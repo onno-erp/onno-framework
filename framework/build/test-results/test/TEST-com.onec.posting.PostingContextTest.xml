@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.onec.posting.PostingContextTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-04-10T01:12:16.206Z" hostname="mikes-macbook-pro.tail81fce0.ts.net" time="0.001">
+  <properties/>
+  <testcase name="movements_returnsCollectionForRegisterClass()" classname="com.onec.posting.PostingContextTest" time="0.0"/>
+  <testcase name="allMovements_returnsAllCollections()" classname="com.onec.posting.PostingContextTest" time="0.001"/>
+  <testcase name="movements_calledTwice_returnsSameCollection()" classname="com.onec.posting.PostingContextTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

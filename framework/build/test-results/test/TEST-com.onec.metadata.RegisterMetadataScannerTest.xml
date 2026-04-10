@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.onec.metadata.RegisterMetadataScannerTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-04-10T01:12:16.203Z" hostname="mikes-macbook-pro.tail81fce0.ts.net" time="0.002">
+  <properties/>
+  <testcase name="scanRegister_annotatedClassNotExtendingAccumulationRecord_throws()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.0"/>
+  <testcase name="scanRegister_turnoverRegister()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.001"/>
+  <testcase name="scanRegister_classWithoutAnnotation_throws()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.0"/>
+  <testcase name="scanRegister_findsResources()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.001"/>
+  <testcase name="scanRegister_findsDimensions()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.0"/>
+  <testcase name="scanRegister_balanceRegister_returnsCorrectDescriptor()" classname="com.onec.metadata.RegisterMetadataScannerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
