@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI tooling
+.ai/
+
+# Plans
+plans/

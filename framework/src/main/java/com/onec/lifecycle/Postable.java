@@ -1,8 +1,9 @@
 package com.onec.lifecycle;
 
-import com.onec.posting.PostingContext;
-
+/**
+ * Marker interface for documents that support posting.
+ * The actual posting method should be annotated with @HandlePosting
+ * and accept RegisterMovementCollection parameters for each register.
+ */
 public interface Postable {
-
-    void handlePosting(PostingContext context);
 }

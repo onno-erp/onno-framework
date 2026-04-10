@@ -5,9 +5,3 @@ spring:
   datasource:
     url: jdbc:h2:mem:example;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
-
-onec:
-  scan-packages:
-    - com.example.domain.catalogs
-    - com.example.domain.documents
-    - com.example.domain.registers

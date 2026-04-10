@@ -204,6 +204,79 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         });
     }
 
+    @SuppressWarnings("unchecked")
+    public List<T> getBalanceTyped(Map<String, Object> filters) {
+        if (descriptor.accumulationType() != AccumulationType.BALANCE) {
+            throw new IllegalStateException("getBalance is only available for BALANCE registers");
+        }
+
+        StringBuilder sql = new StringBuilder("SELECT * FROM " + descriptor.totalsTableName());
+        if (filters != null && !filters.isEmpty()) {
+            sql.append(" WHERE ");
+            sql.append(filters.keySet().stream()
+                    .map(k -> k + " = :" + k)
+                    .collect(Collectors.joining(" AND ")));
+        }
+
+        return jdbi.withHandle(handle -> {
+            var query = handle.createQuery(sql.toString());
+            if (filters != null) {
+                filters.forEach(query::bind);
+            }
+            return query.map((rs, ctx) -> {
+                try {
+                    T record = (T) descriptor.javaClass().getDeclaredConstructor().newInstance();
+                    mapDimensionsAndResources(record, rs);
+                    return record;
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to map balance record", e);
+                }
+            }).list();
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<T> getTurnoverTyped(LocalDateTime from, LocalDateTime to,
+                                     Map<String, Object> filters) {
+        String dimCols = descriptor.dimensions().stream()
+                .map(AttributeDescriptor::columnName)
+                .collect(Collectors.joining(", "));
+
+        String resSums = descriptor.resources().stream()
+                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
+                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
+                .collect(Collectors.joining(", "));
+
+        StringBuilder sql = new StringBuilder("SELECT " + dimCols + ", " + resSums +
+                " FROM " + descriptor.tableName() +
+                " WHERE _active = TRUE AND _period >= :from AND _period <= :to");
+
+        if (filters != null) {
+            for (String key : filters.keySet()) {
+                sql.append(" AND ").append(key).append(" = :").append(key);
+            }
+        }
+        sql.append(" GROUP BY ").append(dimCols);
+
+        return jdbi.withHandle(handle -> {
+            var query = handle.createQuery(sql.toString())
+                    .bind("from", from)
+                    .bind("to", to);
+            if (filters != null) {
+                filters.forEach(query::bind);
+            }
+            return query.map((rs, ctx) -> {
+                try {
+                    T record = (T) descriptor.javaClass().getDeclaredConstructor().newInstance();
+                    mapDimensionsAndResources(record, rs);
+                    return record;
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to map turnover record", e);
+                }
+            }).list();
+        });
+    }
+
     public List<Map<String, Object>> getTurnover(LocalDateTime from, LocalDateTime to,
                                                    Map<String, Object> filters) {
         String dimCols = descriptor.dimensions().stream()
@@ -269,6 +342,21 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                         })
                         .list()
         );
+    }
+
+    // --- Mapping ---
+
+    private void mapDimensionsAndResources(T record, java.sql.ResultSet rs) throws Exception {
+        for (AttributeDescriptor dim : descriptor.dimensions()) {
+            Field field = findField(descriptor.javaClass(), dim.fieldName());
+            field.setAccessible(true);
+            field.set(record, rs.getObject(dim.columnName(), field.getType()));
+        }
+        for (AttributeDescriptor res : descriptor.resources()) {
+            Field field = findField(descriptor.javaClass(), res.fieldName());
+            field.setAccessible(true);
+            field.set(record, rs.getObject(res.columnName(), BigDecimal.class));
+        }
     }
 
     // --- Helpers ---

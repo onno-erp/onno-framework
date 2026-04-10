@@ -4,13 +4,16 @@ import com.onec.metadata.*;
 import com.onec.posting.PostingEngine;
 import com.onec.posting.PostingService;
 import com.onec.posting.RegisterPersistence;
-import com.onec.posting.RegisterQueryService;
+import com.onec.repository.RegisterRepository;
+import com.onec.repository.RegisterRepositoryImpl;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
@@ -41,8 +44,9 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public SchemaInitializer schemaInitializer(DataSource dataSource, OneCProperties properties) {
-        return new SchemaInitializer(dataSource, properties.getScanPackages());
+    public SchemaInitializer schemaInitializer(DataSource dataSource, OneCProperties properties,
+                                               ApplicationContext context) {
+        return new SchemaInitializer(dataSource, resolvePackages(properties, context));
     }
 
     @Bean
@@ -56,20 +60,42 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public PostingService postingService(DataSource dataSource, OneCProperties properties) {
-        Jdbi jdbi = Jdbi.create(dataSource);
-        MetadataRegistry registry = buildRegistry(properties.getScanPackages());
-        Map<Class<?>, RegisterPersistence<?>> persistenceMap = buildRegisterPersistenceMap(jdbi, registry);
+    public MetadataRegistry metadataRegistry(OneCProperties properties, ApplicationContext context) {
+        return buildRegistry(resolvePackages(properties, context));
+    }
+
+    @Bean
+    public Jdbi jdbi(DataSource dataSource) {
+        return Jdbi.create(dataSource);
+    }
+
+    @Bean
+    public Map<Class<?>, RegisterPersistence<?>> registerPersistenceMap(Jdbi jdbi, MetadataRegistry registry) {
+        return buildRegisterPersistenceMap(jdbi, registry);
+    }
+
+    @Bean
+    public PostingService postingService(Jdbi jdbi, MetadataRegistry registry,
+                                         Map<Class<?>, RegisterPersistence<?>> persistenceMap) {
         PostingEngine engine = new PostingEngine(jdbi, registry, persistenceMap);
         return new PostingService(engine);
     }
 
     @Bean
-    public RegisterQueryService registerQueryService(DataSource dataSource, OneCProperties properties) {
-        Jdbi jdbi = Jdbi.create(dataSource);
-        MetadataRegistry registry = buildRegistry(properties.getScanPackages());
-        Map<Class<?>, RegisterPersistence<?>> persistenceMap = buildRegisterPersistenceMap(jdbi, registry);
-        return new RegisterQueryService(persistenceMap);
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Map<Class<?>, RegisterRepository<?>> registerRepositories(
+            Map<Class<?>, RegisterPersistence<?>> persistenceMap) {
+        Map<Class<?>, RegisterRepository<?>> repos = new HashMap<>();
+        for (var entry : persistenceMap.entrySet()) {
+            repos.put(entry.getKey(), new RegisterRepositoryImpl(entry.getValue()));
+        }
+        return repos;
+    }
+
+    @Bean
+    public RegisterRepositoryProvider registerRepositoryProvider(
+            Map<Class<?>, RegisterRepository<?>> registerRepositories) {
+        return new RegisterRepositoryProvider(registerRepositories);
     }
 
     private MetadataRegistry buildRegistry(List<String> scanPackages) {
@@ -93,5 +119,17 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
             map.put(desc.javaClass(), new RegisterPersistence<>(jdbi, desc));
         }
         return map;
+    }
+
+    private List<String> resolvePackages(OneCProperties properties, ApplicationContext context) {
+        if (!properties.getScanPackages().isEmpty()) {
+            return properties.getScanPackages();
+        }
+        if (AutoConfigurationPackages.has(context)) {
+            return AutoConfigurationPackages.get(context);
+        }
+        throw new IllegalStateException(
+                "Could not determine base packages for 1C entity scanning. " +
+                "Either use @SpringBootApplication or set onec.scan-packages in your configuration.");
     }
 }
