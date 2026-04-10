@@ -18,9 +18,9 @@ import java.util.List;
 
 public class MetadataScanner {
 
-    private final NamingStrategy naming;
+    private final DefaultNamingStrategy naming;
 
-    public MetadataScanner(NamingStrategy naming) {
+    public MetadataScanner(DefaultNamingStrategy naming) {
         this.naming = naming;
     }
 

@@ -18,7 +18,7 @@ public class PostingContext {
     }
 
     @SuppressWarnings("unchecked")
-    public <T extends AccumulationRecord> RegisterRepository<T> register(Class<T> registerClass) {
+    public <T extends AccumulationRecord> RegisterRepository<T> movements(Class<T> registerClass) {
         RegisterRepositoryImpl<?> repo = repositoryMap.get(registerClass);
         if (repo == null) {
             throw new IllegalArgumentException(

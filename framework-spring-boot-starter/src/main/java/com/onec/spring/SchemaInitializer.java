@@ -27,7 +27,7 @@ public class SchemaInitializer implements InitializingBean {
         CatalogScanner catalogScanner = new CatalogScanner();
         for (Class<?> clazz : catalogScanner.scan(scanPackages)) {
             CatalogDescriptor descriptor = scanner.scan(clazz);
-            registry.register(descriptor);
+            registry.registerCatalog(descriptor);
         }
 
         DocumentScanner documentScanner = new DocumentScanner();
@@ -41,7 +41,7 @@ public class SchemaInitializer implements InitializingBean {
             registry.registerAccumulation(scanner.scanRegister(clazz));
         }
 
-        SchemaGenerator schemaGenerator = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator schemaGenerator = new SchemaGenerator(registry);
         schemaGenerator.execute(Jdbi.create(dataSource));
     }
 }

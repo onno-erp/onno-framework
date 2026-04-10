@@ -2,21 +2,24 @@ package com.onec.schema;
 
 import com.onec.metadata.*;
 import com.onec.model.AccumulationType;
+import com.onec.types.Ref;
 
 import org.jdbi.v3.core.Jdbi;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class SchemaGenerator {
 
     private final MetadataRegistry registry;
-    private final TypeMapping typeMapping;
 
-    public SchemaGenerator(MetadataRegistry registry, TypeMapping typeMapping) {
+    public SchemaGenerator(MetadataRegistry registry) {
         this.registry = registry;
-        this.typeMapping = typeMapping;
     }
 
     public List<String> generateDDL() {
@@ -58,7 +61,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : catalog.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -79,7 +82,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : document.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -98,7 +101,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : section.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -119,12 +122,12 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor dim : reg.dimensions()) {
             sb.append(",\n    ").append(dim.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
+            sb.append(sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
         }
 
         for (AttributeDescriptor res : reg.resources()) {
             sb.append(",\n    ").append(res.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
+            sb.append(sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
         }
 
         sb.append("\n)");
@@ -139,13 +142,13 @@ public class SchemaGenerator {
         for (AttributeDescriptor dim : reg.dimensions()) {
             if (!first) sb.append(",\n");
             sb.append("    ").append(dim.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
+            sb.append(sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
             first = false;
         }
 
         for (AttributeDescriptor res : reg.resources()) {
             sb.append(",\n    ").append(res.columnName()).append(" ");
-            sb.append(typeMapping.sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
+            sb.append(sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
             sb.append(" DEFAULT 0");
         }
 
@@ -156,5 +159,28 @@ public class SchemaGenerator {
 
         sb.append("\n)");
         return sb.toString();
+    }
+
+    private static String sqlType(Class<?> javaType, int length, int precision, int scale) {
+        if (javaType == String.class) {
+            return "VARCHAR(" + length + ")";
+        } else if (javaType == int.class || javaType == Integer.class) {
+            return "INTEGER";
+        } else if (javaType == long.class || javaType == Long.class) {
+            return "BIGINT";
+        } else if (javaType == boolean.class || javaType == Boolean.class) {
+            return "BOOLEAN";
+        } else if (javaType == BigDecimal.class) {
+            return "DECIMAL(" + precision + "," + scale + ")";
+        } else if (javaType == UUID.class) {
+            return "UUID";
+        } else if (javaType == LocalDate.class) {
+            return "DATE";
+        } else if (javaType == LocalDateTime.class) {
+            return "TIMESTAMP";
+        } else if (Ref.class.isAssignableFrom(javaType)) {
+            return "UUID";
+        }
+        throw new IllegalArgumentException("Unsupported type: " + javaType.getName());
     }
 }

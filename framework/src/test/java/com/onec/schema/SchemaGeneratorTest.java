@@ -17,9 +17,9 @@ class SchemaGeneratorTest {
     void generateDDL_singleCatalog_correctCreateTable() {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
-        registry.register(scanner.scan(TestProduct.class));
+        registry.registerCatalog(scanner.scan(TestProduct.class));
 
-        SchemaGenerator generator = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
         assertThat(ddl).hasSize(1);
@@ -39,13 +39,13 @@ class SchemaGeneratorTest {
     void execute_createsTableInH2() {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
-        registry.register(scanner.scan(TestProduct.class));
+        registry.registerCatalog(scanner.scan(TestProduct.class));
 
         JdbcDataSource ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:schematest;DB_CLOSE_DELAY=-1");
         Jdbi jdbi = Jdbi.create(ds);
 
-        SchemaGenerator generator = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator generator = new SchemaGenerator(registry);
         generator.execute(jdbi);
 
         List<String> tables = jdbi.withHandle(handle ->

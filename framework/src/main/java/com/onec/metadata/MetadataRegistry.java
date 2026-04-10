@@ -11,7 +11,7 @@ public class MetadataRegistry {
     private final Map<Class<?>, DocumentDescriptor> documents = new ConcurrentHashMap<>();
     private final Map<Class<?>, AccumulationRegisterDescriptor> registers = new ConcurrentHashMap<>();
 
-    public void register(CatalogDescriptor descriptor) {
+    public void registerCatalog(CatalogDescriptor descriptor) {
         catalogs.put(descriptor.javaClass(), descriptor);
     }
 
@@ -19,10 +19,14 @@ public class MetadataRegistry {
         documents.put(descriptor.javaClass(), descriptor);
     }
 
-    public CatalogDescriptor getDescriptor(Class<?> clazz) {
+    public void registerAccumulation(AccumulationRegisterDescriptor descriptor) {
+        registers.put(descriptor.javaClass(), descriptor);
+    }
+
+    public CatalogDescriptor getCatalogDescriptor(Class<?> clazz) {
         CatalogDescriptor descriptor = catalogs.get(clazz);
         if (descriptor == null) {
-            throw new IllegalArgumentException("No descriptor registered for " + clazz.getName());
+            throw new IllegalArgumentException("No catalog descriptor registered for " + clazz.getName());
         }
         return descriptor;
     }
@@ -35,24 +39,20 @@ public class MetadataRegistry {
         return descriptor;
     }
 
-    public Collection<CatalogDescriptor> allCatalogs() {
-        return Collections.unmodifiableCollection(catalogs.values());
-    }
-
-    public Collection<DocumentDescriptor> allDocuments() {
-        return Collections.unmodifiableCollection(documents.values());
-    }
-
-    public void registerAccumulation(AccumulationRegisterDescriptor descriptor) {
-        registers.put(descriptor.javaClass(), descriptor);
-    }
-
     public AccumulationRegisterDescriptor getRegisterDescriptor(Class<?> clazz) {
         AccumulationRegisterDescriptor descriptor = registers.get(clazz);
         if (descriptor == null) {
             throw new IllegalArgumentException("No register descriptor registered for " + clazz.getName());
         }
         return descriptor;
+    }
+
+    public Collection<CatalogDescriptor> allCatalogs() {
+        return Collections.unmodifiableCollection(catalogs.values());
+    }
+
+    public Collection<DocumentDescriptor> allDocuments() {
+        return Collections.unmodifiableCollection(documents.values());
     }
 
     public Collection<AccumulationRegisterDescriptor> allRegisters() {

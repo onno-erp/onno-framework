@@ -19,7 +19,7 @@ class DocumentSchemaGeneratorTest {
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerDocument(scanner.scanDocument(TestInvoice.class));
 
-        SchemaGenerator generator = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
         assertThat(ddl).hasSize(2);
@@ -52,7 +52,7 @@ class DocumentSchemaGeneratorTest {
         ds.setURL("jdbc:h2:mem:docschematest;DB_CLOSE_DELAY=-1");
         Jdbi jdbi = Jdbi.create(ds);
 
-        SchemaGenerator generator = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator generator = new SchemaGenerator(registry);
         generator.execute(jdbi);
 
         List<String> tables = jdbi.withHandle(handle ->

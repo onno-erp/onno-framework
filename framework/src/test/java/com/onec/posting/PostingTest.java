@@ -38,7 +38,7 @@ class PostingTest {
         registry.registerDocument(scanner.scanDocument(TestReceipt.class));
         registry.registerAccumulation(scanner.scanRegister(TestStockRegister.class));
 
-        SchemaGenerator schema = new SchemaGenerator(registry, new DefaultTypeMapping());
+        SchemaGenerator schema = new SchemaGenerator(registry);
         schema.execute(jdbi);
 
         AccumulationRegisterDescriptor stockDesc = registry.getRegisterDescriptor(TestStockRegister.class);

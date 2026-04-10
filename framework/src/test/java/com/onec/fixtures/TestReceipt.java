@@ -27,7 +27,7 @@ public class TestReceipt extends DocumentObject implements Postable {
 
     @Override
     public void handlePosting(PostingContext context) {
-        var movements = context.register(TestStockRegister.class);
+        var movements = context.movements(TestStockRegister.class);
         for (TestReceiptLine line : items) {
             movements.addReceipt(r -> {
                 r.setProduct(line.getProduct());

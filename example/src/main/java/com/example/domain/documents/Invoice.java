@@ -43,10 +43,10 @@ public class Invoice extends DocumentObject implements BeforeWriteHandler, Posta
 
     @Override
     public void handlePosting(PostingContext context) {
-        var sales = context.register(SalesRegister.class);
+        var sales = context.movements(SalesRegister.class);
         for (InvoiceLine line : items) {
             sales.addReceipt(r -> {
-                r.setProductName(line.getProductName());
+                r.setProduct(line.getProduct());
                 r.setQuantity(line.getQuantity());
                 r.setAmount(line.getAmount());
             });

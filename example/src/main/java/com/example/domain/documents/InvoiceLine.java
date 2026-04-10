@@ -1,7 +1,9 @@
 package com.example.domain.documents;
 
+import com.example.domain.catalogs.Product;
 import com.onec.annotations.Attribute;
 import com.onec.model.TabularSectionRow;
+import com.onec.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -12,8 +14,8 @@ import java.math.BigDecimal;
 @Setter
 public class InvoiceLine extends TabularSectionRow {
 
-    @Attribute(length = 100)
-    private String productName;
+    @Attribute
+    private Ref<Product> product;
 
     @Attribute(precision = 15, scale = 2)
     private BigDecimal quantity;
