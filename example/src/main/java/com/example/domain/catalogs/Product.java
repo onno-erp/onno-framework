@@ -16,7 +16,7 @@ import com.example.domain.enumerations.UnitOfMeasure;
 import java.math.BigDecimal;
 
 @Catalog(name = "Products", codeLength = 11)
-@UiSection(value = "Sales", order = 0)
+@UiSection(value = "Warehouse", order = 2)
 @DashboardWidget(title = "Products", type = "count", order = 10, width = "1/3")
 @Getter
 @Setter

@@ -22,8 +22,8 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(name = "Sales", numberLength = 9)
-@UiSection(value = "Sales", order = 0)
+@Document(name = "Sales Documents", tableName = "Sales", numberLength = 9)
+@UiSection(value = "Sales", order = 2)
 @DashboardWidget(title = "Sales Calendar", type = "calendar", order = 0, width = "1/3",
         dateField = "_date", titleField = "customer")
 @DashboardWidget(title = "Recent Sales", type = "list", order = 1, width = "1/2", maxItems = 5)

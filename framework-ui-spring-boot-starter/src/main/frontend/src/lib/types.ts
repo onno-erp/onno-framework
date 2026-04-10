@@ -79,4 +79,18 @@ export interface DashboardWidgetMeta {
   extraConfig: Record<string, string>;
 }
 
+export interface LayoutItem {
+  name: string;
+  type: string;
+  href: string;
+}
+
+export interface LayoutSection {
+  name: string;
+  order: number;
+  icon: string;
+  placement: string;
+  items: LayoutItem[];
+}
+
 export type EntityRecord = Record<string, unknown>;

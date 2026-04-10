@@ -13,5 +13,8 @@ public @interface InformationRegister {
 
     String name();
 
+    /** Stable DB table name. When empty, derived from {@link #name()}. */
+    String tableName() default "";
+
     Periodicity periodicity() default Periodicity.NONE;
 }

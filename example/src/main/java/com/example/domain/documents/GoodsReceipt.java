@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(name = "Goods Receipts", numberLength = 9)
+@Document(name = "Inbound Goods", tableName = "Goods Receipts", numberLength = 9)
 @UiSection(value = "Warehouse", order = 1)
 @DashboardWidget(title = "Recent Receipts", type = "list", order = 2, width = "1/2", maxItems = 5)
 @Getter

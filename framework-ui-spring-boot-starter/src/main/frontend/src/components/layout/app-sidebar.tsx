@@ -12,71 +12,37 @@ import {
   Sun,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import { cn, toSnakeCase } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useTheme } from "@/providers/theme-provider";
+import type { LayoutSection } from "@/lib/types";
 
-interface NavItem {
-  name: string;
-  href: string;
-}
+const iconMap: Record<string, React.ElementType> = {
+  "book-open": BookOpen,
+  "file-text": FileText,
+  "bar-chart": BarChart3,
+  "folder": FolderOpen,
+};
 
-interface NavSection {
-  title: string;
-  icon: React.ElementType;
-  order: number;
-  items: NavItem[];
+function resolveIcon(icon: string, sectionName: string): React.ElementType {
+  if (icon && iconMap[icon]) return iconMap[icon];
+  const fallback: Record<string, React.ElementType> = {
+    Catalogs: BookOpen,
+    Documents: FileText,
+    Registers: BarChart3,
+  };
+  return fallback[sectionName] ?? FolderOpen;
 }
 
 export function AppSidebar() {
-  const [sections, setSections] = useState<NavSection[]>([]);
+  const [sections, setSections] = useState<LayoutSection[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const location = useLocation();
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    Promise.all([api.getCatalogs(), api.getDocuments(), api.getRegisters()]).then(
-      ([catalogs, documents, registers]) => {
-        const sectionMap = new Map<string, { order: number; items: NavItem[] }>();
-
-        const add = (
-          entity: { name: string; section?: string; sectionOrder?: number },
-          prefix: string,
-          fallbackSection: string
-        ) => {
-          const sectionName = entity.section ?? fallbackSection;
-          const order = entity.sectionOrder ?? 999;
-          const href = `/${prefix}/${toSnakeCase(entity.name)}`;
-
-          if (!sectionMap.has(sectionName)) {
-            sectionMap.set(sectionName, { order, items: [] });
-          }
-          const sec = sectionMap.get(sectionName)!;
-          sec.order = Math.min(sec.order, order);
-          sec.items.push({ name: entity.name, href });
-        };
-
-        catalogs.forEach((c) => add(c, "catalogs", "Catalogs"));
-        documents.forEach((d) => add(d, "documents", "Documents"));
-        registers.forEach((r) => add(r, "registers", "Registers"));
-
-        const fallbackIcons: Record<string, React.ElementType> = {
-          Catalogs: BookOpen,
-          Documents: FileText,
-          Registers: BarChart3,
-        };
-
-        const navSections: NavSection[] = [...sectionMap.entries()]
-          .map(([title, { order, items }]) => ({
-            title,
-            icon: fallbackIcons[title] ?? FolderOpen,
-            order,
-            items: items.sort((a, b) => a.name.localeCompare(b.name)),
-          }))
-          .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-
-        setSections(navSections);
-      }
-    );
+    api.getLayout().then((layout) => {
+      setSections(layout.filter((s) => s.placement === "sidebar"));
+    });
   }, []);
 
   const toggle = (title: string) =>
@@ -103,40 +69,43 @@ export function AppSidebar() {
         </Link>
 
         <div className="mt-4 space-y-3">
-          {sections.map((section) => (
-            <div key={section.title}>
-              <button
-                onClick={() => toggle(section.title)}
-                className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-              >
-                {section.title}
-                {collapsed[section.title] ? (
-                  <ChevronRight className="ml-auto h-3 w-3" />
-                ) : (
-                  <ChevronDown className="ml-auto h-3 w-3" />
-                )}
-              </button>
+          {sections.map((section) => {
+            const Icon = resolveIcon(section.icon, section.name);
+            return (
+              <div key={section.name}>
+                <button
+                  onClick={() => toggle(section.name)}
+                  className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                >
+                  {section.name}
+                  {collapsed[section.name] ? (
+                    <ChevronRight className="ml-auto h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="ml-auto h-3 w-3" />
+                  )}
+                </button>
 
-              {!collapsed[section.title] && (
-                <div className="mt-0.5 space-y-px">
-                  {section.items.map((item) => (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      className={cn(
-                        "flex items-center rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                        location.pathname === item.href
-                          ? "bg-accent text-accent-foreground font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                      )}
-                    >
-                      {item.name}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                {!collapsed[section.name] && (
+                  <div className="mt-0.5 space-y-px">
+                    {section.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={cn(
+                          "flex items-center rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                          location.pathname === item.href
+                            ? "bg-accent text-accent-foreground font-medium"
+                            : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                        )}
+                      >
+                        {item.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </nav>
 

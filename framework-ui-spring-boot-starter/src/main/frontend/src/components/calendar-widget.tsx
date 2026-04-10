@@ -50,7 +50,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
       <CardHeader>
         <CardTitle className="text-sm font-medium">{widget.title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 px-2 pb-4">
         <Calendar
           mode="single"
           selected={selectedDay}
@@ -61,7 +61,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
             hasEvent: (day) => eventDates.has(format(day, "yyyy-MM-dd")),
           }}
           modifiersClassNames={{
-            hasEvent: "bg-primary/20 font-semibold",
+            hasEvent: "bg-primary/10 text-primary font-semibold rounded-md",
           }}
         />
         {selectedDay && (

@@ -10,4 +10,7 @@ import java.lang.annotation.Target;
 public @interface Enumeration {
 
     String name();
+
+    /** Stable DB table name. When empty, derived from {@link #name()}. */
+    String tableName() default "";
 }

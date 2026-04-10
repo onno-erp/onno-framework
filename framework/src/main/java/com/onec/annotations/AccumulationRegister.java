@@ -13,5 +13,8 @@ public @interface AccumulationRegister {
 
     String name();
 
+    /** Stable DB table name. When empty, derived from {@link #name()}. */
+    String tableName() default "";
+
     AccumulationType type() default AccumulationType.BALANCE;
 }

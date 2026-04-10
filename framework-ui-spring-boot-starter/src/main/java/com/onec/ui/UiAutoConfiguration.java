@@ -38,8 +38,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public MetadataApiController metadataApiController(MetadataRegistry registry) {
-        return new MetadataApiController(registry);
+    public MetadataApiController metadataApiController(MetadataRegistry registry,
+                                                        com.onec.ui.UiLayout uiLayout,
+                                                        com.onec.ui.UiLayoutResolver layoutResolver) {
+        return new MetadataApiController(registry, uiLayout, layoutResolver);
     }
 
     @Bean

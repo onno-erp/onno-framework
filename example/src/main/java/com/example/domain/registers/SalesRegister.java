@@ -14,7 +14,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
-@AccumulationRegister(name = "Sales", type = AccumulationType.BALANCE)
+@AccumulationRegister(name = "Sales Register", tableName = "Sales", type = AccumulationType.BALANCE)
 @UiSection(value = "Sales", order = 0)
 @Getter
 @Setter

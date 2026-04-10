@@ -2,6 +2,8 @@ package com.onec.ui;
 
 import com.onec.annotations.UiSection;
 import com.onec.metadata.*;
+import com.onec.ui.UiLayout;
+import com.onec.ui.UiLayoutResolver;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,9 +19,20 @@ import java.util.Map;
 public class MetadataApiController {
 
     private final MetadataRegistry registry;
+    private final UiLayout uiLayout;
+    private final UiLayoutResolver layoutResolver;
 
-    public MetadataApiController(MetadataRegistry registry) {
+    public MetadataApiController(MetadataRegistry registry,
+                                  UiLayout uiLayout,
+                                  UiLayoutResolver layoutResolver) {
         this.registry = registry;
+        this.uiLayout = uiLayout;
+        this.layoutResolver = layoutResolver;
+    }
+
+    @GetMapping("/layout")
+    public List<UiLayout.ResolvedSection> layout() {
+        return layoutResolver.resolve(uiLayout);
     }
 
     @GetMapping("/catalogs")
@@ -38,8 +51,7 @@ public class MetadataApiController {
 
     @GetMapping("/dashboard")
     public List<Map<String, Object>> dashboard() {
-        return registry.allDashboardWidgets().stream()
-                .sorted(java.util.Comparator.comparingInt(DashboardWidgetDescriptor::order))
+        return layoutResolver.resolveWidgets(uiLayout).stream()
                 .map(w -> {
                     Map<String, Object> map = new LinkedHashMap<>();
                     map.put("title", w.title());

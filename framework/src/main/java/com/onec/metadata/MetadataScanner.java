@@ -86,7 +86,8 @@ public class MetadataScanner {
         }
 
         String logicalName = catalog.name();
-        String tableName = naming.catalogTable(logicalName);
+        String storageKey = catalog.tableName().isEmpty() ? logicalName : catalog.tableName();
+        String tableName = naming.catalogTable(storageKey);
         int codeLength = catalog.codeLength();
 
         List<AttributeDescriptor> attributes = scanAttributes(clazz, CatalogObject.class);
@@ -104,11 +105,12 @@ public class MetadataScanner {
         }
 
         String logicalName = document.name();
-        String tableName = naming.documentTable(logicalName);
+        String storageKey = document.tableName().isEmpty() ? logicalName : document.tableName();
+        String tableName = naming.documentTable(storageKey);
         int numberLength = document.numberLength();
 
         List<AttributeDescriptor> attributes = scanAttributes(clazz, DocumentObject.class);
-        List<TabularSectionDescriptor> tabularSections = scanTabularSections(clazz, logicalName);
+        List<TabularSectionDescriptor> tabularSections = scanTabularSections(clazz, storageKey);
 
         return new DocumentDescriptor(logicalName, tableName, clazz, numberLength, attributes, tabularSections);
     }
@@ -123,8 +125,9 @@ public class MetadataScanner {
         }
 
         String logicalName = reg.name();
-        String tableName = naming.registerTable(logicalName);
-        String totalsTableName = naming.registerTotalsTable(logicalName);
+        String storageKey = reg.tableName().isEmpty() ? logicalName : reg.tableName();
+        String tableName = naming.registerTable(storageKey);
+        String totalsTableName = naming.registerTotalsTable(storageKey);
         AccumulationType type = reg.type();
 
         List<AttributeDescriptor> dimensions = scanDimensions(clazz, AccumulationRecord.class);
@@ -145,7 +148,8 @@ public class MetadataScanner {
         }
 
         String logicalName = enumAnnotation.name();
-        String tableName = naming.enumerationTable(logicalName);
+        String storageKey = enumAnnotation.tableName().isEmpty() ? logicalName : enumAnnotation.tableName();
+        String tableName = naming.enumerationTable(storageKey);
 
         Object[] constants = clazz.getEnumConstants();
         List<EnumerationValueDescriptor> values = new ArrayList<>();
@@ -169,7 +173,8 @@ public class MetadataScanner {
         }
 
         String logicalName = reg.name();
-        String tableName = naming.infoRegisterTable(logicalName);
+        String storageKey = reg.tableName().isEmpty() ? logicalName : reg.tableName();
+        String tableName = naming.infoRegisterTable(storageKey);
         Periodicity periodicity = reg.periodicity();
 
         List<AttributeDescriptor> dimensions = scanDimensions(clazz, InformationRecord.class);

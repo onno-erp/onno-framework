@@ -5,6 +5,7 @@ import type {
   DashboardWidgetMeta,
   DocumentMeta,
   EntityRecord,
+  LayoutSection,
   RegisterMeta,
 } from "./types";
 
@@ -37,6 +38,7 @@ export const api = {
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),
 
   // Metadata
+  getLayout: () => fetchJson<LayoutSection[]>(`${BASE}/metadata/layout`),
   getCatalogs: () => fetchJson<CatalogMeta[]>(`${BASE}/metadata/catalogs`),
   getDocuments: () => fetchJson<DocumentMeta[]>(`${BASE}/metadata/documents`),
   getRegisters: () => fetchJson<RegisterMeta[]>(`${BASE}/metadata/registers`),

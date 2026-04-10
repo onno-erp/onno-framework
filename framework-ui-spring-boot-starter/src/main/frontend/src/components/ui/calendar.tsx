@@ -17,24 +17,24 @@ function Calendar({
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col sm:flex-row gap-4",
-        month: "flex flex-col gap-4",
-        month_caption: "flex justify-center relative items-center h-7",
+        months: "flex flex-col sm:flex-row gap-4 w-full",
+        month: "flex flex-col gap-4 w-full",
+        month_caption: "flex justify-center relative items-center h-7 px-8",
         caption_label: "text-sm font-medium",
         nav: "flex items-center",
         button_previous: cn(
-          buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute left-0"
+          buttonVariants({ variant: "ghost" }),
+          "h-7 w-7 p-0 opacity-50 hover:opacity-100 absolute left-1"
         ),
         button_next: cn(
-          buttonVariants({ variant: "outline" }),
-          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 absolute right-0"
+          buttonVariants({ variant: "ghost" }),
+          "h-7 w-7 p-0 opacity-50 hover:opacity-100 absolute right-1"
         ),
         month_grid: "w-full border-collapse",
-        weekdays: "flex",
+        weekdays: "flex justify-between",
         weekday:
           "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
-        week: "flex w-full mt-2",
+        week: "flex w-full justify-between mt-2",
         day: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-md",
         day_button: cn(
           buttonVariants({ variant: "ghost" }),

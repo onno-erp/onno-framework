@@ -1,8 +1,10 @@
 package com.onec.spring;
 
+import com.onec.annotations.UiSection;
 import com.onec.metadata.*;
 import com.onec.posting.PostingEngine;
 import com.onec.posting.PostingService;
+import com.onec.ui.*;
 import com.onec.posting.RegisterPersistence;
 import com.onec.jobs.BackgroundJobs;
 import com.onec.repository.*;
@@ -23,9 +25,8 @@ import org.springframework.data.relational.core.mapping.NamingStrategy;
 import org.springframework.data.repository.config.BootstrapMode;
 
 import javax.sql.DataSource;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
 @EnableConfigurationProperties(OneCProperties.class)
@@ -149,6 +150,76 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     public ScheduledJobRegistrar scheduledJobRegistrar(ApplicationContext applicationContext,
                                                         JobScheduler jobScheduler) {
         return new ScheduledJobRegistrar(applicationContext, jobScheduler);
+    }
+
+    @Bean
+    public UiLayout uiLayout(MetadataRegistry registry,
+                              List<OneCUiConfigurer> configurers) {
+        UiLayoutBuilder builder = new UiLayoutBuilder();
+
+        for (OneCUiConfigurer configurer : configurers) {
+            configurer.configure(builder);
+        }
+
+        UiLayout explicit = new UiLayout(builder.build());
+
+        // Collect classes that the user already placed explicitly
+        Set<Class<?>> placed = explicit.sections().stream()
+                .flatMap(s -> s.entityRefs().stream())
+                .map(UiLayoutBuilder.EntityRef::javaClass)
+                .collect(Collectors.toSet());
+
+        // Auto-place remaining entities using @UiSection or fallback grouping
+        UiLayoutBuilder fallbackBuilder = new UiLayoutBuilder();
+
+        for (CatalogDescriptor d : registry.allCatalogs()) {
+            if (placed.contains(d.javaClass())) continue;
+            UiSection s = d.javaClass().getAnnotation(UiSection.class);
+            String section = s != null ? s.value() : "Catalogs";
+            int order = s != null ? s.order() : 900;
+            fallbackBuilder.section(section).order(order).catalog(d.javaClass());
+        }
+        for (DocumentDescriptor d : registry.allDocuments()) {
+            if (placed.contains(d.javaClass())) continue;
+            UiSection s = d.javaClass().getAnnotation(UiSection.class);
+            String section = s != null ? s.value() : "Documents";
+            int order = s != null ? s.order() : 901;
+            fallbackBuilder.section(section).order(order).document(d.javaClass());
+        }
+        for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
+            if (placed.contains(d.javaClass())) continue;
+            UiSection s = d.javaClass().getAnnotation(UiSection.class);
+            String section = s != null ? s.value() : "Registers";
+            int order = s != null ? s.order() : 902;
+            fallbackBuilder.section(section).order(order).register(d.javaClass());
+        }
+
+        // Merge: explicit sections first, then fallback sections
+        List<UiLayout.Section> merged = new ArrayList<>(explicit.sections());
+        Set<String> explicitNames = explicit.sections().stream()
+                .map(UiLayout.Section::name)
+                .collect(Collectors.toSet());
+        for (UiLayout.Section fb : fallbackBuilder.build()) {
+            if (!explicitNames.contains(fb.name())) {
+                merged.add(fb);
+            }
+        }
+        merged.sort(Comparator.comparingInt(UiLayout.Section::order));
+
+        // Widgets: use explicit config if provided, otherwise fall back to annotations
+        List<UiLayoutBuilder.WidgetConfig> widgets;
+        if (builder.hasWidgets()) {
+            widgets = builder.buildWidgets();
+        } else {
+            widgets = List.of(); // will fall back to annotation-based widgets in registry
+        }
+
+        return new UiLayout(merged, widgets);
+    }
+
+    @Bean
+    public UiLayoutResolver uiLayoutResolver(MetadataRegistry registry) {
+        return new UiLayoutResolver(registry);
     }
 
     private MetadataRegistry buildRegistry(List<String> scanPackages) {
