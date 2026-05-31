@@ -54,11 +54,19 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public ResolvedMetadataService resolvedMetadataService(MetadataRegistry registry,
+                                                           com.onec.ui.UiLayout uiLayout,
+                                                           com.onec.ui.UiLayoutResolver layoutResolver) {
+        return new ResolvedMetadataService(registry, uiLayout, layoutResolver);
+    }
+
+    @Bean
     public MetadataApiController metadataApiController(MetadataRegistry registry,
                                                         com.onec.ui.UiLayout uiLayout,
                                                         com.onec.ui.UiLayoutResolver layoutResolver,
-                                                        UiAccessService access) {
-        return new MetadataApiController(registry, uiLayout, layoutResolver, access);
+                                                        UiAccessService access,
+                                                        ResolvedMetadataService resolvedMetadata) {
+        return new MetadataApiController(registry, uiLayout, layoutResolver, access, resolvedMetadata);
     }
 
     @Bean
