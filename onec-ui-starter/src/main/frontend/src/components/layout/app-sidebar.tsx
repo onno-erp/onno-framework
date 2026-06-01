@@ -8,6 +8,18 @@ import {
   ChevronDown,
   ChevronRight,
   Home,
+  Euro,
+  DollarSign,
+  Users,
+  Book,
+  Building2,
+  Briefcase,
+  Settings,
+  Package,
+  ShoppingCart,
+  Calendar,
+  Mail,
+  Tag,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -19,6 +31,19 @@ const iconMap: Record<string, React.ElementType> = {
   "file-text": FileText,
   "bar-chart": BarChart3,
   "folder": FolderOpen,
+  "home": Home,
+  "euro": Euro,
+  "dollar": DollarSign,
+  "users": Users,
+  "book": Book,
+  "building": Building2,
+  "briefcase": Briefcase,
+  "settings": Settings,
+  "package": Package,
+  "cart": ShoppingCart,
+  "calendar": Calendar,
+  "mail": Mail,
+  "tag": Tag,
 };
 
 function resolveIcon(icon: string, sectionName: string): React.ElementType {
@@ -39,6 +64,9 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
   const [sections, setSections] = useState<LayoutSection[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const location = useLocation();
+  const rendererQuery = new URLSearchParams(location.search).get("renderer") === "divkit"
+    ? "?renderer=divkit"
+    : "";
 
   useEffect(() => {
     api.getLayout().then((layout) => {
@@ -57,7 +85,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
 
       <nav className="flex-1 overflow-y-auto px-2 pb-2">
         <Link
-          to="/"
+          to={`/${rendererQuery}`}
           onClick={onNavigate}
           className={cn(
             "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
@@ -79,6 +107,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                   onClick={() => toggle(section.name)}
                   className="flex w-full items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                 >
+                  <Icon className="h-3.5 w-3.5" />
                   {section.name}
                   {collapsed[section.name] ? (
                     <ChevronRight className="ml-auto h-3 w-3" />
@@ -92,7 +121,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps) {
                     {section.items.map((item) => (
                       <Link
                         key={item.href}
-                        to={item.href}
+                        to={`${item.href}${rendererQuery}`}
                         onClick={onNavigate}
                         className={cn(
                           "flex items-center rounded-md px-2.5 py-1.5 text-[13px] transition-colors",

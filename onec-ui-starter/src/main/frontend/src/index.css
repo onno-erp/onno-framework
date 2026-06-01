@@ -95,6 +95,14 @@
   .animate-in-page {
     animation: fadeSlideIn 0.15s ease-out;
   }
+  .divkit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+  .divkit-header-row {
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 @keyframes fadeSlideIn {

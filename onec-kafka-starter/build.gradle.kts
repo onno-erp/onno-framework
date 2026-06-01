@@ -29,7 +29,7 @@ publishing {
 
 dependencies {
     api(project(":onec-framework"))
-    implementation(project(":onec-framework-spring-boot-starter"))
+    implementation(project(":onec-framework-starter"))
 
     implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
     implementation("org.springframework:spring-web:6.2.5")

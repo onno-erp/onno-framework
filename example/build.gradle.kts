@@ -5,9 +5,9 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":onec-framework-spring-boot-starter"))
-    implementation(project(":onec-ui-spring-boot-starter"))
-    implementation(project(":onec-auth-spring-boot-starter"))
+    implementation(project(":onec-framework-starter"))
+    implementation(project(":onec-ui-starter"))
+    implementation(project(":onec-auth-starter"))
     implementation(project(":onec-print-starter"))
     implementation(project(":onec-mail-starter"))
     implementation("org.springframework.boot:spring-boot-starter-web")

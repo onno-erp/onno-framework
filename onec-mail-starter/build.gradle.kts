@@ -29,7 +29,7 @@ publishing {
 
 dependencies {
     api(project(":onec-framework"))
-    implementation(project(":onec-framework-spring-boot-starter"))
+    implementation(project(":onec-framework-starter"))
 
     // Optional: enables MailDispatcher to render bodies via the print starter when present
     compileOnly(project(":onec-print-starter"))

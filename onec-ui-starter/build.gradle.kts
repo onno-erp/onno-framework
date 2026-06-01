@@ -36,7 +36,7 @@ publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-            artifactId = "onec-ui-spring-boot-starter"
+            artifactId = "onec-ui-starter"
         }
     }
     repositories {
@@ -53,7 +53,7 @@ publishing {
 
 dependencies {
     api(project(":onec-framework"))
-    implementation(project(":onec-framework-spring-boot-starter"))
+    implementation(project(":onec-framework-starter"))
 
     implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
     implementation("org.springframework.boot:spring-boot-starter-web:3.4.4")
