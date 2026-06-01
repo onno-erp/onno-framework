@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
 import { DivKitView } from "@/views/divkit-view";
+import { WidgetPortals } from "@/lib/widget-bridge";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -24,7 +25,14 @@ function ProtectedApp() {
   }
 
   // The entire authenticated app is server-driven DivKit (chrome + content).
-  return <DivKitView />;
+  // WidgetPortals lives alongside it so DivKit's div-custom blocks (charts,
+  // calendars, kanban) render as React widgets within the app's providers.
+  return (
+    <>
+      <DivKitView />
+      <WidgetPortals />
+    </>
+  );
 }
 
 function WorkspaceProviders({ children }: { children: ReactNode }) {

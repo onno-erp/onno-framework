@@ -8,7 +8,6 @@ import com.example.domain.enumerations.BookingStatus;
 import com.example.domain.registers.OccupancyRegister;
 import com.onec.annotations.AccessControl;
 import com.onec.annotations.Attribute;
-import com.onec.annotations.BusinessRule;
 import com.onec.annotations.Document;
 import com.onec.annotations.TabularSection;
 import com.onec.lifecycle.BeforeWriteHandler;
@@ -16,6 +15,8 @@ import com.onec.lifecycle.Postable;
 import com.onec.mail.MailTemplate;
 import com.onec.model.DocumentObject;
 import com.onec.posting.PostingContext;
+import com.onec.rules.BusinessRule;
+import com.onec.rules.Validated;
 import com.onec.types.Ref;
 
 import lombok.Getter;
@@ -30,13 +31,12 @@ import java.util.List;
 
 @Document(name = "Bookings", numberPrefix = "B-", numberLength = 14, context = "Rentals")
 @AccessControl(readRoles = {"ADMIN", "RENTALS", "CLEANER"}, writeRoles = {"ADMIN", "RENTALS"})
-@BusinessRule(name = "property-required", expression = "property != null")
 @MailTemplate(name = "booking-confirmed",
         subject = "Your booking is confirmed",
         html = true)
 @Getter
 @Setter
-public class Booking extends DocumentObject implements BeforeWriteHandler, Postable {
+public class Booking extends DocumentObject implements BeforeWriteHandler, Postable, Validated {
 
     @Attribute(required = true)
     private Ref<Property> property;
@@ -85,6 +85,12 @@ public class Booking extends DocumentObject implements BeforeWriteHandler, Posta
 
     @TabularSection(name = "guests")
     private List<Guest> guests = new ArrayList<>();
+
+    @Override
+    public List<BusinessRule> rules() {
+        return List.of(
+                new BusinessRule("property-required", "Property is required", () -> property != null));
+    }
 
     @Override
     public void beforeWrite() {

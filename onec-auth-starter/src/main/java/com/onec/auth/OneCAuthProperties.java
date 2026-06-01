@@ -23,7 +23,12 @@ public class OneCAuthProperties {
             "/error",
             "/api/theme",
             "/api/config",
-            "/api/auth/login"));
+            "/api/auth/login",
+            // Desktop shell liveness + window manifest. The native shell polls these
+            // before any user can log in, so they must be reachable unauthenticated;
+            // both are non-sensitive (readiness probe + window geometry/title).
+            "/api/desktop/ready",
+            "/api/desktop/manifest"));
 
     /**
      * In-memory user accounts. Empty by default — the consuming app supplies them via

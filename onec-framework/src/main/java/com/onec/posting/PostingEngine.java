@@ -35,7 +35,6 @@ public class PostingEngine {
     private final Jdbi jdbi;
     private final MetadataRegistry registry;
     private final Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap;
-    private final DeclarativePostingRuleEngine declarativeRules = new DeclarativePostingRuleEngine();
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final OutboxWriter outboxWriter;
 
@@ -55,9 +54,9 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void post(DocumentObject document) {
-        if (!(document instanceof Postable) && !hasDeclarativePostingRules(document)) {
+        if (!(document instanceof Postable)) {
             throw new IllegalArgumentException(
-                    document.getClass().getName() + " does not implement Postable and has no @PostingRule");
+                    document.getClass().getName() + " does not implement Postable");
         }
 
         if (document instanceof BeforeWriteHandler writer) {
@@ -105,9 +104,9 @@ public class PostingEngine {
     }
 
     public PostingPreview preview(DocumentObject document) {
-        if (!(document instanceof Postable) && !hasDeclarativePostingRules(document)) {
+        if (!(document instanceof Postable)) {
             throw new IllegalArgumentException(
-                    document.getClass().getName() + " does not implement Postable and has no @PostingRule");
+                    document.getClass().getName() + " does not implement Postable");
         }
         if (document instanceof BeforeWriteHandler writer) {
             writer.beforeWrite();
@@ -185,12 +184,7 @@ public class PostingEngine {
         if (document instanceof Postable postable) {
             postable.handlePosting(context);
         }
-        declarativeRules.apply(document, context);
         return context;
-    }
-
-    private boolean hasDeclarativePostingRules(DocumentObject document) {
-        return document.getClass().getAnnotationsByType(com.onec.annotations.PostingRule.class).length > 0;
     }
 
     private Map<String, Object> movementMap(AccumulationRegisterDescriptor desc, AccumulationRecord record) {

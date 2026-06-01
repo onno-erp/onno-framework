@@ -20,6 +20,7 @@ val buildFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::
     args.set(listOf("run", "build"))
     workingDir.set(file("src/main/frontend"))
     inputs.dir("src/main/frontend/src")
+    inputs.dir("src/main/frontend/public")
     inputs.file("src/main/frontend/package.json")
     inputs.file("src/main/frontend/vite.config.ts")
     outputs.dir("src/main/frontend/dist")

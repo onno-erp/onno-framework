@@ -36,4 +36,12 @@ public interface EntityView {
 
     /** Customize the list/table surface. Default: auto-generated columns. */
     default void list(ListSpec list) {}
+
+    /**
+     * Per-field hints for this entity — order, visibility (list/form/detail),
+     * group, width, widget — using the same {@code field(...)} DSL as the layout.
+     * Field config lives here now; the layout's section calls are pure placement.
+     * Applies to the default view; a profile-specific view can override.
+     */
+    default void fields(EntityConfigBuilder fields) {}
 }

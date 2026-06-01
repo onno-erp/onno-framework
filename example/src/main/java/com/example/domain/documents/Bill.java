@@ -6,7 +6,6 @@ import com.example.domain.registers.ReceivablesRegister;
 import com.example.domain.registers.RevenueRegister;
 import com.onec.annotations.AccessControl;
 import com.onec.annotations.Attribute;
-import com.onec.annotations.BusinessRule;
 import com.onec.annotations.Document;
 import com.onec.lifecycle.BeforeWriteHandler;
 import com.onec.lifecycle.Postable;
@@ -14,6 +13,8 @@ import com.onec.model.DocumentObject;
 import com.onec.posting.PostingContext;
 import com.onec.print.PrintFormat;
 import com.onec.print.PrintTemplate;
+import com.onec.rules.BusinessRule;
+import com.onec.rules.Validated;
 import com.onec.types.Ref;
 
 import lombok.Getter;
@@ -21,6 +22,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,12 +31,10 @@ import java.util.UUID;
  */
 @Document(name = "Bills", numberPrefix = "BILL-", numberLength = 14, context = "Rentals")
 @AccessControl(readRoles = {"ADMIN", "RENTALS", "FINANCE"}, writeRoles = {"ADMIN", "FINANCE"})
-@BusinessRule(name = "client-required", expression = "client != null")
-@BusinessRule(name = "gross-positive", expression = "gross > 0")
 @PrintTemplate(name = "bill", label = "Print Bill", format = PrintFormat.PDF)
 @Getter
 @Setter
-public class Bill extends DocumentObject implements BeforeWriteHandler, Postable {
+public class Bill extends DocumentObject implements BeforeWriteHandler, Postable, Validated {
 
     @Attribute(required = true)
     private Ref<Client> client;
@@ -60,6 +60,14 @@ public class Bill extends DocumentObject implements BeforeWriteHandler, Postable
 
     @Attribute(length = 1000)
     private String comments;
+
+    @Override
+    public List<BusinessRule> rules() {
+        return List.of(
+                new BusinessRule("client-required", "Client is required", () -> client != null),
+                new BusinessRule("gross-positive", "Gross must be positive",
+                        () -> gross != null && gross.signum() > 0));
+    }
 
     @Override
     public void beforeWrite() {

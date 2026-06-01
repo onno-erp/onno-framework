@@ -19,7 +19,7 @@ public class EntityConfigBuilder {
         return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
     }
 
-    Map<String, FieldHint> buildFieldHints() {
+    public Map<String, FieldHint> buildFieldHints() {
         Map<String, FieldHint> result = new LinkedHashMap<>();
         for (var entry : fields.entrySet()) {
             result.put(entry.getKey(), entry.getValue().build());

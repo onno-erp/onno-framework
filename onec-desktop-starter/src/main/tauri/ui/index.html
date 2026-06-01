@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Starting…</title>
+    <style>
+      /* Mirrors the app's default (dark) shadcn theme so the splash and the live
+         UI are visually continuous: background #0A0A0A, foreground #EDEDED, and a
+         neutral zero-saturation accent (primary #FAFAFA) — no off-theme blue. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #0a0a0a;
+        color: #ededed;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+      }
+      .spinner {
+        width: 30px;
+        height: 30px;
+        border: 2.5px solid #242424; /* --border (dark) */
+        border-top-color: #fafafa;   /* --primary (dark) */
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+      .label {
+        font-size: 13px;
+        letter-spacing: 0.01em;
+        color: #808080; /* --muted-foreground (dark) */
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner { animation-duration: 1.6s; }
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="spinner"></div>
+      <div class="label">Starting the application…</div>
+    </div>
+  </body>
+</html>

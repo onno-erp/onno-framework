@@ -16,3 +16,17 @@ declare module "@divkitframework/react" {
 
   export const DivKit: ComponentType<DivKitProps>;
 }
+
+declare module "@divkitframework/divkit/client-hydratable" {
+  export interface DivKitVariable {
+    setValue(value: unknown): void;
+    set(value: string): void;
+    getValue(): unknown;
+  }
+  export interface GlobalVariablesController {
+    setVariable(variable: DivKitVariable): void;
+    getVariable(name: string): DivKitVariable | undefined;
+  }
+  export function createVariable(name: string, type: string, value: unknown): DivKitVariable;
+  export function createGlobalVariablesController(): GlobalVariablesController;
+}

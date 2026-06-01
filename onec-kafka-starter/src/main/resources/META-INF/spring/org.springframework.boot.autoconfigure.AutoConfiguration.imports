@@ -1,1 +1,2 @@
 com.onec.kafka.OneCKafkaAutoConfiguration
+com.onec.kafka.OneCKafkaInboundAutoConfiguration

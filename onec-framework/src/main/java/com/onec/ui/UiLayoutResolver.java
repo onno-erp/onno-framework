@@ -66,7 +66,7 @@ public class UiLayoutResolver {
                 String name = resolveEntityName(ref);
                 if (name != null) {
                     String href = "/" + ref.type() + "s/" + toSnakeCase(name);
-                    items.add(new UiLayout.ResolvedItem(name, ref.type(), href));
+                    items.add(new UiLayout.ResolvedItem(name, ref.type(), href, ref.javaClass()));
                 }
             }
             result.add(new UiLayout.ResolvedSection(
@@ -100,7 +100,15 @@ public class UiLayoutResolver {
                     .sorted(java.util.Comparator.comparingInt(DashboardWidgetDescriptor::order))
                     .toList();
         }
+        return resolveWidgetConfigs(widgets);
+    }
 
+    /**
+     * Resolve explicit widget configs (e.g. composed by a {@link Page}) to
+     * descriptors. Unlike {@link #resolveWidgets}, an empty list yields an empty
+     * result — no annotation fallback — so a page renders exactly what it composes.
+     */
+    public List<DashboardWidgetDescriptor> resolveWidgetConfigs(List<UiLayoutBuilder.WidgetConfig> widgets) {
         List<DashboardWidgetDescriptor> result = new ArrayList<>();
         for (UiLayoutBuilder.WidgetConfig wc : widgets) {
             String entityName = resolveEntityNameByClass(wc.entityType(), wc.entityClass());

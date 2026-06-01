@@ -43,6 +43,16 @@ public class UiViewResolver {
         return resolveList(d.javaClass(), profileId, metadata.describeDocument(d));
     }
 
+    /**
+     * Whether this entity is declared by a view (profile-specific or default) and
+     * may therefore appear in the UI. The view layer is the allowlist: an entity
+     * with no view is hidden from nav and its surfaces 404 — only what's authored
+     * renders.
+     */
+    public boolean hasView(Class<?> entity, String profileId) {
+        return entity != null && viewFor(entity, profileId) != null;
+    }
+
     /** Profile-specific view wins, then the default view, then auto-generated columns. */
     private EntityView viewFor(Class<?> entity, String profileId) {
         Map<String, EntityView> byProfile = views.get(entity);

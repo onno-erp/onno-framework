@@ -48,15 +48,32 @@ final class Components {
                 : badge(text, p.muted(), p.rowAlt());
     }
 
-    /** A bordered card containing a header row + data rows, columns evenly weighted. */
+    // Each column is a fixed width with single-line cells, so a wide table keeps its
+    // intrinsic width and scrolls horizontally inside {@link #scrollX} rather than
+    // squeezing columns until the text wraps.
+    private static final int COL_WIDTH = 150;
+    private static final int CELL_GAP = 16;
+
+    /** A bordered, horizontally-scrolling card: a header row + data rows. */
     static Map<String, Object> table(List<String> headers, List<Row> rows, Palette p) {
+        return scrollX(tableStack(tableItems(headers, rows, p)), p);
+    }
+
+    /**
+     * The table's children (header row + separator + data rows) on their own — the
+     * payload a {@code div-patch} replaces when only the rows change. Wrap with
+     * {@link #tableStack} + {@link #scrollX} for a full render.
+     */
+    static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows, Palette p) {
         List<Map<String, Object>> stack = new ArrayList<>();
 
         List<Map<String, Object>> headerCells = new ArrayList<>();
         for (String h : headers) {
-            headerCells.add(Div.weight(Div.color(Div.text(h, 12, "medium"), p.faint()), 1));
+            headerCells.add(cell(Div.color(Div.text(h, 12, "medium"), p.faint())));
         }
         Map<String, Object> headerRow = Div.horizontal(headerCells);
+        Div.wrapWidth(headerRow);
+        Div.gap(headerRow, CELL_GAP);
         Div.pad(headerRow, 10, 14);
         stack.add(headerRow);
         stack.add(Div.separator(p.border()));
@@ -70,9 +87,11 @@ final class Components {
             Row row = rows.get(i);
             List<Map<String, Object>> cells = new ArrayList<>();
             for (String value : row.cells()) {
-                cells.add(Div.weight(Div.color(Div.text(value, 14, "regular"), p.text()), 1));
+                cells.add(cell(Div.color(Div.text(value, 14, "regular"), p.text())));
             }
             Map<String, Object> rowNode = Div.horizontal(cells);
+            Div.wrapWidth(rowNode);
+            Div.gap(rowNode, CELL_GAP);
             Div.pad(rowNode, 11, 14);
             if (i % 2 == 1) {
                 Div.background(rowNode, p.rowAlt());
@@ -82,13 +101,29 @@ final class Components {
             }
             stack.add(rowNode);
         }
+        return stack;
+    }
 
-        Map<String, Object> table = Div.vertical(stack);
-        Div.matchWidth(table);
-        Div.background(table, p.surface());
-        Div.corner(table, 12);
-        Div.stroke(table, p.border(), 1);
-        return table;
+    /** A fixed-width, single-line table cell — columns stay aligned and never wrap. */
+    private static Map<String, Object> cell(Map<String, Object> textNode) {
+        return Div.maxLines(Div.width(textNode, COL_WIDTH), 1);
+    }
+
+    /** The header+rows as a width-to-content vertical stack — the {@code div-patch} target. */
+    static Map<String, Object> tableStack(List<Map<String, Object>> items) {
+        Map<String, Object> stack = Div.vertical(items);
+        Div.wrapWidth(stack);
+        return stack;
+    }
+
+    /** Wrap a (potentially wide) node in a bordered surface card that scrolls sideways. */
+    static Map<String, Object> scrollX(Map<String, Object> inner, Palette p) {
+        Map<String, Object> g = Div.gallery("horizontal", List.of(inner));
+        Div.matchWidth(g);
+        Div.background(g, p.surface());
+        Div.corner(g, 12);
+        Div.stroke(g, p.border(), 1);
+        return g;
     }
 
     static Map<String, Object> fieldRow(String label, String value, Palette p) {

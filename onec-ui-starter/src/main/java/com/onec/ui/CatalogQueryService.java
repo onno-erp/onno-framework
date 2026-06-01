@@ -50,6 +50,26 @@ public class CatalogQueryService {
         return rows;
     }
 
+    public long count(CatalogDescriptor desc) {
+        return jdbi.withHandle(h ->
+                h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")
+                        .mapTo(Long.class)
+                        .one());
+    }
+
+    public List<Map<String, Object>> list(CatalogDescriptor desc, int offset, int limit) {
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false ORDER BY _code LIMIT :limit OFFSET :offset")
+                        .bind("limit", limit)
+                        .bind("offset", offset)
+                        .mapToMap()
+                        .list()
+        );
+        refResolver.resolveAttributes(rows, desc.attributes());
+        return rows;
+    }
+
     public List<Map<String, Object>> children(CatalogDescriptor desc, UUID parent) {
         if (!desc.hierarchical()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

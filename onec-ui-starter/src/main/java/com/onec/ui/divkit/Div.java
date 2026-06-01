@@ -85,17 +85,53 @@ public final class Div {
         return node;
     }
 
-    /** Custom extension node — clients render it via the registered {@code custom_type}. */
-    public static Map<String, Object> custom(String customType, Map<String, Object> payload) {
+    /** Text input bound to {@code textVariable}; the field's value lives in that variable. */
+    public static Map<String, Object> input(String textVariable, String keyboardType) {
+        Map<String, Object> node = node("input");
+        node.put("text_variable", textVariable);
+        if (keyboardType != null) {
+            node.put("keyboard_type", keyboardType);
+        }
+        return node;
+    }
+
+    /** Dropdown: {@code options} of {@code {value,text}}, the chosen value in {@code valueVariable}. */
+    public static Map<String, Object> select(String valueVariable, List<Map<String, Object>> options) {
+        Map<String, Object> node = node("select");
+        node.put("value_variable", valueVariable);
+        node.put("options", options);
+        return node;
+    }
+
+    /** One {@link #select} option. */
+    public static Map<String, Object> option(String value, String text) {
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("value", value);
+        o.put("text", text == null || text.isBlank() ? value : text);
+        return o;
+    }
+
+    /**
+     * Custom extension node — clients render it via the registered {@code custom_type}.
+     * {@code props} are passed through DivKit's {@code custom_props}, reaching the
+     * web client's custom element as its element properties.
+     */
+    public static Map<String, Object> custom(String customType, Map<String, Object> props) {
         Map<String, Object> node = node("custom");
         node.put("custom_type", customType);
-        if (payload != null) {
-            node.putAll(payload);
+        if (props != null && !props.isEmpty()) {
+            node.put("custom_props", props);
         }
         return node;
     }
 
     // ----- styling helpers (mutate + return) -----
+
+    /** Stable node id — the anchor a {@code div-patch} ({@code applyPatch}) targets. */
+    public static Map<String, Object> id(Map<String, Object> node, String id) {
+        node.put("id", id);
+        return node;
+    }
 
     public static Map<String, Object> action(Map<String, Object> node, String logId, String url) {
         Map<String, Object> action = new LinkedHashMap<>();

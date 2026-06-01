@@ -122,13 +122,6 @@ export const api = {
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),
 
-  // Metadata
-  getLayout: () => fetchJson<LayoutSection[]>(`${BASE}/metadata/layout`),
-  getCatalogs: () => fetchJson<CatalogMeta[]>(`${BASE}/metadata/catalogs`),
-  getDocuments: () => fetchJson<DocumentMeta[]>(`${BASE}/metadata/documents`),
-  getRegisters: () => fetchJson<RegisterMeta[]>(`${BASE}/metadata/registers`),
-  getDashboardWidgets: () => fetchJson<DashboardWidgetMeta[]>(`${BASE}/metadata/dashboard`),
-
   // Catalog CRUD
   listCatalog: (name: string) =>
     fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}`),

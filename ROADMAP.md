@@ -49,7 +49,6 @@ It should remain friendly to normal Java:
 Good next slices:
 - Role-aware UI metadata and backend authorization rules for catalogs, documents, registers, and actions
 - OIDC/Keycloak profile for production authentication
-- Richer expression language for validation and posting formulas
 - UI widgets for hierarchy browsing and posting preview inspection
 - Richer live collaboration signals, such as record-level locks and stale-record banners
 - Migration snapshots and model diffs, not only additive column migration

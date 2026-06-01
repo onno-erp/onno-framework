@@ -152,7 +152,7 @@ class PostingTest {
 
         assertThatThrownBy(() -> engine.post(receipt))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Business rule failed: warehouse-required");
+                .hasMessageContaining("Warehouse is required");
     }
 
     @Test

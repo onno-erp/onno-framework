@@ -11,7 +11,21 @@ public class UiLayoutBuilder {
     private final Map<String, SectionBuilder> sections = new LinkedHashMap<>();
     private final List<WidgetBuilder> widgets = new ArrayList<>();
     private final Map<String, ProfileBuilder> profiles = new LinkedHashMap<>();
+    private final ShellBuilder shell = new ShellBuilder();
     private UiIdentityLink identity;
+
+    /**
+     * Configure the app shell — chiefly the navigation presentation. Each layout
+     * is authored per {@link Viewport}, so the shell has a single nav style:
+     * {@code layout.shell().nav(NavStyle.SIDEBAR)}.
+     */
+    public ShellBuilder shell() {
+        return shell;
+    }
+
+    public ShellConfig buildShell() {
+        return shell.build();
+    }
 
     public SectionBuilder section(String name) {
         return sections.computeIfAbsent(name, SectionBuilder::new);
@@ -270,6 +284,21 @@ public class UiLayoutBuilder {
         UiLayout.Profile buildProfile() {
             return new UiLayout.Profile(id, title, theme, List.copyOf(roles), priority,
                     build(), buildWidgets());
+        }
+    }
+
+    /** Builds the {@link ShellConfig} — this layout's navigation presentation. */
+    public static class ShellBuilder {
+        private NavStyle nav;
+
+        /** Nav presentation for this layout's viewport. */
+        public ShellBuilder nav(NavStyle style) {
+            this.nav = style;
+            return this;
+        }
+
+        ShellConfig build() {
+            return new ShellConfig(nav);
         }
     }
 

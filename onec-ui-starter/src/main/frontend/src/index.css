@@ -115,3 +115,10 @@
     transform: translateY(0);
   }
 }
+
+/* DivKit mounts div-custom widgets (chart/calendar/kanban) into this element; it's
+   inline by default, so make it fill the weighted cell DivKit places it in. */
+onec-widget {
+  display: block;
+  width: 100%;
+}

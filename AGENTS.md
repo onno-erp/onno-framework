@@ -477,89 +477,36 @@ public class SalesRegister extends AccumulationRecord {
 }
 ```
 
-### Declarative Posting Rule
+Posting is always typed Java: implement `Postable.handlePosting(PostingContext)` (as above). There is no string-mapped declarative posting rule — a posting rule is code, type-checked and refactorable.
 
-For simple document-to-register movements, prefer `@PostingRule` before writing Java posting code.
+### Business Rules
 
-```java
-@Document(name = "Goods Receipts", context = "Inventory")
-@PostingRule(
-    register = StockRegister.class,
-    movement = MovementType.RECEIPT,
-    forEach = "items",
-    map = {
-        "warehouse = document.warehouse",
-        "product = item.product",
-        "quantity = item.quantity"
-    }
-)
-public class GoodsReceipt extends DocumentObject {
-    @Attribute(required = true)
-    private Ref<Warehouse> warehouse;
-
-    @TabularSection(name = "items")
-    private List<GoodsReceiptLine> items = new ArrayList<>();
-}
-```
-
-Use handwritten `Postable` when logic needs branching, external services, complex formulas, or multiple conditional outcomes.
-
-### Declarative Business Rule
-
-Use `@BusinessRule` for simple validations that should be visible in the manifest.
+Validation is typed Java, not string expressions. Implement `Validated` and return named `BusinessRule`s whose condition is a `BooleanSupplier` over the entity's fields. Rules run before write and before posting; the first failure throws with the rule's message (or `Business rule failed: {name}` if none).
 
 ```java
-@BusinessRule(name = "items-required", expression = "items not empty")
-@BusinessRule(name = "total-positive", expression = "total > 0")
-public class Invoice extends DocumentObject {
-}
-```
-
-### UI Layout And Field Hints
-
-UI configuration lives in a single `OneCUiConfigurer` bean, not on the entity. This keeps domain classes focused on business semantics and lets the same metadata drive future renderers.
-
-```java
-@Configuration
-public class UiConfig implements OneCUiConfigurer {
+public class Invoice extends DocumentObject implements Validated {
     @Override
-    public void configure(UiLayoutBuilder layout) {
-        layout.section("Sales")
-                .order(0)
-                .icon("euro")
-                .catalog(Customer.class, c -> c
-                        .field("name").order(0)
-                        .field("taxId").order(1))
-                .document(Invoice.class, d -> d
-                        .field("customer").order(0)
-                        .field("total").order(10).hideInForm()
-                        .field("notes").order(20).widget("textarea"));
-
-        layout.widget("Recent invoices")
-                .type("list").order(0).width("1/2")
-                .document(Invoice.class)
-                .maxItems(8);
+    public List<BusinessRule> rules() {
+        return List.of(
+            new BusinessRule("items-required", "Add at least one line",
+                    () -> items != null && !items.isEmpty()),
+            new BusinessRule("total-positive", "Total must be positive",
+                    () -> total != null && total.signum() > 0));
     }
 }
 ```
 
-Field-hint methods on `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default; unset values fall through.
+The compiler checks the field references, the IDE refactors through them, and there is no expression grammar to learn or parser to maintain.
 
-Widget DSL on `WidgetBuilder`: `.type(...)` accepts `count`, `list`, `calendar`, `kanban`, `chart`. Use `.dateField`, `.titleField`, `.config(key, value)`, `.maxItems`, `.width` to customize.
+### UI Authoring (Layout / Page / EntityView)
 
-Tabular section row classes (e.g. invoice lines) currently still take `@UiHint` on their fields. The DSL does not yet expose tabular-section field hints; that capability is planned.
+UI is authored as Java classes registered as Spring beans — never as annotations on domain classes. Three kinds:
 
-Supported lightweight expressions include:
-- `field != null`
-- `field == null`
-- `field not empty`
-- `field > 0`
-- `field >= 0`
-- `field < 100`
-- `field <= 100`
-- `field == 'VALUE'`
+- **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell; one per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`.
+- **`Page`** — a route whose content you compose (e.g. a dashboard): `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.custom(...)`.
+- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An entity is only visible if it has an `EntityView` (the view layer is the allowlist).
 
-For richer logic, use normal Java lifecycle hooks or Spring services.
+Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
 ## Questions To Ask For Common Domains
 

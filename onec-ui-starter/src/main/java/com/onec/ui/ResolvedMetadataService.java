@@ -12,23 +12,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Resolves descriptor metadata into the JSON-shaped attribute view served by the
- * metadata API, merging layout field hints over descriptor defaults. Shared by
- * {@link MetadataApiController} and the DivKit emitters so every renderer sees an
- * identical, layout-aware view of fields.
+ * Resolves descriptor metadata into a JSON-shaped attribute view, merging field
+ * hints over descriptor defaults. Consumed by the DivKit emitters (list columns,
+ * document detail, register reports) so every surface sees an identical,
+ * field-hint-aware view of an entity's fields.
  */
 public class ResolvedMetadataService {
 
     private final MetadataRegistry registry;
-    private final UiLayout uiLayout;
-    private final UiLayoutResolver layoutResolver;
+    private final FieldHintResolver fieldHints;
 
-    public ResolvedMetadataService(MetadataRegistry registry,
-                                   UiLayout uiLayout,
-                                   UiLayoutResolver layoutResolver) {
+    public ResolvedMetadataService(MetadataRegistry registry, FieldHintResolver fieldHints) {
         this.registry = registry;
-        this.uiLayout = uiLayout;
-        this.layoutResolver = layoutResolver;
+        this.fieldHints = fieldHints;
     }
 
     public Map<String, Object> describeCatalog(CatalogDescriptor d) {
@@ -42,8 +38,7 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
-        Map<String, FieldHint> hints = layoutResolver.resolveFieldHints(
-                uiLayout, "catalog", d.logicalName());
+        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
                 systemColumn("code", "Code", "_code", hints),
@@ -61,8 +56,7 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
-        Map<String, FieldHint> hints = layoutResolver.resolveFieldHints(
-                uiLayout, "document", d.logicalName());
+        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
                 systemColumn("number", "Number", "_number", hints),
@@ -88,8 +82,7 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
-        Map<String, FieldHint> hints = layoutResolver.resolveFieldHints(
-                uiLayout, "register", d.logicalName());
+        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("dimensions", describeAttributes(d.dimensions(), hints));
         map.put("resources", describeAttributes(d.resources(), hints));
         return map;

@@ -54,19 +54,15 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public ResolvedMetadataService resolvedMetadataService(MetadataRegistry registry,
-                                                           com.onec.ui.UiLayout uiLayout,
-                                                           com.onec.ui.UiLayoutResolver layoutResolver) {
-        return new ResolvedMetadataService(registry, uiLayout, layoutResolver);
+    public FieldHintResolver fieldHintResolver(
+            org.springframework.beans.factory.ObjectProvider<com.onec.ui.EntityView> entityViews) {
+        return new FieldHintResolver(entityViews.orderedStream().toList());
     }
 
     @Bean
-    public MetadataApiController metadataApiController(MetadataRegistry registry,
-                                                        com.onec.ui.UiLayout uiLayout,
-                                                        com.onec.ui.UiLayoutResolver layoutResolver,
-                                                        UiAccessService access,
-                                                        ResolvedMetadataService resolvedMetadata) {
-        return new MetadataApiController(registry, uiLayout, layoutResolver, access, resolvedMetadata);
+    public ResolvedMetadataService resolvedMetadataService(MetadataRegistry registry,
+                                                           FieldHintResolver fieldHintResolver) {
+        return new ResolvedMetadataService(registry, fieldHintResolver);
     }
 
     @Bean
@@ -126,18 +122,26 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public DivKitController divKitController(com.onec.ui.UiLayout uiLayout,
+    public PageResolver pageResolver(
+            org.springframework.beans.factory.ObjectProvider<com.onec.ui.Page> pages) {
+        return new PageResolver(pages.orderedStream().toList());
+    }
+
+    @Bean
+    public DivKitController divKitController(com.onec.ui.LayoutSet layoutSet,
                                              com.onec.ui.UiLayoutResolver layoutResolver,
                                              com.onec.ui.UiProfileResolver profileResolver,
                                              UiAccessService access,
                                              CurrentUserResolver currentUserResolver,
                                              ResolvedMetadataService resolvedMetadata,
                                              UiViewResolver uiViewResolver,
+                                             PageResolver pageResolver,
                                              CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
                                              RegisterQueryService registerQueryService) {
-        return new DivKitController(uiLayout, layoutResolver, profileResolver, access, currentUserResolver,
-                resolvedMetadata, uiViewResolver, catalogQueryService, documentQueryService, registerQueryService);
+        return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
+                resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
+                registerQueryService);
     }
 
 }

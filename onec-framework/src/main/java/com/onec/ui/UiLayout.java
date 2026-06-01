@@ -5,23 +5,30 @@ import java.util.List;
 public record UiLayout(List<Section> sections,
                        List<UiLayoutBuilder.WidgetConfig> widgets,
                        List<Profile> profiles,
-                       UiIdentityLink identity) {
+                       UiIdentityLink identity,
+                       ShellConfig shell) {
 
     public UiLayout {
         profiles = profiles == null ? List.of() : List.copyOf(profiles);
+        shell = shell == null ? ShellConfig.defaults() : shell;
     }
 
     public UiLayout(List<Section> sections) {
-        this(sections, List.of(), List.of(), null);
+        this(sections, List.of(), List.of(), null, null);
     }
 
     public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets) {
-        this(sections, widgets, List.of(), null);
+        this(sections, widgets, List.of(), null, null);
     }
 
     public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets,
                     List<Profile> profiles) {
-        this(sections, widgets, profiles, null);
+        this(sections, widgets, profiles, null, null);
+    }
+
+    public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets,
+                    List<Profile> profiles, UiIdentityLink identity) {
+        this(sections, widgets, profiles, identity, null);
     }
 
     /**
@@ -80,6 +87,7 @@ public record UiLayout(List<Section> sections,
     public record ResolvedItem(
             String name,
             String type,
-            String href
+            String href,
+            Class<?> javaClass
     ) {}
 }

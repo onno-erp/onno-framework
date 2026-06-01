@@ -191,18 +191,77 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public UiLayout uiLayout(MetadataRegistry registry,
-                              List<OneCUiConfigurer> configurers) {
-        UiLayoutBuilder builder = new UiLayoutBuilder();
+    public LayoutSet layoutSet(MetadataRegistry registry, List<Layout> layouts) {
+        Map<Viewport, UiLayout> byViewport = new java.util.EnumMap<>(Viewport.class);
+        for (Viewport v : Viewport.values()) {
+            List<Layout> chosen = selectForViewport(layouts, v);
+            // Auto-place un-placed entities only when this viewport uses the universal
+            // default layout. A device-specific default is a deliberate curation — don't
+            // dump the rest of the metadata into its nav.
+            boolean curated = chosen.stream()
+                    .anyMatch(l -> profileKey(l).isEmpty() && l.viewport() == v);
+            byViewport.put(v, buildUiLayout(registry, chosen, !curated));
+        }
+        return new LayoutSet(byViewport);
+    }
 
-        for (OneCUiConfigurer configurer : configurers) {
-            configurer.configure(builder);
+    /**
+     * The default ({@link Viewport#DESKTOP}) layout, kept as a bean for consumers
+     * that aren't viewport-aware (identity resolution, the metadata API).
+     */
+    @Bean
+    public UiLayout uiLayout(LayoutSet layoutSet) {
+        return layoutSet.forViewport(Viewport.DESKTOP);
+    }
+
+    /**
+     * Choose one {@link Layout} per profile for this viewport: a viewport-specific
+     * layout wins over the universal ({@code viewport()==null}) one.
+     */
+    private static List<Layout> selectForViewport(List<Layout> layouts, Viewport viewport) {
+        Map<String, Layout> chosen = new LinkedHashMap<>();
+        for (Layout l : layouts) {
+            if (l.viewport() == null) {
+                chosen.putIfAbsent(profileKey(l), l);
+            }
+        }
+        for (Layout l : layouts) {
+            if (l.viewport() == viewport) {
+                chosen.put(profileKey(l), l);
+            }
+        }
+        return new ArrayList<>(chosen.values());
+    }
+
+    private static String profileKey(Layout l) {
+        return l.profile() == null ? "" : l.profile();
+    }
+
+    private UiLayout buildUiLayout(MetadataRegistry registry, List<Layout> layouts, boolean applyFallback) {
+        // Each Layout bean is one persona's shell; the default layout (profile()==null)
+        // is the back-office shell. A Layout IS a profile.
+        List<UiLayout.Section> defaultSections = new ArrayList<>();
+        List<UiLayout.Profile> profiles = new ArrayList<>();
+        ShellConfig shell = ShellConfig.defaults();
+        UiIdentityLink identity = null;
+
+        for (Layout layout : layouts) {
+            LayoutSpec spec = new LayoutSpec();
+            layout.configure(spec);
+            if (layout.profile() == null) {
+                defaultSections.addAll(spec.sections());
+                shell = spec.shellConfig();
+                if (spec.identity() != null) {
+                    identity = spec.identity();
+                }
+            } else {
+                profiles.add(new UiLayout.Profile(layout.profile(), spec.title(), spec.theme(),
+                        spec.roles(), spec.priority(), spec.sections(), List.of()));
+            }
         }
 
-        UiLayout explicit = new UiLayout(builder.build());
-
-        // Collect classes that the user already placed explicitly
-        Set<Class<?>> placed = explicit.sections().stream()
+        // Collect classes the default layout already placed explicitly
+        Set<Class<?>> placed = defaultSections.stream()
                 .flatMap(s -> s.entityRefs().stream())
                 .map(UiLayoutBuilder.EntityRef::javaClass)
                 .collect(Collectors.toSet());
@@ -210,31 +269,33 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         // Auto-place remaining entities using @UiSection or fallback grouping
         UiLayoutBuilder fallbackBuilder = new UiLayoutBuilder();
 
-        for (CatalogDescriptor d : registry.allCatalogs()) {
-            if (placed.contains(d.javaClass())) continue;
-            UiSection s = d.javaClass().getAnnotation(UiSection.class);
-            String section = s != null ? s.value() : "Catalogs";
-            int order = s != null ? s.order() : 900;
-            fallbackBuilder.section(section).order(order).catalog(d.javaClass());
-        }
-        for (DocumentDescriptor d : registry.allDocuments()) {
-            if (placed.contains(d.javaClass())) continue;
-            UiSection s = d.javaClass().getAnnotation(UiSection.class);
-            String section = s != null ? s.value() : "Documents";
-            int order = s != null ? s.order() : 901;
-            fallbackBuilder.section(section).order(order).document(d.javaClass());
-        }
-        for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
-            if (placed.contains(d.javaClass())) continue;
-            UiSection s = d.javaClass().getAnnotation(UiSection.class);
-            String section = s != null ? s.value() : "Registers";
-            int order = s != null ? s.order() : 902;
-            fallbackBuilder.section(section).order(order).register(d.javaClass());
+        if (applyFallback) {
+            for (CatalogDescriptor d : registry.allCatalogs()) {
+                if (placed.contains(d.javaClass())) continue;
+                UiSection s = d.javaClass().getAnnotation(UiSection.class);
+                String section = s != null ? s.value() : "Catalogs";
+                int order = s != null ? s.order() : 900;
+                fallbackBuilder.section(section).order(order).catalog(d.javaClass());
+            }
+            for (DocumentDescriptor d : registry.allDocuments()) {
+                if (placed.contains(d.javaClass())) continue;
+                UiSection s = d.javaClass().getAnnotation(UiSection.class);
+                String section = s != null ? s.value() : "Documents";
+                int order = s != null ? s.order() : 901;
+                fallbackBuilder.section(section).order(order).document(d.javaClass());
+            }
+            for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
+                if (placed.contains(d.javaClass())) continue;
+                UiSection s = d.javaClass().getAnnotation(UiSection.class);
+                String section = s != null ? s.value() : "Registers";
+                int order = s != null ? s.order() : 902;
+                fallbackBuilder.section(section).order(order).register(d.javaClass());
+            }
         }
 
-        // Merge: explicit sections first, then fallback sections
-        List<UiLayout.Section> merged = new ArrayList<>(explicit.sections());
-        Set<String> explicitNames = explicit.sections().stream()
+        // Merge: explicit default sections first, then fallback sections
+        List<UiLayout.Section> merged = new ArrayList<>(defaultSections);
+        Set<String> explicitNames = defaultSections.stream()
                 .map(UiLayout.Section::name)
                 .collect(Collectors.toSet());
         for (UiLayout.Section fb : fallbackBuilder.build()) {
@@ -244,15 +305,8 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         }
         merged.sort(Comparator.comparingInt(UiLayout.Section::order));
 
-        // Widgets: use explicit config if provided, otherwise fall back to annotations
-        List<UiLayoutBuilder.WidgetConfig> widgets;
-        if (builder.hasWidgets()) {
-            widgets = builder.buildWidgets();
-        } else {
-            widgets = List.of(); // will fall back to annotation-based widgets in registry
-        }
-
-        return new UiLayout(merged, widgets, builder.buildProfiles(), builder.buildIdentity());
+        // Dashboard widgets now live in Page beans, not the layout.
+        return new UiLayout(merged, List.of(), profiles, identity, shell);
     }
 
     @Bean
