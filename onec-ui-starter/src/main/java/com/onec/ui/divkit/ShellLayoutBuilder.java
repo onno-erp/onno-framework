@@ -24,26 +24,23 @@ public final class ShellLayoutBuilder {
 
     public record NavSection(String title, List<NavItem> items) {}
 
-    public static Map<String, Object> build(String brand,
-                                            String userName,
-                                            List<ProfileLink> profiles,
-                                            String activeProfileId,
-                                            List<NavSection> nav,
-                                            Map<String, Object> content,
-                                            boolean mobile,
-                                            Palette p) {
-        int padX = mobile ? 16 : 28;
-
-        Map<String, Object> contentWrap = Div.vertical(List.of(content));
-        Div.matchWidth(contentWrap);
-        Div.pad(contentWrap, mobile ? 16 : 24, padX);
-
+    /**
+     * The chrome only (top bar + nav) — no content. The client renders this
+     * instantly and streams the per-route content in beneath it, so navigation
+     * never blanks while data loads.
+     */
+    public static Map<String, Object> chrome(String brand,
+                                             String userName,
+                                             List<ProfileLink> profiles,
+                                             String activeProfileId,
+                                             List<NavSection> nav,
+                                             boolean mobile,
+                                             Palette p) {
         Map<String, Object> root = Div.vertical(List.of(
                 topbar(brand, userName, profiles, activeProfileId, mobile, p),
                 Div.separator(p.border()),
                 navBar(nav, mobile, p),
-                Div.separator(p.border()),
-                contentWrap));
+                Div.separator(p.border())));
         Div.matchWidth(root);
         Div.background(root, p.page());
         return root;

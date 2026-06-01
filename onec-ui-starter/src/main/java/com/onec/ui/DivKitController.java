@@ -25,11 +25,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Emits the full server-rendered DivKit app: every endpoint returns a complete
- * card (chrome + surface content) for the caller's resolved persona, intersected
- * with RBAC, in the client's theme. The client is a thin DivKit canvas; it passes
- * {@code ?viewport=mobile} and {@code ?theme=dark} so the layout and colors are
- * chosen server-side — the same hooks a Flutter client would use.
+ * Emits the server-rendered DivKit app, split so the client can render instantly
+ * and load data lazily: {@code /shell} returns the chrome (top bar + nav, no data
+ * — fast), and each content endpoint returns just that surface's card. The client
+ * paints the shell immediately and streams content in beneath it behind a
+ * skeleton. Everything is resolved for the caller's persona, intersected with
+ * RBAC, in the requested theme/viewport — the same hooks a Flutter client uses.
  */
 @RestController
 @RequestMapping("/api/divkit")
@@ -68,11 +69,36 @@ public class DivKitController {
         this.registerQuery = registerQuery;
     }
 
-    @GetMapping("/app")
-    public Map<String, Object> app(@RequestParam(required = false) String profile,
-                                   @RequestParam(required = false) String viewport,
-                                   @RequestParam(required = false) String theme,
-                                   Principal principal) {
+    // ----- chrome (fast, no entity data) -----
+
+    @GetMapping("/shell")
+    public Map<String, Object> shell(@RequestParam(required = false) String profile,
+                                     @RequestParam(required = false) String viewport,
+                                     @RequestParam(required = false) String theme,
+                                     @RequestParam(required = false) String active,
+                                     Principal principal) {
+        boolean mobile = isMobile(viewport);
+        Palette p = Palette.of(theme);
+        UiLayout.Profile activeProfile = activeProfile(principal, profile);
+        CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
+
+        List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, active);
+        List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
+        String brand = activeProfile.title() == null || activeProfile.title().isBlank()
+                ? "OneC" : activeProfile.title();
+
+        Map<String, Object> chrome = ShellLayoutBuilder.chrome(
+                brand, user.displayName(), profileLinks, activeProfile.id(), nav, mobile, p);
+        return DivCard.of("onec-shell", chrome);
+    }
+
+    // ----- content (per route; the slow, data-bearing part) -----
+
+    @GetMapping("/home")
+    public Map<String, Object> home(@RequestParam(required = false) String profile,
+                                    @RequestParam(required = false) String viewport,
+                                    @RequestParam(required = false) String theme,
+                                    Principal principal) {
         boolean mobile = isMobile(viewport);
         Palette p = Palette.of(theme);
         UiLayout.Profile active = activeProfile(principal, profile);
@@ -85,84 +111,65 @@ public class DivKitController {
         String title = active.title() == null || active.title().isBlank() ? "Dashboard" : active.title();
         Map<String, Object> content = DashboardDivBuilder.build(
                 title, "Welcome back, " + user.displayName(), widgets, mobile ? 1 : 2, p);
-
-        return renderShell(principal, active, user, mobile, p, null, content);
+        return DivCard.of("onec-content", content);
     }
 
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
-                                           @RequestParam(required = false) String profile,
-                                           @RequestParam(required = false) String viewport,
                                            @RequestParam(required = false) String theme,
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
-        Palette p = Palette.of(theme);
         Map<String, Object> content = SurfaceDivBuilder.catalogList(
-                viewResolver.catalogList(desc), catalogQuery.list(desc), p);
-        return renderShell(principal, profile, isMobile(viewport), p, "/catalogs/" + name, content);
+                viewResolver.catalogList(desc), catalogQuery.list(desc), Palette.of(theme));
+        return DivCard.of("onec-content", content);
     }
 
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentList(@PathVariable String name,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to,
-                                            @RequestParam(required = false) String profile,
-                                            @RequestParam(required = false) String viewport,
                                             @RequestParam(required = false) String theme,
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
-        Palette p = Palette.of(theme);
         Map<String, Object> content = SurfaceDivBuilder.documentList(
-                viewResolver.documentList(desc), documentQuery.list(desc, from, to), name, p);
-        return renderShell(principal, profile, isMobile(viewport), p, "/documents/" + name, content);
+                viewResolver.documentList(desc), documentQuery.list(desc, from, to), name, Palette.of(theme));
+        return DivCard.of("onec-content", content);
     }
 
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
-                                              @RequestParam(required = false) String profile,
-                                              @RequestParam(required = false) String viewport,
                                               @RequestParam(required = false) String theme,
                                               Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
-        Palette p = Palette.of(theme);
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(
-                resolvedMetadata.describeDocument(desc), documentQuery.get(desc, id), p);
-        return renderShell(principal, profile, isMobile(viewport), p, "/documents/" + name, content);
+                resolvedMetadata.describeDocument(desc), documentQuery.get(desc, id), Palette.of(theme));
+        return DivCard.of("onec-content", content);
     }
 
     @GetMapping("/registers/{name}")
     public Map<String, Object> registerReport(@PathVariable String name,
                                               @RequestParam(required = false) String from,
                                               @RequestParam(required = false) String to,
-                                              @RequestParam(required = false) String profile,
-                                              @RequestParam(required = false) String viewport,
                                               @RequestParam(required = false) String theme,
                                               Principal principal) {
         AccumulationRegisterDescriptor desc = registerQuery.require(name);
         access.requireRead(principal, desc);
-        Palette p = Palette.of(theme);
         List<Map<String, Object>> balances = desc.accumulationType() == AccumulationType.BALANCE
                 ? registerQuery.balance(desc, Map.of())
                 : null;
         Map<String, Object> content = SurfaceDivBuilder.registerReport(
-                resolvedMetadata.describeRegister(desc), registerQuery.movements(desc, from, to), balances, p);
-        return renderShell(principal, profile, isMobile(viewport), p, "/registers/" + name, content);
+                resolvedMetadata.describeRegister(desc), registerQuery.movements(desc, from, to), balances,
+                Palette.of(theme));
+        return DivCard.of("onec-content", content);
     }
 
-    // ----- shell assembly -----
+    // ----- helpers -----
 
-    private Map<String, Object> renderShell(Principal principal, String profileParam, boolean mobile,
-                                            Palette p, String activePath, Map<String, Object> content) {
-        UiLayout.Profile active = activeProfile(principal, profileParam);
-        return renderShell(principal, active, currentUserResolver.resolve(principal), mobile, p, activePath, content);
-    }
-
-    private Map<String, Object> renderShell(Principal principal, UiLayout.Profile active,
-                                            CurrentUserResolver.CurrentUser user, boolean mobile,
-                                            Palette p, String activePath, Map<String, Object> content) {
+    private List<ShellLayoutBuilder.NavSection> navFor(Principal principal, UiLayout.Profile active,
+                                                       String activePath) {
         List<ShellLayoutBuilder.NavSection> nav = new ArrayList<>();
         for (UiLayout.ResolvedSection section : layoutResolver.resolve(active)) {
             List<ShellLayoutBuilder.NavItem> items = section.items().stream()
@@ -174,21 +181,14 @@ public class DivKitController {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), items));
             }
         }
+        return nav;
+    }
 
-        List<ShellLayoutBuilder.ProfileLink> profileLinks = profileResolver.switchable(layout, access.roles(principal))
-                .stream()
+    private List<ShellLayoutBuilder.ProfileLink> profileLinksFor(Principal principal) {
+        return profileResolver.switchable(layout, access.roles(principal)).stream()
                 .map(pl -> new ShellLayoutBuilder.ProfileLink(pl.id(),
                         pl.title() == null || pl.title().isBlank() ? pl.id() : pl.title()))
                 .toList();
-
-        String brand = active.title() == null || active.title().isBlank() ? "OneC" : active.title();
-        Map<String, Object> root = ShellLayoutBuilder.build(
-                brand, user.displayName(), profileLinks, active.id(), nav, content, mobile, p);
-
-        List<Map<String, Object>> variables = active.theme() == null || active.theme().isBlank()
-                ? List.of()
-                : List.of(DivCard.stringVar("theme", active.theme()));
-        return DivCard.of("onec-app", root, variables);
     }
 
     private UiLayout.Profile activeProfile(Principal principal, String profileParam) {
