@@ -8,5 +8,6 @@ include(
     "onec-kafka-starter",
     "onec-print-starter",
     "onec-mail-starter",
+    "onec-hospedajes-starter",
     "example"
 )
