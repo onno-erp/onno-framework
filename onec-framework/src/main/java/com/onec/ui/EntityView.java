@@ -24,6 +24,16 @@ public interface EntityView {
     /** The domain class (catalog or document) this view customizes. */
     Class<?> entity();
 
+    /**
+     * The profile/persona id this view applies to, or {@code null} (default) to
+     * apply to every profile. A profile-specific view lets you build a radically
+     * different screen for a persona; the resolver prefers it over the default.
+     * Composition is just Java — subclass another view and override a surface.
+     */
+    default String profile() {
+        return null;
+    }
+
     /** Customize the list/table surface. Default: auto-generated columns. */
     default void list(ListSpec list) {}
 }

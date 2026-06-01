@@ -15,6 +15,10 @@ import "@divkitframework/divkit/dist/client.css";
  */
 const MOBILE_BREAKPOINT = 768;
 
+// Chrome is cheap and stable per (profile, theme, viewport, active), so cache it
+// for the session — navigation reuses it instantly instead of re-fetching.
+const shellCache = new Map<string, DivKitProps["json"]>();
+
 export function DivKitView() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,17 +57,25 @@ export function DivKitView() {
     const qs = new URLSearchParams();
     if (mobile) qs.set("viewport", "mobile");
     qs.set("theme", resolvedTheme);
-    if (isHome && profile) qs.set("profile", profile);
+    if (profile) qs.set("profile", profile);
     return `${base}?${qs.toString()}`;
   }, [location.pathname, mobile, resolvedTheme, profile]);
 
-  // Chrome: fast, no entity data — paints immediately.
+  // Chrome: fast, no entity data — paint from cache instantly, else fetch once.
   useEffect(() => {
+    const cached = shellCache.get(shellEndpoint);
+    if (cached) {
+      setShellCard(cached);
+      return;
+    }
     let cancelled = false;
     fetch(shellEndpoint, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((json) => {
-        if (!cancelled) setShellCard(json as DivKitProps["json"]);
+        if (!cancelled) {
+          shellCache.set(shellEndpoint, json as DivKitProps["json"]);
+          setShellCard(json as DivKitProps["json"]);
+        }
       })
       .catch(() => {});
     return () => {
@@ -95,6 +107,7 @@ export function DivKitView() {
       if (!url || !url.startsWith("onec://")) return;
       const rest = url.slice("onec://".length); // "logout" | "theme/toggle" | "app?profile=x" | "documents/foo/id"
       if (rest === "logout") {
+        shellCache.clear();
         logout().finally(() => navigate("/login"));
         return;
       }

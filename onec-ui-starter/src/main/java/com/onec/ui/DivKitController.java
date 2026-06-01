@@ -116,12 +116,14 @@ public class DivKitController {
 
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
+                                           @RequestParam(required = false) String profile,
                                            @RequestParam(required = false) String theme,
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
+        String profileId = activeProfile(principal, profile).id();
         Map<String, Object> content = SurfaceDivBuilder.catalogList(
-                viewResolver.catalogList(desc), catalogQuery.list(desc), Palette.of(theme));
+                viewResolver.catalogList(desc, profileId), catalogQuery.list(desc), Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
 
@@ -129,12 +131,15 @@ public class DivKitController {
     public Map<String, Object> documentList(@PathVariable String name,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to,
+                                            @RequestParam(required = false) String profile,
                                             @RequestParam(required = false) String theme,
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
+        String profileId = activeProfile(principal, profile).id();
         Map<String, Object> content = SurfaceDivBuilder.documentList(
-                viewResolver.documentList(desc), documentQuery.list(desc, from, to), name, Palette.of(theme));
+                viewResolver.documentList(desc, profileId), documentQuery.list(desc, from, to), name,
+                Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
 

@@ -18,30 +18,45 @@ import java.util.Map;
  */
 public class UiViewResolver {
 
+    private static final String DEFAULT = "";
+
     private final ResolvedMetadataService metadata;
-    private final Map<Class<?>, EntityView> views = new LinkedHashMap<>();
+    // entity -> (profile id | "" for default) -> view
+    private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
 
     public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews) {
         this.metadata = metadata;
         for (EntityView view : entityViews) {
-            if (view.entity() != null) {
-                views.put(view.entity(), view);
+            if (view.entity() == null) {
+                continue;
             }
+            String profile = view.profile() == null ? DEFAULT : view.profile();
+            views.computeIfAbsent(view.entity(), k -> new LinkedHashMap<>()).put(profile, view);
         }
     }
 
-    public ResolvedListView catalogList(CatalogDescriptor d) {
-        return resolveList(d.javaClass(), metadata.describeCatalog(d));
+    public ResolvedListView catalogList(CatalogDescriptor d, String profileId) {
+        return resolveList(d.javaClass(), profileId, metadata.describeCatalog(d));
     }
 
-    public ResolvedListView documentList(DocumentDescriptor d) {
-        return resolveList(d.javaClass(), metadata.describeDocument(d));
+    public ResolvedListView documentList(DocumentDescriptor d, String profileId) {
+        return resolveList(d.javaClass(), profileId, metadata.describeDocument(d));
+    }
+
+    /** Profile-specific view wins, then the default view, then auto-generated columns. */
+    private EntityView viewFor(Class<?> entity, String profileId) {
+        Map<String, EntityView> byProfile = views.get(entity);
+        if (byProfile == null) {
+            return null;
+        }
+        EntityView specific = byProfile.get(profileId);
+        return specific != null ? specific : byProfile.get(DEFAULT);
     }
 
     @SuppressWarnings("unchecked")
-    private ResolvedListView resolveList(Class<?> entity, Map<String, Object> meta) {
+    private ResolvedListView resolveList(Class<?> entity, String profileId, Map<String, Object> meta) {
         ListSpec spec = new ListSpec();
-        EntityView view = views.get(entity);
+        EntityView view = viewFor(entity, profileId);
         if (view != null) {
             view.list(spec);
         }
