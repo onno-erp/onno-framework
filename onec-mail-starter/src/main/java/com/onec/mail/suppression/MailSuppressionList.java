@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.suppression;
 
 import org.jdbi.v3.core.Jdbi;
 

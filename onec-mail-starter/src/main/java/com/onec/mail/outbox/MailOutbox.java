@@ -1,7 +1,8 @@
-package com.onec.mail;
+package com.onec.mail.outbox;
 
 import org.jdbi.v3.core.Jdbi;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +25,7 @@ public class MailOutbox {
                     "    _last_error TEXT,\n" +
                     "    _created_at TIMESTAMP NOT NULL,\n" +
                     "    _dispatched_at TIMESTAMP,\n" +
+                    "    _claimed_at TIMESTAMP,\n" +
                     "    _next_attempt_at TIMESTAMP NOT NULL,\n" +
                     "    _status VARCHAR(32) NOT NULL\n" +
                     ")";
@@ -31,6 +33,10 @@ public class MailOutbox {
     private static final String DDL_IDEMPOTENCY_INDEX =
             "CREATE UNIQUE INDEX IF NOT EXISTS onec_mail_outbox_idem " +
                     "ON onec_mail_outbox (_idempotency_key)";
+
+    // Brings tables created before the claim-based relay up to date.
+    private static final String DDL_CLAIMED_AT =
+            "ALTER TABLE onec_mail_outbox ADD COLUMN IF NOT EXISTS _claimed_at TIMESTAMP";
 
     private final Jdbi jdbi;
 
@@ -41,6 +47,7 @@ public class MailOutbox {
     public void initSchema() {
         jdbi.useHandle(h -> {
             h.execute(DDL);
+            h.execute(DDL_CLAIMED_AT);
             h.execute(DDL_IDEMPOTENCY_INDEX);
         });
     }
@@ -81,12 +88,27 @@ public class MailOutbox {
         return id;
     }
 
-    public List<Pending> findDueForDispatch(int limit) {
+    /**
+     * Atomically claims up to {@code limit} due messages for this worker, flipping them {@code NEW -> SENDING}
+     * in a single statement. {@code FOR UPDATE SKIP LOCKED} lets concurrent relays (multiple app instances)
+     * grab disjoint batches instead of all selecting the same rows and sending duplicates. Rows stuck in
+     * {@code SENDING} longer than {@code leaseTimeout} — a worker that crashed mid-send — are reclaimed.
+     */
+    public List<Pending> claimBatch(int limit, Duration leaseTimeout) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime staleBefore = now.minus(leaseTimeout);
         return jdbi.withHandle(h -> h.createQuery(
-                        "SELECT _id, _payload, _attempts FROM onec_mail_outbox " +
-                                "WHERE _status = 'NEW' AND _next_attempt_at <= :now " +
-                                "ORDER BY _created_at LIMIT :limit")
-                .bind("now", LocalDateTime.now())
+                        "UPDATE onec_mail_outbox SET _status = 'SENDING', _claimed_at = :now " +
+                                "WHERE _id IN (" +
+                                "  SELECT _id FROM onec_mail_outbox " +
+                                "  WHERE (_status = 'NEW' AND _next_attempt_at <= :now) " +
+                                "     OR (_status = 'SENDING' AND _claimed_at < :staleBefore) " +
+                                "  ORDER BY _created_at LIMIT :limit " +
+                                "  FOR UPDATE SKIP LOCKED" +
+                                ") " +
+                                "RETURNING _id, _payload, _attempts")
+                .bind("now", now)
+                .bind("staleBefore", staleBefore)
                 .bind("limit", limit)
                 .map((rs, ctx) -> new Pending(
                         (UUID) rs.getObject("_id"),

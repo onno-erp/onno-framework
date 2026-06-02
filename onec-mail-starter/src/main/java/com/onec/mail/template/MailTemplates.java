@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.template;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

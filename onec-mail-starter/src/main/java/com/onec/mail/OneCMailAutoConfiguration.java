@@ -1,5 +1,21 @@
 package com.onec.mail;
 
+import com.onec.mail.dispatch.CompositeMailDispatcher;
+import com.onec.mail.dispatch.FileMailDispatcher;
+import com.onec.mail.dispatch.HttpMailDispatcher;
+import com.onec.mail.dispatch.LoggingMailDispatcher;
+import com.onec.mail.dispatch.MailDispatcher;
+import com.onec.mail.dispatch.SmtpMailDispatcher;
+import com.onec.mail.outbox.MailOutbox;
+import com.onec.mail.outbox.MailOutboxRelay;
+import com.onec.mail.outbox.MailOutboxRelayScheduler;
+import com.onec.mail.suppression.MailSuppressionList;
+import com.onec.mail.template.MailRenderer;
+import com.onec.mail.template.MailScanner;
+import com.onec.mail.template.MailTemplateRegistry;
+import com.onec.mail.web.MailEventController;
+import com.onec.mail.web.MailPreviewController;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.jdbi.v3.core.Jdbi;

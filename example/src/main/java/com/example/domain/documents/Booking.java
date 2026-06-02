@@ -16,7 +16,7 @@ import com.onec.annotations.UiHint;
 import com.onec.annotations.UiSection;
 import com.onec.lifecycle.BeforeWriteHandler;
 import com.onec.lifecycle.Postable;
-import com.onec.mail.MailTemplate;
+import com.onec.mail.template.MailTemplate;
 import com.onec.model.DocumentObject;
 import com.onec.posting.PostingContext;
 import com.onec.types.Ref;

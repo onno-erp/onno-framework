@@ -13,13 +13,13 @@ public class MailProperties {
 
     private boolean enabled = true;
 
-    /** Selects which {@link MailDispatcher} bean is active by its {@code name()}. */
+    /** Selects which {@code MailDispatcher} bean is active by its {@code name()}. */
     private String provider = "smtp";
 
     /** Default From: address when a {@link MailMessage} doesn't set one. */
     private String defaultFrom;
 
-    /** Packages scanned for {@link MailTemplate}. Defaults to the application's base packages. */
+    /** Packages scanned for {@code MailTemplate}. Defaults to the application's base packages. */
     private List<String> basePackages = new ArrayList<>();
 
     /** Outbox relay batch size. */
@@ -88,6 +88,11 @@ public class MailProperties {
         private long intervalMs = 30_000;
         /** Max delivery attempts before a message is marked FAILED. */
         private int maxAttempts = 5;
+        /**
+         * How long a message claimed by a relay may stay in {@code SENDING} before another worker reclaims it.
+         * Guards against a worker that crashed mid-send; set comfortably above the slowest provider send time.
+         */
+        private long leaseTimeoutMs = 300_000;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -95,6 +100,8 @@ public class MailProperties {
         public void setIntervalMs(long intervalMs) { this.intervalMs = intervalMs; }
         public int getMaxAttempts() { return maxAttempts; }
         public void setMaxAttempts(int maxAttempts) { this.maxAttempts = maxAttempts; }
+        public long getLeaseTimeoutMs() { return leaseTimeoutMs; }
+        public void setLeaseTimeoutMs(long leaseTimeoutMs) { this.leaseTimeoutMs = leaseTimeoutMs; }
     }
 
     /** Config for the {@code file} dev dispatcher, which writes messages to disk instead of sending. */

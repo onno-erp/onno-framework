@@ -1,4 +1,10 @@
-package com.onec.mail;
+package com.onec.mail.dispatch;
+
+import com.onec.mail.MailAttachment;
+import com.onec.mail.MailDeliveryException;
+import com.onec.mail.MailHeader;
+import com.onec.mail.MailMessage;
+import com.onec.mail.MailProperties;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;

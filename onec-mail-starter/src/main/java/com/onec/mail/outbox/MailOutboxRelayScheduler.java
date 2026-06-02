@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.outbox;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

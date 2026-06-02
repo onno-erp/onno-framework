@@ -1,4 +1,8 @@
-package com.onec.mail;
+package com.onec.mail.dispatch;
+
+import com.onec.mail.MailDeliveryException;
+import com.onec.mail.MailMessage;
+import com.onec.mail.MailProperties;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;

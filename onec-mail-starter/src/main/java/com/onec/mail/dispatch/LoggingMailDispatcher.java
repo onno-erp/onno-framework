@@ -1,4 +1,6 @@
-package com.onec.mail;
+package com.onec.mail.dispatch;
+
+import com.onec.mail.MailMessage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

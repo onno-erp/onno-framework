@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.template;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

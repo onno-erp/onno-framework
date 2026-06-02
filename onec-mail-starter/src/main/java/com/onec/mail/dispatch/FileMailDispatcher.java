@@ -1,4 +1,9 @@
-package com.onec.mail;
+package com.onec.mail.dispatch;
+
+import com.onec.mail.MailDeliveryException;
+import com.onec.mail.MailHeader;
+import com.onec.mail.MailMessage;
+import com.onec.mail.MailProperties;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
