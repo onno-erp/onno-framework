@@ -1,4 +1,8 @@
-package com.onec.mail;
+package com.onec.mail.outbox;
+
+import com.onec.mail.MailMessage;
+import com.onec.mail.MailProperties;
+import com.onec.mail.dispatch.MailDispatcher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -24,7 +28,8 @@ public class MailOutboxRelay {
 
     public int relayPending() {
         int dispatched = 0;
-        for (MailOutbox.Pending p : outbox.findDueForDispatch(properties.getRelayBatchSize())) {
+        Duration lease = Duration.ofMillis(properties.getRelay().getLeaseTimeoutMs());
+        for (MailOutbox.Pending p : outbox.claimBatch(properties.getRelayBatchSize(), lease)) {
             try {
                 MailMessage msg = objectMapper.readValue(p.payload(), MailMessage.class);
                 dispatcher.dispatch(msg);

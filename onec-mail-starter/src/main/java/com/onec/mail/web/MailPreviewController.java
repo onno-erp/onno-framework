@@ -1,4 +1,8 @@
-package com.onec.mail;
+package com.onec.mail.web;
+
+import com.onec.mail.template.MailRenderer;
+import com.onec.mail.template.MailTemplateDescriptor;
+import com.onec.mail.template.MailTemplateRegistry;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;

@@ -1,5 +1,11 @@
 package com.onec.mail;
 
+import com.onec.mail.dispatch.CompositeMailDispatcher;
+import com.onec.mail.dispatch.FileMailDispatcher;
+import com.onec.mail.dispatch.MailDispatcher;
+import com.onec.mail.template.MailRenderer;
+import com.onec.mail.template.MailTemplateDescriptor;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.DefaultResourceLoader;
 

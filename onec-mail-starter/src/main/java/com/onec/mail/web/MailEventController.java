@@ -1,4 +1,6 @@
-package com.onec.mail;
+package com.onec.mail.web;
+
+import com.onec.mail.suppression.MailSuppressionList;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

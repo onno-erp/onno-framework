@@ -9,5 +9,6 @@ include(
     "onec-print-starter",
     "onec-mail-starter",
     "onec-hospedajes-starter",
+    "onec-guesty-starter",
     "example"
 )

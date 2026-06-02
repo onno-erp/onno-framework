@@ -1,4 +1,6 @@
-package com.onec.mail;
+package com.onec.mail.template;
+
+import com.onec.mail.MailProperties;
 
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;

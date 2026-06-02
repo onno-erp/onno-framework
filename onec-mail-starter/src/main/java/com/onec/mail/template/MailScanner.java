@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.template;
 
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;

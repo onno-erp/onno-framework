@@ -1,5 +1,12 @@
 package com.onec.mail;
 
+import com.onec.mail.dispatch.MailDispatcher;
+import com.onec.mail.outbox.MailOutbox;
+import com.onec.mail.suppression.MailSuppressionList;
+import com.onec.mail.template.MailRenderer;
+import com.onec.mail.template.MailTemplateDescriptor;
+import com.onec.mail.template.MailTemplateRegistry;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -16,7 +23,7 @@ import java.util.UUID;
  * <ul>
  *     <li>{@link #send(MailMessage)} - synchronous dispatch via the active provider.</li>
  *     <li>{@link #queue(MailMessage)} - durable queue via the mail outbox; relayed asynchronously with retry.</li>
- *     <li>{@link #send(Object, String, String...)} - render a registered {@link MailTemplate}
+ *     <li>{@link #send(Object, String, String...)} - render a registered {@code MailTemplate}
  *         bound to {@code target.getClass()} and dispatch (queued or direct based on config).</li>
  * </ul>
  * Default routing of {@link #send(Object, String, String...)} is controlled by {@code onec.mail.use-outbox}.
