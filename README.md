@@ -72,6 +72,23 @@ Publish with:
 GITHUB_ACTOR=your-user GITHUB_TOKEN=your-token ./gradlew publish
 ```
 
+CI publishes packages from version tags. Push a tag named `v0.1.0` to publish artifacts with version `0.1.0`:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Release candidates work the same way. A tag named `v0.1.0-rc1` publishes artifacts with version `0.1.0-rc1`:
+
+```bash
+git tag v0.1.0-rc1
+git push origin v0.1.0-rc1
+```
+
+The release workflow also supports manual dispatch with an explicit version. In both cases, CI runs `clean check` before publishing.
+After publishing packages, the workflow creates a GitHub Release with generated notes. Versions with a suffix, such as `0.1.0-rc1`, are marked as pre-releases.
+
 A consuming project can resolve published artifacts with:
 
 ```kotlin

@@ -4,9 +4,13 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7" apply false
 }
 
+val releaseVersion = providers.gradleProperty("releaseVersion")
+    .orElse(providers.environmentVariable("RELEASE_VERSION"))
+    .orElse("0.1.0")
+
 allprojects {
     group = "com.onec"
-    version = "0.1.0"
+    version = releaseVersion.get()
 
     repositories {
         mavenCentral()
