@@ -19,5 +19,7 @@ include(
     "onec-print-starter",
     "onec-mail-starter",
     "onec-desktop-starter",
+    "onec-hospedajes-starter",
+    "onec-guesty-starter",
     "example"
 )

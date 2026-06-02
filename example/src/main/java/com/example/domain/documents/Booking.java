@@ -12,7 +12,7 @@ import com.onec.annotations.Document;
 import com.onec.annotations.TabularSection;
 import com.onec.lifecycle.BeforeWriteHandler;
 import com.onec.lifecycle.Postable;
-import com.onec.mail.MailTemplate;
+import com.onec.mail.template.MailTemplate;
 import com.onec.model.DocumentObject;
 import com.onec.posting.PostingContext;
 import com.onec.rules.BusinessRule;

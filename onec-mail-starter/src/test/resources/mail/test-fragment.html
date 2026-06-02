@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<div th:replace="~{layouts/base :: page(~{::content})}">
+    <div th:fragment="content">
+        <p th:text="${doc.title}">title</p>
+    </div>
+</div>
+</body>
+</html>

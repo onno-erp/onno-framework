@@ -1,9 +1,12 @@
-package com.onec.mail;
+package com.onec.mail.template;
+
+import com.onec.mail.MailProperties;
 
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
+import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.StringTemplateResolver;
 
 import java.io.IOException;
@@ -13,6 +16,11 @@ import java.util.Map;
 /**
  * Renders mail subject and body templates. Subject is processed inline as a tiny Thymeleaf template
  * so it can reference {@code doc} fields ("Booking #${doc.ref} confirmed").
+ *
+ * <p>Body templates may pull in shared layouts/fragments via {@code th:insert}/{@code th:replace},
+ * resolved against {@code classpath:/mail/} (e.g. {@code ~{layouts/base :: html(~{::content})}}).
+ * Fragment lookup is handled by a {@link ClassLoaderTemplateResolver} that precedes the inline
+ * {@link StringTemplateResolver} in the resolution chain.
  */
 public class MailRenderer {
 
@@ -24,12 +32,26 @@ public class MailRenderer {
         this.resourceLoader = resourceLoader;
         this.encoding = Charset.forName(properties.getEncoding());
 
-        StringTemplateResolver resolver = new StringTemplateResolver();
-        resolver.setTemplateMode("HTML");
-        resolver.setCacheable(false);
+        // Order 1: resolve named fragments/layouts under classpath:/mail/. checkExistence=true lets the
+        // inline body/subject strings (which are not real resources) fall through to the string resolver.
+        ClassLoaderTemplateResolver fragments = new ClassLoaderTemplateResolver();
+        fragments.setPrefix("mail/");
+        fragments.setSuffix(".html");
+        fragments.setTemplateMode("HTML");
+        fragments.setCharacterEncoding(encoding.name());
+        fragments.setCheckExistence(true);
+        fragments.setCacheable(false);
+        fragments.setOrder(1);
+
+        // Order 2: treat the passed-in string as the template content itself (subject + body bodies).
+        StringTemplateResolver inline = new StringTemplateResolver();
+        inline.setTemplateMode("HTML");
+        inline.setCacheable(false);
+        inline.setOrder(2);
 
         this.engine = new TemplateEngine();
-        this.engine.setTemplateResolver(resolver);
+        this.engine.addTemplateResolver(fragments);
+        this.engine.addTemplateResolver(inline);
     }
 
     public Rendered render(MailTemplateDescriptor descriptor, Object target, Map<String, Object> extras) {

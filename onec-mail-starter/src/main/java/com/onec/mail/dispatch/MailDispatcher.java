@@ -1,4 +1,6 @@
-package com.onec.mail;
+package com.onec.mail.dispatch;
+
+import com.onec.mail.MailMessage;
 
 /**
  * Provider SPI. Each provider starter (SMTP default, SendGrid, SES, Resend, ...)
@@ -9,6 +11,6 @@ public interface MailDispatcher {
     /** Stable provider id, e.g. "smtp", "sendgrid", "ses". */
     String name();
 
-    /** Synchronously deliver a message to the provider. Throws {@link MailDeliveryException} on failure. */
+    /** Synchronously deliver a message to the provider. Throws {@code MailDeliveryException} on failure. */
     void dispatch(MailMessage message);
 }

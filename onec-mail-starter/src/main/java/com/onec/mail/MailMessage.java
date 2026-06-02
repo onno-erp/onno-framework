@@ -59,6 +59,16 @@ public record MailMessage(
         public Builder attach(MailAttachment a) { this.attachments.add(a); return this; }
         public Builder header(String name, String value) { this.headers.add(new MailHeader(name, value)); return this; }
 
+        /**
+         * Adds RFC 8058 one-click unsubscribe headers. {@code uri} is an {@code https:} or {@code mailto:}
+         * target; mail clients surface it as an Unsubscribe button and providers use it for list hygiene.
+         */
+        public Builder listUnsubscribe(String uri) {
+            this.headers.add(new MailHeader("List-Unsubscribe", "<" + uri + ">"));
+            this.headers.add(new MailHeader("List-Unsubscribe-Post", "List-Unsubscribe=One-Click"));
+            return this;
+        }
+
         public MailMessage build() {
             return new MailMessage(from, replyTo, to, cc, bcc, subject, text, html, attachments, headers);
         }

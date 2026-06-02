@@ -1,52 +1,53 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8"/>
-    <title>Booking confirmed</title>
-</head>
-<body style="font-family: Helvetica, Arial, sans-serif; color: #222; line-height: 1.5;">
+<body>
+<div th:replace="~{layouts/base :: page(~{::content})}">
+    <div th:fragment="content">
 
-    <h2 style="margin: 0 0 12px 0;">Your booking is confirmed</h2>
+        <h2 style="margin: 0 0 12px 0;">Your booking is confirmed</h2>
 
-    <p>Hello,</p>
+        <p>Hello,</p>
 
-    <p>
-        We're glad to confirm your stay
-        <span th:if="${doc.property != null}">at <strong th:text="${doc.property}">Property</strong></span>.
-    </p>
+        <p>
+            We're glad to confirm your stay
+            <span th:if="${doc.property != null}">at <strong th:text="${doc.property}">Property</strong></span>.
+        </p>
 
-    <table style="border-collapse: collapse; margin: 16px 0;">
-        <tr>
-            <td style="padding: 4px 12px 4px 0; color: #666;">Check-in</td>
-            <td style="padding: 4px 0;" th:text="${doc.checkIn}">—</td>
-        </tr>
-        <tr>
-            <td style="padding: 4px 12px 4px 0; color: #666;">Check-out</td>
-            <td style="padding: 4px 0;" th:text="${doc.checkOut}">—</td>
-        </tr>
-        <tr>
-            <td style="padding: 4px 12px 4px 0; color: #666;">Nights</td>
-            <td style="padding: 4px 0;" th:text="${doc.nights}">—</td>
-        </tr>
-        <tr>
-            <td style="padding: 4px 12px 4px 0; color: #666;">Guests</td>
-            <td style="padding: 4px 0;">
-                <span th:text="${doc.adults != null} ? ${doc.adults} : 0">0</span> adults
-                <span th:if="${doc.children != null and doc.children > 0}">
-                    , <span th:text="${doc.children}">0</span> children
-                </span>
-            </td>
-        </tr>
-        <tr th:if="${doc.totalGross != null}">
-            <td style="padding: 4px 12px 4px 0; color: #666;">Total</td>
-            <td style="padding: 4px 0;"><strong th:text="${doc.totalGross} + ' €'">0 €</strong></td>
-        </tr>
-    </table>
+        <table style="border-collapse: collapse; margin: 16px 0;">
+            <tr>
+                <td style="padding: 4px 12px 4px 0; color: #666;">Check-in</td>
+                <td style="padding: 4px 0;" th:text="${doc.checkIn}">—</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; color: #666;">Check-out</td>
+                <td style="padding: 4px 0;" th:text="${doc.checkOut}">—</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; color: #666;">Nights</td>
+                <td style="padding: 4px 0;" th:text="${doc.nights}">—</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; color: #666;">Guests</td>
+                <td style="padding: 4px 0;">
+                    <span th:text="${doc.adults != null} ? ${doc.adults} : 0">0</span> adults
+                    <span th:if="${doc.children != null and doc.children > 0}">
+                        , <span th:text="${doc.children}">0</span> children
+                    </span>
+                </td>
+            </tr>
+            <tr th:if="${doc.totalGross != null}">
+                <td style="padding: 4px 12px 4px 0; color: #666;">Total</td>
+                <td style="padding: 4px 0;"><strong th:text="${doc.totalGross} + ' €'">0 €</strong></td>
+            </tr>
+        </table>
 
-    <p>If you need anything before your arrival, just reply to this email.</p>
+        <p>If you need anything before your arrival, just reply to this email.</p>
 
-    <p style="color: #999; font-size: 12px; margin-top: 32px;">
-        Booking ref <span th:text="${doc.number}">B-000000001</span>
-    </p>
+        <p style="color: #999; font-size: 12px; margin-top: 32px;">
+            Booking ref <span th:text="${doc.number}">B-000000001</span>
+        </p>
+
+    </div>
+</div>
 </body>
 </html>

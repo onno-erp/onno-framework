@@ -1,4 +1,4 @@
-package com.onec.mail;
+package com.onec.mail.template;
 
 public record MailTemplateDescriptor(
         Class<?> target,
