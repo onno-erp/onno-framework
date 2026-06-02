@@ -1,6 +1,6 @@
 package com.onec.hospedajes;
 
-import com.onec.hospedajes.model.Solicitud;
+import com.onec.hospedajes.model.Peticion;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.JAXBException;
@@ -14,8 +14,9 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Serializes a {@link Solicitud} to the wire form the service expects for the {@code <solicitud>}
- * element: UTF-8 XML, ZIP-compressed, then Base64-encoded.
+ * Serializes a {@link Peticion} (the {@code altaParteHospedaje} root) to the wire form the service
+ * expects for the SOAP {@code <solicitud>} element: UTF-8 XML, ZIP-compressed, then Base64-encoded
+ * (spec §: "La solicitud será el fichero xml comprimido (zip) y en Base64").
  */
 public class SolicitudCodec {
 
@@ -23,23 +24,23 @@ public class SolicitudCodec {
 
     public SolicitudCodec() {
         try {
-            this.context = JAXBContext.newInstance(Solicitud.class);
+            this.context = JAXBContext.newInstance(Peticion.class);
         } catch (JAXBException e) {
-            throw new IllegalStateException("Failed to init JAXB context for Solicitud", e);
+            throw new IllegalStateException("Failed to init JAXB context for Peticion", e);
         }
     }
 
     /** Marshal to a UTF-8 XML string. */
-    public String toXml(Solicitud solicitud) {
+    public String toXml(Peticion peticion) {
         try {
             Marshaller marshaller = context.createMarshaller();
             marshaller.setProperty(Marshaller.JAXB_ENCODING, "UTF-8");
             marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.FALSE);
             StringWriter writer = new StringWriter();
-            marshaller.marshal(solicitud, writer);
+            marshaller.marshal(peticion, writer);
             return writer.toString();
         } catch (JAXBException e) {
-            throw new IllegalStateException("Failed to marshal Solicitud", e);
+            throw new IllegalStateException("Failed to marshal Peticion", e);
         }
     }
 
@@ -49,8 +50,8 @@ public class SolicitudCodec {
     }
 
     /** Convenience: marshal and encode in one step. */
-    public String encode(Solicitud solicitud) {
-        return encode(toXml(solicitud));
+    public String encode(Peticion peticion) {
+        return encode(toXml(peticion));
     }
 
     private byte[] zip(byte[] data) {

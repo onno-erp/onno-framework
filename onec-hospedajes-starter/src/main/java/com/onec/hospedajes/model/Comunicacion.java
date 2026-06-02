@@ -3,31 +3,25 @@ package com.onec.hospedajes.model;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlType;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** One {@code comunicacion} — a parte de viajeros for a single contract at one establishment. */
+/**
+ * {@code comunicacionType} of {@code altaParteHospedaje.xsd}: a parte de viajeros for a single
+ * contract — the contract block plus its travelers. The establishment is carried once on the
+ * enclosing {@link Solicitud}.
+ */
 @XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {"contrato", "persona"})
 public class Comunicacion {
 
-    /** Establishment/property code assigned by the Hospedajes registry. Required. */
-    @XmlElement(name = "codigoEstablecimiento")
-    private String codigoEstablecimiento;
-
-    @XmlElement(name = "contrato")
+    @XmlElement(name = "contrato", required = true)
     private Contrato contrato;
 
-    @XmlElement(name = "persona")
+    @XmlElement(name = "persona", required = true)
     private List<Persona> persona = new ArrayList<>();
-
-    public String getCodigoEstablecimiento() {
-        return codigoEstablecimiento;
-    }
-
-    public void setCodigoEstablecimiento(String codigoEstablecimiento) {
-        this.codigoEstablecimiento = codigoEstablecimiento;
-    }
 
     public Contrato getContrato() {
         return contrato;

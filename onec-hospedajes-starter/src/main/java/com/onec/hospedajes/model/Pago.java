@@ -3,12 +3,14 @@ package com.onec.hospedajes.model;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlType;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import java.time.LocalDate;
 
-/** Bloque {@code pago} (spec section 4.2). Payment data mandated by RD 933/2021. */
+/** {@code pagoType} ({@code tiposGenerales.xsd}). Payment data mandated by RD 933/2021. */
 @XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {"tipoPago", "fechaPago", "medioPago", "titular", "caducidadTarjeta"})
 public class Pago {
 
     /** Payment type code (MIR catalog TIPO_PAGO: e.g. cash, card, transfer). Required. */

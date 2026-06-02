@@ -3,6 +3,7 @@ package com.onec.hospedajes;
 import com.onec.hospedajes.model.Comunicacion;
 import com.onec.hospedajes.model.Contrato;
 import com.onec.hospedajes.model.Direccion;
+import com.onec.hospedajes.model.Pago;
 import com.onec.hospedajes.model.Persona;
 
 import com.sun.net.httpserver.HttpServer;
@@ -24,8 +25,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Exercises the full client + transport + service + log flow against a stubbed SOAP endpoint over
  * plain HTTP (so no certificates or real credentials are needed). The stub responses mirror the
- * shape the parser expects; the goal is to prove the end-to-end plumbing — envelope construction,
- * Basic-auth header, ZIP+Base64 payload, response parsing, and the SUBMITTED→REGISTERED lifecycle.
+ * WSDL v3.1.3 shapes ({@code comunicacionResponse} / {@code consultaLoteResponse}); the goal is to
+ * prove the end-to-end plumbing — envelope construction, Basic-auth header, ZIP+Base64 payload,
+ * response parsing, and the SUBMITTED→REGISTERED lifecycle keyed by {@code orden}.
  */
 class HospedajesServiceIntegrationTest {
 
@@ -78,7 +80,7 @@ class HospedajesServiceIntegrationTest {
 
     @Test
     void submitsAltaWithBasicAuthAndRecordsTheBatch() {
-        ComunicacionResult result = service.registrar(List.of(sampleComunicacion()));
+        ComunicacionResult result = service.registrar("EST-001", List.of(sampleComunicacion()));
 
         assertThat(result.accepted()).isTrue();
         assertThat(result.numeroLote()).isEqualTo("LOTE-123");
@@ -88,7 +90,8 @@ class HospedajesServiceIntegrationTest {
                 .encodeToString("ws-user:ws-pass".getBytes(StandardCharsets.UTF_8));
         assertThat(lastAuthHeader.get()).isEqualTo(expected);
 
-        // Envelope carries the header fields and a (zipped/base64) solicitud
+        // Envelope carries the cabecera fields and a (zipped/base64) solicitud
+        assertThat(lastRequestBody.get()).contains("comunicacionRequest");
         assertThat(lastRequestBody.get()).contains("<codigoArrendador>0000000001</codigoArrendador>");
         assertThat(lastRequestBody.get()).contains("<tipoOperacion>A</tipoOperacion>");
         assertThat(lastRequestBody.get()).contains("<tipoComunicacion>PV</tipoComunicacion>");
@@ -97,7 +100,7 @@ class HospedajesServiceIntegrationTest {
 
     @Test
     void reconcileMarksCommunicationRegisteredFromConsultaLote() {
-        service.registrar(List.of(sampleComunicacion()));
+        service.registrar("EST-001", List.of(sampleComunicacion()));
 
         int updated = service.reconcile(10);
 
@@ -106,17 +109,20 @@ class HospedajesServiceIntegrationTest {
     }
 
     private String comunicacionResponse() {
-        return "<?xml version=\"1.0\"?><comunicacionResponse>"
-                + "<resultado><codigo>0</codigo><descripcion>OK</descripcion></resultado>"
-                + "<numeroLote>LOTE-123</numeroLote></comunicacionResponse>";
+        return "<?xml version=\"1.0\"?><comunicacionResponse "
+                + "xmlns=\"http://www.soap.servicios.hospedajes.mir.es/comunicacion\">"
+                + "<respuesta><codigo>0</codigo><descripcion>OK</descripcion><lote>LOTE-123</lote></respuesta>"
+                + "</comunicacionResponse>";
     }
 
     private String consultaLoteResponse() {
-        return "<?xml version=\"1.0\"?><consultaLoteResponse>"
-                + "<resultado><codigo>0</codigo><descripcion>OK</descripcion></resultado>"
-                + "<numeroLote>LOTE-123</numeroLote>"
-                + "<comunicacion><referencia>B-000001</referencia>"
-                + "<codigoComunicacion>PV-ABC-001</codigoComunicacion></comunicacion>"
+        return "<?xml version=\"1.0\"?><consultaLoteResponse "
+                + "xmlns=\"http://www.soap.servicios.hospedajes.mir.es/comunicacion\">"
+                + "<respuesta><codigo>0</codigo><descripcion>OK</descripcion></respuesta>"
+                + "<resultado><lote>LOTE-123</lote><codigoEstado>2</codigoEstado><descEstado>PROCESADO</descEstado>"
+                + "<resultadoComunicaciones>"
+                + "<resultadoComunicacion><orden>1</orden><codigoComunicacion>PV-ABC-001</codigoComunicacion></resultadoComunicacion>"
+                + "</resultadoComunicaciones></resultado>"
                 + "</consultaLoteResponse>";
     }
 
@@ -138,15 +144,18 @@ class HospedajesServiceIntegrationTest {
         persona.setDireccion(direccion);
         persona.setCorreo("ana@example.com");
 
+        Pago pago = new Pago();
+        pago.setTipoPago("EFECT");
+
         Contrato contrato = new Contrato();
         contrato.setReferencia("B-000001");
         contrato.setFechaContrato(LocalDate.of(2026, 5, 30));
         contrato.setFechaEntrada(LocalDateTime.of(2026, 6, 1, 14, 0, 0));
-        contrato.setFechaSalida(LocalDate.of(2026, 6, 5));
+        contrato.setFechaSalida(LocalDateTime.of(2026, 6, 5, 11, 0, 0));
         contrato.setNumPersonas(1);
+        contrato.setPago(pago);
 
         Comunicacion comunicacion = new Comunicacion();
-        comunicacion.setCodigoEstablecimiento("EST-001");
         comunicacion.setContrato(contrato);
         comunicacion.setPersona(List.of(persona));
         return comunicacion;

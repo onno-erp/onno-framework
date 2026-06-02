@@ -38,4 +38,9 @@ public class Property extends CatalogObject {
     @Attribute(displayName = "Cleaning fee", precision = 12, scale = 2)
     @UiHint(order = 4)
     private BigDecimal cleaningFee;
+
+    /** Código de establecimiento assigned by SES.HOSPEDAJES; required to register partes for this property. */
+    @Attribute(displayName = "SES establishment code", length = 10)
+    @UiHint(order = 5)
+    private String sesEstablishmentCode;
 }

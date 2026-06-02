@@ -3,13 +3,16 @@ package com.onec.hospedajes.model;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlType;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** Bloque {@code contrato} — booking/contract data for a hospedaje comunicación. */
+/** {@code contratoHospedajeType} ({@code tiposGenerales.xsd}) — booking/contract data for a parte. */
 @XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {"referencia", "fechaContrato", "fechaEntrada", "fechaSalida",
+        "numPersonas", "numHabitaciones", "internet", "pago"})
 public class Contrato {
 
     /** Caller's own contract reference. Required. */
@@ -25,9 +28,10 @@ public class Contrato {
     @XmlJavaTypeAdapter(LocalDateTimeXmlAdapter.class)
     private LocalDateTime fechaEntrada;
 
+    /** Date and time of departure from the accommodation. Required ({@code xsd:dateTime}). */
     @XmlElement(name = "fechaSalida")
-    @XmlJavaTypeAdapter(LocalDateXmlAdapter.class)
-    private LocalDate fechaSalida;
+    @XmlJavaTypeAdapter(LocalDateTimeXmlAdapter.class)
+    private LocalDateTime fechaSalida;
 
     @XmlElement(name = "numPersonas")
     private Integer numPersonas;
@@ -65,11 +69,11 @@ public class Contrato {
         this.fechaEntrada = fechaEntrada;
     }
 
-    public LocalDate getFechaSalida() {
+    public LocalDateTime getFechaSalida() {
         return fechaSalida;
     }
 
-    public void setFechaSalida(LocalDate fechaSalida) {
+    public void setFechaSalida(LocalDateTime fechaSalida) {
         this.fechaSalida = fechaSalida;
     }
 

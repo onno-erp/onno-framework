@@ -13,8 +13,11 @@ import java.util.List;
  */
 public interface HospedajesClient {
 
-    /** Submit an "alta" of partes de viajeros (tipoComunicacion=PV, tipoOperacion=A). */
-    ComunicacionResult altaPartes(List<Comunicacion> comunicaciones);
+    /**
+     * Submit an "alta" of partes de viajeros (tipoComunicacion=PV, tipoOperacion=A) for a single
+     * establishment. All comunicaciones in one request belong to {@code codigoEstablecimiento}.
+     */
+    ComunicacionResult altaPartes(String codigoEstablecimiento, List<Comunicacion> comunicaciones);
 
     /** Cancel previously registered comunicaciones by their assigned codes (tipoOperacion=B). */
     ComunicacionResult anularComunicaciones(List<String> codigosComunicacion);

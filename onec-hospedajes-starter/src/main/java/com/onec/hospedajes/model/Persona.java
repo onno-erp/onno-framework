@@ -3,12 +3,16 @@ package com.onec.hospedajes.model;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlType;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import java.time.LocalDate;
 
-/** Bloque {@code persona} — one traveler on the contract. Repeats 1..n per comunicación. */
+/** {@code personaHospedajeType} ({@code tiposGenerales.xsd}) — one traveler. Repeats 1..n. */
 @XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {"rol", "nombre", "apellido1", "apellido2", "tipoDocumento", "numeroDocumento",
+        "soporteDocumento", "fechaNacimiento", "nacionalidad", "sexo", "direccion",
+        "telefono", "telefono2", "correo", "parentesco"})
 public class Persona {
 
     /** Role in the contract; for partes de viajeros always {@code "VI"} (viajero). */

@@ -3,17 +3,20 @@ package com.onec.hospedajes.model;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
+import jakarta.xml.bind.annotation.XmlType;
 
-/** Bloque {@code direccion} (spec section 4.1) — a person's home address. */
+/** {@code direccionType} ({@code tiposGenerales.xsd}) — a person's home address. */
 @XmlAccessorType(XmlAccessType.FIELD)
+@XmlType(propOrder = {"direccion", "direccionComplementaria", "codigoMunicipio",
+        "nombreMunicipio", "codigoPostal", "pais"})
 public class Direccion {
 
-    /** Calle, número, escalera, piso, puerta. Required. */
-    @XmlElement(name = "direccion")
+    /** Calle, número, escalera, piso, puerta. Required, max 100 chars. */
+    @XmlElement(name = "direccion", required = true)
     private String direccion;
 
-    @XmlElement(name = "direccionComplem")
-    private String direccionComplem;
+    @XmlElement(name = "direccionComplementaria")
+    private String direccionComplementaria;
 
     /** INE 5-digit municipality code. Required when país is Spain. */
     @XmlElement(name = "codigoMunicipio")
@@ -23,11 +26,12 @@ public class Direccion {
     @XmlElement(name = "nombreMunicipio")
     private String nombreMunicipio;
 
-    @XmlElement(name = "codigoPostal")
+    /** Postal code. Required, max 20 chars. */
+    @XmlElement(name = "codigoPostal", required = true)
     private String codigoPostal;
 
-    /** ISO-3166 alpha-3 country code (MIR catalog PAIS). Required. */
-    @XmlElement(name = "pais")
+    /** ISO-3166-1 alpha-3 country code (MIR catalog PAIS). Required. */
+    @XmlElement(name = "pais", required = true)
     private String pais;
 
     public String getDireccion() {
@@ -38,12 +42,12 @@ public class Direccion {
         this.direccion = direccion;
     }
 
-    public String getDireccionComplem() {
-        return direccionComplem;
+    public String getDireccionComplementaria() {
+        return direccionComplementaria;
     }
 
-    public void setDireccionComplem(String direccionComplem) {
-        this.direccionComplem = direccionComplem;
+    public void setDireccionComplementaria(String direccionComplementaria) {
+        this.direccionComplementaria = direccionComplementaria;
     }
 
     public String getCodigoMunicipio() {

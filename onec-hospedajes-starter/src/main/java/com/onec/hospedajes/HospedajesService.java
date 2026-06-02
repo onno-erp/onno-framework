@@ -25,15 +25,18 @@ public class HospedajesService {
         this.communicationLog = communicationLog;
     }
 
-    /** Submit partes de viajeros and record each comunicación as SUBMITTED against its referencia. */
-    public ComunicacionResult registrar(List<Comunicacion> comunicaciones) {
-        ComunicacionResult result = client.altaPartes(comunicaciones);
+    /**
+     * Submit partes de viajeros for one establishment and record each comunicación as SUBMITTED at
+     * its 1-based position in the batch (the {@code orden} the service uses to report outcomes).
+     */
+    public ComunicacionResult registrar(String codigoEstablecimiento, List<Comunicacion> comunicaciones) {
+        ComunicacionResult result = client.altaPartes(codigoEstablecimiento, comunicaciones);
         if (result.accepted() && communicationLog != null) {
+            int orden = 1;
             for (Comunicacion c : comunicaciones) {
                 String referencia = c.getContrato() == null ? null : c.getContrato().getReferencia();
-                if (referencia != null) {
-                    communicationLog.recordSubmission(referencia, result.numeroLote());
-                }
+                communicationLog.recordSubmission(referencia, result.numeroLote(), orden);
+                orden++;
             }
         }
         return result;
@@ -52,15 +55,17 @@ public class HospedajesService {
         for (String lote : communicationLog.findUnreconciledLotes(maxLotes)) {
             LoteEstado estado = client.consultaLote(lote);
             for (LoteEstado.ComunicacionEstado c : estado.comunicaciones()) {
-                if (c.referencia() == null) {
+                if (c.orden() < 0) {
                     continue;
                 }
                 if (c.registered()) {
-                    communicationLog.markRegistered(c.referencia(), lote, c.codigoComunicacion());
+                    communicationLog.markRegistered(lote, c.orden(), c.codigoComunicacion());
                 } else if (c.error() != null) {
-                    communicationLog.markRejected(c.referencia(), lote, c.error());
-                    log.warn("SES.HOSPEDAJES rejected referencia {} in lote {}: {}",
-                            c.referencia(), lote, c.error());
+                    String detail = (c.tipoError() == null ? "" : c.tipoError() + ": ") + c.error();
+                    communicationLog.markRejected(lote, c.orden(), detail);
+                    log.warn("SES.HOSPEDAJES rejected orden {} in lote {}: {}", c.orden(), lote, detail);
+                } else {
+                    continue; // still processing — leave SUBMITTED for the next poll
                 }
                 updated++;
             }

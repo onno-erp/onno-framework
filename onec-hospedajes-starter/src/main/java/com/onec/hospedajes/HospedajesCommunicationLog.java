@@ -7,15 +7,17 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Audit + reconciliation ledger for partes sent to SES.HOSPEDAJES. One row per comunicación,
- * keyed by the caller's contract {@code referencia}, tracking the async lifecycle:
+ * Audit + reconciliation ledger for partes sent to SES.HOSPEDAJES. One row per comunicación, keyed
+ * by (numeroLote, orden) — the position assigned by the service within a batch — and carrying the
+ * caller's contract {@code referencia} for traceability. Tracks the async lifecycle:
  * SUBMITTED → (REGISTERED | REJECTED) and later CANCELLED.
  */
 public class HospedajesCommunicationLog {
 
     public enum Status { SUBMITTED, REGISTERED, REJECTED, CANCELLED }
 
-    public record Entry(String referencia, String numeroLote, String codigoComunicacion, String status) {
+    public record Entry(String referencia, String numeroLote, int orden,
+                        String codigoComunicacion, String status) {
     }
 
     private final Jdbi jdbi;
@@ -30,6 +32,7 @@ public class HospedajesCommunicationLog {
                         "_id UUID PRIMARY KEY, " +
                         "_referencia VARCHAR(50) NOT NULL, " +
                         "_numero_lote VARCHAR(50), " +
+                        "_orden INT NOT NULL, " +
                         "_codigo_comunicacion VARCHAR(50), " +
                         "_status VARCHAR(32) NOT NULL, " +
                         "_error VARCHAR(1000), " +
@@ -37,17 +40,32 @@ public class HospedajesCommunicationLog {
                         "_updated_at TIMESTAMP NOT NULL)"));
     }
 
-    public void recordSubmission(String referencia, String numeroLote) {
+    /** Record one submitted comunicación at its 1-based position in the batch. */
+    public void recordSubmission(String referencia, String numeroLote, int orden) {
         LocalDateTime now = LocalDateTime.now();
         jdbi.useHandle(handle -> handle.createUpdate(
                         "INSERT INTO onec_hospedajes_comunicacion " +
-                                "(_id, _referencia, _numero_lote, _status, _created_at, _updated_at) " +
-                                "VALUES (:id, :referencia, :lote, 'SUBMITTED', :now, :now)")
+                                "(_id, _referencia, _numero_lote, _orden, _status, _created_at, _updated_at) " +
+                                "VALUES (:id, :referencia, :lote, :orden, 'SUBMITTED', :now, :now)")
                 .bind("id", UUID.randomUUID())
                 .bind("referencia", referencia)
                 .bind("lote", numeroLote)
+                .bind("orden", orden)
                 .bind("now", now)
                 .execute());
+    }
+
+    /**
+     * Whether a comunicación for this referencia has already been submitted and not rejected — used
+     * for idempotency so a re-save does not resubmit, while a rejected parte can still be retried.
+     */
+    public boolean hasActiveSubmission(String referencia) {
+        return jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT COUNT(*) FROM onec_hospedajes_comunicacion " +
+                                "WHERE _referencia = :referencia AND _status IN ('SUBMITTED', 'REGISTERED')")
+                .bind("referencia", referencia)
+                .mapTo(int.class)
+                .one()) > 0;
     }
 
     /** Distinct batch numbers still awaiting a definitive per-comunicación outcome. */
@@ -61,27 +79,27 @@ public class HospedajesCommunicationLog {
                 .list());
     }
 
-    public void markRegistered(String referencia, String numeroLote, String codigoComunicacion) {
+    public void markRegistered(String numeroLote, int orden, String codigoComunicacion) {
         jdbi.useHandle(handle -> handle.createUpdate(
                         "UPDATE onec_hospedajes_comunicacion " +
                                 "SET _status = 'REGISTERED', _codigo_comunicacion = :codigo, " +
                                 "_error = NULL, _updated_at = :now " +
-                                "WHERE _referencia = :referencia AND _numero_lote = :lote AND _status = 'SUBMITTED'")
+                                "WHERE _numero_lote = :lote AND _orden = :orden AND _status = 'SUBMITTED'")
                 .bind("codigo", codigoComunicacion)
-                .bind("referencia", referencia)
                 .bind("lote", numeroLote)
+                .bind("orden", orden)
                 .bind("now", LocalDateTime.now())
                 .execute());
     }
 
-    public void markRejected(String referencia, String numeroLote, String error) {
+    public void markRejected(String numeroLote, int orden, String error) {
         jdbi.useHandle(handle -> handle.createUpdate(
                         "UPDATE onec_hospedajes_comunicacion " +
                                 "SET _status = 'REJECTED', _error = :error, _updated_at = :now " +
-                                "WHERE _referencia = :referencia AND _numero_lote = :lote AND _status = 'SUBMITTED'")
+                                "WHERE _numero_lote = :lote AND _orden = :orden AND _status = 'SUBMITTED'")
                 .bind("error", error)
-                .bind("referencia", referencia)
                 .bind("lote", numeroLote)
+                .bind("orden", orden)
                 .bind("now", LocalDateTime.now())
                 .execute());
     }

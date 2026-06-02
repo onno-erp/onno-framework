@@ -31,3 +31,13 @@ onec:
     use-outbox: true
   print:
     enabled: true
+  hospedajes:
+    # SES.HOSPEDAJES traveler registration (RD 933/2021). Disabled by default; enable and supply
+    # the WebService credentials issued on the Sede Electrónica to register partes on check-in.
+    # The FNMT CA is bundled and trusted automatically (no truststore setup required).
+    enabled: ${ONEC_HOSPEDAJES_ENABLED:false}
+    production: false                       # pre-production sandbox
+    arrendador: ${ONEC_HOSPEDAJES_ARRENDADOR:}
+    aplicacion: onec-rentals
+    username: ${ONEC_HOSPEDAJES_USERNAME:}
+    password: ${ONEC_HOSPEDAJES_PASSWORD:}

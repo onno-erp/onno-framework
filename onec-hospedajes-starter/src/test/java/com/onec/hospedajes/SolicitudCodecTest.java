@@ -3,7 +3,9 @@ package com.onec.hospedajes;
 import com.onec.hospedajes.model.Comunicacion;
 import com.onec.hospedajes.model.Contrato;
 import com.onec.hospedajes.model.Direccion;
+import com.onec.hospedajes.model.Pago;
 import com.onec.hospedajes.model.Persona;
+import com.onec.hospedajes.model.Peticion;
 import com.onec.hospedajes.model.Solicitud;
 
 import org.junit.jupiter.api.Test;
@@ -22,23 +24,28 @@ class SolicitudCodecTest {
     private final SolicitudCodec codec = new SolicitudCodec();
 
     @Test
-    void marshalsPartesViajerosToExpectedXml() {
-        String xml = codec.toXml(sampleSolicitud());
+    void marshalsParteToTheAltaParteHospedajeSchema() {
+        String xml = codec.toXml(samplePeticion());
 
-        assertThat(xml).contains("<solicitud>");
+        // Root is the altaParteHospedaje peticion; establishment is carried once on the solicitud.
+        assertThat(xml).contains("http://www.neg.hospedajes.mir.es/altaParteHospedaje");
+        assertThat(xml).contains("peticion");
         assertThat(xml).contains("<codigoEstablecimiento>EST-001</codigoEstablecimiento>");
         assertThat(xml).contains("<referencia>B-000001</referencia>");
         assertThat(xml).contains("<fechaContrato>2026-05-30</fechaContrato>");
         assertThat(xml).contains("<fechaEntrada>2026-06-01T14:00:00</fechaEntrada>");
+        assertThat(xml).contains("<fechaSalida>2026-06-05T11:00:00</fechaSalida>");
+        assertThat(xml).contains("<tipoPago>EFECT</tipoPago>");
         assertThat(xml).contains("<rol>VI</rol>");
         assertThat(xml).contains("<apellido1>García</apellido1>");
         assertThat(xml).contains("<nacionalidad>ESP</nacionalidad>");
+        assertThat(xml).contains("<codigoPostal>28013</codigoPostal>");
         assertThat(xml).contains("<pais>ESP</pais>");
     }
 
     @Test
     void encodesAsZippedBase64ThatRoundTripsBackToTheXml() throws Exception {
-        String xml = codec.toXml(sampleSolicitud());
+        String xml = codec.toXml(samplePeticion());
         String encoded = codec.encode(xml);
 
         byte[] zipped = Base64.getDecoder().decode(encoded);
@@ -49,7 +56,7 @@ class SolicitudCodecTest {
         }
     }
 
-    private Solicitud sampleSolicitud() {
+    private Peticion samplePeticion() {
         Direccion direccion = new Direccion();
         direccion.setDireccion("Calle Mayor 1");
         direccion.setCodigoMunicipio("28079");
@@ -68,20 +75,24 @@ class SolicitudCodecTest {
         persona.setDireccion(direccion);
         persona.setCorreo("ana@example.com");
 
+        Pago pago = new Pago();
+        pago.setTipoPago("EFECT");
+
         Contrato contrato = new Contrato();
         contrato.setReferencia("B-000001");
         contrato.setFechaContrato(LocalDate.of(2026, 5, 30));
         contrato.setFechaEntrada(LocalDateTime.of(2026, 6, 1, 14, 0, 0));
-        contrato.setFechaSalida(LocalDate.of(2026, 6, 5));
+        contrato.setFechaSalida(LocalDateTime.of(2026, 6, 5, 11, 0, 0));
         contrato.setNumPersonas(1);
+        contrato.setPago(pago);
 
         Comunicacion comunicacion = new Comunicacion();
-        comunicacion.setCodigoEstablecimiento("EST-001");
         comunicacion.setContrato(contrato);
         comunicacion.setPersona(List.of(persona));
 
         Solicitud solicitud = new Solicitud();
+        solicitud.setCodigoEstablecimiento("EST-001");
         solicitud.setComunicacion(List.of(comunicacion));
-        return solicitud;
+        return new Peticion(solicitud);
     }
 }
