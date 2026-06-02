@@ -135,7 +135,7 @@ public class SchemaMigrator {
     }
 
     private String columnType(AttributeDescriptor attr) {
-        return SchemaGenerator.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale())
+        return SchemaGenerator.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName())
                 + (attr.required() ? " NOT NULL" : "");
     }
 }

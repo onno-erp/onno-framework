@@ -97,6 +97,11 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
+    public OneCAfterConvertCallback oneCAfterConvertCallback() {
+        return new OneCAfterConvertCallback();
+    }
+
+    @Bean
     public OneCBeforeDeleteCallback oneCBeforeDeleteCallback(OutboxWriter outboxWriter) {
         return new OneCBeforeDeleteCallback(outboxWriter);
     }
@@ -143,11 +148,25 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         return repos;
     }
 
+    /**
+     * Bridges the framework's {@link com.onec.posting.PostEventPublisher} SPI onto Spring's
+     * {@link org.springframework.context.ApplicationEventPublisher}, so a successful post/unpost
+     * publishes a {@link com.onec.posting.DocumentPostedEvent}/
+     * {@link com.onec.posting.DocumentUnpostedEvent} that application code can {@code @EventListener}.
+     * This is the Spring-bean-reachable "after post" hook (no Kafka outbox required).
+     */
+    @Bean
+    public com.onec.posting.PostEventPublisher postEventPublisher(
+            org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
+        return applicationEventPublisher::publishEvent;
+    }
+
     @Bean
     public PostingService postingService(Jdbi jdbi, MetadataRegistry registry,
                                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryImplMap,
-                                         OutboxWriter outboxWriter) {
-        PostingEngine engine = new PostingEngine(jdbi, registry, repositoryImplMap, outboxWriter);
+                                         OutboxWriter outboxWriter,
+                                         com.onec.posting.PostEventPublisher postEventPublisher) {
+        PostingEngine engine = new PostingEngine(jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher);
         return new PostingService(engine);
     }
 

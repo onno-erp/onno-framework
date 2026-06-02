@@ -100,7 +100,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : catalog.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(columnType(attr));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -124,7 +124,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : document.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(columnType(attr));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -143,7 +143,7 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor attr : section.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(columnType(attr));
             if (attr.required()) {
                 sb.append(" NOT NULL");
             }
@@ -164,12 +164,12 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor dim : reg.dimensions()) {
             sb.append(",\n    ").append(dim.columnName()).append(" ");
-            sb.append(sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
+            sb.append(columnType(dim));
         }
 
         for (AttributeDescriptor res : reg.resources()) {
             sb.append(",\n    ").append(res.columnName()).append(" ");
-            sb.append(sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
+            sb.append(columnType(res));
         }
 
         sb.append("\n)");
@@ -184,13 +184,13 @@ public class SchemaGenerator {
         for (AttributeDescriptor dim : reg.dimensions()) {
             if (!first) sb.append(",\n");
             sb.append("    ").append(dim.columnName()).append(" ");
-            sb.append(sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
+            sb.append(columnType(dim));
             first = false;
         }
 
         for (AttributeDescriptor res : reg.resources()) {
             sb.append(",\n    ").append(res.columnName()).append(" ");
-            sb.append(sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
+            sb.append(columnType(res));
             sb.append(" DEFAULT 0");
         }
 
@@ -232,15 +232,15 @@ public class SchemaGenerator {
 
         for (AttributeDescriptor dim : reg.dimensions()) {
             sb.append(",\n    ").append(dim.columnName()).append(" ");
-            sb.append(sqlType(dim.javaType(), dim.length(), dim.precision(), dim.scale()));
+            sb.append(columnType(dim));
         }
         for (AttributeDescriptor res : reg.resources()) {
             sb.append(",\n    ").append(res.columnName()).append(" ");
-            sb.append(sqlType(res.javaType(), res.length(), res.precision(), res.scale()));
+            sb.append(columnType(res));
         }
         for (AttributeDescriptor attr : reg.attributes()) {
             sb.append(",\n    ").append(attr.columnName()).append(" ");
-            sb.append(sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale()));
+            sb.append(columnType(attr));
         }
 
         // UNIQUE constraint on period + dimensions for upsert semantics
@@ -266,7 +266,16 @@ public class SchemaGenerator {
                 ")";
     }
 
+    /** SQL type for a metadata attribute, naming the column in any error it raises. */
+    static String columnType(AttributeDescriptor attr) {
+        return sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName());
+    }
+
     public static String sqlType(Class<?> javaType, int length, int precision, int scale) {
+        return sqlType(javaType, length, precision, scale, null);
+    }
+
+    public static String sqlType(Class<?> javaType, int length, int precision, int scale, String fieldContext) {
         if (javaType == String.class) {
             return "VARCHAR(" + length + ")";
         } else if (javaType == int.class || javaType == Integer.class) {
@@ -275,6 +284,9 @@ public class SchemaGenerator {
             return "BIGINT";
         } else if (javaType == boolean.class || javaType == Boolean.class) {
             return "BOOLEAN";
+        } else if (javaType == double.class || javaType == Double.class
+                || javaType == float.class || javaType == Float.class) {
+            return "DOUBLE PRECISION";
         } else if (javaType == BigDecimal.class) {
             return "DECIMAL(" + precision + "," + scale + ")";
         } else if (javaType == UUID.class) {
@@ -288,6 +300,11 @@ public class SchemaGenerator {
         } else if (javaType.isEnum()) {
             return "UUID";
         }
-        throw new IllegalArgumentException("Unsupported type: " + javaType.getName());
+        throw new IllegalArgumentException(
+                "Unsupported attribute type " + javaType.getName()
+                        + (fieldContext == null ? "" : " for column '" + fieldContext + "'")
+                        + ". Supported types: String, int/Integer, long/Long, boolean/Boolean, "
+                        + "double/Double, float/Float, BigDecimal, UUID, LocalDate, LocalDateTime, "
+                        + "enums, and Ref subtypes.");
     }
 }

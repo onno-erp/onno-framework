@@ -475,7 +475,9 @@ Follow this order.
 6. Implement registers and posting logic.
 7. Implement constants, jobs, and integrations.
 8. Run tests.
-9. Inspect `/api/ui/metadata/manifest` to verify the model is coherent.
+9. Verify the model is coherent against the running app — see [Verification](#verification) for the
+   real authenticated endpoints (`/api/catalogs/{name}`, `/api/documents/{name}`, etc.); there is no
+   anonymous manifest endpoint.
 10. Summarize what was modeled and what assumptions were made.
 
 ## Classification Heuristics
@@ -597,6 +599,30 @@ public class SalesRegister extends AccumulationRecord {
 ```
 
 Posting is always typed Java: implement `Postable.handlePosting(PostingContext)` (as above). There is no string-mapped declarative posting rule — a posting rule is code, type-checked and refactorable.
+
+**Reacting to a post (external integrations).** When something must happen *after* a document posts —
+call an external API, send a notification, register travelers with an authority — don't try to do it
+inside `handlePosting` (that runs in the posting transaction and should only write movements) and don't
+reach for a service-locator. The framework publishes a Spring `DocumentPostedEvent` (and
+`DocumentUnpostedEvent`) after the post commits; handle it with an ordinary `@EventListener` bean,
+which has full dependency injection:
+
+```java
+@Component
+class CheckInListener {
+    private final HospedajesService hospedajes;
+    CheckInListener(HospedajesService hospedajes) { this.hospedajes = hospedajes; }
+
+    @EventListener
+    void onPosted(DocumentPostedEvent event) {
+        if (event.document() instanceof CheckIn checkIn) hospedajes.registrar(checkIn);
+    }
+}
+```
+
+The domain `AfterPostHandler.afterPost()` hook still exists, but it has no Spring access — prefer the
+event for anything that touches beans. Neither requires the Kafka outbox (that's only for cross-service
+event streaming).
 
 ### Business Rules
 
@@ -736,16 +762,74 @@ For UI frontend-only changes, at minimum run:
 ./gradlew :onec-ui-starter:processResources
 ```
 
-For a running app, inspect:
+### Inspecting a running app (read this before you curl)
 
-```text
-GET /api/ui/metadata/manifest
+Everything under `/api/**` is **authenticated** and most of it is **CSRF-protected**. Two things trip
+up every agent:
+
+1. **There is no anonymous metadata/manifest endpoint.** Older notes pointed at
+   `/api/ui/metadata/manifest`; no controller serves that path, so it falls through to the SPA and you
+   get `index.html` (HTTP 200, HTML body) — which looks like success but isn't. To introspect the
+   model at runtime, hit the real generated endpoints below.
+2. **Unknown `/api/**`-adjacent paths return the SPA, not a 404.** If a call returns HTML, you have the
+   wrong path or aren't authenticated — not a working endpoint.
+
+**Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
+`JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
+token: it's delivered in a readable `XSRF-TOKEN` cookie and echoed back in the `X-XSRF-TOKEN` header.
+Users come from `onec.auth.users[*]` (there are **no** default credentials).
+
+```bash
+# 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.
+curl -sc cookies.txt -H 'Content-Type: application/json' \
+     -d '{"username":"admin","password":"…"}' http://localhost:8080/api/auth/login
+
+# 2. Reads just need the session cookie:
+curl -sb cookies.txt http://localhost:8080/api/catalogs/Properties
+curl -sb cookies.txt http://localhost:8080/api/documents/Reservations
+
+# 3. Mutations also need the CSRF header (value taken from the XSRF-TOKEN cookie):
+XSRF=$(awk '/XSRF-TOKEN/{print $7}' cookies.txt)
+curl -sb cookies.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
+     -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Properties
 ```
 
-For documents that post movements, inspect:
+`{name}` is the entity's **display name** (e.g. `Properties`, `Reservations`), *not* the Java class
+name (`Property` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onec-ui-starter`):
 
 ```text
-GET /api/ui/documents/{name}/{id}/posting-preview
+GET    /api/catalogs/{name}                       list
+GET    /api/catalogs/{name}/{id}                   one
+POST   /api/catalogs/{name}                        create        (CSRF)
+PUT    /api/catalogs/{name}/{id}                   update        (CSRF)
+DELETE /api/catalogs/{name}/{id}                                 (CSRF)
+GET    /api/documents/{name}                       list
+GET    /api/documents/{name}/{id}                  one
+POST   /api/documents/{name}                       create        (CSRF)
+POST   /api/documents/{name}/{id}/post             post          (CSRF)
+POST   /api/documents/{name}/{id}/unpost           unpost        (CSRF)
+GET    /api/documents/{name}/{id}/posting-preview  dry-run the movements a post would write
+GET    /api/registers/{name}/movements
+GET    /api/registers/{name}/balance
+GET    /api/registers/{name}/turnover?from=…&to=…
+GET    /api/auth/me                                current principal (handy auth smoke-test)
 ```
 
-The manifest should make sense to a human and an agent. If it does not, improve names, contexts, required fields, refs, and register semantics before adding more code.
+The generated API and screens should read like the business domain. If they don't, improve names,
+contexts, required fields, refs, and register semantics before adding more code.
+
+### Writing sync / import code (upsert + posting)
+
+Two framework behaviors you *will* hit the moment you write import or sync code:
+
+- **Upserts are handled on load.** `CatalogObject`/`DocumentObject`/`AccumulationRecord` default
+  `isNew = true`. The framework resets it to `false` after every load (an `AfterConvertCallback`), so
+  the natural "load, mutate, `repository.save(...)`" does an UPDATE. If you build an entity *by hand*
+  (new instance, then set its known id — e.g. keyed on an external system's id) and want an UPDATE,
+  call `setNew(false)` yourself; otherwise the save attempts an INSERT and you get a duplicate-key
+  error.
+- **Posting is its own transaction.** `post(...)` runs on a separate JDBI transaction, *not* enlisted
+  in any ambient Spring `@Transactional`. Do **not** wrap save+post in one `@Transactional` method —
+  the document row won't be committed yet, the `_posted` update runs on a different connection that
+  can't see it, and you silently end up with register movements but `_posted = false`. **Save (let it
+  commit), then post.**

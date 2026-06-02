@@ -233,6 +233,49 @@ class PostingTest {
     }
 
     @Test
+    void post_and_unpost_publishApplicationEvents() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+
+        List<Object> events = new ArrayList<>();
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add);
+
+        engineWithEvents.post(receipt);
+        engineWithEvents.unpost(receipt);
+
+        assertThat(events).hasSize(2);
+        assertThat(events.get(0)).isInstanceOf(DocumentPostedEvent.class);
+        DocumentPostedEvent posted = (DocumentPostedEvent) events.get(0);
+        assertThat(posted.document()).isSameAs(receipt);
+        assertThat(posted.documentId()).isEqualTo(receipt.getId());
+
+        assertThat(events.get(1)).isInstanceOf(DocumentUnpostedEvent.class);
+        assertThat(((DocumentUnpostedEvent) events.get(1)).document()).isSameAs(receipt);
+    }
+
+    @Test
+    void post_businessRuleFailure_publishesNoEvent() {
+        List<Object> events = new ArrayList<>();
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add);
+        TestDeclarativeReceipt receipt = createDeclarativeReceipt(null, UUID.randomUUID(), new BigDecimal("3"));
+
+        assertThatThrownBy(() -> engineWithEvents.post(receipt))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(events).isEmpty();
+    }
+
+    private Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMapFor() {
+        RegisterRepositoryImpl<TestStockRegister> stockRepo =
+                new RegisterRepositoryImpl<>(stockPersistence, TestStockRegister.class);
+        Map<Class<?>, RegisterRepositoryImpl<?>> map = new HashMap<>();
+        map.put(TestStockRegister.class, stockRepo);
+        return map;
+    }
+
+    @Test
     void post_multipleLineItems_createsMultipleRecords() {
         UUID product1 = UUID.randomUUID();
         UUID product2 = UUID.randomUUID();

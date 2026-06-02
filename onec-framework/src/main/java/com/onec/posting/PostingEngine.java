@@ -30,6 +30,24 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Posts documents: runs their {@link Postable} logic, writes the resulting register movements and
+ * totals, enforces non-negative balances, then flips {@code _posted}.
+ *
+ * <h2>Transaction boundary — important</h2>
+ * Posting runs inside its <em>own</em> JDBI transaction ({@link Jdbi#useTransaction}) on a connection
+ * obtained directly from the {@code DataSource}. It is <strong>not</strong> enlisted in any ambient
+ * Spring {@code @Transactional} that the caller may have opened. Two consequences follow:
+ * <ul>
+ *   <li>Do <strong>not</strong> wrap "save the document, then post it" in a single
+ *       {@code @Transactional} method. The {@code save()} row is not yet committed, so JDBI — on a
+ *       separate connection — cannot see it, the {@code UPDATE ... SET _posted = TRUE} matches zero
+ *       rows, and you silently get register movements with {@code _posted} still {@code false}.
+ *       Save (and let it commit) first, then call {@link PostingService}/{@code post(...)}.</li>
+ *   <li>Posting is atomic in itself (movements, totals, balance checks and the {@code _posted} flag
+ *       all commit or roll back together), but it is a distinct transaction from the document write.</li>
+ * </ul>
+ */
 public class PostingEngine {
 
     private final Jdbi jdbi;
@@ -37,6 +55,7 @@ public class PostingEngine {
     private final Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final OutboxWriter outboxWriter;
+    private final PostEventPublisher eventPublisher;
 
     public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap) {
@@ -46,10 +65,18 @@ public class PostingEngine {
     public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap,
                          OutboxWriter outboxWriter) {
+        this(jdbi, registry, repositoryMap, outboxWriter, null);
+    }
+
+    public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
+                         Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap,
+                         OutboxWriter outboxWriter,
+                         PostEventPublisher eventPublisher) {
         this.jdbi = jdbi;
         this.registry = registry;
         this.repositoryMap = repositoryMap;
         this.outboxWriter = outboxWriter;
+        this.eventPublisher = eventPublisher;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -101,6 +128,8 @@ public class PostingEngine {
         if (document instanceof AfterPostHandler handler) {
             handler.afterPost();
         }
+
+        publishApplicationEvent(new DocumentPostedEvent(document));
     }
 
     public PostingPreview preview(DocumentObject document) {
@@ -160,6 +189,8 @@ public class PostingEngine {
         });
 
         document.setPosted(false);
+
+        publishApplicationEvent(new DocumentUnpostedEvent(document));
     }
 
     private void checkNonNegativeBalances(Handle handle,
@@ -202,6 +233,12 @@ public class PostingEngine {
     private void clearPending(PostingContext context) {
         for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
             repo.clearPending();
+        }
+    }
+
+    private void publishApplicationEvent(Object event) {
+        if (eventPublisher != null) {
+            eventPublisher.publish(event);
         }
     }
 

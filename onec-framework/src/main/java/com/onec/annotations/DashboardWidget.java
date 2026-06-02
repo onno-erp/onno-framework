@@ -21,11 +21,12 @@ import java.lang.annotation.Target;
  *       }
  *   }
  * }
- * As of the resolver fix shipped with the page/layout migration, both
- * {@code /api/ui/metadata/dashboard} and {@code /api/ui/metadata/manifest}
- * read from authored pages; this annotation is no longer consulted by either
- * endpoint when the configurer declares any widgets. The annotation will be
- * removed in the next release.
+ * As of the page/layout migration the dashboard is built from authored pages
+ * (surfaced through the DivKit home surface, e.g. {@code /api/divkit/home});
+ * this annotation is no longer consulted when the configurer declares any
+ * widgets, and will be removed in the next release. (Note: there is no
+ * {@code /api/ui/metadata/*} REST endpoint — see the README/AGENTS.md for the
+ * real {@code /api/...} surface.)
  */
 @Deprecated(since = "next", forRemoval = true)
 @Retention(RetentionPolicy.RUNTIME)
