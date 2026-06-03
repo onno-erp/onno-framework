@@ -115,12 +115,16 @@ public final class SurfaceDivBuilder {
 
     @SuppressWarnings("unchecked")
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                     String editUrl, String deleteUrl, Palette p) {
+                                                     String editUrl, String deleteUrl,
+                                                     String postUrl, String unpostUrl, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         Map<String, Object> badge = Components.statusBadge(posted, posted ? "Posted" : "Draft", p);
-        items.add(detailHeader(str(meta.get("name")), str(row.get("_number")), badge, editUrl, deleteUrl, p));
+        // Already-posted documents re-post (regenerate movements) rather than post fresh.
+        String postLabel = posted ? "Re-post" : "Post";
+        items.add(detailHeader(str(meta.get("name")), str(row.get("_number")), badge,
+                editUrl, deleteUrl, postUrl, unpostUrl, postLabel, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
         fieldRows.add(Components.fieldRow("Date", str(row.get("_date")), p));
@@ -173,7 +177,7 @@ public final class SurfaceDivBuilder {
         String code = str(row.get("_code"));
         String title = description.isBlank() ? str(meta.get("name")) : description;
         String subtitle = description.isBlank() ? code : (code.isBlank() ? null : code);
-        items.add(detailHeader(title, subtitle, null, editUrl, deleteUrl, p));
+        items.add(detailHeader(title, subtitle, null, editUrl, deleteUrl, null, null, null, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
         for (Map<String, Object> a : visible(
@@ -300,7 +304,8 @@ public final class SurfaceDivBuilder {
      * width and ellipsizes so the actions never get crammed.
      */
     private static Map<String, Object> detailHeader(String title, String subtitle, Map<String, Object> badge,
-                                                    String editUrl, String deleteUrl, Palette p) {
+                                                    String editUrl, String deleteUrl,
+                                                    String postUrl, String unpostUrl, String postLabel, Palette p) {
         Map<String, Object> titleNode = Div.color(Div.text(title, 20, "bold"), p.text());
         Div.matchWidth(titleNode);
         Div.maxLines(titleNode, 2);
@@ -318,6 +323,16 @@ public final class SurfaceDivBuilder {
         List<Map<String, Object>> actions = new ArrayList<>();
         if (badge != null) {
             actions.add(badge);
+        }
+        // Posting actions lead the cluster (Post is the primary document action in 1C):
+        // a solid green Post/Re-post, and a soft Unpost once the document is posted.
+        if (postUrl != null) {
+            actions.add(Components.actionButton("circle-check", postLabel == null ? "Post" : postLabel,
+                    "#FFFFFF", p.success(), null, postUrl, "post"));
+        }
+        if (unpostUrl != null) {
+            actions.add(Components.actionButton("rotate-ccw", "Unpost", p.text(), p.surface(), p.border(),
+                    unpostUrl, "unpost"));
         }
         if (editUrl != null) {
             actions.add(Components.actionButton("pencil", "Edit", p.text(), p.primarySoft(), null, editUrl, "edit"));

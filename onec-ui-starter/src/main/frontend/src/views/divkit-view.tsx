@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
 import { ExternalLink, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
 import {
   createGlobalVariablesController,
   createVariable,
@@ -441,6 +442,18 @@ export function DivKitView() {
             onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(() => {}),
           });
         }
+        return;
+      }
+      if (rest.startsWith("post/") || rest.startsWith("unpost/")) {
+        // post/{name}/{id} or unpost/{name}/{id} — drive the document's posting state via
+        // REST. Posting emits ("posted"/"unposted", document) + ("changed","register","*")
+        // over SSE, so the detail surface and any open register refresh themselves; no
+        // manual navigation needed. The api layer toasts any failure (validation/balance).
+        const unpost = rest.startsWith("unpost/");
+        const [name, id] = rest.slice((unpost ? "unpost/" : "post/").length).split("/");
+        if (!name || !id) return;
+        const op = unpost ? api.unpostDocument(name, id) : api.postDocument(name, id);
+        op.then(() => toast.success(unpost ? "Document unposted" : "Document posted")).catch(() => {});
         return;
       }
       const path = "/" + rest;

@@ -23,7 +23,7 @@ public class PaymentView implements EntityView {
         f.field("client").order(0)
                 .field("account").order(1)
                 .field("method").order(2)
-                .field("billRef").order(3)
+                .field("bill").order(3)
                 .field("amount").order(4)
                 .field("notes").order(5);
     }

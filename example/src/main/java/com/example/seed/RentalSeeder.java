@@ -353,7 +353,7 @@ public class RentalSeeder implements CommandLineRunner {
                     BankAccount acc = bankAccounts.get(rnd.nextInt(bankAccounts.size()));
                     pay.setAccount(Ref.of(BankAccount.class, acc.getId()));
                     // method left null pending Spring Data JDBC enum-as-UUID converter wiring
-                    pay.setBillRef(billSaved.getId());
+                    pay.setBill(Ref.of(Bill.class, billSaved.getId()));
                     pay.setAmount(billSaved.getGross());
                     Payment paySaved = payments.save(pay);
                     paymentsCreated++;

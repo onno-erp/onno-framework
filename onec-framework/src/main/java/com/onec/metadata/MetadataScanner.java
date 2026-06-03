@@ -381,8 +381,14 @@ public class MetadataScanner {
         if (!(genericType instanceof ParameterizedType paramType)) return null;
         Type[] typeArgs = paramType.getActualTypeArguments();
         if (typeArgs.length != 1 || !(typeArgs[0] instanceof Class<?> targetClass)) return null;
+        // Resolve to the target's registered logical name so the UI can look it up
+        // (catalog or document). A Ref<SomeDocument> must carry the @Document name —
+        // not the Java simple name — or the document ref picker/display can't find it.
         Catalog catalog = targetClass.getAnnotation(Catalog.class);
-        return catalog != null ? catalog.name() : targetClass.getSimpleName();
+        if (catalog != null) return catalog.name();
+        Document document = targetClass.getAnnotation(Document.class);
+        if (document != null) return document.name();
+        return targetClass.getSimpleName();
     }
 
     private Class<?> extractRowClass(Field field) {
