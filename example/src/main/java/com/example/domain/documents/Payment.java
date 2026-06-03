@@ -20,7 +20,6 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.UUID;
 
 @Document(name = "Payments", numberPrefix = "PMT-", numberLength = 14, context = "Rentals")
 @AccessControl(readRoles = {"RENTALS", "FINANCE"}, writeRoles = {"FINANCE"})
@@ -37,8 +36,10 @@ public class Payment extends DocumentObject implements Postable, Validated {
     @Attribute
     private PaymentMethod method;
 
-    @Attribute(displayName = "Bill ref")
-    private UUID billRef;
+    // A document → document reference: the bill this payment settles. Rendered as a
+    // searchable document ref picker in the UI (resolves to the bill's number).
+    @Attribute(displayName = "Bill")
+    private Ref<Bill> bill;
 
     @Attribute(precision = 14, scale = 2, required = true)
     private BigDecimal amount;

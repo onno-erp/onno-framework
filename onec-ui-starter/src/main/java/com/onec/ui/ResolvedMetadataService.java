@@ -56,6 +56,10 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
+        // Whether this document type can be posted (implements Postable). The UI uses it to
+        // decide whether to offer Post / Re-post / Unpost actions; a non-postable document
+        // only ever gets a plain Save.
+        map.put("postable", com.onec.lifecycle.Postable.class.isAssignableFrom(d.javaClass()));
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
@@ -120,6 +124,14 @@ public class ResolvedMetadataService {
             map.put("required", a.required());
             map.put("isRef", a.isRef());
             map.put("refTarget", a.refTarget());
+            // Tell the UI whether a ref points at a catalog or a document so the picker
+            // can hit the right endpoints. refTarget is the registered logical name, so a
+            // matching document means it's a document ref; otherwise treat it as a catalog.
+            if (a.isRef() && a.refTarget() != null) {
+                boolean isDocument = registry.allDocuments().stream()
+                        .anyMatch(d -> d.logicalName().equals(a.refTarget()));
+                map.put("refKind", isDocument ? "document" : "catalog");
+            }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
             // Layout hints win when set; otherwise fall back to descriptor (which

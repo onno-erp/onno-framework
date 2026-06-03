@@ -155,6 +155,11 @@ export const api = {
   },
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
+  // Server-side typeahead for document ref pickers: capped, case-insensitive _number match.
+  searchDocument: (name: string, q: string, limit = 30) => {
+    const params = new URLSearchParams({ q, limit: String(limit) });
+    return fetchJson<EntityRecord[]>(`${BASE}/documents/${name}?${params.toString()}`);
+  },
   createDocument: (name: string, data: EntityRecord) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}`, {
       method: "POST",

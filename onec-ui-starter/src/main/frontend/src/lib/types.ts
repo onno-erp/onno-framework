@@ -12,6 +12,8 @@ export interface AttributeMeta {
   required: boolean;
   isRef: boolean;
   refTarget?: string;
+  /** Whether refTarget names a catalog or a document (set only when isRef). */
+  refKind?: "catalog" | "document";
   isEnum: boolean;
   enumName?: string;
   enumValues?: EnumValue[];

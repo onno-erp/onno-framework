@@ -296,9 +296,17 @@ public class DivKitController {
         boolean canWrite = access.canWrite(principal, desc);
         String editUrl = canWrite ? "onec://documents/" + name + "/" + id + "/edit" : null;
         String deleteUrl = canWrite ? "onec://delete/documents/" + name + "/" + id : null;
+        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> row = documentQuery.get(desc, id);
+        // Posting actions: only for writable, postable documents. Post is offered in both
+        // states (it re-posts when already posted); Unpost only once posted. The builder
+        // labels the Post button "Re-post" when _posted is true.
+        boolean postable = Boolean.TRUE.equals(meta.get("postable"));
+        boolean posted = Boolean.TRUE.equals(row.get("_posted"));
+        String postUrl = (canWrite && postable) ? "onec://post/" + name + "/" + id : null;
+        String unpostUrl = (canWrite && postable && posted) ? "onec://unpost/" + name + "/" + id : null;
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(
-                resolvedMetadata.describeDocument(desc), documentQuery.get(desc, id), editUrl, deleteUrl,
-                Palette.of(theme));
+                meta, row, editUrl, deleteUrl, postUrl, unpostUrl, Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
 

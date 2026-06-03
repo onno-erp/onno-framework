@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, TabularSectionMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,8 @@ export type FormDescriptor = {
   meta: {
     name: string;
     autoNumber?: boolean;
+    /** Documents that implement Postable can be posted from the form (1C-style). */
+    postable?: boolean;
     attributes: AttributeMeta[];
     tabularSections?: TabularSectionMeta[];
   };
@@ -86,6 +88,12 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // REST layer round-trips rows; this is the form's editable grid for each one.
   const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
 
+  // 1C-style posting: a postable document offers Write (save, no posting) alongside
+  // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
+  // non-postable documents keep the single Save button.
+  const postable = kind === "documents" && meta.postable === true;
+  const wasPosted = Boolean(initial?._posted);
+
   const [data, setData] = useState<EntityRecord>(() => {
     const seed: EntityRecord = {};
     if (!initial) return seed;
@@ -134,7 +142,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
     }));
 
-  const save = async () => {
+  const save = async (thenPost = false) => {
     setSaving(true);
     try {
       const payload = { ...data };
@@ -168,6 +176,18 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           : await api.createCatalogItem(name, payload);
       }
       const savedId = String(isEdit ? id : saved._id);
+      // Post after a successful save when requested. The document is already persisted, so
+      // a posting failure (e.g. a validation/balance error) surfaces a toast but the saved
+      // record still opens — the user can fix it and re-post. api.postDocument re-posts a
+      // document that was already posted (the backend reverses old movements first).
+      if (thenPost && kind === "documents") {
+        try {
+          await api.postDocument(name, savedId);
+        } catch {
+          // The error toast is already shown by the api layer; fall through to open the
+          // saved (unposted) record so the user lands somewhere actionable.
+        }
+      }
       // Open the saved record and close the form pane (the list refreshes over SSE).
       dispatchAction(`onec://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
@@ -213,12 +233,26 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         <button
           type="button"
           className={cn(actionBtn, "text-foreground")}
-          onClick={save}
+          onClick={() => save(false)}
           disabled={saving}
         >
           <Check className="size-4" aria-hidden="true" />
-          {saving ? "Saving…" : form.submitLabel}
+          {saving ? "Saving…" : postable ? "Write" : form.submitLabel}
         </button>
+        {postable ? (
+          <button
+            type="button"
+            className={cn(
+              actionBtn,
+              "bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white"
+            )}
+            onClick={() => save(true)}
+            disabled={saving}
+          >
+            <CircleCheck className="size-4" aria-hidden="true" />
+            {wasPosted ? "Re-post" : "Post"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -360,7 +394,12 @@ function AttrControl({
 
   if (attr.isRef && attr.refTarget) {
     return (
-      <RefSelect catalogName={attr.refTarget} value={value as string | undefined} onChange={onChange} />
+      <RefSelect
+        targetName={attr.refTarget}
+        refKind={attr.refKind}
+        value={value as string | undefined}
+        onChange={onChange}
+      />
     );
   }
 

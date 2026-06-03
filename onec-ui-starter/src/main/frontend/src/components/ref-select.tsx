@@ -7,7 +7,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface RefSelectProps {
-  catalogName: string;
+  /** The ref target's registered logical name (catalog or document). */
+  targetName: string;
+  /** Whether the target is a catalog or a document; drives which endpoints we hit. */
+  refKind?: "catalog" | "document";
   value?: string;
   onChange: (id: string) => void;
 }
@@ -22,7 +25,10 @@ function initials(name: string | undefined): string {
 function displayOf(item: EntityRecord): string {
   const desc = item._description as string | undefined;
   if (desc && desc.trim()) return desc;
-  return (item._code as string) ?? (item._id as string) ?? "";
+  // Catalogs label by code; documents have no code/description, so fall back to number.
+  return (
+    (item._code as string) ?? (item._number as string) ?? (item._id as string) ?? ""
+  );
 }
 
 /**
@@ -32,8 +38,9 @@ function displayOf(item: EntityRecord): string {
  * shows even when it isn't in the current result page. "+ New" is pinned at the top so
  * it's always reachable regardless of how many matches there are.
  */
-export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
-  const name = toSnakeCase(catalogName);
+export function RefSelect({ targetName, refKind = "catalog", value, onChange }: RefSelectProps) {
+  const name = toSnakeCase(targetName);
+  const isDocument = refKind === "document";
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<EntityRecord[]>([]);
@@ -48,11 +55,12 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
     }
     if (selected && selected._id === value) return;
     let cancelled = false;
-    api.getCatalogItem(name, value).then((r) => !cancelled && setSelected(r)).catch(() => {});
+    const fetchOne = isDocument ? api.getDocument(name, value) : api.getCatalogItem(name, value);
+    fetchOne.then((r) => !cancelled && setSelected(r)).catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [value, name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value, name, isDocument]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced server-side search while the popover is open.
   useEffect(() => {
@@ -60,8 +68,8 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
     setLoading(true);
     const t = setTimeout(() => {
       let cancelled = false;
-      api
-        .searchCatalog(name, query, 30)
+      const run = isDocument ? api.searchDocument(name, query, 30) : api.searchCatalog(name, query, 30);
+      run
         .then((r) => !cancelled && setItems(r))
         .catch(() => {})
         .finally(() => !cancelled && setLoading(false));
@@ -70,7 +78,7 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
       };
     }, 180);
     return () => clearTimeout(t);
-  }, [open, query, name]);
+  }, [open, query, name, isDocument]);
 
   const pick = (item: EntityRecord) => {
     setSelected(item);
@@ -80,9 +88,10 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
 
   const addNew = () => {
     setOpen(false);
-    // Open the catalog's full new-form (a side pane in the islands layout) so every
+    // Open the target's full new-form (a side pane in the islands layout) so every
     // required field is available; the user returns and picks the new record.
-    window.dispatchEvent(new CustomEvent("onec:action", { detail: `onec://catalogs/${name}/new` }));
+    const kind = isDocument ? "documents" : "catalogs";
+    window.dispatchEvent(new CustomEvent("onec:action", { detail: `onec://${kind}/${name}/new` }));
   };
 
   return (
@@ -95,7 +104,7 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
           {selected ? (
             <RefRow item={selected} />
           ) : (
-            <span className="text-muted-foreground">Select {catalogName}…</span>
+            <span className="text-muted-foreground">Select {targetName}…</span>
           )}
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
@@ -111,7 +120,7 @@ export function RefSelect({ catalogName, value, onChange }: RefSelectProps) {
           className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
           <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
-          New {catalogName}
+          New {targetName}
         </button>
         <SearchBox value={query} onChange={setQuery} />
         <div className="max-h-64 overflow-y-auto py-1">

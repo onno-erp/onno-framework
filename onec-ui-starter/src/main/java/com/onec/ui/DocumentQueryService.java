@@ -58,6 +58,26 @@ public class DocumentQueryService {
         return rows;
     }
 
+    /**
+     * Capped, case-insensitive typeahead by document number — the document-ref-picker
+     * counterpart of the catalog search. Live records only, newest first.
+     */
+    public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit) {
+        String like = "%" + (query == null ? "" : query.toLowerCase()) + "%";
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false" +
+                                " AND LOWER(_number) LIKE :q" +
+                                " ORDER BY _date DESC LIMIT :limit")
+                        .bind("q", like)
+                        .bind("limit", limit)
+                        .mapToMap()
+                        .list()
+        );
+        refResolver.resolveAttributes(rows, desc.attributes());
+        return rows;
+    }
+
     public long count(DocumentDescriptor desc) {
         return jdbi.withHandle(h ->
                 h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")

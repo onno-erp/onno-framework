@@ -58,9 +58,17 @@ public class GenericDocumentController {
     public List<Map<String, Object>> list(@PathVariable String name,
                                            @RequestParam(required = false) String from,
                                            @RequestParam(required = false) String to,
+                                           @RequestParam(required = false) String q,
+                                           @RequestParam(required = false) Integer limit,
                                            Principal principal) {
         DocumentDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
+        // A search query or explicit limit switches to the capped typeahead used by the
+        // document ref picker; otherwise it's the full (date-ranged) list.
+        if (q != null || limit != null) {
+            int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
+            return query.search(desc, q, cap);
+        }
         return query.list(desc, from, to);
     }
 
@@ -182,6 +190,12 @@ public class GenericDocumentController {
         DocumentDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
         DocumentObject doc = loadDocumentObject(desc, id);
+        // Re-posting (1C "Провести" on an already-posted document): reverse the existing
+        // register movements before writing fresh ones, otherwise posting twice would
+        // double-count. A first-time post sees posted=false and skips this.
+        if (doc.isPosted()) {
+            postingService.unpost(doc);
+        }
         postingService.post(doc);
         eventPublisher.publish("posted", "document", desc.logicalName(), id);
         eventPublisher.publish("changed", "register", "*", id);
