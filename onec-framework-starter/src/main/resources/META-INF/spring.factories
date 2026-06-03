@@ -1,2 +1,2 @@
 org.springframework.boot.autoconfigure.AutoConfigurationImportFilter=\
-com.onec.spring.OneCAutoConfigurationImportFilter
+com.onec.spring.OnecAutoConfigurationImportFilter

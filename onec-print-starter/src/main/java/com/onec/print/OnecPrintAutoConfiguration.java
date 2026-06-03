@@ -17,7 +17,7 @@ import java.util.List;
 @ConditionalOnClass(TemplateEngine.class)
 @ConditionalOnProperty(prefix = "onec.print", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(PrintProperties.class)
-public class OneCPrintAutoConfiguration {
+public class OnecPrintAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean

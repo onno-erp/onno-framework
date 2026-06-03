@@ -22,7 +22,7 @@ import org.springframework.core.env.Environment;
 @ConditionalOnWebApplication
 @EnableConfigurationProperties(DesktopProperties.class)
 @ConditionalOnProperty(prefix = "onec.desktop", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class OneCDesktopAutoConfiguration {
+public class OnecDesktopAutoConfiguration {
 
     /** A sensible default shell so dropping the starter in is enough to ship a window. */
     @Bean

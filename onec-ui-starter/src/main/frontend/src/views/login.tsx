@@ -37,7 +37,7 @@ export function LoginView() {
   return (
     <main className="flex min-h-screen bg-background">
       <section className="hidden flex-1 border-r border-border bg-muted/30 px-12 py-10 md:flex md:flex-col md:justify-between">
-        <div className="text-sm font-semibold">OneC</div>
+        <div className="text-sm font-semibold">onec</div>
         <div className="max-w-md">
           <p className="text-3xl font-semibold tracking-tight">Business apps shaped around roles.</p>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">

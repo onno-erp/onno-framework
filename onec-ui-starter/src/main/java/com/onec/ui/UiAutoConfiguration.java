@@ -3,7 +3,7 @@ package com.onec.ui;
 import com.onec.metadata.MetadataRegistry;
 import com.onec.numbering.NumberGenerator;
 import com.onec.posting.PostingService;
-import com.onec.spring.OneCAutoConfiguration;
+import com.onec.spring.OnecAutoConfiguration;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@AutoConfiguration(after = OneCAutoConfiguration.class)
+@AutoConfiguration(after = OnecAutoConfiguration.class)
 @EnableConfigurationProperties(UiProperties.class)
 @ConditionalOnBean(MetadataRegistry.class)
 @ConditionalOnProperty(prefix = "onec.ui", name = "enabled", havingValue = "true", matchIfMissing = true)

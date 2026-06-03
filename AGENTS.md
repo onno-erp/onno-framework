@@ -1,4 +1,4 @@
-# Agent Guide: Modeling Businesses With OneC Framework
+# Agent Guide: Modeling Businesses With onec Framework
 
 This project is a Java/Spring framework for modeling business processes as explicit business concepts:
 catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,

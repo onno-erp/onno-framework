@@ -22,7 +22,7 @@ onec:
         roles: [ADMIN, USER]
 ```
 
-Auto-configuration (`OneCAuthAutoConfiguration`) runs **before** Spring Boot's
+Auto-configuration (`OnecAuthAutoConfiguration`) runs **before** Spring Boot's
 `SecurityAutoConfiguration` / `UserDetailsServiceAutoConfiguration` and contributes a
 `PasswordEncoder` (BCrypt), a `UserDetailsService` (in-memory), an `AuthenticationManager`
 (`DaoAuthenticationProvider`), the `SecurityFilterChain`, and the `AuthApiController`. Every bean is

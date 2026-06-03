@@ -16,11 +16,11 @@ import org.springframework.web.client.RestClient;
 @ConditionalOnClass(KafkaTemplate.class)
 @ConditionalOnBean({OutboxWriter.class, KafkaTemplate.class})
 @ConditionalOnProperty(prefix = "onec.kafka", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(OneCKafkaProperties.class)
-public class OneCKafkaAutoConfiguration {
+@EnableConfigurationProperties(OnecKafkaProperties.class)
+public class OnecKafkaAutoConfiguration {
 
     @Bean
-    public ServiceRegistry serviceRegistry(OneCKafkaProperties properties) {
+    public ServiceRegistry serviceRegistry(OnecKafkaProperties properties) {
         return new ServiceRegistry(properties);
     }
 
@@ -34,7 +34,7 @@ public class OneCKafkaAutoConfiguration {
     public OutboxRelay outboxRelay(OutboxWriter outboxWriter,
                                    KafkaTemplate<String, String> kafkaTemplate,
                                    ObjectMapper objectMapper,
-                                   OneCKafkaProperties properties) {
+                                   OnecKafkaProperties properties) {
         return new OutboxRelay(outboxWriter, kafkaTemplate, objectMapper, properties);
     }
 }

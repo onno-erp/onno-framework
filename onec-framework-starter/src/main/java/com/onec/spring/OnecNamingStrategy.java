@@ -12,7 +12,7 @@ import com.onec.model.TabularSectionRow;
 import org.springframework.data.relational.core.mapping.NamingStrategy;
 import org.springframework.data.relational.core.mapping.RelationalPersistentProperty;
 
-public class OneCNamingStrategy implements NamingStrategy {
+public class OnecNamingStrategy implements NamingStrategy {
 
     private final DefaultNamingStrategy delegate = new DefaultNamingStrategy();
 
