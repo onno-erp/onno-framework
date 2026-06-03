@@ -44,7 +44,7 @@ import java.util.List;
 @ConditionalOnClass(JavaMailSender.class)
 @ConditionalOnProperty(prefix = "onec.mail", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(MailProperties.class)
-public class OneCMailAutoConfiguration {
+public class OnecMailAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean

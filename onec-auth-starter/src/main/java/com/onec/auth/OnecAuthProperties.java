@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "onec.auth")
-public class OneCAuthProperties {
+public class OnecAuthProperties {
 
     /**
      * Master switch for the auth starter. When false, no SecurityFilterChain is contributed

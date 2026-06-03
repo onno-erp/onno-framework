@@ -9,9 +9,9 @@ import org.springframework.data.relational.core.mapping.NamingStrategy;
 import org.springframework.data.relational.core.mapping.RelationalPersistentEntity;
 import org.springframework.data.relational.core.mapping.RelationalPersistentProperty;
 
-public class OneCMappingContext extends JdbcMappingContext {
+public class OnecMappingContext extends JdbcMappingContext {
 
-    public OneCMappingContext(NamingStrategy namingStrategy) {
+    public OnecMappingContext(NamingStrategy namingStrategy) {
         super(namingStrategy);
     }
 

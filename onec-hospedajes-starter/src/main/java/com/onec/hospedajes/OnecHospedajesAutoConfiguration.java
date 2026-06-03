@@ -16,7 +16,7 @@ import javax.sql.DataSource;
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
 @ConditionalOnProperty(prefix = "onec.hospedajes", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(HospedajesProperties.class)
-public class OneCHospedajesAutoConfiguration {
+public class OnecHospedajesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean

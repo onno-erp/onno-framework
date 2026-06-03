@@ -5,9 +5,9 @@ import org.springframework.boot.autoconfigure.AutoConfigurationMetadata;
 
 /**
  * Excludes Spring Boot's default JdbcRepositoriesAutoConfiguration since
- * OneCRepositoriesAutoConfiguration handles JDBC repos with proper RegisterRepository exclusion.
+ * OnecRepositoriesAutoConfiguration handles JDBC repos with proper RegisterRepository exclusion.
  */
-public class OneCAutoConfigurationImportFilter implements AutoConfigurationImportFilter {
+public class OnecAutoConfigurationImportFilter implements AutoConfigurationImportFilter {
 
     private static final String EXCLUDED =
             "org.springframework.boot.autoconfigure.data.jdbc.JdbcRepositoriesAutoConfiguration";

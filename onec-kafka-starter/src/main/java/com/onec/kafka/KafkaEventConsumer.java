@@ -23,13 +23,13 @@ public class KafkaEventConsumer implements MessageListener<String, String> {
     private final ObjectMapper objectMapper;
     private final Inbox inbox;
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final OneCKafkaProperties properties;
+    private final OnecKafkaProperties properties;
 
     public KafkaEventConsumer(InboundEventRouter router,
                               ObjectMapper objectMapper,
                               Inbox inbox,
                               KafkaTemplate<String, String> kafkaTemplate,
-                              OneCKafkaProperties properties) {
+                              OnecKafkaProperties properties) {
         this.router = router;
         this.objectMapper = objectMapper;
         this.inbox = inbox;

@@ -35,7 +35,7 @@ onec:
 ```
 
 When active (`@ConditionalOnWebApplication` + `onec.desktop.enabled` not `false`),
-`OneCDesktopAutoConfiguration` exposes a `DesktopManifest`, the `DesktopManifestController`, and — if
+`OnecDesktopAutoConfiguration` exposes a `DesktopManifest`, the `DesktopManifestController`, and — if
 the application defines no `DesktopApp` bean — a default `DesktopApp` (application name as title,
 1280×800 window).
 

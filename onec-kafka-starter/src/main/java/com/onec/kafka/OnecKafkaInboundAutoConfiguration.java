@@ -28,8 +28,8 @@ import java.util.Map;
 @AutoConfiguration(after = KafkaAutoConfiguration.class)
 @ConditionalOnClass({KafkaTemplate.class, ConcurrentMessageListenerContainer.class})
 @ConditionalOnProperty(prefix = "onec.kafka.inbound", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties(OneCKafkaProperties.class)
-public class OneCKafkaInboundAutoConfiguration {
+@EnableConfigurationProperties(OnecKafkaProperties.class)
+public class OnecKafkaInboundAutoConfiguration {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
@@ -52,7 +52,7 @@ public class OneCKafkaInboundAutoConfiguration {
                                                  ObjectMapper objectMapper,
                                                  ObjectProvider<Inbox> inbox,
                                                  ObjectProvider<KafkaTemplate<String, String>> kafkaTemplate,
-                                                 OneCKafkaProperties properties) {
+                                                 OnecKafkaProperties properties) {
         return new KafkaEventConsumer(router, objectMapper, inbox.getIfAvailable(),
                 kafkaTemplate.getIfAvailable(), properties);
     }
@@ -62,9 +62,9 @@ public class OneCKafkaInboundAutoConfiguration {
     public ConcurrentMessageListenerContainer<String, String> onecInboundContainer(
             KafkaProperties kafkaProperties,
             KafkaEventConsumer consumer,
-            OneCKafkaProperties properties) {
+            OnecKafkaProperties properties) {
 
-        OneCKafkaProperties.Inbound inbound = properties.getInbound();
+        OnecKafkaProperties.Inbound inbound = properties.getInbound();
         String groupId = (inbound.getGroupId() == null || inbound.getGroupId().isBlank())
                 ? properties.getServiceName() + "-inbound"
                 : inbound.getGroupId();

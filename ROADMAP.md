@@ -1,4 +1,4 @@
-# OneC Framework Roadmap
+# onec Framework Roadmap
 
 This project is a modern Java/Spring framework for modeling business processes with explicit domain concepts:
 catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,

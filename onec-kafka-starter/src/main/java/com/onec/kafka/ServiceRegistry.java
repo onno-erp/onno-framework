@@ -5,9 +5,9 @@ import java.util.Optional;
 
 public class ServiceRegistry {
 
-    private final OneCKafkaProperties properties;
+    private final OnecKafkaProperties properties;
 
-    public ServiceRegistry(OneCKafkaProperties properties) {
+    public ServiceRegistry(OnecKafkaProperties properties) {
         this.properties = properties;
     }
 

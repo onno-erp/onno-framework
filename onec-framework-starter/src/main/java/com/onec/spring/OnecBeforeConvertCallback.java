@@ -15,13 +15,13 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.UUID;
 
-public class OneCBeforeConvertCallback implements BeforeConvertCallback<Object> {
+public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> {
 
     private final MetadataRegistry registry;
     private final NumberGenerator numberGenerator;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
 
-    public OneCBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator) {
+    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator) {
         this.registry = registry;
         this.numberGenerator = numberGenerator;
     }

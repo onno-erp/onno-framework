@@ -2,33 +2,54 @@ package com.onec.spring;
 
 import com.onec.annotations.DomainEvent;
 import com.onec.annotations.EventTiming;
-import com.onec.lifecycle.BeforeDeleteHandler;
+import com.onec.lifecycle.AfterWriteHandler;
 import com.onec.messaging.OutboxWriter;
+import com.onec.model.AccumulationRecord;
 import com.onec.model.CatalogObject;
 import com.onec.model.DocumentObject;
 
-import org.springframework.data.relational.core.mapping.event.BeforeDeleteCallback;
-import org.springframework.data.relational.core.conversion.MutableAggregateChange;
+import org.springframework.data.relational.core.mapping.event.AfterConvertCallback;
+import org.springframework.data.relational.core.mapping.event.AfterSaveCallback;
 
-public class OneCBeforeDeleteCallback implements BeforeDeleteCallback<Object> {
+public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterConvertCallback<Object> {
 
     private final OutboxWriter outboxWriter;
 
-    public OneCBeforeDeleteCallback() {
+    public OnecAfterSaveCallback() {
         this(null);
     }
 
-    public OneCBeforeDeleteCallback(OutboxWriter outboxWriter) {
+    public OnecAfterSaveCallback(OutboxWriter outboxWriter) {
         this.outboxWriter = outboxWriter;
     }
 
     @Override
-    public Object onBeforeDelete(Object aggregate, MutableAggregateChange<Object> aggregateChange) {
-        if (aggregate instanceof BeforeDeleteHandler handler) {
-            handler.beforeDelete();
+    public Object onAfterSave(Object aggregate) {
+        markNotNew(aggregate);
+
+        // Call AfterWriteHandler
+        if (aggregate instanceof AfterWriteHandler handler) {
+            handler.afterWrite();
         }
-        publishDomainEvents(aggregate, EventTiming.AFTER_DELETE);
+        publishDomainEvents(aggregate, EventTiming.AFTER_WRITE);
+
         return aggregate;
+    }
+
+    @Override
+    public Object onAfterConvert(Object aggregate) {
+        markNotNew(aggregate);
+        return aggregate;
+    }
+
+    private void markNotNew(Object aggregate) {
+        if (aggregate instanceof CatalogObject catalog) {
+            catalog.setNew(false);
+        } else if (aggregate instanceof DocumentObject document) {
+            document.setNew(false);
+        } else if (aggregate instanceof AccumulationRecord record) {
+            record.setNew(false);
+        }
     }
 
     private void publishDomainEvents(Object aggregate, EventTiming timing) {
