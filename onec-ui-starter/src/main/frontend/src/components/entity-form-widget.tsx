@@ -98,6 +98,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     const seed: EntityRecord = {};
     if (!initial) return seed;
     for (const f of fields) {
+      // Secret fields are write-only: never seed the control from the loaded value (the
+      // server only ever sends a "set" sentinel anyway). Leaving it blank means an unchanged
+      // save omits the field, so the stored secret is preserved.
+      if (f.kind === "attr" && f.attr.secret) continue;
       const col = f.kind === "system" ? f.column : f.attr.columnName;
       if (initial[col] != null) seed[f.key] = initial[col];
     }
@@ -116,6 +120,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         ? (raw as EntityRecord[]).map((r) => {
             const row: EntityRecord = {};
             for (const attr of ts.attributes) {
+              if (attr.secret) continue; // write-only — see top-level seed
               if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
             }
             return row;
@@ -417,6 +422,21 @@ function AttrControl({
           ))}
         </SelectContent>
       </Select>
+    );
+  }
+
+  if (attr.secret) {
+    // Write-only password control. Never seeded from the loaded value; leaving it blank on
+    // edit keeps the stored secret unchanged (the field is simply omitted from the save).
+    return (
+      <Input
+        type="password"
+        autoComplete="new-password"
+        maxLength={attr.length > 0 ? attr.length : undefined}
+        placeholder="Enter to set — leave blank to keep current"
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
     );
   }
 

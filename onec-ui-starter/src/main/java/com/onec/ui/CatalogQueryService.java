@@ -2,6 +2,7 @@ package com.onec.ui;
 
 import com.onec.metadata.CatalogDescriptor;
 import com.onec.metadata.MetadataRegistry;
+import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
@@ -49,6 +50,7 @@ public class CatalogQueryService {
                         .list()
         );
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -69,6 +71,7 @@ public class CatalogQueryService {
                         .list()
         );
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -118,6 +121,7 @@ public class CatalogQueryService {
                         .list()
         );
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -136,6 +140,7 @@ public class CatalogQueryService {
             return query.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -151,6 +156,7 @@ public class CatalogQueryService {
                         .list()
         );
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return buildTree(rows, null);
     }
 
@@ -163,6 +169,7 @@ public class CatalogQueryService {
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
         refResolver.resolveAttributes(List.of(row), desc.attributes());
+        SecretRedactor.redact(List.of(row), desc.attributes());
         return row;
     }
 

@@ -8,6 +8,8 @@ import com.onec.model.CatalogObject;
 import com.onec.model.DocumentObject;
 import com.onec.numbering.NumberGenerator;
 import com.onec.rules.BusinessRuleValidator;
+import com.onec.security.SecretCipher;
+import com.onec.security.SecretFields;
 
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
 
@@ -19,11 +21,14 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
 
     private final MetadataRegistry registry;
     private final NumberGenerator numberGenerator;
+    private final SecretCipher secretCipher;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
 
-    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator) {
+    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
+                                     SecretCipher secretCipher) {
         this.registry = registry;
         this.numberGenerator = numberGenerator;
+        this.secretCipher = secretCipher;
     }
 
     @Override
@@ -71,6 +76,10 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
         // Validate required attributes
         validateRequired(aggregate);
         businessRuleValidator.validate(aggregate);
+
+        // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
+        // restored on the in-memory instance by OnecAfterSaveCallback once the write lands.
+        SecretFields.apply(aggregate, registry, secretCipher::encrypt);
 
         return aggregate;
     }

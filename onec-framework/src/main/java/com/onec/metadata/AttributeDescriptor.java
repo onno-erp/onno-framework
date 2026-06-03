@@ -17,6 +17,7 @@ public record AttributeDescriptor(
         int order,
         String group,
         String widthHint,
-        String widget
+        String widget,
+        boolean secret
 ) {
 }

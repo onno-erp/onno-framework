@@ -147,6 +147,9 @@ public class ResolvedMetadataService {
             }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
+            // Tell the UI to render a write-only password control and a "set / not set"
+            // indicator instead of the value (which the read API never returns).
+            map.put("secret", a.secret());
             // Layout hints win when set; otherwise fall back to descriptor (which
             // reflects @UiHint on the field, or scanner default if absent).
             map.put("visibleInList", pick(hint == null ? null : hint.visibleInList(), a.visibleInList()));

@@ -3,6 +3,7 @@ package com.onec.ui;
 import com.onec.metadata.DocumentDescriptor;
 import com.onec.metadata.MetadataRegistry;
 import com.onec.metadata.TabularSectionDescriptor;
+import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,7 @@ public class DocumentQueryService {
             return query.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -75,6 +77,7 @@ public class DocumentQueryService {
                         .list()
         );
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -123,6 +126,7 @@ public class DocumentQueryService {
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
         refResolver.resolveAttributes(List.of(doc), desc.attributes());
+        SecretRedactor.redact(List.of(doc), desc.attributes());
 
         for (TabularSectionDescriptor ts : desc.tabularSections()) {
             List<Map<String, Object>> rows = jdbi.withHandle(h ->
@@ -133,6 +137,7 @@ public class DocumentQueryService {
                             .list()
             );
             refResolver.resolveAttributes(rows, ts.attributes());
+            SecretRedactor.redact(rows, ts.attributes());
             doc.put(ts.name(), rows);
         }
         return doc;

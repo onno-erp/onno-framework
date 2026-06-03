@@ -20,4 +20,13 @@ public @interface Attribute {
     int precision() default 15;
 
     int scale() default 2;
+
+    /**
+     * Marks a String attribute as sensitive (a credential, API key, password, …). A secret
+     * attribute is encrypted at rest, never returned in the clear by the generic API (read
+     * responses carry a "set / not set" sentinel instead of the value), and rendered as a
+     * write-only password control in the UI. Only meaningful for {@code String} attributes;
+     * requires {@code onec.security.secret-key} to be configured.
+     */
+    boolean secret() default false;
 }

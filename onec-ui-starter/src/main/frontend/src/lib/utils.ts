@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import type { AttributeMeta } from "@/lib/types";
+import { type AttributeMeta, SECRET_SET } from "@/lib/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -14,6 +14,11 @@ export function toSnakeCase(str: string): string {
 }
 
 export function displayValue(attr: AttributeMeta, raw: unknown, row?: Record<string, unknown>): string {
+  // Secrets are write-only: the server returns a "set" sentinel or null, never the value.
+  if (attr.secret) {
+    const stored = row ? row[attr.columnName] : raw;
+    return stored === SECRET_SET || (stored != null && stored !== "") ? "•••• set" : "Not set";
+  }
   // Prefer server-resolved display value
   if (row) {
     const ref = row[attr.columnName + "_ref"];

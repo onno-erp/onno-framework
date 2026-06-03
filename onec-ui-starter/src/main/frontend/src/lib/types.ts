@@ -1,3 +1,9 @@
+/**
+ * Server-side sentinel returned in place of a stored secret value (see SecretRedactor).
+ * The real value is never sent to the client; this only signals "a value is set".
+ */
+export const SECRET_SET = "__SECRET_SET__";
+
 export interface EnumValue {
   name: string;
   id: string;
@@ -17,6 +23,8 @@ export interface AttributeMeta {
   isEnum: boolean;
   enumName?: string;
   enumValues?: EnumValue[];
+  /** Sensitive attribute: write-only, rendered as a password control, masked in views. */
+  secret?: boolean;
   precision: number;
   scale: number;
   visibleInList: boolean;

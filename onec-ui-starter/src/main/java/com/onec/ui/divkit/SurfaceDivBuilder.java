@@ -432,7 +432,7 @@ public final class SurfaceDivBuilder {
         }
         Object display = row.get(columnName + "_display");
         Object value = display != null ? display : row.get(columnName);
-        return value == null ? "" : value.toString();
+        return maskSecret(value);
     }
 
     private static List<Map<String, Object>> visible(List<Map<String, Object>> attrs, String slot) {
@@ -447,11 +447,20 @@ public final class SurfaceDivBuilder {
         String col = str(attr.get("columnName"));
         Object display = row.get(col + "_display");
         Object value = display != null ? display : row.get(col);
-        return value == null ? "" : value.toString();
+        return maskSecret(value);
     }
 
     private static String str(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    /**
+     * Renders a secret attribute's read-side sentinel as a masked "set" indicator rather than
+     * the raw {@code __SECRET_SET__} marker. Non-secret values pass through unchanged.
+     */
+    private static String maskSecret(Object value) {
+        if (value == null) return "";
+        return com.onec.security.SecretRedactor.SET.equals(value) ? "•••• set" : value.toString();
     }
 
     /**

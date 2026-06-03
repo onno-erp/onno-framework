@@ -3,6 +3,8 @@ package com.onec.ui;
 import com.onec.metadata.AttributeDescriptor;
 import com.onec.metadata.CatalogDescriptor;
 import com.onec.numbering.NumberGenerator;
+import com.onec.security.SecretCipher;
+import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Update;
@@ -27,18 +29,21 @@ public class GenericCatalogController {
     private final CatalogQueryService query;
     private final UiAccessService access;
     private final UiEventPublisher eventPublisher;
+    private final SecretCipher secretCipher;
 
     public GenericCatalogController(Jdbi jdbi, UiProperties properties,
                                     NumberGenerator numberGenerator,
                                     CatalogQueryService query,
                                     UiAccessService access,
-                                    UiEventPublisher eventPublisher) {
+                                    UiEventPublisher eventPublisher,
+                                    SecretCipher secretCipher) {
         this.jdbi = jdbi;
         this.properties = properties;
         this.numberGenerator = numberGenerator;
         this.query = query;
         this.access = access;
         this.eventPublisher = eventPublisher;
+        this.secretCipher = secretCipher;
     }
 
     @GetMapping("/{name}")
@@ -138,7 +143,7 @@ public class GenericCatalogController {
         if (body.containsKey("parent")) setClauses.add("_parent = :_parent");
 
         for (AttributeDescriptor attr : desc.attributes()) {
-            if (body.containsKey(attr.fieldName())) {
+            if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
                 setClauses.add(attr.columnName() + " = :" + attr.columnName());
             }
         }
@@ -165,8 +170,8 @@ public class GenericCatalogController {
             }
 
             for (AttributeDescriptor attr : desc.attributes()) {
-                if (body.containsKey(attr.fieldName())) {
-                    update.bind(attr.columnName(), body.get(attr.fieldName()));
+                if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                    bindAttribute(update, attr, body.get(attr.fieldName()));
                 }
             }
             return update.execute();
@@ -198,7 +203,16 @@ public class GenericCatalogController {
             update.bind(attr.columnName(), (UUID) null);
             return;
         }
-        if (attr.isRef() || attr.javaType().isEnum()) {
+        if (attr.secret()) {
+            // Write-only secret: store the value encrypted. A "set" sentinel (echoed from a
+            // GET) carries no real value — on create there's nothing to keep, so store null.
+            // On update the caller is filtered out earlier by leaveSecretUnchanged.
+            if (SecretRedactor.SET.equals(value)) {
+                update.bind(attr.columnName(), (String) null);
+            } else {
+                update.bind(attr.columnName(), secretCipher.encrypt(value.toString()));
+            }
+        } else if (attr.isRef() || attr.javaType().isEnum()) {
             UUID uuid = value instanceof UUID u ? u : UUID.fromString(value.toString());
             update.bind(attr.columnName(), uuid);
         } else if (attr.javaType() == BigDecimal.class) {
@@ -206,6 +220,15 @@ public class GenericCatalogController {
         } else {
             update.bind(attr.columnName(), value);
         }
+    }
+
+    /**
+     * A secret attribute whose incoming value is the read-side "set" sentinel means "leave it
+     * as it is" — the client round-tripped a GET it never saw the real value of. Such columns
+     * are dropped from the UPDATE so the stored ciphertext is preserved.
+     */
+    private boolean leaveSecretUnchanged(AttributeDescriptor attr, Object value) {
+        return attr.secret() && SecretRedactor.SET.equals(value);
     }
 
     private UUID parseUuid(Object value) {

@@ -268,6 +268,11 @@ public class SchemaGenerator {
 
     /** SQL type for a metadata attribute, naming the column in any error it raises. */
     static String columnType(AttributeDescriptor attr) {
+        // Secret String values are stored encrypted; the base64 ciphertext is larger than the
+        // declared plaintext length, so widen to TEXT rather than the attribute's VARCHAR(length).
+        if (attr.secret() && attr.javaType() == String.class) {
+            return "TEXT";
+        }
         return sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName());
     }
 
