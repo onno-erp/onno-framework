@@ -15,7 +15,7 @@ package com.onec.ui;
  * class MainLayout implements Layout {
  *     public void configure(LayoutSpec s) {
  *         s.shell().nav(NavStyle.SIDEBAR);
- *         s.section("Rentals").icon("home")
+ *         s.section("Rentals").icon("house")
  *             .catalog(Property.class, c -> c.field("displayName").order(0));
  *     }
  * }

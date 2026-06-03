@@ -14,9 +14,24 @@ import java.util.Map;
 public class EntityConfigBuilder {
 
     private final Map<String, FieldHintBuilder> fields = new LinkedHashMap<>();
+    private String icon = "";
 
     public FieldHintBuilder field(String name) {
         return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
+    }
+
+    /**
+     * The nav icon for this entity — any lucide icon name (e.g. {@code "key"},
+     * {@code "calendar-check"}). Honored over the keyword heuristic, so an authored
+     * icon always wins. Blank means "fall back to the heuristic".
+     */
+    public EntityConfigBuilder icon(String icon) {
+        this.icon = icon;
+        return this;
+    }
+
+    String buildIcon() {
+        return icon;
     }
 
     public Map<String, FieldHint> buildFieldHints() {

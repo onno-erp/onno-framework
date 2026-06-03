@@ -125,6 +125,12 @@ public class UiLayoutBuilder {
             return entity("catalog", clazz, configurer);
         }
 
+        /** Add a catalog with an explicit nav icon (a lucide icon name, honored over the heuristic). */
+        public SectionBuilder catalog(Class<?> clazz, String icon) {
+            entities.add(new EntityRef("catalog", clazz, Map.of(), icon));
+            return this;
+        }
+
         public SectionBuilder document(Class<?> clazz) {
             entities.add(new EntityRef("document", clazz));
             return this;
@@ -132,6 +138,12 @@ public class UiLayoutBuilder {
 
         public SectionBuilder document(Class<?> clazz, Consumer<EntityConfigBuilder> configurer) {
             return entity("document", clazz, configurer);
+        }
+
+        /** Add a document with an explicit nav icon (a lucide icon name, honored over the heuristic). */
+        public SectionBuilder document(Class<?> clazz, String icon) {
+            entities.add(new EntityRef("document", clazz, Map.of(), icon));
+            return this;
         }
 
         public SectionBuilder register(Class<?> clazz) {
@@ -143,11 +155,17 @@ public class UiLayoutBuilder {
             return entity("register", clazz, configurer);
         }
 
+        /** Add a register with an explicit nav icon (a lucide icon name, honored over the heuristic). */
+        public SectionBuilder register(Class<?> clazz, String icon) {
+            entities.add(new EntityRef("register", clazz, Map.of(), icon));
+            return this;
+        }
+
         private SectionBuilder entity(String type, Class<?> clazz,
                                        Consumer<EntityConfigBuilder> configurer) {
             EntityConfigBuilder cfg = new EntityConfigBuilder();
             configurer.accept(cfg);
-            entities.add(new EntityRef(type, clazz, cfg.buildFieldHints()));
+            entities.add(new EntityRef(type, clazz, cfg.buildFieldHints(), cfg.buildIcon()));
             return this;
         }
 
@@ -302,14 +320,20 @@ public class UiLayoutBuilder {
         }
     }
 
-    public record EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints) {
+    public record EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints, String icon) {
         public EntityRef {
             fieldHints = fieldHints == null ? Map.of() : Map.copyOf(fieldHints);
+            icon = icon == null ? "" : icon;
         }
 
         /** Convenience constructor for callers that don't provide field hints. */
         public EntityRef(String type, Class<?> javaClass) {
-            this(type, javaClass, Map.of());
+            this(type, javaClass, Map.of(), "");
+        }
+
+        /** Convenience constructor for callers that provide hints but no explicit icon. */
+        public EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints) {
+            this(type, javaClass, fieldHints, "");
         }
     }
 

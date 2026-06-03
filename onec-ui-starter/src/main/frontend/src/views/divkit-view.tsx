@@ -14,6 +14,7 @@ import type { UiEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
+import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
 import "@divkitframework/divkit/dist/client.css";
 
 /**
@@ -832,7 +833,7 @@ export function DivKitView() {
 
   // ----- presentation tokens (match ShellLayoutBuilder's Palette) -----
 
-  const pageBg = resolvedTheme === "dark" ? "#0A0A0A" : "#FFFFFF";
+  const pageBg = resolvedTheme === "dark" ? "#0D0D0D" : "#FFFFFF";
   const skeletonBg = resolvedTheme === "dark" ? "#1F1F1F" : "#F5F5F5";
   const surfaceBg = resolvedTheme === "dark" ? "#121212" : "#FFFFFF";
   const borderColor = resolvedTheme === "dark" ? "#242424" : "#EBEBEB";
@@ -850,6 +851,7 @@ export function DivKitView() {
       theme={resolvedTheme}
       globalVariablesController={navVars}
       onCustomAction={onCustomAction as NonNullable<DivKitProps["onCustomAction"]>}
+      customComponents={ICON_CUSTOM_COMPONENTS}
     />
   );
 

@@ -10,10 +10,38 @@ import type { EntityRecord } from "./types";
 export interface NumberFormatOptions {
   /** ISO 4217 code (e.g. "EUR"); when set, render as currency. */
   currency?: string;
+  /**
+   * An explicit unit/symbol label (e.g. "E", "kg", "pcs", "€"). Unlike {@link currency}
+   * it is not validated against ISO 4217, and it takes precedence over `currency`: the
+   * number renders plainly and the label is placed on the {@link unitPosition} side.
+   */
+  unit?: string;
+  /**
+   * Where the {@link unit} sits relative to the number. "suffix" (default) → "100 E";
+   * "prefix" → "$100". Suffixes get a separating space, prefixes do not.
+   */
+  unitPosition?: "prefix" | "suffix" | string;
   /** "integer" | "decimal" — fraction-digit policy when not a currency. */
   format?: string;
   /** BCP-47 locale; defaults to the runtime/browser locale. */
   locale?: string;
+}
+
+/** Place a unit label on either side of an already-formatted number. */
+function attachUnit(num: string, unit: string, position?: string): string {
+  return position === "prefix" ? `${unit}${num}` : `${num} ${unit}`;
+}
+
+/** A plain grouped number, honouring the integer/decimal fraction-digit policy. */
+function formatPlain(value: number, opts: NumberFormatOptions): string {
+  const locale = opts.locale || undefined;
+  if (opts.format === "integer") {
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+  }
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 /** Coerce a cell value to a number, or null when it isn't numeric. */
@@ -29,6 +57,12 @@ export function toNumber(value: unknown): number | null {
 /** Format a number as currency (when a code is given) or a grouped decimal/integer. */
 export function formatNumber(value: number, opts: NumberFormatOptions = {}): string {
   const locale = opts.locale || undefined;
+  // An explicit unit wins over a currency code: render a plain grouped number and place
+  // the label on the configured side (suffix by default, e.g. "100 E"; prefix → "$100").
+  const unit = opts.unit?.trim();
+  if (unit) {
+    return attachUnit(formatPlain(value, opts), unit, opts.unitPosition);
+  }
   if (opts.currency) {
     try {
       return new Intl.NumberFormat(locale, { style: "currency", currency: opts.currency }).format(value);
@@ -36,13 +70,7 @@ export function formatNumber(value: number, opts: NumberFormatOptions = {}): str
       // Invalid currency code — fall through to plain number formatting.
     }
   }
-  if (opts.format === "integer") {
-    return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
-  }
-  return new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  return formatPlain(value, opts);
 }
 
 /**
@@ -51,7 +79,7 @@ export function formatNumber(value: number, opts: NumberFormatOptions = {}): str
  * existing dashboards are unchanged.
  */
 export function formatAmount(value: number, opts: NumberFormatOptions = {}): string {
-  if (opts.currency) return formatNumber(value, opts);
+  if (opts.unit?.trim() || opts.currency) return formatNumber(value, opts);
   return `$${value.toFixed(2)}`;
 }
 

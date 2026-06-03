@@ -344,14 +344,19 @@ public class DivKitController {
         List<ShellLayoutBuilder.NavSection> nav = new ArrayList<>();
         // The home/dashboard route — always reachable, so it leads the nav.
         nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
-                new ShellLayoutBuilder.NavItem("Dashboard", "onec://", "home", "/"))));
+                new ShellLayoutBuilder.NavItem("Dashboard", "onec://", "house", "/"))));
         for (UiLayout.ResolvedSection section : layoutResolver.resolve(active)) {
             List<ShellLayoutBuilder.NavItem> items = section.items().stream()
                     .filter(item -> access.canRead(principal, item.type(), item.name()))
                     .filter(item -> isDeclared(item, profileId))
                     .map(item -> new ShellLayoutBuilder.NavItem(
                             item.name(), "onec:/" + item.href(),
-                            NavIcons.forItem(item.name(), item.type(), section.icon()), item.href()))
+                            // An explicitly authored icon wins; otherwise fall back to the
+                            // name heuristic (with the section icon as its final default).
+                            item.icon() != null && !item.icon().isBlank()
+                                    ? item.icon()
+                                    : NavIcons.forItem(item.name(), item.type(), section.icon()),
+                            item.href()))
                     .toList();
             if (!items.isEmpty()) {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), section.icon(), items));
@@ -440,6 +445,17 @@ public class DivKitController {
     private static String formatMetric(java.math.BigDecimal value, String metric, Map<String, String> cfg) {
         java.util.Locale locale = cfg.containsKey("locale")
                 ? java.util.Locale.forLanguageTag(cfg.get("locale")) : java.util.Locale.US;
+        String format = cfg.get("format");
+        boolean integer = "integer".equalsIgnoreCase(format)
+                || (format == null && "count".equalsIgnoreCase(metric));
+
+        // An explicit unit wins over a currency code: format a plain grouped number and
+        // place the label on the configured side (suffix by default → "100 E"; prefix → "$100").
+        String unit = cfg.get("unit");
+        if (unit != null && !unit.isBlank()) {
+            return attachUnit(plainNumber(value, locale, integer), unit.trim(), cfg.get("unitPosition"));
+        }
+
         String currency = cfg.get("currency");
         if (currency != null && !currency.isBlank()) {
             try {
@@ -450,9 +466,11 @@ public class DivKitController {
                 // fall through to plain number formatting
             }
         }
-        String format = cfg.get("format");
-        boolean integer = "integer".equalsIgnoreCase(format)
-                || (format == null && "count".equalsIgnoreCase(metric));
+        return plainNumber(value, locale, integer);
+    }
+
+    /** A plain grouped number honouring the integer/decimal fraction-digit policy. */
+    private static String plainNumber(java.math.BigDecimal value, java.util.Locale locale, boolean integer) {
         java.text.NumberFormat nf = integer
                 ? java.text.NumberFormat.getIntegerInstance(locale)
                 : java.text.NumberFormat.getNumberInstance(locale);
@@ -460,6 +478,11 @@ public class DivKitController {
             nf.setMaximumFractionDigits(2);
         }
         return nf.format(value);
+    }
+
+    /** Place a unit label on either side of an already-formatted number. */
+    private static String attachUnit(String number, String unit, String position) {
+        return "prefix".equalsIgnoreCase(position) ? unit + number : number + " " + unit;
     }
 
     private List<ShellLayoutBuilder.ProfileLink> profileLinksFor(Principal principal) {

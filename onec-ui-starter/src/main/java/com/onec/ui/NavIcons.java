@@ -6,7 +6,9 @@ package com.onec.ui;
  * A heuristic default only — a layout that sets an explicit icon should win, and the
  * section icon is the fallback when nothing matches.
  *
- * <p>Icon names map to the bundled monochrome SVGs under {@code public/icons}.</p>
+ * <p>Returned names are lucide kebab-case icon names, rendered by the client's
+ * {@code onec-icon} bridge; any lucide name is valid and an unknown one degrades to a
+ * fallback glyph rather than rendering blank.</p>
  */
 final class NavIcons {
 
@@ -16,24 +18,37 @@ final class NavIcons {
     static String forItem(String name, String type, String sectionIcon) {
         String n = name == null ? "" : name.toLowerCase();
 
-        if (has(n, "propert", "apartment", "room", "unit")) return "building";
+        if (has(n, "dashboard", "overview", "home")) return "house";
+        if (has(n, "propert", "apartment", "room", "unit", "listing")) return "building";
+        if (has(n, "rental", "lease", "tenanc")) return "key";
         if (has(n, "bed", "occupan")) return "bed";
-        if (has(n, "book", "reservation", "stay")) return "calendar";
+        if (has(n, "book", "reservation", "stay", "schedule", "event", "shift")) return "calendar";
         if (has(n, "client", "customer", "guest", "tenant", "contact")) return "users";
-        if (has(n, "employee", "staff", "user", "people", "person")) return "user";
+        if (has(n, "employee", "staff", "user", "people", "person", "team")) return "user";
+        if (has(n, "supplier", "vendor", "shipment", "delivery")) return "truck";
         if (has(n, "bill", "invoice")) return "receipt";
-        if (has(n, "payment", "transaction")) return "wallet";
+        if (has(n, "payment", "transaction", "payout")) return "wallet";
         if (has(n, "bank", "account", "balance", "cash")) return "banknote";
-        if (has(n, "receivable", "payable", "ledger")) return "file-text";
-        if (has(n, "revenue", "sales", "report", "income", "stat")) return "bar-chart";
+        if (has(n, "receivable", "payable", "ledger", "contract", "agreement", "document", "file")) return "file-text";
+        if (has(n, "revenue", "sales", "report", "income", "stat", "analytic", "kpi", "metric")) return "chart-column";
         if (has(n, "countr", "region", "location", "address", "place")) return "map-pin";
         if (has(n, "product", "item", "good", "stock", "inventor", "warehouse")) return "package";
-        if (has(n, "dashboard", "home", "overview")) return "home";
+        if (has(n, "setting", "config", "preference", "admin")) return "settings";
+        if (has(n, "task", "todo", "ticket", "issue", "job", "order")) return "clipboard-list";
+        if (has(n, "categor", "tag", "label", "type", "status")) return "tag";
 
         // Registers are reporting surfaces; a chart reads better than a blank section icon.
-        if ("register".equals(type)) return "bar-chart";
+        if ("register".equals(type)) return "chart-column";
 
-        return sectionIcon == null || sectionIcon.isBlank() ? "circle" : sectionIcon;
+        // An authored section icon is the next-best default; otherwise a neutral, type-aware
+        // glyph (never a bare placeholder circle): documents look like records, catalogs like
+        // a tagged reference list.
+        if (sectionIcon != null && !sectionIcon.isBlank()) return sectionIcon;
+        return switch (type == null ? "" : type) {
+            case "document" -> "file-text";
+            case "register" -> "chart-column";
+            default -> "box";
+        };
     }
 
     private static boolean has(String haystack, String... needles) {

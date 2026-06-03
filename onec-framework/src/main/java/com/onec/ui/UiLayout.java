@@ -88,6 +88,16 @@ public record UiLayout(List<Section> sections,
             String name,
             String type,
             String href,
-            Class<?> javaClass
-    ) {}
+            Class<?> javaClass,
+            String icon
+    ) {
+        public ResolvedItem {
+            icon = icon == null ? "" : icon;
+        }
+
+        /** Back-compat constructor for items with no explicit icon (icon resolved heuristically). */
+        public ResolvedItem(String name, String type, String href, Class<?> javaClass) {
+            this(name, type, href, javaClass, "");
+        }
+    }
 }

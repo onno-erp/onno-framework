@@ -35,8 +35,10 @@ public class MainLayout implements Layout {
 
         layout.section("Rentals")
                 .order(0)
-                .icon("home")
-                .catalog(Property.class)
+                .icon("house")
+                // Property carries an explicit nav icon — authored icons win over the
+                // name heuristic (which would otherwise pick "building").
+                .catalog(Property.class, "key")
                 .catalog(Client.class)
                 .document(Booking.class);
 
@@ -56,7 +58,7 @@ public class MainLayout implements Layout {
 
         layout.section("Reports")
                 .order(3)
-                .icon("bar-chart")
+                .icon("chart-column")
                 .register(OccupancyRegister.class)
                 .register(RevenueRegister.class);
 

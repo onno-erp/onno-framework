@@ -223,6 +223,8 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
           <span className="text-[10px] tabular-nums opacity-70">
             {formatAmount(ext.amount, {
               currency: ext.currency,
+              unit: widget.extraConfig?.unit,
+              unitPosition: widget.extraConfig?.unitPosition,
               format: widget.extraConfig?.format,
               locale: widget.extraConfig?.locale,
             })}

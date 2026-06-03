@@ -66,7 +66,7 @@ public class UiLayoutResolver {
                 String name = resolveEntityName(ref);
                 if (name != null) {
                     String href = "/" + ref.type() + "s/" + toSnakeCase(name);
-                    items.add(new UiLayout.ResolvedItem(name, ref.type(), href, ref.javaClass()));
+                    items.add(new UiLayout.ResolvedItem(name, ref.type(), href, ref.javaClass(), ref.icon()));
                 }
             }
             result.add(new UiLayout.ResolvedSection(

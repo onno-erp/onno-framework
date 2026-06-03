@@ -12,19 +12,23 @@ final class Components {
     private static final String TRANSPARENT = "#00000000";
 
     /**
-     * A monochrome glyph from {@code /icons/{name}.svg}, recolored via {@code tint_color}.
+     * A glyph as an {@code onec-icon} custom block carrying {@code name/color/size}; the
+     * client renders the matching lucide icon by name (any kebab-case lucide name works,
+     * and an unknown name degrades to a fallback glyph rather than rendering blank).
      * Returns {@code null} for a blank name so callers degrade to label-only.
      */
     static Map<String, Object> icon(String name, String color, int size) {
         if (name == null || name.isBlank()) {
             return null;
         }
-        Map<String, Object> img = Div.image("/icons/" + name + ".svg");
-        Div.width(img, size);
-        Div.height(img, size);
-        img.put("scale", "fit");
-        img.put("tint_color", color);
-        return img;
+        Map<String, Object> props = new java.util.LinkedHashMap<>();
+        props.put("name", name);
+        props.put("color", color);
+        props.put("size", size);
+        Map<String, Object> node = Div.custom("onec-icon", props);
+        Div.width(node, size);
+        Div.height(node, size);
+        return node;
     }
 
     /**
@@ -79,9 +83,18 @@ final class Components {
         titleStyle.put("inactive_background_color", TRANSPARENT);
         titleStyle.put("corner_radius", 8);
         titleStyle.put("paddings", Map.of("top", 7, "bottom", 7, "left", 14, "right", 14));
+        // Switch instantly: the active pill jumps to the selected tab instead of
+        // sliding (DivKit's tab_title_style defaults to animation_type "slide"/300ms).
+        titleStyle.put("animation_type", "none");
+        titleStyle.put("animation_duration", 0);
         node.put("tab_title_style", titleStyle);
-        node.put("has_separator", true);
-        node.put("separator_color", p.border());
+        // No hairline under the strip, and no inset on the title row so the leftmost
+        // tab's pill edge lines up with the content table below it.
+        node.put("has_separator", false);
+        node.put("title_paddings", Map.of("top", 0, "bottom", 0, "left", 0, "right", 0));
+        // Switch instantly: disabling the content-swipe scroller drops DivKit's
+        // horizontal slide between tab bodies so the content just swaps.
+        node.put("switch_tabs_by_content_swipe_enabled", false);
         Div.matchWidth(node);
         return node;
     }

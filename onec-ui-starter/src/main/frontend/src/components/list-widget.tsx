@@ -58,7 +58,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
       const n = toNumber(row[key]);
       if (n != null) {
         const currency = resolveCurrency(row, cfg.currencyField, cfg.currency);
-        return formatAmount(n, { currency, format: cfg.format, locale });
+        return formatAmount(n, { currency, unit: cfg.unit, unitPosition: cfg.unitPosition, format: cfg.format, locale });
       }
     }
     return "";

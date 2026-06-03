@@ -32,7 +32,7 @@ public class TabletLayout implements Layout {
 
         layout.section("Rentals")
                 .order(0)
-                .icon("home")
+                .icon("house")
                 .catalog(Property.class)
                 .catalog(Client.class)
                 .document(Booking.class);

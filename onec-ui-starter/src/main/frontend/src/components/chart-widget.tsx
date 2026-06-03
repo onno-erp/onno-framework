@@ -43,6 +43,8 @@ interface AggregateConfig {
   metricField?: string;
   kind: ChartKind;
   currency?: string;
+  unit?: string;
+  unitPosition?: string;
   format?: string;
   locale?: string;
 }
@@ -66,6 +68,8 @@ function readConfig(widget: DashboardWidgetMeta): AggregateConfig {
     metricField: cfg.metricField,
     kind,
     currency: cfg.currency,
+    unit: cfg.unit,
+    unitPosition: cfg.unitPosition,
     // Counts read better as integers on the axis/tooltip unless the author overrides.
     format: cfg.format ?? (metric === "count" ? "integer" : undefined),
     locale: cfg.locale,
@@ -100,7 +104,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const [items, setItems] = useState<EntityRecord[]>([]);
   const config = useMemo(() => readConfig(widget), [widget]);
   const fmt = useMemo(
-    () => (n: number) => formatNumber(n, { currency: config.currency, format: config.format, locale: config.locale }),
+    () => (n: number) => formatNumber(n, { currency: config.currency, unit: config.unit, unitPosition: config.unitPosition, format: config.format, locale: config.locale }),
     [config]
   );
 

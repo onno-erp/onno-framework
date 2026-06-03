@@ -33,8 +33,11 @@ public class DashboardPage implements Page {
         b.widget("Posted bills").type("count").width("1/4").order(2).document(Bill.class)
                 .config("filter", "_posted = true");
         // FR-1 + FR-6: a server-aggregated KPI (SUM of gross) as a currency-formatted card.
+        // Unit placement: render the symbol as a suffix ("174,831.73 €") rather than the
+        // locale's default euro prefix. `unit` wins over `currency`; `unitPosition` is suffix by default.
         b.widget("Revenue").type("metric").width("1/4").order(3).document(Bill.class)
-                .config("metric", "sum").config("metricField", "gross").config("currency", "EUR");
+                .config("metric", "sum").config("metricField", "gross")
+                .config("unit", "€").config("unitPosition", "suffix");
 
         b.widget("Bookings calendar").type("calendar").width("full").order(4).document(Booking.class)
                 .dateField("check_in").titleField("summary")

@@ -39,7 +39,7 @@
   }
 
   .dark {
-    --background: 0 0% 4%;
+    --background: 0 0% 5%;
     --foreground: 0 0% 93%;
     --card: 0 0% 7%;
     --card-foreground: 0 0% 93%;
@@ -63,7 +63,7 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --sidebar-background: 0 0% 4%;
+    --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 60%;
     --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 0 0% 4%;
@@ -95,6 +95,17 @@
   .animate-in-page {
     animation: fadeSlideIn 0.15s ease-out;
   }
+}
+
+/* DivKit tabs slide their content panel over 0.3s when switching tabs (the tabs
+   "swiper_animated" modifier; the base swiper is already 0s). We want Balance/Movements
+   to swap instantly, so collapse that transition. The hashed class comes from
+   @divkitframework/divkit's tabs component — revisit if the DivKit version is bumped. */
+.divkit-763f3 {
+  transition-duration: 0s !important;
+}
+
+@layer utilities {
   .divkit-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -126,6 +137,15 @@ onec-form {
   display: block;
   width: 100%;
   pointer-events: auto;
+}
+
+/* Nav/account glyphs (onec-icon) are fixed-size, not full-width: center the lucide
+   SVG inside the size×size cell DivKit gives the block. */
+onec-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 
 /* List rows carry the "row" DivKit extension, which stamps [data-onec-row]. Highlight

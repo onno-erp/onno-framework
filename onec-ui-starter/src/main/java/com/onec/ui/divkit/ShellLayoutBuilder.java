@@ -3,6 +3,7 @@ package com.onec.ui.divkit;
 import com.onec.ui.NavStyle;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -41,21 +42,49 @@ public final class ShellLayoutBuilder {
     }
 
     /**
-     * A nav glyph as a {@code div-image} pointing at a bundled monochrome SVG
-     * (see {@code public/icons}); {@code tint_color} recolors it to match the
-     * item state, so the same asset serves active and idle. Returns {@code null}
-     * when no icon is authored, so callers fall back to a label-only layout.
+     * A nav glyph as an {@code onec-icon} custom block carrying {@code name/color/size};
+     * the client renders the matching lucide icon by name (see the web client's
+     * {@code icon-bridge}). {@code name} is any lucide kebab-case name (e.g.
+     * {@code "chart-column"}); an unknown name degrades to a fallback glyph on the client
+     * rather than rendering blank. Returns {@code null} when no icon is authored, so
+     * callers fall back to a label-only layout.
      */
     private static Map<String, Object> icon(String name, String color, int size) {
         if (name == null || name.isBlank()) {
             return null;
         }
-        Map<String, Object> img = Div.image("/icons/" + name + ".svg");
-        Div.width(img, size);
-        Div.height(img, size);
-        img.put("scale", "fit");
-        img.put("tint_color", color);
-        return img;
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("name", name);
+        props.put("color", color);
+        props.put("size", size);
+        Map<String, Object> node = Div.custom("onec-icon", props);
+        Div.width(node, size);
+        Div.height(node, size);
+        return node;
+    }
+
+    /**
+     * An {@code onec-icon} that highlights on the active route. The client paints
+     * {@code activeColor} when {@code path} is the current route, else {@code idleColor}
+     * — the icon counterpart to {@link #activeColor}, which the React client can't
+     * evaluate as a DivKit binding inside a custom block. Returns {@code null} for a
+     * blank name so callers degrade to label-only.
+     */
+    private static Map<String, Object> activeIcon(String name, String idleColor, String activeColor,
+                                                  String path, int size) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("name", name);
+        props.put("color", idleColor);
+        props.put("activeColor", activeColor);
+        props.put("activePath", path);
+        props.put("size", size);
+        Map<String, Object> node = Div.custom("onec-icon", props);
+        Div.width(node, size);
+        Div.height(node, size);
+        return node;
     }
 
     /**
@@ -198,7 +227,7 @@ public final class ShellLayoutBuilder {
         Div.color(label, color);
 
         Map<String, Object> link;
-        Map<String, Object> glyph = icon(item.icon(), color, 16);
+        Map<String, Object> glyph = activeIcon(item.icon(), p.text(), p.primary(), item.path(), 16);
         if (glyph != null) {
             link = Div.horizontal(List.of(glyph, label));
             Div.gap(link, 6);
@@ -326,7 +355,7 @@ public final class ShellLayoutBuilder {
         Div.textAlign(label, "center");
 
         List<Map<String, Object>> stack = new ArrayList<>();
-        Map<String, Object> glyph = icon(item.icon(), color, 20);
+        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 20);
         if (glyph != null) {
             stack.add(glyph);
         }

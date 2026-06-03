@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, X } from "lucide-react";
-import type { AttributeMeta, EntityRecord } from "@/lib/types";
+import { Check, Plus, Trash2, X } from "lucide-react";
+import type { AttributeMeta, EntityRecord, TabularSectionMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -33,6 +33,7 @@ export type FormDescriptor = {
     name: string;
     autoNumber?: boolean;
     attributes: AttributeMeta[];
+    tabularSections?: TabularSectionMeta[];
   };
   initial: EntityRecord | null;
 };
@@ -81,6 +82,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     return out;
   }, [kind, meta]);
 
+  // Tabular sections (document child collections). The metadata already ships them and the
+  // REST layer round-trips rows; this is the form's editable grid for each one.
+  const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
+
   const [data, setData] = useState<EntityRecord>(() => {
     const seed: EntityRecord = {};
     if (!initial) return seed;
@@ -90,14 +95,70 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     }
     return seed;
   });
+
+  // Rows per section, keyed by attribute fieldName. Loaded rows arrive keyed by column name
+  // (with resolved *_display labels), so seed each cell from initial[section][columnName] —
+  // the same column→field asymmetry the top-level fields handle above. All attributes are
+  // seeded (not just the visible ones) so hidden columns survive the delete-and-reinsert.
+  const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(() => {
+    const seed: Record<string, EntityRecord[]> = {};
+    for (const ts of sections) {
+      const raw = initial?.[ts.name];
+      seed[ts.name] = Array.isArray(raw)
+        ? (raw as EntityRecord[]).map((r) => {
+            const row: EntityRecord = {};
+            for (const attr of ts.attributes) {
+              if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
+            }
+            return row;
+          })
+        : [];
+    }
+    return seed;
+  });
+
   const [saving, setSaving] = useState(false);
 
   const set = (key: string, value: unknown) => setData((prev) => ({ ...prev, [key]: value }));
+
+  const addRow = (section: string) =>
+    setRowsBySection((prev) => ({ ...prev, [section]: [...(prev[section] ?? []), {}] }));
+  const removeRow = (section: string, idx: number) =>
+    setRowsBySection((prev) => ({
+      ...prev,
+      [section]: (prev[section] ?? []).filter((_, i) => i !== idx),
+    }));
+  const setCell = (section: string, idx: number, key: string, value: unknown) =>
+    setRowsBySection((prev) => ({
+      ...prev,
+      [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
+    }));
 
   const save = async () => {
     setSaving(true);
     try {
       const payload = { ...data };
+      // Attach each tabular section as rows keyed by fieldName (what insertTabularSections
+      // reads server-side). Drop rows where every attribute is blank.
+      for (const ts of sections) {
+        const rows = (rowsBySection[ts.name] ?? [])
+          .filter((row) =>
+            ts.attributes.some((a) => {
+              const v = row[a.fieldName];
+              return v !== null && v !== undefined && v !== "";
+            })
+          )
+          .map((row) => {
+            const out: EntityRecord = {};
+            for (const a of ts.attributes) {
+              const v = row[a.fieldName];
+              // Booleans map to primitive columns — always send true/false, never null.
+              out[a.fieldName] = /^(boolean|Boolean)$/.test(a.javaType) ? v === true : v ?? null;
+            }
+            return out;
+          });
+        payload[ts.name] = rows;
+      }
       let saved: EntityRecord;
       if (kind === "documents") {
         saved = isEdit ? await api.updateDocument(name, id!, payload) : await api.createDocument(name, payload);
@@ -129,6 +190,16 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           <FormFieldRow key={f.key} field={f} value={data[f.key]} onChange={(v) => set(f.key, v)} />
         ))}
       </div>
+      {sections.map((ts) => (
+        <TabularSectionEditor
+          key={ts.name}
+          section={ts}
+          rows={rowsBySection[ts.name] ?? []}
+          onAdd={() => addRow(ts.name)}
+          onRemove={(idx) => removeRow(ts.name, idx)}
+          onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
+        />
+      ))}
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
@@ -149,6 +220,81 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           {saving ? "Saving…" : form.submitLabel}
         </button>
       </div>
+    </div>
+  );
+}
+
+// An editable grid for one tabular section: add/remove rows, with each cell rendered by the
+// same AttrControl the top-level fields use (so Ref pickers, enum selects, dates and typed
+// inputs all behave identically). Only visible-in-form attributes get a column.
+function TabularSectionEditor({
+  section,
+  rows,
+  onAdd,
+  onRemove,
+  onCell,
+}: {
+  section: TabularSectionMeta;
+  rows: EntityRecord[];
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  onCell: (idx: number, key: string, value: unknown) => void;
+}) {
+  const columns = useMemo<AttributeMeta[]>(
+    () =>
+      section.attributes
+        .filter((a) => a.visibleInForm !== false)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [section]
+  );
+  const title = section.name.charAt(0).toUpperCase() + section.name.slice(1);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
+          <Plus className="size-4" aria-hidden="true" />
+          Add row
+        </button>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No rows yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {rows.map((row, idx) => (
+            <div key={idx} className="rounded-xl border border-border bg-background p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Row {idx + 1}</span>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
+                  onClick={() => onRemove(idx)}
+                  aria-label={`Remove row ${idx + 1}`}
+                >
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                  Remove
+                </button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {columns.map((attr) => (
+                  <div key={attr.fieldName} className="grid gap-1.5">
+                    <Label htmlFor={`${section.name}-${idx}-${attr.fieldName}`}>
+                      {attr.displayName}
+                      {attr.required ? <span className="ml-1 text-destructive">*</span> : null}
+                    </Label>
+                    <AttrControl
+                      attr={attr}
+                      value={row[attr.fieldName]}
+                      onChange={(v) => onCell(idx, attr.fieldName, v)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -204,6 +350,14 @@ function AttrControl({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
+  if (/^(boolean|Boolean)$/.test(attr.javaType)) {
+    return (
+      <div className="flex h-9 items-center">
+        <Checkbox checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+      </div>
+    );
+  }
+
   if (attr.isRef && attr.refTarget) {
     return (
       <RefSelect catalogName={attr.refTarget} value={value as string | undefined} onChange={onChange} />
