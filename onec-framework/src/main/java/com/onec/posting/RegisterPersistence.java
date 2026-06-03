@@ -447,57 +447,68 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                     .toList();
         }
 
-        String dimCols = groupDims.stream()
+        List<String> dimColList = groupDims.stream()
                 .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
+                .toList();
 
-        String resSums = descriptor.resources().stream()
+        List<String> resSumList = descriptor.resources().stream()
                 .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
                         " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
+                .toList();
 
-        StringBuilder sql = new StringBuilder();
+        // Assemble the virtual-table SQL as structural fragments and hand them to the
+        // shared SqlRenderer, so register queries and the general query layer go through
+        // exactly one SELECT/WHERE/GROUP BY assembler.
+        List<String> selectItems = new ArrayList<>();
+        List<String> whereClauses = new ArrayList<>();
+        String fromTable;
 
         if (queryType == com.onec.repository.RegisterQueryBuilder.QueryType.BALANCE) {
             if (atDate != null) {
                 // Point-in-time balance from movements
-                sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                        .append(" FROM ").append(descriptor.tableName())
-                        .append(" WHERE _active = TRUE AND _period <= :atDate");
+                fromTable = descriptor.tableName();
+                selectItems.addAll(dimColList);
+                selectItems.addAll(resSumList);
+                whereClauses.add("_active = TRUE");
+                whereClauses.add("_period <= :atDate");
             } else if (!groupByFields.isEmpty()) {
                 // Partial group-by from movements (can't use totals table with fewer dims)
-                sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                        .append(" FROM ").append(descriptor.tableName())
-                        .append(" WHERE _active = TRUE");
+                fromTable = descriptor.tableName();
+                selectItems.addAll(dimColList);
+                selectItems.addAll(resSumList);
+                whereClauses.add("_active = TRUE");
             } else {
                 // Current balance from totals table
-                sql.append("SELECT * FROM ").append(descriptor.totalsTableName())
-                        .append(" WHERE 1=1");
+                fromTable = descriptor.totalsTableName();
+                selectItems.add("*");
             }
         } else {
             // Turnover
-            sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                    .append(" FROM ").append(descriptor.tableName())
-                    .append(" WHERE _active = TRUE");
-            if (fromDate != null) sql.append(" AND _period >= :fromDate");
-            if (toDate != null) sql.append(" AND _period <= :toDate");
+            fromTable = descriptor.tableName();
+            selectItems.addAll(dimColList);
+            selectItems.addAll(resSumList);
+            whereClauses.add("_active = TRUE");
+            if (fromDate != null) whereClauses.add("_period >= :fromDate");
+            if (toDate != null) whereClauses.add("_period <= :toDate");
         }
 
         if (resolvedFilters != null) {
             for (String col : resolvedFilters.keySet()) {
-                sql.append(" AND ").append(col).append(" = :f_").append(col);
+                whereClauses.add(col + " = :f_" + col);
             }
         }
 
         // Add GROUP BY for aggregated queries (not plain totals table select)
         boolean needsGroupBy = atDate != null || !groupByFields.isEmpty() ||
                 queryType == com.onec.repository.RegisterQueryBuilder.QueryType.TURNOVER;
-        if (needsGroupBy && !dimCols.isEmpty()) {
-            sql.append(" GROUP BY ").append(dimCols);
-        }
+        List<String> groupByList = (needsGroupBy && !dimColList.isEmpty())
+                ? dimColList : List.of();
+
+        String sql = com.onec.query.SqlRenderer.render(new com.onec.query.SqlRenderer.RenderModel(
+                selectItems, fromTable, null, null, whereClauses, groupByList, null, null, null));
 
         return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString());
+            var query = handle.createQuery(sql);
             if (atDate != null) query.bind("atDate", atDate);
             if (fromDate != null) query.bind("fromDate", fromDate);
             if (toDate != null) query.bind("toDate", toDate);
