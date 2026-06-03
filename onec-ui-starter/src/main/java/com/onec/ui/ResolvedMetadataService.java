@@ -60,6 +60,16 @@ public class ResolvedMetadataService {
         // decide whether to offer Post / Re-post / Unpost actions; a non-postable document
         // only ever gets a plain Save.
         map.put("postable", com.onec.lifecycle.Postable.class.isAssignableFrom(d.javaClass()));
+        // Detail-header action placement. Default mirrors 1C: Post is the primary
+        // button, Unpost/Edit/Delete live in the overflow (⋯) menu. A view overrides
+        // per action via f.action("...").primary()/.inMenu()/.hidden().
+        Map<String, String> actionOverrides = fieldHints.actionsFor(d.javaClass());
+        Map<String, Object> actions = new LinkedHashMap<>();
+        actions.put("post", actionOverrides.getOrDefault("post", "primary"));
+        actions.put("unpost", actionOverrides.getOrDefault("unpost", "menu"));
+        actions.put("edit", actionOverrides.getOrDefault("edit", "menu"));
+        actions.put("delete", actionOverrides.getOrDefault("delete", "menu"));
+        map.put("actions", actions);
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
