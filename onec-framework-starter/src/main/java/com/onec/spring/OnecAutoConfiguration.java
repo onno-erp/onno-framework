@@ -1,6 +1,5 @@
 package com.onec.spring;
 
-import com.onec.annotations.UiSection;
 import com.onec.metadata.*;
 import com.onec.posting.PostingEngine;
 import com.onec.posting.PostingService;
@@ -285,30 +284,22 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
                 .map(UiLayoutBuilder.EntityRef::javaClass)
                 .collect(Collectors.toSet());
 
-        // Auto-place remaining entities using @UiSection or fallback grouping
+        // Auto-place remaining entities using default fallback grouping.
+        // Explicit placement is the job of Layout beans (the source of truth).
         UiLayoutBuilder fallbackBuilder = new UiLayoutBuilder();
 
         if (applyFallback) {
             for (CatalogDescriptor d : registry.allCatalogs()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Catalogs";
-                int order = s != null ? s.order() : 900;
-                fallbackBuilder.section(section).order(order).catalog(d.javaClass());
+                fallbackBuilder.section("Catalogs").order(900).catalog(d.javaClass());
             }
             for (DocumentDescriptor d : registry.allDocuments()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Documents";
-                int order = s != null ? s.order() : 901;
-                fallbackBuilder.section(section).order(order).document(d.javaClass());
+                fallbackBuilder.section("Documents").order(901).document(d.javaClass());
             }
             for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Registers";
-                int order = s != null ? s.order() : 902;
-                fallbackBuilder.section(section).order(order).register(d.javaClass());
+                fallbackBuilder.section("Registers").order(902).register(d.javaClass());
             }
         }
 

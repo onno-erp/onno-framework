@@ -89,6 +89,35 @@
   input[type="number"] {
     -moz-appearance: textfield;
   }
+
+  /* Subtle, overlay-style scrollbars everywhere (the scroll panes — list islands,
+     sidebar, content — otherwise show the chunky default bar, which reads as a loud
+     light slab in dark mode). Scrolling still works; only the bar's appearance changes.
+     Firefox uses scrollbar-width/-color; WebKit/Chromium uses the ::-webkit-scrollbar
+     pseudo-elements. The thumb is a translucent neutral so it works in both themes and
+     brightens on hover. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0 0% 50% / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(0 0% 50% / 0.35);
+    border-radius: 9999px;
+    /* Padding-box border insets the thumb so it reads as a thin pill, not a full-width slab. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(0 0% 50% / 0.55);
+  }
 }
 
 @layer utilities {
