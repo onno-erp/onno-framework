@@ -10,7 +10,7 @@ import java.util.List;
  * ref(...) / eq(...)} shape from the issue and reuse the existing
  * {@link FieldReference} method-reference mechanism for field resolution.
  *
- * <p>Paths produced here are left un-rooted; {@link Query#from(Class)} binds them to the
+ * <p>Paths produced here are left un-rooted; {@link QueryEngine#from(Class)} binds them to the
  * query root, so {@code Q.col(SalesOrder::getNumber)} works without repeating the class.
  *
  * <pre>{@code
