@@ -34,19 +34,19 @@ This is the only property the starter exposes. Everything else is derived from y
 
 `AutoConfiguration.imports` registers two classes:
 
-- **`OneCAutoConfiguration`** — the heart of the wiring. It extends `AbstractJdbcConfiguration`,
+- **`OnecAutoConfiguration`** — the heart of the wiring. It extends `AbstractJdbcConfiguration`,
   registers the oneC `NamingStrategy` and mapping context, and exposes:
   - `Jdbi` (built from the `DataSource`), `MetadataRegistry`, `RefResolver`
   - `SchemaInitializer` (see below)
-  - the lifecycle callbacks (`OneCBeforeConvertCallback`, `OneCAfterSaveCallback`,
-    `OneCAfterConvertCallback`, `OneCBeforeDeleteCallback`)
+  - the lifecycle callbacks (`OnecBeforeConvertCallback`, `OnecAfterSaveCallback`,
+    `OnecAfterConvertCallback`, `OnecBeforeDeleteCallback`)
   - `NumberGenerator` (JDBC-backed code/number sequences), `OutboxWriter`
   - register persistence/repository maps, `PostingService` (wrapping a `PostingEngine`)
   - information-register, constant and enumeration persistence/managers
   - the UI layout model (`LayoutSet`, `UiLayout`, resolvers) assembled from your `Layout` beans
   - `BackgroundJobs` and `ScheduledJobRegistrar` — only when a JobRunr `JobScheduler` bean is present
     (`@ConditionalOnBean(JobScheduler.class)`)
-- **`OneCRepositoriesAutoConfiguration`** — replaces Spring Boot's stock
+- **`OnecRepositoriesAutoConfiguration`** — replaces Spring Boot's stock
   `JdbcRepositoriesAutoConfiguration` with one that excludes `RegisterRepository` subtypes, and
   scans register repositories separately. Register repositories are register-shaped (append-only
   movement records) rather than aggregate-shaped, so they need their own factory.
@@ -107,7 +107,7 @@ class CounterpartyService {
 
 `CatalogObject`/`DocumentObject`/`AccumulationRecord` implement Spring Data `Persistable` with
 `isNew = true` by default, so a freshly constructed instance INSERTs. Spring Data JDBC never flips
-that flag back after a read, so `OneCAfterConvertCallback` resets `isNew = false` on every load path.
+that flag back after a read, so `OnecAfterConvertCallback` resets `isNew = false` on every load path.
 That means `repository.save(loadedEntity)` correctly issues an **UPDATE**. Find-then-update and sync
 code work automatically — you no longer need to call `setNew(false)` by hand (historically you did).
 

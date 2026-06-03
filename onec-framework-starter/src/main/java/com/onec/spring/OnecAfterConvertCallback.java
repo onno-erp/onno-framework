@@ -18,7 +18,7 @@ import org.springframework.data.relational.core.mapping.event.AfterConvertCallba
  * when the INSERT is ignored. Running on {@code AfterConvert} (after the row is mapped to an object,
  * on every load path) is the canonical place to reset it.
  */
-public class OneCAfterConvertCallback implements AfterConvertCallback<Object> {
+public class OnecAfterConvertCallback implements AfterConvertCallback<Object> {
 
     @Override
     public Object onAfterConvert(Object aggregate) {

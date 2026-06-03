@@ -33,9 +33,9 @@ import java.util.List;
 import java.util.Map;
 
 @AutoConfiguration(before = {SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
-@EnableConfigurationProperties(OneCAuthProperties.class)
+@EnableConfigurationProperties(OnecAuthProperties.class)
 @ConditionalOnProperty(prefix = "onec.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
-public class OneCAuthAutoConfiguration {
+public class OnecAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
@@ -45,7 +45,7 @@ public class OneCAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    UserDetailsService oneCUserDetailsService(OneCAuthProperties properties, PasswordEncoder passwordEncoder) {
+    UserDetailsService oneCUserDetailsService(OnecAuthProperties properties, PasswordEncoder passwordEncoder) {
         List<UserDetails> users = properties.getUsers().stream()
                 .map(u -> {
                     if (u.getUsername() == null || u.getPassword() == null) {
@@ -75,7 +75,7 @@ public class OneCAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(SecurityFilterChain.class)
-    SecurityFilterChain oneCSecurityFilterChain(HttpSecurity http, OneCAuthProperties properties)
+    SecurityFilterChain oneCSecurityFilterChain(HttpSecurity http, OnecAuthProperties properties)
             throws Exception {
         String[] publicPaths = properties.getPublicPaths().toArray(String[]::new);
 

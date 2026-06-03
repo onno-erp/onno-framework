@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "onec")
-public class OneCProperties {
+public class OnecProperties {
 
     private List<String> scanPackages = new ArrayList<>();
 

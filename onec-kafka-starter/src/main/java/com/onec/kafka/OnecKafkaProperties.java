@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 @ConfigurationProperties(prefix = "onec.kafka")
-public class OneCKafkaProperties {
+public class OnecKafkaProperties {
 
     private boolean enabled = true;
     private String serviceName = "onec-service";

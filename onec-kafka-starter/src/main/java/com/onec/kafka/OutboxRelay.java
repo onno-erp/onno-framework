@@ -14,12 +14,12 @@ public class OutboxRelay {
     private final OutboxWriter outboxWriter;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
-    private final OneCKafkaProperties properties;
+    private final OnecKafkaProperties properties;
 
     public OutboxRelay(OutboxWriter outboxWriter,
                        KafkaTemplate<String, String> kafkaTemplate,
                        ObjectMapper objectMapper,
-                       OneCKafkaProperties properties) {
+                       OnecKafkaProperties properties) {
         this.outboxWriter = outboxWriter;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;

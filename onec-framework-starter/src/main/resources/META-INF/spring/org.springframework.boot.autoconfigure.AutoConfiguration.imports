@@ -1,2 +1,2 @@
-com.onec.spring.OneCAutoConfiguration
-com.onec.spring.OneCRepositoriesAutoConfiguration
+com.onec.spring.OnecAutoConfiguration
+com.onec.spring.OnecRepositoriesAutoConfiguration

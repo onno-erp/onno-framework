@@ -22,7 +22,7 @@ import org.springframework.web.client.RestClient;
 @ConditionalOnClass(RestClient.class)
 @ConditionalOnProperty(prefix = "onec.guesty", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(GuestyProperties.class)
-public class OneCGuestyAutoConfiguration {
+public class OnecGuestyAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean

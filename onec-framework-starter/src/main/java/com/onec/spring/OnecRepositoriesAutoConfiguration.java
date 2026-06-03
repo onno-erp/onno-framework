@@ -16,6 +16,6 @@ import javax.sql.DataSource;
 @AutoConfiguration(before = JdbcRepositoriesAutoConfiguration.class)
 @ConditionalOnBean(DataSource.class)
 @ConditionalOnClass(EnableJdbcRepositories.class)
-@Import({OneCJdbcRepositoriesRegistrar.class, RegisterRepositoriesAutoConfiguration.class})
-public class OneCRepositoriesAutoConfiguration {
+@Import({OnecJdbcRepositoriesRegistrar.class, RegisterRepositoriesAutoConfiguration.class})
+public class OnecRepositoriesAutoConfiguration {
 }

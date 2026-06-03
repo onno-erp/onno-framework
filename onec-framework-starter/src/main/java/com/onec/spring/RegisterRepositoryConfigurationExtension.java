@@ -15,7 +15,7 @@ public class RegisterRepositoryConfigurationExtension extends RepositoryConfigur
 
     @Override
     public String getModuleName() {
-        return "OneC Register";
+        return "onec Register";
     }
 
     @Override

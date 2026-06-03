@@ -30,19 +30,19 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
-@EnableConfigurationProperties(OneCProperties.class)
+@EnableConfigurationProperties(OnecProperties.class)
 @ConditionalOnBean(DataSource.class)
-public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
+public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
 
     @org.springframework.beans.factory.annotation.Autowired
-    private OneCProperties oneCProperties;
+    private OnecProperties oneCProperties;
 
     @org.springframework.beans.factory.annotation.Autowired
     private ApplicationContext bootstrapContext;
 
     @Bean
     public NamingStrategy oneCNamingStrategy() {
-        return new OneCNamingStrategy();
+        return new OnecNamingStrategy();
     }
 
     @Override
@@ -53,11 +53,11 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         } else if (bootstrapContext != null) {
             packages = AutoConfigurationPackages.get(bootstrapContext);
         } else {
-            System.err.println("[OneC] userConverters() called before context wired; falling back to system property");
+            System.err.println("[onec] userConverters() called before context wired; falling back to system property");
             String fallback = System.getProperty("onec.scan-packages");
             packages = fallback == null ? java.util.List.of() : java.util.List.of(fallback.split(","));
         }
-        System.err.println("[OneC] userConverters(): scanning packages=" + packages);
+        System.err.println("[onec] userConverters(): scanning packages=" + packages);
         if (packages == null || packages.isEmpty()) {
             return java.util.List.of();
         }
@@ -66,7 +66,7 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         for (Class<?> clazz : new EnumerationScanner().scan(packages)) {
             enums.add(mdScanner.scanEnumeration(clazz));
         }
-        System.err.println("[OneC] userConverters(): registered converters for " + enums.size() + " enums");
+        System.err.println("[onec] userConverters(): registered converters for " + enums.size() + " enums");
         return EnumUuidConverters.build(enums);
     }
 
@@ -74,36 +74,36 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     public JdbcMappingContext jdbcMappingContext(java.util.Optional<NamingStrategy> namingStrategy,
                                                  org.springframework.data.jdbc.core.convert.JdbcCustomConversions customConversions,
                                                  org.springframework.data.relational.RelationalManagedTypes jdbcManagedTypes) {
-        OneCMappingContext context = new OneCMappingContext(namingStrategy.orElseGet(OneCNamingStrategy::new));
+        OnecMappingContext context = new OnecMappingContext(namingStrategy.orElseGet(OnecNamingStrategy::new));
         context.setSimpleTypeHolder(customConversions.getSimpleTypeHolder());
         return context;
     }
 
     @Bean
-    public SchemaInitializer schemaInitializer(DataSource dataSource, OneCProperties properties,
+    public SchemaInitializer schemaInitializer(DataSource dataSource, OnecProperties properties,
                                                ApplicationContext context) {
         return new SchemaInitializer(dataSource, resolvePackages(properties, context));
     }
 
     @Bean
-    public OneCBeforeConvertCallback oneCBeforeConvertCallback(MetadataRegistry registry,
+    public OnecBeforeConvertCallback oneCBeforeConvertCallback(MetadataRegistry registry,
                                                                 com.onec.numbering.NumberGenerator numberGenerator) {
-        return new OneCBeforeConvertCallback(registry, numberGenerator);
+        return new OnecBeforeConvertCallback(registry, numberGenerator);
     }
 
     @Bean
-    public OneCAfterSaveCallback oneCAfterSaveCallback(OutboxWriter outboxWriter) {
-        return new OneCAfterSaveCallback(outboxWriter);
+    public OnecAfterSaveCallback oneCAfterSaveCallback(OutboxWriter outboxWriter) {
+        return new OnecAfterSaveCallback(outboxWriter);
     }
 
     @Bean
-    public OneCAfterConvertCallback oneCAfterConvertCallback() {
-        return new OneCAfterConvertCallback();
+    public OnecAfterConvertCallback oneCAfterConvertCallback() {
+        return new OnecAfterConvertCallback();
     }
 
     @Bean
-    public OneCBeforeDeleteCallback oneCBeforeDeleteCallback(OutboxWriter outboxWriter) {
-        return new OneCBeforeDeleteCallback(outboxWriter);
+    public OnecBeforeDeleteCallback oneCBeforeDeleteCallback(OutboxWriter outboxWriter) {
+        return new OnecBeforeDeleteCallback(outboxWriter);
     }
 
     @Bean
@@ -117,7 +117,7 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public MetadataRegistry metadataRegistry(OneCProperties properties, ApplicationContext context) {
+    public MetadataRegistry metadataRegistry(OnecProperties properties, ApplicationContext context) {
         return buildRegistry(resolvePackages(properties, context));
     }
 
@@ -376,7 +376,7 @@ public class OneCAutoConfiguration extends AbstractJdbcConfiguration {
         return map;
     }
 
-    static List<String> resolvePackages(OneCProperties properties, ApplicationContext context) {
+    static List<String> resolvePackages(OnecProperties properties, ApplicationContext context) {
         if (!properties.getScanPackages().isEmpty()) {
             return properties.getScanPackages();
         }
