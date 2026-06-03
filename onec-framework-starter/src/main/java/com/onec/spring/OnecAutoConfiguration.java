@@ -125,6 +125,16 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
         return Jdbi.create(dataSource);
     }
 
+    /**
+     * The unified type-safe query layer: a {@link com.onec.query.QueryEngine} over
+     * catalogs, documents, and registers with {@code Ref}-navigation joins. Apps inject
+     * it to run {@code query.from(...).select(...).where(...).fetch()} queries.
+     */
+    @Bean
+    public com.onec.query.QueryEngine queryEngine(Jdbi jdbi, MetadataRegistry metadataRegistry) {
+        return new com.onec.query.QueryEngine(jdbi, metadataRegistry);
+    }
+
     @Bean
     public OutboxWriter outboxWriter(Jdbi jdbi) {
         return new OutboxWriter(jdbi);
