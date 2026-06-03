@@ -22,7 +22,7 @@ public class BillView implements EntityView {
     public void fields(EntityConfigBuilder f) {
         f.field("client").order(0)
                 .field("property").order(1)
-                .field("bookingRef").order(2)
+                .field("booking").order(2)
                 .field("net").order(3)
                 .field("ivaPercent").order(4)
                 .field("iva").order(5).hideInForm()

@@ -231,10 +231,16 @@ public class DivKitController {
         // Only offer edit/delete to users who may write the catalog; the REST
         // endpoints enforce it regardless.
         boolean canWrite = access.canWrite(principal, desc);
-        String editUrl = canWrite ? "onec://catalogs/" + name + "/" + id + "/edit" : null;
-        String deleteUrl = canWrite ? "onec://delete/catalogs/" + name + "/" + id : null;
+        // Catalogs keep Edit/Delete as inline (primary) buttons — no posting, no overflow.
+        List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+                    "onec://catalogs/" + name + "/" + id + "/edit", "primary"));
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+                    "onec://delete/catalogs/" + name + "/" + id, "primary"));
+        }
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
-                resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), editUrl, deleteUrl,
+                resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), actions,
                 Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
@@ -294,19 +300,35 @@ public class DivKitController {
         // Only offer edit/delete to users who may write the document; the REST
         // endpoints enforce it regardless.
         boolean canWrite = access.canWrite(principal, desc);
-        String editUrl = canWrite ? "onec://documents/" + name + "/" + id + "/edit" : null;
-        String deleteUrl = canWrite ? "onec://delete/documents/" + name + "/" + id : null;
         Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
         Map<String, Object> row = documentQuery.get(desc, id);
         // Posting actions: only for writable, postable documents. Post is offered in both
-        // states (it re-posts when already posted); Unpost only once posted. The builder
-        // labels the Post button "Re-post" when _posted is true.
+        // states (it re-posts when already posted, labelled accordingly); Unpost only once
+        // posted. Placement (primary button / overflow ⋯ menu / hidden) comes from the
+        // resolved metadata's "actions" map, which a view can override per action.
         boolean postable = Boolean.TRUE.equals(meta.get("postable"));
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
-        String postUrl = (canWrite && postable) ? "onec://post/" + name + "/" + id : null;
-        String unpostUrl = (canWrite && postable && posted) ? "onec://unpost/" + name + "/" + id : null;
-        Map<String, Object> content = SurfaceDivBuilder.documentDetail(
-                meta, row, editUrl, deleteUrl, postUrl, unpostUrl, Palette.of(theme));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
+
+        List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        if (canWrite && postable) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check", posted ? "Re-post" : "Post",
+                    "primary", "onec://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
+        }
+        if (canWrite && postable && posted) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", "Unpost", "normal",
+                    "onec://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
+        }
+        if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+                    "onec://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+                    "onec://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
+        }
+        // "hidden" placement drops the action from the UI (it stays available via REST).
+        actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row, actions, Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
 

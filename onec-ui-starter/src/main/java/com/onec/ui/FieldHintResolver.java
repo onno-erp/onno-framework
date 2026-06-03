@@ -17,6 +17,7 @@ import java.util.Map;
 public class FieldHintResolver {
 
     private final Map<Class<?>, Map<String, FieldHint>> hints = new LinkedHashMap<>();
+    private final Map<Class<?>, Map<String, String>> actions = new LinkedHashMap<>();
 
     public FieldHintResolver(List<EntityView> views) {
         for (EntityView view : views) {
@@ -26,11 +27,17 @@ public class FieldHintResolver {
             EntityConfigBuilder cfg = new EntityConfigBuilder();
             view.fields(cfg);
             hints.put(view.entity(), cfg.buildFieldHints());
+            actions.put(view.entity(), cfg.buildActions());
         }
     }
 
     /** Field hints for an entity, or an empty map if its view defines none. */
     public Map<String, FieldHint> forEntity(Class<?> entity) {
         return hints.getOrDefault(entity, Map.of());
+    }
+
+    /** Detail-header action placement overrides for an entity ({@code action -> primary|menu|hidden}). */
+    public Map<String, String> actionsFor(Class<?> entity) {
+        return actions.getOrDefault(entity, Map.of());
     }
 }

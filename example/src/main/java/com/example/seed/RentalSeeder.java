@@ -333,7 +333,7 @@ public class RentalSeeder implements CommandLineRunner {
                 bill.setDate(LocalDateTime.of(checkOut, java.time.LocalTime.of(10, 0)));
                 bill.setClient(Ref.of(Client.class, primary.getId()));
                 bill.setProperty(Ref.of(Property.class, property.getId()));
-                bill.setBookingRef(saved.getId());
+                bill.setBooking(Ref.of(Booking.class, saved.getId()));
                 bill.setNet(net);
                 bill.setIvaPercent(ivaPct);
                 bill.setComments("Stay " + checkIn + " → " + checkOut + " (" + nights + " nights)");
