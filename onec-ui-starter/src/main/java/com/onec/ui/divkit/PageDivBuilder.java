@@ -6,7 +6,7 @@ import com.onec.ui.PageComponent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.ToLongFunction;
+import java.util.function.Function;
 
 /**
  * Renders an authored {@link com.onec.ui.Page} to DivKit content: a header, the
@@ -21,12 +21,12 @@ public final class PageDivBuilder {
     public static Map<String, Object> build(String title, String subtitle,
                                             List<DashboardWidgetDescriptor> widgets,
                                             List<PageComponent> components, int columns,
-                                            ToLongFunction<DashboardWidgetDescriptor> counts, Palette p) {
+                                            Function<DashboardWidgetDescriptor, String> values, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
         items.add(Components.pageHeader(title, subtitle, p));
 
         if (!widgets.isEmpty()) {
-            items.add(Widgets.grid(widgets, columns, counts, p));
+            items.add(Widgets.grid(widgets, columns, values, p));
         }
 
         for (PageComponent c : components) {

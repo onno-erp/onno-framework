@@ -7,11 +7,13 @@ import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -75,6 +77,35 @@ public class CatalogQueryService {
                 h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")
                         .mapTo(Long.class)
                         .one());
+    }
+
+    /**
+     * A single aggregate value for a count/metric card — {@code count} of rows, or
+     * {@code sum|avg|min|max} of one numeric column — restricted to live records and
+     * narrowed by an optional safe {@code filter} predicate (see {@link WidgetFilter}).
+     */
+    public BigDecimal aggregate(CatalogDescriptor desc, String metric, String field, String filter) {
+        Set<String> columns = columnNames(desc);
+        String agg = WidgetAggregate.expression(metric, field, columns);
+        WidgetFilter.Result f = WidgetFilter.parse(filter, columns);
+
+        StringBuilder sql = new StringBuilder("SELECT ").append(agg)
+                .append(" FROM ").append(desc.tableName())
+                .append(" WHERE _deletion_mark = false");
+        if (!f.isEmpty()) {
+            sql.append(" AND ").append(f.sql());
+        }
+        return jdbi.withHandle(h -> {
+            var query = h.createQuery(sql.toString());
+            f.bindings().forEach(query::bind);
+            return query.mapTo(BigDecimal.class).findOne().orElse(BigDecimal.ZERO);
+        });
+    }
+
+    private static Set<String> columnNames(CatalogDescriptor desc) {
+        return desc.attributes().stream()
+                .map(a -> a.columnName().toLowerCase())
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     public List<Map<String, Object>> list(CatalogDescriptor desc, int offset, int limit) {

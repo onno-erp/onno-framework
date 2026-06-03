@@ -9,9 +9,11 @@ import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -121,6 +123,43 @@ public class RegisterQueryService {
         });
         resolveAll(desc, rows);
         return rows;
+    }
+
+    /**
+     * A single summed resource across a register — the KPI/metric-card counterpart to
+     * {@link #turnover}. Restricted to active movements, narrowed by an optional period
+     * window and a safe {@code filter} predicate (see {@link WidgetFilter}). The resource
+     * field must be one of the register's resources, so it can never carry arbitrary SQL.
+     */
+    public BigDecimal total(AccumulationRegisterDescriptor desc, String resourceField,
+                            String from, String to, String filter) {
+        Set<String> resourceColumns = desc.resources().stream()
+                .map(r -> r.columnName().toLowerCase())
+                .collect(Collectors.toSet());
+        String agg = WidgetAggregate.expression("sum", resourceField, resourceColumns);
+        WidgetFilter.Result f = WidgetFilter.parse(filter, dimensionColumns(desc));
+
+        StringBuilder sql = new StringBuilder("SELECT ").append(agg)
+                .append(" FROM ").append(desc.tableName())
+                .append(" WHERE _active = true");
+        if (from != null) sql.append(" AND _period >= :from");
+        if (to != null) sql.append(" AND _period <= :to");
+        if (!f.isEmpty()) {
+            sql.append(" AND ").append(f.sql());
+        }
+        return jdbi.withHandle(h -> {
+            var query = h.createQuery(sql.toString());
+            if (from != null) query.bind("from", from);
+            if (to != null) query.bind("to", to);
+            f.bindings().forEach(query::bind);
+            return query.mapTo(BigDecimal.class).findOne().orElse(BigDecimal.ZERO);
+        });
+    }
+
+    private static Set<String> dimensionColumns(AccumulationRegisterDescriptor desc) {
+        return desc.dimensions().stream()
+                .map(d -> d.columnName().toLowerCase())
+                .collect(Collectors.toSet());
     }
 
     private void resolveAll(AccumulationRegisterDescriptor desc, List<Map<String, Object>> rows) {

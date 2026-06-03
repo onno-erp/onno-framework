@@ -8,9 +8,12 @@ import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Read-side queries for documents (list with optional date range; detail with
@@ -60,6 +63,35 @@ public class DocumentQueryService {
                 h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")
                         .mapTo(Long.class)
                         .one());
+    }
+
+    /**
+     * A single aggregate value for a count/metric card — {@code count} of rows, or
+     * {@code sum|avg|min|max} of one numeric column — restricted to live records and
+     * narrowed by an optional safe {@code filter} predicate (see {@link WidgetFilter}).
+     */
+    public BigDecimal aggregate(DocumentDescriptor desc, String metric, String field, String filter) {
+        Set<String> columns = columnNames(desc);
+        String agg = WidgetAggregate.expression(metric, field, columns);
+        WidgetFilter.Result f = WidgetFilter.parse(filter, columns);
+
+        StringBuilder sql = new StringBuilder("SELECT ").append(agg)
+                .append(" FROM ").append(desc.tableName())
+                .append(" WHERE _deletion_mark = false");
+        if (!f.isEmpty()) {
+            sql.append(" AND ").append(f.sql());
+        }
+        return jdbi.withHandle(h -> {
+            var query = h.createQuery(sql.toString());
+            f.bindings().forEach(query::bind);
+            return query.mapTo(BigDecimal.class).findOne().orElse(BigDecimal.ZERO);
+        });
+    }
+
+    private static Set<String> columnNames(DocumentDescriptor desc) {
+        return desc.attributes().stream()
+                .map(a -> a.columnName().toLowerCase())
+                .collect(Collectors.toSet());
     }
 
     public Map<String, Object> get(DocumentDescriptor desc, UUID id) {

@@ -177,7 +177,7 @@ public class DivKitController {
         // An authored Page for "/" takes over the home surface; otherwise fall back
         // to the widget grid resolved from the layout/profile. A viewport-specific
         // page wins so the dashboard can differ per device.
-        java.util.function.ToLongFunction<DashboardWidgetDescriptor> counts = this::widgetCount;
+        java.util.function.Function<DashboardWidgetDescriptor, String> values = this::widgetValue;
         Page page = pageResolver.resolve("/", active.id(), vp);
         Map<String, Object> content;
         if (page != null) {
@@ -188,12 +188,12 @@ public class DivKitController {
                     .toList();
             String title = pb.title() != null ? pb.title() : defaultTitle;
             String subtitle = pb.subtitle() != null ? pb.subtitle() : greeting;
-            content = PageDivBuilder.build(title, subtitle, widgets, pb.components(), columns, counts, p);
+            content = PageDivBuilder.build(title, subtitle, widgets, pb.components(), columns, values, p);
         } else {
             List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                     .toList();
-            content = DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns, counts, p);
+            content = DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns, values, p);
         }
         return DivCard.of("onec-content", content);
     }
@@ -404,17 +404,62 @@ public class DivKitController {
         return o == null ? "" : o.toString();
     }
 
-    /** Live record count for a {@code count} widget's entity (0 if not countable). */
-    private long widgetCount(DashboardWidgetDescriptor w) {
+    /**
+     * The preformatted big-number for a {@code count}/{@code metric} tile. {@code count}
+     * tallies rows; {@code metric} aggregates a field ({@code sum|avg|min|max} via
+     * {@code config("metric", ...)} + {@code config("metricField", ...)}). Both honour an
+     * optional {@code config("filter", ...)} predicate, and registers aggregate a resource
+     * server-side. The value is formatted here — currency- and locale-aware — so every
+     * client renders the same string ("—" if the widget can't be resolved).
+     */
+    private String widgetValue(DashboardWidgetDescriptor w) {
+        Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
+        String metric = cfg.getOrDefault("metric", "count");
+        String field = cfg.get("metricField");
+        String filter = cfg.get("filter");
         try {
-            return switch (w.entityType()) {
-                case "catalog" -> catalogQuery.count(catalogQuery.require(w.entityName()));
-                case "document" -> documentQuery.count(documentQuery.require(w.entityName()));
-                default -> 0L;
+            java.math.BigDecimal value = switch (w.entityType()) {
+                case "catalog" -> catalogQuery.aggregate(catalogQuery.require(w.entityName()), metric, field, filter);
+                case "document" -> documentQuery.aggregate(documentQuery.require(w.entityName()), metric, field, filter);
+                // A register tile sums one resource (its turnover counterpart for a single number).
+                case "register" -> registerQuery.total(registerQuery.require(w.entityName()), field, null, null, filter);
+                default -> java.math.BigDecimal.ZERO;
             };
-        } catch (RuntimeException notCountable) {
-            return 0L;
+            return formatMetric(value, metric, cfg);
+        } catch (RuntimeException notRenderable) {
+            return "—";
         }
+    }
+
+    /**
+     * Format a tile's value: a {@code config("currency", "EUR")} renders it as money;
+     * otherwise {@code config("format", "integer|decimal")} (counts default to integer)
+     * controls the fraction digits. Grouping/locale follow {@code config("locale", ...)}
+     * (default {@code en-US}).
+     */
+    private static String formatMetric(java.math.BigDecimal value, String metric, Map<String, String> cfg) {
+        java.util.Locale locale = cfg.containsKey("locale")
+                ? java.util.Locale.forLanguageTag(cfg.get("locale")) : java.util.Locale.US;
+        String currency = cfg.get("currency");
+        if (currency != null && !currency.isBlank()) {
+            try {
+                java.text.NumberFormat nf = java.text.NumberFormat.getCurrencyInstance(locale);
+                nf.setCurrency(java.util.Currency.getInstance(currency.toUpperCase()));
+                return nf.format(value);
+            } catch (IllegalArgumentException badCurrency) {
+                // fall through to plain number formatting
+            }
+        }
+        String format = cfg.get("format");
+        boolean integer = "integer".equalsIgnoreCase(format)
+                || (format == null && "count".equalsIgnoreCase(metric));
+        java.text.NumberFormat nf = integer
+                ? java.text.NumberFormat.getIntegerInstance(locale)
+                : java.text.NumberFormat.getNumberInstance(locale);
+        if (!integer) {
+            nf.setMaximumFractionDigits(2);
+        }
+        return nf.format(value);
     }
 
     private List<ShellLayoutBuilder.ProfileLink> profileLinksFor(Principal principal) {

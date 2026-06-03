@@ -16,12 +16,43 @@ import { ListWidget } from "@/components/list-widget";
  * access to routing, theming, and toasts despite being placed by DivKit.
  */
 
+/**
+ * The widget-type → React component registry. Seeded with the built-ins and open to
+ * app authors via {@link registerWidget}, so a host app can ship its own widget types
+ * (KPI tiles, gauges, maps) for the same {@code onec-widget} custom block without
+ * forking the framework. The server emits {@code .type("gauge")} as an {@code
+ * onec-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
+ */
 const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> = {
   chart: ChartWidget,
   calendar: CalendarWidget,
   kanban: KanbanWidget,
   list: ListWidget,
 };
+
+/**
+ * Register (or override) the renderer for a widget type. Call once at startup, before
+ * or after DivKit content mounts — already-rendered hosts re-resolve against the new
+ * registration. Returns nothing; last registration for a type wins.
+ *
+ * @example
+ *   registerWidget("gauge", GaugeWidget);
+ *   // server: b.widget("SLA").type("gauge").document(Incident.class)
+ */
+export function registerWidget(
+  widgetType: string,
+  component: ComponentType<{ widget: DashboardWidgetMeta }>
+) {
+  REGISTRY[widgetType] = component;
+  // Re-publish so any host already on screen picks up the newly registered renderer.
+  mounts = [...mounts];
+  emit();
+}
+
+/** The widget types with a registered renderer (built-ins + app-registered). */
+export function registeredWidgetTypes(): string[] {
+  return Object.keys(REGISTRY);
+}
 
 type Mount = { id: number; el: HTMLElement; widget: DashboardWidgetMeta };
 
@@ -101,6 +132,18 @@ export const WIDGET_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
   ["onec-widget", { element: "onec-widget" }],
 ]);
 
+/** Placeholder for a widget type with no registered renderer (see {@link registerWidget}). */
+function UnknownWidget({ type, title }: { type: string; title: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+      <div className="font-medium text-foreground">{title}</div>
+      <div className="mt-1">
+        No renderer registered for widget type <code className="font-mono">{type}</code>.
+      </div>
+    </div>
+  );
+}
+
 /** Portals every live {@code <onec-widget>} to its React component. Mount once, high in the tree. */
 export function WidgetPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
@@ -108,8 +151,14 @@ export function WidgetPortals() {
     <>
       {list.map((m) => {
         const Component = REGISTRY[m.widget.widgetType];
-        if (!Component) return null;
-        return createPortal(<Component widget={m.widget} />, m.el, String(m.id));
+        const node = Component ? (
+          <Component widget={m.widget} />
+        ) : (
+          // Don't silently drop an unknown type — show a labelled placeholder so a
+          // missing registerWidget(...) is visible rather than a blank gap.
+          <UnknownWidget type={m.widget.widgetType} title={m.widget.title} />
+        );
+        return createPortal(node, m.el, String(m.id));
       })}
     </>
   );

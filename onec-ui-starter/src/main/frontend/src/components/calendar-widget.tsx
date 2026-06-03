@@ -16,6 +16,7 @@ import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { toSnakeCase, cn } from "@/lib/utils";
+import { formatAmount, resolveCurrency, toNumber } from "@/lib/format";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ interface EventExtendedProps {
   primary?: string;
   secondary?: string;
   amount?: number;
+  currency?: string;
   hasEnd?: boolean;
   avatarUrl?: string;
   avatarLabel?: string;
@@ -98,6 +100,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
   const endDateField = widget.extraConfig?.endDateField; // e.g. "_end_date" or "checkout"
   const durationField = widget.extraConfig?.durationField; // e.g. "duration_days"
   const colorByField = widget.extraConfig?.colorBy;
+  const amountField = widget.extraConfig?.amountField || "total";
   const allDayCfg = widget.extraConfig?.allDay;
   // Booking-style widgets (those with an end date or duration) default to all-day so
   // events render as continuous bars and can be resized day-by-day in month view.
@@ -145,7 +148,8 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         const id = String(item._id ?? "");
         const primary = String(item[titleField] ?? item._number ?? "");
         const secondary = pickField(item, secondaryFieldList);
-        const amount = typeof item.total === "number" ? (item.total as number) : undefined;
+        const amount = toNumber(item[amountField]) ?? undefined;
+        const currency = resolveCurrency(item, widget.extraConfig?.currencyField, widget.extraConfig?.currency);
         const endValue = computeEnd(item, dateValue);
         const avatar = pickAvatar(item);
         const colorKey = colorByField ? (item[colorByField] as string | undefined) : undefined;
@@ -169,6 +173,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
             primary,
             secondary,
             amount,
+            currency,
             hasEnd: Boolean(endValue),
             avatarUrl: avatar.url,
             avatarLabel: avatar.label,
@@ -176,7 +181,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
           classNames: hue != null ? [] : item._posted ? ["fc-onec-posted"] : ["fc-onec-draft"],
         }];
       }),
-    [items, dateField, titleField, secondaryFieldList, endDateField, durationField, allDay, colorByField]
+    [items, dateField, titleField, secondaryFieldList, endDateField, durationField, allDay, colorByField, amountField]
   );
 
   const renderEvent = (arg: EventContentArg): { domNodes?: Node[]; html?: string } | ReactNode => {
@@ -216,7 +221,11 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         )}
         {typeof ext.amount === "number" && (
           <span className="text-[10px] tabular-nums opacity-70">
-            ${ext.amount.toFixed(2)}
+            {formatAmount(ext.amount, {
+              currency: ext.currency,
+              format: widget.extraConfig?.format,
+              locale: widget.extraConfig?.locale,
+            })}
           </span>
         )}
       </div>

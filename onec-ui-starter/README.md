@@ -100,6 +100,61 @@ data-bearing surfaces.
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
 > the underlying REST endpoint would serve it.
 
+## Dashboard widgets
+
+Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
+compiled to DivKit. `count`/`metric` render as native big-number cards (resolved server-side);
+every other type — the built-in `chart`/`calendar`/`kanban`/`list` and any app-registered type —
+is emitted as an `onec-widget` custom block that the client renders with a React component.
+
+```java
+b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
+ .config("metric", "sum").config("metricField", "gross").config("currency", "EUR");
+```
+
+### Widget types
+
+| `type(...)` | Renders | Notes |
+|-------------|---------|-------|
+| `count` | KPI card — row count | Honours `filter`. |
+| `metric` | KPI card — aggregated value | `metric` = `sum`/`avg`/`min`/`max` over `metricField`; honours `filter`, `currency`/`format`. Works on `document`, `catalog`, or a register resource. |
+| `chart` | recharts bar/line/area/donut/**pie** | Source from `document`/`catalog` rows or a `register` (server-side turnover). |
+| `calendar` | FullCalendar | Documents only; drag-to-reschedule. |
+| `list` | Recent-records list | Configurable title/secondary/amount/date. |
+| `kanban` | Drag board grouped by a field | |
+| *(custom)* | App-registered React component | Register on the client with `registerWidget("gauge", GaugeWidget)`. |
+
+### `config(key, value)` reference
+
+| Key | Applies to | Effect |
+|-----|-----------|--------|
+| `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
+| `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
+| `filter` | count, metric | Safe predicate, e.g. `status != cancelled AND _posted = true`. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. |
+| `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
+| `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
+| `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
+| `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
+| `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. |
+| `groupBy`, `groupByDate` | chart | Bucket field, and `day`/`week`/`month` for date buckets. |
+| `titleTemplate` | list | `"{guest_name} — {property_display}"`; unknown fields render empty. |
+| `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
+| `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
+| `dateField` | list, calendar | Column for the date (also `.dateField(...)` on the builder). |
+
+> A register-backed `metric`/`chart` sums a register **resource** over its turnover; `metricField`
+> must name a resource column, and `filter` may reference its **dimensions**.
+
+### Registering a custom widget (client)
+
+```ts
+import { registerWidget } from "@/lib/widget-bridge";
+registerWidget("gauge", GaugeWidget); // server: b.widget("SLA").type("gauge").document(Incident.class)
+```
+
+The server emits any non-native `type(...)` as an `onec-widget` descriptor; an unregistered type
+renders a labelled placeholder rather than vanishing.
+
 ### Misc — `/api`
 
 | Method | Path | Notes |
