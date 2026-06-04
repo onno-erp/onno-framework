@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
-import { ThemeProvider } from "@/providers/theme-provider";
+import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
@@ -43,12 +43,19 @@ function ProtectedApp() {
   );
 }
 
+// Sonner follows the app theme (light/dark/system) so toasts match the current mode. Lives inside
+// ThemeProvider so it can read the theme; "system" lets Sonner track the OS preference itself.
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster theme={theme} richColors position="bottom-right" />;
+}
+
 function WorkspaceProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <AuthProvider>
         {children}
-        <Toaster richColors position="bottom-right" />
+        <ThemedToaster />
       </AuthProvider>
     </ThemeProvider>
   );
