@@ -26,26 +26,35 @@ import java.util.List;
 @RequestMapping("/api/auth")
 class AuthApiController {
 
+    /** Non-null only in in-memory mode; OIDC / resource-server modes have no password manager. */
     private final AuthenticationManager authenticationManager;
+    private final OnecAuthProperties properties;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
-    AuthApiController(AuthenticationManager authenticationManager) {
+    AuthApiController(AuthenticationManager authenticationManager, OnecAuthProperties properties) {
         this.authenticationManager = authenticationManager;
+        this.properties = properties;
     }
 
     @GetMapping("/me")
     AuthUser me(Authentication authentication) {
+        AuthMode mode = authMode();
         if (authentication == null || !authentication.isAuthenticated()
                 || "anonymousUser".equals(authentication.getPrincipal())) {
-            return AuthUser.anonymous();
+            return AuthUser.anonymous(mode);
         }
-        return AuthUser.from(authentication);
+        return AuthUser.from(authentication, mode);
     }
 
     @PostMapping("/login")
     ResponseEntity<AuthUser> login(@RequestBody LoginRequest body,
                                    HttpServletRequest request,
                                    HttpServletResponse response) {
+        // OIDC / resource-server modes authenticate against Keycloak, not this endpoint. Tell the
+        // SPA so it can route the user to the right place instead of failing silently.
+        if (authenticationManager == null) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(AuthUser.anonymous(authMode()));
+        }
         if (body == null || body.username() == null || body.password() == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
         }
@@ -58,7 +67,7 @@ class AuthApiController {
             SecurityContextHolder.setContext(context);
             contextRepository.saveContext(context, request, response);
 
-            return ResponseEntity.ok(AuthUser.from(authentication));
+            return ResponseEntity.ok(AuthUser.from(authentication, authMode()));
         } catch (BadCredentialsException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -74,19 +83,53 @@ class AuthApiController {
         return ResponseEntity.noContent().build();
     }
 
+    private AuthMode authMode() {
+        OnecAuthProperties.Mode mode = properties.getMode();
+        if (mode != OnecAuthProperties.Mode.OIDC) {
+            return new AuthMode(modeName(mode), null, null);
+        }
+        // OIDC: loginUrl is the authorization redirect; logoutUrl is the RP-initiated-logout
+        // endpoint (a full-page GET that also ends the IdP SSO session). The other modes clear the
+        // local session via POST /api/auth/logout and have neither.
+        OnecAuthProperties.ResolvedOidc oidc = properties.getOidc().resolved();
+        String loginUrl = "/oauth2/authorization/" + oidc.registrationId();
+        return new AuthMode(modeName(mode), loginUrl, oidc.logoutPath());
+    }
+
+    private static String modeName(OnecAuthProperties.Mode mode) {
+        return switch (mode) {
+            case IN_MEMORY -> "in-memory";
+            case OIDC -> "oidc";
+            case RESOURCE_SERVER -> "resource-server";
+        };
+    }
+
     record LoginRequest(String username, String password) {
     }
 
-    record AuthUser(boolean authenticated, String username, List<String> roles) {
-        static AuthUser anonymous() {
-            return new AuthUser(false, "", List.of());
+    private record AuthMode(String mode, String loginUrl, String logoutUrl) {
+    }
+
+    /**
+     * @param authenticated whether a session/principal is established
+     * @param username      the authenticated principal name (empty when anonymous)
+     * @param roles         granted authorities
+     * @param mode          active auth backend: {@code in-memory}, {@code oidc}, or {@code resource-server}
+     * @param loginUrl      where the SPA should send the user to log in; non-null only in OIDC mode
+     * @param logoutUrl     full-page RP-initiated-logout endpoint; non-null only in OIDC mode
+     */
+    record AuthUser(boolean authenticated, String username, List<String> roles,
+                    String mode, String loginUrl, String logoutUrl) {
+        static AuthUser anonymous(AuthMode mode) {
+            return new AuthUser(false, "", List.of(), mode.mode(), mode.loginUrl(), mode.logoutUrl());
         }
 
-        static AuthUser from(Authentication authentication) {
+        static AuthUser from(Authentication authentication, AuthMode mode) {
             List<String> roles = authentication.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .toList();
-            return new AuthUser(true, authentication.getName(), roles);
+            return new AuthUser(true, authentication.getName(), roles,
+                    mode.mode(), mode.loginUrl(), mode.logoutUrl());
         }
     }
 }

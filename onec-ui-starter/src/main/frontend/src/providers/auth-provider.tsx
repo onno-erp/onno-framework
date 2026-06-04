@@ -13,6 +13,10 @@ import type { AuthUser } from "@/lib/types";
 interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
+  // Present in OIDC mode: the URL the login screen redirects to (Keycloak). Null otherwise.
+  loginUrl: string | null;
+  // Present in OIDC mode: the URL logout redirects to (ends the Keycloak session). Null otherwise.
+  logoutUrl: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -22,11 +26,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loginUrl, setLoginUrl] = useState<string | null>(null);
+  const [logoutUrl, setLogoutUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
       const currentUser = await api.getCurrentUser();
+      // loginUrl/logoutUrl are reported whether or not authenticated, so the UI can offer the
+      // right affordance (Keycloak redirect vs. password form) even before sign-in.
+      setLoginUrl(currentUser.loginUrl ?? null);
+      setLogoutUrl(currentUser.logoutUrl ?? null);
       setUser(currentUser.authenticated ? currentUser : null);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -75,16 +85,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    // OIDC mode: logout is a full-page navigation to the RP-initiated-logout endpoint, which
+    // clears the local session and bounces through Keycloak's end-session endpoint before
+    // returning to the SPA. A fetch can't follow that cross-origin redirect, so we navigate.
+    if (logoutUrl) {
+      window.location.href = logoutUrl;
+      return;
+    }
     try {
       await api.logout();
     } finally {
       setUser(null);
     }
-  }, []);
+  }, [logoutUrl]);
 
   const value = useMemo(
-    () => ({ user, loading, login, logout, refresh }),
-    [user, loading, login, logout, refresh]
+    () => ({ user, loading, loginUrl, logoutUrl, login, logout, refresh }),
+    [user, loading, loginUrl, logoutUrl, login, logout, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

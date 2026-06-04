@@ -14,6 +14,11 @@ server:
     include-message: always
 onec:
   auth:
+    # Authentication backend. Default is "in-memory" (the onec.auth.users below). Set to
+    # "oidc" for server-side OIDC login (Keycloak, Zitadel, …; keeps the session cookie, "Sign in"
+    # becomes a redirect to the IdP), or "resource-server" for stateless JWT bearer-token
+    # validation. See the commented spring.security.oauth2.* blocks at the bottom of this file.
+    mode: in-memory
     users:
       - username: admin
         password: admin
@@ -27,6 +32,28 @@ onec:
       - username: ana@rentals.local
         password: cleaner
         roles: [CLEANER]
+    # OIDC settings (used only by the oidc / resource-server modes). A "provider" preset fills the
+    # IdP-specific defaults — Keycloak roles come from realm_access.roles; Zitadel roles from the
+    # urn:zitadel:iam:org:project:roles claim (keyed by role name) — and everything is overridable.
+    # oidc:
+    #   provider: keycloak            # keycloak | zitadel | custom
+    #   registration-id: keycloak     # preset default; must match spring.security.oauth2.client.registration.*
+    #   principal-claim: preferred_username
+    #   roles:
+    #     prefix: "ROLE_"
+    #     # Keycloak ergonomics (ignored by other presets): also map a client's roles.
+    #     realm-roles: true
+    #     client-roles: false
+    #     client-id: rentals-app
+    #     # Or drive any IdP explicitly (provider: custom):
+    #     # sources:
+    #     #   - { claim: "urn:zitadel:iam:org:project:roles", shape: object-keys }
+    #     #   - { claim: "realm_access", shape: array }
+    #   # RP-initiated logout (oidc mode): GET this path to end both the app session and the IdP SSO
+    #   # session, then return to post-logout-redirect-uri. {baseUrl} = this app's origin, which must
+    #   # be registered under the IdP client's "Valid post logout redirect URIs" (e.g. .../*).
+    #   logout-path: /logout
+    #   post-logout-redirect-uri: "{baseUrl}"
   mail:
     enabled: true
     provider: smtp
@@ -44,3 +71,47 @@ onec:
     aplicacion: onec-rentals
     username: ${ONEC_HOSPEDAJES_USERNAME:}
     password: ${ONEC_HOSPEDAJES_PASSWORD:}
+
+# --------------------------------------------------------------------------------------------
+# OIDC wiring. Uncomment ONE of the blocks below and set onec.auth.mode accordingly.
+# On the IdP client, register the redirect URI <app>/login/oauth2/code/{registrationId} and add
+# the app origin to the "Valid post logout redirect URIs" so RP-initiated logout can return here.
+#
+# Keycloak login (onec.auth.mode: oidc, onec.auth.oidc.provider: keycloak):
+# spring:
+#   security:
+#     oauth2:
+#       client:
+#         provider:
+#           keycloak:
+#             issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onec}
+#         registration:
+#           keycloak:
+#             client-id: ${KEYCLOAK_CLIENT_ID:rentals-app}
+#             client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+#             authorization-grant-type: authorization_code
+#             scope: [openid, profile, email]
+#
+# Zitadel login (onec.auth.mode: oidc, onec.auth.oidc.provider: zitadel):
+# spring:
+#   security:
+#     oauth2:
+#       client:
+#         provider:
+#           zitadel:
+#             issuer-uri: ${ZITADEL_ISSUER:https://your-instance.zitadel.cloud}
+#         registration:
+#           zitadel:
+#             client-id: ${ZITADEL_CLIENT_ID:}
+#             client-secret: ${ZITADEL_CLIENT_SECRET:}
+#             authorization-grant-type: authorization_code
+#             scope: [openid, profile, email]
+#
+# Resource server (onec.auth.mode: resource-server) — stateless JWT bearer tokens:
+# spring:
+#   security:
+#     oauth2:
+#       resourceserver:
+#         jwt:
+#           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onec}
+# --------------------------------------------------------------------------------------------
