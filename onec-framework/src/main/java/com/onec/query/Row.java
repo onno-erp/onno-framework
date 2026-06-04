@@ -73,7 +73,9 @@ public final class Row {
         if (v == null) return null;
         if (v instanceof LocalDateTime ldt) return ldt;
         if (v instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
-        return LocalDateTime.parse(v.toString());
+        // H2 renders a TIMESTAMP as "2026-06-04 08:44:44.4" (space, not 'T'), which a strict
+        // ISO LocalDateTime.parse rejects at index 10 — normalise the separator before parsing.
+        return LocalDateTime.parse(v.toString().replace(' ', 'T'));
     }
 
     public boolean has(String column) {
