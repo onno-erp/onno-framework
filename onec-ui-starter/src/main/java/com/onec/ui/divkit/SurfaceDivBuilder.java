@@ -4,6 +4,7 @@ import com.onec.ui.ResolvedListView;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -113,14 +114,22 @@ public final class SurfaceDivBuilder {
 
     // ----- document detail -----
 
+    /**
+     * One detail-header action. {@code tone} is {@code "primary"} (solid accent —
+     * Post), {@code "danger"} (Delete) or {@code "normal"}; {@code placement} is
+     * {@code "primary"} (inline button) or {@code "menu"} (overflow ⋯). {@code icon}
+     * is a kebab-case lucide name. A null {@code url} drops the action.
+     */
+    public record HeaderAction(String icon, String label, String tone, String url, String placement) {}
+
     @SuppressWarnings("unchecked")
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                     String editUrl, String deleteUrl, Palette p) {
+                                                     List<HeaderAction> actions, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         Map<String, Object> badge = Components.statusBadge(posted, posted ? "Posted" : "Draft", p);
-        items.add(detailHeader(str(meta.get("name")), str(row.get("_number")), badge, editUrl, deleteUrl, p));
+        items.add(detailHeader(titleOf(meta), str(row.get("_number")), badge, actions, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
         fieldRows.add(Components.fieldRow("Date", str(row.get("_date")), p));
@@ -164,16 +173,16 @@ public final class SurfaceDivBuilder {
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                    String editUrl, String deleteUrl, Palette p) {
+                                                    List<HeaderAction> actions, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // Code/description lead the header (title + subtitle), so the card carries just
         // the attributes — no duplicate Code/Description rows.
         String description = str(row.get("_description"));
         String code = str(row.get("_code"));
-        String title = description.isBlank() ? str(meta.get("name")) : description;
+        String title = description.isBlank() ? titleOf(meta) : description;
         String subtitle = description.isBlank() ? code : (code.isBlank() ? null : code);
-        items.add(detailHeader(title, subtitle, null, editUrl, deleteUrl, p));
+        items.add(detailHeader(title, subtitle, null, actions, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
         for (Map<String, Object> a : visible(
@@ -216,7 +225,7 @@ public final class SurfaceDivBuilder {
         boolean isBalance = "BALANCE".equals(type);
 
         List<Map<String, Object>> items = new ArrayList<>();
-        items.add(Components.pageHeader(str(meta.get("name")),
+        items.add(Components.pageHeader(titleOf(meta),
                 isBalance ? "Balance register" : "Turnover register", p));
 
         Map<String, Object> movementsTable = movementsTable(movements, dimensions, resources, p);
@@ -296,11 +305,15 @@ public final class SurfaceDivBuilder {
      * The detail surface header: a title (with an optional muted subtitle — e.g. a
      * document number or catalog code, which keeps long identifiers out of the big
      * title so it no longer wraps into the corner) on the left, and an action cluster
-     * (optional status chip + Edit/Delete) pinned right. The title takes the remaining
-     * width and ellipsizes so the actions never get crammed.
+     * (optional status chip + primary buttons + an overflow ⋯ menu) pinned right. The
+     * title takes the remaining width and ellipsizes so the actions never get crammed.
+     *
+     * <p>Each {@link HeaderAction} renders inline (placement {@code "primary"}) or is
+     * collected into a single trailing overflow menu (placement {@code "menu"}), so a
+     * document can keep just Post on the surface and tuck Unpost/Edit/Delete away.
      */
     private static Map<String, Object> detailHeader(String title, String subtitle, Map<String, Object> badge,
-                                                    String editUrl, String deleteUrl, Palette p) {
+                                                    List<HeaderAction> actions, Palette p) {
         Map<String, Object> titleNode = Div.color(Div.text(title, 20, "bold"), p.text());
         Div.matchWidth(titleNode);
         Div.maxLines(titleNode, 2);
@@ -315,17 +328,28 @@ public final class SurfaceDivBuilder {
         Map<String, Object> left = Div.vertical(leftItems);
         Div.weight(left, 1);
 
-        List<Map<String, Object>> actions = new ArrayList<>();
+        List<Map<String, Object>> cluster = new ArrayList<>();
         if (badge != null) {
-            actions.add(badge);
+            cluster.add(badge);
         }
-        if (editUrl != null) {
-            actions.add(Components.actionButton("pencil", "Edit", p.text(), p.primarySoft(), null, editUrl, "edit"));
+        List<HeaderAction> menu = new ArrayList<>();
+        for (HeaderAction a : actions == null ? List.<HeaderAction>of() : actions) {
+            if (a == null || a.url() == null) {
+                continue;
+            }
+            if ("menu".equals(a.placement())) {
+                menu.add(a);
+                continue;
+            }
+            String[] c = toneColors(a.tone(), p);
+            cluster.add(Components.actionButton(a.icon(), a.label(), c[0], c[1], c[2], a.url(),
+                    a.label().toLowerCase()));
         }
-        if (deleteUrl != null) {
-            actions.add(Components.actionButton("trash-2", "Delete", DANGER, null, DANGER, deleteUrl, "delete"));
+        if (!menu.isEmpty()) {
+            cluster.add(actionsMenu(menu, p));
         }
-        Map<String, Object> actionRow = Div.horizontal(actions);
+
+        Map<String, Object> actionRow = Div.horizontal(cluster);
         // Hug the buttons (containers default to match_parent, which would stretch the
         // cluster); the weighted title then pushes it to the right edge.
         Div.wrapWidth(actionRow);
@@ -337,6 +361,37 @@ public final class SurfaceDivBuilder {
         Div.alignV(row, "center");
         Div.margins(row, 0, 0, 16, 0);
         return row;
+    }
+
+    /** Inline-button colors {fg, bg, border} for an action tone. */
+    private static String[] toneColors(String tone, Palette p) {
+        return switch (tone == null ? "normal" : tone) {
+            case "primary" -> new String[]{"#FFFFFF", p.success(), null};
+            case "danger" -> new String[]{DANGER, null, DANGER};
+            default -> new String[]{p.text(), p.primarySoft(), null};
+        };
+    }
+
+    /**
+     * The overflow (⋯) menu: an {@code onec-actions-menu} custom block carrying the
+     * menu-placed actions as plain items ({@code label / icon / url / danger}). The
+     * client renders a kebab trigger + dropdown and dispatches each item's
+     * {@code onec://} url — same routing as the inline buttons.
+     */
+    private static Map<String, Object> actionsMenu(List<HeaderAction> items, Palette p) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (HeaderAction a : items) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("label", a.label());
+            m.put("icon", a.icon());
+            m.put("url", a.url());
+            m.put("danger", "danger".equals(a.tone()));
+            list.add(m);
+        }
+        Map<String, Object> node = Div.custom("onec-actions-menu", Map.of("items", list));
+        Div.width(node, 38);
+        Div.height(node, 34);
+        return node;
     }
 
     /** A definition-list card: field rows separated by hairline dividers. */
@@ -377,7 +432,7 @@ public final class SurfaceDivBuilder {
         }
         Object display = row.get(columnName + "_display");
         Object value = display != null ? display : row.get(columnName);
-        return value == null ? "" : value.toString();
+        return maskSecret(value);
     }
 
     private static List<Map<String, Object>> visible(List<Map<String, Object>> attrs, String slot) {
@@ -392,10 +447,29 @@ public final class SurfaceDivBuilder {
         String col = str(attr.get("columnName"));
         Object display = row.get(col + "_display");
         Object value = display != null ? display : row.get(col);
-        return value == null ? "" : value.toString();
+        return maskSecret(value);
     }
 
     private static String str(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    /**
+     * Renders a secret attribute's read-side sentinel as a masked "set" indicator rather than
+     * the raw {@code __SECRET_SET__} marker. Non-secret values pass through unchanged.
+     */
+    private static String maskSecret(Object value) {
+        if (value == null) return "";
+        return com.onec.security.SecretRedactor.SET.equals(value) ? "•••• set" : value.toString();
+    }
+
+    /**
+     * The entity's display heading: its {@code title} when set, else the URL-safe
+     * {@code name}. Keeps localized/multi-word titles out of routes while still showing
+     * them in list/detail/report headers.
+     */
+    private static String titleOf(Map<String, Object> meta) {
+        String title = str(meta.get("title"));
+        return title.isBlank() ? str(meta.get("name")) : title;
     }
 }

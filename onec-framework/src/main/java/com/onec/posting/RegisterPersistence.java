@@ -5,6 +5,7 @@ import com.onec.metadata.AttributeDescriptor;
 import com.onec.model.AccumulationRecord;
 import com.onec.model.AccumulationType;
 import com.onec.model.MovementType;
+import com.onec.query.SqlRenderer;
 import com.onec.types.Ref;
 
 import org.jdbi.v3.core.Handle;
@@ -14,6 +15,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class RegisterPersistence<T extends AccumulationRecord> {
@@ -183,131 +185,47 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     // --- Query methods ---
 
     public List<Map<String, Object>> getBalance(Map<String, Object> filters) {
-        if (descriptor.accumulationType() != AccumulationType.BALANCE) {
-            throw new IllegalStateException("getBalance is only available for BALANCE registers");
-        }
-
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + descriptor.totalsTableName());
-        if (filters != null && !filters.isEmpty()) {
-            sql.append(" WHERE ");
-            sql.append(filters.keySet().stream()
-                    .map(k -> k + " = :" + k)
-                    .collect(Collectors.joining(" AND ")));
-        }
-
-        return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString());
-            if (filters != null) {
-                filters.forEach(query::bind);
-            }
-            return query.mapToMap().list();
-        });
+        String sql = balanceSql(filters);
+        return queryMap(sql, bindFilters(filters));
     }
 
-    @SuppressWarnings("unchecked")
     public List<T> getBalanceTyped(Map<String, Object> filters) {
-        if (descriptor.accumulationType() != AccumulationType.BALANCE) {
-            throw new IllegalStateException("getBalance is only available for BALANCE registers");
-        }
-
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + descriptor.totalsTableName());
-        if (filters != null && !filters.isEmpty()) {
-            sql.append(" WHERE ");
-            sql.append(filters.keySet().stream()
-                    .map(k -> k + " = :" + k)
-                    .collect(Collectors.joining(" AND ")));
-        }
-
-        return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString());
-            if (filters != null) {
-                filters.forEach(query::bind);
-            }
-            return query.map((rs, ctx) -> {
-                try {
-                    T record = (T) descriptor.javaClass().getDeclaredConstructor().newInstance();
-                    mapDimensionsAndResources(record, rs);
-                    return record;
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to map balance record", e);
-                }
-            }).list();
-        });
-    }
-
-    @SuppressWarnings("unchecked")
-    public List<T> getTurnoverTyped(LocalDateTime from, LocalDateTime to,
-                                     Map<String, Object> filters) {
-        String dimCols = descriptor.dimensions().stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
-
-        String resSums = descriptor.resources().stream()
-                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
-                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
-
-        StringBuilder sql = new StringBuilder("SELECT " + dimCols + ", " + resSums +
-                " FROM " + descriptor.tableName() +
-                " WHERE _active = TRUE AND _period >= :from AND _period <= :to");
-
-        if (filters != null) {
-            for (String key : filters.keySet()) {
-                sql.append(" AND ").append(key).append(" = :").append(key);
-            }
-        }
-        sql.append(" GROUP BY ").append(dimCols);
-
-        return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString())
-                    .bind("from", from)
-                    .bind("to", to);
-            if (filters != null) {
-                filters.forEach(query::bind);
-            }
-            return query.map((rs, ctx) -> {
-                try {
-                    T record = (T) descriptor.javaClass().getDeclaredConstructor().newInstance();
-                    mapDimensionsAndResources(record, rs);
-                    return record;
-                } catch (Exception e) {
-                    throw new RuntimeException("Failed to map turnover record", e);
-                }
-            }).list();
-        });
+        String sql = balanceSql(filters);
+        return queryRecords(sql, bindFilters(filters));
     }
 
     public List<Map<String, Object>> getTurnover(LocalDateTime from, LocalDateTime to,
                                                    Map<String, Object> filters) {
-        String dimCols = descriptor.dimensions().stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
+        String sql = turnoverSql(filters);
+        return queryMap(sql, bindTurnover(from, to, filters));
+    }
 
-        String resSums = descriptor.resources().stream()
-                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
-                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
+    public List<T> getTurnoverTyped(LocalDateTime from, LocalDateTime to,
+                                     Map<String, Object> filters) {
+        String sql = turnoverSql(filters);
+        return queryRecords(sql, bindTurnover(from, to, filters));
+    }
 
-        StringBuilder sql = new StringBuilder("SELECT " + dimCols + ", " + resSums +
-                " FROM " + descriptor.tableName() +
-                " WHERE _active = TRUE AND _period >= :from AND _period <= :to");
-
-        if (filters != null) {
-            for (String key : filters.keySet()) {
-                sql.append(" AND ").append(key).append(" = :").append(key);
-            }
+    /** Current balance straight off the totals table, optionally narrowed by column filters. */
+    private String balanceSql(Map<String, Object> filters) {
+        if (descriptor.accumulationType() != AccumulationType.BALANCE) {
+            throw new IllegalStateException("getBalance is only available for BALANCE registers");
         }
-        sql.append(" GROUP BY ").append(dimCols);
+        return SqlRenderer.render(new SqlRenderer.RenderModel(
+                List.of("*"), descriptor.totalsTableName(), null, null,
+                filterClauses(filters), null, null, null, null));
+    }
 
-        return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString())
-                    .bind("from", from)
-                    .bind("to", to);
-            if (filters != null) {
-                filters.forEach(query::bind);
-            }
-            return query.mapToMap().list();
-        });
+    /** Signed turnover over [from, to] grouped by every dimension. */
+    private String turnoverSql(Map<String, Object> filters) {
+        List<String> select = new ArrayList<>(dimensionColumns());
+        select.addAll(resourceSumExpressions());
+        List<String> where = new ArrayList<>(List.of(
+                "_active = TRUE", "_period >= :from", "_period <= :to"));
+        where.addAll(filterClauses(filters));
+        return SqlRenderer.render(new SqlRenderer.RenderModel(
+                select, descriptor.tableName(), null, null,
+                where, dimensionColumns(), null, null, null));
     }
 
     @SuppressWarnings("unchecked")
@@ -349,45 +267,21 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     public void rebuildTotals() {
         if (descriptor.accumulationType() != AccumulationType.BALANCE) return;
 
-        String dimCols = descriptor.dimensions().stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
-
-        String resSums = descriptor.resources().stream()
-                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
-                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
+        String insertCols = String.join(", ", dimensionColumns()) + ", " +
+                descriptor.resources().stream().map(AttributeDescriptor::columnName)
+                        .collect(Collectors.joining(", "));
 
         jdbi.useTransaction(handle -> {
             handle.execute("DELETE FROM " + descriptor.totalsTableName());
-
-            String sql = "INSERT INTO " + descriptor.totalsTableName() +
-                    " (" + dimCols + ", " +
-                    descriptor.resources().stream().map(AttributeDescriptor::columnName)
-                            .collect(Collectors.joining(", ")) +
-                    ") SELECT " + dimCols + ", " + resSums +
-                    " FROM " + descriptor.tableName() +
-                    " WHERE _active = TRUE GROUP BY " + dimCols;
-            handle.execute(sql);
+            handle.execute("INSERT INTO " + descriptor.totalsTableName() +
+                    " (" + insertCols + ") " + currentBalanceSql());
         });
     }
 
     public boolean verifyTotals() {
         if (descriptor.accumulationType() != AccumulationType.BALANCE) return true;
 
-        String dimCols = descriptor.dimensions().stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
-
-        String resSums = descriptor.resources().stream()
-                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
-                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
-
-        String computedSql = "SELECT " + dimCols + ", " + resSums +
-                " FROM " + descriptor.tableName() +
-                " WHERE _active = TRUE GROUP BY " + dimCols;
-
+        String computedSql = currentBalanceSql();
         String storedSql = "SELECT * FROM " + descriptor.totalsTableName();
 
         return jdbi.withHandle(handle -> {
@@ -447,57 +341,62 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                     .toList();
         }
 
-        String dimCols = groupDims.stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
+        List<String> dimColList = dimensionColumns(groupDims);
+        List<String> resSumList = resourceSumExpressions();
 
-        String resSums = descriptor.resources().stream()
-                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
-                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
-                .collect(Collectors.joining(", "));
-
-        StringBuilder sql = new StringBuilder();
+        // Assemble the virtual-table SQL as structural fragments and hand them to the
+        // shared SqlRenderer, so register queries and the general query layer go through
+        // exactly one SELECT/WHERE/GROUP BY assembler.
+        List<String> selectItems = new ArrayList<>();
+        List<String> whereClauses = new ArrayList<>();
+        String fromTable;
 
         if (queryType == com.onec.repository.RegisterQueryBuilder.QueryType.BALANCE) {
             if (atDate != null) {
                 // Point-in-time balance from movements
-                sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                        .append(" FROM ").append(descriptor.tableName())
-                        .append(" WHERE _active = TRUE AND _period <= :atDate");
+                fromTable = descriptor.tableName();
+                selectItems.addAll(dimColList);
+                selectItems.addAll(resSumList);
+                whereClauses.add("_active = TRUE");
+                whereClauses.add("_period <= :atDate");
             } else if (!groupByFields.isEmpty()) {
                 // Partial group-by from movements (can't use totals table with fewer dims)
-                sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                        .append(" FROM ").append(descriptor.tableName())
-                        .append(" WHERE _active = TRUE");
+                fromTable = descriptor.tableName();
+                selectItems.addAll(dimColList);
+                selectItems.addAll(resSumList);
+                whereClauses.add("_active = TRUE");
             } else {
                 // Current balance from totals table
-                sql.append("SELECT * FROM ").append(descriptor.totalsTableName())
-                        .append(" WHERE 1=1");
+                fromTable = descriptor.totalsTableName();
+                selectItems.add("*");
             }
         } else {
             // Turnover
-            sql.append("SELECT ").append(dimCols).append(", ").append(resSums)
-                    .append(" FROM ").append(descriptor.tableName())
-                    .append(" WHERE _active = TRUE");
-            if (fromDate != null) sql.append(" AND _period >= :fromDate");
-            if (toDate != null) sql.append(" AND _period <= :toDate");
+            fromTable = descriptor.tableName();
+            selectItems.addAll(dimColList);
+            selectItems.addAll(resSumList);
+            whereClauses.add("_active = TRUE");
+            if (fromDate != null) whereClauses.add("_period >= :fromDate");
+            if (toDate != null) whereClauses.add("_period <= :toDate");
         }
 
         if (resolvedFilters != null) {
             for (String col : resolvedFilters.keySet()) {
-                sql.append(" AND ").append(col).append(" = :f_").append(col);
+                whereClauses.add(col + " = :f_" + col);
             }
         }
 
         // Add GROUP BY for aggregated queries (not plain totals table select)
         boolean needsGroupBy = atDate != null || !groupByFields.isEmpty() ||
                 queryType == com.onec.repository.RegisterQueryBuilder.QueryType.TURNOVER;
-        if (needsGroupBy && !dimCols.isEmpty()) {
-            sql.append(" GROUP BY ").append(dimCols);
-        }
+        List<String> groupByList = (needsGroupBy && !dimColList.isEmpty())
+                ? dimColList : List.of();
+
+        String sql = SqlRenderer.render(new SqlRenderer.RenderModel(
+                selectItems, fromTable, null, null, whereClauses, groupByList, null, null, null));
 
         return jdbi.withHandle(handle -> {
-            var query = handle.createQuery(sql.toString());
+            var query = handle.createQuery(sql);
             if (atDate != null) query.bind("atDate", atDate);
             if (fromDate != null) query.bind("fromDate", fromDate);
             if (toDate != null) query.bind("toDate", toDate);
@@ -576,6 +475,93 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             Field field = findField(descriptor.javaClass(), res.fieldName());
             field.setAccessible(true);
             field.set(record, rs.getObject(res.columnName(), BigDecimal.class));
+        }
+    }
+
+    // --- Shared SQL fragments (one definition for all register virtual tables) ---
+
+    /** Column names of every dimension, in declaration order. */
+    private List<String> dimensionColumns() {
+        return dimensionColumns(descriptor.dimensions());
+    }
+
+    private List<String> dimensionColumns(List<AttributeDescriptor> dims) {
+        return dims.stream().map(AttributeDescriptor::columnName).toList();
+    }
+
+    /**
+     * The signed turnover aggregate for each resource &mdash;
+     * {@code SUM(CASE WHEN _movement_type = 'RECEIPT' THEN col ELSE -col END) AS col}.
+     * Receipts add, expenses subtract; this is the one expression every register
+     * balance/turnover query shares.
+     */
+    private List<String> resourceSumExpressions() {
+        return descriptor.resources().stream()
+                .map(r -> "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + r.columnName() +
+                        " ELSE -" + r.columnName() + " END) AS " + r.columnName())
+                .toList();
+    }
+
+    /** Current balance from movements: signed resource sums grouped by all dimensions. */
+    private String currentBalanceSql() {
+        List<String> select = new ArrayList<>(dimensionColumns());
+        select.addAll(resourceSumExpressions());
+        return SqlRenderer.render(new SqlRenderer.RenderModel(
+                select, descriptor.tableName(), null, null,
+                List.of("_active = TRUE"), dimensionColumns(), null, null, null));
+    }
+
+    /** {@code col = :col} clauses for caller-supplied (already column-named) filters. */
+    private List<String> filterClauses(Map<String, Object> filters) {
+        if (filters == null || filters.isEmpty()) return List.of();
+        return filters.keySet().stream().map(k -> k + " = :" + k).toList();
+    }
+
+    private Consumer<org.jdbi.v3.core.statement.Query> bindFilters(Map<String, Object> filters) {
+        return query -> {
+            if (filters != null) filters.forEach(query::bind);
+        };
+    }
+
+    private Consumer<org.jdbi.v3.core.statement.Query> bindTurnover(
+            LocalDateTime from, LocalDateTime to, Map<String, Object> filters) {
+        return query -> {
+            query.bind("from", from).bind("to", to);
+            if (filters != null) filters.forEach(query::bind);
+        };
+    }
+
+    private List<Map<String, Object>> queryMap(String sql, Consumer<org.jdbi.v3.core.statement.Query> binder) {
+        return jdbi.withHandle(handle -> {
+            var query = handle.createQuery(sql);
+            binder.accept(query);
+            return query.mapToMap().list();
+        });
+    }
+
+    private List<T> queryRecords(String sql, Consumer<org.jdbi.v3.core.statement.Query> binder) {
+        return jdbi.withHandle(handle -> {
+            var query = handle.createQuery(sql);
+            binder.accept(query);
+            return query.map((rs, ctx) -> {
+                T record = newRecord();
+                try {
+                    mapDimensionsAndResources(record, rs);
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to map register record", e);
+                }
+                return record;
+            }).list();
+        });
+    }
+
+    @SuppressWarnings("unchecked")
+    private T newRecord() {
+        try {
+            return (T) descriptor.javaClass().getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to instantiate register record "
+                    + descriptor.javaClass().getName(), e);
         }
     }
 

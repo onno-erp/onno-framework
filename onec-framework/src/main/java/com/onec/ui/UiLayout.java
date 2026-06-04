@@ -86,6 +86,7 @@ public record UiLayout(List<Section> sections,
 
     public record ResolvedItem(
             String name,
+            String title,
             String type,
             String href,
             Class<?> javaClass,
@@ -93,11 +94,13 @@ public record UiLayout(List<Section> sections,
     ) {
         public ResolvedItem {
             icon = icon == null ? "" : icon;
+            // The display label defaults to the URL-safe name when no title is set.
+            title = (title == null || title.isBlank()) ? name : title;
         }
 
-        /** Back-compat constructor for items with no explicit icon (icon resolved heuristically). */
+        /** Back-compat constructor for items with no explicit title/icon (both resolved heuristically). */
         public ResolvedItem(String name, String type, String href, Class<?> javaClass) {
-            this(name, type, href, javaClass, "");
+            this(name, name, type, href, javaClass, "");
         }
     }
 }

@@ -39,4 +39,17 @@ dependencies {
 
     compileOnly("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+
+    testCompileOnly("org.projectlombok:lombok:1.18.36")
+    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
+    testImplementation("org.springframework:spring-test:6.2.5")
+    testImplementation("com.h2database:h2:2.2.224")
+    testImplementation("org.slf4j:slf4j-simple:2.0.16")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation("org.assertj:assertj-core:3.26.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

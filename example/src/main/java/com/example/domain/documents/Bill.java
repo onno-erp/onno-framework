@@ -23,7 +23,6 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Spanish VAT invoice mirroring the spreadsheet's "Bills" sheet.
@@ -42,9 +41,10 @@ public class Bill extends DocumentObject implements BeforeWriteHandler, Postable
     @Attribute
     private Ref<Property> property;
 
-    /** Backing field for the linked Booking; stored as raw UUID to keep this document free of cyclic references. */
-    @Attribute(displayName = "Booking ref")
-    private UUID bookingRef;
+    /** The booking this invoice bills for — a document → document reference, rendered as a
+     *  searchable booking picker in the UI (resolves to the booking's number). */
+    @Attribute(displayName = "Booking")
+    private Ref<Booking> booking;
 
     @Attribute(displayName = "Net (excl. IVA)", precision = 14, scale = 2)
     private BigDecimal net;

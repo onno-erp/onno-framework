@@ -9,6 +9,8 @@ import com.onec.model.TabularSectionRow;
 import com.onec.numbering.NumberGenerator;
 import com.onec.posting.PostingPreview;
 import com.onec.posting.PostingService;
+import com.onec.security.SecretCipher;
+import com.onec.security.SecretRedactor;
 import com.onec.types.Ref;
 
 import org.jdbi.v3.core.Jdbi;
@@ -37,13 +39,15 @@ public class GenericDocumentController {
     private final UiAccessService access;
     private final UiEventPublisher eventPublisher;
     private final DocumentQueryService query;
+    private final SecretCipher secretCipher;
 
     public GenericDocumentController(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                       NumberGenerator numberGenerator,
                                       PostingService postingService,
                                       DocumentQueryService query,
                                       UiAccessService access,
-                                      UiEventPublisher eventPublisher) {
+                                      UiEventPublisher eventPublisher,
+                                      SecretCipher secretCipher) {
         this.registry = registry;
         this.jdbi = jdbi;
         this.properties = properties;
@@ -52,15 +56,24 @@ public class GenericDocumentController {
         this.query = query;
         this.access = access;
         this.eventPublisher = eventPublisher;
+        this.secretCipher = secretCipher;
     }
 
     @GetMapping("/{name}")
     public List<Map<String, Object>> list(@PathVariable String name,
                                            @RequestParam(required = false) String from,
                                            @RequestParam(required = false) String to,
+                                           @RequestParam(required = false) String q,
+                                           @RequestParam(required = false) Integer limit,
                                            Principal principal) {
         DocumentDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
+        // A search query or explicit limit switches to the capped typeahead used by the
+        // document ref picker; otherwise it's the full (date-ranged) list.
+        if (q != null || limit != null) {
+            int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
+            return query.search(desc, q, cap);
+        }
         return query.list(desc, from, to);
     }
 
@@ -127,7 +140,7 @@ public class GenericDocumentController {
         if (body.containsKey("date")) setClauses.add("_date = :_date");
 
         for (AttributeDescriptor attr : desc.attributes()) {
-            if (body.containsKey(attr.fieldName())) {
+            if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
                 setClauses.add(attr.columnName() + " = :" + attr.columnName());
             }
         }
@@ -148,7 +161,7 @@ public class GenericDocumentController {
                 }
 
                 for (AttributeDescriptor attr : desc.attributes()) {
-                    if (body.containsKey(attr.fieldName())) {
+                    if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
                         bindAttribute(update, attr, body.get(attr.fieldName()));
                     }
                 }
@@ -182,6 +195,12 @@ public class GenericDocumentController {
         DocumentDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
         DocumentObject doc = loadDocumentObject(desc, id);
+        // Re-posting (1C "Провести" on an already-posted document): reverse the existing
+        // register movements before writing fresh ones, otherwise posting twice would
+        // double-count. A first-time post sees posted=false and skips this.
+        if (doc.isPosted()) {
+            postingService.unpost(doc);
+        }
         postingService.post(doc);
         eventPublisher.publish("posted", "document", desc.logicalName(), id);
         eventPublisher.publish("changed", "register", "*", id);
@@ -306,7 +325,8 @@ public class GenericDocumentController {
         } else if (fieldType == BigDecimal.class) {
             field.set(target, value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString()));
         } else if (fieldType == String.class) {
-            field.set(target, value.toString());
+            // Secret columns hold ciphertext; decrypt so posting/business code sees plaintext.
+            field.set(target, attr.secret() ? secretCipher.decrypt(value.toString()) : value.toString());
         } else if (fieldType == int.class || fieldType == Integer.class) {
             field.set(target, value instanceof Number n ? n.intValue() : Integer.parseInt(value.toString()));
         } else if (fieldType == long.class || fieldType == Long.class) {
@@ -428,7 +448,16 @@ public class GenericDocumentController {
             update.bind(attr.columnName(), (UUID) null);
             return;
         }
-        if (attr.isRef() || attr.javaType().isEnum()) {
+        if (attr.secret()) {
+            // Write-only secret: store encrypted. A "set" sentinel echoed from a GET carries no
+            // real value (on create there's nothing to keep, so store null; on update such
+            // columns are dropped earlier by leaveSecretUnchanged).
+            if (SecretRedactor.SET.equals(value)) {
+                update.bind(attr.columnName(), (String) null);
+            } else {
+                update.bind(attr.columnName(), secretCipher.encrypt(value.toString()));
+            }
+        } else if (attr.isRef() || attr.javaType().isEnum()) {
             // Ref and enum columns are UUID in the DB
             UUID uuid = value instanceof UUID u ? u : UUID.fromString(value.toString());
             update.bind(attr.columnName(), uuid);
@@ -437,6 +466,15 @@ public class GenericDocumentController {
         } else {
             update.bind(attr.columnName(), value);
         }
+    }
+
+    /**
+     * A secret attribute whose incoming value is the read-side "set" sentinel means "leave it
+     * as it is" — the client round-tripped a GET it never saw the real value of. Such columns
+     * are dropped from the UPDATE so the stored ciphertext is preserved.
+     */
+    private boolean leaveSecretUnchanged(AttributeDescriptor attr, Object value) {
+        return attr.secret() && SecretRedactor.SET.equals(value);
     }
 
     private int parseInt(Object value) {

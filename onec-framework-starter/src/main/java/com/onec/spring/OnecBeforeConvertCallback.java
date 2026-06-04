@@ -6,8 +6,11 @@ import com.onec.metadata.*;
 import com.onec.model.AccumulationRecord;
 import com.onec.model.CatalogObject;
 import com.onec.model.DocumentObject;
+import com.onec.model.TabularSectionRow;
 import com.onec.numbering.NumberGenerator;
 import com.onec.rules.BusinessRuleValidator;
+import com.onec.security.SecretCipher;
+import com.onec.security.SecretFields;
 
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
 
@@ -19,11 +22,14 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
 
     private final MetadataRegistry registry;
     private final NumberGenerator numberGenerator;
+    private final SecretCipher secretCipher;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
 
-    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator) {
+    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
+                                     SecretCipher secretCipher) {
         this.registry = registry;
         this.numberGenerator = numberGenerator;
+        this.secretCipher = secretCipher;
     }
 
     @Override
@@ -47,16 +53,19 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
             if (document.getId() == null) {
                 document.setId(UUID.randomUUID());
             }
+            DocumentDescriptor desc = registry.getDocumentDescriptor(document.getClass());
             if (document.isNew()) {
                 if (aggregate instanceof OnFillingHandler handler) {
                     handler.onFilling();
                 }
-                DocumentDescriptor desc = registry.getDocumentDescriptor(document.getClass());
                 if (desc.autoNumber() && (document.getNumber() == null || document.getNumber().isEmpty())) {
                     document.setNumber(numberGenerator.nextNumber(
                             desc.tableName(), desc.numberPrefix(), desc.numberLength()));
                 }
             }
+            // Tabular-section rows are aggregate children with a non-generated UUID @Id; Spring
+            // Data JDBC won't assign one, so populate any missing ids before the insert.
+            assignTabularRowIds(document, desc);
         } else if (aggregate instanceof AccumulationRecord record) {
             if (record.getId() == null) {
                 record.setId(UUID.randomUUID());
@@ -72,7 +81,33 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
         validateRequired(aggregate);
         businessRuleValidator.validate(aggregate);
 
+        // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
+        // restored on the in-memory instance by OnecAfterSaveCallback once the write lands.
+        SecretFields.apply(aggregate, registry, secretCipher::encrypt);
+
         return aggregate;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assignTabularRowIds(DocumentObject document, DocumentDescriptor desc) {
+        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+            try {
+                Field field = findField(document.getClass(), ts.fieldName());
+                field.setAccessible(true);
+                Object value = field.get(document);
+                if (!(value instanceof List<?> rows)) {
+                    continue;
+                }
+                for (TabularSectionRow row : (List<TabularSectionRow>) rows) {
+                    if (row != null && row.getId() == null) {
+                        row.setId(UUID.randomUUID());
+                    }
+                }
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                throw new RuntimeException(
+                        "Failed to assign ids for tabular section '" + ts.name() + "'", e);
+            }
+        }
     }
 
     private void validateRequired(Object aggregate) {

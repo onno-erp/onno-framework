@@ -92,9 +92,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                               NumberGenerator numberGenerator,
                                                               CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
-                                                              UiEventPublisher eventPublisher) {
+                                                              UiEventPublisher eventPublisher,
+                                                              com.onec.security.SecretCipher secretCipher) {
         return new GenericCatalogController(jdbi, properties, numberGenerator, catalogQueryService,
-                access, eventPublisher);
+                access, eventPublisher, secretCipher);
     }
 
     @Bean
@@ -104,9 +105,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                                 PostingService postingService,
                                                                 DocumentQueryService documentQueryService,
                                                                 UiAccessService access,
-                                                                UiEventPublisher eventPublisher) {
+                                                                UiEventPublisher eventPublisher,
+                                                                com.onec.security.SecretCipher secretCipher) {
         return new GenericDocumentController(registry, jdbi, properties, numberGenerator, postingService,
-                documentQueryService, access, eventPublisher);
+                documentQueryService, access, eventPublisher, secretCipher);
     }
 
     @Bean

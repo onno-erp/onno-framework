@@ -1,6 +1,7 @@
 package com.onec.ui;
 
 import com.onec.metadata.AccumulationRegisterDescriptor;
+import com.onec.metadata.AttributeDescriptor;
 import com.onec.metadata.CatalogDescriptor;
 import com.onec.metadata.DashboardWidgetDescriptor;
 import com.onec.metadata.DocumentDescriptor;
@@ -231,10 +232,18 @@ public class DivKitController {
         // Only offer edit/delete to users who may write the catalog; the REST
         // endpoints enforce it regardless.
         boolean canWrite = access.canWrite(principal, desc);
-        String editUrl = canWrite ? "onec://catalogs/" + name + "/" + id + "/edit" : null;
-        String deleteUrl = canWrite ? "onec://delete/catalogs/" + name + "/" + id : null;
+        // Catalogs keep Edit/Delete as inline (primary) buttons — no posting, no overflow.
+        List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+                    "onec://catalogs/" + name + "/" + id + "/edit", "primary"));
+            actions.add(new SurfaceDivBuilder.HeaderAction("copy", "Duplicate", "normal",
+                    "onec://catalogs/" + name + "/" + id + "/duplicate", "menu"));
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+                    "onec://delete/catalogs/" + name + "/" + id, "primary"));
+        }
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
-                resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), editUrl, deleteUrl,
+                resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), actions,
                 Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
@@ -258,6 +267,15 @@ public class DivKitController {
             label = str(row.get("_code"));
         }
         return entityFormContent("catalogs", name, id, "Edit " + label, "Save", meta, row);
+    }
+
+    @GetMapping("/catalogs/{name}/{id}/duplicate")
+    public Map<String, Object> catalogDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireWrite(principal, desc);
+        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
+        Map<String, Object> draft = duplicateDraft(catalogQuery.get(desc, id), desc.attributes());
+        return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
     }
 
     @GetMapping("/documents/{name}")
@@ -294,11 +312,37 @@ public class DivKitController {
         // Only offer edit/delete to users who may write the document; the REST
         // endpoints enforce it regardless.
         boolean canWrite = access.canWrite(principal, desc);
-        String editUrl = canWrite ? "onec://documents/" + name + "/" + id + "/edit" : null;
-        String deleteUrl = canWrite ? "onec://delete/documents/" + name + "/" + id : null;
-        Map<String, Object> content = SurfaceDivBuilder.documentDetail(
-                resolvedMetadata.describeDocument(desc), documentQuery.get(desc, id), editUrl, deleteUrl,
-                Palette.of(theme));
+        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> row = documentQuery.get(desc, id);
+        // Posting actions: only for writable, postable documents. Post is offered in both
+        // states (it re-posts when already posted, labelled accordingly); Unpost only once
+        // posted. Placement (primary button / overflow ⋯ menu / hidden) comes from the
+        // resolved metadata's "actions" map, which a view can override per action.
+        boolean postable = Boolean.TRUE.equals(meta.get("postable"));
+        boolean posted = Boolean.TRUE.equals(row.get("_posted"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
+
+        List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        if (canWrite && postable) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check", posted ? "Re-post" : "Post",
+                    "primary", "onec://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
+        }
+        if (canWrite && postable && posted) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", "Unpost", "normal",
+                    "onec://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
+        }
+        if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+                    "onec://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
+            actions.add(new SurfaceDivBuilder.HeaderAction("copy", "Duplicate", "normal",
+                    "onec://documents/" + name + "/" + id + "/duplicate", str(placement.getOrDefault("duplicate", "menu"))));
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+                    "onec://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
+        }
+        // "hidden" placement drops the action from the UI (it stays available via REST).
+        actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row, actions, Palette.of(theme));
         return DivCard.of("onec-content", content);
     }
 
@@ -318,6 +362,15 @@ public class DivKitController {
         Map<String, Object> row = documentQuery.get(desc, id);
         return entityFormContent("documents", name, id, "Edit " + str(meta.get("name")) + " " + str(row.get("_number")),
                 "Save", meta, row);
+    }
+
+    @GetMapping("/documents/{name}/{id}/duplicate")
+    public Map<String, Object> documentDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireWrite(principal, desc);
+        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> draft = duplicateDraft(documentQuery.get(desc, id), desc.attributes());
+        return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
     }
 
     @GetMapping("/registers/{name}")
@@ -350,7 +403,9 @@ public class DivKitController {
                     .filter(item -> access.canRead(principal, item.type(), item.name()))
                     .filter(item -> isDeclared(item, profileId))
                     .map(item -> new ShellLayoutBuilder.NavItem(
-                            item.name(), "onec:/" + item.href(),
+                            // The display label is the title (falls back to name); the route
+                            // still keys off the URL-safe href.
+                            item.title(), "onec:/" + item.href(),
                             // An explicitly authored icon wins; otherwise fall back to the
                             // name heuristic (with the section icon as its final default).
                             item.icon() != null && !item.icon().isBlank()
@@ -394,15 +449,53 @@ public class DivKitController {
     private Map<String, Object> entityFormContent(String kind, String name, UUID id, String title,
                                                   String submitLabel, Map<String, Object> meta,
                                                   Map<String, Object> row) {
+        return entityFormContent(kind, name, id, title, submitLabel, meta, row, false);
+    }
+
+    /**
+     * {@code duplicate} marks a "clone" form: the {@code id} identifies the source record (so the
+     * client knows which pane to close), but the form still submits as a create (POST) into a new
+     * record. {@code initial} carries the source's attributes/line items minus its identity.
+     */
+    private Map<String, Object> entityFormContent(String kind, String name, UUID id, String title,
+                                                  String submitLabel, Map<String, Object> meta,
+                                                  Map<String, Object> row, boolean duplicate) {
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("kind", kind);
         descriptor.put("name", name);
         descriptor.put("id", id == null ? null : id.toString());
         descriptor.put("title", title);
         descriptor.put("submitLabel", submitLabel);
+        descriptor.put("duplicate", duplicate);
         descriptor.put("meta", meta);
         descriptor.put("initial", row);
         return DivCard.of("onec-content", SurfaceDivBuilder.entityForm(descriptor));
+    }
+
+    /**
+     * Turns a loaded record into a create-form draft for "Duplicate": copies its attributes and
+     * tabular-section rows, but drops the system identity/state so the user saves a brand-new
+     * record. The new {@code _id}, {@code _number}/{@code _code}, {@code _posted=false} and
+     * {@code _version} are assigned on save; {@code @Attribute(secret = true)} values are never
+     * copied (the new record starts with them blank). Tabular row ids are ignored by the form and
+     * re-generated on insert, so the line items clone with a fresh identity automatically.
+     */
+    private Map<String, Object> duplicateDraft(Map<String, Object> row, List<AttributeDescriptor> attributes) {
+        Map<String, Object> draft = new LinkedHashMap<>(row);
+        draft.keySet().removeIf(DivKitController::isIdentityColumn);
+        for (AttributeDescriptor attr : attributes) {
+            if (attr.secret()) {
+                draft.remove(attr.columnName());
+            }
+        }
+        return draft;
+    }
+
+    private static boolean isIdentityColumn(String column) {
+        return switch (column) {
+            case "_id", "_number", "_code", "_posted", "_version", "_deletion_mark" -> true;
+            default -> false;
+        };
     }
 
     private static String str(Object o) {

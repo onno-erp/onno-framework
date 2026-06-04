@@ -3,6 +3,7 @@ package com.onec.ui;
 import com.onec.metadata.DocumentDescriptor;
 import com.onec.metadata.MetadataRegistry;
 import com.onec.metadata.TabularSectionDescriptor;
+import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,28 @@ public class DocumentQueryService {
             return query.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
+    /**
+     * Capped, case-insensitive typeahead by document number — the document-ref-picker
+     * counterpart of the catalog search. Live records only, newest first.
+     */
+    public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit) {
+        String like = "%" + (query == null ? "" : query.toLowerCase()) + "%";
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false" +
+                                " AND LOWER(_number) LIKE :q" +
+                                " ORDER BY _date DESC LIMIT :limit")
+                        .bind("q", like)
+                        .bind("limit", limit)
+                        .mapToMap()
+                        .list()
+        );
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
         return rows;
     }
 
@@ -103,6 +126,7 @@ public class DocumentQueryService {
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
         refResolver.resolveAttributes(List.of(doc), desc.attributes());
+        SecretRedactor.redact(List.of(doc), desc.attributes());
 
         for (TabularSectionDescriptor ts : desc.tabularSections()) {
             List<Map<String, Object>> rows = jdbi.withHandle(h ->
@@ -113,6 +137,7 @@ public class DocumentQueryService {
                             .list()
             );
             refResolver.resolveAttributes(rows, ts.attributes());
+            SecretRedactor.redact(rows, ts.attributes());
             doc.put(ts.name(), rows);
         }
         return doc;

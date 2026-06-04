@@ -13,6 +13,14 @@ public @interface AccumulationRegister {
 
     String name();
 
+    /**
+     * Human-facing display label, distinct from the URL-safe {@link #name()} identity.
+     * Use it for localized or multi-word titles while keeping {@code name} ASCII and
+     * space-free so routes stay clean. Surfaces in the UI metadata and is used for nav
+     * items and report headings. When empty, falls back to {@link #name()}.
+     */
+    String title() default "";
+
     /** Stable DB table name. When empty, derived from {@link #name()}. */
     String tableName() default "";
 

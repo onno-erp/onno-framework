@@ -14,10 +14,30 @@ import java.util.Map;
 public class EntityConfigBuilder {
 
     private final Map<String, FieldHintBuilder> fields = new LinkedHashMap<>();
+    private final Map<String, String> actions = new LinkedHashMap<>();
     private String icon = "";
 
     public FieldHintBuilder field(String name) {
         return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
+    }
+
+    /**
+     * Configure where a detail-header action shows: {@code post}, {@code unpost},
+     * {@code edit} or {@code delete}. By default Post is a primary button and the
+     * rest live in the overflow (⋯) menu; override per action with
+     * {@code .primary()}, {@code .inMenu()} or {@code .hidden()}.
+     */
+    public ActionHintBuilder action(String name) {
+        return new ActionHintBuilder(this, name);
+    }
+
+    void putAction(String name, String placement) {
+        actions.put(name, placement);
+    }
+
+    /** Action placement overrides ({@code action name -> primary|menu|hidden}). */
+    Map<String, String> buildActions() {
+        return Map.copyOf(actions);
     }
 
     /**

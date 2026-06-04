@@ -87,13 +87,14 @@ public class MetadataScanner {
         }
 
         String logicalName = catalog.name();
+        String displayTitle = catalog.title().isEmpty() ? logicalName : catalog.title();
         String storageKey = catalog.tableName().isEmpty() ? logicalName : catalog.tableName();
         String tableName = naming.catalogTable(storageKey);
         int codeLength = catalog.codeLength();
 
         List<AttributeDescriptor> attributes = scanAttributes(clazz, CatalogObject.class);
 
-        return new CatalogDescriptor(logicalName, tableName, clazz, codeLength,
+        return new CatalogDescriptor(logicalName, displayTitle, tableName, clazz, codeLength,
                 catalog.hierarchical(), catalog.autoNumber(), catalog.codePrefix(),
                 catalog.context(), readRoles(clazz), writeRoles(clazz), attributes);
     }
@@ -108,6 +109,7 @@ public class MetadataScanner {
         }
 
         String logicalName = document.name();
+        String displayTitle = document.title().isEmpty() ? logicalName : document.title();
         String storageKey = document.tableName().isEmpty() ? logicalName : document.tableName();
         String tableName = naming.documentTable(storageKey);
         int numberLength = document.numberLength();
@@ -115,7 +117,7 @@ public class MetadataScanner {
         List<AttributeDescriptor> attributes = scanAttributes(clazz, DocumentObject.class);
         List<TabularSectionDescriptor> tabularSections = scanTabularSections(clazz, storageKey);
 
-        return new DocumentDescriptor(logicalName, tableName, clazz, numberLength,
+        return new DocumentDescriptor(logicalName, displayTitle, tableName, clazz, numberLength,
                 document.autoNumber(), document.numberPrefix(), document.context(),
                 readRoles(clazz), writeRoles(clazz), attributes, tabularSections);
     }
@@ -130,6 +132,7 @@ public class MetadataScanner {
         }
 
         String logicalName = reg.name();
+        String displayTitle = reg.title().isEmpty() ? logicalName : reg.title();
         String storageKey = reg.tableName().isEmpty() ? logicalName : reg.tableName();
         String tableName = naming.registerTable(storageKey);
         String totalsTableName = naming.registerTotalsTable(storageKey);
@@ -139,7 +142,7 @@ public class MetadataScanner {
         List<AttributeDescriptor> resources = scanResources(clazz, AccumulationRecord.class);
 
         return new AccumulationRegisterDescriptor(
-                logicalName, tableName, totalsTableName, clazz, type, reg.context(),
+                logicalName, displayTitle, tableName, totalsTableName, clazz, type, reg.context(),
                 readRoles(clazz), writeRoles(clazz), dimensions, resources);
     }
 
@@ -247,7 +250,8 @@ public class MetadataScanner {
                         hint == null ? 0 : hint.order(),
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget()));
+                        hint == null ? "" : hint.widget(),
+                        false));
             }
             current = current.getSuperclass();
         }
@@ -280,7 +284,8 @@ public class MetadataScanner {
                         hint == null ? 0 : hint.order(),
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget()));
+                        hint == null ? "" : hint.widget(),
+                        false));
             }
             current = current.getSuperclass();
         }
@@ -327,7 +332,8 @@ public class MetadataScanner {
                         hint == null ? 0 : hint.order(),
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget()
+                        hint == null ? "" : hint.widget(),
+                        attr.secret()
                 ));
             }
             current = current.getSuperclass();
@@ -381,8 +387,14 @@ public class MetadataScanner {
         if (!(genericType instanceof ParameterizedType paramType)) return null;
         Type[] typeArgs = paramType.getActualTypeArguments();
         if (typeArgs.length != 1 || !(typeArgs[0] instanceof Class<?> targetClass)) return null;
+        // Resolve to the target's registered logical name so the UI can look it up
+        // (catalog or document). A Ref<SomeDocument> must carry the @Document name —
+        // not the Java simple name — or the document ref picker/display can't find it.
         Catalog catalog = targetClass.getAnnotation(Catalog.class);
-        return catalog != null ? catalog.name() : targetClass.getSimpleName();
+        if (catalog != null) return catalog.name();
+        Document document = targetClass.getAnnotation(Document.class);
+        if (document != null) return document.name();
+        return targetClass.getSimpleName();
     }
 
     private Class<?> extractRowClass(Field field) {

@@ -30,6 +30,7 @@ public class ResolvedMetadataService {
     public Map<String, Object> describeCatalog(CatalogDescriptor d) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
+        map.put("title", d.displayTitle());
         map.put("tableName", d.tableName());
         map.put("codeLength", d.codeLength());
         map.put("hierarchical", d.hierarchical());
@@ -49,6 +50,7 @@ public class ResolvedMetadataService {
     public Map<String, Object> describeDocument(DocumentDescriptor d) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
+        map.put("title", d.displayTitle());
         map.put("tableName", d.tableName());
         map.put("numberLength", d.numberLength());
         map.put("autoNumber", d.autoNumber());
@@ -56,6 +58,20 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
+        // Whether this document type can be posted (implements Postable). The UI uses it to
+        // decide whether to offer Post / Re-post / Unpost actions; a non-postable document
+        // only ever gets a plain Save.
+        map.put("postable", com.onec.lifecycle.Postable.class.isAssignableFrom(d.javaClass()));
+        // Detail-header action placement. Default mirrors 1C: Post is the primary
+        // button, Unpost/Edit/Delete live in the overflow (⋯) menu. A view overrides
+        // per action via f.action("...").primary()/.inMenu()/.hidden().
+        Map<String, String> actionOverrides = fieldHints.actionsFor(d.javaClass());
+        Map<String, Object> actions = new LinkedHashMap<>();
+        actions.put("post", actionOverrides.getOrDefault("post", "primary"));
+        actions.put("unpost", actionOverrides.getOrDefault("unpost", "menu"));
+        actions.put("edit", actionOverrides.getOrDefault("edit", "menu"));
+        actions.put("delete", actionOverrides.getOrDefault("delete", "menu"));
+        map.put("actions", actions);
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
@@ -77,6 +93,7 @@ public class ResolvedMetadataService {
     public Map<String, Object> describeRegister(AccumulationRegisterDescriptor d) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
+        map.put("title", d.displayTitle());
         map.put("tableName", d.tableName());
         map.put("type", d.accumulationType().name());
         map.put("context", d.context());
@@ -120,8 +137,19 @@ public class ResolvedMetadataService {
             map.put("required", a.required());
             map.put("isRef", a.isRef());
             map.put("refTarget", a.refTarget());
+            // Tell the UI whether a ref points at a catalog or a document so the picker
+            // can hit the right endpoints. refTarget is the registered logical name, so a
+            // matching document means it's a document ref; otherwise treat it as a catalog.
+            if (a.isRef() && a.refTarget() != null) {
+                boolean isDocument = registry.allDocuments().stream()
+                        .anyMatch(d -> d.logicalName().equals(a.refTarget()));
+                map.put("refKind", isDocument ? "document" : "catalog");
+            }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
+            // Tell the UI to render a write-only password control and a "set / not set"
+            // indicator instead of the value (which the read API never returns).
+            map.put("secret", a.secret());
             // Layout hints win when set; otherwise fall back to descriptor (which
             // reflects @UiHint on the field, or scanner default if absent).
             map.put("visibleInList", pick(hint == null ? null : hint.visibleInList(), a.visibleInList()));

@@ -4,6 +4,7 @@ import java.util.List;
 
 public record CatalogDescriptor(
         String logicalName,
+        String displayTitle,
         String tableName,
         Class<?> javaClass,
         int codeLength,

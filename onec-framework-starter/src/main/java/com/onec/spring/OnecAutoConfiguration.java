@@ -1,6 +1,5 @@
 package com.onec.spring;
 
-import com.onec.annotations.UiSection;
 import com.onec.metadata.*;
 import com.onec.posting.PostingEngine;
 import com.onec.posting.PostingService;
@@ -42,7 +41,24 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
 
     @Bean
     public NamingStrategy oneCNamingStrategy() {
-        return new OnecNamingStrategy();
+        return new OnecNamingStrategy(buildTabularSectionTables(resolvePackages(oneCProperties, bootstrapContext)));
+    }
+
+    /**
+     * Maps each tabular-section row class to the child table the schema generator creates
+     * ({@code document_<doc>_<section>}), so {@link OnecNamingStrategy} can give Spring Data JDBC
+     * the same table name when it persists a document's {@code @TabularSection List<Row>}.
+     */
+    static Map<Class<?>, String> buildTabularSectionTables(List<String> scanPackages) {
+        Map<Class<?>, String> map = new HashMap<>();
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        for (Class<?> clazz : new DocumentScanner().scan(scanPackages)) {
+            DocumentDescriptor doc = scanner.scanDocument(clazz);
+            for (TabularSectionDescriptor ts : doc.tabularSections()) {
+                map.put(ts.rowClass(), ts.tableName());
+            }
+        }
+        return map;
     }
 
     @Override
@@ -86,19 +102,27 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
+    public com.onec.security.SecretCipher secretCipher(OnecProperties properties) {
+        return new com.onec.security.SecretCipher(properties.getSecurity().getSecretKey());
+    }
+
+    @Bean
     public OnecBeforeConvertCallback oneCBeforeConvertCallback(MetadataRegistry registry,
-                                                                com.onec.numbering.NumberGenerator numberGenerator) {
-        return new OnecBeforeConvertCallback(registry, numberGenerator);
+                                                                com.onec.numbering.NumberGenerator numberGenerator,
+                                                                com.onec.security.SecretCipher secretCipher) {
+        return new OnecBeforeConvertCallback(registry, numberGenerator, secretCipher);
     }
 
     @Bean
-    public OnecAfterSaveCallback oneCAfterSaveCallback(OutboxWriter outboxWriter) {
-        return new OnecAfterSaveCallback(outboxWriter);
+    public OnecAfterSaveCallback oneCAfterSaveCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
+                                                       com.onec.security.SecretCipher secretCipher) {
+        return new OnecAfterSaveCallback(outboxWriter, registry, secretCipher);
     }
 
     @Bean
-    public OnecAfterConvertCallback oneCAfterConvertCallback() {
-        return new OnecAfterConvertCallback();
+    public OnecAfterConvertCallback oneCAfterConvertCallback(MetadataRegistry registry,
+                                                             com.onec.security.SecretCipher secretCipher) {
+        return new OnecAfterConvertCallback(registry, secretCipher);
     }
 
     @Bean
@@ -124,6 +148,16 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public Jdbi jdbi(DataSource dataSource) {
         return Jdbi.create(dataSource);
+    }
+
+    /**
+     * The unified type-safe query layer: a {@link com.onec.query.QueryEngine} over
+     * catalogs, documents, and registers with {@code Ref}-navigation joins. Apps inject
+     * it to run {@code query.from(...).select(...).where(...).fetch()} queries.
+     */
+    @Bean
+    public com.onec.query.QueryEngine queryEngine(Jdbi jdbi, MetadataRegistry metadataRegistry) {
+        return new com.onec.query.QueryEngine(jdbi, metadataRegistry);
     }
 
     @Bean
@@ -285,30 +319,22 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
                 .map(UiLayoutBuilder.EntityRef::javaClass)
                 .collect(Collectors.toSet());
 
-        // Auto-place remaining entities using @UiSection or fallback grouping
+        // Auto-place remaining entities using default fallback grouping.
+        // Explicit placement is the job of Layout beans (the source of truth).
         UiLayoutBuilder fallbackBuilder = new UiLayoutBuilder();
 
         if (applyFallback) {
             for (CatalogDescriptor d : registry.allCatalogs()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Catalogs";
-                int order = s != null ? s.order() : 900;
-                fallbackBuilder.section(section).order(order).catalog(d.javaClass());
+                fallbackBuilder.section("Catalogs").order(900).catalog(d.javaClass());
             }
             for (DocumentDescriptor d : registry.allDocuments()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Documents";
-                int order = s != null ? s.order() : 901;
-                fallbackBuilder.section(section).order(order).document(d.javaClass());
+                fallbackBuilder.section("Documents").order(901).document(d.javaClass());
             }
             for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
                 if (placed.contains(d.javaClass())) continue;
-                UiSection s = d.javaClass().getAnnotation(UiSection.class);
-                String section = s != null ? s.value() : "Registers";
-                int order = s != null ? s.order() : 902;
-                fallbackBuilder.section(section).order(order).register(d.javaClass());
+                fallbackBuilder.section("Registers").order(902).register(d.javaClass());
             }
         }
 

@@ -11,6 +11,7 @@ Implemented:
 - Catalogs, documents, tabular sections, accumulation registers
 - Information registers, enumerations, constants, background jobs
 - JDBI-based schema generation and persistence primitives
+- Unified type-safe query layer (`QueryEngine`) over catalogs, documents, and registers, with `Ref`-navigation auto-joins, a declarative `QuerySpec` AST, a fluent builder, and a shared `SqlRenderer` that also backs register virtual tables
 - Spring Boot starter auto-configuration
 - React/Vite UI starter with generic metadata, catalog, document, and register APIs
 - UI auth foundation with login screen, protected routes, `/api/ui/auth/me`, JSON `/login` and `/logout`, session cookies, CSRF

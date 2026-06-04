@@ -6,6 +6,7 @@ import java.util.List;
 
 public record AccumulationRegisterDescriptor(
         String logicalName,
+        String displayTitle,
         String tableName,
         String totalsTableName,
         Class<?> javaClass,

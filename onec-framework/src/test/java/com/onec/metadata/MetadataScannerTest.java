@@ -2,6 +2,7 @@ package com.onec.metadata;
 
 import com.onec.fixtures.NotACatalog;
 import com.onec.fixtures.TestProduct;
+import com.onec.fixtures.TestTitledDocument;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,23 @@ class MetadataScannerTest {
         assertThat(descriptor.tableName()).isEqualTo("catalog_test_products");
         assertThat(descriptor.codeLength()).isEqualTo(9);
         assertThat(descriptor.javaClass()).isEqualTo(TestProduct.class);
+    }
+
+    @Test
+    void scan_noTitle_displayTitleFallsBackToName() {
+        CatalogDescriptor descriptor = scanner.scan(TestProduct.class);
+
+        assertThat(descriptor.displayTitle()).isEqualTo("TestProducts");
+    }
+
+    @Test
+    void scanDocument_explicitTitle_keepsNameAndTitleDistinct() {
+        DocumentDescriptor descriptor = scanner.scanDocument(TestTitledDocument.class);
+
+        // name stays the URL-safe key; title carries the localized display label.
+        assertThat(descriptor.logicalName()).isEqualTo("SupplierOrders");
+        assertThat(descriptor.displayTitle()).isEqualTo("Заказы поставщикам");
+        assertThat(descriptor.tableName()).isEqualTo("document_supplier_orders");
     }
 
     @Test

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, TabularSectionMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -29,9 +29,17 @@ export type FormDescriptor = {
   id: string | null;
   title: string;
   submitLabel: string;
+  /**
+   * A "Duplicate" form: {@code id} identifies the source record (so the host closes the right
+   * pane), but the form submits as a create into a brand-new record. {@code initial} carries the
+   * source's attributes/line items minus its identity (see DivKitController#duplicateDraft).
+   */
+  duplicate?: boolean;
   meta: {
     name: string;
     autoNumber?: boolean;
+    /** Documents that implement Postable can be posted from the form (1C-style). */
+    postable?: boolean;
     attributes: AttributeMeta[];
     tabularSections?: TabularSectionMeta[];
   };
@@ -60,8 +68,12 @@ function dispatchClose(path: string) {
 
 export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const { kind, name, id, meta, initial } = form;
-  const isEdit = id != null;
-  const formPath = `/${kind}/${name}/${isEdit ? `${id}/edit` : "new"}`;
+  // A duplicate carries the source id (for pane routing/close) but still creates a new record.
+  const isDuplicate = form.duplicate === true;
+  const isEdit = id != null && !isDuplicate;
+  const formPath = `/${kind}/${name}/${
+    isDuplicate ? `${id}/duplicate` : isEdit ? `${id}/edit` : "new"
+  }`;
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
   // description; both then list the visible-in-form attributes by their order hint.
@@ -86,10 +98,20 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // REST layer round-trips rows; this is the form's editable grid for each one.
   const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
 
+  // 1C-style posting: a postable document offers Write (save, no posting) alongside
+  // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
+  // non-postable documents keep the single Save button.
+  const postable = kind === "documents" && meta.postable === true;
+  const wasPosted = Boolean(initial?._posted);
+
   const [data, setData] = useState<EntityRecord>(() => {
     const seed: EntityRecord = {};
     if (!initial) return seed;
     for (const f of fields) {
+      // Secret fields are write-only: never seed the control from the loaded value (the
+      // server only ever sends a "set" sentinel anyway). Leaving it blank means an unchanged
+      // save omits the field, so the stored secret is preserved.
+      if (f.kind === "attr" && f.attr.secret) continue;
       const col = f.kind === "system" ? f.column : f.attr.columnName;
       if (initial[col] != null) seed[f.key] = initial[col];
     }
@@ -108,6 +130,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         ? (raw as EntityRecord[]).map((r) => {
             const row: EntityRecord = {};
             for (const attr of ts.attributes) {
+              if (attr.secret) continue; // write-only — see top-level seed
               if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
             }
             return row;
@@ -134,7 +157,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
     }));
 
-  const save = async () => {
+  const save = async (thenPost = false) => {
     setSaving(true);
     try {
       const payload = { ...data };
@@ -168,6 +191,18 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           : await api.createCatalogItem(name, payload);
       }
       const savedId = String(isEdit ? id : saved._id);
+      // Post after a successful save when requested. The document is already persisted, so
+      // a posting failure (e.g. a validation/balance error) surfaces a toast but the saved
+      // record still opens — the user can fix it and re-post. api.postDocument re-posts a
+      // document that was already posted (the backend reverses old movements first).
+      if (thenPost && kind === "documents") {
+        try {
+          await api.postDocument(name, savedId);
+        } catch {
+          // The error toast is already shown by the api layer; fall through to open the
+          // saved (unposted) record so the user lands somewhere actionable.
+        }
+      }
       // Open the saved record and close the form pane (the list refreshes over SSE).
       dispatchAction(`onec://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
@@ -213,12 +248,26 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         <button
           type="button"
           className={cn(actionBtn, "text-foreground")}
-          onClick={save}
+          onClick={() => save(false)}
           disabled={saving}
         >
           <Check className="size-4" aria-hidden="true" />
-          {saving ? "Saving…" : form.submitLabel}
+          {saving ? "Saving…" : postable ? "Write" : form.submitLabel}
         </button>
+        {postable ? (
+          <button
+            type="button"
+            className={cn(
+              actionBtn,
+              "bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white"
+            )}
+            onClick={() => save(true)}
+            disabled={saving}
+          >
+            <CircleCheck className="size-4" aria-hidden="true" />
+            {wasPosted ? "Re-post" : "Post"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -360,7 +409,12 @@ function AttrControl({
 
   if (attr.isRef && attr.refTarget) {
     return (
-      <RefSelect catalogName={attr.refTarget} value={value as string | undefined} onChange={onChange} />
+      <RefSelect
+        targetName={attr.refTarget}
+        refKind={attr.refKind}
+        value={value as string | undefined}
+        onChange={onChange}
+      />
     );
   }
 
@@ -378,6 +432,21 @@ function AttrControl({
           ))}
         </SelectContent>
       </Select>
+    );
+  }
+
+  if (attr.secret) {
+    // Write-only password control. Never seeded from the loaded value; leaving it blank on
+    // edit keeps the stored secret unchanged (the field is simply omitted from the save).
+    return (
+      <Input
+        type="password"
+        autoComplete="new-password"
+        maxLength={attr.length > 0 ? attr.length : undefined}
+        placeholder="Enter to set — leave blank to keep current"
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
     );
   }
 

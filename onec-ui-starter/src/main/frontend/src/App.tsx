@@ -9,6 +9,7 @@ import { DivKitView } from "@/views/divkit-view";
 import { WidgetPortals } from "@/lib/widget-bridge";
 import { FormPortals } from "@/lib/form-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
+import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -35,6 +36,7 @@ function ProtectedApp() {
       <WidgetPortals />
       <FormPortals />
       <IconPortals />
+      <ActionsMenuPortals />
     </>
   );
 }

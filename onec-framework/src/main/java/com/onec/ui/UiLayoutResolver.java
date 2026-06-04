@@ -65,8 +65,10 @@ public class UiLayoutResolver {
             for (UiLayoutBuilder.EntityRef ref : section.entityRefs()) {
                 String name = resolveEntityName(ref);
                 if (name != null) {
+                    String title = resolveEntityTitleByClass(ref.type(), ref.javaClass());
+                    // Route key stays derived from the URL-safe name; the title is display-only.
                     String href = "/" + ref.type() + "s/" + toSnakeCase(name);
-                    items.add(new UiLayout.ResolvedItem(name, ref.type(), href, ref.javaClass(), ref.icon()));
+                    items.add(new UiLayout.ResolvedItem(name, title, ref.type(), href, ref.javaClass(), ref.icon()));
                 }
             }
             result.add(new UiLayout.ResolvedSection(
@@ -139,6 +141,22 @@ public class UiLayoutResolver {
             case "register" -> registry.allRegisters().stream()
                     .filter(c -> c.javaClass().equals(clazz))
                     .findFirst().map(AccumulationRegisterDescriptor::logicalName).orElse(null);
+            default -> null;
+        };
+    }
+
+    /** The human-facing display label (falls back to the logical name when no title is declared). */
+    private String resolveEntityTitleByClass(String type, Class<?> clazz) {
+        return switch (type) {
+            case "catalog" -> registry.allCatalogs().stream()
+                    .filter(c -> c.javaClass().equals(clazz))
+                    .findFirst().map(CatalogDescriptor::displayTitle).orElse(null);
+            case "document" -> registry.allDocuments().stream()
+                    .filter(c -> c.javaClass().equals(clazz))
+                    .findFirst().map(DocumentDescriptor::displayTitle).orElse(null);
+            case "register" -> registry.allRegisters().stream()
+                    .filter(c -> c.javaClass().equals(clazz))
+                    .findFirst().map(AccumulationRegisterDescriptor::displayTitle).orElse(null);
             default -> null;
         };
     }

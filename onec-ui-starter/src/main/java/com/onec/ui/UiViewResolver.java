@@ -102,7 +102,9 @@ public class UiViewResolver {
                             e.getValue().columnName())));
         }
 
-        String title = spec.title() != null ? spec.title() : str(meta.get("name"));
+        // An authored view title wins; otherwise the entity's display title (which itself
+        // falls back to the logical name when no @…(title=…) is declared).
+        String title = spec.title() != null ? spec.title() : str(meta.getOrDefault("title", meta.get("name")));
         return new ResolvedListView(title, columns);
     }
 

@@ -41,11 +41,26 @@ public class RefResolver {
         }
         if (ids.isEmpty()) return;
 
+        // refTarget is the registered logical name; a ref can point at a catalog or a
+        // document. Resolve each against the right table (catalogs by code/description,
+        // documents by number).
         CatalogDescriptor catalog = registry.allCatalogs().stream()
                 .filter(c -> c.logicalName().equals(attr.refTarget()))
                 .findFirst().orElse(null);
-        if (catalog == null) return;
+        if (catalog != null) {
+            resolveCatalogRef(rows, attr, catalog, ids);
+            return;
+        }
+        DocumentDescriptor document = registry.allDocuments().stream()
+                .filter(d -> d.logicalName().equals(attr.refTarget()))
+                .findFirst().orElse(null);
+        if (document != null) {
+            resolveDocumentRef(rows, attr, document, ids);
+        }
+    }
 
+    private void resolveCatalogRef(List<Map<String, Object>> rows, AttributeDescriptor attr,
+                                   CatalogDescriptor catalog, Set<UUID> ids) {
         // Detect optional avatar column on the target catalog (convention: avatar_url).
         String avatarColumn = catalog.attributes().stream()
                 .map(AttributeDescriptor::columnName)
@@ -101,6 +116,34 @@ public class RefResolver {
                 if (avatarUrl != null && !avatarUrl.isBlank()) refMap.put("avatarUrl", avatarUrl);
                 row.put(attr.columnName() + "_ref", refMap);
             }
+        }
+    }
+
+    private void resolveDocumentRef(List<Map<String, Object>> rows, AttributeDescriptor attr,
+                                    DocumentDescriptor document, Set<UUID> ids) {
+        Map<UUID, String> resolved = jdbi.withHandle(h ->
+                h.createQuery("SELECT _id, _number FROM " + document.tableName() + " WHERE _id IN (<ids>)")
+                        .bindList("ids", new ArrayList<>(ids))
+                        .reduceRows(new HashMap<>(), (map, rv) -> {
+                            map.put(rv.getColumn("_id", UUID.class), rv.getColumn("_number", String.class));
+                            return map;
+                        })
+        );
+
+        for (Map<String, Object> row : rows) {
+            Object val = value(row, attr.columnName());
+            if (val == null) continue;
+            UUID id = toUUID(val);
+            String display = resolved.get(id);
+            if (display == null || display.isBlank()) display = val.toString();
+
+            row.put(attr.columnName() + "_display", display);
+
+            Map<String, Object> refMap = new LinkedHashMap<>();
+            refMap.put("id", id.toString());
+            refMap.put("type", attr.refTarget());
+            refMap.put("display", display);
+            row.put(attr.columnName() + "_ref", refMap);
         }
     }
 
