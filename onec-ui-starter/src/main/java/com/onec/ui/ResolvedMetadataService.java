@@ -124,6 +124,7 @@ public class ResolvedMetadataService {
         // A width hint on a system column (e.g. .field("description").width("320")) lets a
         // wide built-in column size itself like any custom attribute; blank = auto-fit.
         map.put("widthHint", hint == null ? "" : pick(hint.width(), ""));
+        map.put("placeholder", hint == null ? "" : pick(hint.placeholder(), ""));
         return map;
     }
 
@@ -162,6 +163,25 @@ public class ResolvedMetadataService {
             map.put("group", pick(hint == null ? null : hint.group(), a.group()));
             map.put("widthHint", pick(hint == null ? null : hint.width(), a.widthHint()));
             map.put("widget", pick(hint == null ? null : hint.widget(), a.widget()));
+            // Edit-form placeholder (UI hint only) + the declarative validation constraints the
+            // client mirrors for instant inline errors. Bounds are emitted only when set.
+            map.put("placeholder", pick(hint == null ? null : hint.placeholder(), ""));
+            com.onec.metadata.AttributeDescriptor.Constraints c = a.constraints();
+            if (c.hasMin()) {
+                map.put("min", c.min());
+            }
+            if (c.hasMax()) {
+                map.put("max", c.max());
+            }
+            if (c.minLength() > 0) {
+                map.put("minLength", c.minLength());
+            }
+            if (!c.pattern().isBlank()) {
+                map.put("pattern", c.pattern());
+            }
+            if (c.email()) {
+                map.put("email", true);
+            }
             boolean isEnum = a.javaType().isEnum();
             map.put("isEnum", isEnum);
             if (isEnum) {

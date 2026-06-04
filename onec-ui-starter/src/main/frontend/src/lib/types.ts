@@ -34,6 +34,15 @@ export interface AttributeMeta {
   group: string;
   widthHint: string;
   widget: string;
+  /** Edit-form placeholder text (from .field(...).placeholder(...)). */
+  placeholder?: string;
+  // Declarative validation constraints (mirrored from @Attribute) for instant inline errors.
+  // The server re-checks all of these authoritatively before write.
+  min?: number;
+  max?: number;
+  minLength?: number;
+  pattern?: string;
+  email?: boolean;
 }
 
 export interface TabularSectionMeta {

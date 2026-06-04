@@ -42,6 +42,7 @@ public class GenericDocumentController {
     private final ApplicationEventPublisher events;
     private final DocumentQueryService query;
     private final SecretCipher secretCipher;
+    private final WriteValidator writeValidator = new WriteValidator();
 
     public GenericDocumentController(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                       NumberGenerator numberGenerator,
@@ -92,6 +93,7 @@ public class GenericDocumentController {
         requireWritable();
         DocumentDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
+        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
         UUID id = UUID.randomUUID();
 
         List<String> columns = new ArrayList<>(List.of(
@@ -138,6 +140,7 @@ public class GenericDocumentController {
         requireWritable();
         DocumentDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
+        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
 
         List<String> setClauses = new ArrayList<>();
         if (body.containsKey("number")) setClauses.add("_number = :_number");
@@ -348,9 +351,9 @@ public class GenericDocumentController {
         } else if (fieldType == boolean.class || fieldType == Boolean.class) {
             field.set(target, Boolean.TRUE.equals(value));
         } else if (fieldType == LocalDate.class) {
-            field.set(target, value instanceof LocalDate ld ? ld : LocalDate.parse(value.toString()));
+            field.set(target, toLocalDate(value));
         } else if (fieldType == LocalDateTime.class) {
-            field.set(target, value instanceof LocalDateTime ldt ? ldt : LocalDateTime.parse(value.toString()));
+            field.set(target, toLocalDateTime(value));
         } else if (fieldType == UUID.class) {
             field.set(target, value instanceof UUID u ? u : UUID.fromString(value.toString()));
         } else if (fieldType.isEnum()) {
@@ -383,6 +386,34 @@ public class GenericDocumentController {
             }
         }
         return null;
+    }
+
+    /**
+     * Coerce a JDBC value into a {@link LocalDate}. The driver may hand back a {@code LocalDate},
+     * a {@code java.sql.Date}/{@code Timestamp}, or a string — and a TIMESTAMP renders as
+     * {@code "2026-06-04 08:44:44.4"} (space, not {@code T}), so a strict {@code LocalDate.parse}
+     * would fail at the space. Take just the date part.
+     */
+    static LocalDate toLocalDate(Object value) { // package-private for DocumentDateCoercionTest
+        if (value instanceof LocalDate ld) return ld;
+        if (value instanceof LocalDateTime ldt) return ldt.toLocalDate();
+        if (value instanceof java.sql.Date d) return d.toLocalDate();
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime().toLocalDate();
+        String s = value.toString();
+        return LocalDate.parse(s.length() >= 10 ? s.substring(0, 10) : s);
+    }
+
+    /**
+     * Coerce a JDBC value into a {@link LocalDateTime}, accepting {@code Timestamp}/{@code Date}
+     * instances and both {@code T}- and space-separated strings (H2 returns the latter for
+     * TIMESTAMP columns).
+     */
+    static LocalDateTime toLocalDateTime(Object value) { // package-private for DocumentDateCoercionTest
+        if (value instanceof LocalDateTime ldt) return ldt;
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        if (value instanceof LocalDate ld) return ld.atStartOfDay();
+        if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
+        return LocalDateTime.parse(value.toString().replace(' ', 'T'));
     }
 
     @DeleteMapping("/{name}/{id}")

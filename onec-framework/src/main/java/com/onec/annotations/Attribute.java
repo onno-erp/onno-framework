@@ -21,6 +21,23 @@ public @interface Attribute {
 
     int scale() default 2;
 
+    // ----- validation constraints (enforced before write, mirrored to the form for inline errors) -----
+
+    /** Minimum allowed value for a numeric attribute. {@code NaN} (default) means no bound. */
+    double min() default Double.NaN;
+
+    /** Maximum allowed value for a numeric attribute. {@code NaN} (default) means no bound. */
+    double max() default Double.NaN;
+
+    /** Minimum length for a String attribute. {@code 0} (default) means no minimum. ({@link #length} is the max.) */
+    int minLength() default 0;
+
+    /** A regex the String value must fully match. Empty (default) means no pattern. */
+    String pattern() default "";
+
+    /** Shortcut: the String value must be a valid email address. */
+    boolean email() default false;
+
     /**
      * Marks a String attribute as sensitive (a credential, API key, password, …). A secret
      * attribute is encrypted at rest, never returned in the clear by the generic API (read
