@@ -101,28 +101,41 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public GenericCatalogController genericCatalogController(Jdbi jdbi,
-                                                              UiProperties properties,
-                                                              NumberGenerator numberGenerator,
-                                                              CatalogQueryService catalogQueryService,
-                                                              UiAccessService access,
-                                                              org.springframework.context.ApplicationEventPublisher events,
-                                                              com.onec.security.SecretCipher secretCipher) {
-        return new GenericCatalogController(jdbi, properties, numberGenerator, catalogQueryService,
+    public CatalogCommandService catalogCommandService(Jdbi jdbi, UiProperties properties,
+                                                       NumberGenerator numberGenerator,
+                                                       CatalogQueryService catalogQueryService,
+                                                       UiAccessService access,
+                                                       org.springframework.context.ApplicationEventPublisher events,
+                                                       com.onec.security.SecretCipher secretCipher) {
+        return new CatalogCommandService(jdbi, properties, numberGenerator, catalogQueryService,
                 access, events, secretCipher);
     }
 
     @Bean
-    public GenericDocumentController genericDocumentController(MetadataRegistry registry, Jdbi jdbi,
-                                                                UiProperties properties,
-                                                                NumberGenerator numberGenerator,
-                                                                PostingService postingService,
-                                                                DocumentQueryService documentQueryService,
-                                                                UiAccessService access,
-                                                                org.springframework.context.ApplicationEventPublisher events,
-                                                                com.onec.security.SecretCipher secretCipher) {
-        return new GenericDocumentController(registry, jdbi, properties, numberGenerator, postingService,
+    public DocumentCommandService documentCommandService(MetadataRegistry registry, Jdbi jdbi,
+                                                         UiProperties properties,
+                                                         NumberGenerator numberGenerator,
+                                                         PostingService postingService,
+                                                         DocumentQueryService documentQueryService,
+                                                         UiAccessService access,
+                                                         org.springframework.context.ApplicationEventPublisher events,
+                                                         com.onec.security.SecretCipher secretCipher) {
+        return new DocumentCommandService(registry, jdbi, properties, numberGenerator, postingService,
                 documentQueryService, access, events, secretCipher);
+    }
+
+    @Bean
+    public GenericCatalogController genericCatalogController(CatalogQueryService catalogQueryService,
+                                                              UiAccessService access,
+                                                              CatalogCommandService catalogCommandService) {
+        return new GenericCatalogController(catalogQueryService, access, catalogCommandService);
+    }
+
+    @Bean
+    public GenericDocumentController genericDocumentController(DocumentQueryService documentQueryService,
+                                                                UiAccessService access,
+                                                                DocumentCommandService documentCommandService) {
+        return new GenericDocumentController(documentQueryService, access, documentCommandService);
     }
 
     @Bean

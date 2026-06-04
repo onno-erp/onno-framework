@@ -54,6 +54,8 @@ onec:
     #   # be registered under the IdP client's "Valid post logout redirect URIs" (e.g. .../*).
     #   logout-path: /logout
     #   post-logout-redirect-uri: "{baseUrl}"
+  mcp:
+    enabled: true
   mail:
     enabled: true
     provider: smtp

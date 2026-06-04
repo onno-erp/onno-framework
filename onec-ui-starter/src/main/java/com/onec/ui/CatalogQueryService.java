@@ -35,9 +35,9 @@ public class CatalogQueryService {
     }
 
     public CatalogDescriptor require(String name) {
-        String normalized = name.replace("_", "").toLowerCase();
+        String normalized = name.replace("_", "").replace(" ", "").toLowerCase();
         return registry.allCatalogs().stream()
-                .filter(d -> d.logicalName().replace(" ", "").toLowerCase().equals(normalized))
+                .filter(d -> d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Catalog not found: " + name));

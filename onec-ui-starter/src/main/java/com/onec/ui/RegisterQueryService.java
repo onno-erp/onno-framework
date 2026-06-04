@@ -34,9 +34,9 @@ public class RegisterQueryService {
     }
 
     public AccumulationRegisterDescriptor require(String name) {
-        String normalized = name.replace("_", "").toLowerCase();
+        String normalized = name.replace("_", "").replace(" ", "").toLowerCase();
         return registry.allRegisters().stream()
-                .filter(d -> d.logicalName().replace(" ", "").toLowerCase().equals(normalized))
+                .filter(d -> d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Register not found: " + name));

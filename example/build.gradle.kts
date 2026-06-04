@@ -9,6 +9,7 @@ dependencies {
     implementation(project(":onec-framework-starter"))
     implementation(project(":onec-ui-starter"))
     implementation(project(":onec-auth-starter"))
+    implementation(project(":onec-mcp-starter"))
     implementation(project(":onec-print-starter"))
     implementation(project(":onec-mail-starter"))
     implementation(project(":onec-desktop-starter"))
