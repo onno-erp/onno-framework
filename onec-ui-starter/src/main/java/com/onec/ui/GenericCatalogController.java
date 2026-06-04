@@ -1,5 +1,6 @@
 package com.onec.ui;
 
+import com.onec.events.EntityChangedEvent;
 import com.onec.metadata.AttributeDescriptor;
 import com.onec.metadata.CatalogDescriptor;
 import com.onec.numbering.NumberGenerator;
@@ -8,6 +9,7 @@ import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Update;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -28,21 +30,21 @@ public class GenericCatalogController {
     private final NumberGenerator numberGenerator;
     private final CatalogQueryService query;
     private final UiAccessService access;
-    private final UiEventPublisher eventPublisher;
+    private final ApplicationEventPublisher events;
     private final SecretCipher secretCipher;
 
     public GenericCatalogController(Jdbi jdbi, UiProperties properties,
                                     NumberGenerator numberGenerator,
                                     CatalogQueryService query,
                                     UiAccessService access,
-                                    UiEventPublisher eventPublisher,
+                                    ApplicationEventPublisher events,
                                     SecretCipher secretCipher) {
         this.jdbi = jdbi;
         this.properties = properties;
         this.numberGenerator = numberGenerator;
         this.query = query;
         this.access = access;
-        this.eventPublisher = eventPublisher;
+        this.events = events;
         this.secretCipher = secretCipher;
     }
 
@@ -124,8 +126,10 @@ public class GenericCatalogController {
             update.execute();
         });
 
-        eventPublisher.publish("created", "catalog", desc.logicalName(), id);
-        return query.get(desc, id);
+        Map<String, Object> result = query.get(desc, id);
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, naturalKey(result)));
+        return result;
     }
 
     @PutMapping("/{name}/{id}")
@@ -181,8 +185,10 @@ public class GenericCatalogController {
                     "Catalog item was changed by another transaction: " + id);
         }
 
-        eventPublisher.publish("updated", "catalog", desc.logicalName(), id);
-        return query.get(desc, id);
+        Map<String, Object> result = query.get(desc, id);
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, naturalKey(result)));
+        return result;
     }
 
     @DeleteMapping("/{name}/{id}")
@@ -190,12 +196,26 @@ public class GenericCatalogController {
         requireWritable();
         CatalogDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
+        // Capture the natural key before the soft-delete so listeners can target the resource.
+        String code = jdbi.withHandle(h ->
+                h.createQuery("SELECT _code FROM " + desc.tableName() + " WHERE _id = :id")
+                        .bind("id", id)
+                        .mapTo(String.class)
+                        .findOne()
+                        .orElse(null));
         jdbi.useHandle(h ->
                 h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
                         .bind("id", id)
                         .execute()
         );
-        eventPublisher.publish("deleted", "catalog", desc.logicalName(), id);
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.CATALOG,
+                desc.logicalName(), id, code));
+    }
+
+    /** Natural key for a catalog row is its code (the slug used to address the resource). */
+    private static String naturalKey(Map<String, Object> row) {
+        Object code = row.get("_code");
+        return code == null ? null : code.toString();
     }
 
     private void bindAttribute(Update update, AttributeDescriptor attr, Object value) {

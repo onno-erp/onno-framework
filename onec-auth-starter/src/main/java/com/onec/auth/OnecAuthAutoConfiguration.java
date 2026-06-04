@@ -149,7 +149,7 @@ public class OnecAuthAutoConfiguration {
                     .csrf(csrf -> csrf
                             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                             .csrfTokenRequestHandler(csrfHandler)
-                            .ignoringRequestMatchers("/api/auth/login"))
+                            .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                     .exceptionHandling(ex -> ex.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
                     .formLogin(form -> form.disable())
@@ -184,7 +184,8 @@ public class OnecAuthAutoConfiguration {
                             .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                     .csrf(csrf -> csrf
                             .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                            .csrfTokenRequestHandler(csrfHandler))
+                            .csrfTokenRequestHandler(csrfHandler)
+                            .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                     .oauth2Login(oauth -> oauth
                             // Point at the SPA's own /login route. This suppresses Spring's

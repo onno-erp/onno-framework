@@ -75,6 +75,28 @@ class OnecAuthAutoConfigurationTest {
     }
 
     @Test
+    void csrfIgnoredPathsDefaultToLoginOnly() {
+        runner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(OnecAuthProperties.class).getCsrfIgnoredPaths())
+                    .containsExactly("/api/auth/login");
+        });
+    }
+
+    @Test
+    void csrfIgnoredPathsAreConfigurableAndTheChainStillBuilds() {
+        runner.withPropertyValues(
+                        "onec.auth.csrf-ignored-paths[0]=/api/auth/login",
+                        "onec.auth.csrf-ignored-paths[1]=/api/public/**")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasBean("oneCSecurityFilterChain");
+                    assertThat(context.getBean(OnecAuthProperties.class).getCsrfIgnoredPaths())
+                            .containsExactly("/api/auth/login", "/api/public/**");
+                });
+    }
+
+    @Test
     void disablingTheStarterContributesNoChain() {
         runner.withPropertyValues("onec.auth.enabled=false").run(context -> {
             assertThat(context).hasNotFailed();
