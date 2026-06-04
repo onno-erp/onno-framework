@@ -818,6 +818,10 @@ GET    /api/auth/me                                current principal (handy auth
 The generated API and screens should read like the business domain. If they don't, improve names,
 contexts, required fields, refs, and register semantics before adding more code.
 
+For the exact JSON the read endpoints return — column-name keys, `*_display`/`*_ref` expansion,
+secret redaction, list vs get, inlined tabular sections — see
+[docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md).
+
 ### Writing sync / import code (upsert + posting)
 
 Two framework behaviors you *will* hit the moment you write import or sync code:

@@ -64,6 +64,16 @@ public class OnecAuthProperties {
             "/api/desktop/manifest"));
 
     /**
+     * Request paths exempted from CSRF protection in the cookie-based modes
+     * ({@link Mode#IN_MEMORY} and {@link Mode#OIDC}). Defaults to just the login endpoint. Add a
+     * path here to expose an anonymous, CSRF-free {@code POST} (e.g. a public lead/intake form)
+     * without having to override the whole {@code SecurityFilterChain} (issue #30). Ant patterns
+     * are supported (e.g. {@code /api/public/**}). Ignored in {@link Mode#RESOURCE_SERVER}, where
+     * CSRF is already disabled.
+     */
+    private List<String> csrfIgnoredPaths = new ArrayList<>(List.of("/api/auth/login"));
+
+    /**
      * In-memory user accounts. Empty by default — the consuming app supplies them via
      * {@code onec.auth.users[*]}. Production deployments should disable in-memory users
      * and configure their own UserDetailsService. Only used in {@link Mode#IN_MEMORY}.
@@ -100,6 +110,14 @@ public class OnecAuthProperties {
 
     public void setPublicPaths(List<String> publicPaths) {
         this.publicPaths = publicPaths;
+    }
+
+    public List<String> getCsrfIgnoredPaths() {
+        return csrfIgnoredPaths;
+    }
+
+    public void setCsrfIgnoredPaths(List<String> csrfIgnoredPaths) {
+        this.csrfIgnoredPaths = csrfIgnoredPaths;
     }
 
     public List<User> getUsers() {

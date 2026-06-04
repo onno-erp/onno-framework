@@ -127,9 +127,10 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
                 field.setAccessible(true);
                 Object value = field.get(aggregate);
                 if (value == null) {
-                    throw new IllegalStateException(
+                    throw new com.onec.validation.ValidationException(
                             "Required attribute '" + attr.fieldName() + "' is null on " +
-                                    aggregate.getClass().getSimpleName());
+                                    aggregate.getClass().getSimpleName(),
+                            attr.fieldName());
                 }
             } catch (NoSuchFieldException | IllegalAccessException e) {
                 throw new RuntimeException("Failed to validate required attribute: " + attr.fieldName(), e);

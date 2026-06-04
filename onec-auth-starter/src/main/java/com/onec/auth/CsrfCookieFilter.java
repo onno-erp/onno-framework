@@ -13,8 +13,11 @@ import java.io.IOException;
  * Materializes the deferred CSRF token on every request so the {@code XSRF-TOKEN} cookie is
  * present after the first response to a fresh client. Without this filter the cookie is only
  * written when something downstream reads the token.
+ *
+ * <p>Public so applications that wire their own {@link org.springframework.security.web.SecurityFilterChain}
+ * can reuse it without copy-pasting (issue #30).
  */
-class CsrfCookieFilter extends OncePerRequestFilter {
+public class CsrfCookieFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,

@@ -1,6 +1,9 @@
 package com.onec.ui;
 
+import com.onec.events.EntityChangedEvent;
+
 import jakarta.annotation.PreDestroy;
+import org.springframework.context.event.EventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -13,6 +16,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Pushes entity-change notifications to browser {@link SseEmitter}s for live UI updates. It is one
+ * listener of the framework's {@link EntityChangedEvent} — the single funnel both write paths (the
+ * generic controllers and {@code repository.save}) publish to (issues #28, #29) — so the live stream
+ * reflects programmatic saves too, not just back-office edits.
+ */
 public class UiEventPublisher {
 
     /**
@@ -46,12 +55,27 @@ public class UiEventPublisher {
         return emitter;
     }
 
+    /**
+     * Fans an {@link EntityChangedEvent} out to every open SSE stream. Registered as a Spring
+     * {@code @EventListener}, so anything that publishes the event (both write paths) reaches the
+     * browser — no direct coupling to the controllers.
+     */
+    @EventListener
+    public void onEntityChanged(EntityChangedEvent event) {
+        publish(event.changeType(), event.entityType(), event.entityName(), event.id(), event.naturalKey());
+    }
+
     public void publish(String type, String entityType, String entityName, Object id) {
+        publish(type, entityType, entityName, id, null);
+    }
+
+    public void publish(String type, String entityType, String entityName, Object id, String naturalKey) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", type);
         payload.put("entityType", entityType);
         payload.put("entityName", entityName);
         payload.put("id", id == null ? null : id.toString());
+        payload.put("naturalKey", naturalKey);
         payload.put("timestamp", Instant.now().toString());
 
         for (SseEmitter emitter : emitters) {

@@ -34,6 +34,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public OnecValidationExceptionHandler oneCValidationExceptionHandler() {
+        return new OnecValidationExceptionHandler();
+    }
+
+    @Bean
     public ThemeController themeController(UiProperties properties) {
         return new ThemeController(properties);
     }
@@ -50,6 +56,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public UiEventPublisher uiEventPublisher() {
         return new UiEventPublisher();
     }
@@ -92,10 +99,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                               NumberGenerator numberGenerator,
                                                               CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
-                                                              UiEventPublisher eventPublisher,
+                                                              org.springframework.context.ApplicationEventPublisher events,
                                                               com.onec.security.SecretCipher secretCipher) {
         return new GenericCatalogController(jdbi, properties, numberGenerator, catalogQueryService,
-                access, eventPublisher, secretCipher);
+                access, events, secretCipher);
     }
 
     @Bean
@@ -105,10 +112,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                                 PostingService postingService,
                                                                 DocumentQueryService documentQueryService,
                                                                 UiAccessService access,
-                                                                UiEventPublisher eventPublisher,
+                                                                org.springframework.context.ApplicationEventPublisher events,
                                                                 com.onec.security.SecretCipher secretCipher) {
         return new GenericDocumentController(registry, jdbi, properties, numberGenerator, postingService,
-                documentQueryService, access, eventPublisher, secretCipher);
+                documentQueryService, access, events, secretCipher);
     }
 
     @Bean
