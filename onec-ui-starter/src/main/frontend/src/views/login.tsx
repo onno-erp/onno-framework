@@ -1,37 +1,65 @@
-import { FormEvent, useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { LockKeyhole } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/providers/auth-provider";
+import { useTheme } from "@/providers/theme-provider";
+import { DivKitContent, type ContentAction, type ContentCard } from "@/views/divkit-content";
+import { LoginFormPortals } from "@/lib/login-form-bridge";
+import { IconPortals } from "@/lib/icon-bridge";
 
+/**
+ * The login screen is server-driven, like the rest of the app: the server emits a DivKit card
+ * (GET /api/divkit/login) describing the available methods — a password sub-form (the
+ * `onec-login-form` custom block) and/or one SSO button per OIDC provider — and we render it here.
+ * The password form posts credentials through the auth context; an SSO button taps an
+ * `onec://auth/sso/{id}` action which we turn into a full-page redirect to the authorization
+ * endpoint.
+ */
 export function LoginView() {
-  const { user, login } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const location = useLocation();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const { theme } = useTheme();
+  const resolved: "light" | "dark" =
+    theme === "dark" || theme === "light"
+      ? theme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
 
-  if (user) {
-    return <Navigate to={from} replace />;
+  const [card, setCard] = useState<ContentCard>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    fetch(`/api/divkit/login?theme=${resolved}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((json) => {
+        if (!cancelled) setCard(json as ContentCard);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolved]);
+
+  function onAction(action: ContentAction) {
+    const url = action?.url;
+    if (!url || !url.startsWith("onec://")) return;
+    const rest = url.slice("onec://".length);
+    if (rest.startsWith("auth/sso/")) {
+      // Full-page redirect to the IdP — the server-side authorization-code flow returns to the SPA
+      // shell, where /api/auth/me reflects the new session.
+      const id = rest.slice("auth/sso/".length);
+      if (id) window.location.href = `/oauth2/authorization/${id}`;
+    }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await login(username, password);
-      navigate(from, { replace: true });
-    } catch {
-      setError("The username or password is not correct.");
-    } finally {
-      setSubmitting(false);
-    }
+  // Already signed in (e.g. landed here after an SSO round-trip) — go where we were headed.
+  if (user) {
+    return <Navigate to={from} replace />;
   }
 
   return (
@@ -44,50 +72,29 @@ export function LoginView() {
             Sign in to see the catalogs, documents, dashboards, and forms your role is allowed to use.
           </p>
         </div>
-        <p className="text-xs text-muted-foreground">Basic auth today. OIDC-ready tomorrow.</p>
+        <p className="text-xs text-muted-foreground">Server-driven sign-in.</p>
       </section>
 
       <section className="flex min-h-screen w-full items-center justify-center px-5 md:w-[440px]">
-        <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-6">
-          <div className="space-y-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border">
-              <LockKeyhole className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-              <p className="mt-1 text-sm text-muted-foreground">Use your workspace credentials.</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <Button className="w-full" type="submit" disabled={submitting || !username || !password}>
-            {submitting ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
+        <div className="w-full max-w-sm">
+          {failed ? (
+            <p className="text-sm text-destructive">Couldn't load the sign-in screen. Try refreshing.</p>
+          ) : card ? (
+            <DivKitContent
+              surfaceKey={`login:${resolved}`}
+              card={card}
+              theme={resolved}
+              onAction={onAction}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          )}
+        </div>
       </section>
+
+      {/* DivKit custom blocks on the card mount their React widgets through these portals. */}
+      <LoginFormPortals />
+      <IconPortals />
     </main>
   );
 }

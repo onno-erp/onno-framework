@@ -39,6 +39,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public LoginDivController loginDivController(
+            org.springframework.beans.factory.ObjectProvider<com.onec.auth.spi.AuthMethodsProvider> authMethods) {
+        return new LoginDivController(authMethods);
+    }
+
+    @Bean
     public UiAccessService uiAccessService(MetadataRegistry registry) {
         return new UiAccessService(registry);
     }

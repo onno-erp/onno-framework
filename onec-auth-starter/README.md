@@ -1,12 +1,29 @@
 # onec-auth-starter
 
 Spring Boot (Spring Security) starter that secures a oneC application's HTTP API. It contributes a
-session-based, cookie-CSRF `SecurityFilterChain`, a small JSON auth API (`/api/auth/*`), and an
-in-memory user store configured from properties.
+`SecurityFilterChain`, a small JSON auth API (`/api/auth/*`), and — depending on the selected mode —
+an in-memory user store, server-side Keycloak (OIDC) login, or stateless JWT validation.
 
 The model is deliberately SPA-friendly: **everything outside `/api/**` is public** (so the SPA shell
 and login screen can load), **`/api/**` requires an authenticated session**, and a handful of
-bootstrap `/api/**` endpoints are whitelisted so login can happen at all.
+bootstrap `/api/**` endpoints are whitelisted so login can happen at all. **The authorization model is
+identical across all modes** — only *how* an identity is established changes.
+
+## Authentication modes
+
+`onec.auth.mode` selects exactly one backend; each contributes its own `SecurityFilterChain` and the
+others stay dormant.
+
+| Mode | Value | How you log in | Session | Extra deps active |
+|------|-------|----------------|---------|-------------------|
+| In-memory (default) | `in-memory` | `POST /api/auth/login` against `onec.auth.users` | Cookie (`JSESSIONID`) | none |
+| Keycloak OIDC login | `oidc` | Full-page redirect to Keycloak (authorization-code) | Cookie (`JSESSIONID`) | `spring-boot-starter-oauth2-client` |
+| Resource server | `resource-server` | Client gets a token from Keycloak, sends `Authorization: Bearer …` | Stateless | `spring-boot-starter-oauth2-resource-server` |
+
+Both OAuth2 starters are on the classpath but stay inert until `mode` selects them and the matching
+`spring.security.oauth2.*` properties are present, so an in-memory deployment pays only the jars. The
+in-memory mode below is unchanged from earlier versions; jump to [Keycloak](#keycloak-oidc--resource-server)
+for the OIDC/resource-server modes.
 
 ## Enabling
 
@@ -34,6 +51,7 @@ to contribute nothing and wire your own security.
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `onec.auth.enabled` | `true` | Master switch. When `false`, no `SecurityFilterChain` is contributed and the app wires its own. |
+| `onec.auth.mode` | `in-memory` | Backend: `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
 | `onec.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". |
 | `onec.auth.users[*].username` | — | In-memory account username. |
 | `onec.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
@@ -91,6 +109,19 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 `roles` are the granted authorities verbatim, so they include the `ROLE_` prefix (a `USER` role
 appears as `ROLE_USER`).
 
+Every `AuthUser` response also carries three routing hints the SPA uses to render the right
+affordance without knowing the server's config:
+
+- `mode` — `"in-memory"`, `"oidc"`, or `"resource-server"`.
+- `loginUrl` — where to send the browser to sign in. Non-null **only in OIDC mode**
+  (`/oauth2/authorization/{registrationId}`); the server-driven login screen renders an SSO button
+  per provider instead of the password form.
+- `logoutUrl` — where to send the browser to sign out. Non-null **only in OIDC mode** (the
+  RP-initiated-logout path, default `/logout`); see below.
+
+In OIDC and resource-server modes there is no password manager, so `POST /api/auth/login` returns
+`409 Conflict` (with the `AuthUser` so the SPA can read `loginUrl`) instead of authenticating.
+
 ## End-to-end recipe (curl)
 
 ```bash
@@ -123,6 +154,171 @@ curl -s -b "$JAR" \
 curl -s -b "$JAR" -X POST -H "X-XSRF-TOKEN: $XSRF" "$BASE/api/auth/logout"
 ```
 
+## OIDC (Keycloak, Zitadel, …)
+
+The `oidc` and `resource-server` modes are plain Spring Security OAuth2 — **any** standard OIDC
+provider works by pointing `spring.security.oauth2.*` at its issuer. The only provider-specific
+concern is how token claims carry roles, which `onec.auth.oidc` handles via a `provider` **preset**:
+
+- **Keycloak** — roles under `realm_access.roles` (+ optional `resource_access.<client>.roles`), each
+  an object wrapping a `roles` array.
+- **Zitadel** — roles under `urn:zitadel:iam:org:project:roles`, an object whose **keys** are the role
+  names.
+- **custom** — you spell out the claim sources yourself.
+
+> **Breaking change (vs. the earlier Keycloak-only draft):** configuration moved from
+> `onec.auth.keycloak.*` to `onec.auth.oidc.*`, and `role-prefix` is now `oidc.roles.prefix`.
+
+### `oidc` — server-side login (recommended for the SPA)
+
+The browser session stays cookie-based; "logging in" becomes a full-page redirect to the IdP's
+authorization endpoint, and Spring exchanges the code server-side.
+
+```yaml
+onec:
+  auth:
+    mode: oidc
+    oidc:
+      provider: keycloak            # keycloak | zitadel | custom (fills the role defaults below)
+      # registration-id: keycloak   # preset default; must match the registration id below
+      # principal-claim: preferred_username
+      logout-path: /logout                    # RP-initiated logout endpoint (see below)
+      post-logout-redirect-uri: "{baseUrl}"   # where the IdP returns after sign-out
+      roles:
+        prefix: "ROLE_"
+        # Keycloak ergonomics (ignored by other presets):
+        realm-roles: true           # map realm_access.roles
+        client-roles: false         # also map resource_access.<client-id>.roles
+        client-id: rentals-app      # required only when client-roles: true
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8080/realms/onec
+        registration:
+          keycloak:
+            client-id: rentals-app
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:}
+            authorization-grant-type: authorization_code
+            scope: [openid, profile, email]
+```
+
+**Zitadel** is the same, with `provider: zitadel` and a Zitadel registration (roles map from the URN
+claim automatically — no `roles` config needed):
+
+```yaml
+onec:
+  auth:
+    mode: oidc
+    oidc:
+      provider: zitadel             # registration-id defaults to "zitadel"
+spring:
+  security:
+    oauth2:
+      client:
+        provider:   { zitadel: { issuer-uri: https://your-instance.zitadel.cloud } }
+        registration:
+          zitadel: { client-id: "...", client-secret: "...", scope: [openid, profile, email] }
+```
+
+On the IdP **client**, register:
+
+- **Valid redirect URIs**: `http://localhost:8080/login/oauth2/code/{registrationId}` (the Spring
+  callback — e.g. `…/login/oauth2/code/keycloak`).
+- **Valid post logout redirect URIs**: `http://localhost:8080/*` (so logout can return to the app).
+
+Roles are read from **both** the ID token / userinfo (Zitadel) and the access token (Keycloak's
+default), so mapping works regardless of the IdP and any "add to ID token" mapper. The principal name
+is re-keyed to `principal-claim` (default `preferred_username`) so the framework sees a real username
+rather than the `sub` UUID.
+
+#### RP-initiated logout
+
+Clearing only the local session would leave the IdP SSO session intact, so the next "login" would
+silently re-authenticate without a prompt. In OIDC mode the starter wires **RP-initiated logout**: the
+SPA navigates (full page) to `logout-path` (default `/logout`), which
+
+1. clears the local Spring session, then
+2. redirects the browser to the IdP's `end_session_endpoint` with an `id_token_hint`, and
+3. the IdP ends its session and redirects back to `post-logout-redirect-uri` (`{baseUrl}` → the app
+   origin), landing on the SPA shell as an anonymous user.
+
+The SPA discovers this URL from `logoutUrl` on `/api/auth/me` and switches its logout button from a
+`fetch` POST to a navigation automatically — no app code changes between modes. The endpoint is a
+`GET` (so a plain navigation works, symmetric with the login redirect); the only trade-off versus the
+CSRF-protected POST default is that a forced sign-out is possible, which is benign.
+
+### `resource-server` — stateless bearer tokens
+
+For non-browser clients (or a SPA that manages its own tokens). The client obtains a token from the
+IdP directly and sends it as `Authorization: Bearer …`; the app validates the JWT signature against
+the issuer's JWKS on every request. No session, no CSRF.
+
+```yaml
+onec:
+  auth:
+    mode: resource-server
+    oidc:
+      provider: keycloak            # or zitadel / custom — same role presets
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/onec
+```
+
+OAuth2 scopes are preserved as `SCOPE_*` authorities (matching Spring's default), with IdP roles added
+on top. `/api/auth/login` and `/api/auth/logout` are inert here — token lifecycle is the client's
+responsibility.
+
+### `custom` — any other IdP
+
+When neither preset fits, set `provider: custom` and list the role claims explicitly. Each source is a
+claim path + a `shape` (`array` = a string array or a `{roles:[…]}` wrapper; `object-keys` = an object
+keyed by role name). Claim paths resolve as a literal key first (so keys containing dots, like the
+Zitadel URN, work) then by dotted-path walking.
+
+```yaml
+onec:
+  auth:
+    mode: oidc
+    oidc:
+      provider: custom
+      registration-id: my-idp
+      principal-claim: email
+      roles:
+        prefix: "ROLE_"
+        sources:
+          - { claim: "urn:zitadel:iam:org:project:123456:roles", shape: object-keys }
+          - { claim: "realm_access", shape: array }
+```
+
+### OIDC config keys (`onec.auth.oidc.*`)
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `provider` | `keycloak` | Preset: `keycloak` \| `zitadel` \| `custom`. Fills registration id, principal claim, and role sources. |
+| `registration-id` | preset | Matches `spring.security.oauth2.client.registration.*`; builds the login URL. Required for `custom`. |
+| `principal-claim` | `preferred_username` | Token claim used as the authenticated principal name. |
+| `logout-path` | `/logout` | OIDC RP-initiated-logout endpoint surfaced to the SPA as `logoutUrl`. |
+| `post-logout-redirect-uri` | `{baseUrl}` | Where the IdP returns after sign-out; must be registered on the client. |
+| `roles.prefix` | `ROLE_` | Prefix prepended to each mapped role (so `hasRole(...)` works). |
+| `roles.sources[*]` | preset | Explicit `{ claim, shape }` role sources. Overrides the preset defaults. |
+| `roles.realm-roles` | `true` | Keycloak preset: map `realm_access.roles`. |
+| `roles.client-roles` | `false` | Keycloak preset: also map `resource_access.<client-id>.roles`. |
+| `roles.client-id` | — | Keycloak preset: client whose roles are mapped; **required** when `client-roles: true`. |
+
+### Server-driven login screen
+
+The available methods are exposed to the UI through the `com.onec.auth.spi.AuthMethodsProvider` bean
+(contract in `onec-framework`), so the UI module can build the login screen server-side without
+depending on this module. In the onec UI this drives the DivKit login card (`GET /api/divkit/login`):
+the server emits a password form and/or one button per SSO provider, and adding an IdP needs no client
+change.
+
 ## Gotchas
 
 - **No default credentials.** `onec.auth.users` is empty by default — if you configure none, no one
@@ -138,4 +334,11 @@ curl -s -b "$JAR" -X POST -H "X-XSRF-TOKEN: $XSRF" "$BASE/api/auth/logout"
   if your app already defines a `SecurityFilterChain`, this starter's chain is **not** applied (its
   controller and the auth beans still are). To customize selectively, prefer overriding the narrower
   beans or `onec.auth.public-paths`.
-```
+- **OIDC needs the `spring.security.oauth2.client.*` registration.** Setting `mode: oidc` without a
+  configured client registration fails startup — the mode expects a `ClientRegistrationRepository`.
+- **Register the post-logout redirect URI.** If `post-logout-redirect-uri` (the app origin) is not in
+  the Keycloak client's *Valid post logout redirect URIs*, Keycloak refuses the redirect and the user
+  is stranded on a Keycloak error page after sign-out.
+- **`{baseUrl}` resolves from the request.** Behind a reverse proxy, make sure forwarded-header
+  handling is on (`server.forward-headers-strategy=framework`) so `{baseUrl}` expands to the public
+  origin and not the internal `http://localhost`.

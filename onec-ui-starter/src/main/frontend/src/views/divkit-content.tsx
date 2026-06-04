@@ -6,12 +6,15 @@ import {
 } from "@divkitframework/divkit/client";
 import { WIDGET_CUSTOM_COMPONENTS } from "@/lib/widget-bridge";
 import { FORM_CUSTOM_COMPONENTS } from "@/lib/form-bridge";
+import { LOGIN_FORM_CUSTOM_COMPONENTS } from "@/lib/login-form-bridge";
 import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
 
-// All div-custom blocks the content can host: dashboard widgets, the entity form, icons.
+// All div-custom blocks the content can host: dashboard widgets, the entity form, the login
+// form, icons.
 const CUSTOM_COMPONENTS = new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
   ...FORM_CUSTOM_COMPONENTS,
+  ...LOGIN_FORM_CUSTOM_COMPONENTS,
   ...ICON_CUSTOM_COMPONENTS,
 ]);
 
