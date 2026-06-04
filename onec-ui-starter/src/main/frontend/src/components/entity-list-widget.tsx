@@ -93,13 +93,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
   const rowActions = allActions.filter((a) => a.scope === "row");
 
-  // Column grid template: an authored px width, else a flexible min/auto column. A trailing
-  // fixed column holds the per-row action buttons when any are declared.
+  // Column grid template: an authored px width, else a flexible track. The floor is 0 (not a
+  // fixed min) so that in a narrow/split island the columns shrink — text just truncates —
+  // rather than overflowing the card and pushing the trailing action column out of view. A
+  // trailing fixed column holds the per-row action buttons when any are declared.
   const template =
     columns
       .map((c) => {
         const px = parseInt(c.width, 10);
-        return Number.isFinite(px) && px > 0 ? `${px}px` : "minmax(120px,1fr)";
+        return Number.isFinite(px) && px > 0 ? `${px}px` : "minmax(0,1fr)";
       })
       .concat(rowActions.length ? [`${rowActions.length * 36 + 8}px`] : [])
       .join(" ");
@@ -242,8 +244,14 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     for (let p = firstPage; p <= lastPage; p++) fetchPage(p);
   }, [startIndex, endIndex, pageSize, fetchPage]);
 
+  // Cycle a column through three states on repeated clicks: ascending → descending → off
+  // (off clears the sort entirely, so the list falls back to the server's default order).
   const toggleSort = (col: string) => {
-    setSort((s) => (s.column === col ? { column: col, descending: !s.descending } : { column: col, descending: false }));
+    setSort((s) => {
+      if (s.column !== col) return { column: col, descending: false }; // new column → ascending
+      if (!s.descending) return { column: col, descending: true }; // ascending → descending
+      return { column: null, descending: false }; // descending → off
+    });
   };
 
   const visible: number[] = [];
