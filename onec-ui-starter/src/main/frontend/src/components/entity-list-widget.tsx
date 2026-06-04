@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Plus, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { DynamicLucide } from "@/lib/icon-bridge";
@@ -86,6 +86,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const [sort, setSort] = useState<{ column: string | null; descending: boolean }>(list.sort);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+  // Keys of in-flight server actions (`key` for toolbar, `key:id` for a row) → spinner + disabled.
+  const [pending, setPending] = useState<Set<string>>(new Set());
 
   const allActions = list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
@@ -182,13 +184,21 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
 
   // Run a custom action button. A navigation action just routes (filling {id} for a row); a
   // server action POSTs to /api/actions and applies the ActionResult — toast, navigate, refresh.
-  // (api.runAction is CSRF-aware and already toasts failures.)
+  // While the (possibly slow/async) handler runs, the button shows a spinner and is disabled, so
+  // there's feedback and no double-submit. (api.runAction is CSRF-aware and toasts failures.)
   const runAction = useCallback(
     (action: ListAction, id?: string) => {
       if (!action.server) {
         if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
         return;
       }
+      const k = id ? `${action.key}:${id}` : action.key;
+      setPending((s) => {
+        if (s.has(k)) return s; // already running — ignore the re-click
+        const n = new Set(s);
+        n.add(k);
+        return n;
+      });
       api
         .runAction(action.kind, action.name, action.key, id)
         .then((result) => {
@@ -196,7 +206,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           if (result?.navigate) dispatchAction(result.navigate);
           if (result?.refresh) reload();
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() =>
+          setPending((s) => {
+            if (!s.has(k)) return s;
+            const n = new Set(s);
+            n.delete(k);
+            return n;
+          })
+        );
     },
     [reload]
   );
@@ -253,18 +271,26 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               />
             </div>
           ) : null}
-          {toolbarActions.map((a) => (
-            <button
-              key={a.key}
-              type="button"
-              onClick={() => runAction(a)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-              title={a.label}
-            >
-              {a.icon ? <DynamicLucide name={a.icon} size={16} /> : null}
-              {a.label}
-            </button>
-          ))}
+          {toolbarActions.map((a) => {
+            const busy = pending.has(a.key);
+            return (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => runAction(a)}
+                disabled={busy}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                title={a.label}
+              >
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : a.icon ? (
+                  <DynamicLucide name={a.icon} size={16} />
+                ) : null}
+                {a.label}
+              </button>
+            );
+          })}
           {list.newUrl ? (
             <button
               type="button"
@@ -341,21 +367,29 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     {rowActions.length ? (
                       <div className="flex items-center justify-end gap-1">
                         {row
-                          ? rowActions.map((a) => (
-                              <button
-                                key={a.key}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  runAction(a, String(row._id));
-                                }}
-                                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                                title={a.label}
-                                aria-label={a.label}
-                              >
-                                <DynamicLucide name={a.icon || "zap"} size={15} />
-                              </button>
-                            ))
+                          ? rowActions.map((a) => {
+                              const busy = pending.has(`${a.key}:${row._id}`);
+                              return (
+                                <button
+                                  key={a.key}
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    runAction(a, String(row._id));
+                                  }}
+                                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                  title={a.label}
+                                  aria-label={a.label}
+                                >
+                                  {busy ? (
+                                    <Loader2 className="size-[15px] animate-spin" aria-hidden="true" />
+                                  ) : (
+                                    <DynamicLucide name={a.icon || "zap"} size={15} />
+                                  )}
+                                </button>
+                              );
+                            })
                           : null}
                       </div>
                     ) : null}

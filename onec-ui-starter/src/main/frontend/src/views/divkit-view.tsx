@@ -470,15 +470,19 @@ export function DivKitView() {
         // POST it (CSRF-aware, errors self-toast) and apply the ActionResult.
         const [kind, name, key, id] = rest.slice("action/".length).split("/");
         if (!kind || !name || !key) return;
+        // The detail-header button is DivKit-rendered (no React control to spin), so a loading
+        // toast gives feedback while a slow/async handler runs.
+        const loadingId = toast.loading("Working…");
         api
           .runAction(kind, name, key, id)
           .then((result) => {
+            toast.dismiss(loadingId);
             if (result?.message) toast.success(result.message);
             if (result?.navigate) onCustomAction({ url: result.navigate });
             // A "refresh" result re-renders via the same SSE data stream the handler's writes
             // emit; the detail surface reloads itself, so no manual navigation is needed here.
           })
-          .catch(() => {});
+          .catch(() => toast.dismiss(loadingId));
         return;
       }
       if (rest.startsWith("post/") || rest.startsWith("unpost/")) {
