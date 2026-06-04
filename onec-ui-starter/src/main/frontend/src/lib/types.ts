@@ -138,3 +138,13 @@ export interface SettingMeta {
   widget: string;
   value: unknown;
 }
+
+/**
+ * The result of a custom EntityView action ({@link ActionSpec} handler): an optional success
+ * toast, an optional {@code onec://} route to navigate to, and whether to refresh the surface.
+ */
+export interface ActionResult {
+  message?: string | null;
+  navigate?: string | null;
+  refresh?: boolean;
+}

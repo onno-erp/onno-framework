@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Plus, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { DynamicLucide } from "@/lib/icon-bridge";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { EntityRecord, UiEvent } from "@/lib/types";
 
@@ -13,6 +16,21 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
  */
 
 export type ListColumn = { columnName: string; label: string; width: string };
+/**
+ * A custom action button declared by an EntityView. {@code scope} is "toolbar" (list-level) or
+ * "row" (per-record); a {@code server} action POSTs to /api/actions and applies the returned
+ * result, a navigation action routes its {@code url} ({@code {id}} filled with the row id).
+ */
+export type ListAction = {
+  key: string;
+  label: string;
+  icon: string;
+  scope: "toolbar" | "row";
+  server: boolean;
+  url?: string;
+  kind: string;
+  name: string;
+};
 export type ListDescriptor = {
   kind: "catalogs" | "documents";
   name: string;
@@ -21,7 +39,7 @@ export type ListDescriptor = {
   searchable: boolean;
   sort: { column: string | null; descending: boolean };
   newUrl: string | null;
-  actions?: unknown[];
+  actions?: ListAction[];
   pageSize: number;
 };
 
@@ -69,13 +87,19 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
 
-  // Column grid template: an authored px width, else a flexible min/auto column.
+  const allActions = list.actions ?? [];
+  const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
+  const rowActions = allActions.filter((a) => a.scope === "row");
+
+  // Column grid template: an authored px width, else a flexible min/auto column. A trailing
+  // fixed column holds the per-row action buttons when any are declared.
   const template =
     columns
       .map((c) => {
         const px = parseInt(c.width, 10);
         return Number.isFinite(px) && px > 0 ? `${px}px` : "minmax(120px,1fr)";
       })
+      .concat(rowActions.length ? [`${rowActions.length * 36 + 8}px`] : [])
       .join(" ");
 
   // Debounce the search box.
@@ -146,23 +170,48 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     };
   }, []);
 
+  // Reload the visible window in place (keeps scroll position rather than jumping to the top).
+  const reload = useCallback(() => {
+    gen.current += 1;
+    rows.current.clear();
+    loadedPages.current.clear();
+    inflight.current.clear();
+    fetchPage(Math.floor(scrollTop / ROW_H / pageSize));
+    rerender();
+  }, [fetchPage, scrollTop, pageSize, rerender]);
+
+  // Run a custom action button. A navigation action just routes (filling {id} for a row); a
+  // server action POSTs to /api/actions and applies the ActionResult — toast, navigate, refresh.
+  // (api.runAction is CSRF-aware and already toasts failures.)
+  const runAction = useCallback(
+    (action: ListAction, id?: string) => {
+      if (!action.server) {
+        if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
+        return;
+      }
+      api
+        .runAction(action.kind, action.name, action.key, id)
+        .then((result) => {
+          if (result?.message) toast.success(result.message);
+          if (result?.navigate) dispatchAction(result.navigate);
+          if (result?.refresh) reload();
+        })
+        .catch(() => {});
+    },
+    [reload]
+  );
+
   // Live updates: divkit-view fans out every SSE row change as an "onec:dataevent" window event
-  // (one shared stream). A write to this entity reloads the visible window in place — keeping the
-  // scroll position rather than jumping to the top.
+  // (one shared stream). A write to this entity reloads the visible window in place.
   useEffect(() => {
     const onData = (e: Event) => {
       const event = (e as CustomEvent).detail as UiEvent;
       if (!eventMatches(event, kind, name)) return;
-      gen.current += 1;
-      rows.current.clear();
-      loadedPages.current.clear();
-      inflight.current.clear();
-      fetchPage(Math.floor(scrollTop / ROW_H / pageSize));
-      rerender();
+      reload();
     };
     window.addEventListener("onec:dataevent", onData);
     return () => window.removeEventListener("onec:dataevent", onData);
-  }, [kind, name, scrollTop, pageSize, fetchPage, rerender]);
+  }, [kind, name, reload]);
 
   // Ensure every page covering the visible window is loaded.
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
@@ -202,6 +251,18 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               />
             </div>
           ) : null}
+          {toolbarActions.map((a) => (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => runAction(a)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              title={a.label}
+            >
+              {a.icon ? <DynamicLucide name={a.icon} size={16} /> : null}
+              {a.label}
+            </button>
+          ))}
           {list.newUrl ? (
             <button
               type="button"
@@ -241,6 +302,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               </button>
             );
           })}
+          {rowActions.length ? <span aria-hidden="true" /> : null}
         </div>
 
         {/* virtualized body */}
@@ -274,6 +336,27 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                       : columns.map((c) => (
                           <span key={c.columnName} className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
                         ))}
+                    {rowActions.length ? (
+                      <div className="flex items-center justify-end gap-1">
+                        {row
+                          ? rowActions.map((a) => (
+                              <button
+                                key={a.key}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  runAction(a, String(row._id));
+                                }}
+                                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                                title={a.label}
+                                aria-label={a.label}
+                              >
+                                <DynamicLucide name={a.icon || "zap"} size={15} />
+                              </button>
+                            ))
+                          : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

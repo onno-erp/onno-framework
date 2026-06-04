@@ -55,6 +55,7 @@ public class DivKitController {
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
     private final RegisterQueryService registerQuery;
+    private final UiActionResolver actionResolver;
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -66,7 +67,8 @@ public class DivKitController {
                             PageResolver pageResolver,
                             CatalogQueryService catalogQuery,
                             DocumentQueryService documentQuery,
-                            RegisterQueryService registerQuery) {
+                            RegisterQueryService registerQuery,
+                            UiActionResolver actionResolver) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
@@ -80,6 +82,7 @@ public class DivKitController {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.registerQuery = registerQuery;
+        this.actionResolver = actionResolver;
     }
 
     // ----- chrome (fast, no entity data) -----
@@ -199,6 +202,42 @@ public class DivKitController {
         return DivCard.of("onec-content", content);
     }
 
+    /**
+     * Custom toolbar/row action descriptors for an entity's list surface (what the {@code onec-list}
+     * island renders as buttons). The kind/name travel in each descriptor so the client can POST a
+     * server action to {@code /api/actions/{kind}/{name}/{key}} or route a navigation directly.
+     */
+    private List<Map<String, Object>> listActions(Class<?> entity, String kind, String name) {
+        List<Map<String, Object>> out = actionResolver.descriptors(entity,
+                java.util.EnumSet.of(ActionScope.TOOLBAR, ActionScope.ROW));
+        for (Map<String, Object> a : out) {
+            a.put("kind", kind);
+            a.put("name", name);
+        }
+        return out;
+    }
+
+    /**
+     * DETAIL-scope custom actions as detail-header buttons. A server action routes through the
+     * {@code onec://action/...} scheme (the client POSTs and applies the {@link ActionResult}); a
+     * navigation action fills its {@code {id}} placeholder and routes directly. Custom actions sit
+     * in the overflow menu so they never crowd the built-in Edit/Post/Delete buttons.
+     */
+    private List<SurfaceDivBuilder.HeaderAction> detailActions(Class<?> entity, String kind, String name, UUID id) {
+        List<SurfaceDivBuilder.HeaderAction> out = new ArrayList<>();
+        for (ActionSpec.Action a : actionResolver.forEntity(entity)) {
+            if (a.scope() != ActionScope.DETAIL) {
+                continue;
+            }
+            String url = a.isServer()
+                    ? "onec://action/" + kind + "/" + name + "/" + a.key() + "/" + id
+                    : a.navigateUrl().replace("{id}", id.toString());
+            String icon = a.icon() == null || a.icon().isBlank() ? "zap" : a.icon();
+            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), "normal", url, "menu"));
+        }
+        return out;
+    }
+
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
                                            @RequestParam(required = false) String profile,
@@ -213,7 +252,8 @@ public class DivKitController {
         // pages the data itself from /api/list (so a 10k-row catalog never ships whole).
         String newUrl = access.canWrite(principal, desc) ? "onec://catalogs/" + name + "/new" : null;
         return DivCard.of("onec-content",
-                SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, null));
+                SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl,
+                        listActions(desc.javaClass(), "catalogs", name)));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -236,6 +276,9 @@ public class DivKitController {
                     "onec://catalogs/" + name + "/" + id + "/duplicate", "menu"));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
                     "onec://delete/catalogs/" + name + "/" + id, "primary"));
+        }
+        if (canWrite) {
+            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id));
         }
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
                 resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), actions,
@@ -286,7 +329,8 @@ public class DivKitController {
         // Virtualized onec-list island — see catalogList. Date range is applied by the data feed.
         String newUrl = access.canWrite(principal, desc) ? "onec://documents/" + name + "/new" : null;
         return DivCard.of("onec-content",
-                SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, null));
+                SurfaceDivBuilder.listSurface(view, "documents", name, newUrl,
+                        listActions(desc.javaClass(), "documents", name)));
     }
 
     @GetMapping("/documents/{name}/{id}")
@@ -326,6 +370,9 @@ public class DivKitController {
                     "onec://documents/" + name + "/" + id + "/duplicate", str(placement.getOrDefault("duplicate", "menu"))));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
                     "onec://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
+        }
+        if (canWrite) {
+            actions.addAll(detailActions(desc.javaClass(), "documents", name, id));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));

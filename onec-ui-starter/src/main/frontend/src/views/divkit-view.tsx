@@ -465,6 +465,22 @@ export function DivKitView() {
         }
         return;
       }
+      if (rest.startsWith("action/")) {
+        // action/{kind}/{name}/{key}/{id} — a custom server action from the detail header.
+        // POST it (CSRF-aware, errors self-toast) and apply the ActionResult.
+        const [kind, name, key, id] = rest.slice("action/".length).split("/");
+        if (!kind || !name || !key) return;
+        api
+          .runAction(kind, name, key, id)
+          .then((result) => {
+            if (result?.message) toast.success(result.message);
+            if (result?.navigate) onCustomAction({ url: result.navigate });
+            // A "refresh" result re-renders via the same SSE data stream the handler's writes
+            // emit; the detail surface reloads itself, so no manual navigation is needed here.
+          })
+          .catch(() => {});
+        return;
+      }
       if (rest.startsWith("post/") || rest.startsWith("unpost/")) {
         // post/{name}/{id} or unpost/{name}/{id} — drive the document's posting state via
         // REST. Posting emits ("posted"/"unposted", document) + ("changed","register","*")

@@ -10,6 +10,7 @@ import type {
   AuthUser,
   UiEvent,
   SettingMeta,
+  ActionResult,
 } from "./types";
 
 const BASE = "/api";
@@ -189,6 +190,14 @@ export const api = {
     }),
   deleteDocument: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/documents/${name}/${id}`, { method: "DELETE" }),
+  // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
+  // toolbar action passes no id; a row/detail action passes the record id.
+  runAction: (kind: string, name: string, key: string, id?: string) =>
+    fetchJson<ActionResult>(
+      `${BASE}/actions/${kind}/${name}/${key}${id ? `?id=${encodeURIComponent(id)}` : ""}`,
+      { method: "POST" }
+    ),
+
   postDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/post`, { method: "POST" }),
   unpostDocument: (name: string, id: string) =>

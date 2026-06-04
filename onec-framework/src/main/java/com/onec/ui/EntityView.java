@@ -44,4 +44,18 @@ public interface EntityView {
      * Applies to the default view; a profile-specific view can override.
      */
     default void fields(EntityConfigBuilder fields) {}
+
+    /**
+     * Custom action buttons for this entity — on the list (toolbar / per-row) or the record
+     * detail. Each runs arbitrary server logic ({@code .handler(...)}) or just navigates
+     * ({@code .navigate(...)}). Default: none.
+     *
+     * <pre>
+     * public void actions(ActionSpec a) {
+     *     a.action("recalc").label("Recalculate").icon("calculator").scope(ActionScope.DETAIL)
+     *      .handler(ctx -&gt; { service.recalc(ctx.id()); return ActionResult.refresh("Recalculated"); });
+     * }
+     * </pre>
+     */
+    default void actions(ActionSpec actions) {}
 }

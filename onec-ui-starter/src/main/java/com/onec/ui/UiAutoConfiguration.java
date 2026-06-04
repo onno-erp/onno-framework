@@ -48,6 +48,20 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public UiActionResolver uiActionResolver(
+            org.springframework.beans.factory.ObjectProvider<com.onec.ui.EntityView> entityViews) {
+        return new UiActionResolver(entityViews.orderedStream().toList());
+    }
+
+    @Bean
+    public ActionController actionController(CatalogQueryService catalogQueryService,
+                                             DocumentQueryService documentQueryService,
+                                             UiAccessService access,
+                                             UiActionResolver uiActionResolver) {
+        return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver);
+    }
+
+    @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public OnecValidationExceptionHandler oneCValidationExceptionHandler() {
         return new OnecValidationExceptionHandler();
@@ -180,10 +194,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              PageResolver pageResolver,
                                              CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
-                                             RegisterQueryService registerQueryService) {
+                                             RegisterQueryService registerQueryService,
+                                             UiActionResolver uiActionResolver) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService);
+                registerQueryService, uiActionResolver);
     }
 
 }
