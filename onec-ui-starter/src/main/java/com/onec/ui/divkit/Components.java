@@ -160,10 +160,16 @@ final class Components {
         return chip;
     }
 
-    // Each column is a fixed width with single-line cells, so a wide table keeps its
-    // intrinsic width and scrolls horizontally inside {@link #scrollX} rather than
-    // squeezing columns until the text wraps.
-    private static final int COL_WIDTH = 150;
+    // Columns are sized to fit their widest cell (auto-fit), clamped to a min/max so a
+    // short column doesn't collapse and one very long value doesn't blow the table out —
+    // past the max it ellipsizes and the whole table scrolls sideways inside {@link
+    // #scrollX}. An explicit per-column width hint (from .field(...).width("260"))
+    // overrides the auto-fit. Cells stay single-line so a column's width holds across the
+    // header and every row, keeping them aligned.
+    private static final int COL_MIN = 64;
+    private static final int COL_MAX = 460;
+    private static final int CHAR_PX = 8;   // ~px per glyph at the 14px row font
+    private static final int CELL_PAD = 16; // slack so the widest value isn't flush-clipped
     private static final int CELL_GAP = 16;
 
     /** A bordered, horizontally-scrolling card: a header row + data rows. */
@@ -171,17 +177,28 @@ final class Components {
         return scrollX(tableStack(tableItems(headers, rows, p)), p);
     }
 
+    /** Auto-fit every column to its content (no authored width overrides). */
+    static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows, Palette p) {
+        return tableItems(headers, rows, null, p);
+    }
+
     /**
      * The table's children (header row + separator + data rows) on their own — the
      * payload a {@code div-patch} replaces when only the rows change. Wrap with
      * {@link #tableStack} + {@link #scrollX} for a full render.
+     *
+     * <p>{@code widthHints} is an optional per-column list of authored widths (e.g.
+     * {@code "260"}); a null/blank/unparseable entry (or a null list) auto-fits that
+     * column to its widest cell instead.</p>
      */
-    static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows, Palette p) {
+    static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows,
+                                                List<String> widthHints, Palette p) {
+        List<Integer> widths = columnWidths(headers, rows, widthHints);
         List<Map<String, Object>> stack = new ArrayList<>();
 
         List<Map<String, Object>> headerCells = new ArrayList<>();
-        for (String h : headers) {
-            headerCells.add(cell(Div.color(Div.text(h, 12, "medium"), p.faint())));
+        for (int c = 0; c < headers.size(); c++) {
+            headerCells.add(cell(Div.color(Div.text(headers.get(c), 12, "medium"), p.faint()), widths.get(c)));
         }
         Map<String, Object> headerRow = Div.horizontal(headerCells);
         Div.wrapWidth(headerRow);
@@ -198,8 +215,9 @@ final class Components {
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
             List<Map<String, Object>> cells = new ArrayList<>();
-            for (String value : row.cells()) {
-                cells.add(cell(Div.color(Div.text(value, 14, "regular"), p.text())));
+            List<String> values = row.cells();
+            for (int c = 0; c < values.size(); c++) {
+                cells.add(cell(Div.color(Div.text(values.get(c), 14, "regular"), p.text()), widths.get(c)));
             }
             Map<String, Object> rowNode = Div.horizontal(cells);
             Div.wrapWidth(rowNode);
@@ -219,9 +237,46 @@ final class Components {
         return stack;
     }
 
+    /**
+     * The effective pixel width of each column: an authored hint when present and
+     * parseable, otherwise the widest cell (header + every row) estimated from its
+     * character count and clamped to {@code [COL_MIN, COL_MAX]}.
+     */
+    private static List<Integer> columnWidths(List<String> headers, List<Row> rows, List<String> hints) {
+        List<Integer> widths = new ArrayList<>(headers.size());
+        for (int c = 0; c < headers.size(); c++) {
+            int authored = parseWidth(hints != null && c < hints.size() ? hints.get(c) : null);
+            if (authored > 0) {
+                widths.add(authored);
+                continue;
+            }
+            int maxChars = headers.get(c) == null ? 0 : headers.get(c).length();
+            for (Row row : rows) {
+                List<String> cells = row.cells();
+                if (c < cells.size() && cells.get(c) != null) {
+                    maxChars = Math.max(maxChars, cells.get(c).length());
+                }
+            }
+            widths.add(Math.max(COL_MIN, Math.min(COL_MAX, maxChars * CHAR_PX + CELL_PAD)));
+        }
+        return widths;
+    }
+
+    /** Leading-integer pixel width of a hint ({@code "260"}, {@code "260px"}); -1 if none. */
+    private static int parseWidth(String hint) {
+        if (hint == null) {
+            return -1;
+        }
+        int end = 0;
+        while (end < hint.length() && Character.isDigit(hint.charAt(end))) {
+            end++;
+        }
+        return end == 0 ? -1 : Integer.parseInt(hint.substring(0, end));
+    }
+
     /** A fixed-width, single-line table cell — columns stay aligned and never wrap. */
-    private static Map<String, Object> cell(Map<String, Object> textNode) {
-        return Div.maxLines(Div.width(textNode, COL_WIDTH), 1);
+    private static Map<String, Object> cell(Map<String, Object> textNode, int width) {
+        return Div.maxLines(Div.width(textNode, width), 1);
     }
 
     /** The header+rows as a width-to-content vertical stack — the {@code div-patch} target. */
@@ -245,6 +300,61 @@ final class Components {
         Map<String, Object> row = Div.horizontal(List.of(
                 Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
                 Div.weight(Div.color(Div.text(value, 14, "regular"), p.text()), 3)));
+        Div.pad(row, 7, 0);
+        return row;
+    }
+
+    /**
+     * A detail field row whose value is an image (an image-widget attribute): the label on the
+     * left, a bordered thumbnail on the right. {@code url} is a {@code data:} URL from the image
+     * picker or a plain {@code http(s)} URL. An {@code avatar} renders smaller and circular.
+     */
+    static Map<String, Object> imageFieldRow(String label, String url, boolean avatar, Palette p) {
+        int size = avatar ? 64 : 140;
+        Map<String, Object> img = Div.image(url);
+        Div.width(img, size);
+        Div.height(img, size);
+        Div.corner(img, avatar ? 999 : 10);
+        Div.stroke(img, p.border(), 1);
+        // Cover the box (cropping) for avatars; fit the whole image otherwise.
+        img.put("scale", avatar ? "fill" : "fit");
+
+        Map<String, Object> right = Div.horizontal(List.of(img));
+        Div.weight(right, 3);
+
+        Map<String, Object> row = Div.horizontal(List.of(
+                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                right));
+        Div.alignV(row, "center");
+        Div.pad(row, 7, 0);
+        return row;
+    }
+
+    /**
+     * A detail field row for a multi-image (gallery) attribute: the label on the left, a
+     * horizontally-scrolling strip of square thumbnails on the right. Each {@code url} is a
+     * {@code data:} or {@code http(s)} URL (see GalleryPicker).
+     */
+    static Map<String, Object> imageGalleryRow(String label, List<String> urls, Palette p) {
+        List<Map<String, Object>> thumbs = new ArrayList<>();
+        for (String url : urls) {
+            Map<String, Object> img = Div.image(url);
+            Div.width(img, 72);
+            Div.height(img, 72);
+            Div.corner(img, 8);
+            Div.stroke(img, p.border(), 1);
+            img.put("scale", "fill");
+            thumbs.add(img);
+        }
+        // Many thumbnails would overflow the card — a gallery scrolls them sideways.
+        Map<String, Object> right = Div.gallery("horizontal", thumbs);
+        right.put("item_spacing", 8);
+        Div.weight(right, 3);
+
+        Map<String, Object> row = Div.horizontal(List.of(
+                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                right));
+        Div.alignV(row, "center");
         Div.pad(row, 7, 0);
         return row;
     }

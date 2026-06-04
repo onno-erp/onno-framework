@@ -246,6 +246,7 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public LayoutSet layoutSet(MetadataRegistry registry, List<Layout> layouts) {
         Map<Viewport, UiLayout> byViewport = new java.util.EnumMap<>(Viewport.class);
+        java.util.Set<Viewport> dedicated = java.util.EnumSet.noneOf(Viewport.class);
         for (Viewport v : Viewport.values()) {
             List<Layout> chosen = selectForViewport(layouts, v);
             // Auto-place un-placed entities only when this viewport uses the universal
@@ -253,9 +254,14 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
             // dump the rest of the metadata into its nav.
             boolean curated = chosen.stream()
                     .anyMatch(l -> profileKey(l).isEmpty() && l.viewport() == v);
+            // "curated" here means a default layout specifically targets this viewport — record
+            // it so the shell only treats v as having its own nav when that's true.
+            if (curated) {
+                dedicated.add(v);
+            }
             byViewport.put(v, buildUiLayout(registry, chosen, !curated));
         }
-        return new LayoutSet(byViewport);
+        return new LayoutSet(byViewport, dedicated);
     }
 
     /**
