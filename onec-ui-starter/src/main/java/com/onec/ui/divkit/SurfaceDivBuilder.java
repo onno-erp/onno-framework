@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -477,7 +478,46 @@ public final class SurfaceDivBuilder {
                 return Components.imageFieldRow(label, url, isAvatarWidget(a), p);
             }
         }
+        String refUrl = refUrlFor(a, row);
+        if (refUrl != null) {
+            return Components.refFieldRow(label, cell(a, row), refUrl, p);
+        }
         return Components.fieldRow(label, cell(a, row), p);
+    }
+
+    /**
+     * The {@code onec://} url that opens the record a ref attribute points at, or null when the
+     * attribute isn't a (resolved) ref. The target id comes from the {@code {column}_ref} map the
+     * {@link com.onec.ui.RefResolver} stamps on the row; the route is the attribute's
+     * refKind/refTarget — same shape a list-row tap produces (see {@link #documentBody}).
+     */
+    @SuppressWarnings("unchecked")
+    private static String refUrlFor(Map<String, Object> a, Map<String, Object> row) {
+        if (!Boolean.TRUE.equals(a.get("isRef"))) {
+            return null;
+        }
+        Object refObj = row.get(str(a.get("columnName")) + "_ref");
+        if (!(refObj instanceof Map)) {
+            return null;
+        }
+        Object id = ((Map<String, Object>) refObj).get("id");
+        String target = str(a.get("refTarget"));
+        if (id == null || target.isBlank()) {
+            return null;
+        }
+        String kind = "document".equals(str(a.get("refKind"))) ? "documents" : "catalogs";
+        return "onec://" + kind + "/" + routeNameOf(target) + "/" + id;
+    }
+
+    /**
+     * The URL-safe route segment for a logical name: snake_case, mirroring the client's
+     * {@code toSnakeCase} so a ref link hits the same endpoint the user would by navigating.
+     */
+    private static String routeNameOf(String logicalName) {
+        return logicalName
+                .replaceAll("([a-z])([A-Z])", "$1_$2")
+                .replaceAll("\\s+", "_")
+                .toLowerCase(Locale.ROOT);
     }
 
     private static boolean isImageWidget(Map<String, Object> a) {
