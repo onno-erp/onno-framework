@@ -36,7 +36,10 @@ export function LoginFormWidget() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    // The login screen is a server-driven DivKit card whose container blocks carry
+    // pointer-events:none (taps fall through to DivKit actions). That inherits into this React
+    // island and would make the inputs/button unclickable, so re-enable pointer events here.
+    <form onSubmit={handleSubmit} className="space-y-4 pointer-events-auto">
       <div className="space-y-2">
         <Label htmlFor="username">Username</Label>
         <Input

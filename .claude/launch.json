@@ -10,8 +10,14 @@
     {
       "name": "onec-verify",
       "runtimeExecutable": "java",
-      "runtimeArgs": ["-jar", "example/build/libs/example-0.1.0.jar", "--server.port=8092", "--spring.datasource.url=jdbc:h2:mem:verify;DB_CLOSE_DELAY=-1"],
+      "runtimeArgs": ["-jar", "example/build/libs/example-0.1.0-SNAPSHOT.jar", "--server.port=8092", "--spring.datasource.url=jdbc:h2:mem:verify;DB_CLOSE_DELAY=-1"],
       "port": 8092
+    },
+    {
+      "name": "onec-run",
+      "runtimeExecutable": "java",
+      "runtimeArgs": ["-jar", "example/build/libs/example-0.1.0-SNAPSHOT.jar", "--server.port=8090"],
+      "port": 8090
     }
   ]
 }
