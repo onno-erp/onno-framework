@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { RefSelect } from "@/components/ref-select";
 import { DatePicker } from "@/components/date-picker";
+import { GeoPicker } from "@/components/geo-picker";
+import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-lg, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -405,6 +407,25 @@ function AttrControl({
         <Checkbox checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
       </div>
     );
+  }
+
+  // A custom widget hint (.field(...).widget("map")) wins over the type-based control.
+  // Geolocation stores a plain "lat,lng" string, so it lives on a String attribute.
+  if (/^(map|geo|geolocation)$/i.test(attr.widget ?? "")) {
+    return <GeoPicker value={value as string | undefined} onChange={onChange} />;
+  }
+
+  // Image widgets store a base64 data URL string (use a large-length / TEXT attribute). "avatar"
+  // is a small round variant — it also lights up the existing .widget("avatar") hint. "images"/
+  // "gallery" stores several, newline-joined.
+  if (/^(images|gallery|photos)$/i.test(attr.widget ?? "")) {
+    return <GalleryPicker value={value as string | undefined} onChange={onChange} />;
+  }
+  if (/^(image|photo)$/i.test(attr.widget ?? "")) {
+    return <ImagePicker value={value as string | undefined} onChange={onChange} />;
+  }
+  if (/^avatar$/i.test(attr.widget ?? "")) {
+    return <ImagePicker variant="avatar" value={value as string | undefined} onChange={onChange} />;
   }
 
   if (attr.isRef && attr.refTarget) {

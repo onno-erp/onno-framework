@@ -23,7 +23,7 @@ public final class SurfaceDivBuilder {
 
     public static Map<String, Object> catalogList(ResolvedListView view, List<Map<String, Object>> rows,
                                                   String routeName, String newUrl, Palette p) {
-        return listContent(view.title(), "items", newUrl, headerLabels(view),
+        return listContent(view.title(), "items", newUrl, headerLabels(view), columnWidths(view),
                 catalogBody(view, rows, routeName), p);
     }
 
@@ -33,7 +33,7 @@ public final class SurfaceDivBuilder {
      */
     public static List<Map<String, Object>> catalogRows(ResolvedListView view, List<Map<String, Object>> rows,
                                                         String routeName, Palette p) {
-        return rowsPatch(headerLabels(view), catalogBody(view, rows, routeName), p);
+        return rowsPatch(headerLabels(view), columnWidths(view), catalogBody(view, rows, routeName), p);
     }
 
     private static List<Components.Row> catalogBody(ResolvedListView view, List<Map<String, Object>> rows,
@@ -50,7 +50,7 @@ public final class SurfaceDivBuilder {
 
     public static Map<String, Object> documentList(ResolvedListView view, List<Map<String, Object>> rows,
                                                    String routeName, String newUrl, Palette p) {
-        return listContent(view.title(), "documents", newUrl, headerLabels(view),
+        return listContent(view.title(), "documents", newUrl, headerLabels(view), columnWidths(view),
                 documentBody(view, rows, routeName), p);
     }
 
@@ -60,7 +60,7 @@ public final class SurfaceDivBuilder {
      */
     public static List<Map<String, Object>> documentRows(ResolvedListView view, List<Map<String, Object>> rows,
                                                          String routeName, Palette p) {
-        return rowsPatch(headerLabels(view), documentBody(view, rows, routeName), p);
+        return rowsPatch(headerLabels(view), columnWidths(view), documentBody(view, rows, routeName), p);
     }
 
     private static List<Components.Row> documentBody(ResolvedListView view, List<Map<String, Object>> rows,
@@ -76,7 +76,8 @@ public final class SurfaceDivBuilder {
     // A list surface: title + a count subtitle bound to the @{onec_count} variable
     // (streamed on data changes) over a table whose rows are patched in place.
     private static Map<String, Object> listContent(String title, String nounPlural, String newUrl,
-                                                   List<String> headers, List<Components.Row> body, Palette p) {
+                                                   List<String> headers, List<String> widths,
+                                                   List<Components.Row> body, Palette p) {
         Map<String, Object> titleNode = Div.color(Div.text(title, 22, "bold"), p.text());
         Div.maxLines(titleNode, 1);
         List<Map<String, Object>> topRow = new ArrayList<>(List.of(
@@ -93,7 +94,7 @@ public final class SurfaceDivBuilder {
         Map<String, Object> header = Div.vertical(List.of(top, subtitle));
         Div.margins(header, 0, 0, 16, 0);
 
-        Map<String, Object> table = Components.scrollX(rowsStack(headers, body, p), p);
+        Map<String, Object> table = Components.scrollX(rowsStack(headers, widths, body, p), p);
         return content(List.of(header, table));
     }
 
@@ -103,13 +104,15 @@ public final class SurfaceDivBuilder {
      * <em>re-carries</em> the id — not splice in the bare row list, which would leave the
      * gallery with N children and no patch target, breaking the next update.
      */
-    private static Map<String, Object> rowsStack(List<String> headers, List<Components.Row> body, Palette p) {
-        return Div.id(Components.tableStack(Components.tableItems(headers, body, p)), "onec-rows");
+    private static Map<String, Object> rowsStack(List<String> headers, List<String> widths,
+                                                List<Components.Row> body, Palette p) {
+        return Div.id(Components.tableStack(Components.tableItems(headers, body, widths, p)), "onec-rows");
     }
 
     /** The single-node {@code onec-rows} replacement payload for a {@code div-patch}. */
-    private static List<Map<String, Object>> rowsPatch(List<String> headers, List<Components.Row> body, Palette p) {
-        return List.of(rowsStack(headers, body, p));
+    private static List<Map<String, Object>> rowsPatch(List<String> headers, List<String> widths,
+                                                      List<Components.Row> body, Palette p) {
+        return List.of(rowsStack(headers, widths, body, p));
     }
 
     // ----- document detail -----
@@ -135,7 +138,7 @@ public final class SurfaceDivBuilder {
         fieldRows.add(Components.fieldRow("Date", str(row.get("_date")), p));
         for (Map<String, Object> a : visible(
                 (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of()), "visibleInDetail")) {
-            fieldRows.add(Components.fieldRow(str(a.get("displayName")), cell(a, row), p));
+            fieldRows.add(fieldRowFor(a, row, p));
         }
         items.add(fieldCard(fieldRows, p));
 
@@ -187,7 +190,7 @@ public final class SurfaceDivBuilder {
         List<Map<String, Object>> fieldRows = new ArrayList<>();
         for (Map<String, Object> a : visible(
                 (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of()), "visibleInDetail")) {
-            fieldRows.add(Components.fieldRow(str(a.get("displayName")), cell(a, row), p));
+            fieldRows.add(fieldRowFor(a, row, p));
         }
         if (!fieldRows.isEmpty()) {
             items.add(fieldCard(fieldRows, p));
@@ -422,6 +425,11 @@ public final class SurfaceDivBuilder {
         return view.columns().stream().map(ResolvedListView.Column::label).toList();
     }
 
+    /** Per-column authored width hints, positionally aligned with {@link #headerLabels}. */
+    private static List<String> columnWidths(ResolvedListView view) {
+        return view.columns().stream().map(ResolvedListView.Column::width).toList();
+    }
+
     private static List<String> rowCells(ResolvedListView view, Map<String, Object> row) {
         return view.columns().stream().map(c -> cellByColumn(c.columnName(), row)).toList();
     }
@@ -450,6 +458,52 @@ public final class SurfaceDivBuilder {
         return maskSecret(value);
     }
 
+    /**
+     * A detail field row for an attribute: an inline image when the attribute is an image
+     * widget ({@code .widget("image"|"avatar")}) and holds a value, otherwise the usual
+     * label/value text row. The image source is the raw stored string — a {@code data:} URL
+     * from the picker or a plain {@code http(s)} URL.
+     */
+    private static Map<String, Object> fieldRowFor(Map<String, Object> a, Map<String, Object> row, Palette p) {
+        String label = str(a.get("displayName"));
+        if (isGalleryWidget(a)) {
+            List<String> urls = splitGallery(str(row.get(str(a.get("columnName")))));
+            if (!urls.isEmpty()) {
+                return Components.imageGalleryRow(label, urls, p);
+            }
+        } else if (isImageWidget(a)) {
+            String url = str(row.get(str(a.get("columnName"))));
+            if (!url.isBlank()) {
+                return Components.imageFieldRow(label, url, isAvatarWidget(a), p);
+            }
+        }
+        return Components.fieldRow(label, cell(a, row), p);
+    }
+
+    private static boolean isImageWidget(Map<String, Object> a) {
+        String w = str(a.get("widget"));
+        return w.equalsIgnoreCase("image") || w.equalsIgnoreCase("photo") || isAvatarWidget(a);
+    }
+
+    private static boolean isAvatarWidget(Map<String, Object> a) {
+        return "avatar".equalsIgnoreCase(str(a.get("widget")));
+    }
+
+    /** A multi-image widget ({@code .widget("images"|"gallery")}); value is newline-joined URLs. */
+    private static boolean isGalleryWidget(Map<String, Object> a) {
+        String w = str(a.get("widget"));
+        return w.equalsIgnoreCase("images") || w.equalsIgnoreCase("gallery") || w.equalsIgnoreCase("photos");
+    }
+
+    /** Split a gallery value into its image URLs. base64 data URLs hold no newline, so the
+     *  newline join is unambiguous (see GalleryPicker on the client). */
+    private static List<String> splitGallery(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return value.lines().map(String::trim).filter(s -> !s.isBlank()).toList();
+    }
+
     private static String str(Object value) {
         return value == null ? "" : value.toString();
     }
@@ -460,7 +514,17 @@ public final class SurfaceDivBuilder {
      */
     private static String maskSecret(Object value) {
         if (value == null) return "";
-        return com.onec.security.SecretRedactor.SET.equals(value) ? "•••• set" : value.toString();
+        if (com.onec.security.SecretRedactor.SET.equals(value)) return "•••• set";
+        // An image (or gallery) widget's value is a (potentially huge) data URL — or several,
+        // newline-joined; never dump it as text into a list cell or a fallback row. Show a
+        // compact placeholder. Detail surfaces render the actual image(s) (see fieldRowFor)
+        // before reaching here.
+        String s = value.toString();
+        if (s.startsWith("data:")) {
+            long n = s.lines().count();
+            return n > 1 ? "🖼 " + n + " images" : "🖼 Image";
+        }
+        return s;
     }
 
     /**

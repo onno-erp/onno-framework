@@ -266,12 +266,20 @@ public class SchemaGenerator {
                 ")";
     }
 
+    // Above this declared length a String column is stored as TEXT rather than VARCHAR(n): the
+    // author is asking for unbounded text (e.g. a base64 image behind .widget("image")), which a
+    // capped VARCHAR would reject on insert.
+    private static final int MAX_VARCHAR = 65_535;
+
     /** SQL type for a metadata attribute, naming the column in any error it raises. */
     static String columnType(AttributeDescriptor attr) {
-        // Secret String values are stored encrypted; the base64 ciphertext is larger than the
-        // declared plaintext length, so widen to TEXT rather than the attribute's VARCHAR(length).
-        if (attr.secret() && attr.javaType() == String.class) {
-            return "TEXT";
+        if (attr.javaType() == String.class) {
+            // Secret String values are stored encrypted; the base64 ciphertext is larger than the
+            // declared plaintext length. A very large declared length is likewise a request for
+            // unbounded text. Both widen to TEXT rather than the attribute's VARCHAR(length).
+            if (attr.secret() || attr.length() > MAX_VARCHAR) {
+                return "TEXT";
+            }
         }
         return sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName());
     }

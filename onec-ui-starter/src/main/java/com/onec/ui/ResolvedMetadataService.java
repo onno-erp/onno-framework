@@ -121,6 +121,9 @@ public class ResolvedMetadataService {
         map.put("visibleInList", pick(hint == null ? null : hint.visibleInList(), Boolean.TRUE));
         map.put("visibleInDetail", pick(hint == null ? null : hint.visibleInDetail(), Boolean.TRUE));
         map.put("order", pick(hint == null ? null : hint.order(), Integer.MIN_VALUE));
+        // A width hint on a system column (e.g. .field("description").width("320")) lets a
+        // wide built-in column size itself like any custom attribute; blank = auto-fit.
+        map.put("widthHint", hint == null ? "" : pick(hint.width(), ""));
         return map;
     }
 

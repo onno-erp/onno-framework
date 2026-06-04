@@ -89,7 +89,7 @@ public class UiViewResolver {
                     continue;
                 }
                 columns.add(new ResolvedListView.Column(
-                        spec.labels().getOrDefault(field, cm.label()), cm.columnName()));
+                        spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.width()));
             }
         } else {
             // Default: visible columns in configured order, minus any hidden, with label overrides.
@@ -99,7 +99,7 @@ public class UiViewResolver {
                     .sorted(Comparator.comparingInt(e -> e.getValue().order()))
                     .forEach(e -> columns.add(new ResolvedListView.Column(
                             spec.labels().getOrDefault(e.getKey(), e.getValue().label()),
-                            e.getValue().columnName())));
+                            e.getValue().columnName(), e.getValue().width())));
         }
 
         // An authored view title wins; otherwise the entity's display title (which itself
@@ -108,13 +108,14 @@ public class UiViewResolver {
         return new ResolvedListView(title, columns);
     }
 
-    private record ColumnMeta(String label, String columnName, boolean visibleInList, int order) {
+    private record ColumnMeta(String label, String columnName, boolean visibleInList, int order, String width) {
         static ColumnMeta of(Map<String, Object> m) {
             Object order = m.get("order");
             return new ColumnMeta(
                     str(m.get("displayName")), str(m.get("columnName")),
                     Boolean.TRUE.equals(m.get("visibleInList")),
-                    order == null ? 0 : ((Number) order).intValue());
+                    order == null ? 0 : ((Number) order).intValue(),
+                    str(m.get("widthHint")));
         }
     }
 

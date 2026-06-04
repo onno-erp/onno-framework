@@ -91,7 +91,7 @@ public class DivKitController {
                                      Principal principal) {
         Viewport vp = Viewport.parse(viewport);
         UiLayout vpLayout = layoutSet.forViewport(vp);
-        NavStyle navStyle = navStyleFor(vpLayout, vp);
+        NavStyle navStyle = navStyleFor(vp);
         Palette p = Palette.of(theme);
         // Profile is chosen by role (viewport-independent); take its viewport-specific
         // variant for nav so a mobile layout's curated sections win.
@@ -99,7 +99,7 @@ public class DivKitController {
         UiLayout.Profile activeProfile = profileResolver.byId(vpLayout, profileId);
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
 
-        List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile);
+        List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         String brand = activeProfile.title() == null ? "" : activeProfile.title();
 
@@ -151,7 +151,7 @@ public class DivKitController {
         String profileId = activeProfileId(principal, profile);
         UiLayout.Profile activeProfile = profileResolver.byId(vpLayout, profileId);
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
-        List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile);
+        List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         String brand = activeProfile.title() == null ? "" : activeProfile.title();
         Map<String, Object> content = ShellLayoutBuilder.menu(
@@ -392,12 +392,17 @@ public class DivKitController {
 
     // ----- helpers -----
 
-    private List<ShellLayoutBuilder.NavSection> navFor(Principal principal, UiLayout.Profile active) {
+    private List<ShellLayoutBuilder.NavSection> navFor(Principal principal, UiLayout.Profile active, Viewport vp) {
         String profileId = active.id();
         List<ShellLayoutBuilder.NavSection> nav = new ArrayList<>();
-        // The home/dashboard route — always reachable, so it leads the nav.
-        nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
-                new ShellLayoutBuilder.NavItem("Dashboard", "onec://", "house", "/"))));
+        // The home/dashboard route leads the nav — but only when there's actually a
+        // dashboard to show (an authored Page for "/", or dashboard widgets in the
+        // layout/profile). With neither, "/" is an empty surface, so we don't advertise
+        // it in the nav rather than leading every app with a blank Dashboard entry.
+        if (hasDashboard(active, vp)) {
+            nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
+                    new ShellLayoutBuilder.NavItem("Dashboard", "onec://", "house", "/"))));
+        }
         for (UiLayout.ResolvedSection section : layoutResolver.resolve(active)) {
             List<ShellLayoutBuilder.NavItem> items = section.items().stream()
                     .filter(item -> access.canRead(principal, item.type(), item.name()))
@@ -418,6 +423,17 @@ public class DivKitController {
             }
         }
         return nav;
+    }
+
+    /**
+     * Whether the home route ("/") has a dashboard worth linking to — the same test
+     * {@link #home} uses to decide what to render: an authored {@link Page} for "/"
+     * wins, otherwise the layout/profile must contribute at least one dashboard widget.
+     * Neither → "/" is an empty surface and the nav omits the Dashboard entry.
+     */
+    private boolean hasDashboard(UiLayout.Profile active, Viewport vp) {
+        return pageResolver.resolve("/", active.id(), vp) != null
+                || !layoutResolver.resolveWidgets(active).isEmpty();
     }
 
     /**
@@ -602,11 +618,18 @@ public class DivKitController {
     }
 
     /**
-     * The nav style for a viewport: the layout's explicit choice, else a sensible
-     * per-device default (a bottom tab bar on mobile, a top bar otherwise).
+     * The nav style for a viewport. A non-desktop viewport with no layout of its own does
+     * <em>not</em> inherit the universal/desktop nav (e.g. a sidebar) — a single-layout app
+     * declaring {@code nav(SIDEBAR)} would otherwise render that sidebar on a phone, the
+     * regression behind "resizing stopped changing the layout". Such a device falls back to a
+     * bottom tab bar so the shell stays responsive without authoring a per-device layout.
+     * Otherwise the targeting layout's explicit choice wins, else a per-device default.
      */
-    private static NavStyle navStyleFor(UiLayout layout, Viewport vp) {
-        NavStyle nav = layout.shell().nav();
+    private NavStyle navStyleFor(Viewport vp) {
+        if (vp != Viewport.DESKTOP && !layoutSet.hasDedicated(vp)) {
+            return NavStyle.BOTTOM_BAR;
+        }
+        NavStyle nav = layoutSet.forViewport(vp).shell().nav();
         if (nav != null) {
             return nav;
         }
