@@ -395,8 +395,14 @@ function TabularSectionEditor({
   );
   const title = section.name.charAt(0).toUpperCase() + section.name.slice(1);
 
+  // Booleans get a narrow, centered column; everything else flexes to share the width — so each
+  // row reads as a single compact line (like a spreadsheet) instead of a stacked card.
+  const isBoolCol = (a: AttributeMeta) => /^(boolean|Boolean)$/.test(a.javaType);
+  const colClass = (a: AttributeMeta) =>
+    isBoolCol(a) ? "shrink-0 basis-20" : "min-w-0 grow basis-44";
+
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+    <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
@@ -407,38 +413,53 @@ function TabularSectionEditor({
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">No rows yet.</p>
       ) : (
-        <div className="space-y-3">
-          {rows.map((row, idx) => (
-            <div key={idx} className="rounded-xl border border-border bg-background p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Row {idx + 1}</span>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive"
-                  onClick={() => onRemove(idx)}
-                  aria-label={`Remove row ${idx + 1}`}
+        <div className="overflow-x-auto">
+          <div className="min-w-[28rem]">
+            {/* Column headers, shown once — aligned with the cells below via matching flex rules. */}
+            <div className="flex items-end gap-3 px-2 pb-1.5">
+              {columns.map((attr) => (
+                <div
+                  key={attr.fieldName}
+                  className={cn(colClass(attr), "text-xs font-medium text-muted-foreground", isBoolCol(attr) && "text-center")}
                 >
-                  <Trash2 className="size-3.5" aria-hidden="true" />
-                  Remove
-                </button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {columns.map((attr) => (
-                  <div key={attr.fieldName} className="grid gap-1.5">
-                    <Label htmlFor={`${section.name}-${idx}-${attr.fieldName}`}>
-                      {attr.displayName}
-                      {attr.required ? <span className="ml-1 text-destructive">*</span> : null}
-                    </Label>
-                    <AttrControl
-                      attr={attr}
-                      value={row[attr.fieldName]}
-                      onChange={(v) => onCell(idx, attr.fieldName, v)}
-                    />
-                  </div>
-                ))}
-              </div>
+                  {attr.displayName}
+                  {attr.required ? <span className="ml-0.5 text-destructive">*</span> : null}
+                </div>
+              ))}
+              <span className="w-8 shrink-0" aria-hidden="true" />
             </div>
-          ))}
+            {/* One compact line per row; the remove control fades in on hover. */}
+            <div className="space-y-1">
+              {rows.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="group flex items-center gap-3 rounded-lg px-2 py-1 transition-colors hover:bg-muted/40"
+                >
+                  {columns.map((attr) => (
+                    <div
+                      key={attr.fieldName}
+                      className={cn(colClass(attr), isBoolCol(attr) && "flex justify-center")}
+                    >
+                      <AttrControl
+                        attr={attr}
+                        value={row[attr.fieldName]}
+                        onChange={(v) => onCell(idx, attr.fieldName, v)}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(idx)}
+                    aria-label={`Remove row ${idx + 1}`}
+                    title="Remove row"
+                    className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
