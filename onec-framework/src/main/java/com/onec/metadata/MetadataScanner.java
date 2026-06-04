@@ -253,6 +253,7 @@ public class MetadataScanner {
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
                         hint == null ? "" : hint.widget(),
+                        AttributeDescriptor.Constraints.NONE,
                         false));
             }
             current = current.getSuperclass();
@@ -287,6 +288,7 @@ public class MetadataScanner {
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
                         hint == null ? "" : hint.widget(),
+                        AttributeDescriptor.Constraints.NONE,
                         false));
             }
             current = current.getSuperclass();
@@ -335,6 +337,8 @@ public class MetadataScanner {
                         hint == null ? "" : hint.group(),
                         hint == null ? "" : hint.width(),
                         hint == null ? "" : hint.widget(),
+                        new AttributeDescriptor.Constraints(
+                                attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
                         attr.secret()
                 ));
             }

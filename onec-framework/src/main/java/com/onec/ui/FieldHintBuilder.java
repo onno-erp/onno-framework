@@ -20,6 +20,7 @@ public class FieldHintBuilder {
     private String group;
     private String width;
     private String widget;
+    private String placeholder;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -43,6 +44,12 @@ public class FieldHintBuilder {
 
     public FieldHintBuilder widget(String widget) {
         this.widget = widget;
+        return this;
+    }
+
+    /** Placeholder text shown in this field's empty input on the edit form. */
+    public FieldHintBuilder placeholder(String placeholder) {
+        this.placeholder = placeholder;
         return this;
     }
 
@@ -88,6 +95,6 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget);
+                order, group, width, widget, placeholder);
     }
 }

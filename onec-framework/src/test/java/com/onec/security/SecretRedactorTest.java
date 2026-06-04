@@ -14,7 +14,8 @@ class SecretRedactorTest {
 
     private static AttributeDescriptor attr(String column, boolean secret) {
         return new AttributeDescriptor(column, column, column, String.class, 100, false, false,
-                null, 0, 0, true, true, true, 0, "", "", "", secret);
+                null, 0, 0, true, true, true, 0, "", "", "",
+                AttributeDescriptor.Constraints.NONE, secret);
     }
 
     @Test

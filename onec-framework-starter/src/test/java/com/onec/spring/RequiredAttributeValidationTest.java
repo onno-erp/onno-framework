@@ -31,7 +31,8 @@ class RequiredAttributeValidationTest {
 
         assertThatThrownBy(() -> callback.onBeforeConvert(entity))
                 .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("name");
+                // The message now uses the human-readable display name ("Name is required").
+                .hasMessageContaining("Name");
 
         ValidationException ex = (ValidationException) catching(() -> callback.onBeforeConvert(entity));
         assertThat(ex.getField()).isEqualTo("name");

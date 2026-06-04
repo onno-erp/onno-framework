@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, TabularSectionMeta } from "@/lib/types";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +57,56 @@ function isNumeric(javaType: string): boolean {
   return ["BigDecimal", "Integer", "Long", "Double", "Float", "Short", "int", "long", "double"].includes(
     javaType
   );
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const MAX_VARCHAR = 65535;
+
+function fmtNum(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+/**
+ * Client-side mirror of the server's AttributeValidator (required, length, min/max, pattern,
+ * email) for instant inline feedback. The server re-checks authoritatively before write — this
+ * just avoids a round-trip for the common cases. Returns a message, or null when the value is ok.
+ */
+function validateField(attr: AttributeMeta, value: unknown): string | null {
+  const empty =
+    value == null || value === "" || (typeof value === "string" && value.trim() === "");
+  if (attr.required && empty) return `${attr.displayName} is required`;
+  if (empty) return null;
+
+  if (typeof value === "string") {
+    if (attr.length > 0 && attr.length <= MAX_VARCHAR && value.length > attr.length) {
+      return `${attr.displayName} must be at most ${attr.length} characters`;
+    }
+    if (attr.minLength && value.length < attr.minLength) {
+      return `${attr.displayName} must be at least ${attr.minLength} characters`;
+    }
+    if (attr.pattern) {
+      // Anchor to a full match, matching the server's Pattern.matches semantics.
+      let ok = true;
+      try {
+        ok = new RegExp(`^(?:${attr.pattern})$`).test(value);
+      } catch {
+        ok = true; // a malformed pattern shouldn't block the user; the server is authoritative
+      }
+      if (!ok) return `${attr.displayName} is not in the expected format`;
+    }
+    if (attr.email && !EMAIL_RE.test(value)) {
+      return `${attr.displayName} must be a valid email address`;
+    }
+  }
+
+  if (isNumeric(attr.javaType)) {
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isNaN(n)) {
+      if (attr.min != null && n < attr.min) return `${attr.displayName} must be at least ${fmtNum(attr.min)}`;
+      if (attr.max != null && n > attr.max) return `${attr.displayName} must be at most ${fmtNum(attr.max)}`;
+    }
+  }
+  return null;
 }
 
 // Fire an onec:// action / pane-close through the host (divkit-view) — same routing the
@@ -143,8 +193,30 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   });
 
   const [saving, setSaving] = useState(false);
+  // Inline validation messages, keyed by field key (attr fieldName / system "code"/"description").
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const set = (key: string, value: unknown) => setData((prev) => ({ ...prev, [key]: value }));
+  const set = (key: string, value: unknown) => {
+    setData((prev) => ({ ...prev, [key]: value }));
+    // Clear a field's error as soon as the user edits it; it re-checks on the next save.
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  // Validate every attribute field against its constraints; returns key -> message.
+  const validateAll = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    for (const f of fields) {
+      if (f.kind !== "attr") continue;
+      const msg = validateField(f.attr, data[f.key]);
+      if (msg) errs[f.key] = msg;
+    }
+    return errs;
+  };
 
   const addRow = (section: string) =>
     setRowsBySection((prev) => ({ ...prev, [section]: [...(prev[section] ?? []), {}] }));
@@ -160,6 +232,13 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     }));
 
   const save = async (thenPost = false) => {
+    // Instant client-side check first — don't round-trip a form we already know is invalid.
+    const clientErrors = validateAll();
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      return;
+    }
+    setErrors({});
     setSaving(true);
     try {
       const payload = { ...data };
@@ -209,7 +288,17 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       dispatchAction(`onec://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
-      toast.error(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+      // A server-side validation 422 carries per-field messages — map them onto the inputs
+      // (and surface any cross-field/form message as a toast). Anything else is a generic error.
+      if (e instanceof ApiError && e.fieldErrors) {
+        const mapped: Record<string, string> = {};
+        for (const [field, messages] of Object.entries(e.fieldErrors)) {
+          mapped[field] = Array.isArray(messages) ? messages[0] : String(messages);
+        }
+        setErrors(mapped);
+      } else {
+        toast.error(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+      }
       setSaving(false);
     }
   };
@@ -224,7 +313,13 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       <h1 className="mb-5 text-xl font-semibold text-foreground">{form.title}</h1>
       <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
         {fields.map((f) => (
-          <FormFieldRow key={f.key} field={f} value={data[f.key]} onChange={(v) => set(f.key, v)} />
+          <FormFieldRow
+            key={f.key}
+            field={f}
+            value={data[f.key]}
+            error={errors[f.key]}
+            onChange={(v) => set(f.key, v)}
+          />
         ))}
       </div>
       {sections.map((ts) => (
@@ -353,30 +448,48 @@ function TabularSectionEditor({
 function FormFieldRow({
   field,
   value,
+  error,
   onChange,
 }: {
   field: Field;
   value: unknown;
+  error?: string;
   onChange: (value: unknown) => void;
 }) {
   const required = field.kind === "attr" && field.attr.required;
+  const placeholder = field.kind === "attr" ? field.attr.placeholder : undefined;
+  const invalid = !!error;
   const control =
     field.kind === "system" ? (
-      <Input value={(value as string) ?? ""} onChange={(e) => onChange(e.target.value)} />
+      <Input
+        aria-invalid={invalid}
+        className={cn(invalid && "border-destructive focus-visible:ring-destructive")}
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
     ) : (
-      <AttrControl attr={field.attr} value={value} onChange={onChange} />
+      <AttrControl
+        attr={field.attr}
+        value={value}
+        invalid={invalid}
+        placeholder={placeholder}
+        onChange={onChange}
+      />
     );
 
   // Checkboxes own their label inline.
   if (field.kind === "attr" && /^(boolean|Boolean)$/.test(field.attr.javaType)) {
     return (
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id={field.key}
-          checked={!!value}
-          onCheckedChange={(v) => onChange(v === true)}
-        />
-        <Label htmlFor={field.key}>{field.label}</Label>
+      <div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={field.key}
+            checked={!!value}
+            onCheckedChange={(v) => onChange(v === true)}
+          />
+          <Label htmlFor={field.key}>{field.label}</Label>
+        </div>
+        {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
       </div>
     );
   }
@@ -388,6 +501,7 @@ function FormFieldRow({
         {required ? <span className="ml-1 text-destructive">*</span> : null}
       </Label>
       {control}
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }
@@ -396,11 +510,16 @@ function AttrControl({
   attr,
   value,
   onChange,
+  invalid,
+  placeholder,
 }: {
   attr: AttributeMeta;
   value: unknown;
   onChange: (value: unknown) => void;
+  invalid?: boolean;
+  placeholder?: string;
 }) {
+  const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
   if (/^(boolean|Boolean)$/.test(attr.javaType)) {
     return (
       <div className="flex h-9 items-center">
@@ -463,8 +582,10 @@ function AttrControl({
       <Input
         type="password"
         autoComplete="new-password"
+        aria-invalid={invalid}
+        className={invalidCls}
         maxLength={attr.length > 0 ? attr.length : undefined}
-        placeholder="Enter to set — leave blank to keep current"
+        placeholder={placeholder || "Enter to set — leave blank to keep current"}
         value={(value as string) ?? ""}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -485,8 +606,13 @@ function AttrControl({
   return (
     <Input
       type={numeric ? "number" : "text"}
+      aria-invalid={invalid}
+      className={invalidCls}
+      placeholder={placeholder || undefined}
       step={numeric && attr.scale > 0 ? Math.pow(10, -attr.scale).toString() : undefined}
-      maxLength={attr.length > 0 && !numeric ? attr.length : undefined}
+      min={numeric && attr.min != null ? attr.min : undefined}
+      max={numeric && attr.max != null ? attr.max : undefined}
+      maxLength={attr.length > 0 && attr.length <= MAX_VARCHAR && !numeric ? attr.length : undefined}
       value={(value as string) ?? ""}
       onChange={(e) => onChange(numeric ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
     />

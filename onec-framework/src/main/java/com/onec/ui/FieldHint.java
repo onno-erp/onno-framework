@@ -19,9 +19,10 @@ public record FieldHint(
         Integer order,
         String group,
         String width,
-        String widget
+        String widget,
+        String placeholder
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null);
     }
 }
