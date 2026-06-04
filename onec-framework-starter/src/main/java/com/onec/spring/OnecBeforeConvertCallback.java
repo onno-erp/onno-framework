@@ -11,6 +11,8 @@ import com.onec.numbering.NumberGenerator;
 import com.onec.rules.BusinessRuleValidator;
 import com.onec.security.SecretCipher;
 import com.onec.security.SecretFields;
+import com.onec.validation.AttributeValidator;
+import com.onec.validation.ValidationErrors;
 
 import org.springframework.data.relational.core.mapping.event.BeforeConvertCallback;
 
@@ -24,6 +26,7 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
     private final NumberGenerator numberGenerator;
     private final SecretCipher secretCipher;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
+    private final AttributeValidator attributeValidator = new AttributeValidator();
 
     public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
                                      SecretCipher secretCipher) {
@@ -77,9 +80,15 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
             handler.beforeWrite();
         }
 
-        // Validate required attributes
-        validateRequired(aggregate);
-        businessRuleValidator.validate(aggregate);
+        // Validate: declarative attribute constraints (required, length, min/max, pattern, email)
+        // and custom business rules, collected together so the user sees every problem at once.
+        ValidationErrors errors = new ValidationErrors();
+        List<AttributeDescriptor> attributes = attributesOf(aggregate);
+        if (attributes != null) {
+            attributeValidator.validate(aggregate, attributes, errors);
+        }
+        businessRuleValidator.collect(aggregate, errors);
+        errors.throwIfAny();
 
         // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
         // restored on the in-memory instance by OnecAfterSaveCallback once the write lands.
@@ -110,31 +119,15 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
         }
     }
 
-    private void validateRequired(Object aggregate) {
-        List<AttributeDescriptor> attributes;
+    /** The validatable attributes for a catalog/document aggregate, or null for anything else. */
+    private List<AttributeDescriptor> attributesOf(Object aggregate) {
         if (aggregate instanceof CatalogObject) {
-            attributes = registry.getCatalogDescriptor(aggregate.getClass()).attributes();
-        } else if (aggregate instanceof DocumentObject) {
-            attributes = registry.getDocumentDescriptor(aggregate.getClass()).attributes();
-        } else {
-            return;
+            return registry.getCatalogDescriptor(aggregate.getClass()).attributes();
         }
-
-        for (AttributeDescriptor attr : attributes) {
-            if (!attr.required()) continue;
-            try {
-                Field field = findField(aggregate.getClass(), attr.fieldName());
-                field.setAccessible(true);
-                Object value = field.get(aggregate);
-                if (value == null) {
-                    throw new IllegalStateException(
-                            "Required attribute '" + attr.fieldName() + "' is null on " +
-                                    aggregate.getClass().getSimpleName());
-                }
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                throw new RuntimeException("Failed to validate required attribute: " + attr.fieldName(), e);
-            }
+        if (aggregate instanceof DocumentObject) {
+            return registry.getDocumentDescriptor(aggregate.getClass()).attributes();
         }
+        return null;
     }
 
     private static Field findField(Class<?> clazz, String fieldName) throws NoSuchFieldException {

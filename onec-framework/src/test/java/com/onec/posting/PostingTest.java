@@ -151,7 +151,7 @@ class PostingTest {
         TestDeclarativeReceipt receipt = createDeclarativeReceipt(null, UUID.randomUUID(), new BigDecimal("3"));
 
         assertThatThrownBy(() -> engine.post(receipt))
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOf(com.onec.validation.ValidationException.class)
                 .hasMessageContaining("Warehouse is required");
     }
 
@@ -263,7 +263,7 @@ class PostingTest {
         TestDeclarativeReceipt receipt = createDeclarativeReceipt(null, UUID.randomUUID(), new BigDecimal("3"));
 
         assertThatThrownBy(() -> engineWithEvents.post(receipt))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(com.onec.validation.ValidationException.class);
         assertThat(events).isEmpty();
     }
 

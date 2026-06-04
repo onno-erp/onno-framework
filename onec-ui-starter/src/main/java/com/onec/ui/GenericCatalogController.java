@@ -30,6 +30,7 @@ public class GenericCatalogController {
     private final UiAccessService access;
     private final UiEventPublisher eventPublisher;
     private final SecretCipher secretCipher;
+    private final WriteValidator writeValidator = new WriteValidator();
 
     public GenericCatalogController(Jdbi jdbi, UiProperties properties,
                                     NumberGenerator numberGenerator,
@@ -92,6 +93,7 @@ public class GenericCatalogController {
         requireWritable();
         CatalogDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
+        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
         UUID id = UUID.randomUUID();
 
         List<String> columns = new ArrayList<>(List.of(
@@ -135,6 +137,7 @@ public class GenericCatalogController {
         requireWritable();
         CatalogDescriptor desc = query.require(name);
         access.requireWrite(principal, desc);
+        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
 
         List<String> setClauses = new ArrayList<>();
         if (body.containsKey("code")) setClauses.add("_code = :_code");

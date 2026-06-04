@@ -29,6 +29,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public ApiExceptionAdvice apiExceptionAdvice() {
+        return new ApiExceptionAdvice();
+    }
+
+    @Bean
     public SpaIndexController spaIndexController() {
         return new SpaIndexController();
     }

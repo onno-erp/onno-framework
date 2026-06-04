@@ -88,13 +88,19 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
+    let fieldErrors: Record<string, string[]> | undefined;
     try {
       const body = await res.json();
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
+      if (body.fieldErrors && typeof body.fieldErrors === "object" && Object.keys(body.fieldErrors).length) {
+        fieldErrors = body.fieldErrors as Record<string, string[]>;
+      }
     } catch { /* ignore parse errors */ }
-    if (res.status !== 401) toast.error(message);
-    throw new ApiError(message, res.status);
+    // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
+    // failures (auth aside) surface as a toast as before.
+    if (res.status !== 401 && !fieldErrors) toast.error(message);
+    throw new ApiError(message, res.status, fieldErrors);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -103,7 +109,12 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(
+    message: string,
+    public status: number,
+    /** Per-field validation messages from a 422, keyed by attribute field name. */
+    public fieldErrors?: Record<string, string[]>
+  ) {
     super(message);
   }
 }
