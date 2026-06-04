@@ -305,6 +305,23 @@ final class Components {
     }
 
     /**
+     * A detail field row whose value links to another record (a ref attribute): the label on
+     * the left, the resolved display name on the right rendered as a tappable hyperlink —
+     * primary color, underlined — carrying an {@code onec://} action that opens the referenced
+     * entity (same routing as a list row's tap).
+     */
+    static Map<String, Object> refFieldRow(String label, String value, String url, Palette p) {
+        Map<String, Object> link = Div.color(Div.text(value, 14, "regular"), p.primary());
+        link.put("underline", "single");
+        Div.action(link, "open-ref", url);
+        Map<String, Object> row = Div.horizontal(List.of(
+                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                Div.weight(link, 3)));
+        Div.pad(row, 7, 0);
+        return row;
+    }
+
+    /**
      * A detail field row whose value is an image (an image-widget attribute): the label on the
      * left, a bordered thumbnail on the right. {@code url} is a {@code data:} URL from the image
      * picker or a plain {@code http(s)} URL. An {@code avatar} renders smaller and circular.
