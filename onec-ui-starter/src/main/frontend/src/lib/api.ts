@@ -9,6 +9,7 @@ import type {
   RegisterMeta,
   AuthUser,
   UiEvent,
+  SettingMeta,
 } from "./types";
 
 const BASE = "/api";
@@ -132,6 +133,11 @@ export const api = {
 
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),
+
+  // App settings (framework @Constant values) — admin only
+  getSettings: () => fetchJson<SettingMeta[]>(`${BASE}/settings`),
+  saveSettings: (values: Record<string, unknown>) =>
+    fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }),
 
   // Catalog CRUD
   listCatalog: (name: string) =>

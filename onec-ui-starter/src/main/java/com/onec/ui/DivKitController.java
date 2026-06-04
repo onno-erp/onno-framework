@@ -422,6 +422,12 @@ public class DivKitController {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), section.icon(), items));
             }
         }
+        // App-wide settings (the @Constant values) are administrator-only, so the entry only
+        // shows for admins; the /api/settings endpoints enforce it regardless.
+        if (access.roles(principal).contains("ADMIN")) {
+            nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
+                    new ShellLayoutBuilder.NavItem("Settings", "onec://settings", "settings", "/settings"))));
+        }
         return nav;
     }
 

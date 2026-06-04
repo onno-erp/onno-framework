@@ -34,6 +34,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public SettingsController settingsController(MetadataRegistry registry,
+                                                com.onec.repository.ConstantManager constantManager,
+                                                UiAccessService access) {
+        return new SettingsController(registry, constantManager, access);
+    }
+
+    @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public OnecValidationExceptionHandler oneCValidationExceptionHandler() {
         return new OnecValidationExceptionHandler();

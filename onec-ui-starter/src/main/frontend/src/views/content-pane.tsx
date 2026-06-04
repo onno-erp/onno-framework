@@ -6,6 +6,12 @@ import {
   type ContentHandle,
   type Delta,
 } from "@/views/divkit-content";
+import { SettingsPage } from "@/components/settings-page";
+
+// Routes served as native React pages rather than server-driven DivKit surfaces.
+const REACT_PAGES: Record<string, () => JSX.Element> = {
+  "/settings": () => <SettingsPage />,
+};
 
 // Catalog/document LIST surfaces (2 path segments) have a targeted delta endpoint
 // (rows div-patch + count variable). Home, detail, and registers don't — they patch
@@ -117,6 +123,7 @@ export function ContentPane({
 
   // Initial content load per surface — show a skeleton until it lands.
   useEffect(() => {
+    if (REACT_PAGES[path]) return; // React pages don't fetch a DivKit surface
     let cancelled = false;
     setContent(null);
     setError(null);
@@ -132,6 +139,11 @@ export function ContentPane({
       cancelled = true;
     };
   }, [endpoint]);
+
+  const reactPage = REACT_PAGES[path];
+  if (reactPage) {
+    return reactPage();
+  }
 
   const contentJson = content && content.key === endpoint ? content.json : null;
   // The outer padding now lives in the DivKit content document (Div.contentPadding), so
