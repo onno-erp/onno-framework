@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -498,8 +499,20 @@ function FormFieldRow({
       />
     );
 
-  // Checkboxes own their label inline.
+  // Booleans: a settings-style switch (label left, toggle right) when hinted with .widget("switch"),
+  // otherwise an inline checkbox that owns its label.
   if (field.kind === "attr" && /^(boolean|Boolean)$/.test(field.attr.javaType)) {
+    if (/^(switch|toggle)$/i.test(field.attr.widget ?? "")) {
+      return (
+        <div>
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor={field.key}>{field.label}</Label>
+            <Switch id={field.key} checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+          </div>
+          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+        </div>
+      );
+    }
     return (
       <div>
         <div className="flex items-center gap-2">
@@ -542,9 +555,14 @@ function AttrControl({
 }) {
   const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
   if (/^(boolean|Boolean)$/.test(attr.javaType)) {
+    const isSwitch = /^(switch|toggle)$/i.test(attr.widget ?? "");
     return (
       <div className="flex h-9 items-center">
-        <Checkbox checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+        {isSwitch ? (
+          <Switch checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+        ) : (
+          <Checkbox checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+        )}
       </div>
     );
   }

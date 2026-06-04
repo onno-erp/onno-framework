@@ -129,3 +129,12 @@ export interface LayoutSection {
 }
 
 export type EntityRecord = Record<string, unknown>;
+
+/** One app setting, backed by a framework @Constant. Booleans carry widget "switch". */
+export interface SettingMeta {
+  name: string;
+  displayName: string;
+  type: string;
+  widget: string;
+  value: unknown;
+}
