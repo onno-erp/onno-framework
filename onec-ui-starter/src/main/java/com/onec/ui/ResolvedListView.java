@@ -7,7 +7,13 @@ import java.util.List;
  * by {@link UiViewResolver} (merging an {@link EntityView} over the auto-generated
  * defaults) and consumed by the DivKit emitter — or any other renderer.
  */
-public record ResolvedListView(String title, List<Column> columns) {
+public record ResolvedListView(String title, List<Column> columns,
+                               boolean searchable, String sortColumn, boolean sortDescending) {
+
+    /** Back-compat: a non-searchable, default-sorted view. */
+    public ResolvedListView(String title, List<Column> columns) {
+        this(title, columns, false, null, false);
+    }
 
     /**
      * A resolved column: the header label, the data column it reads, and an optional

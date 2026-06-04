@@ -64,6 +64,9 @@ public final class LoginDivBuilder {
         Map<String, Object> card = Div.vertical(items);
         Div.matchWidth(card);
         Div.gap(card, 12);
+        // Slight horizontal inset so the full-width inputs aren't flush to the card edge — their
+        // focus ring (which draws a few px outside the field) would otherwise get clipped.
+        Div.pad(card, 0, 6, 0, 6);
         return DivCard.of("onec-login", card);
     }
 

@@ -19,38 +19,38 @@ class DocumentDateCoercionTest {
     @Test
     void localDateTime_fromSqlTimestamp() {
         Timestamp ts = Timestamp.valueOf("2026-06-04 08:44:44.417097");
-        assertThat(GenericDocumentController.toLocalDateTime(ts))
+        assertThat(DocumentCommandService.toLocalDateTime(ts))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_097_000));
     }
 
     @Test
     void localDateTime_fromSpaceSeparatedString() {
-        assertThat(GenericDocumentController.toLocalDateTime("2026-06-04 08:44:44.417097"))
+        assertThat(DocumentCommandService.toLocalDateTime("2026-06-04 08:44:44.417097"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_097_000));
     }
 
     @Test
     void localDateTime_fromIsoStringAndInstance() {
-        assertThat(GenericDocumentController.toLocalDateTime("2026-06-04T08:44:44"))
+        assertThat(DocumentCommandService.toLocalDateTime("2026-06-04T08:44:44"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
         LocalDateTime ldt = LocalDateTime.of(2026, 1, 2, 3, 4);
-        assertThat(GenericDocumentController.toLocalDateTime(ldt)).isEqualTo(ldt);
+        assertThat(DocumentCommandService.toLocalDateTime(ldt)).isEqualTo(ldt);
     }
 
     @Test
     void localDate_fromTimestampDateAndStrings() {
         LocalDate expected = LocalDate.of(2026, 6, 4);
-        assertThat(GenericDocumentController.toLocalDate(Timestamp.valueOf("2026-06-04 08:44:44.4")))
+        assertThat(DocumentCommandService.toLocalDate(Timestamp.valueOf("2026-06-04 08:44:44.4")))
                 .isEqualTo(expected);
-        assertThat(GenericDocumentController.toLocalDate(java.sql.Date.valueOf("2026-06-04")))
+        assertThat(DocumentCommandService.toLocalDate(java.sql.Date.valueOf("2026-06-04")))
                 .isEqualTo(expected);
-        assertThat(GenericDocumentController.toLocalDate("2026-06-04 08:44:44.417097")).isEqualTo(expected);
-        assertThat(GenericDocumentController.toLocalDate("2026-06-04")).isEqualTo(expected);
+        assertThat(DocumentCommandService.toLocalDate("2026-06-04 08:44:44.417097")).isEqualTo(expected);
+        assertThat(DocumentCommandService.toLocalDate("2026-06-04")).isEqualTo(expected);
     }
 
     @Test
     void doesNotThrowOnTheReportedValue() {
-        assertThatCode(() -> GenericDocumentController.toLocalDateTime("2026-06-04 08:44:44.417097"))
+        assertThatCode(() -> DocumentCommandService.toLocalDateTime("2026-06-04 08:44:44.417097"))
                 .doesNotThrowAnyException();
     }
 }

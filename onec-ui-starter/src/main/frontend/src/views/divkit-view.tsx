@@ -197,6 +197,11 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!kind || !name) return false;
   const ename = event.entityName ?? "";
 
+  // A 2-segment catalog/document path is a list surface — now the self-refreshing onec-list
+  // island (it reloads its own window via the "onec:dataevent" fan-out), so the DivKit content
+  // pane must NOT refetch/remount it. Detail surfaces (3 segments) still refresh in place.
+  if (seg.length === 2 && (kind === "catalogs" || kind === "documents")) return false;
+
   if (kind === "registers") {
     // Posting emits ("changed","register","*"); any register surface should refresh.
     return event.entityType === "register" && (ename === "*" || toSnake(ename) === name);
@@ -305,6 +310,9 @@ export function DivKitView() {
   const refetchTimers = useRef<Map<string, number>>(new Map());
 
   const onUiEvent = useCallback((event: UiEvent) => {
+    // Fan the raw event out to any onec-list islands (they self-refresh their window) — one shared
+    // SSE stream instead of each island opening its own connection.
+    window.dispatchEvent(new CustomEvent("onec:dataevent", { detail: event }));
     for (const [key, entry] of liveRegistry.current) {
       if (!affectsSurface(event, entry.path)) continue;
       // Coalesce bursts (e.g. a post emits both "posted" and register "changed").
