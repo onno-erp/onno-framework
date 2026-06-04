@@ -125,6 +125,74 @@ public class CatalogQueryService {
         return rows;
     }
 
+    /**
+     * One page of a catalog list, server-side sorted and filtered — the engine behind the
+     * virtualized/paged list grid. {@code sortColumn} must be one of the entity's real columns
+     * (validated by the caller via {@link #sortableColumns}); {@code search} matches case-insensitively
+     * across the text columns. Live records only.
+     */
+    public List<Map<String, Object>> page(CatalogDescriptor desc, int offset, int limit,
+                                           String sortColumn, boolean descending, String search) {
+        String orderBy = safeSort(desc, sortColumn, "_code");
+        String where = "_deletion_mark = false" + searchClause(desc, search);
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                    " WHERE " + where +
+                    " ORDER BY " + orderBy + (descending ? " DESC" : " ASC") +
+                    " LIMIT :limit OFFSET :offset")
+                    .bind("limit", limit).bind("offset", Math.max(0, offset));
+            bindSearch(q, search);
+            return q.mapToMap().list();
+        });
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
+    /** Total live rows matching the search — for the virtual scroller's height. */
+    public long count(CatalogDescriptor desc, String search) {
+        String where = "_deletion_mark = false" + searchClause(desc, search);
+        return jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
+            bindSearch(q, search);
+            return q.mapTo(Long.class).one();
+        });
+    }
+
+    /** Column names that may be sorted on: the system columns + every attribute column. */
+    public Set<String> sortableColumns(CatalogDescriptor desc) {
+        Set<String> cols = new java.util.LinkedHashSet<>(Set.of("_code", "_description"));
+        desc.attributes().forEach(a -> cols.add(a.columnName()));
+        return cols;
+    }
+
+    private String safeSort(CatalogDescriptor desc, String sortColumn, String fallback) {
+        return sortColumn != null && sortableColumns(desc).contains(sortColumn) ? sortColumn : fallback;
+    }
+
+    /** The text columns searched: code, description + every String attribute. */
+    private List<String> searchColumns(CatalogDescriptor desc) {
+        List<String> cols = new ArrayList<>(List.of("_code", "_description"));
+        desc.attributes().stream()
+                .filter(a -> a.javaType() == String.class && !a.secret())
+                .forEach(a -> cols.add(a.columnName()));
+        return cols;
+    }
+
+    private String searchClause(CatalogDescriptor desc, String search) {
+        if (search == null || search.isBlank()) return "";
+        String ors = searchColumns(desc).stream()
+                .map(c -> "LOWER(CAST(" + c + " AS VARCHAR)) LIKE :search")
+                .collect(java.util.stream.Collectors.joining(" OR "));
+        return " AND (" + ors + ")";
+    }
+
+    private void bindSearch(org.jdbi.v3.core.statement.Query q, String search) {
+        if (search != null && !search.isBlank()) {
+            q.bind("search", "%" + search.toLowerCase() + "%");
+        }
+    }
+
     public List<Map<String, Object>> children(CatalogDescriptor desc, UUID parent) {
         if (!desc.hierarchical()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,

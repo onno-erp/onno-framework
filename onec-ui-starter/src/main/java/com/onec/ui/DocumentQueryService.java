@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,6 +88,80 @@ public class DocumentQueryService {
                 h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")
                         .mapTo(Long.class)
                         .one());
+    }
+
+    /**
+     * One page of a document list — server-side sorted, filtered, optionally date-ranged. The
+     * engine behind the virtualized/paged list grid. {@code sortColumn} is validated against the
+     * entity's columns; {@code search} matches case-insensitively across the text columns.
+     */
+    public List<Map<String, Object>> page(DocumentDescriptor desc, int offset, int limit,
+                                          String sortColumn, boolean descending, String search,
+                                          String from, String to) {
+        boolean defaultSort = sortColumn == null || !sortableColumns(desc).contains(sortColumn);
+        String orderBy = defaultSort ? "_date" : sortColumn;
+        boolean dirDesc = defaultSort ? true : descending; // newest-first by default
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
+        if (from != null) where.append(" AND _date >= :from");
+        if (to != null) where.append(" AND _date <= :to");
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                    " WHERE " + where +
+                    " ORDER BY " + orderBy + (dirDesc ? " DESC" : " ASC") +
+                    " LIMIT :limit OFFSET :offset")
+                    .bind("limit", limit).bind("offset", Math.max(0, offset));
+            bindSearch(q, search);
+            if (from != null) q.bind("from", from);
+            if (to != null) q.bind("to", to);
+            return q.mapToMap().list();
+        });
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
+    /** Total live rows matching the search (+ optional date range) — for the virtual scroller. */
+    public long count(DocumentDescriptor desc, String search, String from, String to) {
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
+        if (from != null) where.append(" AND _date >= :from");
+        if (to != null) where.append(" AND _date <= :to");
+        return jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
+            bindSearch(q, search);
+            if (from != null) q.bind("from", from);
+            if (to != null) q.bind("to", to);
+            return q.mapTo(Long.class).one();
+        });
+    }
+
+    /** Columns that may be sorted on: the system columns + every attribute column. */
+    public Set<String> sortableColumns(DocumentDescriptor desc) {
+        Set<String> cols = new LinkedHashSet<>(Set.of("_number", "_date", "_posted"));
+        desc.attributes().forEach(a -> cols.add(a.columnName()));
+        return cols;
+    }
+
+    /** The text columns searched: number + every String attribute. */
+    private List<String> searchColumns(DocumentDescriptor desc) {
+        List<String> cols = new ArrayList<>(List.of("_number"));
+        desc.attributes().stream()
+                .filter(a -> a.javaType() == String.class && !a.secret())
+                .forEach(a -> cols.add(a.columnName()));
+        return cols;
+    }
+
+    private String searchClause(DocumentDescriptor desc, String search) {
+        if (search == null || search.isBlank()) return "";
+        String ors = searchColumns(desc).stream()
+                .map(c -> "LOWER(CAST(" + c + " AS VARCHAR)) LIKE :search")
+                .collect(Collectors.joining(" OR "));
+        return " AND (" + ors + ")";
+    }
+
+    private void bindSearch(org.jdbi.v3.core.statement.Query q, String search) {
+        if (search != null && !search.isBlank()) {
+            q.bind("search", "%" + search.toLowerCase() + "%");
+        }
     }
 
     /**

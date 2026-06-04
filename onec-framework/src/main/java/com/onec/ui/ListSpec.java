@@ -24,9 +24,35 @@ public final class ListSpec {
     private final List<String> include = new ArrayList<>();
     private final Set<String> hidden = new LinkedHashSet<>();
     private final Map<String, String> labels = new LinkedHashMap<>();
+    private boolean searchable = true;
+    private String sortField;
+    private boolean sortDescending = false;
 
     public ListSpec title(String title) {
         this.title = title;
+        return this;
+    }
+
+    /** Whether the list shows a search bar (server-side filter across text columns). Default on. */
+    public ListSpec searchable(boolean searchable) {
+        this.searchable = searchable;
+        return this;
+    }
+
+    /** Turn the search bar off for this list. */
+    public ListSpec noSearch() {
+        return searchable(false);
+    }
+
+    /** The column the list is sorted by initially (a field name); ascending. */
+    public ListSpec sortBy(String field) {
+        return sortBy(field, false);
+    }
+
+    /** The initial sort column + direction. */
+    public ListSpec sortBy(String field, boolean descending) {
+        this.sortField = field;
+        this.sortDescending = descending;
         return this;
     }
 
@@ -64,4 +90,10 @@ public final class ListSpec {
     public Map<String, String> labels() { return Map.copyOf(labels); }
 
     public boolean explicit() { return !include.isEmpty(); }
+
+    public boolean searchable() { return searchable; }
+
+    public String sortField() { return sortField; }
+
+    public boolean sortDescending() { return sortDescending; }
 }

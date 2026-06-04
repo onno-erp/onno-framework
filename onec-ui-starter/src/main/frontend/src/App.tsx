@@ -8,6 +8,7 @@ import { PortfolioPage } from "@/views/portfolio";
 import { DivKitView } from "@/views/divkit-view";
 import { WidgetPortals } from "@/lib/widget-bridge";
 import { FormPortals } from "@/lib/form-bridge";
+import { ListPortals } from "@/lib/list-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 
@@ -35,6 +36,7 @@ function ProtectedApp() {
       <DivKitView />
       <WidgetPortals />
       <FormPortals />
+      <ListPortals />
       <IconPortals />
       <ActionsMenuPortals />
     </>

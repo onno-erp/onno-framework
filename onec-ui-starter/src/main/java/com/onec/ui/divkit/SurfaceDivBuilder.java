@@ -22,6 +22,44 @@ public final class SurfaceDivBuilder {
 
     // ----- catalog list -----
 
+    /**
+     * A list surface as the {@code onec-list} React island: a single custom block carrying a
+     * descriptor (columns, sort, searchability, the open-route + New url). The island fetches
+     * pages from {@code /api/list/...} and virtualizes them, so a 10k-row entity never ships whole.
+     */
+    public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
+                                                  String newUrl, List<Map<String, Object>> actions) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (ResolvedListView.Column c : view.columns()) {
+            Map<String, Object> col = new LinkedHashMap<>();
+            col.put("columnName", c.columnName());
+            col.put("label", c.label());
+            col.put("width", c.width() == null ? "" : c.width());
+            columns.add(col);
+        }
+        Map<String, Object> sort = new LinkedHashMap<>();
+        sort.put("column", view.sortColumn());
+        sort.put("descending", view.sortDescending());
+
+        Map<String, Object> descriptor = new LinkedHashMap<>();
+        descriptor.put("kind", kind);
+        descriptor.put("name", name);
+        descriptor.put("title", view.title());
+        descriptor.put("columns", columns);
+        descriptor.put("searchable", view.searchable());
+        descriptor.put("sort", sort);
+        descriptor.put("newUrl", newUrl);
+        descriptor.put("actions", actions == null ? List.of() : actions);
+        descriptor.put("pageSize", 100);
+
+        Map<String, Object> custom = Div.custom("onec-list", Map.of("list", descriptor));
+        Div.matchWidth(custom);
+        Map<String, Object> root = Div.vertical(List.of(custom));
+        Div.id(root, "onec-content");
+        Div.matchWidth(root);
+        return root;
+    }
+
     public static Map<String, Object> catalogList(ResolvedListView view, List<Map<String, Object>> rows,
                                                   String routeName, String newUrl, Palette p) {
         return listContent(view.title(), "items", newUrl, headerLabels(view), columnWidths(view),

@@ -105,7 +105,11 @@ public class UiViewResolver {
         // An authored view title wins; otherwise the entity's display title (which itself
         // falls back to the logical name when no @…(title=…) is declared).
         String title = spec.title() != null ? spec.title() : str(meta.getOrDefault("title", meta.get("name")));
-        return new ResolvedListView(title, columns);
+        // Resolve the authored sort field name to its data column (validated against available
+        // columns); blank means the query layer's default (e.g. _code / _date).
+        ColumnMeta sortMeta = spec.sortField() == null ? null : available.get(spec.sortField());
+        String sortColumn = sortMeta != null ? sortMeta.columnName() : null;
+        return new ResolvedListView(title, columns, spec.searchable(), sortColumn, spec.sortDescending());
     }
 
     private record ColumnMeta(String label, String columnName, boolean visibleInList, int order, String width) {

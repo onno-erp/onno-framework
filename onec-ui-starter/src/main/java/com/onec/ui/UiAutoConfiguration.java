@@ -41,6 +41,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public ListDataController listDataController(CatalogQueryService catalogQueryService,
+                                                DocumentQueryService documentQueryService,
+                                                UiAccessService access) {
+        return new ListDataController(catalogQueryService, documentQueryService, access);
+    }
+
+    @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public OnecValidationExceptionHandler oneCValidationExceptionHandler() {
         return new OnecValidationExceptionHandler();

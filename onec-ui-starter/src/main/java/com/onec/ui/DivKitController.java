@@ -203,22 +203,17 @@ public class DivKitController {
     public Map<String, Object> catalogList(@PathVariable String name,
                                            @RequestParam(required = false) String profile,
                                            @RequestParam(required = false) String theme,
-                                           @RequestParam(required = false) boolean delta,
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         ResolvedListView view = viewResolver.catalogList(desc, profileId);
-        List<Map<String, Object>> rows = catalogQuery.list(desc);
-        Palette p = Palette.of(theme);
-        Map<String, Object> vars = Map.of("onec_count", rows.size());
-        if (delta) {
-            return DivCard.delta(List.of(
-                    DivCard.change("onec-rows", SurfaceDivBuilder.catalogRows(view, rows, name, p))), vars);
-        }
+        // The list is now the virtualized onec-list island: we emit only its descriptor; it
+        // pages the data itself from /api/list (so a 10k-row catalog never ships whole).
         String newUrl = access.canWrite(principal, desc) ? "onec://catalogs/" + name + "/new" : null;
-        return DivCard.ofVars("onec-content", SurfaceDivBuilder.catalogList(view, rows, name, newUrl, p), vars);
+        return DivCard.of("onec-content",
+                SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, null));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -280,26 +275,18 @@ public class DivKitController {
 
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentList(@PathVariable String name,
-                                            @RequestParam(required = false) String from,
-                                            @RequestParam(required = false) String to,
                                             @RequestParam(required = false) String profile,
                                             @RequestParam(required = false) String theme,
-                                            @RequestParam(required = false) boolean delta,
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         ResolvedListView view = viewResolver.documentList(desc, profileId);
-        List<Map<String, Object>> rows = documentQuery.list(desc, from, to);
-        Palette p = Palette.of(theme);
-        Map<String, Object> vars = Map.of("onec_count", rows.size());
-        if (delta) {
-            return DivCard.delta(List.of(
-                    DivCard.change("onec-rows", SurfaceDivBuilder.documentRows(view, rows, name, p))), vars);
-        }
+        // Virtualized onec-list island — see catalogList. Date range is applied by the data feed.
         String newUrl = access.canWrite(principal, desc) ? "onec://documents/" + name + "/new" : null;
-        return DivCard.ofVars("onec-content", SurfaceDivBuilder.documentList(view, rows, name, newUrl, p), vars);
+        return DivCard.of("onec-content",
+                SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, null));
     }
 
     @GetMapping("/documents/{name}/{id}")
