@@ -6,6 +6,10 @@ The repository is a Gradle multi-module build. Applications usually consume one 
 
 For teams or AI agents using these libraries to build an ERP application, start with [Building ERPs With onec-framework And AI Agents](BUILDING_ERPS_WITH_AGENTS.md).
 
+Building a headless front end or integration against the generic API? See the
+[Headless Read API](docs/HEADLESS_READ_API.md) for the JSON response contract (column-name keys,
+reference/enum expansion, secret redaction, list vs get) and how to react to changes.
+
 ## Modules
 
 | Module | Purpose |

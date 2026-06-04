@@ -95,6 +95,29 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
         return context;
     }
 
+    /**
+     * Replaces the default {@code JdbcConverter} with {@link OnecJdbcConverter}, which maps framework
+     * enums to their {@code UUID} column type so {@code @Enumeration} attributes persist through
+     * {@code repository.save(...)} (issue #26). The body mirrors
+     * {@link AbstractJdbcConfiguration#jdbcConverter} so all other behaviour is unchanged.
+     */
+    @Override
+    public org.springframework.data.jdbc.core.convert.JdbcConverter jdbcConverter(
+            JdbcMappingContext mappingContext,
+            org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations operations,
+            @org.springframework.context.annotation.Lazy org.springframework.data.jdbc.core.convert.RelationResolver relationResolver,
+            org.springframework.data.jdbc.core.convert.JdbcCustomConversions conversions,
+            org.springframework.data.relational.core.dialect.Dialect dialect) {
+        org.springframework.data.jdbc.core.convert.JdbcArrayColumns arrayColumns =
+                dialect instanceof org.springframework.data.jdbc.core.dialect.JdbcDialect jdbcDialect
+                        ? jdbcDialect.getArraySupport()
+                        : org.springframework.data.jdbc.core.convert.JdbcArrayColumns.DefaultSupport.INSTANCE;
+        org.springframework.data.jdbc.core.convert.DefaultJdbcTypeFactory jdbcTypeFactory =
+                new org.springframework.data.jdbc.core.convert.DefaultJdbcTypeFactory(
+                        operations.getJdbcOperations(), arrayColumns);
+        return new OnecJdbcConverter(mappingContext, relationResolver, conversions, jdbcTypeFactory);
+    }
+
     @Bean
     public SchemaInitializer schemaInitializer(DataSource dataSource, OnecProperties properties,
                                                ApplicationContext context) {
@@ -113,10 +136,24 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
         return new OnecBeforeConvertCallback(registry, numberGenerator, secretCipher);
     }
 
+    /**
+     * Bridges the framework's {@link com.onec.events.EntityChangePublisher} SPI onto Spring's
+     * {@link org.springframework.context.ApplicationEventPublisher}, so a {@code repository.save}/
+     * {@code delete} publishes an {@link com.onec.events.EntityChangedEvent} that application code can
+     * {@code @EventListener} — the same event the generic controllers emit, so both write paths are
+     * observable through one hook (issues #28, #29).
+     */
+    @Bean
+    public com.onec.events.EntityChangePublisher entityChangePublisher(
+            org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
+        return applicationEventPublisher::publishEvent;
+    }
+
     @Bean
     public OnecAfterSaveCallback oneCAfterSaveCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
-                                                       com.onec.security.SecretCipher secretCipher) {
-        return new OnecAfterSaveCallback(outboxWriter, registry, secretCipher);
+                                                       com.onec.security.SecretCipher secretCipher,
+                                                       com.onec.events.EntityChangePublisher entityChangePublisher) {
+        return new OnecAfterSaveCallback(outboxWriter, registry, secretCipher, entityChangePublisher);
     }
 
     @Bean
@@ -126,8 +163,9 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public OnecBeforeDeleteCallback oneCBeforeDeleteCallback(OutboxWriter outboxWriter) {
-        return new OnecBeforeDeleteCallback(outboxWriter);
+    public OnecBeforeDeleteCallback oneCBeforeDeleteCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
+                                                             com.onec.events.EntityChangePublisher entityChangePublisher) {
+        return new OnecBeforeDeleteCallback(outboxWriter, registry, entityChangePublisher);
     }
 
     @Bean

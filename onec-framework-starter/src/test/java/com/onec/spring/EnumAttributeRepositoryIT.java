@@ -1,0 +1,213 @@
+package com.onec.spring;
+
+import com.onec.metadata.DefaultNamingStrategy;
+import com.onec.metadata.EnumerationDescriptor;
+import com.onec.metadata.MetadataRegistry;
+import com.onec.metadata.MetadataScanner;
+import com.onec.numbering.NumberGenerator;
+import com.onec.repository.EnumerationPersistence;
+import com.onec.schema.SchemaGenerator;
+import com.onec.security.SecretCipher;
+import com.onec.spring.fixtures.TestService;
+import com.onec.spring.fixtures.TestServiceCategory;
+import com.onec.spring.fixtures.TestServiceRepository;
+
+import org.h2.jdbcx.JdbcDataSource;
+import org.jdbi.v3.core.Jdbi;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jdbc.core.convert.JdbcConverter;
+import org.springframework.data.jdbc.core.convert.JdbcCustomConversions;
+import org.springframework.data.jdbc.core.convert.RelationResolver;
+import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
+import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
+import org.springframework.data.jdbc.repository.config.EnableJdbcRepositories;
+import org.springframework.data.relational.RelationalManagedTypes;
+import org.springframework.data.relational.core.dialect.Dialect;
+import org.springframework.data.relational.core.mapping.NamingStrategy;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import javax.sql.DataSource;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * Round-trips a catalog carrying an {@code @Enumeration} attribute through the typed Spring Data JDBC
+ * repository ({@code save} / {@code findById}). This is the path issue #26 reported broken: the enum
+ * was bound as its {@code name()} string into the {@code UUID} column because Spring Data JDBC
+ * resolves an enum's column type to {@code String} before consulting the registered
+ * {@code Enum -> UUID} converter. {@link OnecJdbcConverter} fixes the column-type resolution.
+ */
+@SpringJUnitConfig(EnumAttributeRepositoryIT.Config.class)
+class EnumAttributeRepositoryIT {
+
+    @Autowired
+    private TestServiceRepository repository;
+
+    @Autowired
+    private DataSource dataSource;
+
+    @BeforeEach
+    void createSchema() {
+        new SchemaGenerator(buildRegistry()).execute(Jdbi.create(dataSource));
+    }
+
+    @Test
+    void catalogWithEnumAttribute_roundTripsThroughRepository() {
+        TestService service = new TestService();
+        service.setCode("S-1");
+        service.setDescription("Rabies shot");
+        service.setName("Rabies shot");
+        service.setCategory(TestServiceCategory.VACCINATION);
+
+        // save(...) used to fail: "Data conversion error converting 'VACCINATION' ... UUID"
+        TestService saved = repository.save(service);
+        UUID id = saved.getId();
+        assertThat(id).isNotNull();
+
+        TestService loaded = repository.findById(id).orElseThrow();
+        assertThat(loaded.getName()).isEqualTo("Rabies shot");
+        assertThat(loaded.getCategory()).isEqualTo(TestServiceCategory.VACCINATION);
+
+        // The column physically holds the stable name-based UUID for the enum value, not its name.
+        UUID expectedEnumId = EnumerationPersistence.resolveId(TestServiceCategory.class,
+                TestServiceCategory.VACCINATION);
+        UUID storedCategory = Jdbi.create(dataSource).withHandle(h ->
+                h.createQuery("SELECT category FROM catalog_test_services WHERE _id = :id")
+                        .bind("id", id)
+                        .mapTo(UUID.class)
+                        .one());
+        assertThat(storedCategory).isEqualTo(expectedEnumId);
+    }
+
+    @Test
+    void nullEnumAttribute_savesAsNull() {
+        TestService service = new TestService();
+        service.setCode("S-2");
+        service.setName("No category");
+        // category left null
+
+        TestService saved = repository.save(service);
+        TestService loaded = repository.findById(saved.getId()).orElseThrow();
+        assertThat(loaded.getCategory()).isNull();
+    }
+
+    private static MetadataRegistry buildRegistry() {
+        MetadataRegistry registry = new MetadataRegistry();
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        registry.registerCatalog(scanner.scan(TestService.class));
+        registry.registerEnumeration(scanner.scanEnumeration(TestServiceCategory.class));
+        return registry;
+    }
+
+    @Configuration
+    @EnableJdbcRepositories(basePackageClasses = TestServiceRepository.class)
+    static class Config extends AbstractJdbcConfiguration {
+
+        @Bean
+        DataSource dataSource() {
+            JdbcDataSource ds = new JdbcDataSource();
+            ds.setURL("jdbc:h2:mem:enum_attr_it;DB_CLOSE_DELAY=-1");
+            return ds;
+        }
+
+        @Bean
+        NamedParameterJdbcOperations namedParameterJdbcOperations(DataSource dataSource) {
+            return new NamedParameterJdbcTemplate(dataSource);
+        }
+
+        @Bean
+        PlatformTransactionManager transactionManager(DataSource dataSource) {
+            return new DataSourceTransactionManager(dataSource);
+        }
+
+        @Bean
+        MetadataRegistry metadataRegistry() {
+            return buildRegistry();
+        }
+
+        @Bean
+        NamingStrategy oneCNamingStrategy() {
+            return new OnecNamingStrategy();
+        }
+
+        /** Register the framework's value-object converters, including {@code Enum <-> UUID}. */
+        @Override
+        protected List<?> userConverters() {
+            MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+            EnumerationDescriptor category = scanner.scanEnumeration(TestServiceCategory.class);
+            return EnumUuidConverters.build(List.of(category));
+        }
+
+        @Override
+        public JdbcMappingContext jdbcMappingContext(Optional<NamingStrategy> namingStrategy,
+                                                     JdbcCustomConversions customConversions,
+                                                     RelationalManagedTypes jdbcManagedTypes) {
+            OnecMappingContext context = new OnecMappingContext(namingStrategy.orElseGet(OnecNamingStrategy::new));
+            context.setSimpleTypeHolder(customConversions.getSimpleTypeHolder());
+            return context;
+        }
+
+        /** Mirror production wiring: the enum-aware converter is what makes this test pass. */
+        @Override
+        public JdbcConverter jdbcConverter(JdbcMappingContext mappingContext,
+                                           NamedParameterJdbcOperations operations,
+                                           @org.springframework.context.annotation.Lazy RelationResolver relationResolver,
+                                           JdbcCustomConversions conversions,
+                                           Dialect dialect) {
+            var arrayColumns = dialect instanceof org.springframework.data.jdbc.core.dialect.JdbcDialect jdbcDialect
+                    ? jdbcDialect.getArraySupport()
+                    : org.springframework.data.jdbc.core.convert.JdbcArrayColumns.DefaultSupport.INSTANCE;
+            var jdbcTypeFactory = new org.springframework.data.jdbc.core.convert.DefaultJdbcTypeFactory(
+                    operations.getJdbcOperations(), arrayColumns);
+            return new OnecJdbcConverter(mappingContext, relationResolver, conversions, jdbcTypeFactory);
+        }
+
+        @Bean
+        SecretCipher secretCipher() {
+            return new SecretCipher("test-secret-key");
+        }
+
+        @Bean
+        NumberGenerator numberGenerator() {
+            return new NumberGenerator() {
+                @Override
+                public String nextNumber(String entityName, int length) {
+                    return "0";
+                }
+
+                @Override
+                public String nextCode(String entityName, int length) {
+                    return "0";
+                }
+            };
+        }
+
+        @Bean
+        OnecBeforeConvertCallback oneCBeforeConvertCallback(MetadataRegistry registry,
+                                                            NumberGenerator numberGenerator,
+                                                            SecretCipher secretCipher) {
+            return new OnecBeforeConvertCallback(registry, numberGenerator, secretCipher);
+        }
+
+        @Bean
+        OnecAfterConvertCallback oneCAfterConvertCallback(MetadataRegistry registry, SecretCipher secretCipher) {
+            return new OnecAfterConvertCallback(registry, secretCipher);
+        }
+
+        @Bean
+        OnecAfterSaveCallback oneCAfterSaveCallback(MetadataRegistry registry, SecretCipher secretCipher) {
+            return new OnecAfterSaveCallback(null, registry, secretCipher, null);
+        }
+    }
+}

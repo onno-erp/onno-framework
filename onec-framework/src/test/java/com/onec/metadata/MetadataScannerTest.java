@@ -79,4 +79,15 @@ class MetadataScannerTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must extend CatalogObject");
     }
+
+    @Test
+    void scan_catalogWithTabularSection_throws() {
+        // A @TabularSection on a @Catalog used to scan cleanly and only fail on the first write
+        // (no child table is generated). It must be rejected at scan time with a clear message.
+        assertThatThrownBy(() -> scanner.scan(
+                com.onec.fixtures.TestCatalogWithTabularSection.class))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("@TabularSection is only supported on @Document")
+                .hasMessageContaining("lines");
+    }
 }
