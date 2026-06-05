@@ -85,6 +85,7 @@ function eventMatches(event: UiEvent, kind: string, name: string): boolean {
 
 export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const { kind, name, columns, pageSize } = list;
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const rows = useRef<Map<number, EntityRecord>>(new Map());
   const loadedPages = useRef<Set<number>>(new Set());
@@ -96,6 +97,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const rerender = useCallback(() => force((n) => n + 1), []);
   const [scrollTop, setScrollTop] = useState(0);
   const [bodyH, setBodyH] = useState(420);
+  // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
+  // so we switch the toolbar to a compact layout off the measured container width, not a media query.
+  const [compact, setCompact] = useState(false);
   const [sort, setSort] = useState<{ column: string | null; descending: boolean }>(list.sort);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -177,6 +181,17 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     fetchPage(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort.column, sort.descending, debounced]);
+
+  // Collapse the toolbar (icon-only buttons, stacked title) when the island gets narrow.
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const apply = () => setCompact(el.clientWidth < 560);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Size the scroll viewport to fill from its top to the bottom of the window.
   useLayoutEffect(() => {
@@ -282,16 +297,18 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
-    <div className="pointer-events-auto flex flex-col px-4 py-4 sm:px-6">
-      {/* toolbar */}
-      <div className="mb-3 flex items-center gap-3">
+    <div ref={rootRef} className="pointer-events-auto flex flex-col px-4 py-4 sm:px-6">
+      {/* toolbar — stacks (title over controls) when the island is too narrow for one row */}
+      <div className={cn("mb-3 flex gap-3", compact ? "flex-col items-stretch" : "items-center")}>
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold text-foreground">{list.title}</h1>
-          <p className="text-xs text-muted-foreground">{total == null ? "…" : `${total} ${total === 1 ? "row" : "rows"}`}</p>
+          <p className="whitespace-nowrap text-xs text-muted-foreground">
+            {total == null ? "…" : `${total} ${total === 1 ? "row" : "rows"}`}
+          </p>
         </div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className={cn("flex flex-wrap items-center gap-2", compact ? "justify-start" : "ml-auto justify-end")}>
           {toolbarInputs.map((inp) => (
-            <label key={inp.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>
               {inp.type === "select" ? (
                 <select
@@ -318,33 +335,40 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             </label>
           ))}
           {list.searchable ? (
-            <div className="relative">
+            <div className={cn("relative", compact ? "min-w-[8rem] flex-1" : "")}>
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
-                className="h-9 w-44 pl-8 sm:w-60"
+                className={cn("h-9 pl-8", compact ? "w-full" : "w-44 sm:w-60")}
               />
             </div>
           ) : null}
           {toolbarActions.map((a) => {
             const busy = pending.has(a.key);
+            // Compact + has an icon → icon-only (label drops to the tooltip), so the button can't
+            // shrink below its content and wrap its text per-character.
+            const iconOnly = compact && !!a.icon;
             return (
               <button
                 key={a.key}
                 type="button"
                 onClick={() => runAction(a)}
                 disabled={busy}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-secondary text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60",
+                  iconOnly ? "w-9 justify-center px-0" : "px-3"
+                )}
                 title={a.label}
+                aria-label={a.label}
               >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 ) : a.icon ? (
                   <DynamicLucide name={a.icon} size={16} />
                 ) : null}
-                {a.label}
+                {iconOnly ? null : a.label}
               </button>
             );
           })}
@@ -352,10 +376,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             <button
               type="button"
               onClick={() => dispatchAction(list.newUrl!)}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+              className={cn(
+                "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-secondary text-sm font-medium text-foreground transition-colors hover:bg-accent",
+                compact ? "w-9 justify-center px-0" : "px-3"
+              )}
+              title="New"
+              aria-label="New"
             >
               <Plus className="size-4" aria-hidden="true" />
-              New
+              {compact ? null : "New"}
             </button>
           ) : null}
         </div>
