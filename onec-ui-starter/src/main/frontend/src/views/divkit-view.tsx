@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
-import { Copy, ExternalLink, Pencil, X } from "lucide-react";
+import { Copy, ExternalLink, Pencil, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   createGlobalVariablesController,
@@ -129,6 +129,12 @@ function isRecordDetail(pathname: string): boolean {
   return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
 }
 
+// Turn a row's open url ("onec://{kind}/{name}/{id}") into the delete action url
+// ("onec://delete/{kind}/{name}/{id}") handled by onCustomAction.
+function rowDeleteUrl(rowUrl: string): string {
+  return "onec://delete/" + rowUrl.slice("onec://".length);
+}
+
 function initialWorkspace(): Workspace {
   const path = window.location.pathname;
   const id = newPaneId();
@@ -230,6 +236,12 @@ export function DivKitView() {
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string } | null>(null);
   // The in-app confirmation modal (delete, etc.); null when closed.
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  // Mirror the menu/modal open-state into refs so the window-level Delete-key handler can read
+  // it without re-subscribing on every toggle.
+  const rowMenuOpenRef = useRef(false);
+  rowMenuOpenRef.current = rowMenu !== null;
+  const confirmOpenRef = useRef(false);
+  confirmOpenRef.current = confirm !== null;
 
   const resolvedTheme = useMemo<"light" | "dark">(() => {
     if (theme === "dark" || theme === "light") return theme;
@@ -539,6 +551,36 @@ export function DivKitView() {
       window.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  // Delete key (macOS fn+Backspace, or the dedicated Del key) deletes the list row under the
+  // pointer — the same row the hover highlight marks and the right-click menu targets. Routes
+  // through the shared delete/ flow (confirm modal + REST), so it's guarded, not destructive.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" || e.metaKey || e.ctrlKey || e.altKey) return;
+      // Don't hijack the key while typing in a field or while a menu/modal owns it.
+      if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (
+        ae &&
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.tagName === "SELECT" ||
+          ae.isContentEditable)
+      ) {
+        return;
+      }
+      // The row the pointer is over (CSS :hover already highlights it). No persistent selection
+      // state to drift out of sync with the virtualized list.
+      const el = document.querySelector("[data-onec-row]:hover") as HTMLElement | null;
+      const url = el?.dataset.onecRow;
+      if (!url) return;
+      e.preventDefault();
+      onCustomAction({ url: rowDeleteUrl(url) });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCustomAction]);
 
   // The React form widgets (onec-form) and ref picker live outside DivKit's action flow,
   // so they reach the host through window events: "onec:action" routes an onec:// url
@@ -935,7 +977,7 @@ export function DivKitView() {
       className="fixed z-50 min-w-44 overflow-hidden rounded-xl border py-1 shadow-lg"
       style={{
         left: Math.min(rowMenu.x, window.innerWidth - 184),
-        top: Math.min(rowMenu.y, window.innerHeight - 96),
+        top: Math.min(rowMenu.y, window.innerHeight - 168),
         background: surfaceBg,
         borderColor,
       }}
@@ -945,19 +987,30 @@ export function DivKitView() {
         { label: "Open", icon: ExternalLink, url: rowMenu.url },
         { label: "Edit", icon: Pencil, url: rowMenu.url + "/edit" },
         { label: "Duplicate", icon: Copy, url: rowMenu.url + "/duplicate" },
-      ].map(({ label, icon: Icon, url }) => (
-        <button
-          key={label}
-          type="button"
-          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
-          onClick={() => {
-            onCustomAction({ url });
-            setRowMenu(null);
-          }}
-        >
-          <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-          {label}
-        </button>
+        // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
+        // detail header's delete (handled in onCustomAction).
+        { label: "Delete", icon: Trash2, url: rowDeleteUrl(rowMenu.url), danger: true, divider: true },
+      ].map(({ label, icon: Icon, url, danger, divider }) => (
+        <Fragment key={label}>
+          {divider ? <div className="my-1 border-t" style={{ borderColor }} /> : null}
+          <button
+            type="button"
+            className={cn(
+              "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted",
+              danger ? "text-red-600" : "text-foreground"
+            )}
+            onClick={() => {
+              onCustomAction({ url });
+              setRowMenu(null);
+            }}
+          >
+            <Icon
+              className={cn("size-4", danger ? "text-red-600" : "text-muted-foreground")}
+              aria-hidden="true"
+            />
+            {label}
+          </button>
+        </Fragment>
       ))}
     </div>
   ) : null;
