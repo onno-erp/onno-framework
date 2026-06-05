@@ -44,6 +44,14 @@ public class DocumentQueryService {
                         "Document not found: " + name));
     }
 
+    /** The document descriptor for a domain class, or {@code null} if it isn't a registered document. */
+    public DocumentDescriptor forClass(Class<?> clazz) {
+        return registry.allDocuments().stream()
+                .filter(d -> d.javaClass().equals(clazz))
+                .findFirst()
+                .orElse(null);
+    }
+
     public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to) {
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false");

@@ -43,6 +43,14 @@ public class CatalogQueryService {
                         "Catalog not found: " + name));
     }
 
+    /** The catalog descriptor for a domain class, or {@code null} if it isn't a registered catalog. */
+    public CatalogDescriptor forClass(Class<?> clazz) {
+        return registry.allCatalogs().stream()
+                .filter(d -> d.javaClass().equals(clazz))
+                .findFirst()
+                .orElse(null);
+    }
+
     public List<Map<String, Object>> list(CatalogDescriptor desc) {
         List<Map<String, Object>> rows = jdbi.withHandle(h ->
                 h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false")

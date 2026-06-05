@@ -63,6 +63,17 @@ public final class PageBuilder {
         return this;
     }
 
+    /**
+     * Embed the full interactive list of a catalog/document — the same surface as its own route,
+     * with the New button, custom action buttons, search/sort and rows that open a detail beside
+     * the page. Lets a page (e.g. Settings) manage reference data inline. {@code entity} is the
+     * catalog or document class.
+     */
+    public PageBuilder list(Class<?> entity) {
+        components.add(PageComponent.list(entity));
+        return this;
+    }
+
     // ----- build accessors (consumed by the renderer) -----
 
     public String title() {

@@ -30,6 +30,23 @@ public final class SurfaceDivBuilder {
     public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
                                                   String newUrl, List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs) {
+        Map<String, Object> descriptor = listDescriptor(view, kind, name, newUrl, actions, inputs);
+        Map<String, Object> custom = Div.custom("onec-list", Map.of("list", descriptor));
+        Div.matchWidth(custom);
+        Map<String, Object> root = Div.vertical(List.of(custom));
+        Div.id(root, "onec-content");
+        Div.matchWidth(root);
+        return root;
+    }
+
+    /**
+     * The {@code onec-list} descriptor (columns, sort, searchability, routes, actions, inputs) that
+     * the React island consumes — without the surface wrapping, so it can be embedded inside a page
+     * as an {@code onec-list} {@code div-custom} block (see {@code PageBuilder.list}).
+     */
+    public static Map<String, Object> listDescriptor(ResolvedListView view, String kind, String name,
+                                                     String newUrl, List<Map<String, Object>> actions,
+                                                     List<Map<String, Object>> inputs) {
         List<Map<String, Object>> columns = new ArrayList<>();
         for (ResolvedListView.Column c : view.columns()) {
             Map<String, Object> col = new LinkedHashMap<>();
@@ -53,13 +70,7 @@ public final class SurfaceDivBuilder {
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
         descriptor.put("pageSize", 100);
-
-        Map<String, Object> custom = Div.custom("onec-list", Map.of("list", descriptor));
-        Div.matchWidth(custom);
-        Map<String, Object> root = Div.vertical(List.of(custom));
-        Div.id(root, "onec-content");
-        Div.matchWidth(root);
-        return root;
+        return descriptor;
     }
 
     public static Map<String, Object> catalogList(ResolvedListView view, List<Map<String, Object>> rows,

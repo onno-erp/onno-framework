@@ -27,8 +27,8 @@ public class SettingsPage implements Page {
         // The @Constant toggles/inputs, saved in place.
         b.constants("App settings");
 
-        // ...and a catalogue managed from the same screen, using the list primitive any page uses.
-        b.widget("Countries").type("list").width("full").catalog(Country.class).maxItems(8)
-                .config("titleTemplate", "{name}").config("secondaryField", "nationality");
+        // ...and a catalogue managed right here: the full interactive list — New button, the
+        // entity's custom action buttons, search/sort, and rows that open a detail beside the page.
+        b.list(Country.class);
     }
 }

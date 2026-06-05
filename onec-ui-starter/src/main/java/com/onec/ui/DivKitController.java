@@ -186,7 +186,7 @@ public class DivKitController {
         if (page != null) {
             PageBuilder pb = new PageBuilder();
             page.compose(pb);
-            content = renderPage(pb, columns, p, principal, defaultTitle, greeting);
+            content = renderPage(pb, columns, p, principal, active.id(), defaultTitle, greeting);
         } else {
             List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
@@ -218,18 +218,82 @@ public class DivKitController {
             pb.title("Settings").subtitle("App-wide configuration.").constants();
         }
         return DivCard.of("onec-content",
-                renderPage(pb, columns, p, principal, "Settings", "App-wide configuration."));
+                renderPage(pb, columns, p, principal, active.id(), "Settings", "App-wide configuration."));
     }
 
     /** Render a composed page (header + access-filtered widget grid + freeform components). */
     private Map<String, Object> renderPage(PageBuilder pb, int columns, Palette p, Principal principal,
-                                           String defaultTitle, String defaultSubtitle) {
+                                           String profileId, String defaultTitle, String defaultSubtitle) {
         List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                 .toList();
+        List<PageComponent> components = expandComponents(pb.components(), profileId, principal);
         String title = pb.title() != null ? pb.title() : defaultTitle;
         String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
-        return PageDivBuilder.build(title, subtitle, widgets, pb.components(), columns, this::widgetValue, p);
+        return PageDivBuilder.build(title, subtitle, widgets, components, columns, this::widgetValue, p);
+    }
+
+    /** Replace each embedded-list component ({@code PageBuilder.list}) with the full onec-list block. */
+    private List<PageComponent> expandComponents(List<PageComponent> in, String profileId, Principal principal) {
+        List<PageComponent> out = new ArrayList<>();
+        for (PageComponent c : in) {
+            if (c.kind() != PageComponent.Kind.LIST) {
+                out.add(c);
+                continue;
+            }
+            Map<String, Object> descriptor = embeddedListDescriptor(c.entity(), profileId, principal);
+            if (descriptor != null) {
+                out.add(PageComponent.custom("onec-list", Map.of("list", descriptor)));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * The full {@code onec-list} descriptor (toolbar, New, actions, inputs, click-to-open) for a
+     * catalog/document class embedded in a page, or {@code null} if it isn't a readable entity.
+     */
+    private Map<String, Object> embeddedListDescriptor(Class<?> entity, String profileId, Principal principal) {
+        if (entity == null) {
+            return null;
+        }
+        CatalogDescriptor cd = catalogQuery.forClass(entity);
+        if (cd != null) {
+            if (!access.canRead(principal, cd)) {
+                return null;
+            }
+            ResolvedListView view = viewResolver.catalogList(cd, profileId);
+            String name = toSnakeCase(cd.logicalName());
+            String newUrl = access.canWrite(principal, cd) ? "onec://catalogs/" + name + "/new" : null;
+            return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl,
+                    listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity));
+        }
+        DocumentDescriptor dd = documentQuery.forClass(entity);
+        if (dd != null) {
+            if (!access.canRead(principal, dd)) {
+                return null;
+            }
+            ResolvedListView view = viewResolver.documentList(dd, profileId);
+            String name = toSnakeCase(dd.logicalName());
+            String newUrl = access.canWrite(principal, dd) ? "onec://documents/" + name + "/new" : null;
+            return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl,
+                    listActions(entity, "documents", name), actionResolver.inputDescriptors(entity));
+        }
+        return null;
+    }
+
+    /** Logical name → route segment (mirrors UiLayoutResolver: "Bank Accounts" → "bank_accounts"). */
+    private static String toSnakeCase(String name) {
+        String normalized = name.replace(" ", "");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            if (Character.isUpperCase(c) && i > 0) {
+                sb.append('_');
+            }
+            sb.append(Character.toLowerCase(c));
+        }
+        return sb.toString();
     }
 
     /**
