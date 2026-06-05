@@ -216,8 +216,21 @@ final class Components {
             Row row = rows.get(i);
             List<Map<String, Object>> cells = new ArrayList<>();
             List<String> values = row.cells();
+            List<String> cellUrls = row.cellUrls();
             for (int c = 0; c < values.size(); c++) {
-                cells.add(cell(Div.color(Div.text(values.get(c), 14, "regular"), p.text()), widths.get(c)));
+                String url = cellUrls != null && c < cellUrls.size() ? cellUrls.get(c) : null;
+                Map<String, Object> textNode;
+                if (url != null && !url.isBlank()) {
+                    // A ref cell: a tappable hyperlink (primary, underlined) that opens the
+                    // referenced record — so tabular-section refs are navigable just like the
+                    // top-level ref rows (see refFieldRow), instead of rendering as dead text.
+                    textNode = Div.color(Div.text(values.get(c), 14, "regular"), p.primary());
+                    textNode.put("underline", "single");
+                    Div.action(textNode, "open-ref", url);
+                } else {
+                    textNode = Div.color(Div.text(values.get(c), 14, "regular"), p.text());
+                }
+                cells.add(cell(textNode, widths.get(c)));
             }
             Map<String, Object> rowNode = Div.horizontal(cells);
             Div.wrapWidth(rowNode);
@@ -376,5 +389,15 @@ final class Components {
         return row;
     }
 
-    record Row(List<String> cells, String actionUrl) {}
+    /**
+     * A table row: its string {@code cells}, an optional row-level {@code actionUrl} (taps the whole
+     * row — used by list surfaces), and an optional positionally-aligned {@code cellUrls} so an
+     * individual cell (e.g. a ref column) can be a tappable link to another record. A null/short
+     * {@code cellUrls}, or a null entry within it, leaves that cell as plain text.
+     */
+    record Row(List<String> cells, String actionUrl, List<String> cellUrls) {
+        Row(List<String> cells, String actionUrl) {
+            this(cells, actionUrl, null);
+        }
+    }
 }

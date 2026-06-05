@@ -205,10 +205,15 @@ public final class SurfaceDivBuilder {
             int line = 1;
             for (Map<String, Object> tsRow : tsRows) {
                 List<String> cells = new ArrayList<>();
+                List<String> cellUrls = new ArrayList<>();
                 Object ln = tsRow.get("_line_number");
                 cells.add(ln != null ? str(ln) : String.valueOf(line));
-                for (Map<String, Object> a : tsAttrs) cells.add(cell(a, tsRow));
-                body.add(new Components.Row(cells, null));
+                cellUrls.add(null); // the leading "#" line-number column is never a ref
+                for (Map<String, Object> a : tsAttrs) {
+                    cells.add(cell(a, tsRow));
+                    cellUrls.add(refUrlFor(a, tsRow)); // null for non-ref columns
+                }
+                body.add(new Components.Row(cells, null, cellUrls));
                 line++;
             }
             items.add(sectionLabel(str(ts.get("name")), p));
