@@ -1,5 +1,7 @@
 package com.onec.query;
 
+import com.onec.repository.EnumerationPersistence;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.RecordComponent;
@@ -101,7 +103,18 @@ final class RowMapper {
             return LocalDateTime.parse(value.toString().replace(' ', 'T'));
         }
         if (target.isEnum()) {
-            return Enum.valueOf((Class<? extends Enum>) target, value.toString());
+            // Enum attributes are stored as their stable UUID (SchemaGenerator maps enums to a UUID
+            // column; EnumerationPersistence does the enum<->UUID mapping), so resolve from the id
+            // rather than treating the value as a constant name. A driver may hand the UUID back as
+            // a string; only a genuinely non-UUID string falls back to by-name lookup.
+            if (value instanceof UUID uuid) {
+                return EnumerationPersistence.resolveValue(target, uuid);
+            }
+            try {
+                return EnumerationPersistence.resolveValue(target, UUID.fromString(value.toString()));
+            } catch (IllegalArgumentException notAStoredEnumId) {
+                return Enum.valueOf((Class<? extends Enum>) target, value.toString());
+            }
         }
         return value;
     }

@@ -65,8 +65,8 @@ public class ThymeleafPrintService implements PrintService {
             throw new IllegalStateException("Print template not found: " + descriptor.template());
         }
         String body;
-        try {
-            body = new String(resource.getInputStream().readAllBytes(), encoding);
+        try (var in = resource.getInputStream()) {
+            body = new String(in.readAllBytes(), encoding);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read template " + descriptor.template(), e);
         }

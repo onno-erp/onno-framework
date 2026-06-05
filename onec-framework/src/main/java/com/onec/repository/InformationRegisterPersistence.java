@@ -288,6 +288,11 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
             return rs.getLong(col);
         } else if (type == boolean.class || type == Boolean.class) {
             return rs.getBoolean(col);
+        } else if (type.isEnum()) {
+            // Enum attributes are stored as their stable UUID — resolve back to the constant
+            // rather than leaking the raw UUID through the getObject(...) fallback.
+            String val = rs.getString(col);
+            return val != null ? EnumerationPersistence.resolveValue(type, UUID.fromString(val)) : null;
         } else if (Ref.class.isAssignableFrom(type)) {
             String val = rs.getString(col);
             return val != null ? new Ref<>(Object.class, UUID.fromString(val)) : null;
