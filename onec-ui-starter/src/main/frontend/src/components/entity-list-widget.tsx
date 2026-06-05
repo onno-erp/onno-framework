@@ -109,8 +109,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const [scrollTop, setScrollTop] = useState(0);
   const [bodyH, setBodyH] = useState(420);
   // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
-  // so we switch the toolbar to a compact layout off the measured container width, not a media query.
-  const [compact, setCompact] = useState(false);
+  // so the toolbar layout is driven by the measured container width, not a media query.
+  const [toolbarWidth, setToolbarWidth] = useState<number | null>(null);
   const [sort, setSort] = useState<{ column: string | null; descending: boolean }>(list.sort);
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -122,6 +122,18 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const rowActions = allActions.filter((a) => a.scope === "row");
   const toolbarInputs = list.inputs ?? [];
 
+  // Responsive toolbar, driven by the measured island width and the actual controls present
+  // (not a fixed media query). `stacked` puts the title on its own row and the controls below
+  // the moment they would no longer fit beside it — so the title never truncates mid-toolbar.
+  // `compact` (much narrower) additionally drops the button labels to icons.
+  const controlsWidthEstimate =
+    toolbarInputs.length * 210 +
+    (list.searchable ? 220 : 0) +
+    toolbarActions.length * 100 +
+    (list.newUrl ? 90 : 0);
+  const stacked = toolbarWidth != null && toolbarWidth < controlsWidthEstimate + 170;
+  const compact = toolbarWidth != null && toolbarWidth < 560;
+
   // Live values of the custom toolbar inputs, seeded from their declared defaults. These are sent
   // with every server action so the handler can read them via ActionContext.input(key).
   const [inputValues, setInputValues] = useState<Record<string, string>>(() =>
@@ -130,18 +142,33 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const inputValuesRef = useRef(inputValues);
   inputValuesRef.current = inputValues;
 
-  // Column grid template: an authored px width, else a flexible track. The floor is 0 (not a
-  // fixed min) so that in a narrow/split island the columns shrink — text just truncates —
-  // rather than overflowing the card and pushing the trailing action column out of view. A
-  // trailing fixed column holds the per-row action buttons when any are declared.
+  // Column grid template: an authored px width, else a flexible track. A trailing fixed column
+  // holds the per-row action buttons when any are declared. The floor is 0 here because the
+  // table's overall min-width (below) keeps the columns readable — when the card is narrower
+  // than that, the table scrolls horizontally instead of cramming the columns.
+  const DATA_COL_MIN = 150;
+  const ACTION_COL_W = rowActions.length ? rowActions.length * 36 + 8 : 0;
   const template =
     columns
       .map((c) => {
         const px = parseInt(c.width, 10);
         return Number.isFinite(px) && px > 0 ? `${px}px` : "minmax(0,1fr)";
       })
-      .concat(rowActions.length ? [`${rowActions.length * 36 + 8}px`] : [])
+      .concat(ACTION_COL_W ? [`${ACTION_COL_W}px`] : [])
       .join(" ");
+
+  // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
+  // plus the action column, the 12px inter-column gaps and the 32px (px-4) row padding. When the
+  // card is wider, the grid fills it (1fr expands); when narrower, this drives a horizontal scroll.
+  const trackCount = columns.length + (ACTION_COL_W ? 1 : 0);
+  const minTableWidth =
+    columns.reduce((sum, c) => {
+      const px = parseInt(c.width, 10);
+      return sum + (Number.isFinite(px) && px > 0 ? px : DATA_COL_MIN);
+    }, 0) +
+    ACTION_COL_W +
+    Math.max(0, trackCount - 1) * 12 +
+    32;
 
   // Debounce the search box.
   useEffect(() => {
@@ -193,11 +220,11 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort.column, sort.descending, debounced]);
 
-  // Collapse the toolbar (icon-only buttons, stacked title) when the island gets narrow.
+  // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
     const el = rootRef.current;
     if (!el) return;
-    const apply = () => setCompact(el.clientWidth < 560);
+    const apply = () => setToolbarWidth(el.clientWidth);
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(el);
@@ -309,15 +336,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
     <div ref={rootRef} className="pointer-events-auto flex flex-col px-4 py-4 sm:px-6">
-      {/* toolbar — stacks (title over controls) when the island is too narrow for one row */}
-      <div className={cn("mb-3 flex gap-3", compact ? "flex-col items-stretch" : "items-center")}>
+      {/* toolbar — stacks (title over controls) the moment the controls won't fit beside it */}
+      <div className={cn("mb-3 flex gap-x-3 gap-y-2", stacked ? "flex-col items-stretch" : "items-center")}>
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold text-foreground">{list.title}</h1>
           <p className="whitespace-nowrap text-xs text-muted-foreground">
             {total == null ? "…" : `${total} ${total === 1 ? "row" : "rows"}`}
           </p>
         </div>
-        <div className={cn("flex flex-wrap items-center gap-2", compact ? "justify-start" : "ml-auto justify-end")}>
+        <div className={cn("flex flex-wrap items-center gap-2", stacked ? "justify-start" : "ml-auto justify-end")}>
           {toolbarInputs.map((inp) => (
             <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>
@@ -359,13 +386,13 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             </label>
           ))}
           {list.searchable ? (
-            <div className={cn("relative", compact ? "min-w-[8rem] flex-1" : "")}>
+            <div className={cn("relative", stacked ? "min-w-[8rem] flex-1" : "")}>
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search…"
-                className={cn("h-9 pl-8", compact ? "w-full" : "w-44 sm:w-60")}
+                className={cn("h-9 pl-8", stacked ? "w-full" : "w-44 sm:w-60")}
               />
             </div>
           ) : null}
@@ -414,44 +441,47 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         </div>
       </div>
 
-      {/* table card */}
+      {/* table card — one scroller for both axes; the header sticks to the top (so it scrolls
+          horizontally in lock-step with the rows) and the inner min-width drives horizontal
+          scroll when the card is narrower than the columns need. */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        {/* header */}
-        <div
-          className="grid items-center gap-3 border-b border-border px-4 py-2.5"
-          style={{ gridTemplateColumns: template }}
-        >
-          {columns.map((c) => {
-            const active = sort.column === c.columnName;
-            return (
-              <button
-                key={c.columnName}
-                type="button"
-                onClick={() => toggleSort(c.columnName)}
-                className="flex items-center gap-1 truncate text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                title={`Sort by ${c.label}`}
-              >
-                <span className="truncate">{c.label}</span>
-                {active ? (
-                  sort.descending ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />
-                ) : (
-                  <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
-                )}
-              </button>
-            );
-          })}
-          {rowActions.length ? <span aria-hidden="true" /> : null}
-        </div>
-
-        {/* virtualized body */}
         <div ref={scrollRef} className="overflow-auto" style={{ height: bodyH }} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
-          {total === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {debounced ? "No matches." : "No records."}
+          <div style={{ minWidth: minTableWidth }}>
+            {/* sticky header */}
+            <div
+              className="sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card px-4 py-2.5"
+              style={{ gridTemplateColumns: template }}
+            >
+              {columns.map((c) => {
+                const active = sort.column === c.columnName;
+                return (
+                  <button
+                    key={c.columnName}
+                    type="button"
+                    onClick={() => toggleSort(c.columnName)}
+                    className="flex items-center gap-1 truncate text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    title={`Sort by ${c.label}`}
+                  >
+                    <span className="truncate">{c.label}</span>
+                    {active ? (
+                      sort.descending ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />
+                    ) : (
+                      <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
+                    )}
+                  </button>
+                );
+              })}
+              {rowActions.length ? <span aria-hidden="true" /> : null}
             </div>
-          ) : (
-            <div style={{ height: (total ?? 0) * ROW_H, position: "relative" }}>
-              {visible.map((i) => {
+
+            {/* virtualized body */}
+            {total === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                {debounced ? "No matches." : "No records."}
+              </div>
+            ) : (
+              <div style={{ height: (total ?? 0) * ROW_H, position: "relative" }}>
+                {visible.map((i) => {
                 const row = rows.current.get(i);
                 const url = row ? `onec://${kind}/${name}/${row._id}` : undefined;
                 return (
@@ -506,8 +536,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                   </div>
                 );
               })}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
