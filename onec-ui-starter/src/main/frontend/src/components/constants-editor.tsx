@@ -8,16 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 /**
- * App settings, backed by the framework's @Constant values (served by SettingsController,
- * admin-only). Booleans render as a toggle switch; strings/numbers as an input. Changes are
- * collected locally and persisted on Save via PUT /api/settings.
+ * The app-settings editor, embedded into a page through the {@code onec-constants} block. Renders
+ * the framework's {@code @Constant} values as toggles/inputs (served by SettingsController,
+ * admin-only) and saves them in place via PUT /api/settings. The page provides the heading, so
+ * this is just the form — letting Settings be an ordinary page composed of framework primitives.
  */
 
 const isBool = (t: string) => /^(boolean|Boolean)$/.test(t);
 const isNum = (t: string) =>
   /^(Integer|Long|Double|Float|Short|BigDecimal|int|long|double)$/.test(t);
 
-export function SettingsPage() {
+export function ConstantsEditor({ title }: { title?: string }) {
   const [settings, setSettings] = useState<SettingMeta[] | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +63,11 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-5 sm:px-6">
-      <h1 className="mb-1 text-xl font-semibold text-foreground">Settings</h1>
-      <p className="mb-5 text-sm text-muted-foreground">
-        App-wide configuration. Changes apply once you save.
-      </p>
+    // DivKit wraps custom blocks in pointer-events:none spans — re-assert so the controls work.
+    <div className="pointer-events-auto w-full">
+      {title ? (
+        <h2 className="mb-2 text-sm font-semibold text-foreground">{title}</h2>
+      ) : null}
 
       {error ? (
         <div className="rounded-xl border border-border bg-card p-5 text-sm text-destructive">
@@ -116,7 +117,7 @@ export function SettingsPage() {
               </div>
             ))}
           </div>
-          <div className="mt-5 flex justify-end">
+          <div className="mt-4 flex justify-end">
             <button
               type="button"
               disabled={saving || !dirty}

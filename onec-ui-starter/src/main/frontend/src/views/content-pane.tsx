@@ -6,12 +6,9 @@ import {
   type ContentHandle,
   type Delta,
 } from "@/views/divkit-content";
-import { SettingsPage } from "@/components/settings-page";
-
-// Routes served as native React pages rather than server-driven DivKit surfaces.
-const REACT_PAGES: Record<string, () => JSX.Element> = {
-  "/settings": () => <SettingsPage />,
-};
+// Routes served as native React pages rather than server-driven DivKit surfaces. Settings is no
+// longer here — it's an ordinary DivKit Page now (see DivKitController.settings / PageBuilder.constants).
+const REACT_PAGES: Record<string, () => JSX.Element> = {};
 
 // Catalog/document LIST surfaces (2 path segments) have a targeted delta endpoint
 // (rows div-patch + count variable). Home, detail, and registers don't — they patch

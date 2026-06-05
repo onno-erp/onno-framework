@@ -181,25 +181,55 @@ public class DivKitController {
         // An authored Page for "/" takes over the home surface; otherwise fall back
         // to the widget grid resolved from the layout/profile. A viewport-specific
         // page wins so the dashboard can differ per device.
-        java.util.function.Function<DashboardWidgetDescriptor, String> values = this::widgetValue;
         Page page = pageResolver.resolve("/", active.id(), vp);
         Map<String, Object> content;
         if (page != null) {
             PageBuilder pb = new PageBuilder();
             page.compose(pb);
-            List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
-                    .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
-                    .toList();
-            String title = pb.title() != null ? pb.title() : defaultTitle;
-            String subtitle = pb.subtitle() != null ? pb.subtitle() : greeting;
-            content = PageDivBuilder.build(title, subtitle, widgets, pb.components(), columns, values, p);
+            content = renderPage(pb, columns, p, principal, defaultTitle, greeting);
         } else {
             List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                     .toList();
-            content = DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns, values, p);
+            content = DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns, this::widgetValue, p);
         }
         return DivCard.of("onec-content", content);
+    }
+
+    /**
+     * The Settings surface — just another authored {@link Page}, like the dashboard. An app can
+     * declare its own {@code Page} with route {@code "/settings"} to compose lists/widgets next to
+     * (or instead of) the constant editor; otherwise the default page renders the constant editor.
+     */
+    @GetMapping("/settings")
+    public Map<String, Object> settings(@RequestParam(required = false) String profile,
+                                        @RequestParam(required = false) String viewport,
+                                        @RequestParam(required = false) String theme,
+                                        Principal principal) {
+        Viewport vp = Viewport.parse(viewport);
+        int columns = vp == Viewport.MOBILE ? 1 : 2;
+        Palette p = Palette.of(theme);
+        UiLayout.Profile active = activeProfile(principal, profile);
+        Page page = pageResolver.resolve("/settings", active.id(), vp);
+        PageBuilder pb = new PageBuilder();
+        if (page != null) {
+            page.compose(pb);
+        } else {
+            pb.title("Settings").subtitle("App-wide configuration.").constants();
+        }
+        return DivCard.of("onec-content",
+                renderPage(pb, columns, p, principal, "Settings", "App-wide configuration."));
+    }
+
+    /** Render a composed page (header + access-filtered widget grid + freeform components). */
+    private Map<String, Object> renderPage(PageBuilder pb, int columns, Palette p, Principal principal,
+                                           String defaultTitle, String defaultSubtitle) {
+        List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
+                .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
+                .toList();
+        String title = pb.title() != null ? pb.title() : defaultTitle;
+        String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
+        return PageDivBuilder.build(title, subtitle, widgets, pb.components(), columns, this::widgetValue, p);
     }
 
     /**

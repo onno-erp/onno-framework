@@ -11,6 +11,7 @@ import { FormPortals } from "@/lib/form-bridge";
 import { ListPortals } from "@/lib/list-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
+import { ConstantsPortals } from "@/lib/constants-bridge";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ function ProtectedApp() {
       <ListPortals />
       <IconPortals />
       <ActionsMenuPortals />
+      <ConstantsPortals />
     </>
   );
 }

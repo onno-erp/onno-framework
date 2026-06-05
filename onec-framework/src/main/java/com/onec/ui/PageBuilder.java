@@ -41,6 +41,22 @@ public final class PageBuilder {
         return this;
     }
 
+    /**
+     * Add the app-settings editor — the {@code @Constant} values rendered as toggles/inputs and
+     * saved in place. A page (e.g. the Settings page) composes this alongside widgets and lists, so
+     * settings are just another page built from the framework's primitives.
+     */
+    public PageBuilder constants() {
+        return constants("");
+    }
+
+    /** Add the settings editor under an optional section heading. */
+    public PageBuilder constants(String heading) {
+        components.add(PageComponent.custom("onec-constants",
+                Map.of("title", heading == null ? "" : heading)));
+        return this;
+    }
+
     /** Add a {@code div-custom} extension block (chart, kanban, ...). */
     public PageBuilder custom(String customType, Map<String, Object> payload) {
         components.add(PageComponent.custom(customType, payload));
