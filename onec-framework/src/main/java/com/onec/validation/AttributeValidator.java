@@ -87,7 +87,11 @@ public final class AttributeValidator {
             } catch (NoSuchFieldException e) {
                 current = current.getSuperclass();
             } catch (IllegalAccessException e) {
-                return null;
+                // setAccessible(true) succeeded above, so this signals a real access problem
+                // (e.g. a SecurityManager / module restriction) — surface it rather than masking
+                // the field as null and silently skipping its validation.
+                throw new IllegalStateException("Cannot read field '" + fieldName + "' on "
+                        + entity.getClass().getName(), e);
             }
         }
         return null;

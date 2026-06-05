@@ -59,6 +59,9 @@ import java.util.Set;
 @ConditionalOnProperty(prefix = "onec.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class OnecAuthAutoConfiguration {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(OnecAuthAutoConfiguration.class);
+
     /**
      * The {@code /api/auth/me} + login/logout controller, wired in every mode. Password login is
      * only honoured when an {@link AuthenticationManager} is present (in-memory mode); in OIDC and
@@ -252,6 +255,8 @@ public class OnecAuthAutoConfiguration {
 
                 String nameAttribute = oidc.principalClaim();
                 if (user.getAttributes().get(nameAttribute) == null) {
+                    log.warn("Configured principal claim '{}' is absent from the OIDC user; falling "
+                            + "back to 'sub'. Check onec.auth.oidc.principal-claim.", nameAttribute);
                     nameAttribute = "sub";
                 }
                 return new DefaultOidcUser(authorities, user.getIdToken(), user.getUserInfo(), nameAttribute);
@@ -326,6 +331,10 @@ public class OnecAuthAutoConfiguration {
             Map<String, Object> claims = new ObjectMapper().readValue(payload, Map.class);
             return claims;
         } catch (RuntimeException | IOException ex) {
+            // Opaque (non-JWT) access token or malformed payload — no claims to merge. Logged at
+            // debug so a genuinely broken token is diagnosable without noise on every opaque one.
+            log.debug("Could not decode access-token claims ({}); treating as no extra claims.",
+                    ex.getClass().getSimpleName());
             return Map.of();
         }
     }

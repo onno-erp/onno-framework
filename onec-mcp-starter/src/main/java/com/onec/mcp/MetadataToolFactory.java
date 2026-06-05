@@ -446,13 +446,17 @@ public class MetadataToolFactory {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> values(Map<String, Object> args) {
         Object v = args.get("values");
+        Map<String, Object> out = new LinkedHashMap<>();
         if (v instanceof Map<?, ?> m) {
-            return (Map<String, Object>) m;
+            // Copy into a checked map (keys stringified) rather than an unchecked cast that
+            // assumes the client sent String keys.
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                out.put(String.valueOf(e.getKey()), e.getValue());
+            }
         }
-        return Map.of();
+        return out;
     }
 
     @SuppressWarnings("unchecked")
