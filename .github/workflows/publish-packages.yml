@@ -10,6 +10,16 @@ on:
         description: Version to publish, without the leading v, e.g. 0.1.0 or 0.1.0-rc1
         required: true
         type: string
+      modules:
+        description: >-
+          Optional: space/comma-separated modules to publish a partial release, e.g.
+          "onec-framework onec-framework-starter onec-ui-starter". Empty = publish everything.
+          IMPORTANT: a subset must be dependency-closed — modules share one version and their
+          published POMs reference the other onec-* modules at the SAME version, so include every
+          onec-* module your selection depends on. A partial run skips the git tag / GitHub release.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -45,6 +55,36 @@ jobs:
             echo "prerelease=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Resolve publish targets
+        id: targets
+        shell: bash
+        run: |
+          # Tag pushes (and a dispatch with no modules) publish everything. A dispatch with an
+          # explicit module list publishes only those modules' :publish tasks.
+          MODULES="${{ inputs.modules }}"
+          MODULES="${MODULES//,/ }"
+          if [[ -z "${MODULES// }" ]]; then
+            echo "tasks=publish" >> "${GITHUB_OUTPUT}"
+            echo "full=true" >> "${GITHUB_OUTPUT}"
+            echo "Publishing ALL modules."
+          else
+            TASKS=""
+            for m in ${MODULES}; do
+              if [[ ! "${m}" =~ ^onec-[a-z0-9-]+$ ]]; then
+                echo "Invalid module name: '${m}'" >&2
+                exit 1
+              fi
+              if [[ ! -f "${m}/build.gradle.kts" ]]; then
+                echo "No such module: '${m}'" >&2
+                exit 1
+              fi
+              TASKS="${TASKS} :${m}:publish"
+            done
+            echo "tasks=${TASKS}" >> "${GITHUB_OUTPUT}"
+            echo "full=false" >> "${GITHUB_OUTPUT}"
+            echo "Publishing only:${TASKS}"
+          fi
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -62,9 +102,12 @@ jobs:
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew publish -PreleaseVersion="${{ steps.version.outputs.release_version }}"
+        run: ./gradlew ${{ steps.targets.outputs.tasks }} -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
+      # Only a full release stamps a git tag + GitHub release. A partial (subset) run just
+      # publishes those packages, since a global vX.Y.Z tag would misrepresent the other modules.
       - name: Create GitHub release
+        if: steps.targets.outputs.full == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.release_version }}
