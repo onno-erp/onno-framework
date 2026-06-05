@@ -96,16 +96,36 @@ public class UiAccessService {
         };
     }
 
+    /**
+     * The normalized roles granted to the caller. Authorities are read off the request's
+     * {@code Authentication} reflectively, because this module deliberately does not depend on
+     * Spring Security — only its runtime presence.
+     *
+     * <p>The {@link Principal} that Spring injects into a controller is not guaranteed to be the
+     * authority-bearing {@code Authentication}: depending on the auth backend it can be a bare
+     * {@link Principal}, a {@code UserDetails}/{@code OidcUser}, or otherwise expose no readable
+     * {@code getAuthorities()}. When the injected principal yields nothing we fall back to the
+     * authenticated token held in the {@code SecurityContext}, which is the canonical source of
+     * authorities for the in-flight request. Without this fallback, write checks (the only callers
+     * of {@code requireWrite}) 403 even privileged users, including {@code ADMIN}. See issue #54.
+     */
     public Set<String> roles(Principal principal) {
-        if (principal == null) return Set.of();
+        Set<String> roles = authoritiesOf(principal);
+        if (roles.isEmpty()) {
+            roles = authoritiesOf(currentAuthentication());
+        }
+        return roles;
+    }
+
+    /** Reflectively read {@code getAuthorities().getAuthority()} off any object, or empty if absent. */
+    private static Set<String> authoritiesOf(Object source) {
         Set<String> roles = new LinkedHashSet<>();
+        if (source == null) return roles;
         try {
-            Method getAuthorities = principal.getClass().getMethod("getAuthorities");
-            Object result = getAuthorities.invoke(principal);
+            Object result = invokePublic(source, "getAuthorities");
             if (result instanceof Collection<?> collection) {
                 for (Object authority : collection) {
-                    Method getAuthority = authority.getClass().getMethod("getAuthority");
-                    Object value = getAuthority.invoke(authority);
+                    Object value = invokePublic(authority, "getAuthority");
                     if (value instanceof String role) {
                         roles.add(normalizeRole(role));
                     }
@@ -116,8 +136,36 @@ public class UiAccessService {
         return roles;
     }
 
+    /** The current request's {@code Authentication} from Spring Security's context, or null. */
+    private static Object currentAuthentication() {
+        try {
+            Class<?> holder = Class.forName("org.springframework.security.core.context.SecurityContextHolder");
+            Object context = holder.getMethod("getContext").invoke(null);
+            if (context == null) return null;
+            // Invoke through the SecurityContext interface so a non-public context implementation
+            // class doesn't trip an IllegalAccessException.
+            Class<?> contextType = Class.forName("org.springframework.security.core.context.SecurityContext");
+            return contextType.getMethod("getAuthentication").invoke(context);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Invoke a no-arg method, tolerating authority/authentication implementations whose concrete
+     * class is not {@code public} (a public method on a package-private class otherwise throws
+     * {@link IllegalAccessException}).
+     */
+    private static Object invokePublic(Object target, String method) throws ReflectiveOperationException {
+        Method m = target.getClass().getMethod(method);
+        m.setAccessible(true);
+        return m.invoke(target);
+    }
+
     private boolean hasAnyRole(Principal principal, List<String> requiredRoles) {
-        if (principal == null) return false;
+        // Don't gate on principal != null: roles() resolves authorities from the SecurityContext
+        // when the injected principal carries none (or is absent). Deny-by-default still applies —
+        // an unauthenticated caller simply resolves to no roles.
         Set<String> actualRoles = roles(principal);
         // ADMIN is the superuser: it sees and edits everything regardless of
         // per-entity role lists.
