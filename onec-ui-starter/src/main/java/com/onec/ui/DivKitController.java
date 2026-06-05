@@ -253,7 +253,8 @@ public class DivKitController {
         String newUrl = access.canWrite(principal, desc) ? "onec://catalogs/" + name + "/new" : null;
         return DivCard.of("onec-content",
                 SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl,
-                        listActions(desc.javaClass(), "catalogs", name)));
+                        listActions(desc.javaClass(), "catalogs", name),
+                        actionResolver.inputDescriptors(desc.javaClass())));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -330,7 +331,8 @@ public class DivKitController {
         String newUrl = access.canWrite(principal, desc) ? "onec://documents/" + name + "/new" : null;
         return DivCard.of("onec-content",
                 SurfaceDivBuilder.listSurface(view, "documents", name, newUrl,
-                        listActions(desc.javaClass(), "documents", name)));
+                        listActions(desc.javaClass(), "documents", name),
+                        actionResolver.inputDescriptors(desc.javaClass())));
     }
 
     @GetMapping("/documents/{name}/{id}")

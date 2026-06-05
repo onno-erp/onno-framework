@@ -31,6 +31,18 @@ export type ListAction = {
   kind: string;
   name: string;
 };
+/**
+ * A custom toolbar input declared by an EntityView. It doesn't filter the list — its current value
+ * is sent with whatever server action button is clicked and reaches the handler via ActionContext.
+ */
+export type ListInput = {
+  key: string;
+  label: string;
+  type: "text" | "date" | "number" | "select";
+  placeholder: string;
+  options: string[];
+  value: string;
+};
 export type ListDescriptor = {
   kind: "catalogs" | "documents";
   name: string;
@@ -40,6 +52,7 @@ export type ListDescriptor = {
   sort: { column: string | null; descending: boolean };
   newUrl: string | null;
   actions?: ListAction[];
+  inputs?: ListInput[];
   pageSize: number;
 };
 
@@ -92,6 +105,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const allActions = list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
   const rowActions = allActions.filter((a) => a.scope === "row");
+  const toolbarInputs = list.inputs ?? [];
+
+  // Live values of the custom toolbar inputs, seeded from their declared defaults. These are sent
+  // with every server action so the handler can read them via ActionContext.input(key).
+  const [inputValues, setInputValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(toolbarInputs.map((i) => [i.key, i.value ?? ""]))
+  );
+  const inputValuesRef = useRef(inputValues);
+  inputValuesRef.current = inputValues;
 
   // Column grid template: an authored px width, else a flexible track. The floor is 0 (not a
   // fixed min) so that in a narrow/split island the columns shrink — text just truncates —
@@ -202,7 +224,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         return n;
       });
       api
-        .runAction(action.kind, action.name, action.key, id)
+        .runAction(action.kind, action.name, action.key, id, inputValuesRef.current)
         .then((result) => {
           if (result?.message) toast.success(result.message);
           if (result?.navigate) dispatchAction(result.navigate);
@@ -267,7 +289,34 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           <h1 className="truncate text-xl font-semibold text-foreground">{list.title}</h1>
           <p className="text-xs text-muted-foreground">{total == null ? "…" : `${total} ${total === 1 ? "row" : "rows"}`}</p>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {toolbarInputs.map((inp) => (
+            <label key={inp.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="whitespace-nowrap">{inp.label}</span>
+              {inp.type === "select" ? (
+                <select
+                  value={inputValues[inp.key] ?? ""}
+                  onChange={(e) => setInputValues((v) => ({ ...v, [inp.key]: e.target.value }))}
+                  className="h-9 rounded-lg border border-input bg-background px-2 text-sm text-foreground"
+                >
+                  {inp.placeholder ? <option value="">{inp.placeholder}</option> : null}
+                  {inp.options.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  type={inp.type === "date" ? "date" : inp.type === "number" ? "number" : "text"}
+                  value={inputValues[inp.key] ?? ""}
+                  onChange={(e) => setInputValues((v) => ({ ...v, [inp.key]: e.target.value }))}
+                  placeholder={inp.placeholder}
+                  className="h-9 w-36"
+                />
+              )}
+            </label>
+          ))}
           {list.searchable ? (
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
