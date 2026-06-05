@@ -365,8 +365,6 @@ public final class SurfaceDivBuilder {
         return root;
     }
 
-    private static final String DANGER = "#DC2626";
-
     /**
      * The detail surface header: a title (with an optional muted subtitle — e.g. a
      * document number or catalog code, which keeps long identifiers out of the big
@@ -398,21 +396,18 @@ public final class SurfaceDivBuilder {
         if (badge != null) {
             cluster.add(badge);
         }
-        List<HeaderAction> menu = new ArrayList<>();
+        // The whole action cluster (inline primary buttons + the overflow ⋯ menu) renders as one
+        // React island, so the async actions (Post / Unpost / custom server actions) show an
+        // in-button loading state — like the list's toolbar/row buttons. Navigation actions
+        // (Edit / Duplicate) and Delete route through onec:// exactly as before.
+        List<HeaderAction> acts = new ArrayList<>();
         for (HeaderAction a : actions == null ? List.<HeaderAction>of() : actions) {
-            if (a == null || a.url() == null) {
-                continue;
+            if (a != null && a.url() != null) {
+                acts.add(a);
             }
-            if ("menu".equals(a.placement())) {
-                menu.add(a);
-                continue;
-            }
-            String[] c = toneColors(a.tone(), p);
-            cluster.add(Components.actionButton(a.icon(), a.label(), c[0], c[1], c[2], a.url(),
-                    a.label().toLowerCase()));
         }
-        if (!menu.isEmpty()) {
-            cluster.add(actionsMenu(menu, p));
+        if (!acts.isEmpty()) {
+            cluster.add(actionCluster(acts));
         }
 
         Map<String, Object> actionRow = Div.horizontal(cluster);
@@ -429,34 +424,42 @@ public final class SurfaceDivBuilder {
         return row;
     }
 
-    /** Inline-button colors {fg, bg, border} for an action tone. */
-    private static String[] toneColors(String tone, Palette p) {
-        return switch (tone == null ? "normal" : tone) {
-            case "primary" -> new String[]{"#FFFFFF", p.success(), null};
-            case "danger" -> new String[]{DANGER, null, DANGER};
-            default -> new String[]{p.text(), p.primarySoft(), null};
-        };
-    }
-
     /**
-     * The overflow (⋯) menu: an {@code onec-actions-menu} custom block carrying the
-     * menu-placed actions as plain items ({@code label / icon / url / danger}). The
-     * client renders a kebab trigger + dropdown and dispatches each item's
-     * {@code onec://} url — same routing as the inline buttons.
+     * The detail-header action cluster: an {@code onec-actions-menu} custom block carrying every
+     * action ({@code label / icon / url / tone / placement}). The React island renders the
+     * {@code "primary"}-placed ones as inline buttons and tucks {@code "menu"}-placed ones into an
+     * overflow ⋯ dropdown, runs the async ones (Post / Unpost / custom server actions) with an
+     * in-button loading state, and routes the rest through the same {@code onec://} events.
      */
-    private static Map<String, Object> actionsMenu(List<HeaderAction> items, Palette p) {
+    private static Map<String, Object> actionCluster(List<HeaderAction> items) {
         List<Map<String, Object>> list = new ArrayList<>();
+        // Reserve a (generous) width for the DivKit box: the React island is portaled in after
+        // DivKit lays out, so wrap_content would measure it empty. Erring large avoids clipping —
+        // the inline-flex host still hugs the real buttons inside the reserved space.
+        int inline = 0;
+        boolean hasMenu = false;
+        int width = 0;
         for (HeaderAction a : items) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("label", a.label());
             m.put("icon", a.icon());
             m.put("url", a.url());
-            m.put("danger", "danger".equals(a.tone()));
+            m.put("tone", a.tone());
+            m.put("placement", a.placement());
             list.add(m);
+            if ("menu".equals(a.placement())) {
+                hasMenu = true;
+            } else {
+                inline++;
+                width += 48 + a.label().length() * 9; // icon + label + horizontal padding
+            }
         }
+        if (hasMenu) {
+            width += 44;
+        }
+        width += Math.max(0, (inline + (hasMenu ? 1 : 0)) - 1) * 8; // inter-button gaps
         Map<String, Object> node = Div.custom("onec-actions-menu", Map.of("items", list));
-        Div.width(node, 38);
-        Div.height(node, 34);
+        Div.width(node, Math.max(40, width));
         return node;
     }
 
