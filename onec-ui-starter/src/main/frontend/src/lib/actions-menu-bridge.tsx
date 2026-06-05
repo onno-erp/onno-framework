@@ -166,8 +166,12 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             disabled={busy}
             onClick={() => run(a)}
             className={cn(
-              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-secondary px-3 text-sm font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60",
-              a.tone === "danger" ? "text-destructive" : "text-foreground"
+              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              a.tone === "primary"
+                ? "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] hover:bg-[hsl(var(--success))]/90"
+                : a.tone === "danger"
+                  ? "bg-secondary text-destructive hover:bg-accent"
+                  : "bg-secondary text-foreground hover:bg-accent"
             )}
             title={a.label}
           >
