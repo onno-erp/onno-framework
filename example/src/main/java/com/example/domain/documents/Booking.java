@@ -89,7 +89,21 @@ public class Booking extends DocumentObject implements BeforeWriteHandler, Posta
     @Override
     public List<BusinessRule> rules() {
         return List.of(
-                new BusinessRule("property-required", "Property is required", () -> property != null));
+                new BusinessRule("property-required", "Property is required", () -> property != null),
+                // A checked-in booking is reported to SES.HOSPEDAJES as a parte de viajeros, which the
+                // service rejects without a traveler. Block posting it before it can be submitted; the
+                // per-field SES requirements (document, address, …) are enforced at submission time by
+                // the hospedajes starter, which cannot resolve the client refs from here.
+                new BusinessRule("checked-in-needs-traveler",
+                        "A checked-in booking must have at least one guest (or a primary client)",
+                        () -> status != BookingStatus.CHECKED_IN || hasIdentifiableTraveler()));
+    }
+
+    private boolean hasIdentifiableTraveler() {
+        if (primaryClient != null) {
+            return true;
+        }
+        return guests.stream().anyMatch(g -> g.getClient() != null);
     }
 
     @Override

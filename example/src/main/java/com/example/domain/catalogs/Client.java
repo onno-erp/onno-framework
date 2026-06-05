@@ -40,6 +40,10 @@ public class Client extends CatalogObject {
     @Attribute(displayName = "ID / Passport No.", length = 50)
     private String docNumber;
 
+    /** Número de soporte del documento — required by SES.HOSPEDAJES when the doc type is NIF or NIE. */
+    @Attribute(displayName = "Document support No.", length = 9)
+    private String docSupportNumber;
+
     @Attribute(displayName = "Document issued on")
     private LocalDate docIssuedOn;
 
@@ -51,6 +55,10 @@ public class Client extends CatalogObject {
 
     @Attribute(length = 100)
     private String city;
+
+    /** INE 5-digit municipality code — required by SES.HOSPEDAJES when the country is Spain. */
+    @Attribute(displayName = "Municipality code (INE)", length = 5)
+    private String municipalityCode;
 
     @Attribute(length = 20)
     private String postCode;

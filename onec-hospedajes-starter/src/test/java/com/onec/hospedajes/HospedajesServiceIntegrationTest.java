@@ -108,6 +108,23 @@ class HospedajesServiceIntegrationTest {
         assertThat(log.findUnreconciledLotes(10)).isEmpty();
     }
 
+    @Test
+    void rejectsInvalidParteLocallyWithoutSubmitting() {
+        Comunicacion invalid = sampleComunicacion();
+        // A distinct reference keeps this independent of the shared in-memory ledger the other
+        // tests in this suite write to.
+        invalid.getContrato().setReferencia("B-INVALID-1");
+        // Spanish address with no INE municipality code — the reported 10121 condition.
+        invalid.getPersona().get(0).getDireccion().setCodigoMunicipio(null);
+
+        ComunicacionResult result = service.registrar("EST-001", List.of(invalid));
+
+        assertThat(result.accepted()).isFalse();
+        assertThat(result.codigo()).isEqualTo(10121);
+        assertThat(lastRequestBody.get()).isNull(); // never reached the service
+        assertThat(log.hasActiveSubmission("B-INVALID-1")).isFalse(); // recorded REJECTED, still retryable
+    }
+
     private String comunicacionResponse() {
         return "<?xml version=\"1.0\"?><comunicacionResponse "
                 + "xmlns=\"http://www.soap.servicios.hospedajes.mir.es/comunicacion\">"
@@ -139,6 +156,7 @@ class HospedajesServiceIntegrationTest {
         persona.setApellido2("López");
         persona.setTipoDocumento("NIF");
         persona.setNumeroDocumento("12345678Z");
+        persona.setSoporteDocumento("ABC123456");
         persona.setFechaNacimiento(LocalDate.of(1990, 1, 2));
         persona.setNacionalidad("ESP");
         persona.setDireccion(direccion);

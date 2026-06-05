@@ -56,6 +56,34 @@ public class HospedajesCommunicationLog {
     }
 
     /**
+     * Record a parte rejected by local validation before it was ever submitted (so it has no lote
+     * or orden yet). Replaces any previous local rejection for the same referencia so re-validating
+     * an uncorrected booking does not pile up duplicate rows. The entry is left in REJECTED state,
+     * which {@link #hasActiveSubmission(String)} does not treat as active, so the parte is retried
+     * automatically once the underlying data is fixed and the booking is saved again.
+     */
+    public void recordLocalRejection(String referencia, String error) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbi.useHandle(handle -> {
+            handle.createUpdate(
+                            "DELETE FROM onec_hospedajes_comunicacion " +
+                                    "WHERE _referencia = :referencia AND _status = 'REJECTED' " +
+                                    "AND _numero_lote IS NULL")
+                    .bind("referencia", referencia)
+                    .execute();
+            handle.createUpdate(
+                            "INSERT INTO onec_hospedajes_comunicacion " +
+                                    "(_id, _referencia, _orden, _status, _error, _created_at, _updated_at) " +
+                                    "VALUES (:id, :referencia, 0, 'REJECTED', :error, :now, :now)")
+                    .bind("id", UUID.randomUUID())
+                    .bind("referencia", referencia)
+                    .bind("error", error)
+                    .bind("now", now)
+                    .execute();
+        });
+    }
+
+    /**
      * Whether a comunicación for this referencia has already been submitted and not rejected — used
      * for idempotency so a re-save does not resubmit, while a rejected parte can still be retried.
      */

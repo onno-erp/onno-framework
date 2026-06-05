@@ -7,6 +7,7 @@ import com.example.domain.documents.Booking;
 import com.example.domain.documents.Guest;
 import com.example.domain.enumerations.DocType;
 import com.example.domain.enumerations.Gender;
+import com.onec.hospedajes.ParteValidator;
 import com.onec.hospedajes.model.Comunicacion;
 import com.onec.hospedajes.model.Contrato;
 import com.onec.hospedajes.model.Direccion;
@@ -115,8 +116,9 @@ public class BookingParteMapper {
         persona.setNombre(client.getFirstName());
         persona.setApellido1(client.getLastName1());
         persona.setApellido2(client.getLastName2());
-        persona.setTipoDocumento(documentoCode(client.getDocType()));
+        persona.setTipoDocumento(documentoCode(client));
         persona.setNumeroDocumento(client.getDocNumber());
+        persona.setSoporteDocumento(client.getDocSupportNumber());
         persona.setFechaNacimiento(client.getBirthday());
         persona.setNacionalidad(countryCode(client.getNationality()));
         persona.setSexo(sexoCode(client.getGender()));
@@ -129,9 +131,16 @@ public class BookingParteMapper {
     private Direccion direccion(Client client) {
         Direccion direccion = new Direccion();
         direccion.setDireccion(client.getAddress());
-        direccion.setNombreMunicipio(client.getCity());
         direccion.setCodigoPostal(client.getPostCode());
-        direccion.setPais(countryCode(client.getCountry()));
+        direccion.setNombreMunicipio(client.getCity());
+
+        String pais = countryCode(client.getCountry());
+        direccion.setPais(pais);
+        // SES.HOSPEDAJES (§4.1): the INE municipality code is mandatory for Spanish addresses; for
+        // any other country the free-text nombreMunicipio (set above) is what is required instead.
+        if (ParteValidator.SPAIN.equalsIgnoreCase(pais)) {
+            direccion.setCodigoMunicipio(client.getMunicipalityCode());
+        }
         return direccion;
     }
 
@@ -143,13 +152,17 @@ public class BookingParteMapper {
         return refResolver.resolve(countryRef).map(Country::getCode).orElse(null);
     }
 
-    private String documentoCode(DocType docType) {
+    private String documentoCode(Client client) {
+        DocType docType = client.getDocType();
         if (docType == null) {
             return null;
         }
         return switch (docType) {
             case PASSPORT -> "PAS";
-            case NATIONAL_ID -> "NIF";
+            // A national ID is a NIF for Spanish nationals and a NIE for foreigners; the distinction
+            // matters because the service applies different conditional rules to each.
+            case NATIONAL_ID -> ParteValidator.SPAIN.equalsIgnoreCase(countryCode(client.getNationality()))
+                    ? "NIF" : "NIE";
             case DRIVING_LICENSE -> "PDC";
             case OTHER -> "OTRO";
         };

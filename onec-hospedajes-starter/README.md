@@ -14,6 +14,24 @@ and Base64-encoded**. Submission is asynchronous — it returns a `numeroLote`; 
 `consultaLote` to learn, per comunicación (keyed by `orden`), whether it was registered (you get a
 `codigoComunicacion`) or rejected (you get a `tipoError`/`error`).
 
+## Validation before submit
+
+The `altaParteHospedaje` XSD only checks structure and field lengths; the service additionally
+enforces a set of **conditional ("Obligatorio si …") rules** (spec §3.1.1.1 and §4.1) that a
+well-formed XML can still violate — those come back asynchronously as `consultaLote` rejections with
+error **`10121` ("Error de validación")**, long after the submit returned `accepted`.
+
+`registrar(...)` runs `ParteValidator` over every comunicación first, so these are caught locally
+and precisely: an invalid parte is recorded as **REJECTED** in the ledger (with the exact reasons)
+and excluded from the batch instead of being sent; only the valid subset reaches the service. A
+rejected parte is not "active", so it is retried automatically once its data is corrected. The rules
+enforced:
+
+- `codigoMunicipio` (5-digit INE) is required when `pais` is `ESP` (Spain); otherwise `nombreMunicipio` is required.
+- `soporteDocumento` is required when `tipoDocumento` is `NIF` or `NIE`; `apellido2` is required for `NIF`.
+- adults must carry `tipoDocumento` + `numeroDocumento`; every persona needs one of `telefono`/`telefono2`/`correo`.
+- when a minor travels, at least one adult must declare `parentesco`.
+
 ## Getting credentials (one-time, on the Sede Electrónica)
 
 1. Log in to the SES.HOSPEDAJES platform with a digital certificate / Cl@ve:
