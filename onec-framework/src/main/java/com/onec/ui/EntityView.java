@@ -58,4 +58,22 @@ public interface EntityView {
      * </pre>
      */
     default void actions(ActionSpec actions) {}
+
+    /**
+     * Custom input fields for this entity's list toolbar — a date picker, dropdown, text or number
+     * field shown next to the action buttons. An input doesn't filter the list itself; its current
+     * value is passed to the {@link #actions action} handlers via {@link ActionContext#input(String)}
+     * when a button is clicked. Default: none.
+     *
+     * <pre>
+     * public void inputs(InputSpec in) {
+     *     in.input("asOf").label("As of").type(InputType.DATE);
+     * }
+     * public void actions(ActionSpec a) {
+     *     a.action("report").label("Report").scope(ActionScope.TOOLBAR)
+     *      .handler(ctx -&gt; ActionResult.message("Report as of " + ctx.input("asOf")));
+     * }
+     * </pre>
+     */
+    default void inputs(InputSpec inputs) {}
 }

@@ -28,7 +28,8 @@ public final class SurfaceDivBuilder {
      * pages from {@code /api/list/...} and virtualizes them, so a 10k-row entity never ships whole.
      */
     public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
-                                                  String newUrl, List<Map<String, Object>> actions) {
+                                                  String newUrl, List<Map<String, Object>> actions,
+                                                  List<Map<String, Object>> inputs) {
         List<Map<String, Object>> columns = new ArrayList<>();
         for (ResolvedListView.Column c : view.columns()) {
             Map<String, Object> col = new LinkedHashMap<>();
@@ -50,6 +51,7 @@ public final class SurfaceDivBuilder {
         descriptor.put("sort", sort);
         descriptor.put("newUrl", newUrl);
         descriptor.put("actions", actions == null ? List.of() : actions);
+        descriptor.put("inputs", inputs == null ? List.of() : inputs);
         descriptor.put("pageSize", 100);
 
         Map<String, Object> custom = Div.custom("onec-list", Map.of("list", descriptor));

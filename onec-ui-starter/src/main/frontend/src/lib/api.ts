@@ -191,11 +191,12 @@ export const api = {
   deleteDocument: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/documents/${name}/${id}`, { method: "DELETE" }),
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
-  // toolbar action passes no id; a row/detail action passes the record id.
-  runAction: (kind: string, name: string, key: string, id?: string) =>
+  // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
+  // input values (if any) ride along in the body and reach the handler via ActionContext.
+  runAction: (kind: string, name: string, key: string, id?: string, inputs?: Record<string, string>) =>
     fetchJson<ActionResult>(
       `${BASE}/actions/${kind}/${name}/${key}${id ? `?id=${encodeURIComponent(id)}` : ""}`,
-      { method: "POST" }
+      { method: "POST", body: JSON.stringify({ inputs: inputs ?? {} }) }
     ),
 
   postDocument: (name: string, id: string) =>

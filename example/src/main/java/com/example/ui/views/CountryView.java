@@ -6,6 +6,8 @@ import com.onec.ui.ActionScope;
 import com.onec.ui.ActionSpec;
 import com.onec.ui.EntityConfigBuilder;
 import com.onec.ui.EntityView;
+import com.onec.ui.InputSpec;
+import com.onec.ui.InputType;
 
 import org.springframework.stereotype.Component;
 
@@ -36,15 +38,34 @@ public class CountryView implements EntityView {
      */
     @Override
     public void actions(ActionSpec a) {
-        // Toolbar (list-level) — no record id; runs across the whole catalog.
+        // Toolbar (list-level) — no record id; runs across the whole catalog. Reads the toolbar
+        // inputs (declared below) off the ActionContext.
         a.action("audit").label("Audit").icon("clipboard-check").scope(ActionScope.TOOLBAR)
-                .handler(ctx -> { slowWork(); return ActionResult.message("Audit started for all countries"); });
+                .handler(ctx -> {
+                    slowWork();
+                    String region = ctx.input("region");
+                    String asOf = ctx.input("asOf");
+                    return ActionResult.message("Audit started"
+                            + (region.isBlank() ? "" : " for " + region)
+                            + (asOf.isBlank() ? "" : " as of " + asOf));
+                });
         // Per-row — receives the row's id.
         a.action("ping").label("Ping").icon("activity").scope(ActionScope.ROW)
                 .handler(ctx -> { slowWork(); return ActionResult.message("Pinged country " + ctx.id()); });
         // Record detail — reloads the surface afterwards (the common "it changed data" case).
         a.action("touch").label("Touch").icon("hand").scope(ActionScope.DETAIL)
                 .handler(ctx -> { slowWork(); return ActionResult.refresh("Touched " + ctx.id()); });
+    }
+
+    /**
+     * Demo toolbar inputs. These don't filter the list — their current values are handed to the
+     * action handlers above via {@link com.onec.ui.ActionContext#input(String)} when a button runs.
+     */
+    @Override
+    public void inputs(InputSpec in) {
+        in.input("region").label("Region").type(InputType.SELECT)
+                .options("Europe", "Asia", "Americas").placeholder("All regions");
+        in.input("asOf").label("As of").type(InputType.DATE);
     }
 
     /** Stand-in for a slow/async handler (a network call, a report, a batch job) — ~1.2s. */
