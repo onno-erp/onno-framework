@@ -1,9 +1,0 @@
-Copyright 2026 onec-erp. All rights reserved.
-
-This file is part of a commercial onec module and is licensed, not sold,
-under the onec Commercial License. Use, copying, modification, and
-distribution are permitted only as expressly authorized by a valid
-subscription or written agreement with onec-erp. Absent such an agreement,
-no rights are granted. See LICENSE.md in this repository.
-
-SPDX-License-Identifier: LicenseRef-onec-Commercial
