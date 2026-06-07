@@ -105,13 +105,16 @@ public class DocumentQueryService {
      */
     public List<Map<String, Object>> page(DocumentDescriptor desc, int offset, int limit,
                                           String sortColumn, boolean descending, String search,
-                                          String from, String to) {
+                                          String from, String to,
+                                          List<String> eq, List<String> ge, List<String> le) {
         boolean defaultSort = sortColumn == null || !sortableColumns(desc).contains(sortColumn);
         String orderBy = defaultSort ? "_date" : sortColumn;
         boolean dirDesc = defaultSort ? true : descending; // newest-first by default
+        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= :from");
         if (to != null) where.append(" AND _date <= :to");
+        if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                     " WHERE " + where +
@@ -121,6 +124,7 @@ public class DocumentQueryService {
             bindSearch(q, search);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
+            filter.bindings().forEach(q::bind);
             return q.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
@@ -128,18 +132,29 @@ public class DocumentQueryService {
         return rows;
     }
 
-    /** Total live rows matching the search (+ optional date range) — for the virtual scroller. */
-    public long count(DocumentDescriptor desc, String search, String from, String to) {
+    /** Total live rows matching the search (+ optional date range and declarative filters). */
+    public long count(DocumentDescriptor desc, String search, String from, String to,
+                      List<String> eq, List<String> ge, List<String> le) {
+        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= :from");
         if (to != null) where.append(" AND _date <= :to");
+        if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
             bindSearch(q, search);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
+            filter.bindings().forEach(q::bind);
             return q.mapTo(Long.class).one();
         });
+    }
+
+    /** Lowercased attribute column names a declarative list filter may bind to (see {@link ListFilter}). */
+    private Set<String> filterableColumns(DocumentDescriptor desc) {
+        return desc.attributes().stream()
+                .map(a -> a.columnName().toLowerCase())
+                .collect(Collectors.toSet());
     }
 
     /** Columns that may be sorted on: the system columns + every attribute column. */

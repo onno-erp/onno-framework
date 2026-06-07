@@ -534,6 +534,13 @@ public class DivKitController {
                     new ShellLayoutBuilder.NavItem("Dashboard", "onec://", "house", "/"))));
         }
         for (UiLayout.ResolvedSection section : layoutResolver.resolve(active)) {
+            // Nav is opt-in (a Layout bean places what the sidebar shows), but a section can still
+            // be authored with HIDDEN placement to register/group its entities without surfacing
+            // them: they stay registered and directly routable (onec://catalogs/<name>), just out
+            // of the sidebar. Honor that here by skipping HIDDEN sections.
+            if (UiLayout.Placement.HIDDEN.name().equalsIgnoreCase(section.placement())) {
+                continue;
+            }
             List<ShellLayoutBuilder.NavItem> items = section.items().stream()
                     .filter(item -> access.canRead(principal, item.type(), item.name()))
                     .filter(item -> isDeclared(item, profileId))

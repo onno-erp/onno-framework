@@ -23,7 +23,11 @@ public class BookingView implements EntityView {
     public void list(ListSpec list) {
         list.columns("number", "date", "property", "checkIn", "checkOut", "primaryClient", "status", "totalGross")
                 .label("primaryClient", "Guest")
-                .label("totalGross", "Total");
+                .label("totalGross", "Total")
+                // Declarative filters drive the list query itself (unlike toolbar inputs). A
+                // check-in date range and a nights SELECT narrow the rows server-side.
+                .filter("checkIn").label("Check-in").dateRange();
+        list.filter("nights").label("Nights").options("1", "2", "3", "4", "5", "6", "7");
     }
 
     @Override

@@ -140,9 +140,11 @@ public class CatalogQueryService {
      * across the text columns. Live records only.
      */
     public List<Map<String, Object>> page(CatalogDescriptor desc, int offset, int limit,
-                                           String sortColumn, boolean descending, String search) {
+                                           String sortColumn, boolean descending, String search,
+                                           List<String> eq, List<String> ge, List<String> le) {
         String orderBy = safeSort(desc, sortColumn, "_code");
-        String where = "_deletion_mark = false" + searchClause(desc, search);
+        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
+        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                     " WHERE " + where +
@@ -150,6 +152,7 @@ public class CatalogQueryService {
                     " LIMIT :limit OFFSET :offset")
                     .bind("limit", limit).bind("offset", Math.max(0, offset));
             bindSearch(q, search);
+            filter.bindings().forEach(q::bind);
             return q.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
@@ -157,14 +160,28 @@ public class CatalogQueryService {
         return rows;
     }
 
-    /** Total live rows matching the search — for the virtual scroller's height. */
-    public long count(CatalogDescriptor desc, String search) {
-        String where = "_deletion_mark = false" + searchClause(desc, search);
+    /** Total live rows matching the search (+ any declarative filters) — for the virtual scroller. */
+    public long count(CatalogDescriptor desc, String search,
+                      List<String> eq, List<String> ge, List<String> le) {
+        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
+        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter);
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
             bindSearch(q, search);
+            filter.bindings().forEach(q::bind);
             return q.mapTo(Long.class).one();
         });
+    }
+
+    /** Lowercased attribute column names a declarative list filter may bind to (see {@link ListFilter}). */
+    private Set<String> filterableColumns(CatalogDescriptor desc) {
+        return desc.attributes().stream()
+                .map(a -> a.columnName().toLowerCase())
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static String filterClause(ListFilter.Result filter) {
+        return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
 
     /** Column names that may be sorted on: the system columns + every attribute column. */

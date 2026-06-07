@@ -3,6 +3,7 @@ package com.onec.ui;
 import com.onec.metadata.CatalogDescriptor;
 import com.onec.metadata.DocumentDescriptor;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -45,12 +46,18 @@ public class ListDataController {
                                            @RequestParam(required = false) String sort,
                                            @RequestParam(required = false) String dir,
                                            @RequestParam(required = false) String q,
+                                           HttpServletRequest request,
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         int lim = clamp(limit);
-        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q);
-        return page(catalogQuery.count(desc, q), offset, rows);
+        // Read filter params raw: Spring's List<String> binding splits a single value on commas,
+        // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
+        List<String> eq = multi(request, "eq");
+        List<String> ge = multi(request, "ge");
+        List<String> le = multi(request, "le");
+        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, ge, le);
+        return page(catalogQuery.count(desc, q, eq, ge, le), offset, rows);
     }
 
     @GetMapping("/documents/{name}")
@@ -62,12 +69,23 @@ public class ListDataController {
                                             @RequestParam(required = false) String q,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to,
+                                            HttpServletRequest request,
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         int lim = clamp(limit);
-        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to);
-        return page(documentQuery.count(desc, q, from, to), offset, rows);
+        // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
+        List<String> eq = multi(request, "eq");
+        List<String> ge = multi(request, "ge");
+        List<String> le = multi(request, "le");
+        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, ge, le);
+        return page(documentQuery.count(desc, q, from, to, eq, ge, le), offset, rows);
+    }
+
+    /** Raw repeated query-param values (no comma-splitting), or an empty list when absent. */
+    private static List<String> multi(HttpServletRequest request, String name) {
+        String[] values = request.getParameterValues(name);
+        return values == null ? List.of() : List.of(values);
     }
 
     private static Map<String, Object> page(long total, int offset, List<Map<String, Object>> rows) {

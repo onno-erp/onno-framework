@@ -111,7 +111,22 @@ public class UiViewResolver {
         // columns); blank means the query layer's default (e.g. _code / _date).
         ColumnMeta sortMeta = spec.sortField() == null ? null : available.get(spec.sortField());
         String sortColumn = sortMeta != null ? sortMeta.columnName() : null;
-        return new ResolvedListView(title, columns, spec.searchable(), sortColumn, spec.sortDescending());
+
+        // Resolve each declared filter's field to its data column (validated against the available
+        // columns); a filter on an unknown field is dropped rather than emitted with no column.
+        List<ResolvedListView.Filter> filters = new ArrayList<>();
+        for (ListSpec.Filter f : spec.filters()) {
+            ColumnMeta cm = available.get(f.field());
+            if (cm == null) {
+                continue;
+            }
+            filters.add(new ResolvedListView.Filter(
+                    f.field(), f.label(), cm.columnName(),
+                    f.type() == ListSpec.FilterType.DATE_RANGE ? "dateRange" : "options",
+                    f.options()));
+        }
+        return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
+                spec.sortDescending(), filters);
     }
 
     private record ColumnMeta(String label, String columnName, boolean visibleInList, int order,

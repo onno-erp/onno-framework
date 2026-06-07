@@ -8,11 +8,34 @@ import java.util.List;
  * defaults) and consumed by the DivKit emitter — or any other renderer.
  */
 public record ResolvedListView(String title, List<Column> columns,
-                               boolean searchable, String sortColumn, boolean sortDescending) {
+                               boolean searchable, String sortColumn, boolean sortDescending,
+                               List<Filter> filters) {
+
+    public ResolvedListView {
+        filters = filters == null ? List.of() : List.copyOf(filters);
+    }
 
     /** Back-compat: a non-searchable, default-sorted view. */
     public ResolvedListView(String title, List<Column> columns) {
-        this(title, columns, false, null, false);
+        this(title, columns, false, null, false, List.of());
+    }
+
+    /** Back-compat: a view with no declarative filters. */
+    public ResolvedListView(String title, List<Column> columns,
+                            boolean searchable, String sortColumn, boolean sortDescending) {
+        this(title, columns, searchable, sortColumn, sortDescending, List.of());
+    }
+
+    /**
+     * A resolved list filter: a stable {@code key} (the field name, the client's state key), the
+     * {@code label}, the data {@code columnName} the query filters on (resolved + validated against
+     * the entity's columns), the control {@code type} ({@code "options"} or {@code "dateRange"}) and,
+     * for an options filter, its {@code options}.
+     */
+    public record Filter(String key, String label, String columnName, String type, List<String> options) {
+        public Filter {
+            options = options == null ? List.of() : List.copyOf(options);
+        }
     }
 
     /**

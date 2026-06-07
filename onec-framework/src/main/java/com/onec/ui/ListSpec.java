@@ -27,6 +27,7 @@ public final class ListSpec {
     private boolean searchable = true;
     private String sortField;
     private boolean sortDescending = false;
+    private final List<FilterBuilder> filters = new ArrayList<>();
 
     public ListSpec title(String title) {
         this.title = title;
@@ -81,6 +82,25 @@ public final class ListSpec {
         return this;
     }
 
+    /**
+     * Declare a user-facing filter control bound to {@code field} (an entity field name, like the
+     * column/sort field names). Unlike a toolbar {@link InputSpec input} — which feeds action
+     * handlers — a filter drives the list query itself: its value narrows the rows the grid shows.
+     * Returns a {@link FilterBuilder}; call {@link FilterBuilder#options} for a SELECT (field-equality)
+     * filter or {@link FilterBuilder#dateRange} for from/to date pickers (a {@code field >= from AND
+     * field <= to} range).
+     *
+     * <pre>
+     * list.filter("season").options("2024", "2025", "2026"); // SELECT -> season = value
+     * list.filter("checkIn").dateRange();                     // from/to pickers -> checkIn range
+     * </pre>
+     */
+    public FilterBuilder filter(String field) {
+        FilterBuilder b = new FilterBuilder(field);
+        filters.add(b);
+        return b;
+    }
+
     public String title() { return title; }
 
     public List<String> include() { return List.copyOf(include); }
@@ -96,4 +116,59 @@ public final class ListSpec {
     public String sortField() { return sortField; }
 
     public boolean sortDescending() { return sortDescending; }
+
+    /** The declared list filters, in declaration order. */
+    public List<Filter> filters() {
+        return filters.stream().map(FilterBuilder::build).toList();
+    }
+
+    /** How a filter narrows the list query (and which control the grid renders). */
+    public enum FilterType {
+        /** A SELECT of {@link Filter#options}; the chosen value is matched for equality on the field. */
+        OPTIONS,
+        /** A pair of from/to date pickers driving a {@code field >= from AND field <= to} range. */
+        DATE_RANGE
+    }
+
+    /** A resolved list filter: the bound field, its label, the control type and (for OPTIONS) its choices. */
+    public record Filter(String field, String label, FilterType type, List<String> options) {
+        public Filter {
+            options = options == null ? List.of() : List.copyOf(options);
+        }
+    }
+
+    /** Fluent builder for one filter; {@link #options}/{@link #dateRange} pick the control type. */
+    public static final class FilterBuilder {
+        private final String field;
+        private String label;
+        private FilterType type = FilterType.OPTIONS;
+        private List<String> options = List.of();
+
+        FilterBuilder(String field) {
+            this.field = field;
+        }
+
+        /** Override the control's label (defaults to the field name). */
+        public FilterBuilder label(String label) {
+            this.label = label;
+            return this;
+        }
+
+        /** A SELECT filter: pick one of {@code options}, matched for equality on the field. */
+        public FilterBuilder options(String... options) {
+            this.type = FilterType.OPTIONS;
+            this.options = List.of(options);
+            return this;
+        }
+
+        /** A from/to date-range filter (two date pickers) over the field. */
+        public FilterBuilder dateRange() {
+            this.type = FilterType.DATE_RANGE;
+            return this;
+        }
+
+        Filter build() {
+            return new Filter(field, label != null ? label : field, type, options);
+        }
+    }
 }

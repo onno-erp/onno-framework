@@ -26,7 +26,6 @@ import org.springframework.data.repository.config.BootstrapMode;
 
 import javax.sql.DataSource;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @AutoConfiguration(after = DataSourceAutoConfiguration.class)
 @EnableConfigurationProperties(OnecProperties.class)
@@ -282,22 +281,19 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public LayoutSet layoutSet(MetadataRegistry registry, List<Layout> layouts) {
+    public LayoutSet layoutSet(List<Layout> layouts) {
         Map<Viewport, UiLayout> byViewport = new java.util.EnumMap<>(Viewport.class);
         java.util.Set<Viewport> dedicated = java.util.EnumSet.noneOf(Viewport.class);
         for (Viewport v : Viewport.values()) {
             List<Layout> chosen = selectForViewport(layouts, v);
-            // Auto-place un-placed entities only when this viewport uses the universal
-            // default layout. A device-specific default is a deliberate curation — don't
-            // dump the rest of the metadata into its nav.
+            // Whether a default layout specifically targets this viewport — record it so the shell
+            // only treats v as having its own nav (vs. inheriting the universal one) when that's true.
             boolean curated = chosen.stream()
                     .anyMatch(l -> profileKey(l).isEmpty() && l.viewport() == v);
-            // "curated" here means a default layout specifically targets this viewport — record
-            // it so the shell only treats v as having its own nav when that's true.
             if (curated) {
                 dedicated.add(v);
             }
-            byViewport.put(v, buildUiLayout(registry, chosen, !curated));
+            byViewport.put(v, buildUiLayout(chosen));
         }
         return new LayoutSet(byViewport, dedicated);
     }
@@ -334,9 +330,15 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
         return l.profile() == null ? "" : l.profile();
     }
 
-    private UiLayout buildUiLayout(MetadataRegistry registry, List<Layout> layouts, boolean applyFallback) {
+    private UiLayout buildUiLayout(List<Layout> layouts) {
         // Each Layout bean is one persona's shell; the default layout (profile()==null)
         // is the back-office shell. A Layout IS a profile.
+        //
+        // Nav is opt-in: an entity appears in the sidebar only if a Layout bean explicitly
+        // places it in a (non-HIDDEN) section. There is no auto-listing of un-placed
+        // catalogs/documents/registers — declaring an entity registers it (so it stays
+        // routable and usable as a ref) without dumping it into the nav. Layout beans are
+        // the single source of truth for what the sidebar shows.
         List<UiLayout.Section> defaultSections = new ArrayList<>();
         List<UiLayout.Profile> profiles = new ArrayList<>();
         ShellConfig shell = ShellConfig.defaults();
@@ -357,41 +359,7 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
             }
         }
 
-        // Collect classes the default layout already placed explicitly
-        Set<Class<?>> placed = defaultSections.stream()
-                .flatMap(s -> s.entityRefs().stream())
-                .map(UiLayoutBuilder.EntityRef::javaClass)
-                .collect(Collectors.toSet());
-
-        // Auto-place remaining entities using default fallback grouping.
-        // Explicit placement is the job of Layout beans (the source of truth).
-        UiLayoutBuilder fallbackBuilder = new UiLayoutBuilder();
-
-        if (applyFallback) {
-            for (CatalogDescriptor d : registry.allCatalogs()) {
-                if (placed.contains(d.javaClass())) continue;
-                fallbackBuilder.section("Catalogs").order(900).catalog(d.javaClass());
-            }
-            for (DocumentDescriptor d : registry.allDocuments()) {
-                if (placed.contains(d.javaClass())) continue;
-                fallbackBuilder.section("Documents").order(901).document(d.javaClass());
-            }
-            for (AccumulationRegisterDescriptor d : registry.allRegisters()) {
-                if (placed.contains(d.javaClass())) continue;
-                fallbackBuilder.section("Registers").order(902).register(d.javaClass());
-            }
-        }
-
-        // Merge: explicit default sections first, then fallback sections
         List<UiLayout.Section> merged = new ArrayList<>(defaultSections);
-        Set<String> explicitNames = defaultSections.stream()
-                .map(UiLayout.Section::name)
-                .collect(Collectors.toSet());
-        for (UiLayout.Section fb : fallbackBuilder.build()) {
-            if (!explicitNames.contains(fb.name())) {
-                merged.add(fb);
-            }
-        }
         merged.sort(Comparator.comparingInt(UiLayout.Section::order));
 
         // Dashboard widgets now live in Page beans, not the layout.

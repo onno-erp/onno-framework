@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,19 @@ export type ListInput = {
   options: string[];
   value: string;
 };
+/**
+ * A declarative filter that drives the list query itself (unlike a {@link ListInput}, which feeds
+ * action handlers). "options" renders a SELECT matched for equality on {@code column}; "dateRange"
+ * renders from/to date pickers driving a {@code column >= from AND column <= to} range. The current
+ * value is sent to /api/list as eq/ge/le params.
+ */
+export type ListFilterControl = {
+  key: string;
+  label: string;
+  column: string;
+  type: "options" | "dateRange";
+  options: string[];
+};
 export type ListDescriptor = {
   kind: "catalogs" | "documents";
   name: string;
@@ -70,6 +83,7 @@ export type ListDescriptor = {
   newUrl: string | null;
   actions?: ListAction[];
   inputs?: ListInput[];
+  filters?: ListFilterControl[];
   pageSize: number;
 };
 
@@ -156,12 +170,25 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
   const rowActions = allActions.filter((a) => a.scope === "row");
   const toolbarInputs = list.inputs ?? [];
+  // Stable reference so the fetch/reset effects don't churn when there are no filters.
+  const filters = useMemo(() => list.filters ?? [], [list.filters]);
+
+  // Current value of each declarative filter: {eq} for an options filter, {from,to} for a date range.
+  // Changing one resets the grid and re-queries (see the reset effect below) — it narrows the rows,
+  // not just the toolbar. Serialized into filterSig so effects can depend on its content.
+  const [filterState, setFilterState] = useState<
+    Record<string, { eq?: string; from?: string; to?: string }>
+  >(() => Object.fromEntries(filters.map((f) => [f.key, {}])));
+  const filterSig = JSON.stringify(filterState);
+  const filterStateRef = useRef(filterState);
+  filterStateRef.current = filterState;
 
   // Responsive toolbar, driven by the measured island width and the actual controls present
   // (not a fixed media query). `stacked` puts the title on its own row and the controls below
   // the moment they would no longer fit beside it — so the title never truncates mid-toolbar.
   // `compact` (much narrower) additionally drops the button labels to icons.
   const controlsWidthEstimate =
+    filters.reduce((w, f) => w + (f.type === "dateRange" ? 320 : 200), 0) +
     toolbarInputs.length * 210 +
     (list.searchable ? 220 : 0) +
     toolbarActions.length * 100 +
@@ -225,6 +252,17 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         params.set("dir", sort.descending ? "desc" : "asc");
       }
       if (debounced) params.set("q", debounced);
+      // Declarative filters → eq/ge/le params (column,value); the server re-validates the column.
+      for (const f of filters) {
+        const st = filterStateRef.current[f.key];
+        if (!st) continue;
+        if (f.type === "dateRange") {
+          if (st.from) params.append("ge", `${f.column},${st.from}`);
+          if (st.to) params.append("le", `${f.column},${st.to}`);
+        } else if (st.eq) {
+          params.append("eq", `${f.column},${st.eq}`);
+        }
+      }
       fetch(`/api/list/${kind}/${name}?${params.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { total: number; offset: number; rows: EntityRecord[] }) => {
@@ -239,10 +277,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           inflight.current.delete(page);
         });
     },
-    [kind, name, pageSize, sort.column, sort.descending, debounced, rerender]
+    [kind, name, pageSize, sort.column, sort.descending, debounced, filters, filterSig, rerender]
   );
 
-  // Reset and reload from the top whenever the sort or the (debounced) search changes.
+  // Reset and reload from the top whenever the sort, the (debounced) search, or a filter changes.
   useEffect(() => {
     gen.current += 1;
     rows.current.clear();
@@ -253,7 +291,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     setScrollTop(0);
     fetchPage(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sort.column, sort.descending, debounced]);
+  }, [sort.column, sort.descending, debounced, filterSig]);
 
   // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
@@ -380,6 +418,67 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           </p>
         </div>
         <div className={cn("flex flex-wrap items-center gap-2", stacked ? "justify-start" : "ml-auto justify-end")}>
+          {filters.map((f) => {
+            // A date-range filter is two pickers. Each needs ~160px so the dd/mm/yyyy segments +
+            // calendar icon stay on one line (w-36 squished them onto two). On a wide toolbar they
+            // sit inline at that fixed width; on a stacked/narrow one (where two fixed pickers would
+            // overflow) the label drops to its own line and the pickers share the full width.
+            if (f.type === "dateRange") {
+              return (
+                <div
+                  key={f.key}
+                  className={cn(
+                    "flex gap-1.5 text-xs text-muted-foreground",
+                    stacked ? "w-full flex-col items-stretch" : "shrink-0 items-center"
+                  )}
+                >
+                  <span className={cn("whitespace-nowrap", stacked ? "" : "self-center")}>{f.label}</span>
+                  <div className="flex items-center gap-1">
+                    <div className={cn(stacked ? "min-w-0 flex-1" : "w-40 shrink-0")}>
+                      <DatePicker
+                        value={filterState[f.key]?.from || undefined}
+                        onChange={(val) =>
+                          setFilterState((s) => ({ ...s, [f.key]: { ...s[f.key], from: val } }))
+                        }
+                      />
+                    </div>
+                    <span className="text-muted-foreground">–</span>
+                    <div className={cn(stacked ? "min-w-0 flex-1" : "w-40 shrink-0")}>
+                      <DatePicker
+                        value={filterState[f.key]?.to || undefined}
+                        onChange={(val) =>
+                          setFilterState((s) => ({ ...s, [f.key]: { ...s[f.key], to: val } }))
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <label key={f.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="whitespace-nowrap">{f.label}</span>
+                <Select
+                  value={filterState[f.key]?.eq || SELECT_NONE}
+                  onValueChange={(val) =>
+                    setFilterState((s) => ({ ...s, [f.key]: { eq: val === SELECT_NONE ? "" : val } }))
+                  }
+                >
+                  <SelectTrigger className="h-9 w-36">
+                    <SelectValue placeholder={f.label} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SELECT_NONE}>All</SelectItem>
+                    {f.options.map((o) => (
+                      <SelectItem key={o} value={o}>
+                        {o}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            );
+          })}
           {toolbarInputs.map((inp) => (
             <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>

@@ -63,6 +63,20 @@ public final class SurfaceDivBuilder {
         sort.put("column", view.sortColumn());
         sort.put("descending", view.sortDescending());
 
+        // Declarative filters: controls the island renders in the toolbar and folds into the
+        // /api/list query (see ListFilter). The column travels so the client can address the
+        // server-side predicate; the server re-validates it against the entity's real columns.
+        List<Map<String, Object>> filters = new ArrayList<>();
+        for (ResolvedListView.Filter f : view.filters()) {
+            Map<String, Object> filter = new LinkedHashMap<>();
+            filter.put("key", f.key());
+            filter.put("label", f.label());
+            filter.put("column", f.columnName());
+            filter.put("type", f.type());
+            filter.put("options", f.options());
+            filters.add(filter);
+        }
+
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("kind", kind);
         descriptor.put("name", name);
@@ -70,6 +84,7 @@ public final class SurfaceDivBuilder {
         descriptor.put("columns", columns);
         descriptor.put("searchable", view.searchable());
         descriptor.put("sort", sort);
+        descriptor.put("filters", filters);
         descriptor.put("newUrl", newUrl);
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
