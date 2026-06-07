@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(xargs -I{} javap -classpath {} org.springframework.data.relational.core.mapping.event.AfterSaveCallback)",
-      "WebFetch(domain:whitecircle.ai)"
-    ]
-  }
-}

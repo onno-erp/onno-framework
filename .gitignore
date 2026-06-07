@@ -26,6 +26,7 @@ onec-ui-starter/src/main/frontend/node_modules/
 
 # AI tooling
 .ai/
+.claude/
 
 # Plans
 plans/
