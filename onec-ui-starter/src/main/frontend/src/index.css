@@ -90,6 +90,17 @@
     -moz-appearance: textfield;
   }
 
+  /* iOS auto-zooms in on tap when the focused input's font-size is below 16px,
+     and never zooms back out. Floor form controls at 16px on touch devices to
+     suppress the zoom without disabling user-scalable globally. */
+  @media (hover: none) and (pointer: coarse) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
   /* Subtle, overlay-style scrollbars everywhere (the scroll panes — list islands,
      sidebar, content — otherwise show the chunky default bar, which reads as a loud
      light slab in dark mode). Scrolling still works; only the bar's appearance changes.
