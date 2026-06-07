@@ -156,7 +156,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const [, force] = useState(0);
   const rerender = useCallback(() => force((n) => n + 1), []);
   const [scrollTop, setScrollTop] = useState(0);
-  const [bodyH, setBodyH] = useState(420);
+  // The space from the scroller's top to the window bottom — the *most* the viewport may grow to.
+  // The actual height hugs the content (see bodyH below), so a short list isn't a full-height card.
+  const [maxBodyH, setMaxBodyH] = useState(420);
   // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
   // so the toolbar layout is driven by the measured container width, not a media query.
   const [toolbarWidth, setToolbarWidth] = useState<number | null>(null);
@@ -310,7 +312,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      setBodyH(Math.max(160, Math.floor(window.innerHeight - top - 16)));
+      setMaxBodyH(Math.max(160, Math.floor(window.innerHeight - top - 16)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -380,6 +382,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     window.addEventListener("onec:dataevent", onData);
     return () => window.removeEventListener("onec:dataevent", onData);
   }, [kind, name, reload]);
+
+  // Hug the content: the scroll viewport grows to fit the rows it actually holds, capped at the
+  // space to the window bottom — so a 1-row list reads as a short card instead of a full-height one
+  // that leaves most of the screen empty (#77). Beyond the cap it stays put and the rows scroll.
+  // While the first page is loading (total unknown) it fills the available space for the skeleton.
+  const HEADER_H = 41; // sticky header: py-2.5 + text-xs row + 1px border
+  const EMPTY_BODY_H = 120; // the "No records" / "No matches" placeholder block
+  const contentHeight = HEADER_H + (total === 0 ? EMPTY_BODY_H : (total ?? 0) * ROW_H);
+  const bodyH = total == null ? maxBodyH : Math.min(maxBodyH, contentHeight);
 
   // Ensure every page covering the visible window is loaded.
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
