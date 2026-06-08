@@ -44,6 +44,10 @@ public class SchemaGenerator {
     }
 
     public List<String> generateDDL() {
+        return generateDDL(SqlDialect.H2);
+    }
+
+    public List<String> generateDDL(SqlDialect dialect) {
         List<String> statements = new ArrayList<>();
         statements.add(generateSequenceTableDDL());
         statements.add(generateOutboxTableDDL());
@@ -64,7 +68,7 @@ public class SchemaGenerator {
         }
         for (EnumerationDescriptor e : registry.allEnumerations()) {
             statements.add(generateEnumerationDDL(e));
-            statements.addAll(generateEnumerationInserts(e));
+            statements.addAll(generateEnumerationInserts(e, dialect));
         }
         for (InformationRegisterDescriptor reg : registry.allInformationRegisters()) {
             statements.add(generateInfoRegisterDDL(reg));
@@ -76,7 +80,8 @@ public class SchemaGenerator {
     }
 
     public void execute(Jdbi jdbi) {
-        List<String> ddl = generateDDL();
+        SqlDialect dialect = jdbi.withHandle(handle -> SqlDialect.detect(handle.getConnection()));
+        List<String> ddl = generateDDL(dialect);
         jdbi.useHandle(handle -> {
             for (String statement : ddl) {
                 handle.execute(statement);
@@ -211,12 +216,16 @@ public class SchemaGenerator {
                 ")";
     }
 
-    private List<String> generateEnumerationInserts(EnumerationDescriptor e) {
+    private List<String> generateEnumerationInserts(EnumerationDescriptor e, SqlDialect dialect) {
         List<String> inserts = new ArrayList<>();
+        List<String> columns = List.of("_id", "_name", "_order");
+        List<String> keyColumns = List.of("_id");
         for (EnumerationValueDescriptor v : e.values()) {
-            inserts.add("MERGE INTO " + e.tableName() +
-                    " (_id, _name, _order) KEY(_id) VALUES ('" +
-                    v.id() + "', '" + v.name() + "', " + v.order() + ")");
+            List<String> values = List.of(
+                    "'" + v.id() + "'",
+                    "'" + v.name() + "'",
+                    String.valueOf(v.order()));
+            inserts.add(dialect.upsert(e.tableName(), columns, keyColumns, values));
         }
         return inserts;
     }

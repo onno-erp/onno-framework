@@ -1,12 +1,14 @@
 package com.onec.repository;
 
 import com.onec.metadata.ConstantDescriptor;
+import com.onec.schema.SqlDialect;
 
 import org.jdbi.v3.core.Jdbi;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public class ConstantPersistence {
@@ -27,11 +29,17 @@ public class ConstantPersistence {
     }
 
     public void setRaw(ConstantDescriptor descriptor, String value) {
-        jdbi.useHandle(handle ->
-                handle.createUpdate("MERGE INTO constants (_name, _value) KEY(_name) VALUES (:name, :value)")
-                        .bind("name", descriptor.logicalName())
-                        .bind("value", value)
-                        .execute());
+        jdbi.useHandle(handle -> {
+            String sql = SqlDialect.detect(handle.getConnection()).upsert(
+                    "constants",
+                    List.of("_name", "_value"),
+                    List.of("_name"),
+                    List.of(":name", ":value"));
+            handle.createUpdate(sql)
+                    .bind("name", descriptor.logicalName())
+                    .bind("value", value)
+                    .execute();
+        });
     }
 
     public Object get(ConstantDescriptor descriptor) {

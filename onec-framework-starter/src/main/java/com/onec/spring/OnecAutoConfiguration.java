@@ -243,11 +243,6 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
-    public EnumerationPersistence enumerationPersistence(Jdbi jdbi) {
-        return new EnumerationPersistence(jdbi);
-    }
-
-    @Bean
     public Map<Class<?>, InformationRegisterRepositoryImpl<?>> informationRegisterRepositoryMap(
             Jdbi jdbi, MetadataRegistry registry) {
         Map<Class<?>, InformationRegisterRepositoryImpl<?>> repos = new HashMap<>();

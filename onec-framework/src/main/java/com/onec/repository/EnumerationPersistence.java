@@ -1,32 +1,18 @@
 package com.onec.repository;
 
-import com.onec.metadata.EnumerationDescriptor;
-import com.onec.metadata.EnumerationValueDescriptor;
-
-import org.jdbi.v3.core.Jdbi;
-
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
-public class EnumerationPersistence {
+/**
+ * Maps {@code @Enumeration} constants to/from their deterministic UUID ids.
+ *
+ * <p>Enumeration value rows are seeded by {@link com.onec.schema.SchemaGenerator}
+ * during schema initialization, so this type only provides the stateless
+ * id-resolution helpers used at query/persistence time.
+ */
+public final class EnumerationPersistence {
 
-    private final Jdbi jdbi;
-
-    public EnumerationPersistence(Jdbi jdbi) {
-        this.jdbi = jdbi;
-    }
-
-    public void populateValues(EnumerationDescriptor descriptor) {
-        jdbi.useHandle(handle -> {
-            for (EnumerationValueDescriptor v : descriptor.values()) {
-                handle.createUpdate("MERGE INTO " + descriptor.tableName() +
-                                " (_id, _name, _order) KEY(_id) VALUES (:id, :name, :order)")
-                        .bind("id", v.id())
-                        .bind("name", v.name())
-                        .bind("order", v.order())
-                        .execute();
-            }
-        });
+    private EnumerationPersistence() {
     }
 
     public static UUID resolveId(Class<? extends Enum<?>> enumClass, Enum<?> value) {
