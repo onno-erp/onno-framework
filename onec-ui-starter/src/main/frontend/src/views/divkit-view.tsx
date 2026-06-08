@@ -471,6 +471,13 @@ export function DivKitView() {
         setTheme(resolvedTheme === "dark" ? "light" : "dark");
         return;
       }
+      if (rest.startsWith("download/")) {
+        // download/{path} — a server endpoint that returns a file with Content-Disposition:
+        // attachment. A full-page GET lets the browser save it (the attachment header means the
+        // current SPA view stays put). Used by print/export actions, e.g. Print to Word.
+        window.location.href = "/" + rest.slice("download/".length);
+        return;
+      }
       if (rest.startsWith("app")) {
         const q = rest.indexOf("?");
         const params = new URLSearchParams(q >= 0 ? rest.slice(q + 1) : "");
