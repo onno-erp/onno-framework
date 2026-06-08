@@ -45,8 +45,8 @@ public class RegisterQueryService {
     public List<Map<String, Object>> movements(AccumulationRegisterDescriptor desc, String from, String to) {
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
-        if (from != null) sql.append(" AND _period >= :from");
-        if (to != null) sql.append(" AND _period <= :to");
+        if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
+        if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
         sql.append(" ORDER BY _period DESC");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
@@ -102,7 +102,7 @@ public class RegisterQueryService {
         }
         sql.append(resourceSums);
         sql.append(" FROM ").append(desc.tableName());
-        sql.append(" WHERE _active = true AND _period >= :from AND _period <= :to");
+        sql.append(" WHERE _active = true AND _period >= CAST(:from AS TIMESTAMP) AND _period <= CAST(:to AS TIMESTAMP)");
         for (AttributeDescriptor dim : desc.dimensions()) {
             if (filters.containsKey(dim.fieldName())) {
                 sql.append(" AND ").append(dim.columnName()).append(" = :").append(dim.columnName());
@@ -142,8 +142,8 @@ public class RegisterQueryService {
         StringBuilder sql = new StringBuilder("SELECT ").append(agg)
                 .append(" FROM ").append(desc.tableName())
                 .append(" WHERE _active = true");
-        if (from != null) sql.append(" AND _period >= :from");
-        if (to != null) sql.append(" AND _period <= :to");
+        if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
+        if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
         if (!f.isEmpty()) {
             sql.append(" AND ").append(f.sql());
         }

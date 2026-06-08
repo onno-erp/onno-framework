@@ -41,6 +41,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testImplementation("org.assertj:assertj-core:3.26.3")
     testImplementation("org.springframework.security:spring-security-core:6.4.4")
+    // Postgres-portability checks: the date-bound register/document queries can only be
+    // verified against a real PostgreSQL (H2 silently casts varchar↔timestamp, so it never
+    // reproduces the strict-typing failure). The IT skips when Docker is unavailable.
+    testImplementation("org.testcontainers:postgresql:1.20.4")
+    testImplementation("org.testcontainers:junit-jupiter:1.20.4")
+    testRuntimeOnly("org.postgresql:postgresql:42.7.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testRuntimeOnly("org.slf4j:slf4j-simple:2.0.16")
 }

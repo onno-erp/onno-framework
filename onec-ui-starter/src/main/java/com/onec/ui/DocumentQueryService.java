@@ -55,8 +55,8 @@ public class DocumentQueryService {
     public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to) {
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false");
-        if (from != null) sql.append(" AND _date >= :from");
-        if (to != null) sql.append(" AND _date <= :to");
+        if (from != null) sql.append(" AND _date >= CAST(:from AS TIMESTAMP)");
+        if (to != null) sql.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         sql.append(" ORDER BY _date DESC");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
@@ -112,8 +112,8 @@ public class DocumentQueryService {
         boolean dirDesc = defaultSort ? true : descending; // newest-first by default
         ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
-        if (from != null) where.append(" AND _date >= :from");
-        if (to != null) where.append(" AND _date <= :to");
+        if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
+        if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
@@ -137,8 +137,8 @@ public class DocumentQueryService {
                       List<String> eq, List<String> ge, List<String> le) {
         ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
-        if (from != null) where.append(" AND _date >= :from");
-        if (to != null) where.append(" AND _date <= :to");
+        if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
+        if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
