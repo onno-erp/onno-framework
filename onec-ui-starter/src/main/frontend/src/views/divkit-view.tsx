@@ -272,6 +272,11 @@ export function DivKitView() {
   useEffect(() => {
     setWorkspace((ws) => {
       const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
+      // don't re-open a "/" tab for it. Real routes still open normally.
+      if (location.pathname === "/" && focused.tabs.length === 0) {
+        return ws;
+      }
       if (
         focused.activePath === location.pathname &&
         focused.tabs.some((t) => t.path === location.pathname)
