@@ -43,21 +43,16 @@ public class DesktopEnvironmentPostProcessor implements EnvironmentPostProcessor
             return;
         }
 
-        // Stay logged in across restarts. Persistent cookie (so the webview keeps it
-        // past quit) + a long rolling timeout, with the session stored in the DB. These
-        // are overridable defaults, so they go in at lowest precedence.
+        // Stay logged in across restarts. Persistent cookie (so the webview keeps it past quit)
+        // + a long rolling timeout. The session *table* itself is created for every persistent
+        // database (H2 file, PostgreSQL) by SessionSchemaEnvironmentPostProcessor — server and
+        // desktop alike — so only the "stay logged in" defaults remain here. Overridable, so they
+        // go in at lowest precedence.
         String url = environment.getProperty("spring.datasource.url", "");
         Map<String, Object> sessionDefaults = new LinkedHashMap<>();
         sessionDefaults.put("server.servlet.session.timeout", "30d");
         sessionDefaults.put("server.servlet.session.cookie.max-age", "30d");
         sessionDefaults.put("spring.session.timeout", "30d");
-        if (url.startsWith("jdbc:h2:")) {
-            // Our idempotent (IF NOT EXISTS) mirror of Spring Session's H2 schema, safe
-            // to run on every boot against the reused file database.
-            sessionDefaults.put("spring.session.jdbc.initialize-schema", "always");
-            sessionDefaults.put("spring.session.jdbc.schema",
-                    "classpath:onec-desktop/session/schema-h2.sql");
-        }
         environment.getPropertySources()
                 .addLast(new MapPropertySource("onec-desktop-session", sessionDefaults));
 

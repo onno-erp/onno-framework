@@ -1,11 +1,12 @@
--- Idempotent Spring Session JDBC schema for the embedded H2 file database.
+-- Idempotent Spring Session JDBC schema for a file-backed H2 database.
 --
--- Spring Session's bundled schema-h2.sql uses bare CREATE TABLE / CREATE INDEX,
--- which fails on the SECOND launch against a persistent (file-backed) database —
--- exactly the desktop case, where the same H2 file is reused across restarts.
--- This mirror adds IF NOT EXISTS so `initialize-schema=always` is safe to run on
--- every boot, the same idempotent contract the framework's own SchemaGenerator
--- follows. Keep column definitions in sync with the upstream schema-h2.sql.
+-- Spring Boot only auto-creates the session schema for in-memory H2, so a file H2
+-- (the default jdbc:h2:file: datasource, in plain bootRun and desktop alike) never
+-- gets it and the first session write fails. Spring Session's bundled schema-h2.sql
+-- uses bare CREATE TABLE / CREATE INDEX, which would then fail on the SECOND launch
+-- against the reused file. This mirror adds IF NOT EXISTS so `initialize-schema=always`
+-- is safe to run on every boot — the same idempotent contract the framework's own
+-- SchemaGenerator follows. Keep column definitions in sync with the upstream schema-h2.sql.
 CREATE TABLE IF NOT EXISTS SPRING_SESSION (
 	PRIMARY_ID CHAR(36) NOT NULL,
 	SESSION_ID CHAR(36) NOT NULL,
