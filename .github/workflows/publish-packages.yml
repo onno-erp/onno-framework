@@ -60,9 +60,9 @@ jobs:
         run: ./gradlew clean check -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
       - name: Publish to Maven Central
-        # Uploads a signed deployment to the Central Portal. With SONATYPE_AUTOMATIC_RELEASE=false
-        # (gradle.properties) it stays staged for a manual "Publish" click at central.sonatype.com;
-        # switch the task to `publishAndReleaseToMavenCentral` to auto-release once you trust it.
+        # Uploads a signed deployment to the Central Portal. SONATYPE_AUTOMATIC_RELEASE=true
+        # (gradle.properties) makes it release automatically once the Portal validates it — no
+        # manual "Publish" click. Set that property to false to instead leave deployments staged.
         env:
           # Central Portal user token (Account → Generate User Token), exposed as Gradle properties.
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
