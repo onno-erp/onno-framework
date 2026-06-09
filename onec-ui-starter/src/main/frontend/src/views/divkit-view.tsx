@@ -1247,13 +1247,13 @@ export function DivKitView() {
         {/* Every open tab stays mounted in its own scroll container; only the active
             one is shown. Keeping them alive preserves each tab's scroll position,
             DivKit state, and form inputs across switches (no remount, no refetch). */}
-        {pane.tabs.length === 0 ? (
-          <div className="grid min-h-0 flex-1 place-items-center">
-            <p className="text-sm text-muted-foreground">No open tabs</p>
-          </div>
-        ) : (
-          <div className="relative min-h-0 flex-1">
-            {pane.tabs.map((tab) => (
+        <div className="relative min-h-0 flex-1">
+          {pane.tabs.length === 0 ? (
+            <div className="grid h-full place-items-center">
+              <p className="text-sm text-muted-foreground">No open tabs</p>
+            </div>
+          ) : (
+            pane.tabs.map((tab) => (
               <div
                 key={tab.path}
                 // Inactive tabs stay laid out (visibility, not display:none) so widgets
@@ -1272,9 +1272,39 @@ export function DivKitView() {
                   skeletonBg={skeletonBg}
                 />
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+          {/* Drag overlay over the body, live only while a tab is being dragged. The body's
+              content can be a React portal (the onec-list grid mounts via createPortal into
+              its <onec-list> host), and a portal's events bubble to its React parent — not to
+              this <section>. So a tab dragged over the list never reaches the island's own
+              onDragOver/onDrop, and the drop is silently rejected (no split). This overlay
+              lives in the section's own subtree and sits above the content, so it catches the
+              drag for every surface type and routes it to the same split/move handlers. */}
+          {dragState ? (
+            <div
+              className="absolute inset-0 z-10"
+              onDragOver={(e) => {
+                if (!dragRef.current) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const mode = dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect());
+                setDropTarget((t) =>
+                  t?.paneId === pane.id && t.mode === mode ? t : { paneId: pane.id, mode }
+                );
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDropTarget((t) => (t?.paneId === pane.id ? null : t));
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDrop(pane.id, dropModeAt(e.clientX, e.currentTarget.getBoundingClientRect()));
+              }}
+            />
+          ) : null}
+        </div>
 
         {/* drop hints while dragging a tab over the body (append / split) */}
         {isDropInto ? (
