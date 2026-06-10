@@ -202,6 +202,9 @@ export const api = {
     }),
   deleteCatalogItem: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/catalogs/${name}/${id}`, { method: "DELETE" }),
+  // Live rows of a related-list panel: the join-catalog rows tied to record {id} (see RelatedListMeta).
+  getRelatedList: (name: string, id: string, relatedName: string) =>
+    fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}/${id}/related/${relatedName}`),
 
   // Document CRUD
   listDocuments: (name: string, from?: string, to?: string) => {

@@ -2,7 +2,9 @@ package com.example.ui.layouts;
 
 import com.example.domain.catalogs.BankAccount;
 import com.example.domain.catalogs.Client;
+import com.example.domain.catalogs.Clinic;
 import com.example.domain.catalogs.Country;
+import com.example.domain.catalogs.Doctor;
 import com.example.domain.catalogs.Employee;
 import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
@@ -55,6 +57,15 @@ public class MainLayout implements Layout {
                 .order(2)
                 .icon("users")
                 .catalog(Employee.class);
+
+        // Demonstrates declarative related-list panels: Clinic and Doctor are a catalog↔catalog
+        // many-to-many, edited inline on either side over the ClinicDoctor join catalog (which
+        // needs no nav entry — the related-list panels read/write it directly).
+        layout.section("Health")
+                .order(4)
+                .icon("stethoscope")
+                .catalog(Clinic.class, "hospital")
+                .catalog(Doctor.class, "stethoscope");
 
         layout.section("Reports")
                 .order(3)

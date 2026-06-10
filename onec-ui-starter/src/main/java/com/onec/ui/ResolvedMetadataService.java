@@ -44,7 +44,71 @@ public class ResolvedMetadataService {
         map.put("systemColumns", List.of(
                 systemColumn("code", "Code", "_code", hints),
                 systemColumn("description", "Description", "_description", hints)));
+        map.put("relatedLists", describeRelatedLists(d));
         return map;
+    }
+
+    /**
+     * Resolves the editor's declared related-list panels (see {@link RelatedList}) into the
+     * JSON the form widget renders. Each panel is resolved against its <em>join catalog</em>'s
+     * scanned metadata: the {@code via} ref (back-reference that scopes rows to this record), the
+     * {@code display} ref (the other side, also the add-row picker's target), and the join-row
+     * columns to show. A panel pointing at an unregistered class, or naming a {@code via}/{@code
+     * display} field that isn't a ref on the join catalog, is dropped with no panel emitted —
+     * the editor degrades gracefully rather than breaking the whole form.
+     */
+    private List<Map<String, Object>> describeRelatedLists(CatalogDescriptor parent) {
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (RelatedList rl : fieldHints.relatedListsFor(parent.javaClass())) {
+            CatalogDescriptor join = registry.allCatalogs().stream()
+                    .filter(c -> c.javaClass().equals(rl.joinCatalog()))
+                    .findFirst().orElse(null);
+            if (join == null) {
+                continue;
+            }
+            AttributeDescriptor via = refAttr(join, rl.via());
+            AttributeDescriptor display = refAttr(join, rl.display());
+            if (via == null || display == null) {
+                continue;
+            }
+            // Columns default to just the display ref; an explicit list may add join-row
+            // attributes (role, sortOrder, …). Unknown field names are skipped.
+            List<String> columnFields = rl.columns().isEmpty() ? List.of(rl.display()) : rl.columns();
+            List<AttributeDescriptor> columns = columnFields.stream()
+                    .map(f -> join.attributes().stream()
+                            .filter(a -> a.fieldName().equals(f)).findFirst().orElse(null))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+
+            boolean targetIsDocument = registry.allDocuments().stream()
+                    .anyMatch(doc -> doc.logicalName().equals(display.refTarget()));
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", rl.name());
+            m.put("label", rl.label());
+            // The join catalog the panel reads/writes (logical name → REST under /api/catalogs).
+            m.put("joinCatalog", join.logicalName());
+            // Field the add-row create binds to the parent record, and the column the list query
+            // filters on; both keyed by field name (the REST write contract takes field names).
+            m.put("viaField", via.fieldName());
+            // The other side: field picked per row, and the catalog/document it points at.
+            m.put("displayField", display.fieldName());
+            m.put("target", display.refTarget());
+            m.put("targetKind", targetIsDocument ? "document" : "catalog");
+            m.put("columns", describeAttributes(columns, fieldHints.forEntity(join.javaClass())));
+            out.add(m);
+        }
+        return out;
+    }
+
+    /** A ref attribute on {@code desc} by field name, or {@code null} if absent or not a ref. */
+    private static AttributeDescriptor refAttr(CatalogDescriptor desc, String field) {
+        if (field == null) {
+            return null;
+        }
+        return desc.attributes().stream()
+                .filter(a -> a.fieldName().equals(field) && a.isRef())
+                .findFirst().orElse(null);
     }
 
     public Map<String, Object> describeDocument(DocumentDescriptor d) {

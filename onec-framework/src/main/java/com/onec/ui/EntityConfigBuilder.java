@@ -1,6 +1,8 @@
 package com.onec.ui;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -15,10 +17,29 @@ public class EntityConfigBuilder {
 
     private final Map<String, FieldHintBuilder> fields = new LinkedHashMap<>();
     private final Map<String, String> actions = new LinkedHashMap<>();
+    private final Map<String, RelatedListBuilder> relatedLists = new LinkedHashMap<>();
     private String icon = "";
 
     public FieldHintBuilder field(String name) {
         return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
+    }
+
+    /**
+     * Declare an inline related-list (child rows) panel for this catalog editor, backed by a
+     * join catalog — the catalog-side analogue of a document's {@code @TabularSection}. Point it
+     * at the join {@code @Catalog} class, then say which {@code Ref} scopes rows to this record
+     * ({@link RelatedListBuilder#via via}) and which {@code Ref} to show/pick per row
+     * ({@link RelatedListBuilder#display display}):
+     *
+     * <pre>
+     * f.relatedList("doctors", ClinicDoctor.class).via("clinic").display("doctor");
+     * </pre>
+     *
+     * <p>See {@link RelatedList}. Editor-only — no schema change; rows are read/written live
+     * against the join catalog.</p>
+     */
+    public RelatedListBuilder relatedList(String name, Class<?> joinCatalog) {
+        return relatedLists.computeIfAbsent(name, n -> new RelatedListBuilder(this, n, joinCatalog));
     }
 
     /**
@@ -60,5 +81,14 @@ public class EntityConfigBuilder {
             result.put(entry.getKey(), entry.getValue().build());
         }
         return Map.copyOf(result);
+    }
+
+    /** Related-list panels authored on this entity, in declaration order. */
+    public List<RelatedList> buildRelatedLists() {
+        List<RelatedList> result = new ArrayList<>();
+        for (RelatedListBuilder b : relatedLists.values()) {
+            result.add(b.build());
+        }
+        return List.copyOf(result);
     }
 }
