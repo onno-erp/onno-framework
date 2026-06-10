@@ -43,6 +43,16 @@ class RelatedListBuilderTest {
         RelatedList rl = cfg.buildRelatedLists().get(0);
         assertThat(rl.columns()).isEmpty();
         assertThat(rl.label()).isEmpty();
+        // Visible in the detail view by default (renders read-only there as well as in the form).
+        assertThat(rl.hideInDetail()).isFalse();
+    }
+
+    @Test
+    void hideInDetail_optsPanelOutOfTheDetailRender() {
+        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        cfg.relatedList("doctors", Join.class).via("clinic").display("doctor").hideInDetail();
+
+        assertThat(cfg.buildRelatedLists().get(0).hideInDetail()).isTrue();
     }
 
     @Test

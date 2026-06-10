@@ -22,6 +22,7 @@ public class RelatedListBuilder {
     private String display;
     private final List<String> columns = new ArrayList<>();
     private String label = "";
+    private boolean hideInDetail = false;
 
     RelatedListBuilder(EntityConfigBuilder parent, String name, Class<?> joinCatalog) {
         this.parent = parent;
@@ -68,6 +69,16 @@ public class RelatedListBuilder {
         return this;
     }
 
+    /**
+     * Hide this panel in the read/detail view, keeping it only in the edit form. By default a
+     * related list renders read-only in the detail view (so the roster is visible without entering
+     * edit mode) <em>and</em> editable in the form; call this to opt a panel out of the detail render.
+     */
+    public RelatedListBuilder hideInDetail() {
+        this.hideInDetail = true;
+        return this;
+    }
+
     /** Add another related-list panel on the same entity. */
     public RelatedListBuilder relatedList(String name, Class<?> joinCatalog) {
         return parent.relatedList(name, joinCatalog);
@@ -79,6 +90,6 @@ public class RelatedListBuilder {
     }
 
     RelatedList build() {
-        return new RelatedList(name, joinCatalog, via, display, List.copyOf(columns), label);
+        return new RelatedList(name, joinCatalog, via, display, List.copyOf(columns), label, hideInDetail);
     }
 }

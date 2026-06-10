@@ -385,10 +385,44 @@ public class DivKitController {
         if (canWrite) {
             actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id));
         }
+        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
-                resolvedMetadata.describeCatalog(desc), catalogQuery.get(desc, id), actions,
+                meta, catalogQuery.get(desc, id), relatedListRows(meta, id, principal), actions,
                 Palette.of(theme));
         return DivCard.of("onec-content", content);
+    }
+
+    /**
+     * Preloads the read-only related-list rows for the detail view, keyed by panel name. Mirrors
+     * the live read path the form panel uses (GenericCatalogController#related): each panel's join
+     * catalog is resolved from the already-described metadata, its {@code via} ref column scopes
+     * rows to this record, and a panel is skipped — degrading gracefully, never breaking the
+     * surface — when it opts out of detail ({@code showInDetail} false), names a join catalog that
+     * vanished, has no via ref, or the caller may not read it.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, List<Map<String, Object>>> relatedListRows(Map<String, Object> meta, UUID parentId,
+                                                                   Principal principal) {
+        Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();
+        for (Map<String, Object> rl : (List<Map<String, Object>>) meta.getOrDefault("relatedLists", List.of())) {
+            if (!Boolean.TRUE.equals(rl.get("showInDetail"))) {
+                continue;
+            }
+            CatalogDescriptor join;
+            try {
+                join = catalogQuery.require(str(rl.get("joinCatalog")));
+            } catch (ResponseStatusException notFound) {
+                continue;
+            }
+            AttributeDescriptor via = join.attributes().stream()
+                    .filter(a -> a.fieldName().equals(str(rl.get("viaField"))) && a.isRef())
+                    .findFirst().orElse(null);
+            if (via == null || !access.canRead(principal, join)) {
+                continue;
+            }
+            out.put(str(rl.get("name")), catalogQuery.relatedRows(join, via.columnName(), parentId));
+        }
+        return out;
     }
 
     @GetMapping("/catalogs/{name}/new")

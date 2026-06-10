@@ -249,11 +249,17 @@ public final class SurfaceDivBuilder {
     /**
      * A catalog item's detail surface: a header (with edit/delete actions when the
      * caller may write) over a card of its visible system columns (code/description)
-     * and attributes. Catalogs have no posting or tabular sections, so it's flatter
-     * than {@link #documentDetail}.
+     * and attributes, then a read-only table per related-list panel. Catalogs have no
+     * posting, so it's flatter than {@link #documentDetail} — but the related-list
+     * tables are the catalog-side analogue of that view's tabular sections.
+     *
+     * <p>{@code relatedRows} maps each panel's {@code name} to its preloaded join rows;
+     * a panel renders (read-only, no add/remove) iff it is {@code showInDetail} and present
+     * in that map (the caller omits panels the user may not read). Empty maps to no panel.
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
+                                                    Map<String, List<Map<String, Object>>> relatedRows,
                                                     List<HeaderAction> actions, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
@@ -274,7 +280,53 @@ public final class SurfaceDivBuilder {
             items.add(fieldCard(fieldRows, p));
         }
 
+        // Related-list panels render read-only here (the catalog-side analogue of a document's
+        // tabular sections), mirroring the form widget minus the add-row / remove controls.
+        for (Map<String, Object> rl : (List<Map<String, Object>>) meta.getOrDefault("relatedLists", List.of())) {
+            if (!Boolean.TRUE.equals(rl.get("showInDetail")) || !relatedRows.containsKey(str(rl.get("name")))) {
+                continue;
+            }
+            items.add(sectionLabel(relatedListTitle(rl), p));
+            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p));
+        }
+
         return content(items);
+    }
+
+    /** A related-list panel heading: its explicit {@code label}, else the capitalized panel name. */
+    private static String relatedListTitle(Map<String, Object> rl) {
+        String label = str(rl.get("label"));
+        if (!label.isBlank()) {
+            return label;
+        }
+        String name = str(rl.get("name"));
+        return name.isEmpty() ? name : Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /**
+     * One related-list panel as a read-only table: a column per resolved join-row column (refs
+     * resolved to their description, and clickable through to the target record), one row per
+     * join row. Shape mirrors {@link #documentDetail}'s tabular-section tables.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> relatedListTable(Map<String, Object> rl,
+                                                        List<Map<String, Object>> rows, Palette p) {
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) rl.getOrDefault("columns", List.of());
+        List<String> headers = new ArrayList<>();
+        for (Map<String, Object> c : columns) {
+            headers.add(str(c.get("displayName")));
+        }
+        List<Components.Row> body = new ArrayList<>();
+        for (Map<String, Object> r : rows) {
+            List<String> cells = new ArrayList<>();
+            List<String> cellUrls = new ArrayList<>();
+            for (Map<String, Object> c : columns) {
+                cells.add(cell(c, r));
+                cellUrls.add(refUrlFor(c, r)); // null for non-ref columns
+            }
+            body.add(new Components.Row(cells, null, cellUrls));
+        }
+        return Components.table(headers, body, p);
     }
 
     // ----- create / edit form -----

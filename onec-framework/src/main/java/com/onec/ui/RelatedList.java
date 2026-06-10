@@ -32,6 +32,8 @@ import java.util.List;
  *                    row (resolved to its description); also the add-row picker's target
  * @param columns     join-row field names to render as columns; empty means just {@code display}
  * @param label       panel heading; blank means derive one from {@code name}
+ * @param hideInDetail when {@code true}, the panel renders only in the edit form, not in the
+ *                    read/detail view; defaults to {@code false} so a declared panel shows in both
  */
 public record RelatedList(
         String name,
@@ -39,5 +41,6 @@ public record RelatedList(
         String via,
         String display,
         List<String> columns,
-        String label) {
+        String label,
+        boolean hideInDetail) {
 }

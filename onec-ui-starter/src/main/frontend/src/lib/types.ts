@@ -72,6 +72,11 @@ export interface RelatedListMeta {
   target: string;
   /** Whether {@link target} names a catalog or a document. */
   targetKind: "catalog" | "document";
+  /**
+   * Whether the panel also renders read-only in the detail/read view (default true). The form
+   * widget renders every panel regardless; only the detail surface honors this flag.
+   */
+  showInDetail?: boolean;
   /** Join-row columns to render (defaults to just the display ref). */
   columns: AttributeMeta[];
 }

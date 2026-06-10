@@ -80,6 +80,8 @@ class RelatedListMetadataTest {
         assertThat(rl.get("displayField")).isEqualTo("doctor");
         assertThat(rl.get("target")).isEqualTo("RlDoctors");
         assertThat(rl.get("targetKind")).isEqualTo("catalog");
+        // Defaults to visible in the detail view, so the panel lights up read-only there too.
+        assertThat(rl.get("showInDetail")).isEqualTo(true);
 
         List<Map<String, Object>> columns = (List<Map<String, Object>>) rl.get("columns");
         assertThat(columns).extracting(c -> c.get("fieldName")).containsExactly("doctor", "role");
@@ -87,6 +89,29 @@ class RelatedListMetadataTest {
         Map<String, Object> doctorCol = columns.get(0);
         assertThat(doctorCol.get("isRef")).isEqualTo(true);
         assertThat(doctorCol.get("refTarget")).isEqualTo("RlDoctors");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void describeCatalog_hideInDetail_marksPanelHiddenFromDetail() {
+        ResolvedMetadataService svc = serviceWith(new EntityView() {
+            @Override
+            public Class<?> entity() {
+                return Clinic.class;
+            }
+
+            @Override
+            public void fields(EntityConfigBuilder f) {
+                f.relatedList("doctors", ClinicDoctor.class)
+                        .via("clinic").display("doctor").hideInDetail();
+            }
+        });
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+
+        Map<String, Object> described = svc.describeCatalog(scanner.scan(Clinic.class));
+        List<Map<String, Object>> related = (List<Map<String, Object>>) described.get("relatedLists");
+        assertThat(related).hasSize(1);
+        assertThat(related.get(0).get("showInDetail")).isEqualTo(false);
     }
 
     @SuppressWarnings("unchecked")

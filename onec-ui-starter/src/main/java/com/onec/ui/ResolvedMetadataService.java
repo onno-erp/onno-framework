@@ -50,7 +50,8 @@ public class ResolvedMetadataService {
 
     /**
      * Resolves the editor's declared related-list panels (see {@link RelatedList}) into the
-     * JSON the form widget renders. Each panel is resolved against its <em>join catalog</em>'s
+     * JSON both the form widget (editable) and the detail surface (read-only, when {@code
+     * showInDetail}) render. Each panel is resolved against its <em>join catalog</em>'s
      * scanned metadata: the {@code via} ref (back-reference that scopes rows to this record), the
      * {@code display} ref (the other side, also the add-row picker's target), and the join-row
      * columns to show. A panel pointing at an unregistered class, or naming a {@code via}/{@code
@@ -95,6 +96,9 @@ public class ResolvedMetadataService {
             m.put("displayField", display.fieldName());
             m.put("target", display.refTarget());
             m.put("targetKind", targetIsDocument ? "document" : "catalog");
+            // Whether the panel also renders read-only in the detail/read view (default true); the
+            // form widget renders every panel regardless, the detail surface honors this flag.
+            m.put("showInDetail", !rl.hideInDetail());
             m.put("columns", describeAttributes(columns, fieldHints.forEntity(join.javaClass())));
             out.add(m);
         }
