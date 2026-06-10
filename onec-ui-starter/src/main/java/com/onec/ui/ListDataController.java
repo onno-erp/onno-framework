@@ -54,10 +54,13 @@ public class ListDataController {
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
         // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
         List<String> eq = multi(request, "eq");
+        List<String> in = multi(request, "in");
+        List<String> like = multi(request, "like");
+        List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, ge, le);
-        return page(catalogQuery.count(desc, q, eq, ge, le), offset, rows);
+        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, in, like, prefix, ge, le);
+        return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le), offset, rows);
     }
 
     @GetMapping("/documents/{name}")
@@ -76,10 +79,13 @@ public class ListDataController {
         int lim = clamp(limit);
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
         List<String> eq = multi(request, "eq");
+        List<String> in = multi(request, "in");
+        List<String> like = multi(request, "like");
+        List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, ge, le);
-        return page(documentQuery.count(desc, q, from, to, eq, ge, le), offset, rows);
+        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, in, like, prefix, ge, le);
+        return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le), offset, rows);
     }
 
     /** Raw repeated query-param values (no comma-splitting), or an empty list when absent. */

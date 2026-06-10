@@ -121,12 +121,21 @@ public class UiViewResolver {
                 continue;
             }
             filters.add(new ResolvedListView.Filter(
-                    f.field(), f.label(), cm.columnName(),
-                    f.type() == ListSpec.FilterType.DATE_RANGE ? "dateRange" : "options",
-                    f.options()));
+                    f.field(), f.label(), cm.columnName(), filterType(f.type()), f.options()));
         }
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters);
+    }
+
+    /** The renderer-neutral control name the island keys off (see {@link ResolvedListView.Filter}). */
+    private static String filterType(ListSpec.FilterType type) {
+        return switch (type) {
+            case MULTI_OPTIONS -> "multiOptions";
+            case CONTAINS -> "contains";
+            case STARTS_WITH -> "startsWith";
+            case DATE_RANGE -> "dateRange";
+            case OPTIONS -> "options";
+        };
     }
 
     private record ColumnMeta(String label, String columnName, boolean visibleInList, int order,

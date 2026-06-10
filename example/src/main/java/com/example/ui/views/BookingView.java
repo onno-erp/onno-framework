@@ -24,10 +24,15 @@ public class BookingView implements EntityView {
         list.columns("number", "date", "property", "checkIn", "checkOut", "primaryClient", "status", "totalGross")
                 .label("primaryClient", "Guest")
                 .label("totalGross", "Total")
-                // Declarative filters drive the list query itself (unlike toolbar inputs). A
-                // check-in date range and a nights SELECT narrow the rows server-side.
+                // Declarative filters drive the list query itself (unlike toolbar inputs), and all of
+                // them AND together. A check-in date range and a nights SELECT narrow the rows
+                // server-side; a multi-select over status and a contains typeahead over the summary
+                // round out the control types.
                 .filter("checkIn").label("Check-in").dateRange();
         list.filter("nights").label("Nights").options("1", "2", "3", "4", "5", "6", "7");
+        list.filter("status").label("Status")
+                .multiOptions("DRAFT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELED");
+        list.filter("summary").label("Summary").contains();
     }
 
     @Override

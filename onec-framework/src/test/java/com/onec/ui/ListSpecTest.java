@@ -20,6 +20,38 @@ class ListSpecTest {
     }
 
     @Test
+    void multiOptionsFilterCarriesItsChoices() {
+        ListSpec spec = new ListSpec();
+        spec.filter("role").label("Role").multiOptions("Хирург", "Терапевт");
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.field()).isEqualTo("role");
+        assertThat(f.label()).isEqualTo("Role");
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.MULTI_OPTIONS);
+        assertThat(f.options()).containsExactly("Хирург", "Терапевт");
+    }
+
+    @Test
+    void containsFilterIsTypeaheadWithNoOptions() {
+        ListSpec spec = new ListSpec();
+        spec.filter("doctorName").label("Doctor").contains();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.CONTAINS);
+        assertThat(f.options()).isEmpty();
+    }
+
+    @Test
+    void startsWithFilterIsTypeaheadWithNoOptions() {
+        ListSpec spec = new ListSpec();
+        spec.filter("doctorName").startsWith();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.STARTS_WITH);
+        assertThat(f.options()).isEmpty();
+    }
+
+    @Test
     void dateRangeFilterHasNoOptions() {
         ListSpec spec = new ListSpec();
         spec.filter("checkIn").label("Check-in").dateRange();
