@@ -106,11 +106,12 @@ public class DocumentQueryService {
     public List<Map<String, Object>> page(DocumentDescriptor desc, int offset, int limit,
                                           String sortColumn, boolean descending, String search,
                                           String from, String to,
-                                          List<String> eq, List<String> ge, List<String> le) {
+                                          List<String> eq, List<String> in, List<String> like,
+                                          List<String> prefix, List<String> ge, List<String> le) {
         boolean defaultSort = sortColumn == null || !sortableColumns(desc).contains(sortColumn);
         String orderBy = defaultSort ? "_date" : sortColumn;
         boolean dirDesc = defaultSort ? true : descending; // newest-first by default
-        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
@@ -134,8 +135,9 @@ public class DocumentQueryService {
 
     /** Total live rows matching the search (+ optional date range and declarative filters). */
     public long count(DocumentDescriptor desc, String search, String from, String to,
-                      List<String> eq, List<String> ge, List<String> le) {
-        ListFilter.Result filter = ListFilter.parse(eq, ge, le, filterableColumns(desc));
+                      List<String> eq, List<String> in, List<String> like,
+                      List<String> prefix, List<String> ge, List<String> le) {
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");

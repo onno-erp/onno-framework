@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/date-picker";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { api } from "@/lib/api";
@@ -62,15 +64,18 @@ export type ListInput = {
 };
 /**
  * A declarative filter that drives the list query itself (unlike a {@link ListInput}, which feeds
- * action handlers). "options" renders a SELECT matched for equality on {@code column}; "dateRange"
- * renders from/to date pickers driving a {@code column >= from AND column <= to} range. The current
- * value is sent to /api/list as eq/ge/le params.
+ * action handlers). "options" renders a SELECT matched for equality on {@code column};
+ * "multiOptions" renders a multi-select matched as {@code column IN (…)}; "contains"/"startsWith"
+ * render a debounced typeahead matched case-insensitively (LIKE %v% / v%) — the high-cardinality
+ * answer where enumerating every value is unusable; "dateRange" renders from/to date pickers driving
+ * a {@code column >= from AND column <= to} range. The current value is sent to /api/list as
+ * eq/in/like/prefix/ge/le params, and several filters narrow the list jointly (AND).
  */
 export type ListFilterControl = {
   key: string;
   label: string;
   column: string;
-  type: "options" | "dateRange";
+  type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange";
   options: string[];
 };
 export type ListDescriptor = {
@@ -143,6 +148,93 @@ function eventMatches(event: UiEvent, kind: string, name: string): boolean {
   return event.entityType === singular && (event.entityName === "*" || toSnake(event.entityName ?? "") === name);
 }
 
+/**
+ * A multi-select filter control: a popover of checkboxes over the declared options. The trigger
+ * summarizes the selection ("All" → "3 selected") so a long list of picks doesn't overflow the
+ * toolbar. The picked values are sent as repeated `in` params → `column IN (…)`.
+ */
+function MultiOptionsFilter({
+  options,
+  selected,
+  onChange,
+}: {
+  options: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const summary =
+    selected.length === 0 ? "All" : selected.length === 1 ? selected[0] : `${selected.length} selected`;
+  const toggle = (option: string) =>
+    onChange(selected.includes(option) ? selected.filter((v) => v !== option) : [...selected, option]);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 w-36 items-center justify-between gap-1 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+        >
+          <span className="truncate">{summary}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="max-h-72 w-56 overflow-y-auto p-1">
+        {selected.length > 0 ? (
+          <button
+            type="button"
+            className="mb-1 w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-accent"
+            onClick={() => onChange([])}
+          >
+            Clear
+          </button>
+        ) : null}
+        {options.map((o) => (
+          <label
+            key={o}
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+          >
+            <Checkbox checked={selected.includes(o)} onCheckedChange={() => toggle(o)} />
+            <span className="truncate">{o}</span>
+          </label>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * A field-scoped typeahead filter: a debounced text input. Keystrokes update the input immediately
+ * but only commit (and re-query) after a short pause, so a contains/starts-with filter over a
+ * high-cardinality column doesn't refetch on every character.
+ */
+function ContainsFilter({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  onCommit: (next: string) => void;
+}) {
+  const [text, setText] = useState(value);
+  // Keep the input in sync if the committed value is reset externally (e.g. a clear-all).
+  useEffect(() => setText(value), [value]);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if (text !== value) onCommit(text);
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+  return (
+    <Input
+      value={text}
+      placeholder={label}
+      onChange={(e) => setText(e.target.value)}
+      className="h-9 w-36"
+    />
+  );
+}
+
 export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const { kind, name, columns, pageSize } = list;
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -175,11 +267,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // Stable reference so the fetch/reset effects don't churn when there are no filters.
   const filters = useMemo(() => list.filters ?? [], [list.filters]);
 
-  // Current value of each declarative filter: {eq} for an options filter, {from,to} for a date range.
-  // Changing one resets the grid and re-queries (see the reset effect below) — it narrows the rows,
-  // not just the toolbar. Serialized into filterSig so effects can depend on its content.
+  // Current value of each declarative filter: {eq} for an options filter, {in} (picked values) for a
+  // multi-select, {text} for a contains/starts-with typeahead, {from,to} for a date range. Changing
+  // one resets the grid and re-queries (see the reset effect below) — it narrows the rows, not just
+  // the toolbar. Serialized into filterSig so effects can depend on its content.
   const [filterState, setFilterState] = useState<
-    Record<string, { eq?: string; from?: string; to?: string }>
+    Record<string, { eq?: string; in?: string[]; text?: string; from?: string; to?: string }>
   >(() => Object.fromEntries(filters.map((f) => [f.key, {}])));
   const filterSig = JSON.stringify(filterState);
   const filterStateRef = useRef(filterState);
@@ -254,13 +347,20 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         params.set("dir", sort.descending ? "desc" : "asc");
       }
       if (debounced) params.set("q", debounced);
-      // Declarative filters → eq/ge/le params (column,value); the server re-validates the column.
+      // Declarative filters → eq/in/like/prefix/ge/le params (column,value); the server re-validates
+      // the column. Several filters AND together; a multi-select sends one `in` per picked value.
       for (const f of filters) {
         const st = filterStateRef.current[f.key];
         if (!st) continue;
         if (f.type === "dateRange") {
           if (st.from) params.append("ge", `${f.column},${st.from}`);
           if (st.to) params.append("le", `${f.column},${st.to}`);
+        } else if (f.type === "multiOptions") {
+          for (const v of st.in ?? []) params.append("in", `${f.column},${v}`);
+        } else if (f.type === "contains") {
+          if (st.text?.trim()) params.append("like", `${f.column},${st.text.trim()}`);
+        } else if (f.type === "startsWith") {
+          if (st.text?.trim()) params.append("prefix", `${f.column},${st.text.trim()}`);
         } else if (st.eq) {
           params.append("eq", `${f.column},${st.eq}`);
         }
@@ -464,6 +564,30 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     </div>
                   </div>
                 </div>
+              );
+            }
+            if (f.type === "multiOptions") {
+              return (
+                <label key={f.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="whitespace-nowrap">{f.label}</span>
+                  <MultiOptionsFilter
+                    options={f.options}
+                    selected={filterState[f.key]?.in ?? []}
+                    onChange={(next) => setFilterState((s) => ({ ...s, [f.key]: { in: next } }))}
+                  />
+                </label>
+              );
+            }
+            if (f.type === "contains" || f.type === "startsWith") {
+              return (
+                <label key={f.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="whitespace-nowrap">{f.label}</span>
+                  <ContainsFilter
+                    label={f.label}
+                    value={filterState[f.key]?.text ?? ""}
+                    onCommit={(next) => setFilterState((s) => ({ ...s, [f.key]: { text: next } }))}
+                  />
+                </label>
               );
             }
             return (

@@ -29,8 +29,9 @@ public record ResolvedListView(String title, List<Column> columns,
     /**
      * A resolved list filter: a stable {@code key} (the field name, the client's state key), the
      * {@code label}, the data {@code columnName} the query filters on (resolved + validated against
-     * the entity's columns), the control {@code type} ({@code "options"} or {@code "dateRange"}) and,
-     * for an options filter, its {@code options}.
+     * the entity's columns), the control {@code type} ({@code "options"}, {@code "multiOptions"},
+     * {@code "contains"}, {@code "startsWith"} or {@code "dateRange"}) and, for the (multi-)options
+     * controls, its {@code options}.
      */
     public record Filter(String key, String label, String columnName, String type, List<String> options) {
         public Filter {

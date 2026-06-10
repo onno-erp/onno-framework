@@ -86,13 +86,25 @@ public final class ListSpec {
      * Declare a user-facing filter control bound to {@code field} (an entity field name, like the
      * column/sort field names). Unlike a toolbar {@link InputSpec input} — which feeds action
      * handlers — a filter drives the list query itself: its value narrows the rows the grid shows.
-     * Returns a {@link FilterBuilder}; call {@link FilterBuilder#options} for a SELECT (field-equality)
-     * filter or {@link FilterBuilder#dateRange} for from/to date pickers (a {@code field >= from AND
+     * Returns a {@link FilterBuilder}; pick the control with {@link FilterBuilder#options} (a SELECT
+     * matched for equality), {@link FilterBuilder#multiOptions} (a multi-select matched as
+     * {@code field IN (…)}), {@link FilterBuilder#contains}/{@link FilterBuilder#startsWith} (a
+     * field-scoped typeahead for high-cardinality fields, matched case-insensitively as
+     * {@code LIKE}), or {@link FilterBuilder#dateRange} (from/to pickers, a {@code field >= from AND
      * field <= to} range).
      *
+     * <p>When several filters are declared they combine with {@code AND}: each contributes its own
+     * {@code WHERE} fragment and the row must satisfy all of them. A {@code multiOptions} filter is
+     * internally an {@code OR}/{@code IN} over its picked values, but across different filters the
+     * combination is always {@code AND}. A filter whose control is left empty (no selection, blank
+     * text) contributes no constraint, and a filter on a field the entity no longer has degrades to
+     * "no constraint" rather than failing the list.</p>
+     *
      * <pre>
-     * list.filter("season").options("2024", "2025", "2026"); // SELECT -> season = value
-     * list.filter("checkIn").dateRange();                     // from/to pickers -> checkIn range
+     * list.filter("season").options("2024", "2025", "2026");        // SELECT -> season = value
+     * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%
+     * list.filter("role").multiOptions("Хирург", "Терапевт");        // multi-select -> role IN (…)
+     * list.filter("checkIn").dateRange();                           // from/to pickers -> checkIn range
      * </pre>
      */
     public FilterBuilder filter(String field) {
@@ -126,18 +138,30 @@ public final class ListSpec {
     public enum FilterType {
         /** A SELECT of {@link Filter#options}; the chosen value is matched for equality on the field. */
         OPTIONS,
+        /** A multi-select of {@link Filter#options}; the picked values match as {@code field IN (…)}. */
+        MULTI_OPTIONS,
+        /** A debounced text typeahead; the text matches case-insensitively as {@code field LIKE %v%}. */
+        CONTAINS,
+        /** A debounced text typeahead; the text matches case-insensitively as {@code field LIKE v%}. */
+        STARTS_WITH,
         /** A pair of from/to date pickers driving a {@code field >= from AND field <= to} range. */
         DATE_RANGE
     }
 
-    /** A resolved list filter: the bound field, its label, the control type and (for OPTIONS) its choices. */
+    /**
+     * A resolved list filter: the bound field, its label, the control type and — for the
+     * {@link FilterType#OPTIONS}/{@link FilterType#MULTI_OPTIONS} controls — its choices.
+     */
     public record Filter(String field, String label, FilterType type, List<String> options) {
         public Filter {
             options = options == null ? List.of() : List.copyOf(options);
         }
     }
 
-    /** Fluent builder for one filter; {@link #options}/{@link #dateRange} pick the control type. */
+    /**
+     * Fluent builder for one filter; {@link #options}/{@link #multiOptions}/{@link #contains}/
+     * {@link #startsWith}/{@link #dateRange} pick the control type.
+     */
     public static final class FilterBuilder {
         private final String field;
         private String label;
@@ -158,6 +182,32 @@ public final class ListSpec {
         public FilterBuilder options(String... options) {
             this.type = FilterType.OPTIONS;
             this.options = List.of(options);
+            return this;
+        }
+
+        /**
+         * A multi-select filter: pick any number of {@code options}, matched as {@code field IN (…)}
+         * over the chosen values (an empty selection adds no constraint).
+         */
+        public FilterBuilder multiOptions(String... options) {
+            this.type = FilterType.MULTI_OPTIONS;
+            this.options = List.of(options);
+            return this;
+        }
+
+        /**
+         * A field-scoped typeahead: a debounced text input matched case-insensitively as
+         * {@code field LIKE %text%}. The high-cardinality answer where a SELECT of every value would
+         * be unusable (e.g. filter a roster by a ~1.4k-name doctor column).
+         */
+        public FilterBuilder contains() {
+            this.type = FilterType.CONTAINS;
+            return this;
+        }
+
+        /** Like {@link #contains} but anchored at the start: matched as {@code field LIKE text%}. */
+        public FilterBuilder startsWith() {
+            this.type = FilterType.STARTS_WITH;
             return this;
         }
 

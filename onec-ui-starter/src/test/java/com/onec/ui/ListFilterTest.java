@@ -81,4 +81,72 @@ class ListFilterTest {
                 .isEqualTo("CAST(season AS VARCHAR) = :lf0 AND amount >= :lf1 AND amount <= :lf2");
         assertThat(r.bindings()).containsEntry("lf0", "2025").containsEntry("lf1", "10").containsEntry("lf2", "99");
     }
+
+    @Test
+    void multiSelectFoldsValuesForOneColumnIntoAnInList() {
+        ListFilter.Result r = ListFilter.parse(
+                null, List.of("season,2024", "season,2025"), null, null, null, null, COLUMNS);
+        assertThat(r.sql()).isEqualTo("CAST(season AS VARCHAR) IN (:lf0, :lf1)");
+        assertThat(r.bindings()).containsEntry("lf0", "2024").containsEntry("lf1", "2025");
+    }
+
+    @Test
+    void multiSelectAcrossColumnsStaysAndedButGroupedPerColumn() {
+        ListFilter.Result r = ListFilter.parse(
+                null, List.of("season,2024", "amount,10", "season,2025"), null, null, null, null, COLUMNS);
+        assertThat(r.sql())
+                .isEqualTo("CAST(season AS VARCHAR) IN (:lf0, :lf1) AND CAST(amount AS VARCHAR) IN (:lf2)");
+        assertThat(r.bindings())
+                .containsEntry("lf0", "2024").containsEntry("lf1", "2025").containsEntry("lf2", "10");
+    }
+
+    @Test
+    void containsMatchesLowercasedAndWrapsBothSides() {
+        ListFilter.Result r = ListFilter.parse(
+                null, null, List.of("season,Q1"), null, null, null, COLUMNS);
+        assertThat(r.sql()).isEqualTo("LOWER(CAST(season AS VARCHAR)) LIKE :lf0");
+        assertThat(r.bindings()).containsEntry("lf0", "%q1%");
+    }
+
+    @Test
+    void startsWithAnchorsAtTheStart() {
+        ListFilter.Result r = ListFilter.parse(
+                null, null, null, List.of("season,Q1"), null, null, COLUMNS);
+        assertThat(r.sql()).isEqualTo("LOWER(CAST(season AS VARCHAR)) LIKE :lf0");
+        assertThat(r.bindings()).containsEntry("lf0", "q1%");
+    }
+
+    @Test
+    void containsStaysBoundUnderInjection() {
+        ListFilter.Result r = ListFilter.parse(
+                null, null, List.of("season,%' OR '1'='1"), null, null, null, COLUMNS);
+        assertThat(r.sql()).isEqualTo("LOWER(CAST(season AS VARCHAR)) LIKE :lf0");
+        assertThat(r.bindings()).containsEntry("lf0", "%%' or '1'='1%");
+    }
+
+    @Test
+    void allChannelsAndTogether() {
+        ListFilter.Result r = ListFilter.parse(
+                List.of("season,2025"), List.of("amount,10", "amount,20"),
+                List.of("check_in,jan"), List.of("season,2"),
+                List.of("amount,1"), List.of("amount,99"), COLUMNS);
+        assertThat(r.sql()).isEqualTo(
+                "CAST(season AS VARCHAR) = :lf0"
+                        + " AND CAST(amount AS VARCHAR) IN (:lf1, :lf2)"
+                        + " AND LOWER(CAST(check_in AS VARCHAR)) LIKE :lf3"
+                        + " AND LOWER(CAST(season AS VARCHAR)) LIKE :lf4"
+                        + " AND amount >= :lf5 AND amount <= :lf6");
+    }
+
+    @Test
+    void multiAndContainsIgnoreUnknownColumns() {
+        assertThat(ListFilter.parse(null, List.of("secret_col,1"), List.of("secret_col,x"),
+                null, null, null, COLUMNS).isEmpty()).isTrue();
+    }
+
+    @Test
+    void emptyMultiAndContainsAddNoConstraint() {
+        assertThat(ListFilter.parse(null, List.of("season,"), List.of("season,  "),
+                List.of("season,"), null, null, COLUMNS).isEmpty()).isTrue();
+    }
 }
