@@ -56,6 +56,10 @@ to contribute nothing and wire your own security.
 | `onec.auth.users[*].username` | — | In-memory account username. |
 | `onec.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onec.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
+| `onec.auth.session.timeout` | `8h` | Idle session timeout for the cookie modes (`in-memory`, `oidc`), applied to the servlet container and **overriding** Spring Boot's 30-minute default. Slides on every request. Ignored in `resource-server` (stateless). |
+| `onec.auth.session.remember-me.enabled` | `true` | In-memory only: issue a persistent remember-me cookie on login and re-authenticate from it after the session lapses. |
+| `onec.auth.session.remember-me.validity` | `14d` | How long the remember-me cookie stays valid. |
+| `onec.auth.session.remember-me.key` | — | Secret signing the remember-me cookie. **Set a stable value in production** so cookies survive restarts and can't be forged; when blank a random key is generated per run (a warning is logged). |
 
 Default `public-paths`:
 
@@ -83,6 +87,28 @@ manifest). Everything else under `/api/**` is `authenticated()`; everything else
 - **Unauthorized `/api/**` requests get `401` with JSON** `{"error":"unauthenticated"}` (no redirect
   to a login page).
 
+### Session longevity & recovery
+
+A long-lived SPA tab should not silently lose its session and dump the user back at login. Three
+mechanisms keep a signed-in tab working:
+
+- **Longer sliding session.** `onec.auth.session.timeout` (default `8h`, vs. Spring's 30 min) is
+  applied to the container and slides on every request, so an actively-used or merely-parked-but-open
+  tab keeps its session for a working day.
+- **Remember-me (in-memory mode).** A successful password login also sets a signed remember-me cookie
+  (`onec.auth.session.remember-me.*`). A request whose session has expired — idle past the timeout, or
+  a reopened browser — is re-authenticated from that cookie by Spring's `RememberMeAuthenticationFilter`,
+  so the user stays signed in without re-entering credentials. `POST /api/auth/logout` cancels the
+  cookie so sign-out is final.
+- **Silent re-auth (OIDC mode).** The SPA, on losing its session, redirects to the IdP authorization
+  endpoint. If the IdP's SSO session is still alive the round-trip is invisible and the app reloads
+  already signed in; only when both the app session **and** the SSO session are gone does the user see
+  the IdP login. (Set a generous SSO Session Idle/Max on the realm to widen this window.)
+
+The SPA's `AuthProvider` drives the client side: a 4-minute `/api/auth/me` heartbeat plus a 401 hook on
+every data call route a lapsed session into recovery (remember-me re-auth, or the OIDC redirect)
+instead of a dead panel.
+
 ### CSRF model
 
 CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFalse()`:
@@ -102,9 +128,9 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 
 | Method | Path | Auth | Body | Response |
 |--------|------|------|------|----------|
-| `POST` | `/api/auth/login` | public, CSRF-exempt | `{"username":"...","password":"..."}` | `200` `{"authenticated":true,"username":"...","roles":["ROLE_ADMIN",...]}`; `401` on bad credentials; `400` if username/password missing |
+| `POST` | `/api/auth/login` | public, CSRF-exempt | `{"username":"...","password":"...","remember":true}` | `200` `{"authenticated":true,"username":"...","roles":["ROLE_ADMIN",...]}`; `401` on bad credentials; `400` if username/password missing. `remember` is optional (default `true`) and, when remember-me is enabled, controls whether the persistent cookie is issued |
 | `GET` | `/api/auth/me` | public | — | Current user, or `{"authenticated":false,"username":"","roles":[]}` when anonymous |
-| `POST` | `/api/auth/logout` | authenticated (needs CSRF header) | — | `204 No Content`; clears the security context and invalidates the session |
+| `POST` | `/api/auth/logout` | authenticated (needs CSRF header) | — | `204 No Content`; cancels the remember-me cookie, clears the security context, and invalidates the session |
 
 `roles` are the granted authorities verbatim, so they include the `ROLE_` prefix (a `USER` role
 appears as `ROLE_USER`).

@@ -5,6 +5,9 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.web.servlet.WebMvcAutoConfiguration;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -15,9 +18,11 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
 
 import com.onec.auth.spi.AuthMethodsProvider;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
@@ -94,6 +99,60 @@ class OnecAuthAutoConfigurationTest {
                     assertThat(context.getBean(OnecAuthProperties.class).getCsrfIgnoredPaths())
                             .containsExactly("/api/auth/login", "/api/public/**");
                 });
+    }
+
+    @Test
+    void inMemoryModeEnablesRememberMeByDefault() {
+        runner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).hasSingleBean(TokenBasedRememberMeServices.class);
+        });
+    }
+
+    @Test
+    void rememberMeCanBeDisabledAndTheChainStillBuilds() {
+        runner.withPropertyValues("onec.auth.session.remember-me.enabled=false").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).doesNotHaveBean(TokenBasedRememberMeServices.class);
+            assertThat(context).hasBean("onecSecurityFilterChain");
+        });
+    }
+
+    @Test
+    void oidcModeHasNoRememberMeServices() {
+        runner.withUserConfiguration(ClientRegistrationConfig.class)
+                .withPropertyValues("onec.auth.mode=oidc")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(TokenBasedRememberMeServices.class);
+                });
+    }
+
+    @Test
+    void sessionTimeoutCustomizerAppliesTheConfiguredIdleWindow() {
+        runner.withPropertyValues("onec.auth.session.timeout=2h").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(applyTimeoutCustomizer(context.getBean(
+                    "onecSessionTimeoutCustomizer", WebServerFactoryCustomizer.class)))
+                    .isEqualTo(Duration.ofHours(2));
+        });
+    }
+
+    @Test
+    void sessionTimeoutDefaultsToEightHours() {
+        runner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(applyTimeoutCustomizer(context.getBean(
+                    "onecSessionTimeoutCustomizer", WebServerFactoryCustomizer.class)))
+                    .isEqualTo(Duration.ofHours(8));
+        });
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Duration applyTimeoutCustomizer(WebServerFactoryCustomizer customizer) {
+        TomcatServletWebServerFactory factory = new TomcatServletWebServerFactory();
+        ((WebServerFactoryCustomizer<ConfigurableServletWebServerFactory>) customizer).customize(factory);
+        return factory.getSession().getTimeout();
     }
 
     @Test

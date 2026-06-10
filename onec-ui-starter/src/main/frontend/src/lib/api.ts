@@ -18,6 +18,15 @@ const CSRF_COOKIE = "XSRF-TOKEN";
 const CSRF_HEADER = "X-XSRF-TOKEN";
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// A 401 on any data call means the session lapsed while the tab was open. The AuthProvider
+// registers a handler here so it can recover (silently re-auth via the IdP, or fall back to the
+// login screen) instead of the request just failing into the void. The bad-credentials 401 from
+// the login endpoint is excluded at the call site below — that isn't session loss.
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 function readCsrfToken(): string | null {
   const match = document.cookie
     .split(";")
@@ -102,6 +111,9 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
     // failures (auth aside) surface as a toast as before.
     if (res.status !== 401 && !fieldErrors) toast.error(message);
+    // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
+    // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
+    if (res.status === 401 && !url.endsWith("/auth/login")) onUnauthorized?.();
     throw new ApiError(message, res.status, fieldErrors);
   }
   if (res.status === 204) return undefined as T;

@@ -12,6 +12,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.RememberMeServices;
+import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,11 +30,16 @@ class AuthApiController {
 
     /** Non-null only in in-memory mode; OIDC / resource-server modes have no password manager. */
     private final AuthenticationManager authenticationManager;
+    /** Non-null only when remember-me is enabled (in-memory mode); issues/clears the persistent cookie. */
+    private final RememberMeServices rememberMeServices;
     private final OnecAuthProperties properties;
     private final SecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
 
-    AuthApiController(AuthenticationManager authenticationManager, OnecAuthProperties properties) {
+    AuthApiController(AuthenticationManager authenticationManager,
+                      RememberMeServices rememberMeServices,
+                      OnecAuthProperties properties) {
         this.authenticationManager = authenticationManager;
+        this.rememberMeServices = rememberMeServices;
         this.properties = properties;
     }
 
@@ -67,6 +74,14 @@ class AuthApiController {
             SecurityContextHolder.setContext(context);
             contextRepository.saveContext(context, request, response);
 
+            // Persist the login beyond the session's idle timeout unless the caller opted out. The
+            // remember-me cookie re-authenticates a later request whose session has lapsed, so the
+            // user isn't bounced to the login screen on the next action after a parked tab.
+            boolean remember = body.remember() == null || body.remember();
+            if (remember && rememberMeServices != null) {
+                rememberMeServices.loginSuccess(request, response, authentication);
+            }
+
             return ResponseEntity.ok(AuthUser.from(authentication, authMode()));
         } catch (BadCredentialsException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -74,7 +89,13 @@ class AuthApiController {
     }
 
     @PostMapping("/logout")
-    ResponseEntity<Void> logout(HttpServletRequest request) {
+    ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response,
+                                Authentication authentication) {
+        // Cancel the remember-me cookie first (while the request still carries it) so logout is
+        // final — otherwise the persistent cookie would silently sign the user back in.
+        if (rememberMeServices instanceof LogoutHandler logoutHandler) {
+            logoutHandler.logout(request, response, authentication);
+        }
         SecurityContextHolder.clearContext();
         HttpSession session = request.getSession(false);
         if (session != null) {
@@ -104,7 +125,11 @@ class AuthApiController {
         };
     }
 
-    record LoginRequest(String username, String password) {
+    /**
+     * @param remember whether to issue a persistent remember-me cookie (in-memory mode). Null is
+     *                 treated as {@code true} — remember by default; pass {@code false} to opt out.
+     */
+    record LoginRequest(String username, String password, Boolean remember) {
     }
 
     private record AuthMode(String mode, String loginUrl, String logoutUrl) {

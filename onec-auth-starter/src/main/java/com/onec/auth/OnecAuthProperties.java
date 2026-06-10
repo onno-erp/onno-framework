@@ -3,6 +3,7 @@ package com.onec.auth;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -80,6 +81,14 @@ public class OnecAuthProperties {
      */
     private List<User> users = new ArrayList<>();
 
+    /**
+     * Session longevity and persistence for the cookie-based modes ({@link Mode#IN_MEMORY} and
+     * {@link Mode#OIDC}). Controls the idle timeout and (in-memory only) remember-me. Ignored in
+     * {@link Mode#RESOURCE_SERVER}, which is stateless.
+     */
+    @NestedConfigurationProperty
+    private Session session = new Session();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -128,6 +137,14 @@ public class OnecAuthProperties {
         this.users = users;
     }
 
+    public Session getSession() {
+        return session;
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
+    }
+
     public enum Mode {
         /** Username/password against {@code onec.auth.users}. */
         IN_MEMORY,
@@ -164,6 +181,92 @@ public class OnecAuthProperties {
 
         public void setRoles(List<String> roles) {
             this.roles = roles;
+        }
+    }
+
+    /**
+     * Session longevity for the cookie-based modes. The idle {@link #timeout} is applied to the
+     * servlet container (overriding Spring Boot's 30-minute default) and slides on every request,
+     * so an actively-used tab never expires mid-session. {@link #rememberMe} adds a persistent
+     * login cookie in {@link Mode#IN_MEMORY} so a session that lapses (closed browser, idle past
+     * the timeout) is silently re-established on the next request instead of bouncing to login.
+     */
+    public static class Session {
+
+        /**
+         * Idle session timeout for the cookie-based modes, applied to the servlet container. Slides
+         * on each request. Defaults to 8 hours (a working day) instead of Spring's 30 minutes so
+         * parked-but-open tabs don't silently lose their session. Ignored in
+         * {@link Mode#RESOURCE_SERVER}.
+         */
+        private Duration timeout = Duration.ofHours(8);
+
+        @NestedConfigurationProperty
+        private RememberMe rememberMe = new RememberMe();
+
+        public Duration getTimeout() {
+            return timeout;
+        }
+
+        public void setTimeout(Duration timeout) {
+            this.timeout = timeout;
+        }
+
+        public RememberMe getRememberMe() {
+            return rememberMe;
+        }
+
+        public void setRememberMe(RememberMe rememberMe) {
+            this.rememberMe = rememberMe;
+        }
+    }
+
+    /**
+     * Persistent "remember me" login for {@link Mode#IN_MEMORY}. When enabled, a successful
+     * password login also issues a signed remember-me cookie; a request that arrives after the
+     * session has expired is re-authenticated from that cookie (via Spring's
+     * {@code RememberMeAuthenticationFilter}) for up to {@link #validity}, so the user stays signed
+     * in across the idle timeout and browser restarts. Has no effect in the OIDC or
+     * resource-server modes, where the IdP owns session continuity.
+     */
+    public static class RememberMe {
+
+        /** Whether to issue and honour the persistent remember-me cookie. */
+        private boolean enabled = true;
+
+        /** How long the remember-me cookie stays valid. Defaults to 14 days. */
+        private Duration validity = Duration.ofDays(14);
+
+        /**
+         * Secret that signs the remember-me cookie. Set a stable, non-guessable value in production
+         * so cookies survive restarts and can't be forged. When blank, a random key is generated at
+         * startup — remember-me still works within a single run, but every restart invalidates
+         * outstanding cookies (and a warning is logged).
+         */
+        private String key;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getValidity() {
+            return validity;
+        }
+
+        public void setValidity(Duration validity) {
+            this.validity = validity;
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        public void setKey(String key) {
+            this.key = key;
         }
     }
 

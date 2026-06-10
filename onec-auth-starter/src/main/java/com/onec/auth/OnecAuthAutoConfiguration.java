@@ -10,6 +10,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
+import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -35,6 +38,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -46,6 +50,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Auto-configures authentication for an Onec application. The active backend is chosen by
@@ -69,8 +74,10 @@ public class OnecAuthAutoConfiguration {
      */
     @Bean
     AuthApiController onecAuthApiController(ObjectProvider<AuthenticationManager> authenticationManager,
+                                            ObjectProvider<TokenBasedRememberMeServices> rememberMeServices,
                                             OnecAuthProperties properties) {
-        return new AuthApiController(authenticationManager.getIfAvailable(), properties);
+        return new AuthApiController(authenticationManager.getIfAvailable(),
+                rememberMeServices.getIfAvailable(), properties);
     }
 
     /**
@@ -84,6 +91,28 @@ public class OnecAuthAutoConfiguration {
             OnecAuthProperties properties,
             ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
         return new OnecAuthMethodsProvider(properties, clientRegistrations);
+    }
+
+    /**
+     * Applies {@code onec.auth.session.timeout} to the servlet container, overriding Spring Boot's
+     * 30-minute default so the cookie-based modes get a working-day idle window that slides on each
+     * request. Inert in resource-server mode, which never creates a session. To use a different
+     * value, set {@code onec.auth.session.timeout} (this customizer is the source of truth — it
+     * runs after, and so wins over, {@code server.servlet.session.timeout}).
+     */
+    @Bean
+    WebServerFactoryCustomizer<ConfigurableServletWebServerFactory> onecSessionTimeoutCustomizer(
+            OnecAuthProperties properties) {
+        return factory -> {
+            java.time.Duration timeout = properties.getSession().getTimeout();
+            // Mutate only the timeout on the existing Session so any other server.servlet.session.*
+            // configuration (cookie name, SameSite, …) is preserved. getSession() lives on the
+            // concrete servlet factory, not the ConfigurableServletWebServerFactory interface.
+            if (timeout != null && !timeout.isZero() && !timeout.isNegative()
+                    && factory instanceof AbstractServletWebServerFactory servletFactory) {
+                servletFactory.getSession().setTimeout(timeout);
+            }
+        };
     }
 
     private static void applyApiAuthorization(HttpSecurity http, OnecAuthProperties properties) throws Exception {
@@ -138,14 +167,50 @@ public class OnecAuthAutoConfiguration {
             return provider::authenticate;
         }
 
+        /**
+         * Persistent remember-me for in-memory mode. Issues a signed cookie on login (the
+         * {@link AuthApiController} calls {@code loginSuccess}) and re-authenticates from it after
+         * the session has expired, so an idle-past-timeout or reopened-browser tab is signed back
+         * in silently instead of bouncing to the login screen. {@code alwaysRemember} is on because
+         * the JSON login carries no form parameter to opt in per-request — the controller decides
+         * whether to remember from the request body and only then issues the cookie.
+         */
+        @Bean
+        @ConditionalOnMissingBean(TokenBasedRememberMeServices.class)
+        @ConditionalOnProperty(prefix = "onec.auth.session.remember-me", name = "enabled",
+                havingValue = "true", matchIfMissing = true)
+        TokenBasedRememberMeServices onecRememberMeServices(UserDetailsService userDetailsService,
+                                                            OnecAuthProperties properties) {
+            OnecAuthProperties.RememberMe config = properties.getSession().getRememberMe();
+            String key = config.getKey();
+            if (key == null || key.isBlank()) {
+                key = UUID.randomUUID().toString();
+                log.warn("onec.auth.session.remember-me.key is not set; generated a random key. "
+                        + "Remember-me cookies will be invalidated on every restart and are not "
+                        + "portable across instances. Set a stable secret in production.");
+            }
+            TokenBasedRememberMeServices services = new TokenBasedRememberMeServices(
+                    key, userDetailsService, TokenBasedRememberMeServices.RememberMeTokenAlgorithm.SHA256);
+            services.setTokenValiditySeconds((int) config.getValidity().toSeconds());
+            services.setAlwaysRemember(true);
+            return services;
+        }
+
         @Bean
         @ConditionalOnMissingBean(SecurityFilterChain.class)
-        SecurityFilterChain onecSecurityFilterChain(HttpSecurity http, OnecAuthProperties properties)
+        SecurityFilterChain onecSecurityFilterChain(HttpSecurity http, OnecAuthProperties properties,
+                                                    ObjectProvider<TokenBasedRememberMeServices> rememberMe)
                 throws Exception {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
 
             applyApiAuthorization(http, properties);
+            // Honour the remember-me cookie: its filter/provider re-authenticate a request whose
+            // session has lapsed. The provider's key must match the one the cookie was signed with.
+            TokenBasedRememberMeServices rms = rememberMe.getIfAvailable();
+            if (rms != null) {
+                http.rememberMe(rm -> rm.rememberMeServices(rms).key(rms.getKey()));
+            }
             return http
                     .sessionManagement(session -> session
                             .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))

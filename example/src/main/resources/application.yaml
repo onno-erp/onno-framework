@@ -19,6 +19,16 @@ onec:
     # becomes a redirect to the IdP), or "resource-server" for stateless JWT bearer-token
     # validation. See the commented spring.security.oauth2.* blocks at the bottom of this file.
     mode: in-memory
+    # Session longevity for the cookie-based modes (in-memory, oidc). Defaults shown; tune as needed.
+    # The idle timeout slides on every request and overrides Spring's 30-minute default, so a
+    # parked-but-open tab keeps its session for a working day. remember-me (in-memory only) re-signs
+    # the user in from a persistent cookie after the session lapses — set a stable key in production.
+    session:
+      timeout: 8h
+      remember-me:
+        enabled: true
+        validity: 14d
+        # key: ${ONEC_REMEMBER_ME_KEY:}   # stable secret in prod; random per-run (logs a warning) if blank
     users:
       - username: admin
         password: admin
