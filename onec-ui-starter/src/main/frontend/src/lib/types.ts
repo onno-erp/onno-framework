@@ -51,6 +51,31 @@ export interface TabularSectionMeta {
   attributes: AttributeMeta[];
 }
 
+/**
+ * An inline related-list (child rows) panel on a catalog editor, backed by a join catalog.
+ * The panel reads the join rows whose {@link viaField} ref points at the record being edited,
+ * and adds/removes rows by creating/deleting join records — so a catalog↔catalog many-to-many
+ * edits inline like a document's tabular section, with no mirrored data. See {@code RelatedList}.
+ */
+export interface RelatedListMeta {
+  /** Panel id + REST sub-path: GET /api/catalogs/{catalog}/{id}/related/{name}. */
+  name: string;
+  /** Heading; blank means derive one from {@link name}. */
+  label: string;
+  /** Logical name of the join catalog the panel reads and writes. */
+  joinCatalog: string;
+  /** Field on the join catalog that scopes a row to the parent record (set on add). */
+  viaField: string;
+  /** Field on the join catalog shown/picked per row (the "other side"). */
+  displayField: string;
+  /** Logical name of the catalog/document the {@link displayField} ref points at. */
+  target: string;
+  /** Whether {@link target} names a catalog or a document. */
+  targetKind: "catalog" | "document";
+  /** Join-row columns to render (defaults to just the display ref). */
+  columns: AttributeMeta[];
+}
+
 export interface CatalogMeta {
   name: string;
   tableName: string;

@@ -148,8 +148,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public GenericCatalogController genericCatalogController(CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
-                                                              CatalogCommandService catalogCommandService) {
-        return new GenericCatalogController(catalogQueryService, access, catalogCommandService);
+                                                              CatalogCommandService catalogCommandService,
+                                                              FieldHintResolver fieldHintResolver) {
+        return new GenericCatalogController(catalogQueryService, access, catalogCommandService,
+                fieldHintResolver);
     }
 
     @Bean

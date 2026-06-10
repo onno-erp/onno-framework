@@ -253,6 +253,28 @@ public class CatalogQueryService {
         return buildTree(rows, null);
     }
 
+    /**
+     * Live rows of a join catalog whose {@code viaColumn} ref points at {@code parentId} — the
+     * read side of a related-list panel (see {@link RelatedList}). Ordered by code so the inline
+     * roster is stable. Refs are resolved (so the {@code display} ref shows its description) and
+     * secrets redacted, exactly like the standalone catalog list. {@code viaColumn} must be a real
+     * column on {@code desc} (the caller resolves it from the join catalog's metadata, never from
+     * user input) so this stays injection-safe.
+     */
+    public List<Map<String, Object>> relatedRows(CatalogDescriptor desc, String viaColumn, UUID parentId) {
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false AND " + viaColumn + " = :parent" +
+                                " ORDER BY _code")
+                        .bind("parent", parentId)
+                        .mapToMap()
+                        .list()
+        );
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
     public Map<String, Object> get(CatalogDescriptor desc, UUID id) {
         Map<String, Object> row = jdbi.withHandle(h ->
                 h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")

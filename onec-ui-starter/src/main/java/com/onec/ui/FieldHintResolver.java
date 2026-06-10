@@ -18,6 +18,7 @@ public class FieldHintResolver {
 
     private final Map<Class<?>, Map<String, FieldHint>> hints = new LinkedHashMap<>();
     private final Map<Class<?>, Map<String, String>> actions = new LinkedHashMap<>();
+    private final Map<Class<?>, List<RelatedList>> relatedLists = new LinkedHashMap<>();
 
     public FieldHintResolver(List<EntityView> views) {
         for (EntityView view : views) {
@@ -28,6 +29,7 @@ public class FieldHintResolver {
             view.fields(cfg);
             hints.put(view.entity(), cfg.buildFieldHints());
             actions.put(view.entity(), cfg.buildActions());
+            relatedLists.put(view.entity(), cfg.buildRelatedLists());
         }
     }
 
@@ -39,5 +41,18 @@ public class FieldHintResolver {
     /** Detail-header action placement overrides for an entity ({@code action -> primary|menu|hidden}). */
     public Map<String, String> actionsFor(Class<?> entity) {
         return actions.getOrDefault(entity, Map.of());
+    }
+
+    /** Related-list panels authored on an entity's view, or an empty list if none. */
+    public List<RelatedList> relatedListsFor(Class<?> entity) {
+        return relatedLists.getOrDefault(entity, List.of());
+    }
+
+    /** A single related-list panel by name, or {@code null} if the entity declares none with that name. */
+    public RelatedList relatedList(Class<?> entity, String name) {
+        return relatedListsFor(entity).stream()
+                .filter(rl -> rl.name().equals(name))
+                .findFirst()
+                .orElse(null);
     }
 }

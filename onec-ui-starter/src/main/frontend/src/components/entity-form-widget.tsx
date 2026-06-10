@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
-import type { AttributeMeta, EntityRecord, TabularSectionMeta } from "@/lib/types";
+import type { AttributeMeta, EntityRecord, RelatedListMeta, TabularSectionMeta } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import { DatePicker } from "@/components/date-picker";
 import { GeoPicker } from "@/components/geo-picker";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
+import { RelatedListPanel } from "@/components/related-list-panel";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-lg, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -46,6 +47,8 @@ export type FormDescriptor = {
     postable?: boolean;
     attributes: AttributeMeta[];
     tabularSections?: TabularSectionMeta[];
+    /** Catalog editors only: inline related-list (join-catalog) panels. */
+    relatedLists?: RelatedListMeta[];
   };
   initial: EntityRecord | null;
 };
@@ -151,6 +154,13 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // Tabular sections (document child collections). The metadata already ships them and the
   // REST layer round-trips rows; this is the form's editable grid for each one.
   const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
+
+  // Related-list panels (catalog editors only). They read/write a join catalog live, scoped to
+  // this record — so they need its id and only render for a saved record (not create/duplicate).
+  const relatedLists = useMemo<RelatedListMeta[]>(
+    () => (kind === "catalogs" ? meta.relatedLists ?? [] : []),
+    [kind, meta]
+  );
 
   // 1C-style posting: a postable document offers Write (save, no posting) alongside
   // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
@@ -332,6 +342,17 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           onAdd={() => addRow(ts.name)}
           onRemove={(idx) => removeRow(ts.name, idx)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
+        />
+      ))}
+      {/* Related-list panels read/write live join-catalog rows, so they're keyed to the saved
+          record's id rather than to form state. On a create/duplicate form (no real id yet) the
+          panel shows a "save first" hint. */}
+      {relatedLists.map((rl) => (
+        <RelatedListPanel
+          key={rl.name}
+          catalog={name}
+          parentId={isEdit ? id : null}
+          meta={rl}
         />
       ))}
       <div className="mt-5 flex justify-end gap-2">
