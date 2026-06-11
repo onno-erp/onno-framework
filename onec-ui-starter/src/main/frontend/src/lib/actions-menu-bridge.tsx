@@ -169,9 +169,11 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
               "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               a.tone === "primary"
                 ? "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] hover:bg-[hsl(var(--success))]/90"
-                : a.tone === "danger"
-                  ? "bg-secondary text-destructive hover:bg-accent"
-                  : "bg-secondary text-foreground hover:bg-accent"
+                : a.tone === "accent"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : a.tone === "danger"
+                    ? "bg-secondary text-destructive hover:bg-accent"
+                    : "bg-secondary text-foreground hover:bg-accent"
             )}
             title={a.label}
           >

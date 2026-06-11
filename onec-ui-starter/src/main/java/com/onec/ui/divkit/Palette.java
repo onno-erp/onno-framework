@@ -1,10 +1,17 @@
 package com.onec.ui.divkit;
 
+import com.onec.ui.BrandPalette;
+import com.onec.ui.BrandingConfig;
+
 /**
  * Theme-aware color palette mirroring the app's shadcn CSS variables (a neutral,
  * zero-saturation scale) so emitted DivKit surfaces match the rest of the UI in
  * light and dark. The client passes {@code ?theme=dark|light}; the controller
  * resolves it via {@link #of} and threads the palette through the builders.
+ *
+ * <p>A consumer can override any slot from Java via {@code shell().light(...)} /
+ * {@code shell().dark(...)} — those land here as a {@link BrandPalette} merged over
+ * the built-in {@link #LIGHT}/{@link #DARK} constants by {@link #of(String, BrandingConfig)}.</p>
  */
 public record Palette(
         String page, String surface, String border, String text, String muted, String faint,
@@ -24,5 +31,36 @@ public record Palette(
 
     public static Palette of(String theme) {
         return "dark".equalsIgnoreCase(theme) ? DARK : LIGHT;
+    }
+
+    /**
+     * The palette for {@code theme} with the consumer's {@link BrandingConfig} overrides
+     * merged in. Starts from the built-in {@link #LIGHT}/{@link #DARK} and replaces only
+     * the slots the app set, so unbranded apps render exactly as before.
+     */
+    public static Palette of(String theme, BrandingConfig branding) {
+        Palette base = of(theme);
+        return branding == null ? base : base.withOverrides(branding.paletteFor(theme));
+    }
+
+    /** This palette with any non-null slot of {@code o} replacing the default; a no-op if empty. */
+    public Palette withOverrides(BrandPalette o) {
+        if (o == null || o.isEmpty()) {
+            return this;
+        }
+        return new Palette(
+                coalesce(o.page(), page),
+                coalesce(o.surface(), surface),
+                coalesce(o.border(), border),
+                coalesce(o.text(), text),
+                coalesce(o.muted(), muted),
+                faint,
+                coalesce(o.primary(), primary),
+                coalesce(o.primarySoft(), primarySoft),
+                success, successSoft, rowAlt);
+    }
+
+    private static String coalesce(String override, String fallback) {
+        return override == null || override.isBlank() ? fallback : override;
     }
 }

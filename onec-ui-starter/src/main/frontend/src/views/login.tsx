@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { useBranding } from "@/providers/branding-provider";
 import { DivKitContent, type ContentAction, type ContentCard } from "@/views/divkit-content";
 import { LoginFormPortals } from "@/lib/login-form-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
@@ -18,12 +19,15 @@ export function LoginView() {
   const { user } = useAuth();
   const location = useLocation();
   const { theme } = useTheme();
+  const branding = useBranding();
   const resolved: "light" | "dark" =
     theme === "dark" || theme === "light"
       ? theme
       : window.matchMedia("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light";
+  // The login mark: a configured logo (dark variant in dark mode), else the app name, else "onec".
+  const logo = (resolved === "dark" && branding.logoUrlDark) || branding.logoUrl;
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
 
   const [card, setCard] = useState<ContentCard>(null);
@@ -65,7 +69,11 @@ export function LoginView() {
   return (
     <main className="flex min-h-screen bg-background">
       <section className="hidden flex-1 border-r border-border bg-muted/30 px-12 py-10 md:flex md:flex-col md:justify-between">
-        <div className="text-sm font-semibold">onec</div>
+        {logo ? (
+          <img src={logo} alt={branding.appName ?? "Logo"} className="h-7 w-auto self-start" />
+        ) : (
+          <div className="text-sm font-semibold">{branding.appName ?? "onec"}</div>
+        )}
         <div className="max-w-md">
           <p className="text-3xl font-semibold tracking-tight">Business apps shaped around roles.</p>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">

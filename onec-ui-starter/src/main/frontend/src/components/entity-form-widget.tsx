@@ -367,7 +367,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         </button>
         <button
           type="button"
-          className={cn(actionBtn, "text-foreground")}
+          // The form's primary affirmative action carries the brand (falls back to the neutral
+          // near-black --primary when unbranded). Cancel/secondary actions stay quiet.
+          className={cn(actionBtn, "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
           onClick={() => save(false)}
           disabled={saving}
         >

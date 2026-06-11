@@ -9,6 +9,7 @@ import {
 } from "@divkitframework/divkit/client-hydratable";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
+import { useBranding } from "@/providers/branding-provider";
 import { api } from "@/lib/api";
 import { useUiEvents } from "@/hooks/use-ui-events";
 import type { UiEvent } from "@/lib/types";
@@ -230,6 +231,7 @@ export function DivKitView() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
+  const branding = useBranding();
   const [profile, setProfile] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
   const [shell, setShell] = useState<ShellData | null>(null);
@@ -486,6 +488,14 @@ export function DivKitView() {
         // attachment. A full-page GET lets the browser save it (the attachment header means the
         // current SPA view stays put). Used by print/export actions, e.g. Print to Word.
         window.location.href = "/" + rest.slice("download/".length);
+        return;
+      }
+      if (rest.startsWith("open/")) {
+        // open/{url} — view a stored file (a detail surface's file chip). An absolute http(s)
+        // URL opens verbatim; an app-relative media path is re-rooted. New tab so the SPA stays put.
+        const target = rest.slice("open/".length);
+        const href = /^https?:\/\//i.test(target) ? target : "/" + target;
+        window.open(href, "_blank", "noopener,noreferrer");
         return;
       }
       if (rest.startsWith("app")) {
@@ -988,15 +998,22 @@ export function DivKitView() {
 
   // ----- presentation tokens (match ShellLayoutBuilder's Palette) -----
 
-  const pageBg = resolvedTheme === "dark" ? "#0D0D0D" : "#FFFFFF";
+  // The React shell paints its own islands/tabs (not server-rendered DivKit), so it
+  // mirrors the Palette here. A consumer's brand overrides arrive via /api/branding and
+  // win per slot — chiefly `accent` (the active-tab pill + drag/split highlights), which
+  // otherwise stays the neutral foreground and looks off against the branded nav.
+  const brand = (resolvedTheme === "dark" ? branding.palette?.dark : branding.palette?.light) ?? {};
+  const pageBg = brand.page ?? (resolvedTheme === "dark" ? "#0D0D0D" : "#FFFFFF");
   const skeletonBg = resolvedTheme === "dark" ? "#1F1F1F" : "#F5F5F5";
-  const surfaceBg = resolvedTheme === "dark" ? "#121212" : "#FFFFFF";
-  const borderColor = resolvedTheme === "dark" ? "#242424" : "#EBEBEB";
+  const surfaceBg = brand.surface ?? (resolvedTheme === "dark" ? "#121212" : "#FFFFFF");
+  const borderColor = brand.border ?? (resolvedTheme === "dark" ? "#242424" : "#EBEBEB");
   const tabStripBg = resolvedTheme === "dark" ? "#0E0E0E" : "#FAFAFA";
-  // A focused island reads with a slightly brighter border (no loud ring); its active
-  // tab carries a thin top accent in the foreground tone.
-  const focusBorder = resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4";
-  const accent = resolvedTheme === "dark" ? "#E5E5E5" : "#171717";
+  // The focused island's border signals *which pane is active* — that's state, not structure, so
+  // it carries the brand when one is set, but only as a faint ~25%-opacity wash so it reads as a
+  // soft hint rather than a loud frame (the focus ring is desaturated for the same reason). Resting
+  // borders stay neutral; the focused one lights up just enough to tell panes apart.
+  const focusBorder = brand.primary ? `${brand.primary}40` : (resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4");
+  const accent = brand.primary ?? (resolvedTheme === "dark" ? "#E5E5E5" : "#171717");
   const navStyle: NavStyle = shell?.navStyle ?? "topbar";
 
   const shellCard = (json: DivKitProps["json"], idPrefix: string) => (
@@ -1215,6 +1232,9 @@ export function DivKitView() {
             // Selection reads as a subtle pill in the accent tone; a touch stronger on
             // the focused island so you can tell which one navigation drives.
             const fill = active ? (focused ? `${accent}1f` : `${accent}12`) : "transparent";
+            // With a brand accent, an active tab carries the brand text too (matching the
+            // nav's active item); unbranded, it keeps the neutral foreground from the class.
+            const activeText = active && brand.primary ? accent : undefined;
             return (
               <div
                 key={tab.path}
@@ -1233,7 +1253,7 @@ export function DivKitView() {
                   // empty space reads as the live "drop here" gap that follows the cursor.
                   slot.dragged && "opacity-0"
                 )}
-                style={{ background: fill }}
+                style={{ background: fill, color: activeText }}
               >
                 <button
                   type="button"

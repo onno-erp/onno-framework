@@ -45,6 +45,9 @@ public class DivKitController {
 
     private final LayoutSet layoutSet;
     private final UiLayout layout;
+    // The consumer's branding (app name, logo, palette overrides), authored on the
+    // default layout's shell. Viewport-independent — every viewport shares one brand.
+    private final BrandingConfig branding;
     private final UiLayoutResolver layoutResolver;
     private final UiProfileResolver profileResolver;
     private final UiAccessService access;
@@ -72,6 +75,7 @@ public class DivKitController {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
+        this.branding = layout.shell().branding();
         this.layoutResolver = layoutResolver;
         this.profileResolver = profileResolver;
         this.access = access;
@@ -95,7 +99,7 @@ public class DivKitController {
         Viewport vp = Viewport.parse(viewport);
         UiLayout vpLayout = layoutSet.forViewport(vp);
         NavStyle navStyle = navStyleFor(vp);
-        Palette p = Palette.of(theme);
+        Palette p = palette(theme);
         // Profile is chosen by role (viewport-independent); take its viewport-specific
         // variant for nav so a mobile layout's curated sections win.
         String profileId = activeProfileId(principal, profile);
@@ -104,7 +108,8 @@ public class DivKitController {
 
         List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
-        String brand = activeProfile.title() == null ? "" : activeProfile.title();
+        String brand = brandName(activeProfile);
+        String logo = branding.logoFor(theme);
 
         // On a bottom tab bar the account (and any overflow destinations) live behind
         // the bar's "More" tab, which opens the /menu hub — so nothing is appended here.
@@ -118,7 +123,7 @@ public class DivKitController {
         // item, so a dashboard-less app opens on a real screen instead of a phantom one.
         out.put("home", landingPath(nav));
         out.put("nav", DivCard.of("onec-nav",
-                ShellLayoutBuilder.nav(brand, nav, navStyle, vp == Viewport.TABLET, p)));
+                ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p)));
         out.put("account", DivCard.of("onec-account",
                 ShellLayoutBuilder.account(user.displayName(), profileLinks, activeProfile.id(), p)));
         return out;
@@ -128,7 +133,7 @@ public class DivKitController {
     public Map<String, Object> account(@RequestParam(required = false) String profile,
                                        @RequestParam(required = false) String theme,
                                        Principal principal) {
-        Palette p = Palette.of(theme);
+        Palette p = palette(theme);
         String profileId = activeProfileId(principal, profile);
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
@@ -151,7 +156,7 @@ public class DivKitController {
                                     @RequestParam(required = false) String viewport,
                                     @RequestParam(required = false) String theme,
                                     Principal principal) {
-        Palette p = Palette.of(theme);
+        Palette p = palette(theme);
         Viewport vp = Viewport.parse(viewport);
         UiLayout vpLayout = layoutSet.forViewport(vp);
         String profileId = activeProfileId(principal, profile);
@@ -159,9 +164,10 @@ public class DivKitController {
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
         List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
-        String brand = activeProfile.title() == null ? "" : activeProfile.title();
+        String brand = brandName(activeProfile);
+        String logo = branding.logoFor(theme);
         Map<String, Object> content = ShellLayoutBuilder.menu(
-                brand, nav, user.displayName(), profileLinks, activeProfile.id(), p);
+                brand, logo, nav, user.displayName(), profileLinks, activeProfile.id(), p);
         Div.margins(content, 16, 16, 16, 16);
         return DivCard.of("onec-content", content);
     }
@@ -175,7 +181,7 @@ public class DivKitController {
                                     Principal principal) {
         Viewport vp = Viewport.parse(viewport);
         int columns = vp == Viewport.MOBILE ? 1 : 2;
-        Palette p = Palette.of(theme);
+        Palette p = palette(theme);
         UiLayout.Profile active = activeProfile(principal, profile);
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
         String greeting = "Welcome back, " + user.displayName();
@@ -218,7 +224,7 @@ public class DivKitController {
                                         Principal principal) {
         Viewport vp = Viewport.parse(viewport);
         int columns = vp == Viewport.MOBILE ? 1 : 2;
-        Palette p = Palette.of(theme);
+        Palette p = palette(theme);
         UiLayout.Profile active = activeProfile(principal, profile);
         Page page = pageResolver.resolve("/settings", active.id(), vp);
         PageBuilder pb = new PageBuilder();
@@ -375,7 +381,7 @@ public class DivKitController {
         // Catalogs keep Edit/Delete as inline (primary) buttons — no posting, no overflow.
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "accent",
                     "onec://catalogs/" + name + "/" + id + "/edit", "primary"));
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", "Duplicate", "normal",
                     "onec://catalogs/" + name + "/" + id + "/duplicate", "menu"));
@@ -388,7 +394,7 @@ public class DivKitController {
         Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
                 meta, catalogQuery.get(desc, id), relatedListRows(meta, id, principal), actions,
-                Palette.of(theme));
+                palette(theme));
         return DivCard.of("onec-content", content);
     }
 
@@ -516,7 +522,7 @@ public class DivKitController {
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row, actions, Palette.of(theme));
+        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row, actions, palette(theme));
         return DivCard.of("onec-content", content);
     }
 
@@ -560,11 +566,27 @@ public class DivKitController {
                 : null;
         Map<String, Object> content = SurfaceDivBuilder.registerReport(
                 resolvedMetadata.describeRegister(desc), registerQuery.movements(desc, from, to), balances,
-                Palette.of(theme));
+                palette(theme));
         return DivCard.of("onec-content", content);
     }
 
     // ----- helpers -----
+
+    /** The palette for {@code theme}, with the consumer's brand color overrides merged in. */
+    private Palette palette(String theme) {
+        return Palette.of(theme, branding);
+    }
+
+    /**
+     * The shell brand text: an explicitly configured {@code shell().brand(...)} app name
+     * wins; otherwise fall back to the active profile's title (the historical source).
+     */
+    private String brandName(UiLayout.Profile activeProfile) {
+        if (branding.hasAppName()) {
+            return branding.appName();
+        }
+        return activeProfile.title() == null ? "" : activeProfile.title();
+    }
 
     private List<ShellLayoutBuilder.NavSection> navFor(Principal principal, UiLayout.Profile active, Viewport vp) {
         String profileId = active.id();

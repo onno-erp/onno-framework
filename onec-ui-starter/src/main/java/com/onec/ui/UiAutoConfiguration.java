@@ -68,8 +68,8 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public ThemeController themeController(UiProperties properties) {
-        return new ThemeController(properties);
+    public ThemeController themeController(UiProperties properties, com.onec.ui.UiLayout uiLayout) {
+        return new ThemeController(properties, uiLayout);
     }
 
     @Bean

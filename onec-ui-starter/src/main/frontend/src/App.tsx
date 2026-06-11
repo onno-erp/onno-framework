@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { ThemeProvider, useTheme } from "@/providers/theme-provider";
+import { BrandingProvider } from "@/providers/branding-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
@@ -55,10 +56,12 @@ function ThemedToaster() {
 function WorkspaceProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        {children}
-        <ThemedToaster />
-      </AuthProvider>
+      <BrandingProvider>
+        <AuthProvider>
+          {children}
+          <ThemedToaster />
+        </AuthProvider>
+      </BrandingProvider>
     </ThemeProvider>
   );
 }

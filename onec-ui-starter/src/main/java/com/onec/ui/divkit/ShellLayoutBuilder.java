@@ -174,14 +174,29 @@ public final class ShellLayoutBuilder {
      * The navigation card, shaped for the chosen {@link NavStyle}. The client
      * positions it (beside / below content); this only decides its inner layout.
      * Built from native DivKit primitives so every official SDK renders it.
+     *
+     * <p>{@code logo} (a configured branding image URL, or {@code null}) replaces the
+     * text {@code brand} in the sidebar header when present.</p>
      */
-    public static Map<String, Object> nav(String brand, List<NavSection> nav, NavStyle style,
+    public static Map<String, Object> nav(String brand, String logo, List<NavSection> nav, NavStyle style,
                                           boolean compact, Palette p) {
         return switch (style) {
-            case SIDEBAR -> sidebarNav(brand, nav, p);
+            case SIDEBAR -> sidebarNav(brand, logo, nav, p);
             case BOTTOM_BAR -> bottomNav(nav, compact, p);
             case TOPBAR -> topbarNav(nav, p);
         };
+    }
+
+    /**
+     * A branding logo sized to a fixed height with its width left to the intrinsic
+     * aspect ratio ({@code scale: fit}), so logos of any proportion render uncropped.
+     */
+    private static Map<String, Object> logoImage(String url, int height) {
+        Map<String, Object> img = Div.image(url);
+        img.put("scale", "fit");
+        Div.height(img, height);
+        img.put("width", Map.of("type", "wrap_content"));
+        return img;
     }
 
     private static Map<String, Object> profileChip(ProfileLink pl, boolean active, Palette p) {
@@ -245,10 +260,15 @@ public final class ShellLayoutBuilder {
 
     // ----- SIDEBAR: vertical rail beside content -----
 
-    private static Map<String, Object> sidebarNav(String brand, List<NavSection> nav, Palette p) {
+    private static Map<String, Object> sidebarNav(String brand, String logo, List<NavSection> nav, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
-        if (brand != null && !brand.isBlank()) {
+        // A configured logo takes the header; otherwise fall back to the text brand.
+        if (logo != null && !logo.isBlank()) {
+            Map<String, Object> brandLogo = logoImage(logo, 28);
+            Div.margins(brandLogo, 4, 8, 14, 8);
+            items.add(brandLogo);
+        } else if (brand != null && !brand.isBlank()) {
             Map<String, Object> brandText = Div.text(brand, 16, "bold");
             Div.color(brandText, p.text());
             Div.margins(brandText, 4, 8, 14, 8);
@@ -384,14 +404,21 @@ public final class ShellLayoutBuilder {
      * It's the overflow target for the bottom bar's "More" tab, so nothing the bar
      * can't fit becomes unreachable.
      */
-    public static Map<String, Object> menu(String brand, List<NavSection> nav, String userName,
+    public static Map<String, Object> menu(String brand, String logo, List<NavSection> nav, String userName,
                                            List<ProfileLink> profiles, String activeProfileId, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
-        Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : "Menu", 22, "bold");
-        Div.color(title, p.text());
-        Div.margins(title, 0, 0, 14, 0);
-        items.add(title);
+        // The menu header mirrors the sidebar: a configured logo, else the text brand.
+        if (logo != null && !logo.isBlank()) {
+            Map<String, Object> title = logoImage(logo, 32);
+            Div.margins(title, 0, 0, 14, 0);
+            items.add(title);
+        } else {
+            Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : "Menu", 22, "bold");
+            Div.color(title, p.text());
+            Div.margins(title, 0, 0, 14, 0);
+            items.add(title);
+        }
 
         for (NavSection section : nav) {
             if (section.title() != null && !section.title().isBlank()) {

@@ -202,14 +202,16 @@ onec-icon {
 
 /* List rows carry the "row" DivKit extension, which stamps [data-onec-row]. Highlight
    the line on hover so it reads as clickable. !important overrides DivKit's inline
-   zebra-stripe background on alternating rows. */
+   zebra-stripe background on alternating rows. The tint is a low-alpha wash of the brand
+   primary, so a branded app hovers in its accent and an unbranded one keeps the neutral
+   near-black/white (--primary defaults to a near-black/near-white per mode). */
 [data-onec-row] {
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
 [data-onec-row]:hover {
-  background-color: rgba(0, 0, 0, 0.045) !important;
+  background-color: hsl(var(--primary) / 0.1) !important;
 }
 .dark [data-onec-row]:hover {
-  background-color: rgba(255, 255, 255, 0.06) !important;
+  background-color: hsl(var(--primary) / 0.18) !important;
 }

@@ -109,6 +109,29 @@ export interface AppConfig {
   basePath: string;
 }
 
+// A consumer's brand color overrides for one mode. Only the slots the app set are
+// present; the React shell coalesces each over its neutral default.
+export interface BrandColors {
+  page?: string;
+  surface?: string;
+  border?: string;
+  text?: string;
+  muted?: string;
+  primary?: string;
+  primarySoft?: string;
+}
+
+// Consumer branding the web client applies at runtime (document title, favicon, login
+// logo, and the island/tab accent). The DivKit chrome renders the logo + brand palette
+// server-side; this covers the parts the React shell owns. Every field is optional.
+export interface Branding {
+  appName?: string | null;
+  logoUrl?: string | null;
+  logoUrlDark?: string | null;
+  faviconUrl?: string | null;
+  palette?: { light?: BrandColors; dark?: BrandColors };
+}
+
 export interface AuthUser {
   authenticated: boolean;
   username: string;

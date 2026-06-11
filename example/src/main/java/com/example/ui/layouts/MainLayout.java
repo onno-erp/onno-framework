@@ -33,7 +33,17 @@ public class MainLayout implements Layout {
     public void configure(LayoutSpec layout) {
         // The universal shell: a sidebar rail. Mobile gets its own curated layout
         // (see MobileLayout); tablet/desktop fall back to this.
-        layout.shell().nav(NavStyle.SIDEBAR);
+        //
+        // Branding is configured entirely here in Java (issue #97): an app name, a logo
+        // (with a dark-mode variant) and favicon served from src/main/resources/static/ui,
+        // and brand color overrides that retint the DivKit chrome's accent in each mode.
+        layout.shell()
+                .nav(NavStyle.SIDEBAR)
+                .brand("Acme Rentals")
+                .logo("/branding/logo.svg", "/branding/logo-dark.svg")
+                .favicon("/branding/favicon.svg")
+                .light(c -> c.primary("#2563EB").primarySoft("#EFF6FF"))
+                .dark(c -> c.primary("#3B82F6").primarySoft("#1E293B"));
 
         layout.section("Rentals")
                 .order(0)

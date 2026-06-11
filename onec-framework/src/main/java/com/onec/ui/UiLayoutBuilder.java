@@ -305,9 +305,18 @@ public class UiLayoutBuilder {
         }
     }
 
-    /** Builds the {@link ShellConfig} — this layout's navigation presentation. */
+    /**
+     * Builds the {@link ShellConfig} — this layout's navigation presentation and
+     * {@link BrandingConfig} (app name, logo, favicon, brand palette).
+     */
     public static class ShellBuilder {
         private NavStyle nav;
+        private String appName;
+        private String logoUrl;
+        private String logoUrlDark;
+        private String faviconUrl;
+        private final PaletteBuilder light = new PaletteBuilder();
+        private final PaletteBuilder dark = new PaletteBuilder();
 
         /** Nav presentation for this layout's viewport. */
         public ShellBuilder nav(NavStyle style) {
@@ -315,8 +324,104 @@ public class UiLayoutBuilder {
             return this;
         }
 
+        /** Explicit application name, shown in the shell instead of the profile title. */
+        public ShellBuilder brand(String appName) {
+            this.appName = appName;
+            return this;
+        }
+
+        /** Logo image (URL or served asset) rendered in the sidebar header and mobile menu. */
+        public ShellBuilder logo(String url) {
+            this.logoUrl = url;
+            return this;
+        }
+
+        /** Logo with a distinct dark-mode variant. */
+        public ShellBuilder logo(String light, String dark) {
+            this.logoUrl = light;
+            this.logoUrlDark = dark;
+            return this;
+        }
+
+        /** Favicon (URL or served asset) the web client installs at runtime. */
+        public ShellBuilder favicon(String url) {
+            this.faviconUrl = url;
+            return this;
+        }
+
+        /** Override brand colors for light mode (only the set slots; the rest keep the default scale). */
+        public ShellBuilder light(java.util.function.Consumer<PaletteBuilder> overrides) {
+            overrides.accept(light);
+            return this;
+        }
+
+        /** Override brand colors for dark mode (only the set slots; the rest keep the default scale). */
+        public ShellBuilder dark(java.util.function.Consumer<PaletteBuilder> overrides) {
+            overrides.accept(dark);
+            return this;
+        }
+
         ShellConfig build() {
-            return new ShellConfig(nav);
+            BrandingConfig branding = new BrandingConfig(
+                    appName, logoUrl, logoUrlDark, faviconUrl, light.build(), dark.build());
+            return new ShellConfig(nav, branding);
+        }
+    }
+
+    /** Typed brand color overrides for one mode; unset slots stay {@code null} (renderer default). */
+    public static class PaletteBuilder {
+        private String page;
+        private String surface;
+        private String border;
+        private String text;
+        private String muted;
+        private String primary;
+        private String primarySoft;
+
+        /** App background behind the islands. */
+        public PaletteBuilder page(String color) {
+            this.page = color;
+            return this;
+        }
+
+        /** Card / panel fill. */
+        public PaletteBuilder surface(String color) {
+            this.surface = color;
+            return this;
+        }
+
+        /** Hairline strokes and separators. */
+        public PaletteBuilder border(String color) {
+            this.border = color;
+            return this;
+        }
+
+        /** Primary foreground text. */
+        public PaletteBuilder text(String color) {
+            this.text = color;
+            return this;
+        }
+
+        /** Secondary / caption foreground. */
+        public PaletteBuilder muted(String color) {
+            this.muted = color;
+            return this;
+        }
+
+        /** Brand accent (active nav, links, primary buttons). */
+        public PaletteBuilder primary(String color) {
+            this.primary = color;
+            return this;
+        }
+
+        /** The tint painted behind the active/selected accent. */
+        public PaletteBuilder primarySoft(String color) {
+            this.primarySoft = color;
+            return this;
+        }
+
+        BrandPalette build() {
+            return new BrandPalette(page, surface, border, text, muted, primary, primarySoft);
         }
     }
 

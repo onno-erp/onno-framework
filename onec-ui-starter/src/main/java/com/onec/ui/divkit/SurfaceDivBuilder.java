@@ -189,8 +189,9 @@ public final class SurfaceDivBuilder {
     // ----- document detail -----
 
     /**
-     * One detail-header action. {@code tone} is {@code "primary"} (solid accent —
-     * Post), {@code "danger"} (Delete) or {@code "normal"}; {@code placement} is
+     * One detail-header action. {@code tone} is {@code "primary"} (solid success —
+     * Post), {@code "accent"} (solid brand — the surface's main action, e.g. Edit),
+     * {@code "danger"} (Delete) or {@code "normal"} (neutral); {@code placement} is
      * {@code "primary"} (inline button) or {@code "menu"} (overflow ⋯). {@code icon}
      * is a kebab-case lucide name. A null {@code url} drops the action.
      */
@@ -626,6 +627,11 @@ public final class SurfaceDivBuilder {
             if (!url.isBlank()) {
                 return Components.imageFieldRow(label, url, isAvatarWidget(a), p);
             }
+        } else if (isFileWidget(a)) {
+            String url = str(row.get(str(a.get("columnName"))));
+            if (!url.isBlank()) {
+                return Components.fileFieldRow(label, url, p);
+            }
         }
         String refUrl = refUrlFor(a, row);
         if (refUrl != null) {
@@ -676,6 +682,11 @@ public final class SurfaceDivBuilder {
 
     private static boolean isAvatarWidget(Map<String, Object> a) {
         return "avatar".equalsIgnoreCase(str(a.get("widget")));
+    }
+
+    /** A file-upload widget ({@code .widget("file")}); value is the stored media reference URL. */
+    private static boolean isFileWidget(Map<String, Object> a) {
+        return "file".equalsIgnoreCase(str(a.get("widget")));
     }
 
     /** A multi-image widget ({@code .widget("images"|"gallery")}); value is newline-joined URLs. */

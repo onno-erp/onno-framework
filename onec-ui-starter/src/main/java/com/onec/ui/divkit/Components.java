@@ -361,6 +361,64 @@ final class Components {
     }
 
     /**
+     * A detail field row for a file attribute ({@code .widget("file")}): the label on the left, a
+     * tappable chip on the right — a paperclip glyph + the file's name in the accent tone — that
+     * opens the stored file in a new tab (an {@code onec://open/...} action). Reads like the form's
+     * file chip, so an attached document looks attached rather than rendering as a raw URL string.
+     */
+    static Map<String, Object> fileFieldRow(String label, String url, Palette p) {
+        List<Map<String, Object>> parts = new ArrayList<>();
+        Map<String, Object> glyph = icon("paperclip", p.muted(), 15);
+        if (glyph != null) {
+            parts.add(glyph);
+        }
+        Map<String, Object> name = Div.text(fileNameOf(url), 13, "medium");
+        Div.color(name, p.primary());
+        Div.maxLines(name, 1);
+        parts.add(name);
+
+        Map<String, Object> chip = Div.horizontal(parts);
+        Div.wrapWidth(chip);
+        Div.gap(chip, 7);
+        Div.alignV(chip, "center");
+        Div.pad(chip, 7, 11);
+        Div.background(chip, p.rowAlt());
+        Div.corner(chip, 8);
+        Div.stroke(chip, p.border(), 1);
+        Div.action(chip, "open-file", openActionFor(url));
+
+        Map<String, Object> right = Div.horizontal(List.of(chip));
+        Div.weight(right, 3);
+
+        Map<String, Object> row = Div.horizontal(List.of(
+                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                right));
+        Div.alignV(row, "center");
+        Div.pad(row, 7, 0);
+        return row;
+    }
+
+    /** The display name for a stored file: the last path segment, minus any query/hash. */
+    private static String fileNameOf(String url) {
+        String path = url.split("[?#]", 2)[0];
+        int slash = path.lastIndexOf('/');
+        String leaf = slash >= 0 ? path.substring(slash + 1) : path;
+        return leaf.isBlank() ? url : leaf;
+    }
+
+    /**
+     * The {@code onec://open/...} action that opens a stored file: an absolute {@code http(s)}
+     * URL travels verbatim; an app-relative media path ({@code /api/media/...}) drops its leading
+     * slash so the client can re-root it. The client opens the result in a new tab.
+     */
+    private static String openActionFor(String url) {
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            return "onec://open/" + url;
+        }
+        return "onec://open/" + (url.startsWith("/") ? url.substring(1) : url);
+    }
+
+    /**
      * A detail field row for a multi-image (gallery) attribute: the label on the left, a
      * horizontally-scrolling strip of square thumbnails on the right. Each {@code url} is a
      * {@code data:} or {@code http(s)} URL (see GalleryPicker).

@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import type {
   AppConfig,
+  Branding,
   CatalogMeta,
   DashboardWidgetMeta,
   DocumentMeta,
@@ -186,6 +187,7 @@ export const api = {
 
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),
+  getBranding: () => fetchJson<Branding>(`${BASE}/branding`),
 
   // App settings (framework @Constant values) — admin only
   getSettings: () => fetchJson<SettingMeta[]>(`${BASE}/settings`),

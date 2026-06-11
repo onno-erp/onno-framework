@@ -171,7 +171,7 @@ function MultiOptionsFilter({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-9 w-36 items-center justify-between gap-1 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          className="flex h-9 w-36 items-center justify-between gap-1 rounded-md border border-input bg-muted px-3 text-sm text-foreground"
         >
           <span className="truncate">{summary}</span>
           <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -697,7 +697,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               type="button"
               onClick={() => dispatchAction(list.newUrl!)}
               className={cn(
-                "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-secondary text-sm font-medium text-foreground transition-colors hover:bg-accent",
+                // New is the surface's primary create action, so it carries the brand (neutral
+                // near-black when unbranded); the sibling toolbar actions stay quiet/secondary.
+                "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
                 compact ? "w-9 justify-center px-0" : "px-3"
               )}
               title="New"
@@ -728,7 +730,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     key={c.columnName}
                     type="button"
                     onClick={() => toggleSort(c.columnName)}
-                    className="flex items-center gap-1 truncate text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    className={cn(
+                      "flex items-center gap-1 truncate text-left text-xs font-medium transition-colors",
+                      // The sorted column carries the brand (accent = state): which column orders
+                      // the list. Inactive headers stay muted and brighten on hover.
+                      active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                    )}
                     title={`Sort by ${c.label}`}
                   >
                     <span className="truncate">{c.label}</span>
@@ -759,7 +766,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     data-onec-row={url}
                     onClick={() => url && dispatchAction(url)}
                     className={cn(
-                      "absolute left-0 right-0 grid cursor-pointer items-center gap-3 px-4 text-sm transition-colors hover:bg-muted/50",
+                      // Hover highlight is owned by the [data-onec-row]:hover rule in index.css
+                      // (a brand-primary wash with !important, to beat DivKit's inline zebra bg);
+                      // here we only set the resting alt-row stripe.
+                      "absolute left-0 right-0 grid cursor-pointer items-center gap-3 px-4 text-sm transition-colors",
                       i % 2 === 1 && "bg-muted/20"
                     )}
                     style={{ top: i * ROW_H, height: ROW_H, gridTemplateColumns: template }}

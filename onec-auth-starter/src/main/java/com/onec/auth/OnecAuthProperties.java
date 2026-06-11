@@ -51,6 +51,9 @@ public class OnecAuthProperties {
             "/error",
             "/api/theme",
             "/api/config",
+            // Branding (app name, logo, favicon) the SPA applies before sign-in so the login
+            // screen carries the consumer's brand. Non-sensitive, like theme/config.
+            "/api/branding",
             "/api/auth/login",
             // Current auth state + the login methods to offer (mode, SSO loginUrl, logoutUrl). Must
             // be reachable unauthenticated so the SPA can decide what to render before sign-in;
