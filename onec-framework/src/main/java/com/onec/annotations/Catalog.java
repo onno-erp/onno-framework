@@ -23,6 +23,15 @@ public @interface Catalog {
     /** Stable DB table name. When empty, derived from {@link #name()}. */
     String tableName() default "";
 
+    /**
+     * Former names of this catalog (previous {@link #name()} or {@link #tableName()} values),
+     * so the schema upgrader can rename the existing table — keeping its data — instead of
+     * creating a fresh empty one. Each value is tried both through the naming strategy
+     * ({@code "Products"} → {@code catalog_products}) and verbatim as a table name. Keep at
+     * least the most recent former name until every deployment has migrated.
+     */
+    String[] previousNames() default {};
+
     int codeLength() default 9;
 
     boolean hierarchical() default false;
