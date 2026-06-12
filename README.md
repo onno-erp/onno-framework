@@ -140,6 +140,52 @@ Each starter exposes its auto-configuration through Spring Boot 3's `META-INF/sp
 
 Most integration starters are disabled by default and are enabled through `onec.*` configuration properties. See the module READMEs for integration-specific setup.
 
+## Schema Migrations
+
+The database schema is derived from the metadata model (`@Catalog`, `@Document`, registers, …). At startup the framework diffs that model against the live database and brings it up to date — no migration files for structural changes.
+
+```properties
+onec.schema.mode=apply              # apply | plan | validate | off (default: apply)
+onec.schema.allow-destructive=false # gate for drops and narrowing type changes
+```
+
+- **apply** (default) — execute safe changes: new tables/columns, renames, widening type
+  changes (e.g. `VARCHAR(100)` → `VARCHAR(200)`, `INTEGER` → `BIGINT`). Destructive changes
+  (dropped tables/columns, narrowing types) are logged and skipped unless
+  `onec.schema.allow-destructive=true`.
+- **plan** — log the full migration plan with its SQL and change nothing. Review in CI, then apply.
+- **validate** — fail startup if the database does not match the metadata or migrations are
+  unapplied. Use in production with `apply` running as a deploy step.
+- **off** — schema is managed externally.
+
+Every applied change-set is recorded in `onec_schema_history` together with a snapshot of the
+metadata model; the snapshot is how type changes and removed entities are detected on later boots.
+
+**Renames keep data.** Without a hint, a renamed field would look like “drop + add”. Declare the
+former name and the upgrader renames the column (or table) in place:
+
+```java
+@Catalog(name = "Counterparties", previousNames = "Suppliers")
+public class Counterparty extends CatalogObject {
+
+    @Attribute(length = 50, previousNames = "phone")
+    private String phoneNumber;
+}
+```
+
+**Data migrations** (backfills, reshaping, seeding) are versioned Java beans, run exactly once
+per database — in version order, inside a transaction, recorded in `onec_schema_history`:
+
+```java
+@Component
+public class BackfillWarehouseCodes implements AppMigration {
+    public String version() { return "2026.06.001"; }
+    public void migrate(MigrationContext context) {
+        context.execute("UPDATE catalog_warehouses SET code = 'WH-' || _code WHERE code IS NULL");
+    }
+}
+```
+
 ## License
 
 The framework follows an **open-core** model.

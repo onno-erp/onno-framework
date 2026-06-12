@@ -12,6 +12,8 @@ public class OnecProperties {
 
     private final Security security = new Security();
 
+    private final Schema schema = new Schema();
+
     public List<String> getScanPackages() {
         return scanPackages;
     }
@@ -22,6 +24,44 @@ public class OnecProperties {
 
     public Security getSecurity() {
         return security;
+    }
+
+    public Schema getSchema() {
+        return schema;
+    }
+
+    /** Schema lifecycle configuration ({@code onec.schema.*}). */
+    public static class Schema {
+
+        /**
+         * What to do about differences between the metadata model and the database at
+         * startup: {@code apply} (default — execute safe changes, report destructive ones),
+         * {@code plan} (log the plan, change nothing), {@code validate} (fail startup on any
+         * difference or unapplied migration), or {@code off}.
+         */
+        private String mode = "apply";
+
+        /**
+         * Allow {@code apply} to execute data-losing changes (dropped tables/columns,
+         * narrowing type changes). Off by default: such changes are logged and skipped.
+         */
+        private boolean allowDestructive = false;
+
+        public String getMode() {
+            return mode;
+        }
+
+        public void setMode(String mode) {
+            this.mode = mode;
+        }
+
+        public boolean isAllowDestructive() {
+            return allowDestructive;
+        }
+
+        public void setAllowDestructive(boolean allowDestructive) {
+            this.allowDestructive = allowDestructive;
+        }
     }
 
     /** Security-related configuration ({@code onec.security.*}). */

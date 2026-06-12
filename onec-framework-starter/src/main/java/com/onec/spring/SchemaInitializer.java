@@ -1,9 +1,14 @@
 package com.onec.spring;
 
 import com.onec.metadata.*;
-import com.onec.schema.SchemaGenerator;
+import com.onec.migration.AppMigration;
+import com.onec.migration.MigrationRunner;
+import com.onec.schema.SchemaMode;
+import com.onec.schema.SchemaUpgrader;
 
 import org.jdbi.v3.core.Jdbi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 
 import javax.sql.DataSource;
@@ -11,12 +16,26 @@ import java.util.List;
 
 public class SchemaInitializer implements InitializingBean {
 
+    private static final Logger log = LoggerFactory.getLogger(SchemaInitializer.class);
+
     private final DataSource dataSource;
     private final List<String> scanPackages;
+    private final SchemaMode mode;
+    private final boolean allowDestructive;
+    private final List<AppMigration> migrations;
 
     public SchemaInitializer(DataSource dataSource, List<String> scanPackages) {
+        this(dataSource, scanPackages, SchemaMode.APPLY, false, List.of());
+    }
+
+    public SchemaInitializer(DataSource dataSource, List<String> scanPackages,
+                             SchemaMode mode, boolean allowDestructive,
+                             List<AppMigration> migrations) {
         this.dataSource = dataSource;
         this.scanPackages = scanPackages;
+        this.mode = mode;
+        this.allowDestructive = allowDestructive;
+        this.migrations = migrations;
     }
 
     @Override
@@ -51,7 +70,33 @@ public class SchemaInitializer implements InitializingBean {
             registry.registerConstant(scanner.scanConstant(clazz));
         }
 
-        SchemaGenerator schemaGenerator = new SchemaGenerator(registry);
-        schemaGenerator.execute(Jdbi.create(dataSource));
+        if (mode == SchemaMode.OFF) {
+            log.info("onec.schema.mode=off — skipping schema upgrade and migrations.");
+            return;
+        }
+
+        Jdbi jdbi = Jdbi.create(dataSource);
+        new SchemaUpgrader(registry, mode, allowDestructive).run(jdbi);
+
+        MigrationRunner runner = new MigrationRunner(registry);
+        switch (mode) {
+            case APPLY -> runner.run(jdbi, migrations);
+            case PLAN -> {
+                List<AppMigration> pending = runner.pending(jdbi, migrations);
+                if (!pending.isEmpty()) {
+                    log.info("Pending migrations (not applied in plan mode): {}",
+                            pending.stream().map(AppMigration::version).toList());
+                }
+            }
+            case VALIDATE -> {
+                List<AppMigration> pending = runner.pending(jdbi, migrations);
+                if (!pending.isEmpty()) {
+                    throw new IllegalStateException(
+                            "Schema validation failed (onec.schema.mode=validate): unapplied migrations "
+                                    + pending.stream().map(AppMigration::version).toList());
+                }
+            }
+            default -> { }
+        }
     }
 }

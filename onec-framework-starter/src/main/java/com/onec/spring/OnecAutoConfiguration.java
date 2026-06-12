@@ -121,8 +121,12 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
 
     @Bean
     public SchemaInitializer schemaInitializer(DataSource dataSource, OnecProperties properties,
-                                               ApplicationContext context) {
-        return new SchemaInitializer(dataSource, resolvePackages(properties, context));
+                                               ApplicationContext context,
+                                               ObjectProvider<com.onec.migration.AppMigration> migrations) {
+        return new SchemaInitializer(dataSource, resolvePackages(properties, context),
+                com.onec.schema.SchemaMode.fromString(properties.getSchema().getMode()),
+                properties.getSchema().isAllowDestructive(),
+                migrations.orderedStream().toList());
     }
 
     @Bean

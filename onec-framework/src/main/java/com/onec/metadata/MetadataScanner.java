@@ -98,7 +98,8 @@ public class MetadataScanner {
 
         return new CatalogDescriptor(logicalName, displayTitle, tableName, clazz, codeLength,
                 catalog.hierarchical(), catalog.autoNumber(), catalog.codePrefix(),
-                catalog.context(), readRoles(clazz), writeRoles(clazz), attributes);
+                catalog.context(), readRoles(clazz), writeRoles(clazz), attributes,
+                List.of(catalog.previousNames()));
     }
 
     public DocumentDescriptor scanDocument(Class<?> clazz) {
@@ -121,7 +122,8 @@ public class MetadataScanner {
 
         return new DocumentDescriptor(logicalName, displayTitle, tableName, clazz, numberLength,
                 document.autoNumber(), document.numberPrefix(), document.context(),
-                readRoles(clazz), writeRoles(clazz), attributes, tabularSections);
+                readRoles(clazz), writeRoles(clazz), attributes, tabularSections,
+                List.of(document.previousNames()));
     }
 
     public AccumulationRegisterDescriptor scanRegister(Class<?> clazz) {
@@ -339,7 +341,8 @@ public class MetadataScanner {
                         hint == null ? "" : hint.widget(),
                         new AttributeDescriptor.Constraints(
                                 attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
-                        attr.secret()
+                        attr.secret(),
+                        List.of(attr.previousNames())
                 ));
             }
             current = current.getSuperclass();

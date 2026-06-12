@@ -13,6 +13,15 @@ public @interface Attribute {
 
     String displayName() default "";
 
+    /**
+     * Former names of this attribute, so the schema upgrader can rename the existing column
+     * (keeping its data) instead of adding a fresh empty one. List the old field/attribute
+     * name as it was written in Java (e.g. {@code "phone"} after renaming the field to
+     * {@code phoneNumber}); it is mapped to a column name through the same naming strategy.
+     * Keep at least the most recent former name until every deployment has migrated.
+     */
+    String[] previousNames() default {};
+
     int length() default 255;
 
     boolean required() default false;

@@ -23,6 +23,15 @@ public @interface Document {
     /** Stable DB table name. When empty, derived from {@link #name()}. */
     String tableName() default "";
 
+    /**
+     * Former names of this document (previous {@link #name()} or {@link #tableName()} values),
+     * so the schema upgrader can rename the existing tables — the document table and its
+     * tabular-section tables, keeping their data — instead of creating fresh empty ones. Each
+     * value is tried both through the naming strategy and verbatim as a table name. Keep at
+     * least the most recent former name until every deployment has migrated.
+     */
+    String[] previousNames() default {};
+
     int numberLength() default 11;
 
     boolean autoNumber() default true;
