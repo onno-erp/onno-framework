@@ -10,6 +10,7 @@ import com.onec.metadata.MetadataRegistry;
 import com.onec.model.AccumulationRecord;
 import com.onec.model.CatalogObject;
 import com.onec.model.DocumentObject;
+import com.onec.performance.OnecPerformance;
 import com.onec.security.SecretCipher;
 import com.onec.security.SecretFields;
 
@@ -22,6 +23,7 @@ public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
     private final MetadataRegistry registry;
     private final SecretCipher secretCipher;
     private final EntityChangePublisher entityChangePublisher;
+    private final OnecMetrics metrics;
 
     public OnecAfterSaveCallback() {
         this(null, null, null, null);
@@ -33,14 +35,24 @@ public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
 
     public OnecAfterSaveCallback(OutboxWriter outboxWriter, MetadataRegistry registry, SecretCipher secretCipher,
                                  EntityChangePublisher entityChangePublisher) {
+        this(outboxWriter, registry, secretCipher, entityChangePublisher, new OnecMetrics(null));
+    }
+
+    public OnecAfterSaveCallback(OutboxWriter outboxWriter, MetadataRegistry registry, SecretCipher secretCipher,
+                                 EntityChangePublisher entityChangePublisher, OnecMetrics metrics) {
         this.outboxWriter = outboxWriter;
         this.registry = registry;
         this.secretCipher = secretCipher;
         this.entityChangePublisher = entityChangePublisher;
+        this.metrics = metrics;
     }
 
     @Override
     public Object onAfterSave(Object aggregate) {
+        return time(operationName("after-save", aggregate), aggregate, () -> afterSave(aggregate));
+    }
+
+    private Object afterSave(Object aggregate) {
         // Read isNew before markNotNew flips it: a still-new aggregate at this point was inserted.
         boolean wasNew = isNew(aggregate);
         markNotNew(aggregate);
@@ -48,12 +60,13 @@ public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
         // OnecBeforeConvertCallback encrypted the secret fields in place before the row was
         // written; decrypt them back so the instance the caller holds keeps its plaintext.
         if (registry != null && secretCipher != null) {
-            SecretFields.apply(aggregate, registry, secretCipher::decrypt);
+            time(operationName("decrypt-secrets", aggregate), aggregate, () ->
+                    SecretFields.apply(aggregate, registry, secretCipher::decrypt));
         }
 
         // Call AfterWriteHandler
         if (aggregate instanceof AfterWriteHandler handler) {
-            handler.afterWrite();
+            time(operationName("after-write", aggregate), aggregate, handler::afterWrite);
         }
         publishDomainEvents(aggregate, EventTiming.AFTER_WRITE);
         publishEntityChange(aggregate, wasNew ? EntityChangedEvent.CREATED : EntityChangedEvent.UPDATED);
@@ -63,8 +76,10 @@ public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
 
     @Override
     public Object onAfterConvert(Object aggregate) {
-        markNotNew(aggregate);
-        return aggregate;
+        return time(operationName("after-convert", aggregate), aggregate, () -> {
+            markNotNew(aggregate);
+            return aggregate;
+        });
     }
 
     private boolean isNew(Object aggregate) {
@@ -119,5 +134,32 @@ public class OnecAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
                     "\",\"aggregateId\":\"" + id + "\"}";
             outboxWriter.append(aggregate.getClass().getName(), id, event.name(), payload);
         }
+    }
+
+    private static String operationName(String phase, Object aggregate) {
+        if (aggregate instanceof DocumentObject) {
+            return "onec.document.save." + phase;
+        }
+        if (aggregate instanceof CatalogObject) {
+            return "onec.catalog.save." + phase;
+        }
+        if (aggregate instanceof AccumulationRecord) {
+            return "onec.register.save." + phase;
+        }
+        return "onec.persistence." + phase;
+    }
+
+    private <T> T time(String operation, Object aggregate, java.util.function.Supplier<T> action) {
+        long itemCount = itemCount(aggregate);
+        return OnecPerformance.record(operation, itemCount, () -> metrics.time(operation, itemCount, action));
+    }
+
+    private void time(String operation, Object aggregate, Runnable action) {
+        long itemCount = itemCount(aggregate);
+        OnecPerformance.record(operation, itemCount, () -> metrics.time(operation, itemCount, action));
+    }
+
+    private static long itemCount(Object aggregate) {
+        return aggregate instanceof DocumentObject ? 1 : 0;
     }
 }

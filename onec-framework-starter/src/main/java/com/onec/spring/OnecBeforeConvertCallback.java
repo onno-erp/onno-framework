@@ -8,6 +8,7 @@ import com.onec.model.CatalogObject;
 import com.onec.model.DocumentObject;
 import com.onec.model.TabularSectionRow;
 import com.onec.numbering.NumberGenerator;
+import com.onec.performance.OnecPerformance;
 import com.onec.rules.BusinessRuleValidator;
 import com.onec.security.SecretCipher;
 import com.onec.security.SecretFields;
@@ -25,18 +26,29 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
     private final MetadataRegistry registry;
     private final NumberGenerator numberGenerator;
     private final SecretCipher secretCipher;
+    private final OnecMetrics metrics;
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final AttributeValidator attributeValidator = new AttributeValidator();
 
     public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
                                      SecretCipher secretCipher) {
+        this(registry, numberGenerator, secretCipher, new OnecMetrics(null));
+    }
+
+    public OnecBeforeConvertCallback(MetadataRegistry registry, NumberGenerator numberGenerator,
+                                     SecretCipher secretCipher, OnecMetrics metrics) {
         this.registry = registry;
         this.numberGenerator = numberGenerator;
         this.secretCipher = secretCipher;
+        this.metrics = metrics;
     }
 
     @Override
     public Object onBeforeConvert(Object aggregate) {
+        return time(operationName("before-convert", aggregate), aggregate, () -> beforeConvert(aggregate));
+    }
+
+    private Object beforeConvert(Object aggregate) {
         // Generate UUID for new entities
         if (aggregate instanceof CatalogObject catalog) {
             if (catalog.getId() == null) {
@@ -77,22 +89,25 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
 
         // Call BeforeWriteHandler
         if (aggregate instanceof BeforeWriteHandler handler) {
-            handler.beforeWrite();
+            time(operationName("before-write", aggregate), aggregate, handler::beforeWrite);
         }
 
         // Validate: declarative attribute constraints (required, length, min/max, pattern, email)
         // and custom business rules, collected together so the user sees every problem at once.
-        ValidationErrors errors = new ValidationErrors();
-        List<AttributeDescriptor> attributes = attributesOf(aggregate);
-        if (attributes != null) {
-            attributeValidator.validate(aggregate, attributes, errors);
-        }
-        businessRuleValidator.collect(aggregate, errors);
-        errors.throwIfAny();
+        time(operationName("validate", aggregate), aggregate, () -> {
+            ValidationErrors errors = new ValidationErrors();
+            List<AttributeDescriptor> attributes = attributesOf(aggregate);
+            if (attributes != null) {
+                attributeValidator.validate(aggregate, attributes, errors);
+            }
+            businessRuleValidator.collect(aggregate, errors);
+            errors.throwIfAny();
+        });
 
         // Encrypt secret attributes so the row written holds ciphertext. The plaintext is
         // restored on the in-memory instance by OnecAfterSaveCallback once the write lands.
-        SecretFields.apply(aggregate, registry, secretCipher::encrypt);
+        time(operationName("encrypt-secrets", aggregate), aggregate, () ->
+                SecretFields.apply(aggregate, registry, secretCipher::encrypt));
 
         return aggregate;
     }
@@ -140,5 +155,32 @@ public class OnecBeforeConvertCallback implements BeforeConvertCallback<Object> 
             }
         }
         throw new NoSuchFieldException(fieldName);
+    }
+
+    private static String operationName(String phase, Object aggregate) {
+        if (aggregate instanceof DocumentObject) {
+            return "onec.document.save." + phase;
+        }
+        if (aggregate instanceof CatalogObject) {
+            return "onec.catalog.save." + phase;
+        }
+        if (aggregate instanceof AccumulationRecord) {
+            return "onec.register.save." + phase;
+        }
+        return "onec.persistence." + phase;
+    }
+
+    private <T> T time(String operation, Object aggregate, java.util.function.Supplier<T> action) {
+        long itemCount = itemCount(aggregate);
+        return OnecPerformance.record(operation, itemCount, () -> metrics.time(operation, itemCount, action));
+    }
+
+    private void time(String operation, Object aggregate, Runnable action) {
+        long itemCount = itemCount(aggregate);
+        OnecPerformance.record(operation, itemCount, () -> metrics.time(operation, itemCount, action));
+    }
+
+    private static long itemCount(Object aggregate) {
+        return aggregate instanceof DocumentObject ? 1 : 0;
     }
 }

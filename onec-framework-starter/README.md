@@ -162,6 +162,75 @@ class TravelerRegistrationListener {
 The listener runs synchronously right after the post commit (posting is its own transaction — see
 above), so its side-effects are safely post-commit. No service-locator or Kafka required.
 
+## Performance profiling
+
+onec uses standard Java/Spring observability tools rather than a custom profiler surface.
+
+For local or production JVM profiling, use **Java Flight Recorder** / **JDK Mission Control**. Core
+document posting emits a custom JFR event named `com.onec.Operation` with stable operation names and
+an item count. The built-in operations include:
+
+- `onec.document.save.before-convert`, `onec.document.save.before-write`,
+  `onec.document.save.validate`, `onec.document.save.after-save`
+- `onec.document.post`, `onec.document.handle-posting`, `onec.document.post.transaction`
+- `onec.document.post.preview`, `onec.document.unpost`
+
+Start an app with continuous JFR recording:
+
+```bash
+java -XX:StartFlightRecording=filename=onec.jfr,settings=profile,dumponexit=true -jar app.jar
+```
+
+Or attach to a running process:
+
+```bash
+jcmd <pid> JFR.start name=onec settings=profile
+jcmd <pid> JFR.dump name=onec filename=onec.jfr
+```
+
+Open `onec.jfr` in JDK Mission Control and filter for `onec Operation`.
+
+For production dashboards, the Spring starter also records Micrometer meters when a `MeterRegistry`
+bean is present:
+
+- `onec.operation.duration` — timer tagged by `operation`
+- `onec.operation.items` — distribution summary tagged by `operation`
+
+For Prometheus/Grafana in a Spring Boot app, add Actuator and the Prometheus registry:
+
+```kotlin
+dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+}
+```
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    prometheus:
+      access: read_only
+```
+
+Prometheus scrapes `/actuator/prometheus`; Grafana then queries Prometheus. Operation tag values are
+stable and low-cardinality; do not add document IDs, customer names, or user input to operation
+names if you add your own Micrometer instrumentation in application code.
+
+If you want Prometheus histogram buckets for percentile dashboards, enable them with Micrometer
+configuration instead of paying that cost by default:
+
+```yaml
+management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        onec.operation.duration: true
+```
+
 ## Background jobs
 
 If your app puts a JobRunr `JobScheduler` on the context, the starter contributes `BackgroundJobs`

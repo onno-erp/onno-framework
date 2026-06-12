@@ -16,6 +16,7 @@ import com.onec.model.AccumulationRecord;
 import com.onec.model.AccumulationType;
 import com.onec.model.DocumentObject;
 import com.onec.model.TabularSectionRow;
+import com.onec.performance.OnecPerformance;
 import com.onec.repository.RegisterRepositoryImpl;
 import com.onec.rules.BusinessRuleValidator;
 import com.onec.types.Ref;
@@ -81,25 +82,30 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void post(DocumentObject document) {
+        OnecPerformance.record("onec.document.post", 1, () -> doPost(document));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void doPost(DocumentObject document) {
         if (!(document instanceof Postable)) {
             throw new IllegalArgumentException(
                     document.getClass().getName() + " does not implement Postable");
         }
 
         if (document instanceof BeforeWriteHandler writer) {
-            writer.beforeWrite();
+            OnecPerformance.record("onec.document.before-write", 1, writer::beforeWrite);
         }
 
         if (document instanceof BeforePostHandler handler) {
-            handler.beforePost();
+            OnecPerformance.record("onec.document.before-post", 1, handler::beforePost);
         }
-        businessRuleValidator.validate(document);
+        OnecPerformance.record("onec.document.validate", 1, () -> businessRuleValidator.validate(document));
 
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
 
         PostingContext context = buildPostingContext(document);
 
-        jdbi.useTransaction(handle -> {
+        OnecPerformance.record("onec.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
             for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
                 RegisterPersistence persistence = repo.getPersistence();
                 persistence.insertRecords(handle, repo.getPendingMovements(),
@@ -120,30 +126,34 @@ public class PostingEngine {
                             " SET _posted = TRUE WHERE _id = :id")
                     .bind("id", document.getId())
                     .execute();
-        });
+        }));
 
         document.setPosted(true);
         publishDomainEvents(document, EventTiming.AFTER_POST);
 
         if (document instanceof AfterPostHandler handler) {
-            handler.afterPost();
+            OnecPerformance.record("onec.document.after-post", 1, handler::afterPost);
         }
 
         publishApplicationEvent(new DocumentPostedEvent(document));
     }
 
     public PostingPreview preview(DocumentObject document) {
+        return OnecPerformance.record("onec.document.post.preview", 1, () -> doPreview(document));
+    }
+
+    private PostingPreview doPreview(DocumentObject document) {
         if (!(document instanceof Postable)) {
             throw new IllegalArgumentException(
                     document.getClass().getName() + " does not implement Postable");
         }
         if (document instanceof BeforeWriteHandler writer) {
-            writer.beforeWrite();
+            OnecPerformance.record("onec.document.before-write", 1, writer::beforeWrite);
         }
         if (document instanceof BeforePostHandler handler) {
-            handler.beforePost();
+            OnecPerformance.record("onec.document.before-post", 1, handler::beforePost);
         }
-        businessRuleValidator.validate(document);
+        OnecPerformance.record("onec.document.validate", 1, () -> businessRuleValidator.validate(document));
 
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
         PostingContext context = buildPostingContext(document);
@@ -173,9 +183,14 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void unpost(DocumentObject document) {
+        OnecPerformance.record("onec.document.unpost", 1, () -> doUnpost(document));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void doUnpost(DocumentObject document) {
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
 
-        jdbi.useTransaction(handle -> {
+        OnecPerformance.record("onec.document.unpost.transaction", 1, () -> jdbi.useTransaction(handle -> {
             for (RegisterRepositoryImpl<?> repo : repositoryMap.values()) {
                 RegisterPersistence persistence = repo.getPersistence();
                 persistence.reverseTotals(handle, document.getId());
@@ -186,7 +201,7 @@ public class PostingEngine {
                             " SET _posted = FALSE WHERE _id = :id")
                     .bind("id", document.getId())
                     .execute();
-        });
+        }));
 
         document.setPosted(false);
 
@@ -213,7 +228,7 @@ public class PostingEngine {
     private PostingContext buildPostingContext(DocumentObject document) {
         PostingContext context = new PostingContext(repositoryMap);
         if (document instanceof Postable postable) {
-            postable.handlePosting(context);
+            OnecPerformance.record("onec.document.handle-posting", 1, () -> postable.handlePosting(context));
         }
         return context;
     }

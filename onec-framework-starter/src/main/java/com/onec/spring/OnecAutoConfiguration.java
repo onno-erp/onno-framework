@@ -7,6 +7,7 @@ import com.onec.ui.*;
 import com.onec.posting.RegisterPersistence;
 import com.onec.jobs.BackgroundJobs;
 import com.onec.messaging.OutboxWriter;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.onec.repository.*;
 
 import org.jdbi.v3.core.Jdbi;
@@ -16,6 +17,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
@@ -124,6 +126,11 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
+    public OnecMetrics onecMetrics(ObjectProvider<MeterRegistry> meterRegistry) {
+        return new OnecMetrics(meterRegistry.getIfAvailable());
+    }
+
+    @Bean
     public com.onec.security.SecretCipher secretCipher(OnecProperties properties) {
         return new com.onec.security.SecretCipher(properties.getSecurity().getSecretKey());
     }
@@ -131,8 +138,9 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public OnecBeforeConvertCallback onecBeforeConvertCallback(MetadataRegistry registry,
                                                                 com.onec.numbering.NumberGenerator numberGenerator,
-                                                                com.onec.security.SecretCipher secretCipher) {
-        return new OnecBeforeConvertCallback(registry, numberGenerator, secretCipher);
+                                                                com.onec.security.SecretCipher secretCipher,
+                                                                OnecMetrics metrics) {
+        return new OnecBeforeConvertCallback(registry, numberGenerator, secretCipher, metrics);
     }
 
     /**
@@ -151,8 +159,9 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public OnecAfterSaveCallback onecAfterSaveCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
                                                        com.onec.security.SecretCipher secretCipher,
-                                                       com.onec.events.EntityChangePublisher entityChangePublisher) {
-        return new OnecAfterSaveCallback(outboxWriter, registry, secretCipher, entityChangePublisher);
+                                                       com.onec.events.EntityChangePublisher entityChangePublisher,
+                                                       OnecMetrics metrics) {
+        return new OnecAfterSaveCallback(outboxWriter, registry, secretCipher, entityChangePublisher, metrics);
     }
 
     @Bean
@@ -236,9 +245,11 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     public PostingService postingService(Jdbi jdbi, MetadataRegistry registry,
                                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryImplMap,
                                          OutboxWriter outboxWriter,
-                                         com.onec.posting.PostEventPublisher postEventPublisher) {
-        PostingEngine engine = new PostingEngine(jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher);
-        return new PostingService(engine);
+                                         com.onec.posting.PostEventPublisher postEventPublisher,
+                                         OnecMetrics metrics) {
+        PostingEngine engine = new PostingEngine(
+                jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher);
+        return new TimedPostingService(engine, metrics);
     }
 
     @Bean
