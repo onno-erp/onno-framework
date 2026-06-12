@@ -21,6 +21,8 @@ reference/enum expansion, secret redaction, list vs get) and how to react to cha
 | `onec-print-starter` | Thymeleaf-based document rendering and PDF output support. |
 | `onec-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |
 | `onec-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
+| `onec-import-starter` | CSV import services and endpoints for catalogs. |
+| `onec-mcp-starter` | MCP server exposing metadata, CRUD, register queries, and posting as AI-agent tools. |
 | `onec-desktop-starter` | Desktop runtime support and packaged Tauri shell resources. |
 | `onec-desktop-gradle-plugin` | Gradle plugin for packaging a Spring Boot app as a native desktop bundle. |
 | `example` | Local example application. It is not intended to be published as a library. |

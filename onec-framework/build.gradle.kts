@@ -3,20 +3,23 @@ plugins {
 }
 
 dependencies {
-    api("org.jdbi:jdbi3-core:3.45.4")
-    api("org.springframework.data:spring-data-commons:3.4.4")
-    compileOnly("com.fasterxml.jackson.core:jackson-annotations:2.18.3")
+    api(libs.jdbi3.core)
+    api(libs.spring.data.commons)
+    compileOnly(libs.jackson.annotations)
 
-    compileOnly("org.projectlombok:lombok:1.18.36")
-    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
 
-    implementation("org.slf4j:slf4j-api:2.0.16")
+    implementation(libs.slf4j.api)
 
-    testCompileOnly("org.projectlombok:lombok:1.18.36")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
-    testImplementation("com.h2database:h2:2.2.224")
-    testImplementation("org.slf4j:slf4j-simple:2.0.16")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.assertj:assertj-core:3.26.3")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
+    testImplementation(libs.h2)
+    testImplementation(libs.slf4j.simple)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit.jupiter)
+    testRuntimeOnly(libs.postgresql)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

@@ -15,14 +15,14 @@ dependencies {
     api(project(":onec-framework"))
     implementation(project(":onec-framework-starter"))
 
-    implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-    implementation("org.springframework.boot:spring-boot-starter-web:3.4.4")
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(libs.spring.boot.starter.web)
 
     // Persist HTTP sessions in the app's (file-backed, relocated-to-home) datasource
     // so a desktop login survives the JVM restart that every app launch performs.
     // Bundling this in the desktop starter scopes "stay logged in" to desktop apps.
-    implementation("org.springframework.session:spring-session-jdbc:3.4.1")
+    implementation(libs.spring.session.jdbc)
 
-    compileOnly("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
-    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+    compileOnly(libs.spring.boot.configuration.processor)
+    annotationProcessor(libs.spring.boot.configuration.processor)
 }

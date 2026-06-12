@@ -135,7 +135,9 @@ public class SchemaMigrator {
     }
 
     private String columnType(AttributeDescriptor attr) {
-        return SchemaGenerator.sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName())
-                + (attr.required() ? " NOT NULL" : "");
+        // Same widening rules as fresh schema generation: a secret or oversized String
+        // column must come out as TEXT here too, or a column added by migration can't
+        // hold its encrypted/unbounded value.
+        return SchemaGenerator.columnType(attr) + (attr.required() ? " NOT NULL" : "");
     }
 }

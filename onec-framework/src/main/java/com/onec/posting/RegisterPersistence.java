@@ -6,6 +6,7 @@ import com.onec.model.AccumulationRecord;
 import com.onec.model.AccumulationType;
 import com.onec.model.MovementType;
 import com.onec.query.SqlRenderer;
+import com.onec.schema.SqlDialect;
 import com.onec.types.Ref;
 
 import org.jdbi.v3.core.Handle;
@@ -72,65 +73,33 @@ public class RegisterPersistence<T extends AccumulationRecord> {
 
     public void updateTotals(Handle handle, List<T> records) {
         if (descriptor.accumulationType() != AccumulationType.BALANCE) return;
+        if (records.isEmpty()) return;
+
+        // One atomic insert-or-increment per movement: a SELECT-then-INSERT/UPDATE pair
+        // would let two concurrent posts to the same new dimension key both take the
+        // INSERT branch and collide on the totals primary key.
+        SqlDialect dialect = SqlDialect.detect(handle.getConnection());
+        List<String> keyColumns = dimensionColumns();
+        List<String> incrementColumns = descriptor.resources().stream()
+                .map(AttributeDescriptor::columnName)
+                .toList();
+        List<String> values = new ArrayList<>();
+        for (AttributeDescriptor dim : descriptor.dimensions()) {
+            values.add(":" + dim.fieldName());
+        }
+        for (AttributeDescriptor res : descriptor.resources()) {
+            values.add(":" + res.fieldName());
+        }
+        String sql = dialect.upsertIncrement(
+                descriptor.totalsTableName(), keyColumns, incrementColumns, values);
 
         for (T record : records) {
             BigDecimal sign = record.getMovementType() == MovementType.RECEIPT
                     ? BigDecimal.ONE : BigDecimal.ONE.negate();
-
-            // Build WHERE clause for dimension match
-            StringBuilder where = new StringBuilder();
-            boolean first = true;
-            for (AttributeDescriptor dim : descriptor.dimensions()) {
-                if (!first) where.append(" AND ");
-                where.append(dim.columnName()).append(" = :").append(dim.fieldName());
-                first = false;
-            }
-
-            // Check if row exists
-            String selectSql = "SELECT COUNT(*) FROM " + descriptor.totalsTableName() +
-                    " WHERE " + where;
-            var selectQuery = handle.createQuery(selectSql);
-            bindFields(selectQuery, record, descriptor.dimensions());
-            int count = selectQuery.mapTo(Integer.class).one();
-
-            if (count > 0) {
-                // UPDATE: add resource values
-                StringBuilder updateSets = new StringBuilder();
-                first = true;
-                for (AttributeDescriptor res : descriptor.resources()) {
-                    if (!first) updateSets.append(", ");
-                    updateSets.append(res.columnName()).append(" = ").append(res.columnName())
-                            .append(" + :").append(res.fieldName());
-                    first = false;
-                }
-                String updateSql = "UPDATE " + descriptor.totalsTableName() +
-                        " SET " + updateSets + " WHERE " + where;
-                var updateStmt = handle.createUpdate(updateSql);
-                bindSignedResources(updateStmt, record, sign);
-                bindFields(updateStmt, record, descriptor.dimensions());
-                updateStmt.execute();
-            } else {
-                // INSERT new totals row
-                StringBuilder insertCols = new StringBuilder();
-                StringBuilder insertVals = new StringBuilder();
-                first = true;
-                for (AttributeDescriptor dim : descriptor.dimensions()) {
-                    if (!first) { insertCols.append(", "); insertVals.append(", "); }
-                    insertCols.append(dim.columnName());
-                    insertVals.append(":").append(dim.fieldName());
-                    first = false;
-                }
-                for (AttributeDescriptor res : descriptor.resources()) {
-                    insertCols.append(", ").append(res.columnName());
-                    insertVals.append(", :").append(res.fieldName());
-                }
-                String insertSql = "INSERT INTO " + descriptor.totalsTableName() +
-                        " (" + insertCols + ") VALUES (" + insertVals + ")";
-                var insertStmt = handle.createUpdate(insertSql);
-                bindFields(insertStmt, record, descriptor.dimensions());
-                bindSignedResources(insertStmt, record, sign);
-                insertStmt.execute();
-            }
+            var stmt = handle.createUpdate(sql);
+            bindFields(stmt, record, descriptor.dimensions());
+            bindSignedResources(stmt, record, sign);
+            stmt.execute();
         }
     }
 

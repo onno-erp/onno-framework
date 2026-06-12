@@ -6,15 +6,15 @@ dependencies {
     api(project(":onec-framework"))
     implementation(project(":onec-framework-starter"))
 
-    implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-    implementation("org.springframework:spring-context:6.2.5")
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(libs.spring.context)
 
-    api("org.thymeleaf:thymeleaf:3.1.2.RELEASE")
-    api("org.xhtmlrenderer:flying-saucer-pdf-openpdf:9.4.0")
+    api(libs.thymeleaf)
+    api(libs.flying.saucer.pdf.openpdf)
 
-    compileOnly("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
-    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+    compileOnly(libs.spring.boot.configuration.processor)
+    annotationProcessor(libs.spring.boot.configuration.processor)
 
-    compileOnly("org.projectlombok:lombok:1.18.36")
-    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
 }

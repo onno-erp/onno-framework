@@ -25,7 +25,10 @@ GET /api/registers/{name}/turnover?from=&to=
 ```
 
 Both list endpoints also accept `?q=<text>&limit=<n>` to switch to a capped typeahead search (used by
-ref pickers); without either parameter you get the full list.
+ref pickers); without either parameter you get the full list, **capped at 1000 rows** as a safety
+limit (catalogs ordered by `_code`, documents newest first). Past the cap the server logs a warning
+and truncates; consumers that need everything should use the paged list endpoints or, for documents,
+narrow the date range.
 
 ## Response shape
 

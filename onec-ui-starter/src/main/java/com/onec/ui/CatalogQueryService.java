@@ -5,6 +5,8 @@ import com.onec.metadata.MetadataRegistry;
 import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -23,6 +25,15 @@ import java.util.UUID;
  * control stays with the callers.
  */
 public class CatalogQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(CatalogQueryService.class);
+
+    /**
+     * Hard safety cap for the un-paged list APIs, so one request can never pull an
+     * entire large table (and ref-resolve every row) into memory. Callers that need
+     * more rows should use the paged/searched variants.
+     */
+    static final int MAX_LIST_ROWS = 1000;
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
@@ -53,10 +64,18 @@ public class CatalogQueryService {
 
     public List<Map<String, Object>> list(CatalogDescriptor desc) {
         List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false")
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false ORDER BY _code LIMIT :limit")
+                        .bind("limit", MAX_LIST_ROWS + 1)
                         .mapToMap()
                         .list()
         );
+        if (rows.size() > MAX_LIST_ROWS) {
+            log.warn("Catalog '{}' has more than {} live records; the un-paged list API truncated "
+                    + "the result. Use the paged list endpoint for complete data.",
+                    desc.logicalName(), MAX_LIST_ROWS);
+            rows = rows.subList(0, MAX_LIST_ROWS);
+        }
         refResolver.resolveAttributes(rows, desc.attributes());
         SecretRedactor.redact(rows, desc.attributes());
         return rows;

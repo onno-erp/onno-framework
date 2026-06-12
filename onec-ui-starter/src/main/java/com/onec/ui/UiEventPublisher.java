@@ -3,6 +3,8 @@ package com.onec.ui;
 import com.onec.events.EntityChangedEvent;
 
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -23,6 +25,8 @@ import java.util.concurrent.TimeUnit;
  * reflects programmatic saves too, not just back-office edits.
  */
 public class UiEventPublisher {
+
+    private static final Logger log = LoggerFactory.getLogger(UiEventPublisher.class);
 
     /**
      * How often to write a keepalive comment to each open stream. The browser, and any
@@ -96,6 +100,8 @@ public class UiEventPublisher {
             } catch (IOException | IllegalStateException e) {
                 emitters.remove(emitter);
                 emitter.completeWithError(e);
+                log.debug("Dropped dead SSE stream on keepalive ({} remaining): {}",
+                        emitters.size(), e.getMessage());
             }
         }
     }
@@ -106,6 +112,8 @@ public class UiEventPublisher {
         } catch (IOException | IllegalStateException e) {
             emitters.remove(emitter);
             emitter.completeWithError(e);
+            log.debug("Dropped dead SSE stream on send ({} remaining): {}",
+                    emitters.size(), e.getMessage());
         }
     }
 

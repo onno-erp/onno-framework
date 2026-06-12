@@ -53,4 +53,37 @@ class SqlDialectTest {
 
         assertThat(sql).isEqualTo("INSERT INTO t (_id) VALUES (:id) ON CONFLICT (_id) DO NOTHING");
     }
+
+    @Test
+    void postgresql_upsertIncrement_addsOnConflict() {
+        String sql = SqlDialect.POSTGRESQL.upsertIncrement(
+                "register_stock_totals",
+                List.of("product", "warehouse"),
+                List.of("quantity"),
+                List.of(":product", ":warehouse", ":quantity"));
+
+        assertThat(sql).isEqualTo(
+                "INSERT INTO register_stock_totals (product, warehouse, quantity)"
+                        + " VALUES (:product, :warehouse, :quantity)"
+                        + " ON CONFLICT (product, warehouse)"
+                        + " DO UPDATE SET quantity = register_stock_totals.quantity + EXCLUDED.quantity");
+    }
+
+    @Test
+    void h2_upsertIncrement_usesStandardMerge() {
+        String sql = SqlDialect.H2.upsertIncrement(
+                "register_stock_totals",
+                List.of("product"),
+                List.of("quantity"),
+                List.of(":product", ":quantity"));
+
+        assertThat(sql).isEqualTo(
+                "MERGE INTO register_stock_totals USING (VALUES (:product, :quantity))"
+                        + " AS src(product, quantity)"
+                        + " ON register_stock_totals.product = src.product"
+                        + " WHEN MATCHED THEN UPDATE SET"
+                        + " quantity = register_stock_totals.quantity + src.quantity"
+                        + " WHEN NOT MATCHED THEN INSERT (product, quantity)"
+                        + " VALUES (src.product, src.quantity)");
+    }
 }

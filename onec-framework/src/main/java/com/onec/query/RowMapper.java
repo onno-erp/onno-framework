@@ -4,10 +4,14 @@ import com.onec.repository.EnumerationPersistence;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Maps a {@link Row} onto a typed DTO for {@code fetchInto(...)}. Two shapes are
@@ -15,8 +19,21 @@ import java.util.UUID;
  * mutable POJO (no-arg constructor, fields set by name). Matching is by output-alias
  * name and is case-insensitive, mirroring {@link Row}; values are lightly coerced to the
  * target type so SQL numerics/UUID/timestamps land in the expected Java types.
+ *
+ * <p>The reflective shape of each DTO class (constructor, record components, settable
+ * fields) is resolved once and cached, so mapping N rows costs N instantiations rather
+ * than N full class-hierarchy walks.
  */
 final class RowMapper {
+
+    private static final ConcurrentHashMap<Class<?>, RecordShape> RECORD_SHAPES = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Class<?>, PojoShape> POJO_SHAPES = new ConcurrentHashMap<>();
+
+    private record RecordShape(RecordComponent[] components, Constructor<?> ctor) {
+    }
+
+    private record PojoShape(Constructor<?> ctor, List<Field> fields) {
+    }
 
     private RowMapper() {
     }
@@ -30,35 +47,59 @@ final class RowMapper {
 
     @SuppressWarnings("unchecked")
     private static <D> D mapRecord(Row row, Class<D> type) {
+        RecordShape shape = RECORD_SHAPES.computeIfAbsent(type, t -> {
+            try {
+                RecordComponent[] components = t.getRecordComponents();
+                Class<?>[] paramTypes = new Class<?>[components.length];
+                for (int i = 0; i < components.length; i++) {
+                    paramTypes[i] = components[i].getType();
+                }
+                Constructor<?> ctor = t.getDeclaredConstructor(paramTypes);
+                ctor.setAccessible(true);
+                return new RecordShape(components, ctor);
+            } catch (NoSuchMethodException e) {
+                throw new IllegalStateException("Failed to map row into record " + t.getName(), e);
+            }
+        });
         try {
-            RecordComponent[] components = type.getRecordComponents();
-            Class<?>[] paramTypes = new Class<?>[components.length];
+            RecordComponent[] components = shape.components();
             Object[] args = new Object[components.length];
             for (int i = 0; i < components.length; i++) {
-                paramTypes[i] = components[i].getType();
                 args[i] = coerce(row.get(components[i].getName()), components[i].getType());
             }
-            Constructor<?> ctor = type.getDeclaredConstructor(paramTypes);
-            ctor.setAccessible(true);
-            return (D) ctor.newInstance(args);
+            return (D) shape.ctor().newInstance(args);
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to map row into record " + type.getName(), e);
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static <D> D mapPojo(Row row, Class<D> type) {
-        try {
-            Constructor<D> ctor = type.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            D instance = ctor.newInstance();
-            Class<?> current = type;
-            while (current != null && current != Object.class) {
-                for (Field field : current.getDeclaredFields()) {
-                    if (!row.has(field.getName())) continue;
-                    field.setAccessible(true);
-                    field.set(instance, coerce(row.get(field.getName()), field.getType()));
+        PojoShape shape = POJO_SHAPES.computeIfAbsent(type, t -> {
+            try {
+                Constructor<?> ctor = t.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                List<Field> fields = new ArrayList<>();
+                for (Class<?> current = t; current != null && current != Object.class;
+                        current = current.getSuperclass()) {
+                    for (Field field : current.getDeclaredFields()) {
+                        if (Modifier.isStatic(field.getModifiers()) || field.isSynthetic()) {
+                            continue;
+                        }
+                        field.setAccessible(true);
+                        fields.add(field);
+                    }
                 }
-                current = current.getSuperclass();
+                return new PojoShape(ctor, List.copyOf(fields));
+            } catch (NoSuchMethodException e) {
+                throw new IllegalStateException("Failed to map row into " + t.getName(), e);
+            }
+        });
+        try {
+            D instance = (D) shape.ctor().newInstance();
+            for (Field field : shape.fields()) {
+                if (!row.has(field.getName())) continue;
+                field.set(instance, coerce(row.get(field.getName()), field.getType()));
             }
             return instance;
         } catch (ReflectiveOperationException e) {

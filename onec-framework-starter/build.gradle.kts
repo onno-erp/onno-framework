@@ -5,26 +5,26 @@ plugins {
 dependencies {
     api(project(":onec-framework"))
 
-    implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-    implementation("org.springframework:spring-context:6.2.5")
-    implementation("org.springframework:spring-jdbc:6.2.5")
-    implementation("org.springframework.data:spring-data-jdbc:3.4.4")
-    implementation("io.micrometer:micrometer-core:1.14.5")
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(libs.spring.context)
+    implementation(libs.spring.jdbc)
+    implementation(libs.spring.data.jdbc)
+    implementation(libs.micrometer.core)
 
-    api("org.jobrunr:jobrunr-spring-boot-3-starter:7.3.2")
+    api(libs.jobrunr.spring.boot3.starter)
 
-    compileOnly("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
-    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+    compileOnly(libs.spring.boot.configuration.processor)
+    annotationProcessor(libs.spring.boot.configuration.processor)
 
-    testCompileOnly("org.projectlombok:lombok:1.18.36")
-    testAnnotationProcessor("org.projectlombok:lombok:1.18.36")
-    testImplementation("org.springframework:spring-test:6.2.5")
-    testImplementation("io.micrometer:micrometer-core:1.14.5")
-    testImplementation("com.h2database:h2:2.2.224")
-    testImplementation("org.slf4j:slf4j-simple:2.0.16")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
-    testImplementation("org.assertj:assertj-core:3.26.3")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
+    testImplementation(libs.spring.test)
+    testImplementation(libs.micrometer.core)
+    testImplementation(libs.h2)
+    testImplementation(libs.slf4j.simple)
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 tasks.withType<Test> {

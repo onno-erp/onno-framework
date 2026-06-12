@@ -6,11 +6,18 @@ dependencies {
     api(project(":onec-framework"))
     implementation(project(":onec-framework-starter"))
 
-    implementation("org.springframework.boot:spring-boot-autoconfigure:3.4.4")
-    implementation("org.springframework:spring-web:6.2.5")
-    implementation("org.springframework.kafka:spring-kafka:3.3.4")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.3")
+    implementation(libs.spring.boot.autoconfigure)
+    implementation(libs.spring.web)
+    implementation(libs.spring.kafka)
+    implementation(libs.jackson.databind)
 
-    compileOnly("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
-    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor:3.4.4")
+    compileOnly(libs.spring.boot.configuration.processor)
+    annotationProcessor(libs.spring.boot.configuration.processor)
+
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.h2)
+    testImplementation(libs.jackson.datatype.jsr310)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

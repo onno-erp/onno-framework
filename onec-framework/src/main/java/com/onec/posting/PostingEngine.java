@@ -23,6 +23,8 @@ import com.onec.types.Ref;
 
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -50,6 +52,8 @@ import java.util.stream.Collectors;
  * </ul>
  */
 public class PostingEngine {
+
+    private static final Logger log = LoggerFactory.getLogger(PostingEngine.class);
 
     private final Jdbi jdbi;
     private final MetadataRegistry registry;
@@ -82,7 +86,14 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void post(DocumentObject document) {
-        OnecPerformance.record("onec.document.post", 1, () -> doPost(document));
+        try {
+            OnecPerformance.record("onec.document.post", 1, () -> doPost(document));
+            log.debug("Posted {} {}", document.getClass().getSimpleName(), document.getId());
+        } catch (RuntimeException e) {
+            log.warn("Posting failed for {} {}: {}",
+                    document.getClass().getSimpleName(), document.getId(), e.getMessage());
+            throw e;
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -183,7 +194,14 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void unpost(DocumentObject document) {
-        OnecPerformance.record("onec.document.unpost", 1, () -> doUnpost(document));
+        try {
+            OnecPerformance.record("onec.document.unpost", 1, () -> doUnpost(document));
+            log.debug("Unposted {} {}", document.getClass().getSimpleName(), document.getId());
+        } catch (RuntimeException e) {
+            log.warn("Unposting failed for {} {}: {}",
+                    document.getClass().getSimpleName(), document.getId(), e.getMessage());
+            throw e;
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})

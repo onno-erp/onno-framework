@@ -6,6 +6,8 @@ import com.onec.metadata.TabularSectionDescriptor;
 import com.onec.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,6 +26,8 @@ import java.util.stream.Collectors;
  * access — access control stays with the callers.
  */
 public class DocumentQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(DocumentQueryService.class);
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
@@ -57,14 +61,21 @@ public class DocumentQueryService {
                 "SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false");
         if (from != null) sql.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _date <= CAST(:to AS TIMESTAMP)");
-        sql.append(" ORDER BY _date DESC");
+        sql.append(" ORDER BY _date DESC LIMIT :rowCap");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString());
+            var query = h.createQuery(sql.toString())
+                    .bind("rowCap", CatalogQueryService.MAX_LIST_ROWS + 1);
             if (from != null) query.bind("from", from);
             if (to != null) query.bind("to", to);
             return query.mapToMap().list();
         });
+        if (rows.size() > CatalogQueryService.MAX_LIST_ROWS) {
+            log.warn("Document '{}' has more than {} live records in range; the un-paged list API "
+                    + "truncated the result. Use the paged list endpoint or a date range for "
+                    + "complete data.", desc.logicalName(), CatalogQueryService.MAX_LIST_ROWS);
+            rows = rows.subList(0, CatalogQueryService.MAX_LIST_ROWS);
+        }
         refResolver.resolveAttributes(rows, desc.attributes());
         SecretRedactor.redact(rows, desc.attributes());
         return rows;

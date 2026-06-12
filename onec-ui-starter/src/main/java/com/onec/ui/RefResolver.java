@@ -5,15 +5,23 @@ import com.onec.metadata.*;
 import org.jdbi.v3.core.Jdbi;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Resolves Ref UUID columns and Enum UUID columns to human-readable display values.
  * Adds "{columnName}_display" and "{columnName}_ref" keys to each row map.
+ *
+ * <p>Descriptor lookups (logical name → catalog/document, enum class → enumeration,
+ * enum id → display name) are cached: the registry never changes after startup
+ * scanning, and these resolvers run on every list/get response.
  */
 public class RefResolver {
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
+    private final ConcurrentHashMap<String, Optional<CatalogDescriptor>> catalogsByName = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Optional<DocumentDescriptor>> documentsByName = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Class<?>, Map<String, String>> enumDisplayNames = new ConcurrentHashMap<>();
 
     public RefResolver(MetadataRegistry registry, Jdbi jdbi) {
         this.registry = registry;
@@ -44,16 +52,20 @@ public class RefResolver {
         // refTarget is the registered logical name; a ref can point at a catalog or a
         // document. Resolve each against the right table (catalogs by code/description,
         // documents by number).
-        CatalogDescriptor catalog = registry.allCatalogs().stream()
-                .filter(c -> c.logicalName().equals(attr.refTarget()))
-                .findFirst().orElse(null);
+        CatalogDescriptor catalog = catalogsByName.computeIfAbsent(attr.refTarget(), name ->
+                registry.allCatalogs().stream()
+                        .filter(c -> c.logicalName().equals(name))
+                        .findFirst()
+        ).orElse(null);
         if (catalog != null) {
             resolveCatalogRef(rows, attr, catalog, ids);
             return;
         }
-        DocumentDescriptor document = registry.allDocuments().stream()
-                .filter(d -> d.logicalName().equals(attr.refTarget()))
-                .findFirst().orElse(null);
+        DocumentDescriptor document = documentsByName.computeIfAbsent(attr.refTarget(), name ->
+                registry.allDocuments().stream()
+                        .filter(d -> d.logicalName().equals(name))
+                        .findFirst()
+        ).orElse(null);
         if (document != null) {
             resolveDocumentRef(rows, attr, document, ids);
         }
@@ -150,15 +162,18 @@ public class RefResolver {
     private record ResolvedRef(String display, String code, String avatarUrl) {}
 
     private void resolveEnumColumn(List<Map<String, Object>> rows, AttributeDescriptor attr) {
-        EnumerationDescriptor enumDesc = registry.allEnumerations().stream()
-                .filter(e -> e.javaClass().equals(attr.javaType()))
-                .findFirst().orElse(null);
-        if (enumDesc == null) return;
-
-        Map<String, String> idToName = new HashMap<>();
-        for (EnumerationValueDescriptor v : enumDesc.values()) {
-            idToName.put(v.id().toString(), v.name());
-        }
+        Map<String, String> idToName = enumDisplayNames.computeIfAbsent(attr.javaType(), type -> {
+            EnumerationDescriptor enumDesc = registry.allEnumerations().stream()
+                    .filter(e -> e.javaClass().equals(type))
+                    .findFirst().orElse(null);
+            if (enumDesc == null) return Map.of();
+            Map<String, String> names = new HashMap<>();
+            for (EnumerationValueDescriptor v : enumDesc.values()) {
+                names.put(v.id().toString(), v.name());
+            }
+            return Map.copyOf(names);
+        });
+        if (idToName.isEmpty()) return;
 
         for (Map<String, Object> row : rows) {
             Object val = value(row, attr.columnName());

@@ -9,16 +9,24 @@ import com.onec.metadata.MetadataRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Bridges the query layer to {@link MetadataRegistry}: resolves a Java entity class, or
  * the logical name a {@code Ref} attribute targets, to a uniform {@link EntityMeta}.
  * This is the only place that knows how the per-kind descriptors map onto table names,
  * primary keys, and column sets.
+ *
+ * <p>Lookups are cached: the registry is fully populated by the startup scanners before
+ * any query runs, so a linear descriptor scan per query (and per auto-join) would be
+ * pure overhead.
  */
 final class EntityResolver {
 
     private final MetadataRegistry registry;
+    private final ConcurrentHashMap<Class<?>, EntityMeta> byClass = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Optional<EntityMeta>> byRefTarget = new ConcurrentHashMap<>();
 
     EntityResolver(MetadataRegistry registry) {
         this.registry = registry;
@@ -26,6 +34,10 @@ final class EntityResolver {
 
     /** Resolve a queryable entity by its Java class, or throw if it is not registered. */
     EntityMeta forClass(Class<?> type) {
+        return byClass.computeIfAbsent(type, this::scanForClass);
+    }
+
+    private EntityMeta scanForClass(Class<?> type) {
         for (CatalogDescriptor d : registry.allCatalogs()) {
             if (d.javaClass() == type) return catalog(d);
         }
@@ -51,13 +63,17 @@ final class EntityResolver {
         if (refTarget == null) {
             return null;
         }
+        return byRefTarget.computeIfAbsent(refTarget, this::scanForRefTarget).orElse(null);
+    }
+
+    private Optional<EntityMeta> scanForRefTarget(String refTarget) {
         for (CatalogDescriptor d : registry.allCatalogs()) {
-            if (d.logicalName().equals(refTarget)) return catalog(d);
+            if (d.logicalName().equals(refTarget)) return Optional.of(catalog(d));
         }
         for (DocumentDescriptor d : registry.allDocuments()) {
-            if (d.logicalName().equals(refTarget)) return document(d);
+            if (d.logicalName().equals(refTarget)) return Optional.of(document(d));
         }
-        return null;
+        return Optional.empty();
     }
 
     private static EntityMeta catalog(CatalogDescriptor d) {

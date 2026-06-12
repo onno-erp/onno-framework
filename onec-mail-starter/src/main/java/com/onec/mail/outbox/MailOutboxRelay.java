@@ -6,10 +6,15 @@ import com.onec.mail.dispatch.MailDispatcher;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 
 public class MailOutboxRelay {
+
+    private static final Logger log = LoggerFactory.getLogger(MailOutboxRelay.class);
 
     private final MailOutbox outbox;
     private final MailDispatcher dispatcher;
@@ -40,7 +45,17 @@ public class MailOutboxRelay {
                 boolean exhausted = attempts >= properties.getRelay().getMaxAttempts();
                 LocalDateTime next = LocalDateTime.now().plus(backoff(attempts));
                 outbox.recordFailure(p.id(), attempts, summarize(e), next, exhausted);
+                if (exhausted) {
+                    log.error("Mail outbox message {} failed permanently after {} attempts: {}",
+                            p.id(), attempts, summarize(e));
+                } else {
+                    log.warn("Mail outbox dispatch failed for message {} (attempt {}/{}), retrying at {}: {}",
+                            p.id(), attempts, properties.getRelay().getMaxAttempts(), next, summarize(e));
+                }
             }
+        }
+        if (dispatched > 0) {
+            log.debug("Dispatched {} mail outbox message(s)", dispatched);
         }
         return dispatched;
     }

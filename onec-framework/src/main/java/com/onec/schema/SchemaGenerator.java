@@ -88,6 +88,79 @@ public class SchemaGenerator {
             }
         });
         new SchemaMigrator(registry).executeAdditive(jdbi);
+        // Indexes go last: a ref column added by the additive migration above must exist
+        // before its index is created.
+        jdbi.useHandle(handle -> {
+            for (String statement : generateIndexDDL()) {
+                handle.execute(statement);
+            }
+        });
+    }
+
+    /**
+     * Index statements for every generated table, covering the columns the framework
+     * itself queries by: ref columns (auto-joins and reference expansion), catalog
+     * hierarchy parents, document dates, tabular-section owners, register periods,
+     * document refs, and dimensions. Statements use {@code IF NOT EXISTS} and run after
+     * the additive column migration, so existing databases pick them up on next boot.
+     */
+    public List<String> generateIndexDDL() {
+        List<String> statements = new ArrayList<>();
+        statements.add(index("onec_outbox", "_status"));
+        for (CatalogDescriptor catalog : registry.allCatalogs()) {
+            if (catalog.hierarchical()) {
+                statements.add(index(catalog.tableName(), "_parent"));
+            }
+            for (AttributeDescriptor attr : catalog.attributes()) {
+                if (attr.isRef()) {
+                    statements.add(index(catalog.tableName(), attr.columnName()));
+                }
+            }
+        }
+        for (DocumentDescriptor document : registry.allDocuments()) {
+            statements.add(index(document.tableName(), "_date"));
+            for (AttributeDescriptor attr : document.attributes()) {
+                if (attr.isRef()) {
+                    statements.add(index(document.tableName(), attr.columnName()));
+                }
+            }
+            for (TabularSectionDescriptor section : document.tabularSections()) {
+                statements.add(index(section.tableName(), "_parent_id"));
+                for (AttributeDescriptor attr : section.attributes()) {
+                    if (attr.isRef()) {
+                        statements.add(index(section.tableName(), attr.columnName()));
+                    }
+                }
+            }
+        }
+        for (AccumulationRegisterDescriptor reg : registry.allRegisters()) {
+            statements.add(index(reg.tableName(), "_period"));
+            statements.add(index(reg.tableName(), "_document_ref"));
+            for (AttributeDescriptor dim : reg.dimensions()) {
+                statements.add(index(reg.tableName(), dim.columnName()));
+            }
+        }
+        for (InformationRegisterDescriptor reg : registry.allInformationRegisters()) {
+            for (AttributeDescriptor dim : reg.dimensions()) {
+                statements.add(index(reg.tableName(), dim.columnName()));
+            }
+        }
+        return statements;
+    }
+
+    private static String index(String table, String column) {
+        return "CREATE INDEX IF NOT EXISTS " + indexName(table, column)
+                + " ON " + table + " (" + column + ")";
+    }
+
+    // PostgreSQL truncates identifiers beyond 63 characters, which would make two long
+    // names collide and IF NOT EXISTS silently skip the second index; cap with a hash.
+    static String indexName(String table, String column) {
+        String name = "idx_" + table + "_" + column;
+        if (name.length() <= 63) {
+            return name;
+        }
+        return name.substring(0, 54) + "_" + Integer.toHexString(name.hashCode());
     }
 
     private String generateCatalogDDL(CatalogDescriptor catalog) {
