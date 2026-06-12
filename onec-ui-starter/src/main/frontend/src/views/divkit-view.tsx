@@ -1000,20 +1000,22 @@ export function DivKitView() {
 
   // The React shell paints its own islands/tabs (not server-rendered DivKit), so it
   // mirrors the Palette here. A consumer's brand overrides arrive via /api/branding and
-  // win per slot — chiefly `accent` (the active-tab pill + drag/split highlights), which
-  // otherwise stays the neutral foreground and looks off against the branded nav.
+  // win per slot — the strip uses the branded surface/border and the active tab uses
+  // the palette's soft primary accent instead of a hard-coded neutral or red-tinted pill.
   const brand = (resolvedTheme === "dark" ? branding.palette?.dark : branding.palette?.light) ?? {};
   const pageBg = brand.page ?? (resolvedTheme === "dark" ? "#0D0D0D" : "#FFFFFF");
   const skeletonBg = resolvedTheme === "dark" ? "#1F1F1F" : "#F5F5F5";
   const surfaceBg = brand.surface ?? (resolvedTheme === "dark" ? "#121212" : "#FFFFFF");
   const borderColor = brand.border ?? (resolvedTheme === "dark" ? "#242424" : "#EBEBEB");
-  const tabStripBg = resolvedTheme === "dark" ? "#0E0E0E" : "#FAFAFA";
+  const tabStripBg = brand.surface ?? (resolvedTheme === "dark" ? "#0E0E0E" : "#FAFAFA");
   // The focused island's border signals *which pane is active* — that's state, not structure, so
   // it carries the brand when one is set, but only as a faint ~25%-opacity wash so it reads as a
   // soft hint rather than a loud frame (the focus ring is desaturated for the same reason). Resting
   // borders stay neutral; the focused one lights up just enough to tell panes apart.
   const focusBorder = brand.primary ? `${brand.primary}40` : (resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4");
   const accent = brand.primary ?? (resolvedTheme === "dark" ? "#E5E5E5" : "#171717");
+  const activeTabBg = brand.primarySoft ?? "hsl(var(--accent))";
+  const activeTabText = brand.primary ?? "hsl(var(--accent-foreground))";
   const navStyle: NavStyle = shell?.navStyle ?? "topbar";
 
   const shellCard = (json: DivKitProps["json"], idPrefix: string) => (
@@ -1229,12 +1231,12 @@ export function DivKitView() {
             }
             const tab = slot.tab;
             const active = tab.path === pane.activePath;
-            // Selection reads as a subtle pill in the accent tone; a touch stronger on
-            // the focused island so you can tell which one navigation drives.
-            const fill = active ? (focused ? `${accent}1f` : `${accent}12`) : "transparent";
-            // With a brand accent, an active tab carries the brand text too (matching the
-            // nav's active item); unbranded, it keeps the neutral foreground from the class.
-            const activeText = active && brand.primary ? accent : undefined;
+            // Selection reads in the configured brand accent. With an explicit
+            // primarySoft this matches the server-rendered DivKit tabs/nav; otherwise it
+            // falls back to the shadcn accent variable that BrandingProvider derives from
+            // the brand primary.
+            const fill = active ? activeTabBg : "transparent";
+            const activeText = active ? activeTabText : undefined;
             return (
               <div
                 key={tab.path}
