@@ -10,7 +10,7 @@ import { ConstantsEditor } from "@/components/constants-editor";
  * the list/form bridges, so Settings is just another page built from framework primitives.
  */
 
-type Mount = { id: number; el: HTMLElement; title: string };
+type Mount = { id: number; el: HTMLElement; title: string; names: string[] | null };
 
 let mounts: Mount[] = [];
 const listeners = new Set<() => void>();
@@ -30,6 +30,9 @@ function getSnapshot(): Mount[] {
 class OnecConstantsElement extends HTMLElement {
   private readonly _id = ++seq;
   private _title = "";
+  // The @Constant logical names to show, or null for "all". DivKit passes the payload list as an
+  // array property; tolerate a JSON string too in case a client stringifies it.
+  private _names: string[] | null = null;
 
   set title(value: string) {
     this._title = value ?? "";
@@ -37,6 +40,21 @@ class OnecConstantsElement extends HTMLElement {
   }
   get title(): string {
     return this._title;
+  }
+  set names(value: string[] | string | null) {
+    if (Array.isArray(value)) this._names = value.map(String);
+    else if (typeof value === "string" && value) {
+      try {
+        const parsed = JSON.parse(value);
+        this._names = Array.isArray(parsed) ? parsed.map(String) : null;
+      } catch {
+        this._names = null;
+      }
+    } else this._names = null;
+    this.sync();
+  }
+  get names(): string[] | null {
+    return this._names;
   }
 
   connectedCallback() {
@@ -52,8 +70,12 @@ class OnecConstantsElement extends HTMLElement {
   private sync() {
     if (!this.isConnected) return;
     const existing = mounts.find((m) => m.el === this);
-    if (existing) existing.title = this._title;
-    else mounts = [...mounts, { id: this._id, el: this, title: this._title }];
+    if (existing) {
+      existing.title = this._title;
+      existing.names = this._names;
+    } else {
+      mounts = [...mounts, { id: this._id, el: this, title: this._title, names: this._names }];
+    }
     mounts = [...mounts];
     emit();
   }
@@ -77,5 +99,11 @@ export const CONSTANTS_CUSTOM_COMPONENTS = new Map<string, { element: string }>(
 /** Portals every live {@code <onec-constants>} to its editor. Mount once, inside the Router. */
 export function ConstantsPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
-  return <>{list.map((m) => createPortal(<ConstantsEditor title={m.title} />, m.el, String(m.id)))}</>;
+  return (
+    <>
+      {list.map((m) =>
+        createPortal(<ConstantsEditor title={m.title} names={m.names ?? undefined} />, m.el, String(m.id))
+      )}
+    </>
+  );
 }

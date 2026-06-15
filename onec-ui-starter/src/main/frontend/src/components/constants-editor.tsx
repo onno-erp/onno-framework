@@ -18,19 +18,24 @@ const isBool = (t: string) => /^(boolean|Boolean)$/.test(t);
 const isNum = (t: string) =>
   /^(Integer|Long|Double|Float|Short|BigDecimal|int|long|double)$/.test(t);
 
-export function ConstantsEditor({ title }: { title?: string }) {
+export function ConstantsEditor({ title, names }: { title?: string; names?: string[] }) {
   const [settings, setSettings] = useState<SettingMeta[] | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  // A page can drop just a subset of constants (e.g. one toggle) by naming them; with no names
+  // the whole editor is shown. Keying on the joined names keeps the effect stable across renders.
+  const namesKey = names && names.length ? names.join(",") : "";
   useEffect(() => {
     let cancelled = false;
+    const wanted = namesKey ? new Set(namesKey.split(",")) : null;
     api
       .getSettings()
-      .then((list) => {
+      .then((all) => {
         if (cancelled) return;
+        const list = wanted ? all.filter((s) => wanted.has(s.name)) : all;
         setSettings(list);
         const seed: Record<string, unknown> = {};
         for (const s of list) seed[s.name] = isBool(s.type) ? s.value === true : s.value ?? "";
@@ -42,7 +47,7 @@ export function ConstantsEditor({ title }: { title?: string }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [namesKey]);
 
   const set = (name: string, val: unknown) => {
     setValues((prev) => ({ ...prev, [name]: val }));
