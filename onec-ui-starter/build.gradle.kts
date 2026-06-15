@@ -20,6 +20,21 @@ val buildFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::
     outputs.dir("src/main/frontend/dist")
 }
 
+val testFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {
+    dependsOn(tasks.named("npmInstall"))
+    args.set(listOf("run", "test:run"))
+    workingDir.set(file("src/main/frontend"))
+    inputs.dir("src/main/frontend/src")
+    inputs.dir("src/main/frontend/tests")
+    inputs.file("src/main/frontend/package.json")
+    inputs.file("src/main/frontend/package-lock.json")
+    inputs.file("src/main/frontend/vite.config.ts")
+}
+
+tasks.named("check") {
+    dependsOn(testFrontend)
+}
+
 tasks.named<ProcessResources>("processResources") {
     dependsOn(buildFrontend)
     from("src/main/frontend/dist") {

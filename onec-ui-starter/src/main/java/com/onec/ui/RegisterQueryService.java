@@ -27,6 +27,15 @@ public class RegisterQueryService {
     private final Jdbi jdbi;
     private final RefResolver refResolver;
 
+    /**
+     * Row caps for the unfiltered register tabs. Movements/balance default to "show everything",
+     * and a register is the highest-row-count table in the model, so without a ceiling opening a
+     * tab streams the whole table to the client. The movements list is ordered newest-first, so
+     * the cap keeps the most recent rows; narrow with a {@code from}/{@code to} window to see more.
+     */
+    private static final int MOVEMENTS_CAP = 1000;
+    private static final int BALANCE_CAP = 5000;
+
     public RegisterQueryService(MetadataRegistry registry, Jdbi jdbi) {
         this.registry = registry;
         this.jdbi = jdbi;
@@ -47,12 +56,13 @@ public class RegisterQueryService {
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
         if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
-        sql.append(" ORDER BY _period DESC");
+        sql.append(" ORDER BY _period DESC LIMIT :cap");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
             if (from != null) query.bind("from", from);
             if (to != null) query.bind("to", to);
+            query.bind("cap", MOVEMENTS_CAP);
             return query.mapToMap().list();
         });
         resolveAll(desc, rows);
@@ -73,6 +83,13 @@ public class RegisterQueryService {
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
+        String dimOrder = desc.dimensions().stream()
+                .map(AttributeDescriptor::columnName)
+                .collect(Collectors.joining(", "));
+        if (!dimOrder.isEmpty()) {
+            sql.append(" ORDER BY ").append(dimOrder);
+        }
+        sql.append(" LIMIT :cap");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
@@ -81,6 +98,7 @@ public class RegisterQueryService {
                     query.bind(dim.columnName(), filters.get(dim.fieldName()));
                 }
             }
+            query.bind("cap", BALANCE_CAP);
             return query.mapToMap().list();
         });
         resolveAll(desc, rows);

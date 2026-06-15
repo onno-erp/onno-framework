@@ -1352,6 +1352,7 @@ export function DivKitView() {
               drag for every surface type and routes it to the same split/move handlers. */}
           {dragState ? (
             <div
+              data-testid="tab-drag-overlay"
               className="absolute inset-0 z-10"
               onDragOver={(e) => {
                 if (!dragRef.current) return;
