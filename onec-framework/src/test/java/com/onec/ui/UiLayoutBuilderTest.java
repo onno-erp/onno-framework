@@ -62,4 +62,31 @@ class UiLayoutBuilderTest {
         assertThat(refs.get(0).fieldHints().get("total").visibleInList()).isFalse();
         assertThat(refs.get(1).fieldHints().get("quantity").order()).isEqualTo(5);
     }
+
+    @Test
+    void fieldHint_capturesHelpText() {
+        UiLayoutBuilder layout = new UiLayoutBuilder();
+        layout.section("Reference").catalog(TestProduct.class, c -> c
+                .field("name").hint("The product's display name.")
+                .field("code"));
+
+        UiLayoutBuilder.EntityRef ref = layout.build().get(0).entityRefs().get(0);
+        assertThat(ref.fieldHints().get("name").hint()).isEqualTo("The product's display name.");
+        // Unset hint stays null so it falls through to the descriptor's blank default.
+        assertThat(ref.fieldHints().get("code").hint()).isNull();
+    }
+
+    @Test
+    void widget_capturesHint() {
+        UiLayoutBuilder layout = new UiLayoutBuilder();
+        layout.widget("Revenue").type("metric").hint("Sum of gross on all bills.");
+        layout.widget("Clients").type("count");
+
+        List<UiLayoutBuilder.WidgetConfig> widgets = layout.buildWidgets();
+        assertThat(widgets).extracting(UiLayoutBuilder.WidgetConfig::title)
+                .containsExactly("Revenue", "Clients");
+        assertThat(widgets.get(0).hint()).isEqualTo("Sum of gross on all bills.");
+        // A widget with no hint defaults to a blank string, never null.
+        assertThat(widgets.get(1).hint()).isEmpty();
+    }
 }

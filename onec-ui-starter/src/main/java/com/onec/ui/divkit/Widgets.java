@@ -107,6 +107,7 @@ final class Widgets {
         meta.put("dateField", w.dateField());
         meta.put("titleField", w.titleField());
         meta.put("extraConfig", w.extraConfig());
+        meta.put("hint", w.hint() == null ? "" : w.hint());
         Map<String, Object> node = Div.custom("onec-widget", Map.of("widget", meta));
         Div.matchWidth(node);
         return node;
@@ -116,7 +117,15 @@ final class Widgets {
     // sum/avg/…) above its title, clickable through to the entity's list surface.
     private static Map<String, Object> valueCard(DashboardWidgetDescriptor w, String value, Palette p) {
         Map<String, Object> number = Div.color(Div.text(value, 30, "bold"), p.text());
-        Map<String, Object> title = Div.color(Div.text(w.title(), 13, "regular"), p.muted());
+        Map<String, Object> titleText = Div.color(Div.text(w.title(), 13, "regular"), p.muted());
+        Map<String, Object> hintGlyph = Components.hint(w.hint(), p.muted(), 14);
+        Map<String, Object> title = titleText;
+        if (hintGlyph != null) {
+            title = Div.horizontal(List.of(titleText, hintGlyph));
+            Div.wrapWidth(title);
+            Div.gap(title, 5);
+            Div.alignV(title, "center");
+        }
         Div.margins(title, 4, 0, 0, 0);
         Map<String, Object> card = Components.card(List.of(number, title), p);
         String href = hrefFor(w);

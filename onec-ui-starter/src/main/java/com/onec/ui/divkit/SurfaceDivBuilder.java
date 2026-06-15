@@ -57,6 +57,8 @@ public final class SurfaceDivBuilder {
             // a format string reformats dates/numbers in the cell.
             col.put("widget", c.widget() == null ? "" : c.widget());
             col.put("format", c.format() == null ? "" : c.format());
+            // Optional help text → a hoverable "?" next to the column header.
+            col.put("hint", c.hint() == null ? "" : c.hint());
             columns.add(col);
         }
         Map<String, Object> sort = new LinkedHashMap<>();
@@ -645,27 +647,28 @@ public final class SurfaceDivBuilder {
      */
     private static Map<String, Object> fieldRowFor(Map<String, Object> a, Map<String, Object> row, Palette p) {
         String label = str(a.get("displayName"));
+        String hint = str(a.get("hint"));
         if (isGalleryWidget(a)) {
             List<String> urls = splitGallery(str(row.get(str(a.get("columnName")))));
             if (!urls.isEmpty()) {
-                return Components.imageGalleryRow(label, urls, p);
+                return Components.imageGalleryRow(label, urls, hint, p);
             }
         } else if (isImageWidget(a)) {
             String url = str(row.get(str(a.get("columnName"))));
             if (!url.isBlank()) {
-                return Components.imageFieldRow(label, url, isAvatarWidget(a), p);
+                return Components.imageFieldRow(label, url, isAvatarWidget(a), hint, p);
             }
         } else if (isFileWidget(a)) {
             String url = str(row.get(str(a.get("columnName"))));
             if (!url.isBlank()) {
-                return Components.fileFieldRow(label, url, p);
+                return Components.fileFieldRow(label, url, hint, p);
             }
         }
         String refUrl = refUrlFor(a, row);
         if (refUrl != null) {
-            return Components.refFieldRow(label, cell(a, row), refUrl, p);
+            return Components.refFieldRow(label, cell(a, row), refUrl, hint, p);
         }
-        return Components.fieldRow(label, cell(a, row), p);
+        return Components.fieldRow(label, cell(a, row), hint, p);
     }
 
     /**

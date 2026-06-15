@@ -41,4 +41,7 @@ public @interface DashboardWidget {
     String dateField() default "";
     String titleField() default "";
     String[] extraConfig() default {};
+
+    /** Optional help text, surfaced as a hoverable {@code ?} icon next to the widget title. */
+    String hint() default "";
 }

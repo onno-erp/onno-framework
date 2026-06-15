@@ -22,6 +22,7 @@ public class FieldHintBuilder {
     private String widget;
     private String placeholder;
     private String format;
+    private String hint;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -79,6 +80,17 @@ public class FieldHintBuilder {
         return this;
     }
 
+    /**
+     * Optional help text for this field, surfaced in the UI as a hoverable {@code ?} icon next to
+     * the field's label (on the edit form, list column header, and read-only detail view). Keep it
+     * short — a sentence explaining what the field means or how to fill it in. Blank (default) shows
+     * no icon.
+     */
+    public FieldHintBuilder hint(String hint) {
+        this.hint = hint;
+        return this;
+    }
+
     public FieldHintBuilder hideInList() {
         this.visibleInList = false;
         return this;
@@ -121,6 +133,6 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget, placeholder, format);
+                order, group, width, widget, placeholder, format, hint);
     }
 }

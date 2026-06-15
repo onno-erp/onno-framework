@@ -12,6 +12,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/date-picker";
+import { HintIcon } from "@/components/ui/hint-icon";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,8 @@ export type ListColumn = {
   widget?: string;
   /** Display format: a date pattern ("dd-MM-yy") or number spec ("currency:EUR", "integer", …). */
   format?: string;
+  /** Optional help text; surfaced as a hoverable "?" next to the column header. */
+  hint?: string;
 };
 /**
  * A custom action button declared by an EntityView. {@code scope} is "toolbar" (list-level) or
@@ -737,26 +740,30 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             >
               {columns.map((c) => {
                 const active = sort.column === c.columnName;
+                // The help "?" sits beside (not inside) the sort button — nesting buttons is
+                // invalid HTML and would make the hint trigger a sort.
                 return (
-                  <button
-                    key={c.columnName}
-                    type="button"
-                    onClick={() => toggleSort(c.columnName)}
-                    className={cn(
-                      "flex items-center gap-1 truncate text-left text-xs font-medium transition-colors",
-                      // The sorted column carries the brand (accent = state): which column orders
-                      // the list. Inactive headers stay muted and brighten on hover.
-                      active ? "text-primary" : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title={`Sort by ${c.label}`}
-                  >
-                    <span className="truncate">{c.label}</span>
-                    {active ? (
-                      sort.descending ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />
-                    ) : (
-                      <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
-                    )}
-                  </button>
+                  <div key={c.columnName} className="flex min-w-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(c.columnName)}
+                      className={cn(
+                        "flex min-w-0 items-center gap-1 truncate text-left text-xs font-medium transition-colors",
+                        // The sorted column carries the brand (accent = state): which column orders
+                        // the list. Inactive headers stay muted and brighten on hover.
+                        active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title={`Sort by ${c.label}`}
+                    >
+                      <span className="truncate">{c.label}</span>
+                      {active ? (
+                        sort.descending ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />
+                      ) : (
+                        <ChevronsUpDown className="size-3 shrink-0 opacity-30" />
+                      )}
+                    </button>
+                    <HintIcon text={c.hint} size={13} />
+                  </div>
                 );
               })}
               {rowActions.length ? <span aria-hidden="true" /> : null}

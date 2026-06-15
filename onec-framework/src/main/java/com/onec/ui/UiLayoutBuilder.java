@@ -186,6 +186,7 @@ public class UiLayoutBuilder {
         private final java.util.Map<String, String> extraConfig = new java.util.LinkedHashMap<>();
         private String dateField = "";
         private String titleField = "";
+        private String hint = "";
 
         WidgetBuilder(UiLayoutBuilder parent, String title) {
             this.parent = parent;
@@ -245,6 +246,12 @@ public class UiLayoutBuilder {
             return this;
         }
 
+        /** Optional help text, surfaced as a hoverable {@code ?} icon next to the widget title. */
+        public WidgetBuilder hint(String hint) {
+            this.hint = hint;
+            return this;
+        }
+
         /** Start a new widget. */
         public WidgetBuilder widget(String title) {
             return parent.widget(title);
@@ -257,7 +264,7 @@ public class UiLayoutBuilder {
 
         WidgetConfig build() {
             return new WidgetConfig(title, type, order, width, entityClass, entityType,
-                    maxItems, dateField, titleField, java.util.Map.copyOf(extraConfig));
+                    maxItems, dateField, titleField, java.util.Map.copyOf(extraConfig), hint);
         }
     }
 
@@ -452,6 +459,7 @@ public class UiLayoutBuilder {
             int maxItems,
             String dateField,
             String titleField,
-            java.util.Map<String, String> extraConfig
+            java.util.Map<String, String> extraConfig,
+            String hint
     ) {}
 }

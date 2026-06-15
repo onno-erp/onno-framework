@@ -8,19 +8,21 @@ import { WIDGET_CUSTOM_COMPONENTS } from "@/lib/widget-bridge";
 import { FORM_CUSTOM_COMPONENTS } from "@/lib/form-bridge";
 import { LOGIN_FORM_CUSTOM_COMPONENTS } from "@/lib/login-form-bridge";
 import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
+import { HINT_CUSTOM_COMPONENTS } from "@/lib/hint-bridge";
 import { ACTIONS_MENU_CUSTOM_COMPONENTS } from "@/lib/actions-menu-bridge";
 import { LIST_CUSTOM_COMPONENTS } from "@/lib/list-bridge";
 import { CONSTANTS_CUSTOM_COMPONENTS } from "@/lib/constants-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
 
 // All div-custom blocks the content can host: dashboard widgets, the entity form, the login
-// form, icons, the detail-header overflow menu, the virtualized list grid, the settings editor,
-// and page-level action button sections.
+// form, icons, help hints, the detail-header overflow menu, the virtualized list grid, the
+// settings editor, and page-level action button sections.
 const CUSTOM_COMPONENTS = new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
   ...FORM_CUSTOM_COMPONENTS,
   ...LOGIN_FORM_CUSTOM_COMPONENTS,
   ...ICON_CUSTOM_COMPONENTS,
+  ...HINT_CUSTOM_COMPONENTS,
   ...ACTIONS_MENU_CUSTOM_COMPONENTS,
   ...LIST_CUSTOM_COMPONENTS,
   ...CONSTANTS_CUSTOM_COMPONENTS,

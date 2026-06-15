@@ -19,6 +19,7 @@ import { toSnakeCase, cn } from "@/lib/utils";
 import { formatAmount, resolveCurrency, toNumber } from "@/lib/format";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HintIcon } from "@/components/ui/hint-icon";
 import { Button } from "@/components/ui/button";
 import "./calendar-widget.css";
 
@@ -300,6 +301,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+            <HintIcon text={widget.hint} size={13} />
             {readOnly && (
               <span
                 className="inline-flex items-center gap-0.5 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"

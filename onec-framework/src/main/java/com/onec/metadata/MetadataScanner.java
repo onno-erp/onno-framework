@@ -72,7 +72,7 @@ public class MetadataScanner {
             result.add(new DashboardWidgetDescriptor(
                     w.title(), w.type(), w.order(), w.width(),
                     entityType, entityName, w.maxItems(),
-                    w.dateField(), w.titleField(), extra));
+                    w.dateField(), w.titleField(), extra, w.hint()));
         }
         return result;
     }

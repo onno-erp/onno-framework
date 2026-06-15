@@ -36,6 +36,8 @@ export interface AttributeMeta {
   widget: string;
   /** Edit-form placeholder text (from .field(...).placeholder(...)). */
   placeholder?: string;
+  /** Optional help text (from .field(...).hint(...)); surfaced as a hoverable "?" by the label. */
+  hint?: string;
   // Declarative validation constraints (mirrored from @Attribute) for instant inline errors.
   // The server re-checks all of these authoritatively before write.
   min?: number;
@@ -171,6 +173,8 @@ export interface DashboardWidgetMeta {
   dateField: string;
   titleField: string;
   extraConfig: Record<string, string>;
+  /** Optional help text (from .widget(...).hint(...)); surfaced as a hoverable "?" by the title. */
+  hint?: string;
 }
 
 export interface LayoutItem {
