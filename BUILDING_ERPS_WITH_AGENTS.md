@@ -4,6 +4,17 @@ This guide is for teams and AI coding agents using the published `onec-framework
 
 Use this file as the agent handoff document in the consuming ERP repo. It explains how to install the libraries, how to model business domains, and how to verify that the generated ERP surface is coherent.
 
+> **Tip — install the `onec` skill.** For the best results with Claude Code, install the skill that
+> packages this guidance as an always-available expert playbook (this framework's repo doubles as a
+> plugin marketplace):
+>
+> ```text
+> /plugin marketplace add onec-erp/onec-framework
+> /plugin install onec@onec-framework
+> ```
+>
+> It auto-loads when you model entities, write posting/validation, or call the runtime API.
+
 ## What The Framework Does
 
 `onec-framework` lets an ERP project describe business concepts directly in Java:
@@ -21,61 +32,49 @@ Do not start from database tables or controllers. Start from the business model.
 
 ## Add The Libraries
 
-For local development after running `./gradlew publishToMavenLocal` in the framework repo:
+Released modules are on **Maven Central** under the `io.github.onec-erp` group. Consumers need no
+credentials and no custom repository — just `mavenCentral()`. (The Java packages are still `com.onec.*`,
+so your imports don't change; only the Maven coordinate uses `io.github.onec-erp`.) Pin the version in
+one place and pick the latest release from
+[Maven Central](https://central.sonatype.com/namespace/io.github.onec-erp):
 
 ```kotlin
+val onecVersion = "<latest>"   // https://central.sonatype.com/namespace/io.github.onec-erp
+
 repositories {
-    mavenLocal()
     mavenCentral()
 }
 
 dependencies {
-    implementation("com.onec:onec-framework-starter:0.1.0")
-    implementation("com.onec:onec-ui-starter:0.1.0")
+    implementation("io.github.onec-erp:onec-framework-starter:$onecVersion")
+    implementation("io.github.onec-erp:onec-ui-starter:$onecVersion")
 
     runtimeOnly("com.h2database:h2")
 }
 ```
 
-For GitHub Packages:
+To consume an unreleased build, run `./gradlew publishToMavenLocal` in the framework repo and add
+`mavenLocal()` (it publishes `-SNAPSHOT`).
+
+Optional starters (same group and `$onecVersion`):
 
 ```kotlin
-repositories {
-    mavenCentral()
-    maven {
-        url = uri("https://maven.pkg.github.com/onec-erp/onec-framework")
-        credentials {
-            username = providers.gradleProperty("gpr.user").orNull
-                ?: System.getenv("GITHUB_ACTOR")
-            password = providers.gradleProperty("gpr.key").orNull
-                ?: System.getenv("GITHUB_TOKEN")
-        }
-    }
-}
-
-dependencies {
-    implementation("com.onec:onec-framework-starter:0.1.0")
-    implementation("com.onec:onec-ui-starter:0.1.0")
-}
-```
-
-Optional starters:
-
-```kotlin
-implementation("com.onec:onec-auth-starter:0.1.0")
-implementation("com.onec:onec-print-starter:0.1.0")
-implementation("com.onec:onec-mail-starter:0.1.0")
-implementation("com.onec:onec-kafka-starter:0.1.0")
-implementation("com.onec:onec-desktop-starter:0.1.0")
+implementation("io.github.onec-erp:onec-auth-starter:$onecVersion")    // security: in-memory, OIDC/SSO, JWT
+implementation("io.github.onec-erp:onec-mcp-starter:$onecVersion")     // MCP server for AI agents
+implementation("io.github.onec-erp:onec-import-starter:$onecVersion")  // CSV import
+implementation("io.github.onec-erp:onec-print-starter:$onecVersion")   // PDF / print
+implementation("io.github.onec-erp:onec-mail-starter:$onecVersion")    // transactional email
+implementation("io.github.onec-erp:onec-kafka-starter:$onecVersion")   // outbox → Kafka
+implementation("io.github.onec-erp:onec-desktop-starter:$onecVersion") // native desktop
 ```
 
 Commercial vertical connectors ship from the separately licensed
 [onec-enterprise](https://github.com/onec-erp/onec-enterprise) repository under the
-`com.onec.enterprise` group:
+`com.onec.enterprise` group (Guesty, SES.HOSPEDAJES, Tochka), versioned independently of the core:
 
 ```kotlin
-implementation("com.onec.enterprise:onec-guesty-starter:0.1.0")
-implementation("com.onec.enterprise:onec-hospedajes-starter:0.1.0")
+implementation("com.onec.enterprise:onec-guesty-starter:<enterprise-version>")
+implementation("com.onec.enterprise:onec-hospedajes-starter:<enterprise-version>")
 ```
 
 ## Minimal Application Config
@@ -91,11 +90,18 @@ spring:
     password:
 
 onec:
-  base-packages:
+  scan-packages:
     - com.acme.erp
+  auth:
+    users:
+      - { username: admin, password: admin, roles: [ADMIN] }
 ```
 
-Keep `onec.base-packages` pointed at the package where catalogs, documents, registers, constants, jobs, layouts, pages, and entity views live.
+`onec.scan-packages` (note: **not** `onec.base-packages`) points at the package where catalogs,
+documents, registers, constants, jobs, layouts, pages, and entity views live. It is optional — if you
+omit it, the framework scans from your `@SpringBootApplication` package. The `onec.base-packages` name
+only exists on the mail and print starters (`onec.mail.base-packages` / `onec.print.base-packages`)
+for template scanning.
 
 ## Recommended Project Layout
 
@@ -134,7 +140,7 @@ When an AI agent is asked to build an ERP, it should work in this order:
 4. Implement one vertical slice end to end.
 5. Add UI layout and entity views for the slice.
 6. Add tests for metadata scanning, rules, posting, and any custom services.
-7. Run the app and inspect the generated UI manifest.
+7. Run the app and inspect the generated API and UI (via `/api/catalogs|documents|registers/{name}` or the MCP `describe_metadata` tool).
 8. Summarize assumptions and the next slice.
 
 Do not ask for every detail before coding. Get enough to build a useful first pass, then iterate.
@@ -289,7 +295,12 @@ Prefer this:
 
 ```java
 @Component
-public class CustomerView implements EntityView<Customer> {
+public class CustomerView implements EntityView {   // not generic — name the target via entity()
+    @Override
+    public Class<?> entity() {
+        return Customer.class;
+    }
+
     @Override
     public void list(ListSpec spec) {
         spec.column("code", "Code");
@@ -372,22 +383,32 @@ Then in the ERP app:
 ./gradlew clean check
 ```
 
-For a running app, inspect:
+For a running app, introspect through the real generated endpoints. Everything under `/api/**` is
+**authenticated** (log in with a JSON `POST /api/auth/login` to get a session cookie) and `{name}` is
+the entity's **display name** (e.g. `Sales Orders`), not the Java class name. **There is no anonymous
+`/api/ui/metadata/manifest` endpoint** — use the generated endpoints directly, or the MCP
+`describe_metadata` tool from `onec-mcp-starter` for a model overview:
 
 ```text
-GET /api/ui/metadata/manifest
-GET /api/ui/documents/{name}/{id}/posting-preview
+GET /api/catalogs/{name}                       list a catalog
+GET /api/documents/{name}                      list a document
+GET /api/documents/{name}/{id}/posting-preview dry-run the movements a post would write
+GET /api/registers/{name}/balance              register balances
 ```
 
-The manifest should be understandable to a business user:
+(See [AGENTS.md](AGENTS.md#inspecting-a-running-app-read-this-before-you-curl) for the full auth +
+CSRF recipe and [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) for the JSON shape.)
+
+The generated API and screens should read like the business to a business user:
 
 - names should be business terms
 - contexts should match business areas
-- visible entities should have views
+- visible entities should have `EntityView`s (the view layer is the UI allowlist)
 - refs should point to meaningful catalogs/documents
 - registers should clearly represent balances, turnover, or historical facts
 
-If the manifest reads like tables, plumbing, or implementation detail, improve the model before adding more features.
+If the generated surface reads like tables, plumbing, or implementation detail, improve the model
+before adding more features.
 
 ## Output Format For AI Agents
 

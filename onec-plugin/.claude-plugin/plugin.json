@@ -1,0 +1,10 @@
+{
+  "name": "onec",
+  "description": "Expert playbook for the onec-framework — the Java/Spring \"model-the-business\" ERP toolkit. Modeling a business into catalogs/documents/registers, posting and validation rules, diff-based schema migration, the generic REST + DivKit UI, the runtime API + auth recipe, and building apps on io.github.onec-erp:onec-*.",
+  "author": {
+    "name": "onec-erp",
+    "url": "https://github.com/onec-erp"
+  },
+  "homepage": "https://github.com/onec-erp/onec-framework",
+  "license": "Apache-2.0"
+}

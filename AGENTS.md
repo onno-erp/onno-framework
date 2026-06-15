@@ -14,11 +14,16 @@ to future agents that may not have the full conversation context.
 
 ### Current Status
 
-- The GitHub repository is private while licensing is undecided.
-- Do not add a `LICENSE` file or license claims unless the user explicitly chooses one.
-- Published coordinates currently use `group = "com.onec"` and `version = "0.1.0"`.
+- The framework is **open-core**. The modules in this repo are Apache-2.0 (see [`LICENSE`](LICENSE)
+  and [`NOTICE`](NOTICE)); commercial vertical connectors live in the separate `onec-enterprise` repo.
+- Published Maven coordinates use `group = "io.github.onec-erp"` (Maven Central). The Java packages
+  are still `com.onec.*` and the desktop plugin id is `com.onec.desktop` — only the publish
+  coordinate changed. Releases are tag-driven (`vX.Y.Z`); the latest is in the git tags.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
 - `onec-ui-starter` builds a bundled frontend with Node 20 via Gradle.
+- The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onec.*`
+  property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); a hands-on playbook with the
+  concept cheat sheet lives in the [`onec` skill](onec-plugin/skills/onec/SKILL.md).
 
 ### Repo Map
 
@@ -26,11 +31,13 @@ to future agents that may not have the full conversation context.
 | --- | --- |
 | `onec-framework` | Core annotations, metadata, schema, posting, repository contracts, UI model, and shared types. |
 | `onec-framework-starter` | Spring Boot auto-configuration for the core framework. |
-| `onec-ui-starter` | Generic web UI controllers plus packaged frontend assets. |
-| `onec-auth-starter` | Security and auth API auto-configuration. |
-| `onec-print-starter` | Print/PDF rendering support. |
+| `onec-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
+| `onec-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
+| `onec-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
+| `onec-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
+| `onec-print-starter` | Print/PDF rendering support (`@PrintTemplate`, Thymeleaf + Flying Saucer). |
 | `onec-mail-starter` | Mail templates, dispatchers, preview endpoints, and outbox relay. |
-| `onec-kafka-starter` | Kafka/event transport helpers. |
+| `onec-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
 | `onec-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
 | `onec-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
@@ -42,8 +49,28 @@ Commercial vertical connectors (`onec-guesty-starter`, `onec-hospedajes-starter`
 1. Read the relevant module's `build.gradle.kts`.
 2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or the example app.
 3. Prefer extending existing framework concepts over adding parallel mechanisms.
-4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass.
+4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass — see [Keeping docs in sync](#keeping-docs-in-sync).
 5. Preserve user changes in the working tree. Do not reset, checkout, or clean files unless the user explicitly asks.
+
+### Keeping Docs In Sync
+
+The docs are part of the public surface. When you change code, update the affected docs **in the same
+change** — stale docs are how every drift bug here started (e.g. a long-gone `/api/ui/metadata/manifest`
+endpoint and an `onec.base-packages` property that never existed for the core scan). When a doc and the
+code disagree, the code wins: fix the doc, don't propagate the claim.
+
+| If you change… | Update |
+| --- | --- |
+| an annotation, model base class, or lifecycle interface | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [`onec-plugin/skills/onec/reference/cheatsheet.md`](onec-plugin/skills/onec/reference/cheatsheet.md) |
+| a `@ConfigurationProperties` field (any `onec.*`) | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and the owning module README |
+| a REST endpoint or its response contract | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md), and the module README |
+| the module set or open-core boundary | [README.md](README.md), this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/licensing/MODULE-SPLIT-PLAN.md](docs/licensing/MODULE-SPLIT-PLAN.md) |
+| auth modes/endpoints, RBAC | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), `onec-auth-starter/README.md`, `onec-ui-starter/README.md` |
+| schema/migration or posting behaviour | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| a feature that was on the roadmap | move it from "next work" to "current state" in [ROADMAP.md](ROADMAP.md) |
+
+The deepest hands-on guidance for modeling and editing the framework lives in the
+[`onec` skill](onec-plugin/skills/onec/SKILL.md); keep it aligned with these docs too.
 
 ### Build And Verification Commands
 
@@ -88,9 +115,10 @@ If a tool creates a cache that appears in `git status`, remove it unless it is i
 
 ### Publication And Consumption Expectations
 
-The reusable surface is the set of published modules under `com.onec:*:0.1.0`. External projects should consume
-artifacts from `mavenLocal()` during development or GitHub Packages after publishing. Avoid requiring consumers
-to use `includeBuild` except for local desktop-plugin development.
+The reusable surface is the set of published modules under `io.github.onec-erp:*` on Maven Central.
+External projects consume them with a plain `mavenCentral()` (no credentials), or from `mavenLocal()`
+(`-SNAPSHOT`) during development. Avoid requiring consumers to use `includeBuild` except for local
+desktop-plugin development.
 
 Spring Boot starters must expose auto-configuration through:
 

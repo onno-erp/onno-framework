@@ -1,0 +1,15 @@
+{
+  "name": "onec-framework",
+  "owner": {
+    "name": "onec-erp",
+    "url": "https://github.com/onec-erp"
+  },
+  "description": "Skills for building ERP applications on the onec-framework.",
+  "plugins": [
+    {
+      "name": "onec",
+      "source": "./onec-plugin",
+      "description": "Expert playbook for building apps on the onec-framework (catalogs, documents, registers, posting, schema migration, the generic REST/DivKit UI, MCP, auth/RBAC)."
+    }
+  ]
+}

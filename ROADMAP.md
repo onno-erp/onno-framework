@@ -14,23 +14,27 @@ Implemented:
 - Unified type-safe query layer (`QueryEngine`) over catalogs, documents, and registers, with `Ref`-navigation auto-joins, a declarative `QuerySpec` AST, a fluent builder, and a shared `SqlRenderer` that also backs register virtual tables
 - Spring Boot starter auto-configuration
 - React/Vite UI starter with generic metadata, catalog, document, and register APIs
-- UI auth foundation with login screen, protected routes, `/api/ui/auth/me`, JSON `/login` and `/logout`, session cookies, CSRF
+- UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
+- Production auth modes shipped in `onec-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
+- Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
-- Server-sent UI event stream for live refresh of catalogs, documents, and registers
-- Agent-readable business model manifest at `/api/ui/metadata/manifest`
+- Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, and registers
+- Agent-readable business model surface via the MCP server (`onec-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Hierarchical catalog fields and generated schema
 - Configurable catalog/document autonumbering prefixes
 - Optimistic locking fields and generic UI conflict checks
 - Durable outbox table and core outbox writer
 - Kafka starter foundation with CloudEvent relay, service registry, and remote reference client
-- Declarative posting rules for simple document-to-register movements
-- Declarative business rule metadata and lightweight validation
-- Additive schema migration for generated columns and attributes
+- Typed-Java posting (`Postable.handlePosting`) writing document-to-register movements
+- Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
+- Diff-based schema migration: `onec_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews
 - Domain event metadata and outbox publication hooks
-- `onec-auth-spring-boot-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onec.auth.users`
-- UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present. `/api/ui/metadata/dashboard` and `/manifest` both read from authored pages/layouts.
+- `onec-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onec.auth.users`, plus OIDC and resource-server modes
+- Integration starters: MCP server (`onec-mcp-starter`), CSV import (`onec-import-starter`), Kafka outbox relay (`onec-kafka-starter`), transactional mail (`onec-mail-starter`), PDF/print (`onec-print-starter`), native desktop packaging (`onec-desktop-starter` + Gradle plugin)
+- Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
+- UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present.
 
 ## Design Direction
 
@@ -48,28 +52,30 @@ It should remain friendly to normal Java:
 ## Near-Term Next Work
 
 Good next slices:
-- Role-aware UI metadata and backend authorization rules for catalogs, documents, registers, and actions
-- OIDC/Keycloak profile for production authentication
-- UI widgets for hierarchy browsing and posting preview inspection
+- UI widgets for hierarchy browsing and posting-preview inspection
 - Richer live collaboration signals, such as record-level locks and stale-record banners
-- Migration snapshots and model diffs, not only additive column migration
-- Scheduled/retrying outbox relay
-- More generated test fixtures from business manifests
-- Tabular-section field hints in the authored UI DSL so `@UiHint` can be deleted entirely when custom row-field hints are needed.
-- DivKit renderer prototype: emit DivKit JSON from existing descriptors + layout, mount alongside the React renderer behind a `?renderer=divkit` flag, validate against list/form/dashboard surfaces
+- Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)
+- More generated test fixtures from business models
+- Tabular-section field hints in the authored UI DSL so `@UiHint` can be deleted entirely when custom row-field hints are needed
+- A native (Flutter) client driven by the same DivKit contract the React SPA uses today
+
+Recently shipped (formerly on this list): role-aware deny-by-default authorization
+(`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
+diffs, and the server-driven DivKit UI layer.
 
 ## Auth Direction
 
-Current auth ships in `onec-auth-spring-boot-starter`:
-- JSON `POST /api/ui/auth/login` and `/logout`, session-backed (`JSESSIONID`), CSRF via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header.
+Current auth ships in `onec-auth-starter` with three modes selected by `onec.auth.mode`:
+- `in-memory` (default): JSON `POST /api/auth/login` and `/api/auth/logout`, session-backed (`JSESSIONID`), CSRF via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header, optional remember-me. In-memory users from `onec.auth.users[*]`; the example seeds admin/rentals/finance/cleaner from `application.yaml`.
+- `oidc`: server-side OpenID Connect SSO (Keycloak/Zitadel/custom) with realm/client role mapping and RP-initiated logout.
+- `resource-server`: stateless JWT bearer validation for API-only clients.
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.
-- In-memory users configured via `onec.auth.users[*]`; the example seeds admin/sales/warehouse from `application.yaml`.
-- Any consumer can override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean to customize.
+- Per-entity authorization is deny-by-default via `@AccessControl(readRoles, writeRoles)`; `ADMIN` is a superuser.
+- Any consumer can set `onec.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
 
 Production direction:
-- Support OIDC/Keycloak as the main production path (additional starter profile).
-- Add role-aware metadata so agents can model who can view, edit, post, unpost, delete, and administer each business object.
 - Replace the demo `InMemoryUserDetailsManager` with a JDBC-backed `UserDetailsService` for real deployments.
+- Finer-grained action-level authorization (post/unpost/administer) layered on the entity-level roles.
 
 ## Future Service Work
 

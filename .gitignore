@@ -26,7 +26,10 @@ onec-ui-starter/src/main/frontend/node_modules/
 
 # AI tooling
 .ai/
-.claude/
+# Ignore everything Claude Code writes under .claude/ (worktrees, local settings, caches)
+# EXCEPT the committed, shared project skill(s).
+.claude/*
+!.claude/skills/
 
 # Plans
 plans/

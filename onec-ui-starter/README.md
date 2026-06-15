@@ -176,8 +176,9 @@ renders a labelled placeholder rather than vanishing.
 | GET | `/api/config` | `{ readOnly, basePath }`. |
 | GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). |
 
-> The `/api/ui/metadata/manifest` endpoint referenced elsewhere in the project is contributed by a
-> different module (the framework starter), not by this one.
+> **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`
+> route is the desktop shell's `/api/desktop/manifest`). To introspect the business model at runtime,
+> use the generated endpoints above or the MCP `describe_metadata` tool from `onec-mcp-starter`.
 
 ## Access model — read this before calling the API
 

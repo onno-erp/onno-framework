@@ -10,6 +10,38 @@ Building a headless front end or integration against the generic API? See the
 [Headless Read API](docs/HEADLESS_READ_API.md) for the JSON response contract (column-name keys,
 reference/enum expansion, secret redaction, list vs get) and how to react to changes.
 
+## Documentation
+
+| Doc | What it covers |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) | Operating rules for AI agents + the playbook for modeling a business into framework concepts. |
+| [BUILDING_ERPS_WITH_AGENTS.md](BUILDING_ERPS_WITH_AGENTS.md) | Handoff guide for building an ERP in a separate project on the published libraries. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the framework fits together: boot pipeline, each subsystem, the full endpoint catalog, open-core boundary. |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onec.*` configuration property, by module, with defaults. |
+| [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) | JSON response contract for the generic read API. |
+| [docs/MEDIA_UPLOADS.md](docs/MEDIA_UPLOADS.md) | Binary upload endpoint and the `MediaStorage` SPI. |
+| [`onec` skill](onec-plugin/skills/onec/SKILL.md) | A hands-on expert playbook + cheat sheet that makes Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
+
+Each module also has its own `README.md` with integration-specific setup.
+
+### Using the onec skill
+
+The `onec` skill teaches Claude Code to model a business into framework concepts, get posting /
+validation / migration right, and use the runtime API — the canonical copy lives in
+[`onec-plugin/skills/onec/`](onec-plugin/skills/onec/SKILL.md).
+
+- **Working in this repo?** It's auto-discovered — `.claude/skills/onec` is a symlink to the canonical
+  copy, so Claude Code loads it with no setup.
+- **Building a separate app on the published artifacts?** Install it as a plugin (this repo doubles as
+  a plugin marketplace via [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)):
+
+  ```text
+  /plugin marketplace add onec-erp/onec-framework
+  /plugin install onec@onec-framework
+  ```
+
+  Claude then auto-invokes it when relevant (or run `/onec:onec` explicitly).
+
 ## Modules
 
 | Module | Purpose |
@@ -77,30 +109,37 @@ under the `io.github.onec-erp` group. Consumers need **no credentials and no cus
 just `mavenCentral()`:
 
 ```kotlin
+val onecVersion = "<latest>"   // pick the latest release from the link below
+
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("io.github.onec-erp:onec-framework-starter:0.6.0")
+    implementation("io.github.onec-erp:onec-framework-starter:$onecVersion")
 }
 ```
+
+> Replace `<latest>` with the latest released version from
+> [Maven Central](https://central.sonatype.com/namespace/io.github.onec-erp).
 
 ### Publishing a release
 
 CI publishes from version tags via the [vanniktech maven-publish](https://vanniktech.github.io/gradle-maven-publish-plugin/)
-plugin. Push a tag named `v0.6.0` to publish artifacts with version `0.6.0`:
+plugin. Push a tag named `vX.Y.Z` to publish artifacts with version `X.Y.Z`:
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v1.2.3
+git push origin v1.2.3
 ```
 
-Release candidates work the same way — a `v0.6.0-rc1` tag publishes `0.6.0-rc1`. The workflow also
+Release candidates work the same way — a `vX.Y.Z-rc1` tag publishes `X.Y.Z-rc1`. The workflow also
 supports manual dispatch with an explicit version. In both cases CI runs `clean check`, signs the
-artifacts, and uploads a deployment to the Central Portal; with `SONATYPE_AUTOMATIC_RELEASE=false`
-the deployment is staged for a manual **Publish** click at [central.sonatype.com](https://central.sonatype.com/publishing/deployments).
-A GitHub Release with generated notes is created too (suffixed versions like `0.6.0-rc1` are marked pre-release).
+artifacts, and uploads a deployment to the Central Portal. Because `gradle.properties` sets
+`SONATYPE_AUTOMATIC_RELEASE=true`, the deployment **auto-releases** once the Portal finishes
+validation — no manual **Publish** click. A GitHub Release with generated notes is created too
+(suffixed versions like `X.Y.Z-rc1` are marked pre-release). Maven Central does not allow replacing a
+released version, so only push a `v*` tag when you mean it.
 
 Publishing requires these repository secrets (see the publish workflow):
 
