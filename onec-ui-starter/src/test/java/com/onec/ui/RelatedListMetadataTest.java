@@ -144,4 +144,60 @@ class RelatedListMetadataTest {
         Map<String, Object> described = svc.describeCatalog(scanner.scan(Clinic.class));
         assertThat((List<Map<String, Object>>) described.get("relatedLists")).isEmpty();
     }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void describeCatalog_explicitColumnsAlwaysIncludeDisplayRef() {
+        // The panel wants the join-row "role" column but forgets to list the display ref. The
+        // display ref is the row's primary identity, so it must still render (prepended) — an
+        // explicit list adds columns on top of the name rather than replacing it (see #108).
+        ResolvedMetadataService svc = serviceWith(new EntityView() {
+            @Override
+            public Class<?> entity() {
+                return Clinic.class;
+            }
+
+            @Override
+            public void fields(EntityConfigBuilder f) {
+                f.relatedList("doctors", ClinicDoctor.class)
+                        .via("clinic").display("doctor").columns("role");
+            }
+        });
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+
+        Map<String, Object> described = svc.describeCatalog(scanner.scan(Clinic.class));
+        List<Map<String, Object>> related = (List<Map<String, Object>>) described.get("relatedLists");
+        assertThat(related).hasSize(1);
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) related.get(0).get("columns");
+        // Display ref prepended ahead of the explicit "role" column.
+        assertThat(columns).extracting(c -> c.get("fieldName")).containsExactly("doctor", "role");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void describeCatalog_dropsUnknownColumnButKeepsDisplayRef() {
+        // "priceFrom" is not an attribute on the join catalog (a typo, or a field that lives on a
+        // different catalog). It is dropped (with a WARN), but the panel must not collapse to
+        // blank rows — the display ref still renders (see #108).
+        ResolvedMetadataService svc = serviceWith(new EntityView() {
+            @Override
+            public Class<?> entity() {
+                return Clinic.class;
+            }
+
+            @Override
+            public void fields(EntityConfigBuilder f) {
+                f.relatedList("doctors", ClinicDoctor.class)
+                        .via("clinic").display("doctor").columns("priceFrom");
+            }
+        });
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+
+        Map<String, Object> described = svc.describeCatalog(scanner.scan(Clinic.class));
+        List<Map<String, Object>> related = (List<Map<String, Object>>) described.get("relatedLists");
+        assertThat(related).hasSize(1);
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) related.get(0).get("columns");
+        // Bogus column dropped; the display ref remains so the row keeps its name.
+        assertThat(columns).extracting(c -> c.get("fieldName")).containsExactly("doctor");
+    }
 }

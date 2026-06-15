@@ -7,6 +7,10 @@ import com.onec.metadata.DocumentDescriptor;
 import com.onec.metadata.EnumerationDescriptor;
 import com.onec.metadata.MetadataRegistry;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +22,8 @@ import java.util.Map;
  * field-hint-aware view of an entity's fields.
  */
 public class ResolvedMetadataService {
+
+    private static final Logger log = LoggerFactory.getLogger(ResolvedMetadataService.class);
 
     private final MetadataRegistry registry;
     private final FieldHintResolver fieldHints;
@@ -54,9 +60,12 @@ public class ResolvedMetadataService {
      * showInDetail}) render. Each panel is resolved against its <em>join catalog</em>'s
      * scanned metadata: the {@code via} ref (back-reference that scopes rows to this record), the
      * {@code display} ref (the other side, also the add-row picker's target), and the join-row
-     * columns to show. A panel pointing at an unregistered class, or naming a {@code via}/{@code
-     * display} field that isn't a ref on the join catalog, is dropped with no panel emitted —
-     * the editor degrades gracefully rather than breaking the whole form.
+     * columns to show. The {@code display} ref is always included in the rendered columns so the
+     * row's primary identity can never be dropped, even when an explicit {@code columns()} list
+     * omits it; a named column that isn't an attribute on the join catalog is dropped with a WARN.
+     * A panel pointing at an unregistered class, or naming a {@code via}/{@code display} field
+     * that isn't a ref on the join catalog, is dropped with no panel emitted — the editor degrades
+     * gracefully rather than breaking the whole form.
      */
     private List<Map<String, Object>> describeRelatedLists(CatalogDescriptor parent) {
         List<Map<String, Object>> out = new java.util.ArrayList<>();
@@ -72,14 +81,32 @@ public class ResolvedMetadataService {
             if (via == null || display == null) {
                 continue;
             }
-            // Columns default to just the display ref; an explicit list may add join-row
-            // attributes (role, sortOrder, …). Unknown field names are skipped.
-            List<String> columnFields = rl.columns().isEmpty() ? List.of(rl.display()) : rl.columns();
-            List<AttributeDescriptor> columns = columnFields.stream()
-                    .map(f -> join.attributes().stream()
-                            .filter(a -> a.fieldName().equals(f)).findFirst().orElse(null))
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
+            // Resolve the author-declared columns against the join catalog. An explicit list adds
+            // join-row attributes (role, sortOrder, …) on top of the name. A named column that
+            // matches no attribute on the join catalog — a typo, or a field that lives on a
+            // different catalog — is dropped, but with a WARN: it's static config knowable up
+            // front, and silently dropping it renders an incomplete (or empty) panel with no hint
+            // as to why (see #108).
+            List<AttributeDescriptor> columns = new ArrayList<>();
+            for (String field : rl.columns()) {
+                AttributeDescriptor attr = join.attributes().stream()
+                        .filter(a -> a.fieldName().equals(field)).findFirst().orElse(null);
+                if (attr == null) {
+                    log.warn("Related-list panel '{}' on catalog '{}' names column '{}', which is "
+                            + "not an attribute on join catalog '{}' — dropping it. Check for a "
+                            + "typo or a field that lives on a different catalog.",
+                            rl.name(), parent.logicalName(), field, join.logicalName());
+                    continue;
+                }
+                columns.add(attr);
+            }
+            // The display ref is the row's primary identity; always render it, even when an
+            // explicit columns() list omits it, so the name can never be accidentally dropped and
+            // the panel can never collapse to blank rows. Prepend when absent (matching the
+            // default, name-first layout); the builder already dedups, so this won't duplicate.
+            if (columns.stream().noneMatch(a -> a.fieldName().equals(display.fieldName()))) {
+                columns.add(0, display);
+            }
 
             boolean targetIsDocument = registry.allDocuments().stream()
                     .anyMatch(doc -> doc.logicalName().equals(display.refTarget()));
