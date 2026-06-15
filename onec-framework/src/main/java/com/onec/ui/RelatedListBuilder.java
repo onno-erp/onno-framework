@@ -52,7 +52,11 @@ public class RelatedListBuilder {
     /**
      * Extra join-row fields to render as columns (e.g. a {@code role} or {@code sortOrder}
      * attribute on the join catalog). When unset, the panel shows just the {@link #display} ref.
-     * Listing the display field here is fine — it is not duplicated.
+     * The {@link #display} ref is always rendered as the row's primary (name) column whether or
+     * not it appears here, so an explicit list adds columns on top of the name rather than
+     * replacing it; listing the display field is fine and is not duplicated. A field name that
+     * matches no attribute on the join catalog (a typo, or a field on a different catalog) is
+     * dropped with a {@code WARN} at metadata resolution.
      */
     public RelatedListBuilder columns(String... fields) {
         for (String f : fields) {
