@@ -12,6 +12,7 @@ public record DashboardWidgetDescriptor(
         int maxItems,
         String dateField,
         String titleField,
-        Map<String, String> extraConfig
+        Map<String, String> extraConfig,
+        String hint
 ) {
 }

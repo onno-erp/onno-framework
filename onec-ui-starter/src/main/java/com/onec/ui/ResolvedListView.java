@@ -46,10 +46,16 @@ public record ResolvedListView(String title, List<Column> columns,
      * render an image thumbnail) and {@code format} (a date pattern or number spec applied to the
      * cell value). Both default to blank.
      */
-    public record Column(String label, String columnName, String width, String widget, String format) {
+    public record Column(String label, String columnName, String width, String widget, String format,
+                         String hint) {
         /** Back-compat: a column with no display widget/format hints. */
         public Column(String label, String columnName, String width) {
-            this(label, columnName, width, "", "");
+            this(label, columnName, width, "", "", "");
+        }
+
+        /** Back-compat: a column with no help hint. */
+        public Column(String label, String columnName, String width, String widget, String format) {
+            this(label, columnName, width, widget, format, "");
         }
     }
 }

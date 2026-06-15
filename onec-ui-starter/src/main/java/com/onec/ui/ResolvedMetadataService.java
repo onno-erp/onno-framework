@@ -268,6 +268,8 @@ public class ResolvedMetadataService {
             map.put("widget", pick(hint == null ? null : hint.widget(), a.widget()));
             // Display format for list/detail cells (date pattern or number spec); DSL-only hint.
             map.put("format", pick(hint == null ? null : hint.format(), ""));
+            // Optional help text, surfaced as a hoverable "?" icon next to the field's label; DSL-only.
+            map.put("hint", pick(hint == null ? null : hint.hint(), ""));
             // Edit-form placeholder (UI hint only) + the declarative validation constraints the
             // client mirrors for instant inline errors. Bounds are emitted only when set.
             map.put("placeholder", pick(hint == null ? null : hint.placeholder(), ""));

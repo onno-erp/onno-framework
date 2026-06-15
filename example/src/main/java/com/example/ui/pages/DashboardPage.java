@@ -37,7 +37,9 @@ public class DashboardPage implements Page {
         // locale's default euro prefix. `unit` wins over `currency`; `unitPosition` is suffix by default.
         b.widget("Revenue").type("metric").width("1/4").order(3).document(Bill.class)
                 .config("metric", "sum").config("metricField", "gross")
-                .config("unit", "€").config("unitPosition", "suffix");
+                .config("unit", "€").config("unitPosition", "suffix")
+                // A widget hint surfaces as a hoverable "?" next to the card title.
+                .hint("Sum of gross on all bills, including unposted drafts.");
 
         b.widget("Bookings calendar").type("calendar").width("full").order(4).document(Booking.class)
                 .dateField("check_in").titleField("summary")

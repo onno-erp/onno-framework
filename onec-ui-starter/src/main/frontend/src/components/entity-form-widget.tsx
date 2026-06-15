@@ -6,6 +6,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { HintIcon } from "@/components/ui/hint-icon";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -503,6 +504,7 @@ function FormFieldRow({
 }) {
   const required = field.kind === "attr" && field.attr.required;
   const placeholder = field.kind === "attr" ? field.attr.placeholder : undefined;
+  const hint = field.kind === "attr" ? field.attr.hint : undefined;
   const invalid = !!error;
   const control =
     field.kind === "system" ? (
@@ -529,7 +531,10 @@ function FormFieldRow({
       return (
         <div>
           <div className="flex items-center justify-between gap-4">
-            <Label htmlFor={field.key}>{field.label}</Label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor={field.key}>{field.label}</Label>
+              <HintIcon text={hint} size={13} />
+            </div>
             <Switch id={field.key} checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
           </div>
           {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
@@ -545,6 +550,7 @@ function FormFieldRow({
             onCheckedChange={(v) => onChange(v === true)}
           />
           <Label htmlFor={field.key}>{field.label}</Label>
+          <HintIcon text={hint} size={13} />
         </div>
         {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
       </div>
@@ -553,10 +559,13 @@ function FormFieldRow({
 
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={field.key}>
-        {field.label}
-        {required ? <span className="ml-1 text-destructive">*</span> : null}
-      </Label>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={field.key}>
+          {field.label}
+          {required ? <span className="ml-1 text-destructive">*</span> : null}
+        </Label>
+        <HintIcon text={hint} size={13} />
+      </div>
       {control}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

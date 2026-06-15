@@ -120,7 +120,8 @@ public class UiLayoutResolver {
                     wc.title(), wc.type(), wc.order(), wc.width(),
                     wc.entityType(), entityName, wc.maxItems(),
                     wc.dateField(), wc.titleField(),
-                    wc.extraConfig() == null ? Map.of() : wc.extraConfig()
+                    wc.extraConfig() == null ? Map.of() : wc.extraConfig(),
+                    wc.hint()
             ));
         }
         return result;

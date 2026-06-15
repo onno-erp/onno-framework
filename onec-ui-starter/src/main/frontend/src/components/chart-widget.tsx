@@ -22,6 +22,7 @@ import { toSnakeCase } from "@/lib/utils";
 import { formatNumber, toNumber } from "@/lib/format";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HintIcon } from "@/components/ui/hint-icon";
 
 interface ChartWidgetProps {
   widget: DashboardWidgetMeta;
@@ -142,7 +143,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+          <HintIcon text={widget.hint} size={13} />
+        </div>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={round ? 240 : 220}>

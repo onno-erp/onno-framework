@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import { toSnakeCase, cn } from "@/lib/utils";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HintIcon } from "@/components/ui/hint-icon";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
@@ -146,7 +147,10 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+          <HintIcon text={widget.hint} size={13} />
+        </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <DragDropContext onDragEnd={onDragEnd}>
@@ -210,6 +214,10 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
                                   {...dragProvided.dragHandleProps}
+                                  // @hello-pangea/dnd's DraggableStyle predates radix's CSSProperties
+                                  // augmentation (the `--radix-*` index signature), so re-assert the
+                                  // spread style as a plain CSSProperties to bridge the two type sets.
+                                  style={dragProvided.draggableProps.style as CSSProperties}
                                   onClick={() => {
                                     if (!dragSnapshot.isDragging) handleOpen();
                                   }}

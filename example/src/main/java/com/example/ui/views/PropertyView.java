@@ -35,8 +35,11 @@ public class PropertyView implements EntityView {
         f.field("displayName").order(0)
                 .field("address").order(1)
                 .field("capacityAdults").order(2)
+                        .hint("Maximum number of adults the property sleeps; used for availability search.")
                 .field("defaultNightRate").order(3)
+                        .hint("Base rate per night before cleaning fee, taxes, or seasonal multipliers.")
                 .field("cleaningFee").order(4)
-                .field("sesEstablishmentCode").order(5);
+                .field("sesEstablishmentCode").order(5)
+                        .hint("Police/tourism registration code reported with each guest's stay (SES).");
     }
 }

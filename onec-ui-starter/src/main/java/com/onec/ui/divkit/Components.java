@@ -32,6 +32,41 @@ final class Components {
     }
 
     /**
+     * A help "?" glyph as an {@code onec-hint} custom block carrying {@code text/color/size}; the
+     * client renders a hoverable/focusable icon that reveals {@code text} in a tooltip. Returns
+     * {@code null} for blank help text so callers degrade to label-only.
+     */
+    static Map<String, Object> hint(String text, String color, int size) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        Map<String, Object> props = new java.util.LinkedHashMap<>();
+        props.put("text", text);
+        props.put("color", color);
+        props.put("size", size);
+        Map<String, Object> node = Div.custom("onec-hint", props);
+        Div.width(node, size);
+        Div.height(node, size);
+        return node;
+    }
+
+    /**
+     * The left (label) cell of a detail field row, weighted 2. When {@code hint} is non-blank a
+     * hoverable {@code ?} glyph is appended after the label text.
+     */
+    private static Map<String, Object> labelCell(String label, String hint, Palette p) {
+        Map<String, Object> text = Div.color(Div.text(label, 13, "regular"), p.muted());
+        Map<String, Object> glyph = hint(hint, p.muted(), 14);
+        if (glyph == null) {
+            return Div.weight(text, 2);
+        }
+        Map<String, Object> labelled = Div.horizontal(List.of(text, glyph));
+        Div.gap(labelled, 5);
+        Div.alignV(labelled, "center");
+        return Div.weight(labelled, 2);
+    }
+
+    /**
      * A compact action button: optional leading icon + label over an {@code onec://}
      * action. Sized small-but-tall (roomy vertical padding, tight horizontal).
      * {@code bg}/{@code border} may be null for a ghost look; {@code url} null for static.
@@ -310,8 +345,12 @@ final class Components {
     }
 
     static Map<String, Object> fieldRow(String label, String value, Palette p) {
+        return fieldRow(label, value, null, p);
+    }
+
+    static Map<String, Object> fieldRow(String label, String value, String hint, Palette p) {
         Map<String, Object> row = Div.horizontal(List.of(
-                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                labelCell(label, hint, p),
                 Div.weight(Div.color(Div.text(value, 14, "regular"), p.text()), 3)));
         Div.pad(row, 7, 0);
         return row;
@@ -324,11 +363,15 @@ final class Components {
      * entity (same routing as a list row's tap).
      */
     static Map<String, Object> refFieldRow(String label, String value, String url, Palette p) {
+        return refFieldRow(label, value, url, null, p);
+    }
+
+    static Map<String, Object> refFieldRow(String label, String value, String url, String hint, Palette p) {
         Map<String, Object> link = Div.color(Div.text(value, 14, "regular"), p.primary());
         link.put("underline", "single");
         Div.action(link, "open-ref", url);
         Map<String, Object> row = Div.horizontal(List.of(
-                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                labelCell(label, hint, p),
                 Div.weight(link, 3)));
         Div.pad(row, 7, 0);
         return row;
@@ -340,6 +383,10 @@ final class Components {
      * picker or a plain {@code http(s)} URL. An {@code avatar} renders smaller and circular.
      */
     static Map<String, Object> imageFieldRow(String label, String url, boolean avatar, Palette p) {
+        return imageFieldRow(label, url, avatar, null, p);
+    }
+
+    static Map<String, Object> imageFieldRow(String label, String url, boolean avatar, String hint, Palette p) {
         int size = avatar ? 64 : 140;
         Map<String, Object> img = Div.image(url);
         Div.width(img, size);
@@ -353,7 +400,7 @@ final class Components {
         Div.weight(right, 3);
 
         Map<String, Object> row = Div.horizontal(List.of(
-                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                labelCell(label, hint, p),
                 right));
         Div.alignV(row, "center");
         Div.pad(row, 7, 0);
@@ -367,6 +414,10 @@ final class Components {
      * file chip, so an attached document looks attached rather than rendering as a raw URL string.
      */
     static Map<String, Object> fileFieldRow(String label, String url, Palette p) {
+        return fileFieldRow(label, url, null, p);
+    }
+
+    static Map<String, Object> fileFieldRow(String label, String url, String hint, Palette p) {
         List<Map<String, Object>> parts = new ArrayList<>();
         Map<String, Object> glyph = icon("paperclip", p.muted(), 15);
         if (glyph != null) {
@@ -391,7 +442,7 @@ final class Components {
         Div.weight(right, 3);
 
         Map<String, Object> row = Div.horizontal(List.of(
-                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                labelCell(label, hint, p),
                 right));
         Div.alignV(row, "center");
         Div.pad(row, 7, 0);
@@ -424,6 +475,10 @@ final class Components {
      * {@code data:} or {@code http(s)} URL (see GalleryPicker).
      */
     static Map<String, Object> imageGalleryRow(String label, List<String> urls, Palette p) {
+        return imageGalleryRow(label, urls, null, p);
+    }
+
+    static Map<String, Object> imageGalleryRow(String label, List<String> urls, String hint, Palette p) {
         List<Map<String, Object>> thumbs = new ArrayList<>();
         for (String url : urls) {
             Map<String, Object> img = Div.image(url);
@@ -440,7 +495,7 @@ final class Components {
         Div.weight(right, 3);
 
         Map<String, Object> row = Div.horizontal(List.of(
-                Div.weight(Div.color(Div.text(label, 13, "regular"), p.muted()), 2),
+                labelCell(label, hint, p),
                 right));
         Div.alignV(row, "center");
         Div.pad(row, 7, 0);

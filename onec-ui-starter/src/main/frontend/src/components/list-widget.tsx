@@ -13,6 +13,7 @@ import {
 } from "@/lib/format";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HintIcon } from "@/components/ui/hint-icon";
 
 interface ListWidgetProps {
   widget: DashboardWidgetMeta;
@@ -105,7 +106,10 @@ export function ListWidget({ widget }: ListWidgetProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+        <div className="flex items-center gap-1.5">
+          <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
+          <HintIcon text={widget.hint} size={13} />
+        </div>
       </CardHeader>
       <CardContent>
         {rows.length === 0 ? (

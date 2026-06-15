@@ -21,9 +21,10 @@ public record FieldHint(
         String width,
         String widget,
         String placeholder,
-        String format
+        String format,
+        String hint
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null);
     }
 }
