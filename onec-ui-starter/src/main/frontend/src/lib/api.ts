@@ -216,9 +216,10 @@ export const api = {
     }),
   deleteCatalogItem: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/catalogs/${name}/${id}`, { method: "DELETE" }),
-  // Live rows of a related-list panel: the join-catalog rows tied to record {id} (see RelatedListMeta).
-  getRelatedList: (name: string, id: string, relatedName: string) =>
-    fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}/${id}/related/${relatedName}`),
+  // Live rows of a related-list panel: the junction rows tied to record {id} (see RelatedListMeta).
+  // The owner can be a catalog or a document, so the endpoint kind travels with the call.
+  getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string) =>
+    fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`),
 
   // Document CRUD
   listDocuments: (name: string, from?: string, to?: string) => {

@@ -52,21 +52,27 @@ export interface TabularSectionMeta {
 }
 
 /**
- * An inline related-list (child rows) panel on a catalog editor, backed by a join catalog.
- * The panel reads the join rows whose {@link viaField} ref points at the record being edited,
- * and adds/removes rows by creating/deleting join records — so a catalog↔catalog many-to-many
- * edits inline like a document's tabular section, with no mirrored data. See {@code RelatedList}.
+ * An inline related-list (child rows) panel on a catalog or document view, backed by a junction —
+ * a join catalog or an information register. The panel reads the junction rows whose {@link
+ * viaField} ref points at the record being edited; a join-catalog junction also adds/removes rows
+ * by creating/deleting join records (so a many-to-many edits inline like a document's tabular
+ * section, with no mirrored data), while a register-backed junction is read-only. See {@code
+ * RelatedList}.
  */
 export interface RelatedListMeta {
-  /** Panel id + REST sub-path: GET /api/catalogs/{catalog}/{id}/related/{name}. */
+  /** Panel id + REST sub-path: GET /api/{catalogs|documents}/{owner}/{id}/related/{name}. */
   name: string;
   /** Heading; blank means derive one from {@link name}. */
   label: string;
-  /** Logical name of the join catalog the panel reads and writes. */
+  /** Logical name of the junction the panel reads (and, for a catalog, writes). */
   joinCatalog: string;
-  /** Field on the join catalog that scopes a row to the parent record (set on add). */
+  /** Whether the junction is a join catalog or an information register. Defaults to "catalog". */
+  sourceKind?: "catalog" | "register";
+  /** Whether the panel is read-only (no inline add/remove) — true for register-backed junctions. */
+  readOnly?: boolean;
+  /** Field on the junction that scopes a row to the parent record (set on add). */
   viaField: string;
-  /** Field on the join catalog shown/picked per row (the "other side"). */
+  /** Field on the junction shown/picked per row (the "other side"). */
   displayField: string;
   /** Logical name of the catalog/document the {@link displayField} ref points at. */
   target: string;
@@ -77,7 +83,7 @@ export interface RelatedListMeta {
    * widget renders every panel regardless; only the detail surface honors this flag.
    */
   showInDetail?: boolean;
-  /** Join-row columns to render (defaults to just the display ref). */
+  /** Junction columns to render (defaults to just the display ref). */
   columns: AttributeMeta[];
 }
 

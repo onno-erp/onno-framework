@@ -1,5 +1,6 @@
 package com.example.ui.views;
 
+import com.example.domain.catalogs.BookingStaff;
 import com.example.domain.documents.Booking;
 import com.onec.ui.EntityConfigBuilder;
 import com.onec.ui.EntityView;
@@ -10,6 +11,11 @@ import org.springframework.stereotype.Component;
 /**
  * Default booking list — the full back-office view. A profile-specific view
  * (see {@link CleaningBookingView}) can replace this for a persona.
+ *
+ * <p>The booking detail also hosts a "Staff" related-list panel, backed by the
+ * {@link BookingStaff} join catalog — the document-side parity with the catalog related-list
+ * panels (#110). {@code via("booking")} scopes rows to this booking; {@code display("employee")}
+ * is the staff member per row. {@code EmployeeView} reads the same join rows from the other side.</p>
  */
 @Component
 public class BookingView implements EntityView {
@@ -55,5 +61,13 @@ public class BookingView implements EntityView {
                 .field("primaryClient").order(12)
                 .field("assignedTo").order(13)
                 .field("notes").order(20);
+
+        // Document-side related-list panel: the staff assigned to this booking, read/written
+        // through the BookingStaff join catalog (the reverse panel lives on EmployeeView).
+        f.relatedList("staff", BookingStaff.class)
+                .via("booking")        // Ref<Booking> that scopes join rows to this booking
+                .display("employee")   // Ref<Employee> shown / picked per row
+                .columns("employee", "role")
+                .label("Staff");
     }
 }

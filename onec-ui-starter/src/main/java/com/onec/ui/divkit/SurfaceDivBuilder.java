@@ -197,8 +197,26 @@ public final class SurfaceDivBuilder {
      */
     public record HeaderAction(String icon, String label, String tone, String url, String placement) {}
 
+    /** Back-compat overload for surfaces with no related-list panels (e.g. unit tests). */
+    public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
+                                                     List<HeaderAction> actions, Palette p) {
+        return documentDetail(meta, row, Map.of(), actions, p);
+    }
+
+    /**
+     * A document's detail surface: header (+ posting/edit actions), a card of its visible system
+     * columns and attributes, then a table per tabular section and finally a read-only table per
+     * related-list panel. The related-list panels are the document-side parity with the catalog
+     * detail (see {@link #catalogDetail}) — a booking can surface its guests (the reverse side of a
+     * Booking↔Client junction) without entering edit mode (see #110).
+     *
+     * <p>{@code relatedRows} maps each panel's {@code name} to its preloaded junction rows; a panel
+     * renders iff it is {@code showInDetail} and present in that map (the caller omits panels the
+     * user may not read). Empty map → no panels.</p>
+     */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
+                                                     Map<String, List<Map<String, Object>>> relatedRows,
                                                      List<HeaderAction> actions, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
@@ -240,6 +258,16 @@ public final class SurfaceDivBuilder {
             }
             items.add(sectionLabel(str(ts.get("name")), p));
             items.add(Components.table(headers, body, p));
+        }
+
+        // Related-list panels render read-only here — the document-side analogue of a catalog's
+        // (same flag/skip rules as catalogDetail): showInDetail and present in the preloaded map.
+        for (Map<String, Object> rl : (List<Map<String, Object>>) meta.getOrDefault("relatedLists", List.of())) {
+            if (!Boolean.TRUE.equals(rl.get("showInDetail")) || !relatedRows.containsKey(str(rl.get("name")))) {
+                continue;
+            }
+            items.add(sectionLabel(relatedListTitle(rl), p));
+            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p));
         }
 
         return content(items);

@@ -17,13 +17,16 @@ public class GenericDocumentController {
     private final UiAccessService access;
     private final DocumentQueryService query;
     private final DocumentCommandService commands;
+    private final RelatedListReader relatedLists;
 
     public GenericDocumentController(DocumentQueryService query,
                                      UiAccessService access,
-                                     DocumentCommandService commands) {
+                                     DocumentCommandService commands,
+                                     RelatedListReader relatedLists) {
         this.query = query;
         this.access = access;
         this.commands = commands;
+        this.relatedLists = relatedLists;
     }
 
     @GetMapping("/{name}")
@@ -49,6 +52,21 @@ public class GenericDocumentController {
         DocumentDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
         return query.get(desc, id);
+    }
+
+    /**
+     * Live rows of a related-list panel declared on the {@code name} document's view (see
+     * {@link RelatedList}) — the junction rows whose back-reference points at record {@code id}.
+     * The document-side parity with {@code GenericCatalogController#related} (1C surfaces
+     * subordinate/related records on documents too); the shared {@link RelatedListReader} resolves
+     * the junction (join catalog or information register) and enforces read access on it.
+     */
+    @GetMapping("/{name}/{id}/related/{relatedName}")
+    public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
+                                             @PathVariable String relatedName, Principal principal) {
+        DocumentDescriptor parent = query.require(name);
+        access.requireRead(principal, parent);
+        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, principal);
     }
 
     @PostMapping("/{name}")

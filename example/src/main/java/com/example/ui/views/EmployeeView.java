@@ -1,5 +1,6 @@
 package com.example.ui.views;
 
+import com.example.domain.catalogs.BookingStaff;
 import com.example.domain.catalogs.Employee;
 import com.onec.ui.EntityConfigBuilder;
 import com.onec.ui.EntityView;
@@ -9,6 +10,11 @@ import org.springframework.stereotype.Component;
 /**
  * Declares the Employee catalog as a visible surface and its field order. Shown in
  * the default back-office nav and reused by the cleaning persona's "Team" section.
+ *
+ * <p>Hosts the mirror of {@code BookingView}'s "Staff" panel: an "Assignments" related-list panel
+ * over the same {@link BookingStaff} join catalog, scoped the other way — {@code via("employee")}
+ * ties rows to this employee, {@code display("booking")} is the booking (a document) per row. One
+ * join catalog, two inline rosters, no duplicated relationship (see #110).</p>
  */
 @Component
 public class EmployeeView implements EntityView {
@@ -30,5 +36,11 @@ public class EmployeeView implements EntityView {
                 .field("mobile").order(6)
                 .field("active").order(7)
                 .field("contractUrl").order(8).widget("file");
+
+        f.relatedList("assignments", BookingStaff.class)
+                .via("employee")       // Ref<Employee> that scopes join rows to this employee
+                .display("booking")    // Ref<Booking> (a document) shown / picked per row
+                .columns("booking", "role")
+                .label("Assignments");
     }
 }

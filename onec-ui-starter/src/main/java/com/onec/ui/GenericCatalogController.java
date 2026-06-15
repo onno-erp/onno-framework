@@ -1,11 +1,8 @@
 package com.onec.ui;
 
-import com.onec.metadata.AttributeDescriptor;
 import com.onec.metadata.CatalogDescriptor;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.List;
@@ -19,16 +16,16 @@ public class GenericCatalogController {
     private final CatalogQueryService query;
     private final UiAccessService access;
     private final CatalogCommandService commands;
-    private final FieldHintResolver fieldHints;
+    private final RelatedListReader relatedLists;
 
     public GenericCatalogController(CatalogQueryService query,
                                     UiAccessService access,
                                     CatalogCommandService commands,
-                                    FieldHintResolver fieldHints) {
+                                    RelatedListReader relatedLists) {
         this.query = query;
         this.access = access;
         this.commands = commands;
-        this.fieldHints = fieldHints;
+        this.relatedLists = relatedLists;
     }
 
     @GetMapping("/{name}")
@@ -73,33 +70,18 @@ public class GenericCatalogController {
 
     /**
      * Live rows of a related-list panel declared on the {@code name} catalog's editor (see
-     * {@link RelatedList}) — the join-catalog rows whose back-reference points at record
-     * {@code id}. Add/remove go through the plain create/delete endpoints on the join catalog
-     * itself (so its own write roles apply), which the form drives from this panel's metadata.
+     * {@link RelatedList}) — the junction rows whose back-reference points at record {@code id}.
+     * For a join-catalog junction, add/remove go through the plain create/delete endpoints on the
+     * join catalog itself (so its own write roles apply), which the form drives from this panel's
+     * metadata; an information-register junction is read-only. The shared {@link RelatedListReader}
+     * resolves the junction and enforces read access on it.
      */
     @GetMapping("/{name}/{id}/related/{relatedName}")
     public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
                                              @PathVariable String relatedName, Principal principal) {
         CatalogDescriptor parent = query.require(name);
         access.requireRead(principal, parent);
-
-        RelatedList rl = fieldHints.relatedList(parent.javaClass(), relatedName);
-        if (rl == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "No related list '" + relatedName + "' on catalog " + parent.logicalName());
-        }
-        CatalogDescriptor join = query.forClass(rl.joinCatalog());
-        if (join == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
-                    "Related list '" + relatedName + "' points at an unregistered catalog");
-        }
-        AttributeDescriptor via = join.attributes().stream()
-                .filter(a -> a.fieldName().equals(rl.via()) && a.isRef())
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Related list '" + relatedName + "' has no via ref '" + rl.via() + "'"));
-        access.requireRead(principal, join);
-        return query.relatedRows(join, via.columnName(), id);
+        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, principal);
     }
 
     @PostMapping("/{name}")

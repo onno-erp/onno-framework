@@ -50,52 +50,55 @@ public class ResolvedMetadataService {
         map.put("systemColumns", List.of(
                 systemColumn("code", "Code", "_code", hints),
                 systemColumn("description", "Description", "_description", hints)));
-        map.put("relatedLists", describeRelatedLists(d));
+        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
         return map;
     }
 
     /**
-     * Resolves the editor's declared related-list panels (see {@link RelatedList}) into the
-     * JSON both the form widget (editable) and the detail surface (read-only, when {@code
-     * showInDetail}) render. Each panel is resolved against its <em>join catalog</em>'s
-     * scanned metadata: the {@code via} ref (back-reference that scopes rows to this record), the
-     * {@code display} ref (the other side, also the add-row picker's target), and the join-row
-     * columns to show. The {@code display} ref is always included in the rendered columns so the
-     * row's primary identity can never be dropped, even when an explicit {@code columns()} list
-     * omits it; a named column that isn't an attribute on the join catalog is dropped with a WARN.
-     * A panel pointing at an unregistered class, or naming a {@code via}/{@code display} field
-     * that isn't a ref on the join catalog, is dropped with no panel emitted — the editor degrades
-     * gracefully rather than breaking the whole form.
+     * Resolves an entity's declared related-list panels (see {@link RelatedList}) into the JSON
+     * both the form widget and the detail surface (read-only, when {@code showInDetail}) render.
+     * Authored on catalogs <em>and</em> documents — 1C surfaces subordinate/related records on both
+     * — so this works off the owning entity's java class, not a catalog-specific descriptor.
+     *
+     * <p>Each panel is resolved against its <em>junction</em>'s scanned metadata, where the
+     * junction is a join catalog <em>or</em> an information register (see {@link Junctions}): the
+     * {@code via} ref (back-reference that scopes rows to this record), the {@code display} ref
+     * (the other side, also the add-row picker's target), and the columns to show. The
+     * {@code display} ref is always included so the row's primary identity can never be dropped,
+     * even when an explicit {@code columns()} list omits it; a named column that isn't a field on
+     * the junction is dropped with a WARN. A panel pointing at an unregistered class, or naming a
+     * {@code via}/{@code display} field that isn't a ref on the junction, is dropped with no panel
+     * emitted — the editor degrades gracefully rather than breaking the whole form.</p>
+     *
+     * <p>Register-backed panels are flagged {@code readOnly} (and {@code sourceKind} {@code
+     * "register"}): they render rows in both directions but offer no inline add/remove, since
+     * information registers have no generic write REST surface yet.</p>
      */
-    private List<Map<String, Object>> describeRelatedLists(CatalogDescriptor parent) {
+    private List<Map<String, Object>> describeRelatedLists(Class<?> parentClass, String parentLogicalName) {
         List<Map<String, Object>> out = new java.util.ArrayList<>();
-        for (RelatedList rl : fieldHints.relatedListsFor(parent.javaClass())) {
-            CatalogDescriptor join = registry.allCatalogs().stream()
-                    .filter(c -> c.javaClass().equals(rl.joinCatalog()))
-                    .findFirst().orElse(null);
-            if (join == null) {
+        for (RelatedList rl : fieldHints.relatedListsFor(parentClass)) {
+            Junctions.Junction junction = Junctions.resolve(registry, rl.joinCatalog());
+            if (junction == null) {
                 continue;
             }
-            AttributeDescriptor via = refAttr(join, rl.via());
-            AttributeDescriptor display = refAttr(join, rl.display());
+            AttributeDescriptor via = Junctions.refField(junction, rl.via());
+            AttributeDescriptor display = Junctions.refField(junction, rl.display());
             if (via == null || display == null) {
                 continue;
             }
-            // Resolve the author-declared columns against the join catalog. An explicit list adds
-            // join-row attributes (role, sortOrder, …) on top of the name. A named column that
-            // matches no attribute on the join catalog — a typo, or a field that lives on a
-            // different catalog — is dropped, but with a WARN: it's static config knowable up
-            // front, and silently dropping it renders an incomplete (or empty) panel with no hint
-            // as to why (see #108).
+            // Resolve the author-declared columns against the junction's fields. An explicit list
+            // adds attributes (role, sortOrder, …) on top of the name. A named column that matches
+            // no field on the junction — a typo, or a field that lives elsewhere — is dropped, but
+            // with a WARN: it's static config knowable up front, and silently dropping it renders
+            // an incomplete (or empty) panel with no hint as to why (see #108).
             List<AttributeDescriptor> columns = new ArrayList<>();
             for (String field : rl.columns()) {
-                AttributeDescriptor attr = join.attributes().stream()
-                        .filter(a -> a.fieldName().equals(field)).findFirst().orElse(null);
+                AttributeDescriptor attr = Junctions.field(junction, field);
                 if (attr == null) {
-                    log.warn("Related-list panel '{}' on catalog '{}' names column '{}', which is "
-                            + "not an attribute on join catalog '{}' — dropping it. Check for a "
-                            + "typo or a field that lives on a different catalog.",
-                            rl.name(), parent.logicalName(), field, join.logicalName());
+                    log.warn("Related-list panel '{}' on '{}' names column '{}', which is not a "
+                            + "field on junction '{}' — dropping it. Check for a typo or a field "
+                            + "that lives on a different entity.",
+                            rl.name(), parentLogicalName, field, junction.logicalName());
                     continue;
                 }
                 columns.add(attr);
@@ -114,8 +117,14 @@ public class ResolvedMetadataService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("name", rl.name());
             m.put("label", rl.label());
-            // The join catalog the panel reads/writes (logical name → REST under /api/catalogs).
-            m.put("joinCatalog", join.logicalName());
+            // The junction the panel reads (and, for a catalog, writes) — its logical name. Kept
+            // under "joinCatalog" for back-compat (catalog add/remove keys off it); "sourceKind"
+            // tells the client whether it's a catalog or an information register.
+            m.put("joinCatalog", junction.logicalName());
+            m.put("sourceKind", junction.isRegister() ? "register" : "catalog");
+            // Register-backed junctions are read-only (no generic info-register write yet); the
+            // form widget hides add/remove for these and renders the rows only.
+            m.put("readOnly", junction.isRegister());
             // Field the add-row create binds to the parent record, and the column the list query
             // filters on; both keyed by field name (the REST write contract takes field names).
             m.put("viaField", via.fieldName());
@@ -126,20 +135,13 @@ public class ResolvedMetadataService {
             // Whether the panel also renders read-only in the detail/read view (default true); the
             // form widget renders every panel regardless, the detail surface honors this flag.
             m.put("showInDetail", !rl.hideInDetail());
-            m.put("columns", describeAttributes(columns, fieldHints.forEntity(join.javaClass())));
+            // Catalog junctions carry per-field UI hints from their own view; registers don't yet.
+            Map<String, FieldHint> joinHints = junction.isRegister()
+                    ? Map.of() : fieldHints.forEntity(junction.catalog().javaClass());
+            m.put("columns", describeAttributes(columns, joinHints));
             out.add(m);
         }
         return out;
-    }
-
-    /** A ref attribute on {@code desc} by field name, or {@code null} if absent or not a ref. */
-    private static AttributeDescriptor refAttr(CatalogDescriptor desc, String field) {
-        if (field == null) {
-            return null;
-        }
-        return desc.attributes().stream()
-                .filter(a -> a.fieldName().equals(field) && a.isRef())
-                .findFirst().orElse(null);
     }
 
     public Map<String, Object> describeDocument(DocumentDescriptor d) {
@@ -182,6 +184,10 @@ public class ResolvedMetadataService {
             tsMap.put("attributes", describeAttributes(ts.attributes(), Map.of()));
             return tsMap;
         }).toList());
+        // Documents surface related-list panels too (1C parity): a booking can show its guests —
+        // the reverse side of a Booking↔Client junction — read-only on the detail and editable in
+        // the form, exactly like a catalog. See #110.
+        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
         return map;
     }
 

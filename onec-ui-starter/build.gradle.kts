@@ -56,6 +56,9 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.spring.security.core)
+    // In-memory engine for the read-path query-service tests (e.g. information-register
+    // related-list rows) — same lightweight pattern the framework module uses.
+    testImplementation(libs.h2)
     // Postgres-portability checks: the date-bound register/document queries can only be
     // verified against a real PostgreSQL (H2 silently casts varchar↔timestamp, so it never
     // reproduces the strict-typing failure). The IT skips when Docker is unavailable.

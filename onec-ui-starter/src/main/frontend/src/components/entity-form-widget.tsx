@@ -47,7 +47,7 @@ export type FormDescriptor = {
     postable?: boolean;
     attributes: AttributeMeta[];
     tabularSections?: TabularSectionMeta[];
-    /** Catalog editors only: inline related-list (join-catalog) panels. */
+    /** Inline related-list (junction) panels — on catalogs and documents alike. */
     relatedLists?: RelatedListMeta[];
   };
   initial: EntityRecord | null;
@@ -155,12 +155,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // REST layer round-trips rows; this is the form's editable grid for each one.
   const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
 
-  // Related-list panels (catalog editors only). They read/write a join catalog live, scoped to
-  // this record — so they need its id and only render for a saved record (not create/duplicate).
-  const relatedLists = useMemo<RelatedListMeta[]>(
-    () => (kind === "catalogs" ? meta.relatedLists ?? [] : []),
-    [kind, meta]
-  );
+  // Related-list panels (catalogs and documents alike). They read a junction live, scoped to this
+  // record — so they need its id and only render for a saved record (not create/duplicate). A
+  // catalog junction is editable here; a register junction is read-only (see RelatedListPanel).
+  const relatedLists = useMemo<RelatedListMeta[]>(() => meta.relatedLists ?? [], [meta]);
 
   // 1C-style posting: a postable document offers Write (save, no posting) alongside
   // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
@@ -350,7 +348,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       {relatedLists.map((rl) => (
         <RelatedListPanel
           key={rl.name}
-          catalog={name}
+          parentKind={kind}
+          parentName={name}
           parentId={isEdit ? id : null}
           meta={rl}
         />

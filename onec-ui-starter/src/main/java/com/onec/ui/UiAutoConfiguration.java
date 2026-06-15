@@ -122,6 +122,20 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public InformationRegisterQueryService informationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi) {
+        return new InformationRegisterQueryService(registry, jdbi);
+    }
+
+    @Bean
+    public RelatedListReader relatedListReader(FieldHintResolver fieldHintResolver, MetadataRegistry registry,
+                                               CatalogQueryService catalogQueryService,
+                                               InformationRegisterQueryService informationRegisterQueryService,
+                                               UiAccessService access) {
+        return new RelatedListReader(fieldHintResolver, registry, catalogQueryService,
+                informationRegisterQueryService, access);
+    }
+
+    @Bean
     public CatalogCommandService catalogCommandService(Jdbi jdbi, UiProperties properties,
                                                        NumberGenerator numberGenerator,
                                                        CatalogQueryService catalogQueryService,
@@ -149,16 +163,18 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public GenericCatalogController genericCatalogController(CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
                                                               CatalogCommandService catalogCommandService,
-                                                              FieldHintResolver fieldHintResolver) {
+                                                              RelatedListReader relatedListReader) {
         return new GenericCatalogController(catalogQueryService, access, catalogCommandService,
-                fieldHintResolver);
+                relatedListReader);
     }
 
     @Bean
     public GenericDocumentController genericDocumentController(DocumentQueryService documentQueryService,
                                                                 UiAccessService access,
-                                                                DocumentCommandService documentCommandService) {
-        return new GenericDocumentController(documentQueryService, access, documentCommandService);
+                                                                DocumentCommandService documentCommandService,
+                                                                RelatedListReader relatedListReader) {
+        return new GenericDocumentController(documentQueryService, access, documentCommandService,
+                relatedListReader);
     }
 
     @Bean
@@ -197,10 +213,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
                                              RegisterQueryService registerQueryService,
-                                             UiActionResolver uiActionResolver) {
+                                             UiActionResolver uiActionResolver,
+                                             RelatedListReader relatedListReader) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver);
+                registerQueryService, uiActionResolver, relatedListReader);
     }
 
 }

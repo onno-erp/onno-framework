@@ -75,6 +75,10 @@ public class UiAccessService {
         if (!canRead(principal, descriptor)) throw forbidden("register", descriptor.logicalName());
     }
 
+    public void requireRead(Principal principal, InformationRegisterDescriptor descriptor) {
+        if (!canRead(principal, descriptor)) throw forbidden("information register", descriptor.logicalName());
+    }
+
     public boolean canRead(Principal principal, String type, String name) {
         return switch (type) {
             case "catalog" -> registry.allCatalogs().stream()

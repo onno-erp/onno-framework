@@ -10,25 +10,33 @@ const actionBtn =
   "inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
 
 /**
- * Inline related-list panel for a catalog editor: the catalog-side analogue of a document's
- * tabular section, backed by a join catalog instead of an owned child table. It reads the join
- * rows whose {@code viaField} ref points at the record being edited, renders one line per row,
- * and lets the user add a row (pick the other side → create a join record with {@code viaField}
- * set to this record) or remove one (delete the join record). Both sides of the relationship can
- * mount this panel against the same join catalog, so they stay consistent with no mirroring.
+ * Inline related-list panel for a catalog or document view: the analogue of a document's tabular
+ * section, backed by a junction (join catalog or information register) instead of an owned child
+ * table. It reads the junction rows whose {@code viaField} ref points at the record being edited
+ * and renders one line per row. A join-catalog junction is editable — the user can add a row (pick
+ * the other side → create a join record with {@code viaField} set to this record) or remove one
+ * (delete the join record); both sides of the relationship can mount this panel against the same
+ * junction, so they stay consistent with no mirroring. A register-backed junction is read-only
+ * ({@code meta.readOnly}): the rows render but there is no inline add/remove.
  *
- * Only meaningful once the parent record exists — a brand-new, unsaved catalog item has no id to
- * scope rows to, so the panel asks the user to save first.
+ * Editing is only meaningful once the parent record exists — a brand-new, unsaved record has no id
+ * to scope rows to, so the panel asks the user to save first.
  */
 export function RelatedListPanel({
-  catalog,
+  parentKind,
+  parentName,
   parentId,
   meta,
 }: {
-  catalog: string;
+  parentKind: "catalogs" | "documents";
+  parentName: string;
   parentId: string | null;
   meta: RelatedListMeta;
 }) {
+  // Register-backed junctions have no generic write REST yet, so they render read-only — no Add
+  // button, no per-row remove (see RelatedList / Junctions on the server).
+  const readOnly = meta.readOnly === true;
+
   const title = useMemo(() => {
     if (meta.label && meta.label.trim()) return meta.label;
     return meta.name.charAt(0).toUpperCase() + meta.name.slice(1);
@@ -50,13 +58,13 @@ export function RelatedListPanel({
     if (!parentId) return;
     setLoading(true);
     try {
-      setRows(await api.getRelatedList(catalog, parentId, meta.name));
+      setRows(await api.getRelatedList(parentKind, parentName, parentId, meta.name));
     } catch (e) {
       toast.error(`Couldn't load ${title}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setLoading(false);
     }
-  }, [catalog, parentId, meta.name, title]);
+  }, [parentKind, parentName, parentId, meta.name, title]);
 
   useEffect(() => {
     void reload();
@@ -106,7 +114,7 @@ export function RelatedListPanel({
     <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {parentId && !adding ? (
+        {!readOnly && parentId && !adding ? (
           <button
             type="button"
             className={cn(actionBtn, "text-foreground")}
@@ -120,10 +128,12 @@ export function RelatedListPanel({
       </div>
 
       {!parentId ? (
-        <p className="text-sm text-muted-foreground">Save this record first to manage {title.toLowerCase()}.</p>
+        <p className="text-sm text-muted-foreground">
+          Save this record first to {readOnly ? "see" : "manage"} {title.toLowerCase()}.
+        </p>
       ) : (
         <>
-          {adding && displayCol ? (
+          {!readOnly && adding && displayCol ? (
             // A one-shot picker for the other side; choosing a record adds the row immediately.
             <div className="mb-3 flex items-center gap-2">
               <div className="min-w-0 grow">
@@ -172,16 +182,18 @@ export function RelatedListPanel({
                         {cell(row, col) || "—"}
                       </div>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => void remove(rowId)}
-                      disabled={busy}
-                      aria-label="Remove row"
-                      title="Remove"
-                      className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => void remove(rowId)}
+                        disabled={busy}
+                        aria-label="Remove row"
+                        title="Remove"
+                        className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </button>
+                    ) : null}
                   </div>
                 );
               })}
