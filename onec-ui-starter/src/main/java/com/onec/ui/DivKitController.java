@@ -17,6 +17,8 @@ import com.onec.ui.divkit.SurfaceDivBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -195,7 +197,7 @@ public class DivKitController {
         if (page != null) {
             PageBuilder pb = new PageBuilder();
             page.compose(pb);
-            content = renderPage(pb, columns, p, principal, active.id(), defaultTitle, greeting);
+            content = renderPage(pb, "/", columns, p, principal, active.id(), defaultTitle, greeting);
         } else {
             List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
@@ -234,32 +236,94 @@ public class DivKitController {
             pb.title("Settings").subtitle("App-wide configuration.").constants();
         }
         return DivCard.of("onec-content",
-                renderPage(pb, columns, p, principal, active.id(), "Settings", "App-wide configuration."));
+                renderPage(pb, "/settings", columns, p, principal, active.id(), "Settings", "App-wide configuration."));
+    }
+
+    /**
+     * Run a page action button's server handler — the обработка-style logic declared via
+     * {@link PageBuilder#actions}. The button posts the page {@code route} and action {@code key};
+     * we re-resolve and re-compose the page (compose is a pure spec build, like the GET render),
+     * find the handler by key, and return its {@link ActionResult}. Page actions have no entity to
+     * gate on, so we require an authenticated user and leave finer authorization to the handler.
+     */
+    @PostMapping("/page-action")
+    public ActionResult pageAction(@RequestParam String route, @RequestParam String key,
+                                   @RequestParam(required = false) String profile,
+                                   @RequestParam(required = false) String viewport,
+                                   @RequestBody(required = false) Map<String, Object> body,
+                                   Principal principal) {
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in to run this action");
+        }
+        Viewport vp = Viewport.parse(viewport);
+        UiLayout.Profile active = activeProfile(principal, profile);
+        Page page = pageResolver.resolve(route, active.id(), vp);
+        if (page == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No page for route: " + route);
+        }
+        PageBuilder pb = new PageBuilder();
+        page.compose(pb);
+        ActionSpec.Action action = pb.pageAction(key);
+        if (action == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
+        }
+        if (!action.isServer()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action is navigation-only: " + key);
+        }
+        ActionContext ctx = new ActionContext("page", route, null, principal.getName(), inputValues(body));
+        ActionResult result = action.handler().apply(ctx);
+        return result != null ? result : ActionResult.ok();
+    }
+
+    /** Pull the action input values out of the request body ({@code {"inputs": {key: value}}}). */
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> inputValues(Map<String, Object> body) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (body != null && body.get("inputs") instanceof Map<?, ?> raw) {
+            raw.forEach((k, v) -> out.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
+        }
+        return out;
     }
 
     /** Render a composed page (header + access-filtered widget grid + freeform components). */
-    private Map<String, Object> renderPage(PageBuilder pb, int columns, Palette p, Principal principal,
+    private Map<String, Object> renderPage(PageBuilder pb, String route, int columns, Palette p, Principal principal,
                                            String profileId, String defaultTitle, String defaultSubtitle) {
         List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                 .toList();
-        List<PageComponent> components = expandComponents(pb.components(), profileId, principal);
+        List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
         String title = pb.title() != null ? pb.title() : defaultTitle;
         String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
         return PageDivBuilder.build(title, subtitle, widgets, components, columns, this::widgetValue, p);
     }
 
-    /** Replace each embedded-list component ({@code PageBuilder.list}) with the full onec-list block. */
-    private List<PageComponent> expandComponents(List<PageComponent> in, String profileId, Principal principal) {
+    /**
+     * Expand the renderer-agnostic page components into concrete custom blocks: an embedded list
+     * ({@code PageBuilder.list}) becomes the full {@code onec-list} surface; an action section
+     * ({@code PageBuilder.actions}) becomes an {@code onec-actions} block carrying the page route
+     * its buttons post back to.
+     */
+    private List<PageComponent> expandComponents(List<PageComponent> in, String route, String profileId,
+                                                 Principal principal) {
         List<PageComponent> out = new ArrayList<>();
         for (PageComponent c : in) {
-            if (c.kind() != PageComponent.Kind.LIST) {
+            if (c.kind() == PageComponent.Kind.LIST) {
+                Map<String, Object> descriptor = embeddedListDescriptor(c.entity(), profileId, principal);
+                if (descriptor != null) {
+                    // Embedded in a page (which already applies content padding) the list drops its
+                    // own horizontal gutter so its table aligns with the sibling cards, full width.
+                    descriptor.put("embedded", true);
+                    out.add(PageComponent.custom("onec-list", Map.of("list", descriptor)));
+                }
+            } else if (c.kind() == PageComponent.Kind.ACTIONS) {
+                Map<String, Object> payload = new LinkedHashMap<>(c.payload());
+                payload.put("route", route);
+                if (profileId != null && !profileId.isBlank()) {
+                    payload.put("profile", profileId);
+                }
+                out.add(PageComponent.custom("onec-actions", payload));
+            } else {
                 out.add(c);
-                continue;
-            }
-            Map<String, Object> descriptor = embeddedListDescriptor(c.entity(), profileId, principal);
-            if (descriptor != null) {
-                out.add(PageComponent.custom("onec-list", Map.of("list", descriptor)));
             }
         }
         return out;

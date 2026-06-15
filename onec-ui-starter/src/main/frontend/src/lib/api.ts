@@ -255,6 +255,17 @@ export const api = {
       `${BASE}/actions/${kind}/${name}/${key}${id ? `?id=${encodeURIComponent(id)}` : ""}`,
       { method: "POST", body: JSON.stringify({ inputs: inputs ?? {} }) }
     ),
+  // Page-level action button (PageBuilder.actions): POSTs to the server handler resolved by
+  // re-composing the page at {route}, and returns its ActionResult. The page's profile rides
+  // along so the same page variant resolves; data writes refresh embedded lists over SSE.
+  runPageAction: (route: string, key: string, profile?: string, inputs?: Record<string, string>) => {
+    const params = new URLSearchParams({ route, key });
+    if (profile) params.set("profile", profile);
+    return fetchJson<ActionResult>(`${BASE}/divkit/page-action?${params.toString()}`, {
+      method: "POST",
+      body: JSON.stringify({ inputs: inputs ?? {} }),
+    });
+  },
 
   postDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/post`, { method: "POST" }),

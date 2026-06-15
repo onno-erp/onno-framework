@@ -90,6 +90,10 @@ export type ListDescriptor = {
   inputs?: ListInput[];
   filters?: ListFilterControl[];
   pageSize: number;
+  // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
+  // The page already pads its content, so the widget drops its horizontal gutter to align its table
+  // with the page's other full-width components (constants editor, action sections).
+  embedded?: boolean;
 };
 
 const ROW_H = 40;
@@ -519,7 +523,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
-    <div ref={rootRef} className="pointer-events-auto flex flex-col px-4 py-4 sm:px-6">
+    // Embedded in a page, the table aligns with the sibling cards (no horizontal gutter); as its own
+    // route surface it carries the page gutter itself (the surface root has no content padding).
+    <div
+      ref={rootRef}
+      className={cn(
+        "pointer-events-auto flex flex-col py-4",
+        list.embedded ? "" : "px-4 sm:px-6"
+      )}
+    >
       {/* toolbar — stacks (title over controls) the moment the controls won't fit beside it */}
       <div className={cn("mb-3 flex gap-x-3 gap-y-2", stacked ? "flex-col items-stretch" : "items-center")}>
         <div className="min-w-0">
