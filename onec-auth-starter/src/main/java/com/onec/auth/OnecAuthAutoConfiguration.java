@@ -1,12 +1,24 @@
 package com.onec.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.onec.auth.magic.JdbcMagicLinkTokenStore;
+import com.onec.auth.magic.MagicLinkController;
+import com.onec.auth.magic.MagicLinkSender;
+import com.onec.auth.magic.MagicLinkService;
+import com.onec.auth.magic.MagicLinkTokenStore;
+import com.onec.auth.magic.MagicLinkUserLookup;
+import com.onec.auth.magic.MailMagicLinkSender;
+import com.onec.auth.magic.PropertiesMagicLinkUserLookup;
 import com.onec.auth.spi.AuthMethodsProvider;
+import com.onec.mail.MailService;
+import org.jdbi.v3.core.Jdbi;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -43,6 +55,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.Collection;
@@ -58,7 +71,14 @@ import java.util.Set;
  * authorization model — {@code /api/**} requires authentication, everything else (the SPA shell)
  * is public — so swapping modes never changes which routes are protected.
  */
-@AutoConfiguration(before = {SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
+@AutoConfiguration(
+        // Order after the beans the opt-in magic-link feature consumes via @ConditionalOnBean — the
+        // DataSource (token store) and, when present, the mail starter's MailService (default sender) —
+        // so those conditions see the beans instead of evaluating before they're registered. afterName
+        // keeps the mail starter optional (tolerated when absent).
+        after = DataSourceAutoConfiguration.class,
+        afterName = "com.onec.mail.OnecMailAutoConfiguration",
+        before = {SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
 @EnableConfigurationProperties(OnecAuthProperties.class)
 @ConditionalOnProperty(prefix = "onec.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class OnecAuthAutoConfiguration {
@@ -236,6 +256,75 @@ public class OnecAuthAutoConfiguration {
                     .httpBasic(basic -> basic.disable())
                     .logout(logout -> logout.disable())
                     .build();
+        }
+
+        // ------------------------------------------------------------------------------------
+        // Opt-in passwordless magic-link login. Nested inside the in-memory config so it only
+        // activates in that mode (OIDC/resource-server delegate sign-in to the IdP); gated again
+        // by onec.auth.magic-link.enabled. Tokens are persisted (JDBC) so links validate across a
+        // horizontally-scaled deployment, and delivery defaults to the mail starter when present.
+        // ------------------------------------------------------------------------------------
+        @Configuration(proxyBeanMethods = false)
+        @ConditionalOnProperty(prefix = "onec.auth.magic-link", name = "enabled", havingValue = "true")
+        static class MagicLinkConfiguration {
+
+            @Bean
+            @ConditionalOnBean(DataSource.class)
+            @ConditionalOnMissingBean(MagicLinkTokenStore.class)
+            MagicLinkTokenStore magicLinkTokenStore(DataSource dataSource) {
+                JdbcMagicLinkTokenStore store = new JdbcMagicLinkTokenStore(Jdbi.create(dataSource));
+                store.initSchema();
+                return store;
+            }
+
+            @Bean
+            @ConditionalOnMissingBean(MagicLinkUserLookup.class)
+            MagicLinkUserLookup magicLinkUserLookup(OnecAuthProperties properties) {
+                return new PropertiesMagicLinkUserLookup(properties);
+            }
+
+            @Bean
+            @ConditionalOnMissingBean(MagicLinkService.class)
+            MagicLinkService magicLinkService(MagicLinkUserLookup userLookup,
+                                              ObjectProvider<MagicLinkTokenStore> tokenStore,
+                                              ObjectProvider<MagicLinkSender> sender,
+                                              UserDetailsService userDetailsService,
+                                              OnecAuthProperties properties) {
+                MagicLinkTokenStore store = tokenStore.getIfAvailable();
+                if (store == null) {
+                    throw new IllegalStateException(
+                            "onec.auth.magic-link.enabled=true needs a DataSource so single-use tokens "
+                                    + "can be persisted and validated across nodes. Configure a datasource, "
+                                    + "or register your own MagicLinkTokenStore bean.");
+                }
+                MagicLinkSender resolvedSender = sender.getIfAvailable();
+                if (resolvedSender == null) {
+                    throw new IllegalStateException(
+                            "onec.auth.magic-link.enabled=true needs a way to deliver the link. Add the "
+                                    + "onec-mail-starter and configure a mail provider, or register your own "
+                                    + "MagicLinkSender bean.");
+                }
+                return new MagicLinkService(userLookup, store, resolvedSender, userDetailsService, properties);
+            }
+
+            @Bean
+            @ConditionalOnMissingBean(MagicLinkController.class)
+            MagicLinkController magicLinkController(MagicLinkService service, OnecAuthProperties properties) {
+                return new MagicLinkController(service, properties);
+            }
+
+            /** Mail-backed delivery — wired only when the mail starter is on the classpath and active. */
+            @Configuration(proxyBeanMethods = false)
+            @ConditionalOnClass(MailService.class)
+            static class MailMagicLinkSenderConfiguration {
+
+                @Bean
+                @ConditionalOnBean(MailService.class)
+                @ConditionalOnMissingBean(MagicLinkSender.class)
+                MagicLinkSender mailMagicLinkSender(MailService mailService, OnecAuthProperties properties) {
+                    return new MailMagicLinkSender(mailService, properties);
+                }
+            }
         }
     }
 

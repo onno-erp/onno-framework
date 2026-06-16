@@ -7,6 +7,7 @@ import {
 import { WIDGET_CUSTOM_COMPONENTS } from "@/lib/widget-bridge";
 import { FORM_CUSTOM_COMPONENTS } from "@/lib/form-bridge";
 import { LOGIN_FORM_CUSTOM_COMPONENTS } from "@/lib/login-form-bridge";
+import { MAGIC_LINK_CUSTOM_COMPONENTS } from "@/lib/magic-link-bridge";
 import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
 import { HINT_CUSTOM_COMPONENTS } from "@/lib/hint-bridge";
 import { ACTIONS_MENU_CUSTOM_COMPONENTS } from "@/lib/actions-menu-bridge";
@@ -22,6 +23,7 @@ const CUSTOM_COMPONENTS = new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
   ...FORM_CUSTOM_COMPONENTS,
   ...LOGIN_FORM_CUSTOM_COMPONENTS,
+  ...MAGIC_LINK_CUSTOM_COMPONENTS,
   ...ICON_CUSTOM_COMPONENTS,
   ...HINT_CUSTOM_COMPONENTS,
   ...ACTIONS_MENU_CUSTOM_COMPONENTS,

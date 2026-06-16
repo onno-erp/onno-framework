@@ -199,6 +199,13 @@ export const api = {
     }),
   logout: () =>
     fetchJson<void>(`${BASE}/auth/logout`, { method: "POST" }),
+  // Passwordless login: ask the server to email a single-use sign-in link. Always succeeds (202)
+  // whether or not the address is registered, so the UI shows the same confirmation either way.
+  requestMagicLink: (email: string) =>
+    fetchJson<void>(`${BASE}/auth/magic/request`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
 
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),

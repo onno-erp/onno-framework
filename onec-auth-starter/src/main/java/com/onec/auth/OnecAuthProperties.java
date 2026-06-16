@@ -61,6 +61,11 @@ public class OnecAuthProperties {
             "/api/auth/me",
             // The server-driven (DivKit) login screen. Public so it can render before sign-in.
             "/api/divkit/login",
+            // Passwordless magic-link login. Both must be reachable unauthenticated: request emails
+            // a single-use link, verify consumes the token and establishes the session. Inert (404)
+            // unless onec.auth.magic-link.enabled=true wires the controller.
+            "/api/auth/magic/request",
+            "/api/auth/magic/verify",
             // Desktop shell liveness + window manifest. The native shell polls these
             // before any user can log in, so they must be reachable unauthenticated;
             // both are non-sensitive (readiness probe + window geometry/title).
@@ -75,7 +80,11 @@ public class OnecAuthProperties {
      * are supported (e.g. {@code /api/public/**}). Ignored in {@link Mode#RESOURCE_SERVER}, where
      * CSRF is already disabled.
      */
-    private List<String> csrfIgnoredPaths = new ArrayList<>(List.of("/api/auth/login"));
+    private List<String> csrfIgnoredPaths = new ArrayList<>(List.of(
+            "/api/auth/login",
+            // Pre-auth POST from the (public) login screen — no session/token to protect yet, same
+            // rationale as /api/auth/login. The token itself is the unguessable, single-use credential.
+            "/api/auth/magic/request"));
 
     /**
      * In-memory user accounts. Empty by default — the consuming app supplies them via
@@ -91,6 +100,17 @@ public class OnecAuthProperties {
      */
     @NestedConfigurationProperty
     private Session session = new Session();
+
+    /**
+     * Passwordless "magic link" login for {@link Mode#IN_MEMORY}. Opt-in (disabled by default): the
+     * user enters their email on the login screen, the framework emails a single-use link, and
+     * following it establishes a session — no password typed. Requires a configured mail provider
+     * (the {@code onec-mail-starter}) and a {@code DataSource} (tokens are persisted so links validate
+     * across every node of a horizontally-scaled deployment). Ignored in the OIDC and resource-server
+     * modes, where the IdP owns sign-in.
+     */
+    @NestedConfigurationProperty
+    private MagicLink magicLink = new MagicLink();
 
     public boolean isEnabled() {
         return enabled;
@@ -148,6 +168,14 @@ public class OnecAuthProperties {
         this.session = session;
     }
 
+    public MagicLink getMagicLink() {
+        return magicLink;
+    }
+
+    public void setMagicLink(MagicLink magicLink) {
+        this.magicLink = magicLink;
+    }
+
     public enum Mode {
         /** Username/password against {@code onec.auth.users}. */
         IN_MEMORY,
@@ -161,6 +189,16 @@ public class OnecAuthProperties {
         private String username;
         private String password;
         private List<String> roles = new ArrayList<>();
+
+        /**
+         * Optional email address that identifies this user for passwordless magic-link login. Opt-in:
+         * a user with no email cannot use magic-link (the request silently finds no account). The same
+         * way an OIDC/SSO backend keys a user by its external identity (e.g. a GitHub username), this
+         * lets an in-memory user declare its email as the identity the magic-link flow looks up. When
+         * left blank, the {@code username} is treated as the email if it looks like one. Only used in
+         * {@link Mode#IN_MEMORY} with {@code onec.auth.magic-link.enabled=true}.
+         */
+        private String email;
 
         public String getUsername() {
             return username;
@@ -184,6 +222,14 @@ public class OnecAuthProperties {
 
         public void setRoles(List<String> roles) {
             this.roles = roles;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
         }
     }
 
@@ -287,6 +333,78 @@ public class OnecAuthProperties {
 
         public void setKey(String key) {
             this.key = key;
+        }
+    }
+
+    /**
+     * Passwordless email magic-link login (in-memory mode). See {@link OnecAuthProperties#magicLink}.
+     */
+    public static class MagicLink {
+
+        /** Whether magic-link login is wired and advertised on the login screen. Off by default. */
+        private boolean enabled = false;
+
+        /**
+         * How long an emailed link stays valid before it must be re-requested. Single-use regardless:
+         * following a link consumes it. Kept short — a link is a bearer credential sitting in an inbox.
+         */
+        private Duration tokenValidity = Duration.ofMinutes(15);
+
+        /**
+         * Absolute base URL used to build the link placed in the email, e.g.
+         * {@code https://app.example.com}. Leave blank to derive it from the incoming request's
+         * origin (scheme/host/port) — correct for single-origin deployments, but set it explicitly
+         * when the public URL differs from what the app sees behind a proxy/load balancer.
+         */
+        private String baseUrl;
+
+        /**
+         * Where the browser lands after a link is successfully verified and the session established.
+         * A same-origin path (must start with {@code /}); defaults to the app root.
+         */
+        private String redirectPath = "/";
+
+        /** Subject line of the magic-link email. */
+        private String subject = "Your sign-in link";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getTokenValidity() {
+            return tokenValidity;
+        }
+
+        public void setTokenValidity(Duration tokenValidity) {
+            this.tokenValidity = tokenValidity;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getRedirectPath() {
+            return redirectPath;
+        }
+
+        public void setRedirectPath(String redirectPath) {
+            this.redirectPath = redirectPath;
+        }
+
+        public String getSubject() {
+            return subject;
+        }
+
+        public void setSubject(String subject) {
+            this.subject = subject;
         }
     }
 

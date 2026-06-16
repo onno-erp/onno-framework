@@ -49,6 +49,14 @@ public final class LoginDivBuilder {
             items.add(form);
         }
 
+        // Passwordless magic-link sub-form: like the password form it needs to read a typed email on
+        // submit, so it's a React custom block too. Sits below the password form when both are offered.
+        if (methods.magicLinkEnabled()) {
+            Map<String, Object> magic = Div.custom("onec-magic-link", Map.of());
+            Div.matchWidth(magic);
+            items.add(magic);
+        }
+
         // SSO buttons. The first is primary when no password form competes with it.
         boolean primary = !methods.passwordEnabled();
         for (SsoProvider provider : methods.providers()) {

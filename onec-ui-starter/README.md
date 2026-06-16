@@ -307,7 +307,9 @@ that matters to an integrator:
 - **The SPA is public; `/api/**` requires an authenticated session.** Everything outside `/api/**`
   (the SPA shell and static assets) is permitted anonymously so the login screen can load.
   `/api/**` is `authenticated()`, except the public endpoints `/api/theme`, `/api/config`,
-  `/api/auth/login` (and `/error`, plus the desktop probes). Unauthenticated `/api/**` calls get
+  `/api/branding`, `/api/auth/login`, `/api/divkit/login`, the opt-in magic-link endpoints
+  `/api/auth/magic/request` and `/api/auth/magic/verify` (and `/error`, plus the desktop probes).
+  Unauthenticated `/api/**` calls get
   `401` with `{"error":"unauthenticated"}` — **not** an HTTP Basic challenge (form login and Basic
   are both disabled).
 - **Auth is a session cookie, established by a JSON login** — not Basic auth, not a bearer token.
@@ -327,6 +329,8 @@ that matters to an integrator:
 | POST | `/api/auth/login` | Body `{"username","password"}`. On success sets the session cookie and returns `{authenticated, username, roles}`; `401` on bad credentials, `400` on a malformed body. CSRF-exempt. |
 | POST | `/api/auth/logout` | Invalidates the session. |
 | GET | `/api/auth/me` | Current user, or `{authenticated:false,...}` when anonymous. |
+| POST | `/api/auth/magic/request` | Opt-in passwordless login: emails a single-use sign-in link. Always `202` (no account enumeration). Renders as the `onec-magic-link` block on the DivKit login card when `onec.auth.magic-link.enabled=true`. CSRF-exempt. |
+| GET | `/api/auth/magic/verify` | Consumes the token, establishes the session, and redirects into the app. |
 
 ### Logging in to call the API
 
