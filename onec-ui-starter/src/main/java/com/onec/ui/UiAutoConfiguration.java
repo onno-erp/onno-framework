@@ -15,7 +15,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @AutoConfiguration(after = OnecAutoConfiguration.class)
-@EnableConfigurationProperties(UiProperties.class)
+@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class})
 @ConditionalOnBean(MetadataRegistry.class)
 @ConditionalOnProperty(prefix = "onec.ui", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class UiAutoConfiguration implements WebMvcConfigurer {
@@ -68,8 +68,22 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public ThemeController themeController(UiProperties properties, com.onec.ui.UiLayout uiLayout) {
-        return new ThemeController(properties, uiLayout);
+    public ThemeController themeController(UiProperties properties, com.onec.ui.UiLayout uiLayout,
+                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker) {
+        return new ThemeController(properties, uiLayout, updateChecker);
+    }
+
+    /**
+     * Polls onec-cloud for a newer framework release and exposes the result through {@code /config}.
+     * Disabled with {@code onec.ui.update-check.enabled=false}; otherwise on by default and fail-silent.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    @ConditionalOnProperty(prefix = "onec.ui.update-check", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
+    public UpdateChecker updateChecker(UpdateProperties updateProperties,
+                                       com.fasterxml.jackson.databind.ObjectMapper objectMapper) {
+        return new UpdateChecker(updateProperties, OnecBuildInfo.version(), objectMapper);
     }
 
     @Bean

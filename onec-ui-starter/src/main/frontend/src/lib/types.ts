@@ -115,6 +115,16 @@ export interface RegisterMeta {
 export interface AppConfig {
   readOnly: boolean;
   basePath: string;
+  // Present when the server-side update check is enabled; drives the "update available" notice.
+  update?: UpdateInfo;
+}
+
+// The result of the server's framework-version check (see UpdateChecker / ReleaseController).
+export interface UpdateInfo {
+  available: boolean;
+  current: string | null;
+  latest: string | null;
+  url: string | null;
 }
 
 // A consumer's brand color overrides for one mode. Only the slots the app set are

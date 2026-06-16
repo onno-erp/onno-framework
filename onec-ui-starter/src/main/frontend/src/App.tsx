@@ -15,6 +15,7 @@ import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 import { ConstantsPortals } from "@/lib/constants-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
+import { UpdateNotice } from "@/components/update-notice";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -37,6 +38,7 @@ function ProtectedApp() {
   // calendars, kanban) render as React widgets within the app's providers.
   return (
     <>
+      <UpdateNotice />
       <DivKitView />
       <WidgetPortals />
       <FormPortals />

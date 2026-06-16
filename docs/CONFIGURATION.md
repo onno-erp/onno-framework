@@ -25,6 +25,10 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.ui.path` | `String` | `/ui` | SPA base path, returned as `basePath` from `GET /api/config`. |
 | `onec.ui.read-only` | `boolean` | `false` | When true, every mutating REST call returns `403 UI is in read-only mode`. |
 | `onec.ui.theme.*` | `Map<String,String>` | empty | Free-form theme key/values served from `GET /api/theme`. |
+| `onec.ui.update-check.enabled` | `boolean` | `true` | Poll for a newer framework release and surface an "update available" notice in the UI. Fail-silent. |
+| `onec.ui.update-check.url` | `String` | `https://cloud.onno.su/releases/v1/latest` | Endpoint that announces the latest release (onec-cloud's `ReleaseController`). |
+| `onec.ui.update-check.interval` | `Duration` | `24h` | Poll cadence after the first check (floored at 60s). |
+| `onec.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on the network. |
 | `onec.media.enabled` | `boolean` | `true` | Wire `POST /api/media` and the default filesystem storage. |
 | `onec.media.max-file-size` | `DataSize` | `10MB` | Largest accepted upload; also raises Spring's multipart limit. |
 | `onec.media.allowed-content-types` | `List<String>` | empty (any) | Exact (`image/png`) or wildcard-subtype (`image/*`) allow-list. |

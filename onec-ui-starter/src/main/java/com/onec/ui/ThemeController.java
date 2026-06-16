@@ -1,5 +1,6 @@
 package com.onec.ui;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,10 +15,13 @@ public class ThemeController {
 
     private final UiProperties properties;
     private final BrandingConfig branding;
+    private final ObjectProvider<UpdateChecker> updateChecker;
 
-    public ThemeController(UiProperties properties, UiLayout layout) {
+    public ThemeController(UiProperties properties, UiLayout layout,
+                          ObjectProvider<UpdateChecker> updateChecker) {
         this.properties = properties;
         this.branding = layout.shell().branding();
+        this.updateChecker = updateChecker;
     }
 
     @GetMapping("/theme")
@@ -27,10 +31,22 @@ public class ThemeController {
 
     @GetMapping("/config")
     public Map<String, Object> getConfig() {
-        return Map.of(
-                "readOnly", properties.isReadOnly(),
-                "basePath", properties.getPath()
-        );
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("readOnly", properties.isReadOnly());
+        out.put("basePath", properties.getPath());
+        // When the update check is enabled, hand the client the last-known result so it can render
+        // (or hide) the "update available" banner. Absent when the checker bean is disabled.
+        UpdateChecker checker = updateChecker.getIfAvailable();
+        if (checker != null) {
+            UpdateStatus s = checker.status();
+            Map<String, Object> update = new LinkedHashMap<>();
+            update.put("available", s.updateAvailable());
+            update.put("current", s.currentVersion());
+            update.put("latest", s.latestVersion());
+            update.put("url", s.releaseUrl());
+            out.put("update", update);
+        }
+        return out;
     }
 
     /**

@@ -40,6 +40,12 @@ tasks.named<ProcessResources>("processResources") {
     from("src/main/frontend/dist") {
         into("static/ui")
     }
+    // Bake the build version into onec-build.properties so OnecBuildInfo can read it at runtime.
+    // Scoped to that one file with filesMatching so `expand` never touches the frontend dist (whose
+    // minified JS is full of ${...} that would otherwise blow up template expansion).
+    filesMatching("META-INF/onec-build.properties") {
+        expand("onecVersion" to project.version)
+    }
 }
 
 dependencies {

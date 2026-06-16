@@ -38,6 +38,21 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onec.ui.path` | `/ui` | SPA base path, returned to the client as `basePath` from `GET /api/config`. |
 | `onec.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
 | `onec.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. |
+| `onec.ui.update-check.enabled` | `true` | Poll onec-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
+| `onec.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
+| `onec.ui.update-check.interval` | `24h` | Cadence after the first check (floored at 60s). |
+| `onec.ui.update-check.initial-delay` | `1m` | Delay before the first check. |
+
+### Update-available notice
+
+When `onec.ui.update-check.enabled` is on (the default), `UpdateChecker` polls
+`onec.ui.update-check.url` on a background daemon thread and compares the announced version to the
+running framework version (baked into `META-INF/onec-build.properties` at build time). The result
+rides along on `GET /api/config` as an `update` object — `{ available, current, latest, url }` — and
+the web client raises a dismissible toast when `available` is true. Every failure (offline, non-200,
+unparseable body, unknown local version) is swallowed, so a flaky network never produces a wrong or
+alarming notice. The endpoint it polls is served by onec-cloud (`GET /releases/v1/latest`), which
+returns `204` when no release is announced.
 
 ## REST endpoints
 
@@ -173,7 +188,7 @@ renders a labelled placeholder rather than vanishing.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/theme` | The `onec.ui.theme.*` map. |
-| GET | `/api/config` | `{ readOnly, basePath }`. |
+| GET | `/api/config` | `{ readOnly, basePath }`, plus `update: { available, current, latest, url }` when the update check is enabled. |
 | GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). |
 
 > **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`
