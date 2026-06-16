@@ -24,9 +24,12 @@ public class BillView implements EntityView {
                 .field("property").order(1)
                 .field("booking").order(2)
                 .field("net").order(3)
+                        .hint("Taxable base before IVA.")
                 .field("ivaPercent").order(4)
+                        .hint("VAT rate applied to the net (Spain: usually 10% or 21%).")
                 .field("iva").order(5).hideInForm()
                 .field("gross").order(6).hideInForm()
+                        .hint("Auto-computed: net + IVA. Read-only.")
                 .field("comments").order(10);
     }
 }

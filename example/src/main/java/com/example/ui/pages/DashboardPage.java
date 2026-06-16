@@ -27,11 +27,13 @@ public class DashboardPage implements Page {
     public void compose(PageBuilder b) {
         b.title("Dashboard");
 
-        b.widget("Properties").type("count").width("1/4").order(0).catalog(Property.class);
+        b.widget("Properties").type("count").width("1/4").order(0).catalog(Property.class)
+                .hint("Total rental units in the catalog.");
         b.widget("Clients").type("count").width("1/4").order(1).catalog(Client.class);
         // FR-5: a count narrowed by a safe filter predicate (system column).
         b.widget("Posted bills").type("count").width("1/4").order(2).document(Bill.class)
-                .config("filter", "_posted = true");
+                .config("filter", "_posted = true")
+                .hint("Bills posted to the ledger; drafts are excluded.");
         // FR-1 + FR-6: a server-aggregated KPI (SUM of gross) as a currency-formatted card.
         // Unit placement: render the symbol as a suffix ("174,831.73 €") rather than the
         // locale's default euro prefix. `unit` wins over `currency`; `unitPosition` is suffix by default.

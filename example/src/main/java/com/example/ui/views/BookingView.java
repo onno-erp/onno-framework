@@ -45,7 +45,9 @@ public class BookingView implements EntityView {
     public void fields(EntityConfigBuilder f) {
         f.field("property").order(0)
                 .field("status").order(1)
+                        .hint("Booking lifecycle. Posting to the revenue register is gated on CONFIRMED or later.")
                 .field("channel").order(2)
+                        .hint("Where the booking originated — direct, Airbnb, Booking.com, …")
                 // Display formatting (.format) — dates as DD-MM-YY, money as euros — applied in
                 // both the list table and the detail surface.
                 .field("date").format("dd-MM-yy")
@@ -55,8 +57,10 @@ public class BookingView implements EntityView {
                 .field("children").order(6)
                 .field("nights").order(7).hideInForm()
                 .field("nightRate").order(8).format("currency:EUR")
+                        .hint("Agreed rate per night; the property's default rate pre-fills it.")
                 .field("cleaningFee").order(9).format("currency:EUR")
                 .field("totalGross").order(10).hideInForm().format("currency:EUR")
+                        .hint("Auto-computed: nights × rate + cleaning fee. Read-only.")
                 .field("summary").order(11).hideInForm()
                 .field("primaryClient").order(12)
                 .field("assignedTo").order(13)
