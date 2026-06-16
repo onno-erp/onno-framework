@@ -17,17 +17,22 @@ package com.onec.ui;
  *
  * <p>Every field is optional. A {@code null}/empty {@code appName} falls back to the
  * active profile title (today's behavior); a {@code null} {@code logoUrl} keeps the
- * text brand; empty palettes keep the renderer's neutral scale.</p>
+ * text brand; empty palettes keep the renderer's neutral scale. A {@code null}
+ * {@code logoWidth}/{@code logoHeight} leaves the logo at its intrinsic aspect ratio and
+ * each surface's default size.</p>
  *
  * @param appName     explicit application name; falls back to the profile title when blank
  * @param logoUrl     logo image URL/asset shown in the sidebar header and mobile menu
  * @param logoUrlDark optional dark-mode logo variant; falls back to {@code logoUrl}
+ * @param logoWidth   optional fixed logo width in dp; {@code null} keeps the intrinsic width
+ * @param logoHeight  optional fixed logo height in dp; {@code null} keeps each surface's default
  * @param faviconUrl  optional favicon the web client installs at runtime
  * @param light       brand color overrides for light mode
  * @param dark        brand color overrides for dark mode
  */
 public record BrandingConfig(
-        String appName, String logoUrl, String logoUrlDark, String faviconUrl,
+        String appName, String logoUrl, String logoUrlDark,
+        Integer logoWidth, Integer logoHeight, String faviconUrl,
         BrandPalette light, BrandPalette dark) {
 
     public BrandingConfig {
@@ -36,7 +41,8 @@ public record BrandingConfig(
     }
 
     public static BrandingConfig defaults() {
-        return new BrandingConfig(null, null, null, null, BrandPalette.empty(), BrandPalette.empty());
+        return new BrandingConfig(null, null, null, null, null, null,
+                BrandPalette.empty(), BrandPalette.empty());
     }
 
     /** Whether a non-blank app name was authored (else callers fall back to the profile title). */
