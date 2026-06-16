@@ -60,6 +60,10 @@ final class Components {
         if (glyph == null) {
             return Div.weight(text, 2);
         }
+        // Hug the label to its content so the ? sits just after the text. Left as the default
+        // match_parent, the text fills the weighted label column and shoves the glyph to its far
+        // right edge — landing against the value column, reading as if it belongs to the value.
+        Div.wrapWidth(text);
         Map<String, Object> labelled = Div.horizontal(List.of(text, glyph));
         Div.gap(labelled, 5);
         Div.alignV(labelled, "center");
