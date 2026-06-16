@@ -30,8 +30,12 @@ export function HintIcon({
             type="button"
             aria-label={text}
             // A help affordance, not a form action: never submit, never tab-trap focus styling away.
+            // pointer-events-auto: when portaled into a DivKit detail surface the icon lives under a
+            // wrapper chain that DivKit paints pointer-events:none (so taps fall through to row
+            // actions); without re-enabling it here the hover/focus never reaches the trigger and the
+            // tooltip never opens. Harmless on the React-island form, where events already flow.
             className={cn(
-              "inline-flex shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/70 outline-none transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              "pointer-events-auto inline-flex shrink-0 cursor-help items-center justify-center rounded-full text-muted-foreground/70 outline-none transition-colors hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
               className
             )}
             style={color ? { color } : undefined}
