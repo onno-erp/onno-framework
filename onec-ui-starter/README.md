@@ -119,7 +119,9 @@ data-bearing surfaces.
 
 Every list row (DivKit-rendered lists and the virtualized `EntityListWidget` alike) supports:
 
-- **Right-click** → a context menu with **Open**, **Edit**, **Duplicate** and **Delete**.
+- **Right-click** → a context menu with **Open**, **Edit**, **Duplicate**, **Copy link** and
+  **Delete**. **Copy link** puts the row's shareable deep link (`{origin}/{kind}/{name}/{id}`) on the
+  clipboard — paste it into a new tab to land straight on that record.
 - **Delete key** (macOS **fn+Backspace**, or the dedicated Del key) → deletes the row **under the
   pointer** — the one the hover highlight marks. Ignored while typing in a field or while a menu or
   dialog is open.
@@ -127,6 +129,14 @@ Every list row (DivKit-rendered lists and the virtualized `EntityListWidget` ali
 Both delete paths open the in-app confirmation dialog and then issue `DELETE /api/{kind}/{name}/{id}`
 (soft delete), so the server still enforces write access — a read-only user (or one without the
 entity's write role) gets a `403`, never a silent delete.
+
+### Sharing a link to a surface
+
+Every surface is a real browser URL (the app runs on `BrowserRouter`), so any list, record, page,
+dashboard or register is shareable by its address. Besides the row menu's **Copy link**, on the
+desktop islands layout **right-click a workspace tab → Copy link** copies the deep link to whatever
+that tab shows — covering pages, dashboards and registers that aren't list rows. Pasting a link into
+a fresh tab opens the app straight on that surface (after login if needed).
 
 ### Custom & state-aware row actions
 

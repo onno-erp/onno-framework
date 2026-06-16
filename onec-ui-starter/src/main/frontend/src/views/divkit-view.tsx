@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
-import { Copy, ExternalLink, Pencil, Trash2, X } from "lucide-react";
+import { Copy, ExternalLink, Link2, Pencil, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   createGlobalVariablesController,
@@ -13,7 +13,7 @@ import { useBranding } from "@/providers/branding-provider";
 import { api } from "@/lib/api";
 import { useUiEvents } from "@/hooks/use-ui-events";
 import type { UiEvent } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
 import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
@@ -140,6 +140,19 @@ function rowDeleteUrl(rowUrl: string): string {
   return "onec://delete/" + rowUrl.slice("onec://".length);
 }
 
+// Turn a row's open url ("onec://{kind}/{name}/{id}") into its route path
+// ("/{kind}/{name}/{id}") — the same path the URL bar shows when the row is open.
+function rowOpenPath(rowUrl: string): string {
+  return "/" + rowUrl.slice("onec://".length);
+}
+
+// The absolute, shareable URL for an in-app route path. The app uses real browser
+// URLs (BrowserRouter at "/"), so origin + path is a working deep link: pasted into
+// a new tab it lands straight on that surface.
+function shareableUrl(path: string): string {
+  return window.location.origin + path;
+}
+
 function initialWorkspace(): Workspace {
   const path = window.location.pathname;
   const id = newPaneId();
@@ -240,6 +253,8 @@ export function DivKitView() {
   wsRef.current = workspace;
   // Right-click menu for a list row: screen position + the row's onec:// open url.
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string } | null>(null);
+  // Right-click menu for a workspace tab: screen position + the tab's route path.
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   // The in-app confirmation modal (delete, etc.); null when closed.
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   // Mirror the menu/modal open-state into refs so the window-level Delete-key handler can read
@@ -469,6 +484,15 @@ export function DivKitView() {
     [location.pathname, navigate]
   );
 
+  // Copy the shareable deep link for a route path to the clipboard, with a toast. Used by the
+  // row right-click menu (a list row's record) and the tab right-click menu (any open surface —
+  // detail, list, page, dashboard, register), so every screen the app can show is shareable by URL.
+  const copyLink = useCallback((path: string) => {
+    void copyToClipboard(shareableUrl(path)).then((ok) =>
+      ok ? toast.success("Link copied") : toast.error("Couldn't copy link")
+    );
+  }, []);
+
   const onCustomAction = useCallback(
     (action: ContentAction) => {
       const url = action?.url;
@@ -601,9 +625,13 @@ export function DivKitView() {
       const url = el?.dataset.onecRow;
       if (!url) return;
       e.preventDefault();
+      setTabMenu(null);
       setRowMenu({ x: e.clientX, y: e.clientY, url });
     };
-    const close = () => setRowMenu(null);
+    const close = () => {
+      setRowMenu(null);
+      setTabMenu(null);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
@@ -1089,26 +1117,21 @@ export function DivKitView() {
     />
   );
 
-  // The row right-click menu, rendered once per layout. Clamped to stay on-screen.
-  const rowMenuEl = rowMenu ? (
+  // A small right-click context menu, positioned at (x, y) and clamped to stay on-screen.
+  // Shared by the list-row menu and the workspace-tab menu so they look and behave alike.
+  type MenuItem = { label: string; icon: LucideIcon; run: () => void; danger?: boolean; divider?: boolean };
+  const contextMenu = (pos: { x: number; y: number }, items: MenuItem[], close: () => void) => (
     <div
       className="fixed z-50 min-w-44 overflow-hidden rounded-xl border py-1 shadow-lg"
       style={{
-        left: Math.min(rowMenu.x, window.innerWidth - 184),
-        top: Math.min(rowMenu.y, window.innerHeight - 168),
+        left: Math.min(pos.x, window.innerWidth - 184),
+        top: Math.min(pos.y, window.innerHeight - 168),
         background: surfaceBg,
         borderColor,
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {[
-        { label: "Open", icon: ExternalLink, url: rowMenu.url },
-        { label: "Edit", icon: Pencil, url: rowMenu.url + "/edit" },
-        { label: "Duplicate", icon: Copy, url: rowMenu.url + "/duplicate" },
-        // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
-        // detail header's delete (handled in onCustomAction).
-        { label: "Delete", icon: Trash2, url: rowDeleteUrl(rowMenu.url), danger: true, divider: true },
-      ].map(({ label, icon: Icon, url, danger, divider }) => (
+      {items.map(({ label, icon: Icon, run, danger, divider }) => (
         <Fragment key={label}>
           {divider ? <div className="my-1 border-t" style={{ borderColor }} /> : null}
           <button
@@ -1118,8 +1141,8 @@ export function DivKitView() {
               danger ? "text-red-600" : "text-foreground"
             )}
             onClick={() => {
-              onCustomAction({ url });
-              setRowMenu(null);
+              run();
+              close();
             }}
           >
             <Icon
@@ -1131,7 +1154,40 @@ export function DivKitView() {
         </Fragment>
       ))}
     </div>
-  ) : null;
+  );
+
+  // The row right-click menu, rendered once per layout.
+  const rowMenuEl = rowMenu
+    ? contextMenu(
+        rowMenu,
+        [
+          { label: "Open", icon: ExternalLink, run: () => onCustomAction({ url: rowMenu.url }) },
+          { label: "Edit", icon: Pencil, run: () => onCustomAction({ url: rowMenu.url + "/edit" }) },
+          { label: "Duplicate", icon: Copy, run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }) },
+          { label: "Copy link", icon: Link2, run: () => copyLink(rowOpenPath(rowMenu.url)), divider: true },
+          // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
+          // detail header's delete (handled in onCustomAction).
+          {
+            label: "Delete",
+            icon: Trash2,
+            run: () => onCustomAction({ url: rowDeleteUrl(rowMenu.url) }),
+            danger: true,
+            divider: true,
+          },
+        ],
+        () => setRowMenu(null)
+      )
+    : null;
+
+  // The tab right-click menu — copy a shareable link to whatever surface the tab shows
+  // (record detail, list, page, dashboard, register), covering the cases a list row can't.
+  const tabMenuEl = tabMenu
+    ? contextMenu(
+        tabMenu,
+        [{ label: "Copy link", icon: Link2, run: () => copyLink(tabMenu.path) }],
+        () => setTabMenu(null)
+      )
+    : null;
 
   // The in-app confirmation modal (replaces window.confirm): a backdrop over a centered
   // card with Cancel / confirm actions. Backdrop click or Esc cancels.
@@ -1287,6 +1343,11 @@ export function DivKitView() {
                 draggable
                 onDragStart={(e) => onTabDragStart(pane.id, tab.path, e)}
                 onDragEnd={onTabDragEnd}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setRowMenu(null);
+                  setTabMenu({ x: e.clientX, y: e.clientY, path: tab.path });
+                }}
                 className={cn(
                   "group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-lg pl-1 text-sm transition-colors active:cursor-grabbing",
                   active
@@ -1441,6 +1502,7 @@ export function DivKitView() {
           ))}
         </div>
         {rowMenuEl}
+        {tabMenuEl}
         {confirmEl}
       </div>
     );
