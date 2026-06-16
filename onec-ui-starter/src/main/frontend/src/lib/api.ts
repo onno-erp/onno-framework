@@ -163,6 +163,21 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
   return (await res.json()) as StoredMedia;
 }
 
+/** One comment in an entity's discussion thread (see CommentController). */
+export interface CommentView {
+  id: string;
+  authorName: string | null;
+  /** The author's avatar image URL when their account links to a record with an avatar; else null. */
+  authorAvatarUrl: string | null;
+  body: string;
+  createdAt: string | null;
+  editedAt: string | null;
+  /** True when the current user authored this comment. */
+  mine: boolean;
+  /** True when the current user may delete it (author or ADMIN). */
+  canDelete: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -267,6 +282,19 @@ export const api = {
       body: JSON.stringify({ inputs: inputs ?? {} }),
     });
   },
+
+  // Comments — a discussion thread on any catalog/document detail (see CommentController). Reads
+  // and posts are gated server-side on read access to the owning entity; the author is stamped
+  // from the session, never sent by the client.
+  listComments: (kind: "catalogs" | "documents", name: string, id: string) =>
+    fetchJson<CommentView[]>(`${BASE}/comments/${kind}/${name}/${id}`),
+  addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string) =>
+    fetchJson<CommentView>(`${BASE}/comments/${kind}/${name}/${id}`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+  deleteComment: (commentId: string) =>
+    fetchJson<void>(`${BASE}/comments/${commentId}`, { method: "DELETE" }),
 
   postDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/post`, { method: "POST" }),

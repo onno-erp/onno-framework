@@ -242,10 +242,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              RegisterQueryService registerQueryService,
                                              UiActionResolver uiActionResolver,
                                              RelatedListReader relatedListReader,
-                                             UiProperties uiProperties) {
+                                             UiProperties uiProperties,
+                                             org.springframework.beans.factory.ObjectProvider<com.onec.ui.comments.CommentProperties> commentProperties) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties, commentProperties);
     }
 
 }

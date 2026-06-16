@@ -25,10 +25,12 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
 | `onec.security.secret-key` | `String` | — | Encryption key for `@Attribute(secret = true)` values. Any passphrase works (it is hashed to a 256-bit AES key). Required only when an entity declares a secret attribute; supply it from an environment variable, never hard-code it. |
 
-## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`)
+## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onec.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
+| `onec.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
 | `onec.media.allowed-content-types` | `List<String>` | — | Content types the endpoint accepts. Entries may be exact (`image/png`) or a wildcard subtype (`image/*`). Empty means accept any type — fine for an authenticated admin endpoint; set it to lock uploads down to, say, images only. |
 | `onec.media.enabled` | `Boolean` | `true` | Whether the upload endpoint and the default filesystem storage are wired at all. |
 | `onec.media.filesystem.directory` | `String` | — | Directory the filesystem backend writes uploads beneath. Defaults to `onec-media` under the JVM temp dir; set an absolute, persistent path in production. |

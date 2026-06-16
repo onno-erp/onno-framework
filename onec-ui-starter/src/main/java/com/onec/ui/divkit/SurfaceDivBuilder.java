@@ -464,6 +464,30 @@ public final class SurfaceDivBuilder {
     }
 
     /**
+     * Append the comments thread panel to a built detail surface. The panel is an
+     * {@code onec-comments} {@code div-custom} carrying the entity's {@code (kind, name, id)} triple;
+     * the React bridge loads and posts the thread itself from {@code /api/comments/...}. Returns the
+     * same content map (its {@code items} replaced with an extended copy), so callers can chain it
+     * onto {@link #catalogDetail} / {@link #documentDetail} without those methods knowing about
+     * comments. A no-op if the content has no {@code items} list (defensive).
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> withComments(Map<String, Object> content, String kind,
+                                                   String name, String id) {
+        Object items = content.get("items");
+        if (!(items instanceof List<?> existing)) {
+            return content;
+        }
+        List<Map<String, Object>> next = new ArrayList<>((List<Map<String, Object>>) existing);
+        Map<String, Object> panel = Div.custom("onec-comments",
+                Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
+        Div.matchWidth(panel);
+        next.add(panel);
+        content.put("items", next);
+        return content;
+    }
+
+    /**
      * The detail surface header: a title (with an optional muted subtitle — e.g. a
      * document number or catalog code, which keeps long identifiers out of the big
      * title so it no longer wraps into the corner) on the left, and an action cluster

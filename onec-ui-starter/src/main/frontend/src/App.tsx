@@ -15,6 +15,7 @@ import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 import { ConstantsPortals } from "@/lib/constants-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
+import { CommentsPortals } from "@/lib/comments-bridge";
 import { UpdateNotice } from "@/components/update-notice";
 
 function ProtectedApp() {
@@ -48,6 +49,7 @@ function ProtectedApp() {
       <ActionsMenuPortals />
       <ConstantsPortals />
       <ActionsBarPortals />
+      <CommentsPortals />
     </>
   );
 }

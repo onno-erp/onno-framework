@@ -268,6 +268,25 @@ Button face — set **one**:
 `redirect(...)` differs from `navigate("onec://open/<url>")`, which opens a **new tab** (for viewing
 files); `redirect` replaces the current page so a provider round-trip lands back in the app.
 
+### Comments — `/api/comments`
+
+Every catalog and document detail surface carries a **discussion thread**: a feed of authored,
+timestamped comments with a compose box, rendered by the `onec-comments` DivKit panel. Comments are
+framework infrastructure, not modelled entities — they live in the framework-owned `onec_comments`
+table (created at startup, never shown in the nav), so *any* entity gets the feature with no
+per-entity modelling. Each author's avatar resolves from the identity catalog's avatar-hinted
+attribute (falling back to initials).
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. |
+| POST | `/api/comments/{kind}/{name}/{id}` | Add a comment — body `{ "body": "…" }`. The author is stamped from the session ([CurrentUserResolver](src/main/java/com/onec/ui/CurrentUserResolver.java)); the client never asserts identity. |
+| DELETE | `/api/comments/{commentId}` | Soft-delete (kept for audit). Author or `ADMIN` only. |
+
+Reading and posting are gated on **read** access to the owning entity — if you can open the record
+you can comment on it. Disable the whole feature with `onec.comments.enabled=false`; cap body length
+with `onec.comments.max-length` (default 4000).
+
 ### Misc — `/api`
 
 | Method | Path | Notes |

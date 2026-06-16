@@ -1,2 +1,3 @@
 com.onec.ui.UiAutoConfiguration
 com.onec.ui.media.MediaAutoConfiguration
+com.onec.ui.comments.CommentsAutoConfiguration

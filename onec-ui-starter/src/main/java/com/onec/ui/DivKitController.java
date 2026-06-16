@@ -13,7 +13,9 @@ import com.onec.ui.divkit.PageDivBuilder;
 import com.onec.ui.divkit.Palette;
 import com.onec.ui.divkit.ShellLayoutBuilder;
 import com.onec.ui.divkit.SurfaceDivBuilder;
+import com.onec.ui.comments.CommentProperties;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -63,6 +65,9 @@ public class DivKitController {
     private final UiActionResolver actionResolver;
     private final RelatedListReader relatedLists;
     private final UiProperties uiProperties;
+    // Resolved per request (lazily): the comments module is wired after this controller, and is
+    // absent entirely when onec.comments.enabled=false. getIfAvailable() yields null in that case.
+    private final ObjectProvider<CommentProperties> commentProperties;
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -77,7 +82,8 @@ public class DivKitController {
                             RegisterQueryService registerQuery,
                             UiActionResolver actionResolver,
                             RelatedListReader relatedLists,
-                            UiProperties uiProperties) {
+                            UiProperties uiProperties,
+                            ObjectProvider<CommentProperties> commentProperties) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
@@ -95,6 +101,13 @@ public class DivKitController {
         this.actionResolver = actionResolver;
         this.relatedLists = relatedLists;
         this.uiProperties = uiProperties;
+        this.commentProperties = commentProperties;
+    }
+
+    /** Whether the comments module is wired and enabled — decided per request (see the field). */
+    private boolean commentsEnabled() {
+        CommentProperties cp = commentProperties.getIfAvailable();
+        return cp != null && cp.isEnabled();
     }
 
     // ----- chrome (fast, no entity data) -----
@@ -473,6 +486,9 @@ public class DivKitController {
                 meta, catalogQuery.get(desc, id),
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
                 palette(theme));
+        if (commentsEnabled()) {
+            content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
+        }
         return DivCard.of("onec-content", content);
     }
 
@@ -570,6 +586,9 @@ public class DivKitController {
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(
                 meta, row, relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
                 palette(theme));
+        if (commentsEnabled()) {
+            content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
+        }
         return DivCard.of("onec-content", content);
     }
 
