@@ -200,13 +200,19 @@ The UI is authored as Spring beans, never as annotations on domain classes:
 
 - **`Layout`** — navigation, shell (`NavStyle`), branding, persona (`profile()`), `roles`, and an
   optional `viewport()` (DESKTOP/TABLET/MOBILE). The default layout (`profile() == null`) is the
-  back-office shell.
+  back-office shell. **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
+  sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
+  catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions
+  auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS` groups; that was removed.)
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
   chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
   hints (`order`, `group`, `width`, `widget`, `format`, `hideInList/Form/Detail`, related lists,
-  actions). **An entity is only visible in the UI if it has an `EntityView` for the active profile —
-  the view layer is the allowlist.**
+  actions). **An entity surface is only *served* if it has an `EntityView` for the active profile —
+  the view layer is the allowlist (no view → `404`).** This gates reachability, not nav presence: a
+  view makes the entity reachable by its direct route, but it shows in the sidebar only once a
+  `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not
+  sufficient for nav presence.
 
 Server-side rendering uses **DivKit**: the controllers emit DivKit card JSON resolved for the
 caller's persona, roles, theme, and viewport. The same contract drives the bundled React/Vite SPA

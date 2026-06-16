@@ -158,8 +158,12 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
     (`currency:EUR`, `dd-MM-yy`, …), `hideInList/Form/Detail()`, `visibleInList/Form/Detail(bool)`,
     chain `.field(next)`.
 
-An entity is only visible if it has an `EntityView` for the active profile. Media widgets stream the
-file to `MediaStorage` and persist the returned URL (see `docs/MEDIA_UPLOADS.md`).
+An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
+that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the
+sidebar only if a `Layout` section lists it (`spec.section(...).catalog(X.class)`) — a view alone
+makes it reachable by direct route but unlisted. No auto-listing of unclaimed catalogs (removed; cf.
+#69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
+`docs/MEDIA_UPLOADS.md`).
 
 ## Events & outbox (packages `com.onec.events`, `com.onec.messaging`)
 

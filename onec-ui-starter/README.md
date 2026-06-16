@@ -115,6 +115,15 @@ data-bearing surfaces.
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
 > the underlying REST endpoint would serve it.
+>
+> This gates **reachability**, not **nav presence** — the two are separate. The sidebar is
+> **curated**: a catalog/document/register shows in it only if a `Layout` section lists it
+> (`spec.section("Licensing").icon("key").catalog(License.class)`). An entity that has an
+> `EntityView` but is in no section is still reachable by its direct route (`/catalogs/{name}`) — it
+> just won't appear in the nav. So an `EntityView` is **necessary but not sufficient** for nav
+> presence: no view → `404`; view but no section → reachable but unlisted; view + section → in the
+> sidebar. (Earlier versions auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS`
+> groups; that was removed.)
 
 ### List row actions
 

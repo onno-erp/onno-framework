@@ -96,8 +96,9 @@ public class SalesRegister extends AccumulationRecord {
     @Resource(precision = 15, scale = 2) private BigDecimal amount;
 }
 
-// 4. EntityView — REQUIRED for the entity to appear in the UI (the view layer is the allowlist).
-//    EntityView is NOT generic; it names its target via entity().
+// 4. EntityView — REQUIRED for the entity surface to be served (no view → 404; the view layer is
+//    the allowlist). A view alone does NOT put the entity in the sidebar — a Layout section must
+//    list it (nav is curated). EntityView is NOT generic; it names its target via entity().
 @Component
 public class CustomerView implements EntityView {
     @Override public Class<?> entity() { return Customer.class; }
@@ -160,9 +161,13 @@ public class Counterparty extends CatalogObject {
 UI is authored as Spring beans on the *view* side, never as annotations on domain classes:
 
 - **`Layout`** — nav structure, shell style, branding, persona (`profile()`), `roles`, viewport.
+  **Nav is curated:** an entity shows in the sidebar only if a `spec.section(...)` lists it; there is
+  no auto-listing of unclaimed catalogs.
 - **`Page`** — a composed route (dashboards): `compose(PageBuilder)` with `widget`/`text`/`list`/`custom`.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
-  hints. **An entity is only visible in the UI if it has an `EntityView` for the active profile.**
+  hints. **An entity surface is only served if it has an `EntityView` for the active profile** (no
+  view → `404`). That is *necessary but not sufficient* for nav presence: a view makes the entity
+  reachable by direct route, but it appears in the sidebar only once a `Layout` section lists it.
 
 Do **not** add `@UiHint`, `@UiSection`, or `@DashboardWidget` to new code — they are deprecated.
 The widget DSL and `config(key,value)` reference are in
