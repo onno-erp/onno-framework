@@ -70,7 +70,18 @@ export function LoginView() {
     <main className="flex min-h-screen bg-background">
       <section className="hidden flex-1 border-r border-border bg-muted/30 px-12 py-10 md:flex md:flex-col md:justify-between">
         {logo ? (
-          <img src={logo} alt={branding.appName ?? "Logo"} className="h-7 w-auto self-start" />
+          // Honor the configured logo size (px) the same way the DivKit shell does — a fixed
+          // box with object-fit: contain stays uncropped; unset falls back to h-7 / intrinsic width.
+          <img
+            src={logo}
+            alt={branding.appName ?? "Logo"}
+            className="self-start"
+            style={{
+              height: branding.logoHeight != null ? `${branding.logoHeight}px` : "1.75rem",
+              width: branding.logoWidth != null ? `${branding.logoWidth}px` : "auto",
+              objectFit: "contain",
+            }}
+          />
         ) : (
           <div className="text-sm font-semibold">{branding.appName ?? "onec"}</div>
         )}

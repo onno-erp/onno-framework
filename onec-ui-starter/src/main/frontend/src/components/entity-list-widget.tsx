@@ -47,6 +47,8 @@ export type ListAction = {
   key: string;
   label: string;
   icon: string;
+  /** Image URL/path shown instead of the lucide icon — e.g. a brand logo for "Connect with X". */
+  logo?: string;
   scope: "toolbar" | "row";
   server: boolean;
   url?: string;
@@ -684,7 +686,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             const busy = pending.has(a.key);
             // Compact + has an icon → icon-only (label drops to the tooltip), so the button can't
             // shrink below its content and wrap its text per-character.
-            const iconOnly = compact && !!a.icon;
+            const iconOnly = compact && (!!a.icon || !!a.logo);
             return (
               <button
                 key={a.key}
@@ -700,6 +702,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               >
                 {busy ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : a.logo ? (
+                  <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
                 ) : a.icon ? (
                   <DynamicLucide name={a.icon} size={16} />
                 ) : null}
@@ -818,6 +822,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                                 >
                                   {busy ? (
                                     <Loader2 className="size-[15px] animate-spin" aria-hidden="true" />
+                                  ) : a.logo ? (
+                                    <img src={a.logo} alt="" aria-hidden="true" className="size-[15px] shrink-0 object-contain" />
                                   ) : (
                                     <DynamicLucide name={a.icon || "zap"} size={15} />
                                   )}

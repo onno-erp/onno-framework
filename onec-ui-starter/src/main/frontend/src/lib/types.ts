@@ -136,6 +136,9 @@ export interface Branding {
   appName?: string | null;
   logoUrl?: string | null;
   logoUrlDark?: string | null;
+  // Optional fixed logo size in px; null keeps the intrinsic aspect ratio / default size.
+  logoWidth?: number | null;
+  logoHeight?: number | null;
   faviconUrl?: string | null;
   palette?: { light?: BrandColors; dark?: BrandColors };
 }

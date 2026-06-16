@@ -114,7 +114,8 @@ public class DivKitController {
         List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         String brand = brandName(activeProfile);
-        String logo = branding.logoFor(theme);
+        ShellLayoutBuilder.Logo logo = ShellLayoutBuilder.Logo.of(
+                branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
 
         // On a bottom tab bar the account (and any overflow destinations) live behind
         // the bar's "More" tab, which opens the /menu hub — so nothing is appended here.
@@ -170,7 +171,8 @@ public class DivKitController {
         List<ShellLayoutBuilder.NavSection> nav = navFor(principal, activeProfile, vp);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         String brand = brandName(activeProfile);
-        String logo = branding.logoFor(theme);
+        ShellLayoutBuilder.Logo logo = ShellLayoutBuilder.Logo.of(
+                branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
         Map<String, Object> content = ShellLayoutBuilder.menu(
                 brand, logo, nav, user.displayName(), profileLinks, activeProfile.id(), p);
         Div.margins(content, 16, 16, 16, 16);

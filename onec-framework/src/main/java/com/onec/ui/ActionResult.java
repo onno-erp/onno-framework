@@ -29,4 +29,13 @@ public record ActionResult(String message, String navigate, boolean refresh) {
     public static ActionResult navigate(String url) {
         return new ActionResult(null, url, false);
     }
+
+    /**
+     * Send the top-level browser to an external {@code url} (a full-page navigation, not a new tab) —
+     * e.g. kicking off an OAuth "Connect with X" consent screen so the provider can redirect back. The
+     * url is passed verbatim after the {@code onec://redirect/} scheme, so it may carry a query string.
+     */
+    public static ActionResult redirect(String url) {
+        return new ActionResult(null, "onec://redirect/" + url, false);
+    }
 }

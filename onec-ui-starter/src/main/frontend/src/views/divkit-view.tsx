@@ -498,6 +498,14 @@ export function DivKitView() {
         window.open(href, "_blank", "noopener,noreferrer");
         return;
       }
+      if (rest.startsWith("redirect/")) {
+        // redirect/{url} — full-page navigation to an external URL (verbatim, query string and all),
+        // e.g. an OAuth "Connect with X" consent screen that redirects back to our callback. Unlike
+        // open/ this replaces the current page so the provider's round-trip lands back in the app.
+        const target = rest.slice("redirect/".length);
+        if (/^https?:\/\//i.test(target)) window.location.href = target;
+        return;
+      }
       if (rest.startsWith("app")) {
         const q = rest.indexOf("?");
         const params = new URLSearchParams(q >= 0 ? rest.slice(q + 1) : "");

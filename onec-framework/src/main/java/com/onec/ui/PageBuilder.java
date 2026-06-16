@@ -105,6 +105,9 @@ public final class PageBuilder {
             m.put("key", a.key());
             m.put("label", a.label());
             m.put("icon", a.icon());
+            if (a.logo() != null && !a.logo().isBlank()) {
+                m.put("logo", a.logo());
+            }
             m.put("server", a.isServer());
             if (!a.isServer()) {
                 m.put("url", a.navigateUrl());

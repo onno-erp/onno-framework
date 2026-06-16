@@ -72,6 +72,7 @@ Current auth ships in `onec-auth-starter` with three modes selected by `onec.aut
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.
 - Per-entity authorization is deny-by-default via `@AccessControl(readRoles, writeRoles)`; `ADMIN` is a superuser.
 - Any consumer can set `onec.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
+- Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) build on generic core UI primitives — action-button `.logo(...)` and `ActionResult.redirect(...)` for a full-page consent redirect — so an app can hand-roll the callback on just the core; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onec-connector-support`.
 
 Production direction:
 - Replace the demo `InMemoryUserDetailsManager` with a JDBC-backed `UserDetailsService` for real deployments.

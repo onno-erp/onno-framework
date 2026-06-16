@@ -321,6 +321,8 @@ public class UiLayoutBuilder {
         private String appName;
         private String logoUrl;
         private String logoUrlDark;
+        private Integer logoWidth;
+        private Integer logoHeight;
         private String faviconUrl;
         private final PaletteBuilder light = new PaletteBuilder();
         private final PaletteBuilder dark = new PaletteBuilder();
@@ -350,6 +352,25 @@ public class UiLayoutBuilder {
             return this;
         }
 
+        /** Fixed logo width in dp; unset keeps the intrinsic aspect ratio (wrap_content). */
+        public ShellBuilder logoWidth(int width) {
+            this.logoWidth = width;
+            return this;
+        }
+
+        /** Fixed logo height in dp; unset keeps each surface's default (sidebar 28, mobile menu 32). */
+        public ShellBuilder logoHeight(int height) {
+            this.logoHeight = height;
+            return this;
+        }
+
+        /** Fixed logo box in dp. With {@code scale: fit} the mark stays uncropped within it. */
+        public ShellBuilder logoSize(int width, int height) {
+            this.logoWidth = width;
+            this.logoHeight = height;
+            return this;
+        }
+
         /** Favicon (URL or served asset) the web client installs at runtime. */
         public ShellBuilder favicon(String url) {
             this.faviconUrl = url;
@@ -370,7 +391,8 @@ public class UiLayoutBuilder {
 
         ShellConfig build() {
             BrandingConfig branding = new BrandingConfig(
-                    appName, logoUrl, logoUrlDark, faviconUrl, light.build(), dark.build());
+                    appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
+                    light.build(), dark.build());
             return new ShellConfig(nav, branding);
         }
     }

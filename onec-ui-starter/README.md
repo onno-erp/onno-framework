@@ -168,6 +168,41 @@ registerWidget("gauge", GaugeWidget); // server: b.widget("SLA").type("gauge").d
 The server emits any non-native `type(...)` as an `onec-widget` descriptor; an unregistered type
 renders a labelled placeholder rather than vanishing.
 
+## Page action buttons
+
+`PageBuilder.actions(heading, spec)` adds a section of buttons to a page (the same `ActionSpec` an
+`EntityView.actions(...)` uses for list/row buttons). Each button either runs a **server handler**
+(`.handler(ctx -> ActionResult)` — POSTs to `/api/divkit/page-action`, runs for an authenticated
+user, self-authorizes via `ctx.user()`) or **navigates** (`.navigate("onec://...")`).
+
+```java
+b.actions("Connected accounts", a ->
+    a.action("connect-tochka")
+     .label("Connect Tochka Bank")
+     .logo("https://enter.tochka.com/favicon.ico")   // brand image, shown instead of a lucide icon
+     .handler(ctx -> ActionResult.redirect(oauth.beginConnect("tochka"))));
+```
+
+Button face — set **one**:
+
+| Builder | Renders |
+|---------|---------|
+| `.icon("download")` | a kebab-case [lucide](https://lucide.dev) icon |
+| `.logo("https://…/x.svg")` | an image (URL or app-static path) — for brand marks like "Connect with X". Rendered on page-action and list/row/toolbar buttons. |
+
+`ActionResult` (what a handler returns):
+
+| Factory | Effect |
+|---------|--------|
+| `ok()` | acknowledge, nothing observable |
+| `message(text)` | success toast |
+| `refresh(text)` | toast + reload the current surface |
+| `navigate("onec://…")` | route the client (internal `onec://` scheme; `{id}` is filled for row actions) |
+| `redirect(url)` | **full-page** navigation of the top-level browser to an external `url` (e.g. an OAuth consent screen that redirects back) — emitted as the `onec://redirect/<url>` scheme |
+
+`redirect(...)` differs from `navigate("onec://open/<url>")`, which opens a **new tab** (for viewing
+files); `redirect` replaces the current page so a provider round-trip lands back in the app.
+
 ### Misc — `/api`
 
 | Method | Path | Notes |
