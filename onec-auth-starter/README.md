@@ -56,6 +56,12 @@ to contribute nothing and wire your own security.
 | `onec.auth.users[*].username` | — | In-memory account username. |
 | `onec.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onec.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
+| `onec.auth.users[*].email` | — | Optional email that identifies this user for magic-link login (opt-in per account). See [magic-link](#passwordless-magic-link-login). |
+| `onec.auth.magic-link.enabled` | `false` | Opt-in passwordless email login (in-memory mode). See [magic-link](#passwordless-magic-link-login). |
+| `onec.auth.magic-link.token-validity` | `15m` | How long an emailed link stays valid; single-use regardless. |
+| `onec.auth.magic-link.base-url` | — | Absolute base URL for the emailed link (e.g. `https://app.example.com`). Blank derives it from the request origin. |
+| `onec.auth.magic-link.redirect-path` | `/` | Same-origin path the browser lands on after a link is verified. |
+| `onec.auth.magic-link.subject` | `Your sign-in link` | Subject line of the magic-link email. |
 | `onec.auth.session.timeout` | `8h` | Idle session timeout for the cookie modes (`in-memory`, `oidc`), applied to the servlet container and **overriding** Spring Boot's 30-minute default. Slides on every request. Ignored in `resource-server` (stateless). |
 | `onec.auth.session.remember-me.enabled` | `true` | In-memory only: issue a persistent remember-me cookie on login and re-authenticate from it after the session lapses. |
 | `onec.auth.session.remember-me.validity` | `14d` | How long the remember-me cookie stays valid. |
@@ -67,7 +73,12 @@ Default `public-paths`:
 /error
 /api/theme
 /api/config
+/api/branding
 /api/auth/login
+/api/auth/me
+/api/divkit/login
+/api/auth/magic/request
+/api/auth/magic/verify
 /api/desktop/ready
 /api/desktop/manifest
 ```
@@ -131,6 +142,8 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 | `POST` | `/api/auth/login` | public, CSRF-exempt | `{"username":"...","password":"...","remember":true}` | `200` `{"authenticated":true,"username":"...","roles":["ROLE_ADMIN",...]}`; `401` on bad credentials; `400` if username/password missing. `remember` is optional (default `true`) and, when remember-me is enabled, controls whether the persistent cookie is issued |
 | `GET` | `/api/auth/me` | public | — | Current user, or `{"authenticated":false,"username":"","roles":[]}` when anonymous |
 | `POST` | `/api/auth/logout` | authenticated (needs CSRF header) | — | `204 No Content`; cancels the remember-me cookie, clears the security context, and invalidates the session |
+| `POST` | `/api/auth/magic/request` | public, CSRF-exempt | `{"email":"..."}` | `202 Accepted` always (no account enumeration). Opt-in — only mapped when `onec.auth.magic-link.enabled=true`. See [magic-link](#passwordless-magic-link-login) |
+| `GET` | `/api/auth/magic/verify` | public | `?token=…` | `302` into the app on success (session established) or to `/login?error=link` if invalid/expired/used. Opt-in as above |
 
 `roles` are the granted authorities verbatim, so they include the `ROLE_` prefix (a `USER` role
 appears as `ROLE_USER`).
@@ -179,6 +192,64 @@ curl -s -b "$JAR" \
 # 5) Log out (also a mutation, so it needs the CSRF header).
 curl -s -b "$JAR" -X POST -H "X-XSRF-TOKEN: $XSRF" "$BASE/api/auth/logout"
 ```
+
+## Passwordless magic-link login
+
+An **opt-in** alternative to the password form for the `in-memory` mode: the user enters their email,
+the framework emails a single-use link, and following it establishes the session — no password typed.
+It composes with password login (both appear on the login screen); it is **not** used in the `oidc` /
+`resource-server` modes, where the IdP owns sign-in.
+
+The mental model mirrors SSO: just as an OIDC backend keys a user by an external identity, here an
+in-memory user *declares its email* as the identity the link looks up. So enabling it is two steps —
+flip the switch, and give the accounts that may use it an `email`:
+
+```yaml
+onec:
+  auth:
+    magic-link:
+      enabled: true
+      # token-validity: 15m              # how long a link is valid (single-use regardless)
+      # base-url: https://app.example.com # else derived from the request origin
+      # redirect-path: /                  # where verify lands the browser
+    users:
+      - username: admin
+        password: "s3cret"
+        roles: [ADMIN]
+        email: admin@example.com         # opt-in: a user with no email can't use magic-link
+```
+
+**Requirements (fail-fast at startup if missing):**
+
+- The **`onec-mail-starter`** on the classpath with a configured provider — the default
+  `MagicLinkSender` emails the link via `MailService`.
+- A **`DataSource`** — tokens are persisted (hashed) in `onec_auth_magic_link` so a link issued by one
+  node validates on any node of a horizontally-scaled deployment.
+
+**Flow:**
+
+1. `POST /api/auth/magic/request {"email":"..."}` → if the address maps to a user, a single-use token
+   is generated, its SHA-256 hash stored with an expiry, and the link emailed. The endpoint returns
+   `202` **whether or not** an account matched, so it can't be used to enumerate registered addresses.
+2. `GET /api/auth/magic/verify?token=…` → validates and consumes the token atomically (single-use,
+   expiry-checked), establishes the `SecurityContext` in the session exactly like `/api/auth/login`,
+   and redirects to `redirect-path`. An invalid/expired/used link redirects to `/login?error=link`.
+
+**Security properties:** 256-bit `SecureRandom` tokens; only their hash is persisted (a store leak
+can't be replayed); single-use consumption closes the replay window; short default validity (15 min);
+and uniform `202` responses (no enumeration).
+
+**Extension points** (register your own bean to override the default):
+
+| SPI | Default | Replace to… |
+|-----|---------|-------------|
+| `MagicLinkUserLookup` | reads `onec.auth.users` (match `email`, else email-shaped `username`) | resolve emails against your own user directory |
+| `MagicLinkTokenStore` | JDBC (`onec_auth_magic_link`) | use a different store (e.g. Redis) |
+| `MagicLinkSender` | emails via `MailService` | deliver another way / fully control the message body |
+
+The login screen advertises the option through `AuthMethods.magicLinkEnabled` (the same SPI that
+carries the password flag and SSO providers); the onec UI renders it as the `onec-magic-link` block on
+the DivKit login card.
 
 ## OIDC (Keycloak, Zitadel, …)
 
@@ -342,7 +413,8 @@ onec:
 The available methods are exposed to the UI through the `com.onec.auth.spi.AuthMethodsProvider` bean
 (contract in `onec-framework`), so the UI module can build the login screen server-side without
 depending on this module. In the onec UI this drives the DivKit login card (`GET /api/divkit/login`):
-the server emits a password form and/or one button per SSO provider, and adding an IdP needs no client
+the server emits a password form, the [magic-link](#passwordless-magic-link-login) block (when
+`AuthMethods.magicLinkEnabled`), and/or one button per SSO provider, and adding an IdP needs no client
 change.
 
 `AuthMethodsProvider` is the single source of the password flag, mode, and logout URL. To **add** a

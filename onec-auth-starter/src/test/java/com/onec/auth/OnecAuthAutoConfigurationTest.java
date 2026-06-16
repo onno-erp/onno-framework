@@ -83,11 +83,13 @@ class OnecAuthAutoConfigurationTest {
     }
 
     @Test
-    void csrfIgnoredPathsDefaultToLoginOnly() {
+    void csrfIgnoredPathsDefaultToPublicPreAuthPosts() {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
+            // The pre-auth login and magic-link-request POSTs are public and carry no session/token
+            // to protect, so both are exempt by default.
             assertThat(context.getBean(OnecAuthProperties.class).getCsrfIgnoredPaths())
-                    .containsExactly("/api/auth/login");
+                    .containsExactly("/api/auth/login", "/api/auth/magic/request");
         });
     }
 

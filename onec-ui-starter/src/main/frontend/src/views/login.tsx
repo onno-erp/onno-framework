@@ -5,6 +5,7 @@ import { useTheme } from "@/providers/theme-provider";
 import { useBranding } from "@/providers/branding-provider";
 import { DivKitContent, type ContentAction, type ContentCard } from "@/views/divkit-content";
 import { LoginFormPortals } from "@/lib/login-form-bridge";
+import { MagicLinkPortals } from "@/lib/magic-link-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 
 /**
@@ -120,6 +121,7 @@ export function LoginView() {
 
       {/* DivKit custom blocks on the card mount their React widgets through these portals. */}
       <LoginFormPortals />
+      <MagicLinkPortals />
       <IconPortals />
     </main>
   );

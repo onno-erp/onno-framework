@@ -184,7 +184,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes (ui-starter) |
-| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` (auth-starter) |
+| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`; opt-in magic-link: `POST /api/auth/magic/request`, `GET /api/auth/magic/verify` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
@@ -231,9 +231,19 @@ and `config(key,value)` reference.
   the token via `onec.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.
 
+**Passwordless magic-link** (opt-in, in-memory mode): set `onec.auth.magic-link.enabled=true` and a
+user's `email` on `onec.auth.users[*]`. `POST /api/auth/magic/request {email}` emails a single-use
+link (via the `onec-mail-starter`); `GET /api/auth/magic/verify?token=…` consumes it, establishes the
+session like `/api/auth/login`, and redirects into the app. Tokens are stored hashed in
+`onec_auth_magic_link` (needs a `DataSource`) so links validate across nodes; the request endpoint
+returns `202` regardless of whether the address is registered (no account enumeration). Delivery and
+token storage are pluggable via `MagicLinkSender` / `MagicLinkTokenStore` beans; the login screen
+advertises it through `AuthMethods.magicLinkEnabled`.
+
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
 `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/divkit/login`,
-`/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a catalog/document/register is invisible
+`/api/auth/magic/request`, `/api/auth/magic/verify`, `/api/desktop/**`). **Per-entity RBAC is
+deny-by-default**: a catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onec.auth.enabled=false` and supplying your own
 `SecurityFilterChain`.

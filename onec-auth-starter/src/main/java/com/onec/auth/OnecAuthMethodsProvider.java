@@ -29,7 +29,8 @@ class OnecAuthMethodsProvider implements AuthMethodsProvider {
     @Override
     public AuthMethods authMethods() {
         return switch (properties.getMode()) {
-            case IN_MEMORY -> new AuthMethods(true, List.of(), null, "in-memory");
+            case IN_MEMORY -> new AuthMethods(true, properties.getMagicLink().isEnabled(),
+                    List.of(), null, "in-memory");
             case RESOURCE_SERVER -> new AuthMethods(false, List.of(), null, "resource-server");
             case OIDC -> {
                 OnecAuthProperties.ResolvedOidc oidc = properties.getOidc().resolved();

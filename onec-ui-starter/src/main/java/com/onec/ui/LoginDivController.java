@@ -54,7 +54,8 @@ public class LoginDivController {
         }
         List<SsoProvider> providers = new ArrayList<>(base.providers());
         providers.addAll(contributed);
-        return new AuthMethods(base.passwordEnabled(), providers, base.logoutUrl(), base.mode());
+        return new AuthMethods(base.passwordEnabled(), base.magicLinkEnabled(),
+                providers, base.logoutUrl(), base.mode());
     }
 
     /**

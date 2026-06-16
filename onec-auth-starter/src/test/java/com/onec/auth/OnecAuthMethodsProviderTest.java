@@ -42,6 +42,7 @@ class OnecAuthMethodsProviderTest {
             AuthMethods m = methods(context);
             assertThat(m.mode()).isEqualTo("in-memory");
             assertThat(m.passwordEnabled()).isTrue();
+            assertThat(m.magicLinkEnabled()).isFalse();
             assertThat(m.providers()).isEmpty();
             assertThat(m.logoutUrl()).isNull();
         });
