@@ -201,7 +201,8 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 | `calendar` | FullCalendar | Documents only; drag-to-reschedule. |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
-| *(custom)* | App-registered React component | Register on the client with `registerWidget("map", MapWidget)`. |
+| `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `geoField` (a `"lat,lng"` string) **or** `latField`+`lngField` for markers, and/or `geoJsonField` for shapes (paths/areas); features link to the record and label from `.titleField(...)`. |
+| *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
 
 > `stat`, `sparkline` and `gauge` read the same source + aggregate config as `chart`
 > (`metric`/`metricField`, `groupBy`/`groupByDate`); `stat`/`sparkline` also take `kind` =
@@ -228,6 +229,9 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
 | `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
 | `dateField` | list, calendar | Column for the date (also `.dateField(...)` on the builder). |
+| `geoField` | map | Field holding a `"lat,lng"` string marker point (what `.widget("map")` writes). |
+| `latField`, `lngField` | map | Numeric latitude/longitude fields, when the point is stored split (used when `geoField` is unset). |
+| `geoJsonField` | map | Field holding GeoJSON geometry — points, paths, areas (what `.widget("geojson")` writes). Plotted alongside any marker point. |
 
 > A register-backed `metric`/`chart` sums a register **resource** over its turnover; `metricField`
 > must name a resource column, and `filter` may reference its **dimensions**.
@@ -236,11 +240,57 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 
 ```ts
 import { registerWidget } from "@/lib/widget-bridge";
-registerWidget("map", MapWidget); // server: b.widget("Sites").type("map").document(Site.class)
+registerWidget("heatmap", HeatmapWidget); // server: b.widget("Load").type("heatmap").document(Shift.class)
 ```
 
 The server emits any non-native `type(...)` as an `onec-widget` descriptor; an unregistered type
 renders a labelled placeholder rather than vanishing.
+
+## Maps
+
+Geolocation renders on **MapLibre GL** over a minimal **monochrome basemap that flips light/dark
+with the app theme** — no API key, no billing, and a collapsed ⓘ attribution. Data geometry is
+tinted with the brand color (`--primary`). Two storage shapes, both on a plain String attribute:
+
+- a **point** — a single `"lat,lng"` string (the simple picker / legacy format), or a numeric
+  `lat`/`lng` pair on the read surfaces;
+- **geometry** — a GeoJSON string holding points, paths (lines), and areas (polygons).
+
+The built-in basemap is the keyless CARTO monochrome raster; apps that want a fully recolored vector
+basemap or an **offline self-hosted Protomaps** style can pass a style override to the map components.
+
+**1. Field inputs.** Opt a String attribute into a map control from the entity's `fields(...)`:
+
+```java
+f.field("location").widget("map");        // single point → "lat,lng" (click/drag a marker, or type)
+f.field("serviceArea").widget("geojson"); // geometry editor → draw points/lines/polygons (GeoJSON)
+```
+
+The geometry editor has Point / Line / Area tools: click to add vertices, double-click or **Finish**
+to complete a line/area, **drag the handles** to reshape, right-click a shape to delete. The
+detail/read view of either field renders the stored geometry as a small map automatically.
+
+**2. Dashboard widget** — plot a catalog/document's records on a `Page`:
+
+```java
+b.widget("Stores").type("map").width("full").catalog(Store.class)
+ .config("geoField", "location")          // marker point ("lat,lng"); or latField/lngField
+ .config("geoJsonField", "service_area")  // optional shape (GeoJSON) — paths/areas
+ .titleField("name");                      // popup label (falls back to a system identifier)
+```
+
+**3. List map view** — add a Table ⇄ Map toggle to an entity's list, from its `list(ListSpec)`:
+
+```java
+spec.map().field("location").label("name");            // "lat,lng" marker
+spec.map().lat("latitude").lng("longitude");           // split numeric fields
+spec.map().geoJson("serviceArea");                     // GeoJSON shapes (combine with a point if you like)
+spec.map().field("location").defaultView();            // open on the map, not the table
+```
+
+Features in the widget and list views link back to the record; records with no geometry are skipped.
+A misconfigured map (a geo source that doesn't resolve) degrades to no map rather than failing the
+surface.
 
 ## Page action buttons
 

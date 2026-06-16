@@ -8,6 +8,7 @@ import { ListWidget } from "@/components/list-widget";
 import { StatWidget } from "@/components/stat-widget";
 import { SparklineWidget } from "@/components/sparkline-widget";
 import { GaugeWidget } from "@/components/gauge-widget";
+import { MapWidget } from "@/components/map-widget";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks to React widgets. The server emits a
@@ -34,6 +35,7 @@ const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> =
   stat: StatWidget,
   sparkline: SparklineWidget,
   gauge: GaugeWidget,
+  map: MapWidget,
 };
 
 /**

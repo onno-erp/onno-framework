@@ -28,18 +28,25 @@ public class PropertyView implements EntityView {
                 .label("capacityAdults", "Sleeps")
                 .label("defaultNightRate", "Rate / night")
                 .label("cleaningFee", "Cleaning");
+        // Offer a Table ⇄ Map toggle; the marker reads the "lat,lng" `location` field, the drawn
+        // service area reads the GeoJSON `serviceArea` field, both labelled by the property name.
+        list.map().field("location").geoJson("serviceArea").label("displayName");
     }
 
     @Override
     public void fields(EntityConfigBuilder f) {
         f.field("displayName").order(0)
                 .field("address").order(1)
-                .field("capacityAdults").order(2)
+                .field("location").order(2).width("full").widget("map")
+                        .hint("Pin the property on the map, or type precise lat/lng coordinates.")
+                .field("serviceArea").order(3).width("full").widget("geojson")
+                        .hint("Draw the property's coverage area (or any paths/points) on the map.")
+                .field("capacityAdults").order(4)
                         .hint("Maximum number of adults the property sleeps; used for availability search.")
-                .field("defaultNightRate").order(3)
+                .field("defaultNightRate").order(5)
                         .hint("Base rate per night before cleaning fee, taxes, or seasonal multipliers.")
-                .field("cleaningFee").order(4)
-                .field("sesEstablishmentCode").order(5)
+                .field("cleaningFee").order(6)
+                .field("sesEstablishmentCode").order(7)
                         .hint("Police/tourism registration code reported with each guest's stay (SES).");
     }
 }

@@ -46,11 +46,14 @@ public class FieldHintBuilder {
 
     /**
      * Override the control used to edit this field. Built-in hints include {@code "switch"}/
-     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "map"}/{@code "geo"} (a "lat,lng"
-     * string), and the media widgets {@code "image"}/{@code "photo"}, {@code "avatar"} (small round),
-     * {@code "images"}/{@code "gallery"}/{@code "photos"} (several), and {@code "file"} (any type).
-     * The media widgets stream the chosen file to {@code POST /api/media} and store only the returned
-     * reference URL, so a plain String attribute holds it — see {@code com.onec.ui.media}.
+     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "map"}/{@code "geo"} (a single point
+     * stored as a "lat,lng" string), {@code "geojson"} (the full geometry editor — draw points,
+     * paths, and areas, stored as a GeoJSON string), and the media widgets {@code "image"}/
+     * {@code "photo"}, {@code "avatar"} (small round), {@code "images"}/{@code "gallery"}/
+     * {@code "photos"} (several), and {@code "file"} (any type). The map widgets render on a
+     * theme-aware MapLibre basemap; the media widgets stream the chosen file to {@code POST /api/media}
+     * and store only the returned reference URL, so a plain String attribute holds it — see
+     * {@code com.onec.ui.media}.
      */
     public FieldHintBuilder widget(String widget) {
         this.widget = widget;

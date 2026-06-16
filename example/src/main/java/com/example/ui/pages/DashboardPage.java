@@ -1,5 +1,6 @@
 package com.example.ui.pages;
 
+import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
 import com.example.domain.registers.RevenueRegister;
@@ -78,5 +79,11 @@ public class DashboardPage implements Page {
                 .config("endDateField", "check_out")
                 .config("secondaryField", "client_display,property_display")
                 .config("amountField", "total_gross").config("currency", "EUR");
+
+        // ---- Map: properties as markers + drawn service areas (point + GeoJSON sources) --------
+        b.widget("Properties map").type("map").width("full").order(50).catalog(Property.class)
+                .config("geoField", "location").config("geoJsonField", "service_area")
+                .titleField("displayName")
+                .hint("Every property with a pinned location and any drawn service area; click to open.");
     }
 }

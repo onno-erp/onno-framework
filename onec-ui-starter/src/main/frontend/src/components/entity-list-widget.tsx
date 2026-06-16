@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Plus, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
 import { toast } from "sonner";
+import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -107,6 +108,8 @@ export type ListDescriptor = {
   actions?: ListAction[];
   inputs?: ListInput[];
   filters?: ListFilterControl[];
+  /** When set, the toolbar offers a Table ⇄ Map toggle that plots the rows as markers. */
+  map?: ListMapConfig;
   pageSize: number;
   // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
@@ -281,6 +284,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const [debounced, setDebounced] = useState("");
   // Keys of in-flight server actions (`key` for toolbar, `key:id` for a row) → spinner + disabled.
   const [pending, setPending] = useState<Set<string>>(new Set());
+  // Table vs map view (only offered when the list declares a map config). The map fetches its own
+  // rows, so the grid's search/filters/sort are hidden while it's shown.
+  const [view, setView] = useState<"table" | "map">(list.map?.defaultView ? "map" : "table");
+  const mapMode = !!list.map && view === "map";
 
   const allActions = list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
@@ -559,7 +566,43 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           </p>
         </div>
         <div className={cn("flex flex-wrap items-center gap-2", stacked ? "justify-start" : "ml-auto justify-end")}>
-          {filters.map((f) => {
+          {list.map ? (
+            <div className="inline-flex h-9 shrink-0 items-center rounded-lg border border-input bg-muted p-0.5">
+              <button
+                type="button"
+                onClick={() => setView("table")}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                  view === "table"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Table view"
+                aria-label="Table view"
+                aria-pressed={view === "table"}
+              >
+                <Table2 className="size-4" />
+                {compact ? null : "Table"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("map")}
+                className={cn(
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                  view === "map"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Map view"
+                aria-label="Map view"
+                aria-pressed={view === "map"}
+              >
+                <MapIcon className="size-4" />
+                {compact ? null : "Map"}
+              </button>
+            </div>
+          ) : null}
+          {!mapMode && filters.map((f) => {
             // A date-range filter is two pickers. Each needs ~160px so the dd/mm/yyyy segments +
             // calendar icon stay on one line (w-36 squished them onto two). On a wide toolbar they
             // sit inline at that fixed width; on a stacked/narrow one (where two fixed pickers would
@@ -644,7 +687,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               </label>
             );
           })}
-          {toolbarInputs.map((inp) => (
+          {!mapMode && toolbarInputs.map((inp) => (
             <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>
               {inp.type === "select" ? (
@@ -684,7 +727,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               )}
             </label>
           ))}
-          {list.searchable ? (
+          {!mapMode && list.searchable ? (
             <div className={cn("relative", stacked ? "min-w-[8rem] flex-1" : "")}>
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
@@ -744,9 +787,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         </div>
       </div>
 
-      {/* table card — one scroller for both axes; the header sticks to the top (so it scrolls
-          horizontally in lock-step with the rows) and the inner min-width drives horizontal
-          scroll when the card is narrower than the columns need. */}
+      {mapMode ? (
+        <ListMapView kind={kind} name={name} config={list.map!} />
+      ) : (
+      /* table card — one scroller for both axes; the header sticks to the top (so it scrolls
+         horizontally in lock-step with the rows) and the inner min-width drives horizontal
+         scroll when the card is narrower than the columns need. */
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <div ref={scrollRef} className="overflow-auto" style={{ height: bodyH }} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
           <div style={{ minWidth: minTableWidth }}>
@@ -862,6 +908,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

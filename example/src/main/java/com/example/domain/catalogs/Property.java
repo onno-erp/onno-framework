@@ -30,6 +30,14 @@ public class Property extends CatalogObject {
     @Attribute(displayName = "Address", length = 255)
     private String address;
 
+    /** Geolocation as a "lat,lng" string; edited via the map picker (.widget("map")). */
+    @Attribute(displayName = "Location", length = 40)
+    private String location;
+
+    /** A drawn service/coverage area as GeoJSON; edited via the geometry editor (.widget("geojson")). */
+    @Attribute(displayName = "Service area", length = 8000)
+    private String serviceArea;
+
     @Attribute(displayName = "Capacity (adults)")
     private Integer capacityAdults;
 

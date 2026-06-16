@@ -28,6 +28,7 @@ public final class ListSpec {
     private String sortField;
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
+    private MapSpec map;
 
     public ListSpec title(String title) {
         this.title = title;
@@ -113,6 +114,31 @@ public final class ListSpec {
         return b;
     }
 
+    /**
+     * Enable a map view for this list: a Table ⇄ Map toggle in the toolbar that plots the records as
+     * markers over OpenStreetMap tiles. Returns a {@link MapSpec}; tell it where each record's point
+     * comes from — a single {@code "lat,lng"} string field via {@link MapSpec#field}, or a numeric
+     * latitude/longitude pair via {@link MapSpec#lat}/{@link MapSpec#lng} — and optionally a
+     * {@link MapSpec#label} field for the marker popup and {@link MapSpec#defaultView} to open on the
+     * map. Field names are entity field names, like the column/sort/filter ones.
+     *
+     * <p>Calling {@code map()} more than once returns the same spec (so chained calls accumulate).
+     * A map whose geo field(s) don't resolve to real columns degrades to "no map view" rather than
+     * failing the list.</p>
+     *
+     * <pre>
+     * list.map().field("location").label("name");          // "lat,lng" string field
+     * list.map().lat("latitude").lng("longitude");          // split numeric fields
+     * list.map().field("location").defaultView();           // open on the map, not the table
+     * </pre>
+     */
+    public MapSpec map() {
+        if (map == null) {
+            map = new MapSpec();
+        }
+        return map;
+    }
+
     public String title() { return title; }
 
     public List<String> include() { return List.copyOf(include); }
@@ -132,6 +158,77 @@ public final class ListSpec {
     /** The declared list filters, in declaration order. */
     public List<Filter> filters() {
         return filters.stream().map(FilterBuilder::build).toList();
+    }
+
+    /** The map view spec, or null when {@link #map()} was never called (no map view). */
+    public MapSpec mapSpec() {
+        return map;
+    }
+
+    /**
+     * Where a list's map geometry comes from, and how it reads. A marker point comes from either a
+     * single combined {@link #field} ({@code "lat,lng"} string) or a {@link #lat}/{@link #lng} pair;
+     * arbitrary shapes (points/paths/areas) come from a {@link #geoJson} field (a GeoJSON string). A
+     * record may use any combination. {@link #label} names the field shown in a feature's popup;
+     * {@link #defaultView} opens the list on the map rather than the table.
+     */
+    public static final class MapSpec {
+        private String field;
+        private String latField;
+        private String lngField;
+        private String geoJsonField;
+        private String labelField;
+        private boolean defaultView = false;
+
+        MapSpec() {}
+
+        /** A single {@code "lat,lng"} string field for a marker point (what {@code .widget("map")} writes). */
+        public MapSpec field(String field) {
+            this.field = field;
+            return this;
+        }
+
+        /** The latitude field, when the point is stored as a numeric lat/lng pair. */
+        public MapSpec lat(String latField) {
+            this.latField = latField;
+            return this;
+        }
+
+        /** The longitude field, when the point is stored as a numeric lat/lng pair. */
+        public MapSpec lng(String lngField) {
+            this.lngField = lngField;
+            return this;
+        }
+
+        /** A GeoJSON field for arbitrary geometry — points, paths, and areas (what {@code .widget("geojson")} writes). */
+        public MapSpec geoJson(String geoJsonField) {
+            this.geoJsonField = geoJsonField;
+            return this;
+        }
+
+        /** The field shown in a feature's popup (defaults to a system identifier when unset). */
+        public MapSpec label(String labelField) {
+            this.labelField = labelField;
+            return this;
+        }
+
+        /** Open the list on the map view rather than the table. */
+        public MapSpec defaultView() {
+            this.defaultView = true;
+            return this;
+        }
+
+        public String field() { return field; }
+
+        public String latField() { return latField; }
+
+        public String lngField() { return lngField; }
+
+        public String geoJsonField() { return geoJsonField; }
+
+        public String labelField() { return labelField; }
+
+        public boolean isDefaultView() { return defaultView; }
     }
 
     /** How a filter narrows the list query (and which control the grid renders). */
