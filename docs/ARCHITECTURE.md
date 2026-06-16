@@ -179,6 +179,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Settings | `GET`/`PUT /api/settings` — `@Constant` values, ADMIN (ui-starter) |
 | Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions (ui-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}` — uploads ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
+| Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `DELETE /api/comments/{commentId}` — per-entity discussion threads, gated on read access to the entity (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes (ui-starter) |
@@ -291,9 +292,10 @@ are in [docs/licensing/MODULE-SPLIT-PLAN.md](licensing/MODULE-SPLIT-PLAN.md).
 
 The same starter mechanism is open to anyone — community extensions are first-class, not a fork.
 There are four extension surfaces: **connectors** (auto-config starters wrapping an external
-system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, custom `SecurityFilterChain`/
-`UserDetailsService`, Kafka `EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom
-widgets/actions), and Claude **skills/plugins** (via [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
+system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, an additive
+`AuthMethodsContributor` login button, custom `SecurityFilterChain`/`UserDetailsService`, Kafka
+`EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom widgets/actions), and Claude
+**skills/plugins** (via [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
 
 The contributor-facing how-to — the starter shape, the conventions that keep `io.github.onec-erp`
 and the `com.onec.*` packages reserved, and a definition of done — is in

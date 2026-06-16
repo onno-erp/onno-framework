@@ -55,9 +55,16 @@ export function LoginView() {
     const rest = url.slice("onec://".length);
     if (rest.startsWith("auth/sso/")) {
       // Full-page redirect to the IdP — the server-side authorization-code flow returns to the SPA
-      // shell, where /api/auth/me reflects the new session.
-      const id = rest.slice("auth/sso/".length);
-      if (id) window.location.href = `/oauth2/authorization/${id}`;
+      // shell, where /api/auth/me reflects the new session. The server carries the destination as
+      // `?to=` so a non-OIDC provider (e.g. a Telegram login flow) points at its own start URL; we
+      // fall back to the OIDC `/oauth2/authorization/{id}` convention when none is supplied. The
+      // `to.startsWith("/")` guard keeps the redirect same-origin.
+      const tail = rest.slice("auth/sso/".length);
+      const q = tail.indexOf("?");
+      const id = q >= 0 ? tail.slice(0, q) : tail;
+      const to = q >= 0 ? new URLSearchParams(tail.slice(q + 1)).get("to") : null;
+      const dest = to && to.startsWith("/") ? to : id ? `/oauth2/authorization/${id}` : null;
+      if (dest) window.location.href = dest;
     }
   }
 

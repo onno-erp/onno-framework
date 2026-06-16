@@ -14,7 +14,7 @@ Pick the one that matches what you're adding. Most "integrations" are **connecto
 | Surface | You're adding… | Mechanism |
 | --- | --- | --- |
 | **Connector** | a binding to an external system (a PMS, a bank, a marketplace, an ERP) | a Spring Boot auto-configuration starter that exposes a typed client + sync service |
-| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, a custom `SecurityFilterChain`/`UserDetailsService`, a Kafka `EventHandler`) |
+| **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a custom `SecurityFilterChain`/`UserDetailsService`, a Kafka `EventHandler`) |
 | **UI** | a dashboard widget, page, or action | `Page`/`Layout`/`EntityView` beans and app-registered custom widgets/actions (see [onec-ui-starter/README.md](../onec-ui-starter/README.md)) |
 | **Skill / plugin** | guidance that makes an AI agent good at your domain | a Claude skill published through a plugin marketplace (see [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)) |
 

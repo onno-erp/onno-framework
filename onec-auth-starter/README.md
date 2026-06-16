@@ -345,6 +345,20 @@ depending on this module. In the onec UI this drives the DivKit login card (`GET
 the server emits a password form and/or one button per SSO provider, and adding an IdP needs no client
 change.
 
+`AuthMethodsProvider` is the single source of the password flag, mode, and logout URL. To **add** a
+sign-in button without replacing it — e.g. a connector that is itself an identity provider — register
+an additive `com.onec.auth.spi.AuthMethodsContributor` bean; the UI appends every contributor's
+`ssoProviders()` to the base list. Each `SsoProvider` carries its own `authorizationUrl`, so a button
+need not follow the OIDC `/oauth2/authorization/{id}` convention (a Telegram flow can point at
+`/api/auth/telegram/start`):
+
+```java
+@Bean
+AuthMethodsContributor telegramLogin() {
+    return () -> List.of(new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start"));
+}
+```
+
 ## Gotchas
 
 - **No default credentials.** `onec.auth.users` is empty by default — if you configure none, no one

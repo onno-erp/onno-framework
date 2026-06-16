@@ -3,6 +3,8 @@ package com.onec.ui.divkit;
 import com.onec.auth.spi.AuthMethods;
 import com.onec.auth.spi.SsoProvider;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +74,7 @@ public final class LoginDivBuilder {
 
     /**
      * A full-width login button. Tapping it navigates to {@code onec://auth/sso/{id}}, which the
-     * host turns into a full-page redirect to {@code /oauth2/authorization/{id}}.
+     * host turns into a full-page redirect to the provider's authorization URL.
      */
     private static Map<String, Object> ssoButton(SsoProvider provider, boolean primary, Palette p) {
         Map<String, Object> label = Div.text("Continue with " + provider.label(), 14, "medium");
@@ -91,7 +93,23 @@ public final class LoginDivBuilder {
             Div.background(btn, p.surface());
             Div.stroke(btn, p.border(), 1);
         }
-        Div.action(btn, "sso", "onec://auth/sso/" + provider.id());
+        Div.action(btn, "sso", ssoAction(provider));
         return btn;
+    }
+
+    /**
+     * The tap action for an SSO button. Carries the provider's {@code authorizationUrl} as a
+     * {@code ?to=} parameter so an additive, non-OIDC contributor (e.g. a Telegram login flow at
+     * {@code /api/auth/telegram/start}) navigates to its own start endpoint rather than the OIDC
+     * {@code /oauth2/authorization/{id}} convention. The id stays in the path as the action log id
+     * and as the host's fallback target when no URL is carried.
+     */
+    private static String ssoAction(SsoProvider provider) {
+        String action = "onec://auth/sso/" + provider.id();
+        String url = provider.authorizationUrl();
+        if (url != null && !url.isBlank()) {
+            action += "?to=" + URLEncoder.encode(url, StandardCharsets.UTF_8);
+        }
+        return action;
     }
 }
