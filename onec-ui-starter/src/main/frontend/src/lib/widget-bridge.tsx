@@ -5,6 +5,9 @@ import { ChartWidget } from "@/components/chart-widget";
 import { CalendarWidget } from "@/components/calendar-widget";
 import { KanbanWidget } from "@/components/kanban-widget";
 import { ListWidget } from "@/components/list-widget";
+import { StatWidget } from "@/components/stat-widget";
+import { SparklineWidget } from "@/components/sparkline-widget";
+import { GaugeWidget } from "@/components/gauge-widget";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks to React widgets. The server emits a
@@ -28,6 +31,9 @@ const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> =
   calendar: CalendarWidget,
   kanban: KanbanWidget,
   list: ListWidget,
+  stat: StatWidget,
+  sparkline: SparklineWidget,
+  gauge: GaugeWidget,
 };
 
 /**

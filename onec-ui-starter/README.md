@@ -37,6 +37,7 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onec.ui.enabled` | `true` | Master switch. Also gated on a `MetadataRegistry` bean being present. |
 | `onec.ui.path` | `/ui` | SPA base path, returned to the client as `basePath` from `GET /api/config`. |
 | `onec.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
+| `onec.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
 | `onec.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. |
 | `onec.ui.update-check.enabled` | `true` | Poll onec-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
 | `onec.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
@@ -159,8 +160,9 @@ icon/label. A static row action (no functions) costs nothing: the list ships its
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
 compiled to DivKit. `count`/`metric` render as native big-number cards (resolved server-side);
-every other type — the built-in `chart`/`calendar`/`kanban`/`list` and any app-registered type —
-is emitted as an `onec-widget` custom block that the client renders with a React component.
+every other type — the built-in `chart`/`stat`/`sparkline`/`gauge`/`calendar`/`kanban`/`list` and
+any app-registered type — is emitted as an `onec-widget` custom block that the client renders with
+a React component.
 
 ```java
 b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
@@ -173,11 +175,18 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 |-------------|---------|-------|
 | `count` | KPI card — row count | Honours `filter`. |
 | `metric` | KPI card — aggregated value | `metric` = `sum`/`avg`/`min`/`max` over `metricField`; honours `filter`, `currency`/`format`. Works on `document`, `catalog`, or a register resource. |
-| `chart` | recharts bar/line/area/donut/**pie** | Source from `document`/`catalog` rows or a `register` (server-side turnover). |
+| `chart` | recharts bar/line/area/donut/**pie**, single- **or multi-series** | Source from `document`/`catalog` rows or a `register` (server-side turnover). `seriesBy` splits into colored series; `stacked` stacks them. |
+| `stat` | KPI tile with trend | Headline aggregate + period-over-period delta + a sparkline of the series. |
+| `sparkline` | Compact KPI tile | Headline aggregate + an inline sparkline (no delta). |
+| `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
 | `calendar` | FullCalendar | Documents only; drag-to-reschedule. |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
-| *(custom)* | App-registered React component | Register on the client with `registerWidget("gauge", GaugeWidget)`. |
+| *(custom)* | App-registered React component | Register on the client with `registerWidget("map", MapWidget)`. |
+
+> `stat`, `sparkline` and `gauge` read the same source + aggregate config as `chart`
+> (`metric`/`metricField`, `groupBy`/`groupByDate`); `stat`/`sparkline` also take `kind` =
+> `area` (default) or `line` for the sparkline shape, and `gauge` takes a `target`.
 
 ### `config(key, value)` reference
 
@@ -190,8 +199,12 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
 | `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
-| `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. |
-| `groupBy`, `groupByDate` | chart | Bucket field, and `day`/`week`/`month` for date buckets. |
+| `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. For `stat`/`sparkline` it picks the sparkline shape (`area` default, or `line`). |
+| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `day`/`week`/`month` for date buckets (date buckets are ordered chronologically). |
+| `seriesBy` | chart | Field that splits the chart into one colored series per distinct value (multi-series `bar`/`line`/`area`). Ignored by `pie`/`donut`. Series rank by total; the tail beyond the palette folds into "Other". |
+| `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
+| `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |
+| `target` | gauge | The 100% mark the ring fills toward; with none, the gauge shows the bare value in a full ring. |
 | `titleTemplate` | list | `"{guest_name} — {property_display}"`; unknown fields render empty. |
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
 | `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
@@ -204,7 +217,7 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
 
 ```ts
 import { registerWidget } from "@/lib/widget-bridge";
-registerWidget("gauge", GaugeWidget); // server: b.widget("SLA").type("gauge").document(Incident.class)
+registerWidget("map", MapWidget); // server: b.widget("Sites").type("map").document(Site.class)
 ```
 
 The server emits any non-native `type(...)` as an `onec-widget` descriptor; an unregistered type

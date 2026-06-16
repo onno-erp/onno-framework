@@ -62,6 +62,7 @@ public class DivKitController {
     private final RegisterQueryService registerQuery;
     private final UiActionResolver actionResolver;
     private final RelatedListReader relatedLists;
+    private final UiProperties uiProperties;
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -75,7 +76,8 @@ public class DivKitController {
                             DocumentQueryService documentQuery,
                             RegisterQueryService registerQuery,
                             UiActionResolver actionResolver,
-                            RelatedListReader relatedLists) {
+                            RelatedListReader relatedLists,
+                            UiProperties uiProperties) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
@@ -92,6 +94,7 @@ public class DivKitController {
         this.registerQuery = registerQuery;
         this.actionResolver = actionResolver;
         this.relatedLists = relatedLists;
+        this.uiProperties = uiProperties;
     }
 
     // ----- chrome (fast, no entity data) -----
@@ -220,9 +223,11 @@ public class DivKitController {
     }
 
     /**
-     * The Settings surface — just another authored {@link Page}, like the dashboard. An app can
-     * declare its own {@code Page} with route {@code "/settings"} to compose lists/widgets next to
-     * (or instead of) the constant editor; otherwise the default page renders the constant editor.
+     * The Settings surface — opt-in via {@code onec.ui.settings.enabled} (off by default). An app
+     * can author its own {@code Page} at route {@code "/settings"} to compose lists/widgets next to
+     * (or instead of) the constant editor, and that authored page renders regardless of the flag;
+     * the built-in default page (the constant editor) is gated on the flag. With neither, the route
+     * is {@code 404}.
      */
     @GetMapping("/settings")
     public Map<String, Object> settings(@RequestParam(required = false) String profile,
@@ -237,8 +242,11 @@ public class DivKitController {
         PageBuilder pb = new PageBuilder();
         if (page != null) {
             page.compose(pb);
-        } else {
+        } else if (uiProperties.getSettings().isEnabled()) {
             pb.title("Settings").subtitle("App-wide configuration.").constants();
+        } else {
+            // Opt-in and not enabled, with no authored page → the surface doesn't exist.
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Settings page is not enabled");
         }
         return DivCard.of("onec-content",
                 renderPage(pb, "/settings", columns, p, principal, active.id(), "Settings", "App-wide configuration."));
@@ -664,9 +672,10 @@ public class DivKitController {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), section.icon(), items));
             }
         }
-        // App-wide settings (the @Constant values) are administrator-only, so the entry only
-        // shows for admins; the /api/settings endpoints enforce it regardless.
-        if (access.roles(principal).contains("ADMIN")) {
+        // App-wide settings (the @Constant values) are opt-in (onec.ui.settings.enabled, off by
+        // default) and administrator-only, so the entry shows only when enabled and for admins; the
+        // /api/settings endpoints enforce the admin check regardless.
+        if (uiProperties.getSettings().isEnabled() && access.roles(principal).contains("ADMIN")) {
             nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
                     new ShellLayoutBuilder.NavItem("Settings", "onec://settings", "settings", "/settings"))));
         }

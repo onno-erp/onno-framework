@@ -28,6 +28,17 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+    /* Categorical chart palette (data widgets). Ordered so adjacent series stay
+       distinguishable; --chart-1 is also the default single-series accent. The
+       Java DSL can override per widget via config("colors", "..."). */
+    --chart-1: 222 83% 58%;
+    --chart-2: 152 60% 42%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 348 83% 58%;
+    --chart-5: 262 70% 60%;
+    --chart-6: 190 80% 42%;
+    --chart-7: 24 90% 55%;
+    --chart-8: 322 75% 58%;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 0 0% 4%;
     --sidebar-primary: 0 0% 9%;
@@ -63,6 +74,15 @@
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+    /* Lifted a touch in lightness/saturation so the palette reads on the dark canvas. */
+    --chart-1: 222 90% 66%;
+    --chart-2: 152 55% 52%;
+    --chart-3: 38 92% 58%;
+    --chart-4: 348 85% 66%;
+    --chart-5: 262 78% 70%;
+    --chart-6: 190 75% 52%;
+    --chart-7: 24 90% 62%;
+    --chart-8: 322 78% 66%;
     --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 60%;
     --sidebar-primary: 0 0% 98%;
