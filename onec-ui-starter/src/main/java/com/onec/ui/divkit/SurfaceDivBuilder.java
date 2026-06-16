@@ -91,6 +91,19 @@ public final class SurfaceDivBuilder {
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
         descriptor.put("pageSize", 100);
+        // Optional map view: a Table ⇄ Map toggle the island renders, plotting the rows as markers
+        // (the geo columns are resolved + validated server-side; see ResolvedListView.MapView).
+        if (view.mapView() != null) {
+            ResolvedListView.MapView mv = view.mapView();
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("geoField", mv.geoField());
+            map.put("latField", mv.latField());
+            map.put("lngField", mv.lngField());
+            map.put("geoJsonField", mv.geoJsonField());
+            map.put("labelField", mv.labelField());
+            map.put("defaultView", mv.defaultView());
+            descriptor.put("map", map);
+        }
         return descriptor;
     }
 
@@ -687,6 +700,11 @@ public final class SurfaceDivBuilder {
             if (!url.isBlank()) {
                 return Components.fileFieldRow(label, url, hint, p);
             }
+        } else if (isMapWidget(a)) {
+            String value = str(row.get(str(a.get("columnName"))));
+            if (!value.isBlank()) {
+                return Components.geoFieldRow(label, value, hint, p);
+            }
         }
         String refUrl = refUrlFor(a, row);
         if (refUrl != null) {
@@ -742,6 +760,16 @@ public final class SurfaceDivBuilder {
     /** A file-upload widget ({@code .widget("file")}); value is the stored media reference URL. */
     private static boolean isFileWidget(Map<String, Object> a) {
         return "file".equalsIgnoreCase(str(a.get("widget")));
+    }
+
+    /**
+     * A map widget ({@code .widget("map"|"geo"|"geolocation")} — a {@code "lat,lng"} point — or
+     * {@code .widget("geojson")} — GeoJSON points/paths/areas). Either renders read-only as a map.
+     */
+    private static boolean isMapWidget(Map<String, Object> a) {
+        String w = str(a.get("widget"));
+        return w.equalsIgnoreCase("map") || w.equalsIgnoreCase("geo")
+                || w.equalsIgnoreCase("geolocation") || w.equalsIgnoreCase("geojson");
     }
 
     /** A multi-image widget ({@code .widget("images"|"gallery")}); value is newline-joined URLs. */

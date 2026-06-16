@@ -1,5 +1,6 @@
 package com.example.ui.pages;
 
+import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
 import com.example.domain.registers.RevenueRegister;
@@ -12,10 +13,10 @@ import org.springframework.stereotype.Component;
 /**
  * The phone home screen: the dashboard for {@link Viewport#MOBILE}. Wins over
  * {@link DashboardPage} on mobile and carries the same graphs and "cool stuff" —
- * KPI tiles with momentum, the stacked time-series, the categorical charts, and
- * the calendar — but reordered for a single, scrollable phone column (every
- * widget renders full-width on mobile, so the desktop's side-by-side fractions
- * are dropped and the glance-first figures lead).
+ * KPI tiles with momentum, the stacked time-series, the categorical charts, the
+ * calendar, and the map — but reordered for a single, scrollable phone column
+ * (every widget renders full-width on mobile, so the desktop's side-by-side
+ * fractions are dropped and the glance-first figures lead).
  */
 @Component
 public class MobileDashboardPage implements Page {
@@ -62,12 +63,16 @@ public class MobileDashboardPage implements Page {
         b.widget("Bookings by channel").type("chart").width("full").order(13).document(Booking.class)
                 .config("kind", "donut").config("groupBy", "channel").config("metric", "count");
 
-        // ---- Calendar ------------------------------------------------------------------------
+        // ---- Calendar + map ------------------------------------------------------------------
         b.widget("Bookings calendar").type("calendar").width("full").order(20).document(Booking.class)
                 .dateField("check_in").titleField("summary")
                 .config("endDateField", "check_out")
                 .config("secondaryField", "client_display,property_display")
                 .config("amountField", "total_gross").config("currency", "EUR");
+        b.widget("Properties map").type("map").width("full").order(21).catalog(Property.class)
+                .config("geoField", "location").config("geoJsonField", "service_area")
+                .titleField("displayName")
+                .hint("Every property with a pinned location and any drawn service area; tap to open.");
 
         // ---- Recent activity -----------------------------------------------------------------
         b.widget("Recent bills").type("list").width("full").order(30).document(Bill.class).maxItems(6)

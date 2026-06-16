@@ -235,3 +235,29 @@ onec-icon {
 .dark [data-onec-row]:hover {
   background-color: hsl(var(--primary) / 0.18) !important;
 }
+
+/* ---- MapLibre: theme the popup + keep attribution to a small ⓘ -------------------------- */
+/* MapLibre's popup is hardcoded white; re-skin it with the theme tokens so a popup title
+   (theme foreground) stays readable in dark mode instead of near-white on white. */
+.maplibregl-popup-content {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  padding: 10px 12px;
+}
+/* The little triangle that points at the marker must match the popup background per side. */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: hsl(var(--popover)); }
+.maplibregl-popup-close-button { color: hsl(var(--muted-foreground)); }
+
+/* Attribution: a small, unobtrusive ⓘ by default that reveals the credit line on hover.
+   Hover-based (not the default click-to-toggle) so it's collapsed on load every time. */
+.maplibregl-ctrl-attrib.maplibregl-compact { min-height: 24px; background: hsl(var(--popover) / 0.85); }
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner { display: none; }
+.maplibregl-ctrl-attrib.maplibregl-compact:hover .maplibregl-ctrl-attrib-inner { display: block; }
+.maplibregl-ctrl-attrib { font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: hsl(var(--muted-foreground)); }

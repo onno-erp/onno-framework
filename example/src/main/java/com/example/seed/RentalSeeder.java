@@ -126,12 +126,18 @@ public class RentalSeeder implements CommandLineRunner {
     }
 
     private List<Property> seedProperties() {
+        // A sample GeoJSON service area (a polygon up the cape near Pool Place) so the geometry
+        // editor / map shapes have something to render out of the box.
+        String poolArea = "{\"type\":\"FeatureCollection\",\"features\":[{\"type\":\"Feature\","
+                + "\"properties\":{},\"geometry\":{\"type\":\"Polygon\",\"coordinates\":[[[3.2800,42.2895],"
+                + "[3.2835,42.2898],[3.2842,42.2915],[3.2808,42.2918],[3.2795,42.2905],[3.2800,42.2895]]]}}]}";
+        // Columns: name, address, capacity, rate, cleaning, "lat,lng" point, GeoJSON service area.
         Object[][] data = {
-                {"Can Joe", "Carrer Major 12, Cadaqués", 6, "220.00", "90.00"},
-                {"Can Toni", "Carrer del Mar 5, Cadaqués", 4, "180.00", "60.00"},
-                {"Pool Place", "Camí del Far 18, Cadaqués", 8, "280.00", "120.00"},
-                {"Loft", "Plaça Doctor Pont 3, Cadaqués", 2, "90.00", "40.00"},
-                {"Garden Suite", "Carrer Nou 22, Cadaqués", 4, "140.00", "60.00"},
+                {"Can Joe", "Carrer Major 12, Cadaqués", 6, "220.00", "90.00", "42.288500,3.279000", null},
+                {"Can Toni", "Carrer del Mar 5, Cadaqués", 4, "180.00", "60.00", "42.287100,3.278200", null},
+                {"Pool Place", "Camí del Far 18, Cadaqués", 8, "280.00", "120.00", "42.290200,3.281500", poolArea},
+                {"Loft", "Plaça Doctor Pont 3, Cadaqués", 2, "90.00", "40.00", "42.288000,3.277600", null},
+                {"Garden Suite", "Carrer Nou 22, Cadaqués", 4, "140.00", "60.00", "42.286600,3.279900", null},
         };
         List<Property> out = new ArrayList<>();
         for (Object[] row : data) {
@@ -142,6 +148,8 @@ public class RentalSeeder implements CommandLineRunner {
             p.setCapacityAdults((Integer) row[2]);
             p.setDefaultNightRate(new BigDecimal((String) row[3]));
             p.setCleaningFee(new BigDecimal((String) row[4]));
+            p.setLocation((String) row[5]);
+            p.setServiceArea((String) row[6]);
             out.add(properties.save(p));
         }
         log.info("  seeded {} properties", out.size());

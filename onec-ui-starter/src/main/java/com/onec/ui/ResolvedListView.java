@@ -9,7 +9,7 @@ import java.util.List;
  */
 public record ResolvedListView(String title, List<Column> columns,
                                boolean searchable, String sortColumn, boolean sortDescending,
-                               List<Filter> filters) {
+                               List<Filter> filters, MapView mapView) {
 
     public ResolvedListView {
         filters = filters == null ? List.of() : List.copyOf(filters);
@@ -17,13 +17,39 @@ public record ResolvedListView(String title, List<Column> columns,
 
     /** Back-compat: a non-searchable, default-sorted view. */
     public ResolvedListView(String title, List<Column> columns) {
-        this(title, columns, false, null, false, List.of());
+        this(title, columns, false, null, false, List.of(), null);
     }
 
     /** Back-compat: a view with no declarative filters. */
     public ResolvedListView(String title, List<Column> columns,
                             boolean searchable, String sortColumn, boolean sortDescending) {
-        this(title, columns, searchable, sortColumn, sortDescending, List.of());
+        this(title, columns, searchable, sortColumn, sortDescending, List.of(), null);
+    }
+
+    /** Back-compat: a view with filters but no map view. */
+    public ResolvedListView(String title, List<Column> columns,
+                            boolean searchable, String sortColumn, boolean sortDescending,
+                            List<Filter> filters) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, null);
+    }
+
+    /**
+     * A resolved map view: the data {@code columnName}s the geometry reads — a marker point (a
+     * combined {@code geoField} {@code "lat,lng"} string, or a {@code latField}/{@code lngField}
+     * pair) and/or a {@code geoJsonField} (GeoJSON points/paths/areas) — an optional
+     * {@code labelField} for the popup, and whether the list opens on the map. Column names are
+     * resolved + validated against the entity's real columns (an unresolved geo source drops the map
+     * view). A blank string means "unset".
+     */
+    public record MapView(String geoField, String latField, String lngField, String geoJsonField,
+                          String labelField, boolean defaultView) {
+        public MapView {
+            geoField = geoField == null ? "" : geoField;
+            latField = latField == null ? "" : latField;
+            lngField = lngField == null ? "" : lngField;
+            geoJsonField = geoJsonField == null ? "" : geoJsonField;
+            labelField = labelField == null ? "" : labelField;
+        }
     }
 
     /**

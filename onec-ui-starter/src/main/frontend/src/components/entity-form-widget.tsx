@@ -19,6 +19,7 @@ import {
 import { RefSelect } from "@/components/ref-select";
 import { DatePicker } from "@/components/date-picker";
 import { GeoPicker } from "@/components/geo-picker";
+import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
 import { RelatedListPanel } from "@/components/related-list-panel";
@@ -599,8 +600,12 @@ function AttrControl({
     );
   }
 
-  // A custom widget hint (.field(...).widget("map")) wins over the type-based control.
-  // Geolocation stores a plain "lat,lng" string, so it lives on a String attribute.
+  // A custom widget hint (.field(...).widget("map"|"geojson")) wins over the type-based control.
+  // "map"/"geo" is a single point stored as a "lat,lng" string; "geojson" is the full geometry
+  // editor (points/paths/areas) stored as a GeoJSON string. Both live on a String attribute.
+  if (/^geojson$/i.test(attr.widget ?? "")) {
+    return <MapEditor value={value as string | undefined} onChange={onChange} />;
+  }
   if (/^(map|geo|geolocation)$/i.test(attr.widget ?? "")) {
     return <GeoPicker value={value as string | undefined} onChange={onChange} />;
   }

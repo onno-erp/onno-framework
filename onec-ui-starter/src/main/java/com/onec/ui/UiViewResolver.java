@@ -135,8 +135,43 @@ public class UiViewResolver {
             filters.add(new ResolvedListView.Filter(
                     f.field(), f.label(), cm.columnName(), filterType(f.type()), f.options()));
         }
+
+        ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);
+
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
-                spec.sortDescending(), filters);
+                spec.sortDescending(), filters, mapView);
+    }
+
+    /**
+     * Resolve a declared map spec's field names to data columns (validated against the available
+     * columns), or null when there's no usable geo source — a combined field that doesn't resolve,
+     * or a lat/lng pair where either side is missing/unknown — so a misconfigured map degrades to
+     * "no map view" rather than a broken toggle.
+     */
+    private static ResolvedListView.MapView resolveMap(ListSpec.MapSpec spec,
+                                                       Map<String, ColumnMeta> available) {
+        if (spec == null) {
+            return null;
+        }
+        String geo = columnOf(spec.field(), available);
+        String lat = columnOf(spec.latField(), available);
+        String lng = columnOf(spec.lngField(), available);
+        String geoJson = columnOf(spec.geoJsonField(), available);
+        String label = columnOf(spec.labelField(), available);
+        boolean hasGeo = !geo.isEmpty() || (!lat.isEmpty() && !lng.isEmpty()) || !geoJson.isEmpty();
+        if (!hasGeo) {
+            return null;
+        }
+        return new ResolvedListView.MapView(geo, lat, lng, geoJson, label, spec.isDefaultView());
+    }
+
+    /** Resolve a field name to its data column, or "" when the name is blank/unknown. */
+    private static String columnOf(String field, Map<String, ColumnMeta> available) {
+        if (field == null || field.isBlank()) {
+            return "";
+        }
+        ColumnMeta cm = available.get(field);
+        return cm == null ? "" : cm.columnName();
     }
 
     /** The renderer-neutral control name the island keys off (see {@link ResolvedListView.Filter}). */

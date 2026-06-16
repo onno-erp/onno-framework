@@ -507,6 +507,42 @@ final class Components {
     }
 
     /**
+     * A detail field row for a geolocation attribute ({@code .widget("map")}): the label above a
+     * small read-only map pinned at the stored {@code "lat,lng"} value. The map is an
+     * {@code onec-geo} custom block (a Leaflet island the web client portals in; a non-web DivKit
+     * client can register its own {@code onec-geo} renderer). A height is reserved so DivKit lays
+     * out the box before the island — which is portaled in after layout — fills it.
+     */
+    static Map<String, Object> geoFieldRow(String label, String value, String hint, Palette p) {
+        List<Map<String, Object>> labelParts = new ArrayList<>();
+        labelParts.add(Div.color(Div.text(label, 13, "regular"), p.muted()));
+        Map<String, Object> glyph = hint(hint, p.muted(), 14);
+        if (glyph != null) {
+            labelParts.add(glyph);
+        }
+        Map<String, Object> labelRow = Div.horizontal(labelParts);
+        Div.wrapWidth(labelRow);
+        Div.gap(labelRow, 5);
+        Div.alignV(labelRow, "center");
+
+        Map<String, Object> geo = new java.util.LinkedHashMap<>();
+        geo.put("value", value);
+        geo.put("label", label);
+        // Single "geo" prop key matching the onec-geo element's `set geo(...)`, like the
+        // widget/form/list bridges (DivKit assigns each custom_props key as an element property).
+        Map<String, Object> map = Div.custom("onec-geo", Map.of("geo", geo));
+        Div.matchWidth(map);
+        Div.height(map, 200);
+        Div.corner(map, 10);
+
+        Map<String, Object> col = Div.vertical(List.of(labelRow, map));
+        Div.matchWidth(col);
+        Div.gap(col, 8);
+        Div.pad(col, 9, 0);
+        return col;
+    }
+
+    /**
      * A table row: its string {@code cells}, an optional row-level {@code actionUrl} (taps the whole
      * row — used by list surfaces), and an optional positionally-aligned {@code cellUrls} so an
      * individual cell (e.g. a ref column) can be a tappable link to another record. A null/short
