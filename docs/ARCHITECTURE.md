@@ -34,6 +34,7 @@ Apache-2.0) and `com.onec.enterprise` (commercial connectors). The desktop Gradl
 | `onec-auth-starter` | `io.github.onec-erp` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onec-mcp-starter` | `io.github.onec-erp` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onec-import-starter` | `io.github.onec-erp` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
+| `onec-cluster-starter` | `io.github.onec-erp` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI in sync across instances. |
 | `onec-kafka-starter` | `io.github.onec-erp` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onec-mail-starter` | `io.github.onec-erp` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
 | `onec-print-starter` | `io.github.onec-erp` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
@@ -265,6 +266,34 @@ Spring `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`
 SSE stream and lets server-side consumers (cache revalidation, search indexing) react to a specific
 resource instead of polling. `@DomainEvent` declarations append to the transactional `onec_outbox`;
 `onec-kafka-starter` relays those rows when you want cross-service streaming.
+
+The SSE fan-out is in-JVM by default — fine for one node. Add `onec-cluster-starter` (see below) to
+make `EntityChangedEvent`s reach browsers on **every** node of a scaled-out deployment.
+
+## Scaling out (horizontal)
+
+Running more than one instance behind a load balancer needs these, beyond a shared database:
+
+- **Live-UI events across nodes** — add `onec-cluster-starter`. It relays each `EntityChangedEvent`
+  over a pluggable `ClusterEventBus` (`com.onec.cluster`, an SPI swappable like `MediaStorage`);
+  the default uses Postgres `LISTEN`/`NOTIFY` (no extra infrastructure) and is a no-op on H2. A
+  received event is pushed straight to the local SSE stream and is **never** re-published as a Spring
+  event, so business `@EventListener`s (cache, search, post-hooks, the kafka outbox) still run exactly
+  once, on the node that made the change. `DocumentPostedEvent`/`DocumentUnpostedEvent` are node-local
+  by design; their cross-node *visibility* rides on the `posted`/`unposted` `EntityChangedEvent`. To
+  swap in Kafka/Redis, expose your own `ClusterEventBus` bean (`@ConditionalOnMissingBean`).
+- **Schema apply** — every node runs the boot-time diff/migration. On Postgres it is serialized by a
+  session-level advisory lock, so one node applies DDL while the others wait and then re-run against
+  the now-current schema (idempotent via the diff + `onec_schema_history`). H2 is single-node and
+  skips the lock.
+- **Auth** — set a stable `onec.auth.session.remember-me.key`; a blank key fails fast (per-node random
+  keys make cookies non-portable behind a load balancer). For single-node/dev, opt in with
+  `onec.auth.session.remember-me.allow-ephemeral-key=true`. Sessions are in-memory servlet sessions,
+  so use sticky routing or a shared session store.
+- **Media** — `FilesystemMediaStorage` is per-node; supply a shared `MediaStorage` bean (object store)
+  so uploads are reachable from any node.
+- Already cluster-safe: **JobRunr** scheduled jobs (DB-backed leader election), `onec_schema_history`
+  idempotency, and the "update available" notice (each node polls independently and converges).
 
 ## Build, versioning, publishing
 

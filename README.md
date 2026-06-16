@@ -83,6 +83,7 @@ validation / migration right, and use the runtime API — the canonical copy liv
 | `onec-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |
 | `onec-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
 | `onec-import-starter` | CSV import services and endpoints for catalogs. |
+| `onec-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out (pluggable bus; default Postgres LISTEN/NOTIFY). |
 | `onec-mcp-starter` | MCP server exposing metadata, CRUD, register queries, and posting as AI-agent tools. |
 | `onec-desktop-starter` | Desktop runtime support and packaged Tauri shell resources. |
 | `onec-desktop-gradle-plugin` | Gradle plugin for packaging a Spring Boot app as a native desktop bundle. |

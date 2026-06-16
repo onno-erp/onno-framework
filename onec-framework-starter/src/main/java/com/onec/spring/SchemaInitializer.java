@@ -5,6 +5,7 @@ import com.onec.migration.AppMigration;
 import com.onec.migration.MigrationRunner;
 import com.onec.schema.SchemaMode;
 import com.onec.schema.SchemaUpgrader;
+import com.onec.schema.SqlDialect;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -17,6 +18,14 @@ import java.util.List;
 public class SchemaInitializer implements InitializingBean {
 
     private static final Logger log = LoggerFactory.getLogger(SchemaInitializer.class);
+
+    /**
+     * Fixed key for the Postgres session-level advisory lock that serializes schema apply across the
+     * nodes of a horizontally-scaled deployment. Derived deterministically from {@code "onec"}/
+     * {@code "schema"} so every node — running the same code — computes the identical bigint.
+     */
+    private static final long SCHEMA_LOCK_KEY =
+            ((long) "onec".hashCode() << 32) | ("schema".hashCode() & 0xFFFFFFFFL);
 
     private final DataSource dataSource;
     private final List<String> scanPackages;
@@ -76,6 +85,29 @@ public class SchemaInitializer implements InitializingBean {
         }
 
         Jdbi jdbi = Jdbi.create(dataSource);
+        SqlDialect dialect = jdbi.withHandle(handle -> SqlDialect.detect(handle.getConnection()));
+
+        if (dialect == SqlDialect.POSTGRESQL && mode == SchemaMode.APPLY) {
+            // A horizontally-scaled deployment boots N instances that would otherwise race to run DDL.
+            // Hold a session-level advisory lock for the whole apply so exactly one node mutates the
+            // schema at a time; the others wait, then re-run against the now-current schema (the diff
+            // is empty and migrations are already recorded in onec_schema_history, so it is idempotent).
+            // The lock gates by session, not by which pooled connection runs the DDL. H2 is single-node
+            // and skips this; PLAN/VALIDATE only read, so they need no lock.
+            jdbi.useHandle(lock -> {
+                lock.execute("SELECT pg_advisory_lock(?)", SCHEMA_LOCK_KEY);
+                try {
+                    applySchema(jdbi, registry);
+                } finally {
+                    lock.execute("SELECT pg_advisory_unlock(?)", SCHEMA_LOCK_KEY);
+                }
+            });
+        } else {
+            applySchema(jdbi, registry);
+        }
+    }
+
+    private void applySchema(Jdbi jdbi, MetadataRegistry registry) {
         new SchemaUpgrader(registry, mode, allowDestructive).run(jdbi);
 
         MigrationRunner runner = new MigrationRunner(registry);

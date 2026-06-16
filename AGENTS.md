@@ -35,6 +35,7 @@ to future agents that may not have the full conversation context.
 | `onec-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onec-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onec-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
+| `onec-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
 | `onec-print-starter` | Print/PDF rendering support (`@PrintTemplate`, Thymeleaf + Flying Saucer). |
 | `onec-mail-starter` | Mail templates, dispatchers, preview endpoints, and outbox relay. |
 | `onec-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |

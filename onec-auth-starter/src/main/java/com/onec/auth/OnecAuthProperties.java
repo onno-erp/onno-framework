@@ -242,11 +242,20 @@ public class OnecAuthProperties {
 
         /**
          * Secret that signs the remember-me cookie. Set a stable, non-guessable value in production
-         * so cookies survive restarts and can't be forged. When blank, a random key is generated at
-         * startup — remember-me still works within a single run, but every restart invalidates
-         * outstanding cookies (and a warning is logged).
+         * so cookies survive restarts, can't be forged, and validate across every node of a
+         * horizontally-scaled deployment. When blank, startup fails fast unless
+         * {@link #allowEphemeralKey} is set (a blank key would otherwise sign cookies with a secret
+         * that peer nodes reject, breaking login under a load balancer).
          */
         private String key;
+
+        /**
+         * When {@link #key} is blank, allow the app to start anyway with a built-in non-secret dev
+         * key. Off by default so a multi-node deployment fails fast instead of silently signing
+         * cookies a load-balanced peer can't verify. Turn on only for single-node/dev — never with a
+         * real secret expectation.
+         */
+        private boolean allowEphemeralKey = false;
 
         public boolean isEnabled() {
             return enabled;
@@ -254,6 +263,14 @@ public class OnecAuthProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public boolean isAllowEphemeralKey() {
+            return allowEphemeralKey;
+        }
+
+        public void setAllowEphemeralKey(boolean allowEphemeralKey) {
+            this.allowEphemeralKey = allowEphemeralKey;
         }
 
         public Duration getValidity() {

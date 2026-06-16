@@ -71,6 +71,7 @@ val publishedModules = mapOf(
     "onec-ui-starter" to "Server-driven admin UI starter for onec — bundles the frontend and its Spring MVC endpoints.",
     "onec-auth-starter" to "Authentication starter for onec: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
     "onec-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onec query and command services to AI agents.",
+    "onec-cluster-starter" to "Cross-node delivery of onec entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onec-kafka-starter" to "Kafka integration starter publishing onec entity-change events to topics.",
     "onec-print-starter" to "PDF / printing starter for onec using Thymeleaf templates and Flying Saucer.",
     "onec-mail-starter" to "Email starter for onec: SMTP and HTTP dispatch with Thymeleaf-templated bodies.",
@@ -215,8 +216,8 @@ val configNotesDir = file("docs/_config")
 // Render order + human section titles. One entry per published starter that owns `onec.*` props.
 val configModuleProjects = listOf(
     "onec-framework-starter", "onec-ui-starter", "onec-auth-starter", "onec-mcp-starter",
-    "onec-import-starter", "onec-kafka-starter", "onec-mail-starter", "onec-print-starter",
-    "onec-desktop-starter",
+    "onec-import-starter", "onec-cluster-starter", "onec-kafka-starter", "onec-mail-starter",
+    "onec-print-starter", "onec-desktop-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each
@@ -242,6 +243,7 @@ val configModuleTitles = mapOf(
     "onec-auth-starter" to "Auth — `onec-auth-starter` (`OnecAuthProperties`, prefix `onec.auth`)",
     "onec-mcp-starter" to "MCP — `onec-mcp-starter` (`OnecMcpProperties`, prefix `onec.mcp`)",
     "onec-import-starter" to "Import — `onec-import-starter` (`OnecImportProperties`, prefix `onec.import`)",
+    "onec-cluster-starter" to "Cluster — `onec-cluster-starter` (`OnecClusterProperties`, prefix `onec.cluster`)",
     "onec-kafka-starter" to "Kafka — `onec-kafka-starter` (`OnecKafkaProperties`, prefix `onec.kafka`)",
     "onec-mail-starter" to "Mail — `onec-mail-starter` (`MailProperties`, prefix `onec.mail`)",
     "onec-print-starter" to "Print — `onec-print-starter` (`PrintProperties`, prefix `onec.print`)",

@@ -4,32 +4,25 @@ plugins {
 
 dependencies {
     api(project(":onec-framework"))
+    implementation(project(":onec-framework-starter"))
 
     implementation(libs.spring.boot.autoconfigure)
-    implementation(libs.spring.context)
-    implementation(libs.spring.jdbc)
-    implementation(libs.spring.data.jdbc)
-    implementation(libs.micrometer.core)
+    implementation(libs.jackson.databind)
 
-    api(libs.jobrunr.spring.boot3.starter)
+    // The PostgreSQL driver is provided at runtime by a Postgres deployment (it is the DataSource);
+    // on H2 the bus is never instantiated, so org.postgresql.* is never loaded.
+    compileOnly(libs.postgresql)
 
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)
 
-    testCompileOnly(libs.lombok)
-    testAnnotationProcessor(libs.lombok)
-    testImplementation(libs.spring.test)
-    testImplementation(libs.micrometer.core)
-    testImplementation(libs.h2)
-    testImplementation(libs.slf4j.simple)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.h2)
+    testImplementation(libs.jackson.datatype.jsr310)
     testImplementation(libs.testcontainers.postgresql)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.postgresql)
     testRuntimeOnly(libs.junit.platform.launcher)
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
 }

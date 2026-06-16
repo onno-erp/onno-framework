@@ -15,6 +15,7 @@ import org.jobrunr.scheduling.JobScheduler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.ObjectProvider;
@@ -158,6 +159,28 @@ public class OnecAutoConfiguration extends AbstractJdbcConfiguration {
     public com.onec.events.EntityChangePublisher entityChangePublisher(
             org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
         return applicationEventPublisher::publishEvent;
+    }
+
+    /**
+     * Local-only fallback {@link com.onec.cluster.ClusterEventBus}. {@code onec-cluster-starter}
+     * supplies a Postgres {@code LISTEN}/{@code NOTIFY} bus (its auto-configuration is ordered
+     * {@code before} this one, so its {@code @ConditionalOnMissingBean} bean registers first and this
+     * one backs off); an application may override either with its own bean. With this no-op default,
+     * the cluster relay/bridge are inert and single-node behaviour is unchanged.
+     */
+    @Bean
+    @ConditionalOnMissingBean(com.onec.cluster.ClusterEventBus.class)
+    public com.onec.cluster.ClusterEventBus clusterEventBus() {
+        return new com.onec.cluster.NoOpClusterEventBus();
+    }
+
+    /**
+     * Publish side of cross-node live-UI sync: relays each {@link com.onec.events.EntityChangedEvent}
+     * onto the {@link com.onec.cluster.ClusterEventBus} for peer nodes (no-op with the default bus).
+     */
+    @Bean
+    public ClusterEntityChangeRelay clusterEntityChangeRelay(com.onec.cluster.ClusterEventBus clusterEventBus) {
+        return new ClusterEntityChangeRelay(clusterEventBus);
     }
 
     @Bean

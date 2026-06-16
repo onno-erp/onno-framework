@@ -50,7 +50,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Auto-configures authentication for an Onec application. The active backend is chosen by
@@ -66,6 +65,9 @@ public class OnecAuthAutoConfiguration {
 
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(OnecAuthAutoConfiguration.class);
+
+    /** Fixed non-secret key used only when {@code allow-ephemeral-key=true} (single-node/dev). */
+    private static final String EPHEMERAL_REMEMBER_ME_KEY = "onec-dev-ephemeral-remember-me-key";
 
     /**
      * The {@code /api/auth/me} + login/logout controller, wired in every mode. Password login is
@@ -184,10 +186,20 @@ public class OnecAuthAutoConfiguration {
             OnecAuthProperties.RememberMe config = properties.getSession().getRememberMe();
             String key = config.getKey();
             if (key == null || key.isBlank()) {
-                key = UUID.randomUUID().toString();
-                log.warn("onec.auth.session.remember-me.key is not set; generated a random key. "
-                        + "Remember-me cookies will be invalidated on every restart and are not "
-                        + "portable across instances. Set a stable secret in production.");
+                if (!config.isAllowEphemeralKey()) {
+                    throw new IllegalStateException(
+                            "onec.auth.session.remember-me.key must be set: a blank key makes the "
+                                    + "framework sign remember-me cookies with a per-node secret that other "
+                                    + "nodes reject, breaking login under a load balancer. Set a stable "
+                                    + "secret, or set onec.auth.session.remember-me.allow-ephemeral-key=true "
+                                    + "for single-node/dev, or disable remember-me with "
+                                    + "onec.auth.session.remember-me.enabled=false.");
+                }
+                // Single-node/dev opt-in: a fixed (non-secret) key so cookies survive restarts —
+                // not random, which would invalidate them on every boot.
+                key = EPHEMERAL_REMEMBER_ME_KEY;
+                log.warn("onec.auth.session.remember-me.key is not set; using a built-in non-secret dev "
+                        + "key (allow-ephemeral-key=true). Set a stable secret for production.");
             }
             TokenBasedRememberMeServices services = new TokenBasedRememberMeServices(
                     key, userDetailsService, TokenBasedRememberMeServices.RememberMeTokenAlgorithm.SHA256);

@@ -62,8 +62,9 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.auth.oidc.roles.realm-roles` | `Boolean` | `true` | Keycloak preset: map realm-level roles (`realm_access.roles`). |
 | `onec.auth.oidc.roles.sources` | `List<RoleSource>` | — | Explicit role sources. When empty, the Provider preset supplies defaults. Each source names a claim and the shape of its value. |
 | `onec.auth.public-paths` | `List<String>` | — | Public API/config endpoints permitted without authentication so the login screen can render and authenticate. The SPA shell itself (everything outside `/api/**`) is public by default; only `/api/**` requires a session. |
+| `onec.auth.session.remember-me.allow-ephemeral-key` | `Boolean` | `false` | When key is blank, allow the app to start anyway with a built-in non-secret dev key. Off by default so a multi-node deployment fails fast instead of silently signing cookies a load-balanced peer can't verify. Turn on only for single-node/dev — never with a real secret expectation. |
 | `onec.auth.session.remember-me.enabled` | `Boolean` | `true` | Whether to issue and honour the persistent remember-me cookie. |
-| `onec.auth.session.remember-me.key` | `String` | — | Secret that signs the remember-me cookie. Set a stable, non-guessable value in production so cookies survive restarts and can't be forged. When blank, a random key is generated at startup — remember-me still works within a single run, but every restart invalidates outstanding cookies (and a warning is logged). |
+| `onec.auth.session.remember-me.key` | `String` | — | Secret that signs the remember-me cookie. Set a stable, non-guessable value in production so cookies survive restarts, can't be forged, and validate across every node of a horizontally-scaled deployment. When blank, startup fails fast unless allowEphemeralKey is set (a blank key would otherwise sign cookies with a secret that peer nodes reject, breaking login under a load balancer). |
 | `onec.auth.session.remember-me.validity` | `Duration` | `14d` | How long the remember-me cookie stays valid. Defaults to 14 days. |
 | `onec.auth.session.timeout` | `Duration` | `8h` | Idle session timeout for the cookie-based modes, applied to the servlet container. Slides on each request. Defaults to 8 hours (a working day) instead of Spring's 30 minutes so parked-but-open tabs don't silently lose their session. Ignored in RESOURCE_SERVER. |
 | `onec.auth.users` | `List<User>` | — | In-memory user accounts. Empty by default — the consuming app supplies them via `onec.auth.users[*]`. Production deployments should disable in-memory users and configure their own UserDetailsService. Only used in IN_MEMORY. |
@@ -91,6 +92,17 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onec.import.max-file-bytes` | `Long` | `0` | Maximum accepted CSV file size in bytes. Defaults to 5 MiB. |
 | `onec.import.max-rows` | `Integer` | `10000` | Maximum data rows processed by one import request. |
 | `onec.import.preview-rows` | `Integer` | `20` | Maximum data rows returned from preview. |
+
+## Cluster — `onec-cluster-starter` (`OnecClusterProperties`, prefix `onec.cluster`)
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onec.cluster.channel` | `String` | `onec_cluster_events` | Postgres `LISTEN`/`NOTIFY` channel carrying cross-node entity-change notices. Must be a bare identifier (`[A-Za-z0-9_]`); an invalid value falls back to the default. |
+| `onec.cluster.enabled` | `Boolean` | `true` | Master switch for the cross-node event bus. When `false`, a local-only no-op bus is used and live-UI (SSE) updates do not propagate between nodes. |
+| `onec.cluster.max-payload-bytes` | `Integer` | `7000` | Soft cap (bytes) kept below Postgres's 8000-byte `NOTIFY` limit. A larger event first drops its natural key, then degrades to a coarse "something changed" notice rather than failing. |
+| `onec.cluster.node-id` | `String` | — | Stable id identifying this node when filtering out its own `NOTIFY` echoes. Defaults to a random per-JVM UUID; set it only if you want a deterministic id in logs. |
+| `onec.cluster.poll-timeout` | `Duration` | `5s` | How long the listener blocks waiting for notifications before looping to re-check for shutdown. Bounds shutdown latency; does not affect delivery speed. |
+| `onec.cluster.reconnect-backoff-max` | `Duration` | `30s` | Upper bound on the exponential backoff between reconnect attempts after the listener drops. |
 
 ## Kafka — `onec-kafka-starter` (`OnecKafkaProperties`, prefix `onec.kafka`)
 

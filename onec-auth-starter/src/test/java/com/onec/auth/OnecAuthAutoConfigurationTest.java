@@ -31,6 +31,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OnecAuthAutoConfigurationTest {
 
     private final WebApplicationContextRunner runner = new WebApplicationContextRunner()
+            // Mirror a single-node dev app: a blank remember-me key is allowed via the opt-in. Tests
+            // that need the strict (multi-node) behaviour override this back to false.
+            .withPropertyValues("onec.auth.session.remember-me.allow-ephemeral-key=true")
             .withConfiguration(AutoConfigurations.of(
                     WebMvcAutoConfiguration.class,
                     SecurityAutoConfiguration.class,
@@ -115,6 +118,23 @@ class OnecAuthAutoConfigurationTest {
             assertThat(context).hasNotFailed();
             assertThat(context).doesNotHaveBean(TokenBasedRememberMeServices.class);
             assertThat(context).hasBean("onecSecurityFilterChain");
+        });
+    }
+
+    @Test
+    void blankRememberMeKeyWithoutOptInFailsFast() {
+        // Multi-node hazard: a per-node random key makes cookies non-portable. Refuse to start.
+        runner.withPropertyValues("onec.auth.session.remember-me.allow-ephemeral-key=false").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(context).getFailure().hasMessageContaining("remember-me.key");
+        });
+    }
+
+    @Test
+    void explicitRememberMeKeyIsHonoured() {
+        runner.withPropertyValues("onec.auth.session.remember-me.key=a-stable-secret").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context).hasSingleBean(TokenBasedRememberMeServices.class);
         });
     }
 

@@ -33,7 +33,11 @@ onec:
       remember-me:
         enabled: true
         validity: 14d
-        # key: ${ONEC_REMEMBER_ME_KEY:}   # stable secret in prod; random per-run (logs a warning) if blank
+        # Single-node dev: start with a built-in non-secret key when no key is set. In production (or
+        # any multi-node deployment) set a stable `key` instead — a blank key without this opt-in
+        # fails fast, since per-node keys break remember-me behind a load balancer.
+        allow-ephemeral-key: true
+        # key: ${ONEC_REMEMBER_ME_KEY:}   # stable secret in prod / multi-node
     users:
       - username: admin
         password: admin

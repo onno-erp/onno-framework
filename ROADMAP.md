@@ -33,6 +33,7 @@ Implemented:
 - Domain event metadata and outbox publication hooks
 - `onec-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onec.auth.users`, plus OIDC and resource-server modes
 - Integration starters: MCP server (`onec-mcp-starter`), CSV import (`onec-import-starter`), Kafka outbox relay (`onec-kafka-starter`), transactional mail (`onec-mail-starter`), PDF/print (`onec-print-starter`), native desktop packaging (`onec-desktop-starter` + Gradle plugin)
+- Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onec-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
 - UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present.
 
@@ -61,7 +62,7 @@ Good next slices:
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
-diffs, and the server-driven DivKit UI layer.
+diffs, the server-driven DivKit UI layer, and horizontal scale-out (`onec-cluster-starter`).
 
 ## Auth Direction
 

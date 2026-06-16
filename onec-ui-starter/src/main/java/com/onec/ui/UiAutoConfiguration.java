@@ -110,6 +110,17 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new UiEventController(publisher);
     }
 
+    /**
+     * Bridges the cross-node {@link com.onec.cluster.ClusterEventBus} into the local SSE stream so a
+     * write on one node lights up browsers connected to any node. With the default no-op bus this is
+     * inert. See {@link ClusterUiBridge} for why received events bypass the Spring event bus.
+     */
+    @Bean
+    public ClusterUiBridge clusterUiBridge(com.onec.cluster.ClusterEventBus clusterEventBus,
+                                           UiEventPublisher publisher) {
+        return new ClusterUiBridge(clusterEventBus, publisher);
+    }
+
     @Bean
     public FieldHintResolver fieldHintResolver(
             org.springframework.beans.factory.ObjectProvider<com.onec.ui.EntityView> entityViews) {

@@ -25,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OnecAuthMethodsProviderTest {
 
     private final WebApplicationContextRunner runner = new WebApplicationContextRunner()
+            // Single-node dev: allow the blank remember-me key via the opt-in (in-memory mode).
+            .withPropertyValues("onec.auth.session.remember-me.allow-ephemeral-key=true")
             .withConfiguration(AutoConfigurations.of(
                     WebMvcAutoConfiguration.class,
                     SecurityAutoConfiguration.class,
