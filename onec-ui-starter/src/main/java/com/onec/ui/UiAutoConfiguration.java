@@ -229,10 +229,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              DocumentQueryService documentQueryService,
                                              RegisterQueryService registerQueryService,
                                              UiActionResolver uiActionResolver,
-                                             RelatedListReader relatedListReader) {
+                                             RelatedListReader relatedListReader,
+                                             UiProperties uiProperties) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties);
     }
 
 }

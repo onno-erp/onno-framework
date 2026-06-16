@@ -1,7 +1,5 @@
 package com.example.ui.pages;
 
-import com.example.domain.catalogs.Client;
-import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
 import com.example.domain.registers.RevenueRegister;
@@ -11,9 +9,10 @@ import com.onec.ui.PageBuilder;
 import org.springframework.stereotype.Component;
 
 /**
- * The home dashboard, authored as a {@link Page} (was the {@code layout.widget(...)}
- * block in UiConfig). Composes the widget grid in code; {@code b.text(...)} /
- * {@code b.custom(...)} are available for freeform blocks beyond widgets.
+ * The home dashboard, authored as a {@link Page}. Showcases the data-widget DSL end to end: KPI
+ * tiles with trend ({@code stat}/{@code sparkline}/{@code gauge}), a multi-series time-series chart
+ * ({@code seriesBy} splits one chart into colored, stacked series), and the categorical charts.
+ * Colors come from the theme palette by default; {@code config("colors", ...)} overrides per widget.
  */
 @Component
 public class DashboardPage implements Page {
@@ -27,46 +26,57 @@ public class DashboardPage implements Page {
     public void compose(PageBuilder b) {
         b.title("Dashboard");
 
-        b.widget("Properties").type("count").width("1/4").order(0).catalog(Property.class)
-                .hint("Total rental units in the catalog.");
-        b.widget("Clients").type("count").width("1/4").order(1).catalog(Client.class);
-        // FR-5: a count narrowed by a safe filter predicate (system column).
-        b.widget("Posted bills").type("count").width("1/4").order(2).document(Bill.class)
+        // ---- KPI row: figures with momentum, not just static numbers -------------------------
+        // A stat tile: the headline total + period-over-period trend + a sparkline of the series.
+        b.widget("Revenue").type("stat").width("1/4").order(0).document(Bill.class)
+                .config("metric", "sum").config("metricField", "gross")
+                .config("groupByDate", "month").config("currency", "EUR")
+                .hint("Sum of gross across all bills, with the latest month's trend.");
+        // A bare sparkline: count of bookings per month by check-in date.
+        b.widget("Bookings").type("sparkline").width("1/4").order(1).document(Booking.class)
+                .config("groupBy", "check_in").config("groupByDate", "month");
+        // A radial gauge: revenue against a target (the ring fills toward it).
+        b.widget("Revenue vs target").type("gauge").width("1/4").order(2).document(Bill.class)
+                .config("metric", "sum").config("metricField", "gross")
+                .config("target", "250000").config("currency", "EUR")
+                .hint("Gross billed against the annual target.");
+        // A plain count, narrowed by a safe filter predicate (system column).
+        b.widget("Posted bills").type("count").width("1/4").order(3).document(Bill.class)
                 .config("filter", "_posted = true")
                 .hint("Bills posted to the ledger; drafts are excluded.");
-        // FR-1 + FR-6: a server-aggregated KPI (SUM of gross) as a currency-formatted card.
-        // Unit placement: render the symbol as a suffix ("174,831.73 €") rather than the
-        // locale's default euro prefix. `unit` wins over `currency`; `unitPosition` is suffix by default.
-        b.widget("Revenue").type("metric").width("1/4").order(3).document(Bill.class)
-                .config("metric", "sum").config("metricField", "gross")
-                .config("unit", "€").config("unitPosition", "suffix")
-                // A widget hint surfaces as a hoverable "?" next to the card title.
-                .hint("Sum of gross on all bills, including unposted drafts.");
 
-        b.widget("Bookings calendar").type("calendar").width("full").order(4).document(Booking.class)
-                .dateField("check_in").titleField("summary")
-                .config("endDateField", "check_out")
-                .config("secondaryField", "client_display,property_display")
-                // FR-6: render the booking amount as EUR instead of a hardcoded $.
-                .config("amountField", "total_gross").config("currency", "EUR");
+        // ---- Time series: one chart, a colored series per property, stacked -------------------
+        b.widget("Revenue over time").type("chart").width("full").order(10).document(Bill.class)
+                .config("kind", "area")
+                .config("groupBy", "_date").config("groupByDate", "month")
+                .config("seriesBy", "property_display").config("stacked", "true")
+                .config("metric", "sum").config("metricField", "gross").config("currency", "EUR")
+                .hint("Monthly gross, split and stacked by property.");
 
-        // Hidden for the moment — restore to bring the Bookings-by-status kanban back.
-        // b.widget("Bookings by status").type("kanban").width("1/2").order(5).document(Booking.class)
-        //         .config("groupBy", "_posted").maxItems(12);
-
-        // FR-4: chart sourced from the Revenue accumulation register's server-side turnover.
-        b.widget("Revenue by property").type("chart").width("1/2").order(6).register(RevenueRegister.class)
+        // ---- Categorical charts ---------------------------------------------------------------
+        // Bar sourced from the Revenue register's server-side turnover (sum of a resource).
+        b.widget("Revenue by property").type("chart").width("1/2").order(20).register(RevenueRegister.class)
                 .config("kind", "bar").config("groupBy", "property_display")
                 .config("metric", "sum").config("metricField", "gross_amount").config("currency", "EUR");
+        // A pie with an explicit two-color override: posted (green) vs draft (muted).
+        b.widget("Bills by status").type("chart").width("1/2").order(21).document(Bill.class)
+                .config("kind", "pie").config("groupBy", "_posted").config("metric", "count")
+                .config("colors", "success,muted");
 
-        // FR-3: a true pie (alias of donut with innerRadius 0).
-        b.widget("Bills by status").type("chart").width("1/2").order(7).document(Bill.class)
-                .config("kind", "pie").config("groupBy", "_posted").config("metric", "count");
-
-        // FR-2 + FR-6 + FR-7: configurable list rows — templated title, EUR amount field, _number on line 2.
-        b.widget("Recent bills").type("list").width("1/2").order(8).document(Bill.class).maxItems(8)
+        // ---- Donut + recent list --------------------------------------------------------------
+        b.widget("Bookings by channel").type("chart").width("1/2").order(30).document(Booking.class)
+                .config("kind", "donut").config("groupBy", "channel").config("metric", "count");
+        // Configurable list rows — templated title, EUR amount field, _number on line 2.
+        b.widget("Recent bills").type("list").width("1/2").order(31).document(Bill.class).maxItems(8)
                 .config("titleTemplate", "{client_display} — {property_display}")
                 .config("secondaryField", "_number")
                 .config("amountField", "gross").config("currency", "EUR");
+
+        // ---- Calendar -------------------------------------------------------------------------
+        b.widget("Bookings calendar").type("calendar").width("full").order(40).document(Booking.class)
+                .dateField("check_in").titleField("summary")
+                .config("endDateField", "check_out")
+                .config("secondaryField", "client_display,property_display")
+                .config("amountField", "total_gross").config("currency", "EUR");
     }
 }

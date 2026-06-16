@@ -37,6 +37,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.ui.enabled` | `Boolean` | `true` | Master switch for the UI starter. Also gated on a `MetadataRegistry` bean being present. |
 | `onec.ui.path` | `String` | `/ui` | SPA base path, returned as `basePath` from `GET /api/config`. |
 | `onec.ui.read-only` | `Boolean` | `false` | When true, every mutating REST call is rejected with `403 UI is in read-only mode`. |
+| `onec.ui.settings.enabled` | `Boolean` | `false` | Whether to surface the built-in Settings page and its admin nav entry. |
 | `onec.ui.theme` | `Map<String,String>` | — | Free-form theme key/values served verbatim from `GET /api/theme`. |
 | `onec.ui.update-check.enabled` | `Boolean` | `true` | Master switch. When false no outbound call is ever made and the notice never appears. |
 | `onec.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |

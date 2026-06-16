@@ -44,6 +44,36 @@ function formatPlain(value: number, opts: NumberFormatOptions): string {
   }).format(value);
 }
 
+/**
+ * A compact rendering of a number for tight spaces — chart axis ticks and KPI tile headlines —
+ * where a full grouped figure (`€147,110.90`) clips or wraps. Uses Intl compact notation
+ * (`€147K`, `1.2M`) while honouring the same currency/unit/locale options as {@link formatNumber}.
+ */
+export function formatCompact(value: number, opts: NumberFormatOptions = {}): string {
+  const locale = opts.locale || undefined;
+  const unit = opts.unit?.trim();
+  if (unit) {
+    const n = new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(value);
+    return attachUnit(n, unit, opts.unitPosition);
+  }
+  if (opts.currency) {
+    try {
+      return new Intl.NumberFormat(locale, {
+        notation: "compact",
+        style: "currency",
+        currency: opts.currency,
+        maximumFractionDigits: 1,
+      }).format(value);
+    } catch {
+      // Invalid currency code — fall through to a plain compact number.
+    }
+  }
+  return new Intl.NumberFormat(locale, {
+    notation: "compact",
+    maximumFractionDigits: opts.format === "integer" ? 0 : 1,
+  }).format(value);
+}
+
 /** Coerce a cell value to a number, or null when it isn't numeric. */
 export function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;

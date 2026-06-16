@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { useId, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -17,10 +16,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api } from "@/lib/api";
-import { toSnakeCase } from "@/lib/utils";
-import { formatNumber, toNumber } from "@/lib/format";
-import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
+import { formatCompact, formatNumber, toNumber } from "@/lib/format";
+import { resolveColors } from "@/lib/chart-colors";
+import { buildSeries, SINGLE_SERIES, useWidgetRows, type GroupByDate, type Metric, type SeriesData } from "@/lib/widget-data";
+import type { DashboardWidgetMeta } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 
@@ -32,17 +31,15 @@ interface ChartWidgetProps {
 type ChartKind = "bar" | "line" | "area" | "donut" | "pie";
 const CHART_KINDS: ChartKind[] = ["bar", "line", "area", "donut", "pie"];
 
-// Turnover/balance need a period window; a register chart sums across all of time
-// unless the author scopes it, so we ask for an unbounded range.
-const ALL_TIME_FROM = "1970-01-01T00:00:00";
-const ALL_TIME_TO = "2999-12-31T23:59:59";
-
-interface AggregateConfig {
+interface ChartConfig {
   groupBy: string;
-  groupByDate?: "day" | "week" | "month";
-  metric: "count" | "sum";
+  groupByDate?: GroupByDate;
+  seriesBy?: string;
+  metric: Metric;
   metricField?: string;
   kind: ChartKind;
+  stacked: boolean;
+  colors?: string;
   currency?: string;
   unit?: string;
   unitPosition?: string;
@@ -50,24 +47,27 @@ interface AggregateConfig {
   locale?: string;
 }
 
-function readConfig(widget: DashboardWidgetMeta): AggregateConfig {
+function readConfig(widget: DashboardWidgetMeta): ChartConfig {
   const cfg = widget.extraConfig ?? {};
   const explicit = (cfg.kind as ChartKind | undefined) ?? "bar";
   let kind: ChartKind = explicit;
   if (!CHART_KINDS.includes(explicit)) {
-    // FR-3: don't silently coerce an unknown kind — surface it, then fall back.
+    // Don't silently coerce an unknown kind — surface it, then fall back.
     console.warn(`[onec chart] unknown kind "${explicit}" for "${widget.title}"; falling back to "bar"`);
     kind = "bar";
   }
-  const metric = (cfg.metric as "count" | "sum") ?? "count";
+  const metric = (cfg.metric as Metric) ?? "count";
   return {
     groupBy: cfg.groupBy ?? "_date",
     groupByDate:
-      (cfg.groupByDate as "day" | "week" | "month" | undefined) ??
+      (cfg.groupByDate as GroupByDate | undefined) ??
       (cfg.groupBy === "_date" || !cfg.groupBy ? "day" : undefined),
+    seriesBy: cfg.seriesBy || undefined,
     metric,
     metricField: cfg.metricField,
     kind,
+    stacked: cfg.stacked === "true",
+    colors: cfg.colors,
     currency: cfg.currency,
     unit: cfg.unit,
     unitPosition: cfg.unitPosition,
@@ -77,120 +77,119 @@ function readConfig(widget: DashboardWidgetMeta): AggregateConfig {
   };
 }
 
-function bucketLabel(value: unknown, groupByDate?: AggregateConfig["groupByDate"]): string {
-  if (typeof value === "string" && groupByDate) {
-    try {
-      const d = parseISO(value);
-      if (groupByDate === "day") return format(d, "MMM d");
-      if (groupByDate === "week") return `Wk ${format(d, "II")}`;
-      if (groupByDate === "month") return format(d, "MMM yyyy");
-    } catch {
-      // fall through
-    }
-  }
-  if (typeof value === "boolean") return value ? "Posted" : "Draft";
-  if (value === null || value === undefined || value === "") return "—";
-  return String(value);
-}
-
-const CHART_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(var(--success))",
-  "hsl(var(--warning))",
-  "hsl(var(--destructive))",
-  "hsl(var(--muted-foreground))",
-];
-
 export function ChartWidget({ widget }: ChartWidgetProps) {
-  const [items, setItems] = useState<EntityRecord[]>([]);
   const config = useMemo(() => readConfig(widget), [widget]);
-  const fmt = useMemo(
-    () => (n: number) => formatNumber(n, { currency: config.currency, unit: config.unit, unitPosition: config.unitPosition, format: config.format, locale: config.locale }),
+  const items = useWidgetRows(widget);
+  const numberOpts = useMemo(
+    () => ({
+      currency: config.currency,
+      unit: config.unit,
+      unitPosition: config.unitPosition,
+      format: config.format,
+      locale: config.locale,
+    }),
     [config]
   );
-
-  useEffect(() => {
-    const name = toSnakeCase(widget.entityName);
-    if (widget.entityType === "document") {
-      api.listDocuments(name).then(setItems);
-    } else if (widget.entityType === "catalog") {
-      api.listCatalog(name).then(setItems);
-    } else if (widget.entityType === "register") {
-      // FR-4: source from the register's server-side turnover (grouped resource sums),
-      // then bucket/aggregate client-side exactly like a document/catalog feed.
-      api.getTurnover(name, ALL_TIME_FROM, ALL_TIME_TO).then(setItems);
-    }
-  }, [widget]);
-
-  const data = useMemo(() => {
-    const buckets = new Map<string, { label: string; value: number }>();
-    for (const row of items) {
-      const raw = row[config.groupBy];
-      const label = bucketLabel(raw, config.groupByDate);
-      const existing = buckets.get(label) ?? { label, value: 0 };
-      if (config.metric === "count") {
-        existing.value += 1;
-      } else if (config.metric === "sum" && config.metricField) {
-        const v = row[config.metricField];
-        if (typeof v === "number") existing.value += v;
-      }
-      buckets.set(label, existing);
-    }
-    return Array.from(buckets.values());
-  }, [items, config]);
+  // Full figures in the tooltip + header; compact ones on the axis, where a full currency value
+  // would clip.
+  const fmt = useMemo(() => (n: number) => formatNumber(n, numberOpts), [numberOpts]);
+  const fmtAxis = useMemo(() => (n: number) => formatCompact(n, numberOpts), [numberOpts]);
 
   const round = config.kind === "donut" || config.kind === "pie";
+  const data = useMemo<SeriesData>(
+    () =>
+      buildSeries(items, {
+        groupBy: config.groupBy,
+        groupByDate: config.groupByDate,
+        // A pie's slices ARE the buckets; splitting into series doesn't apply there.
+        seriesBy: round ? undefined : config.seriesBy,
+        metric: config.metric,
+        metricField: config.metricField,
+      }),
+    [items, config, round]
+  );
+
+  const colors = useMemo(
+    () => resolveColors(round ? data.rows.length : data.seriesKeys.length, config.colors),
+    [round, data, config.colors]
+  );
+
+  // A unique gradient-id prefix per widget instance — SVG ids are document-global, so two area
+  // charts on one page would otherwise share (and clobber) the same <linearGradient>.
+  const gradientPrefix = `chart-${useId().replace(/:/g, "")}`;
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="overflow-hidden">
+      <CardHeader className="flex-row items-start justify-between space-y-0 p-4 pb-1">
         <div className="flex items-center gap-1.5">
           <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
           <HintIcon text={widget.hint} size={13} />
         </div>
+        {data.rows.length > 0 && (
+          <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(data.total)}</span>
+        )}
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={round ? 240 : 220}>
-          {renderChart(config.kind, data, fmt)}
-        </ResponsiveContainer>
+      <CardContent className="p-4 pt-2">
+        {data.rows.length === 0 ? (
+          <div className="flex h-[210px] items-center justify-center text-xs text-muted-foreground">No data yet</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={round ? 230 : 210}>
+            {renderChart(config.kind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix)}
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   );
 }
 
+const tooltipStyle = {
+  background: "hsl(var(--popover))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 6,
+  fontSize: 12,
+  color: "hsl(var(--popover-foreground))",
+};
+
+// A plain function (not a component) so it can be the direct child of ResponsiveContainer, which
+// clones its single child to inject the measured width/height — a wrapper component would swallow
+// them and the chart would render at 0×0.
 function renderChart(
   kind: ChartKind,
-  data: { label: string; value: number }[],
-  fmt: (n: number) => string
+  data: SeriesData,
+  colors: string[],
+  fmt: (n: number) => string,
+  fmtAxis: (n: number) => string,
+  stacked: boolean,
+  gradientPrefix: string
 ): React.ReactElement {
-  const tooltipStyle = {
-    background: "hsl(var(--popover))",
-    border: "1px solid hsl(var(--border))",
-    borderRadius: 6,
-    fontSize: 12,
-    color: "hsl(var(--popover-foreground))",
-  };
-  // Recharts' Formatter passes a wide value type; coerce and render a single string.
-  const tooltipFormatter = (value: unknown) => fmt(toNumber(value) ?? 0);
+  // Recharts' Formatter passes a wide value type; coerce and render a single string. Blank the
+  // name for the single-series sentinel so its tooltip shows just the value, not "value: …".
+  const tooltipFormatter = (value: unknown, name: unknown) => [
+    fmt(toNumber(value) ?? 0),
+    name === SINGLE_SERIES ? "" : (name as string),
+  ];
+  const { seriesKeys } = data;
+  const multi = seriesKeys.length > 1 || seriesKeys[0] !== SINGLE_SERIES;
+  const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 11, tickLine: false, axisLine: false } as const;
+  const legend = multi ? <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} /> : null;
 
   if (kind === "donut" || kind === "pie") {
     return (
       <PieChart>
-        <Tooltip
-          contentStyle={tooltipStyle}
-          itemStyle={{ color: "hsl(var(--popover-foreground))" }}
-          formatter={tooltipFormatter}
-        />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "hsl(var(--popover-foreground))" }} formatter={(v: unknown) => fmt(toNumber(v) ?? 0)} />
+        <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
         <Pie
-          data={data}
-          dataKey="value"
+          data={data.rows}
+          dataKey={SINGLE_SERIES}
           nameKey="label"
-          innerRadius={kind === "pie" ? 0 : 50}
-          outerRadius={80}
+          innerRadius={kind === "pie" ? 0 : 52}
+          outerRadius={82}
           paddingAngle={kind === "pie" ? 0 : 2}
+          stroke="hsl(var(--card))"
+          strokeWidth={2}
         >
-          {data.map((_, i) => (
-            <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+          {data.rows.map((_, i) => (
+            <Cell key={i} fill={colors[i % colors.length]} />
           ))}
         </Pie>
       </PieChart>
@@ -199,32 +198,75 @@ function renderChart(
 
   if (kind === "line" || kind === "area") {
     const ChartImpl = kind === "line" ? LineChart : AreaChart;
-    const Series = kind === "line" ? Line : Area;
     return (
-      <ChartImpl data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+      <ChartImpl data={data.rows} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
+        {kind === "area" && (
+          <defs>
+            {seriesKeys.map((_, i) => (
+              <linearGradient key={i} id={`${gradientPrefix}-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={colors[i]} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={colors[i]} stopOpacity={0.02} />
+              </linearGradient>
+            ))}
+          </defs>
+        )}
         <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-        <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} width={40} tickFormatter={fmt} />
-        <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--accent) / 0.4)" }} formatter={tooltipFormatter} />
-        <Series
-          type="monotone"
-          dataKey="value"
-          stroke="hsl(var(--primary))"
-          fill="hsl(var(--primary) / 0.15)"
-          strokeWidth={2}
-          dot={false}
-        />
+        <XAxis dataKey="label" {...axis} />
+        <YAxis {...axis} width={52} tickFormatter={fmtAxis} />
+        <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "hsl(var(--border))" }} formatter={tooltipFormatter} />
+        {legend}
+        {seriesKeys.map((key, i) =>
+          kind === "line" ? (
+            <Line
+              key={key}
+              type="monotone"
+              dataKey={key}
+              name={key === SINGLE_SERIES ? undefined : key}
+              stroke={colors[i]}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          ) : (
+            <Area
+              key={key}
+              type="monotone"
+              dataKey={key}
+              name={key === SINGLE_SERIES ? undefined : key}
+              stroke={colors[i]}
+              strokeWidth={2}
+              fill={`url(#${gradientPrefix}-${i})`}
+              stackId={stacked ? "stack" : undefined}
+              dot={false}
+            />
+          )
+        )}
       </ChartImpl>
     );
   }
 
   return (
-    <BarChart data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+    <BarChart data={data.rows} margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
       <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
-      <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} width={40} tickFormatter={fmt} />
+      <XAxis dataKey="label" {...axis} />
+      <YAxis {...axis} width={52} tickFormatter={fmtAxis} />
       <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(var(--accent) / 0.4)" }} formatter={tooltipFormatter} />
-      <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+      {legend}
+      {seriesKeys.map((key, i) => {
+        // Round only the exposed top: the last series in a stack, or every bar when not stacked.
+        const top = !stacked || i === seriesKeys.length - 1;
+        return (
+          <Bar
+            key={key}
+            dataKey={key}
+            name={key === SINGLE_SERIES ? undefined : key}
+            fill={colors[i]}
+            stackId={stacked ? "stack" : undefined}
+            radius={top ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+            maxBarSize={48}
+          />
+        );
+      })}
     </BarChart>
   );
 }

@@ -12,8 +12,9 @@ import org.springframework.stereotype.Component;
  * {@code @Constant} editor with the framework's other primitives, so reference data can be managed
  * right here. Everything here is a reusable page primitive: the same toggles, button section, and
  * embedded list drop onto any page (a dashboard, or a catalog page authored at its route) — Settings
- * is just another page. Remove this bean and the framework still renders a default Settings page
- * with the full constant editor.
+ * is just another page. The built-in Settings surface is opt-in ({@code onec.ui.settings.enabled},
+ * enabled in this app's {@code application.yaml}); with it on, removing this bean falls back to the
+ * framework's default Settings page (the full constant editor).
  */
 @Component
 public class SettingsPage implements Page {

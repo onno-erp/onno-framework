@@ -13,6 +13,11 @@ server:
     include-stacktrace: always
     include-message: always
 onec:
+  ui:
+    # The built-in Settings page (the @Constant editor) is opt-in and off by default; this app
+    # composes its own SettingsPage at /settings, so turn the surface + admin nav entry on.
+    settings:
+      enabled: true
   auth:
     # Authentication backend. Default is "in-memory" (the onec.auth.users below). Set to
     # "oidc" for server-side OIDC login (Keycloak, Zitadel, …; keeps the session cookie, "Sign in"
