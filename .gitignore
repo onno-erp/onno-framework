@@ -33,3 +33,9 @@ onec-ui-starter/src/main/frontend/node_modules/
 
 # Plans
 plans/
+
+# Docs site (VitePress)
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/public/api/

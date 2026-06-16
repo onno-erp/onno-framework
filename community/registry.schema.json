@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/onec-erp/onec-framework/blob/main/community/registry.schema.json",
+  "title": "onec-framework community registry",
+  "description": "Schema for community/registry.json — the source of truth for the community integrations catalog rendered into INTEGRATIONS.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["integrations"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to this schema, so editors validate the file."
+    },
+    "integrations": {
+      "type": "array",
+      "description": "One entry per community-built integration.",
+      "items": { "$ref": "#/definitions/integration" }
+    }
+  },
+  "definitions": {
+    "integration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "author",
+        "repository",
+        "category",
+        "onecVersion",
+        "license",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of the integration, e.g. \"onec-shopify-starter\"."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "One-sentence summary of what it does."
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Maintainer name or GitHub handle/org."
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://",
+          "description": "Public source repository URL."
+        },
+        "homepage": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://",
+          "description": "Optional docs or marketing site, if different from the repository."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["connector", "spi", "ui", "skill", "library"],
+          "description": "connector = wraps an external API; spi = implements a framework SPI (MediaStorage, MailDispatcher, auth, …); ui = custom widgets/pages/actions; skill = Claude skill/plugin; library = general helper."
+        },
+        "coordinates": {
+          "type": "string",
+          "pattern": "^[^:\\s]+:[^:\\s]+(:[^:\\s]+)?$",
+          "description": "Maven coordinates as group:artifact[:version]. Omit for skills/plugins that aren't published to Maven."
+        },
+        "onecVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "onec-framework version (or range) the integration is built and tested against, e.g. \"0.10.x\" or \">=0.10.0\"."
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SPDX license identifier, e.g. \"Apache-2.0\", \"MIT\", \"Proprietary\"."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "experimental", "unmaintained"],
+          "description": "Maintenance status as declared by the author."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "Optional free-form tags for search/filtering."
+        }
+      }
+    }
+  }
+}

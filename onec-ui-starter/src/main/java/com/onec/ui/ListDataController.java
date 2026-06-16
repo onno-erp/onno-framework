@@ -31,12 +31,14 @@ public class ListDataController {
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
     private final UiAccessService access;
+    private final UiActionResolver actionResolver;
 
     public ListDataController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                              UiAccessService access) {
+                              UiAccessService access, UiActionResolver actionResolver) {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.access = access;
+        this.actionResolver = actionResolver;
     }
 
     @GetMapping("/catalogs/{name}")
@@ -60,6 +62,7 @@ public class ListDataController {
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
         List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, in, like, prefix, ge, le);
+        decorateRowActions(desc.javaClass(), rows);
         return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le), offset, rows);
     }
 
@@ -85,7 +88,26 @@ public class ListDataController {
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
         List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, in, like, prefix, ge, le);
+        decorateRowActions(desc.javaClass(), rows);
         return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le), offset, rows);
+    }
+
+    /**
+     * Attach per-row state for any state-aware row actions (see {@link ActionSpec}) under each row's
+     * {@code _actions} key, so the grid can render a row's button with the right icon/label and
+     * honour its visibility/enabled. A no-op (rows untouched) when the entity has only static row
+     * actions — the common case — so existing lists pay nothing.
+     */
+    private void decorateRowActions(Class<?> entity, List<Map<String, Object>> rows) {
+        if (entity == null || !actionResolver.hasDynamicRowActions(entity)) {
+            return;
+        }
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> state = actionResolver.rowActionState(entity, row);
+            if (!state.isEmpty()) {
+                row.put("_actions", state);
+            }
+        }
     }
 
     /** Raw repeated query-param values (no comma-splitting), or an empty list when absent. */

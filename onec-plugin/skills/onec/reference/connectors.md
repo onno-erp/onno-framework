@@ -6,6 +6,11 @@ The commercial vertical connectors live in the separate, commercially licensed
 rental PMS), `onec-hospedajes-starter` (Spanish SES.HOSPEDAJES guest-registration authority, SOAP),
 `onec-tochka-starter` (Tochka Bank API). Use this when adding or editing a connector.
 
+> Building an **open-source / community** integration instead (any external system, not the
+> commercial verticals)? The public, contributor-facing guide is
+> [`docs/EXTENDING.md`](https://github.com/onec-erp/onec-framework/blob/main/docs/EXTENDING.md) —
+> same starter shape, plus naming/namespace conventions and how to get listed in `INTEGRATIONS.md`.
+
 ## Key insight: a connector wraps an external API, it does not model the business
 
 The connectors define **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.

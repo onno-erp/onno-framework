@@ -2,6 +2,11 @@ package com.example.ui.views;
 
 import com.example.domain.catalogs.BookingStaff;
 import com.example.domain.documents.Booking;
+import com.example.domain.enumerations.BookingStatus;
+import com.example.repositories.BookingRepository;
+import com.onec.ui.ActionResult;
+import com.onec.ui.ActionScope;
+import com.onec.ui.ActionSpec;
 import com.onec.ui.EntityConfigBuilder;
 import com.onec.ui.EntityView;
 import com.onec.ui.ListSpec;
@@ -16,9 +21,20 @@ import org.springframework.stereotype.Component;
  * {@link BookingStaff} join catalog — the document-side parity with the catalog related-list
  * panels (#110). {@code via("booking")} scopes rows to this booking; {@code display("employee")}
  * is the staff member per row. {@code EmployeeView} reads the same join rows from the other side.</p>
+ *
+ * <p>It also demonstrates <b>state-aware row actions</b> (#116): one per-row control whose icon and
+ * label flip with the booking's {@code status} (Cancel ⇄ Reinstate), disabled on a checked-in
+ * booking; plus a "Confirm" action shown only on {@code DRAFT} rows. The icon/label/visibility are
+ * functions of the row, evaluated as the list renders.</p>
  */
 @Component
 public class BookingView implements EntityView {
+
+    private final BookingRepository bookings;
+
+    public BookingView(BookingRepository bookings) {
+        this.bookings = bookings;
+    }
 
     @Override
     public Class<?> entity() {
@@ -73,5 +89,37 @@ public class BookingView implements EntityView {
                 .display("employee")   // Ref<Employee> shown / picked per row
                 .columns("employee", "role")
                 .label("Staff");
+    }
+
+    /**
+     * State-aware per-row actions (#116). The same row control reads each booking's {@code status}
+     * (via {@code row.enumValue("status", …)}) and adapts: a {@code ban} "Cancel" on an active
+     * booking flips to a {@code rotate-ccw} "Reinstate" once canceled, and is disabled on a
+     * checked-in booking (which shouldn't be canceled from the list). A second action, "Confirm",
+     * is shown only on {@code DRAFT} rows. The icon/label/visibility/enabled are functions of the
+     * row, evaluated server-side as the list renders; the handler mutates and refreshes.
+     */
+    @Override
+    public void actions(ActionSpec a) {
+        a.action("toggleStatus").scope(ActionScope.ROW)
+                .icon(row -> row.enumValue("status", BookingStatus.class) == BookingStatus.CANCELED
+                        ? "rotate-ccw" : "ban")
+                .label(row -> row.enumValue("status", BookingStatus.class) == BookingStatus.CANCELED
+                        ? "Reinstate" : "Cancel")
+                .enabledWhen(row -> row.enumValue("status", BookingStatus.class) != BookingStatus.CHECKED_IN)
+                .handler(ctx -> bookings.findById(ctx.id()).map(b -> {
+                    boolean canceling = b.getStatus() != BookingStatus.CANCELED;
+                    b.setStatus(canceling ? BookingStatus.CANCELED : BookingStatus.CONFIRMED);
+                    bookings.save(b);
+                    return ActionResult.refresh(canceling ? "Booking canceled" : "Booking reinstated");
+                }).orElseGet(() -> ActionResult.message("Booking not found")));
+
+        a.action("confirm").scope(ActionScope.ROW).icon("check").label("Confirm")
+                .visibleWhen(row -> row.enumValue("status", BookingStatus.class) == BookingStatus.DRAFT)
+                .handler(ctx -> bookings.findById(ctx.id()).map(b -> {
+                    b.setStatus(BookingStatus.CONFIRMED);
+                    bookings.save(b);
+                    return ActionResult.refresh("Booking confirmed");
+                }).orElseGet(() -> ActionResult.message("Booking not found")));
     }
 }

@@ -286,3 +286,17 @@ Commercial License and consume the core as published Maven artifacts. An enterpr
 Spring Boot auto-configuration starter that wraps an external API; the framework metadata, posting,
 and UI live in the *consuming application*, not in the connector. The boundary and extraction plan
 are in [docs/licensing/MODULE-SPLIT-PLAN.md](licensing/MODULE-SPLIT-PLAN.md).
+
+## Community extensions
+
+The same starter mechanism is open to anyone — community extensions are first-class, not a fork.
+There are four extension surfaces: **connectors** (auto-config starters wrapping an external
+system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, custom `SecurityFilterChain`/
+`UserDetailsService`, Kafka `EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom
+widgets/actions), and Claude **skills/plugins** (via [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
+
+The contributor-facing how-to — the starter shape, the conventions that keep `io.github.onec-erp`
+and the `com.onec.*` packages reserved, and a definition of done — is in
+[EXTENDING.md](EXTENDING.md). Community-built integrations are cataloged in
+[INTEGRATIONS.md](../INTEGRATIONS.md), generated from the machine-readable
+[`community/registry.json`](../community/registry.json) by the `generateIntegrationsDoc` Gradle task.

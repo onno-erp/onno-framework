@@ -1,0 +1,85 @@
+name: Docs
+
+# Build the VitePress docs site (hand-written guides + generated configuration reference +
+# aggregated Javadoc) and publish it to GitHub Pages. Reference content is generated from the code
+# at build time, so the site can never drift from the source of truth.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "**/*Properties.java"
+      - "build.gradle.kts"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress run mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # Regenerate the configuration reference and the API Javadoc from the code so the published
+      # site always reflects the committed source (self-healing if a generated file was stale).
+      - name: Generate reference docs (config + Javadoc)
+        run: ./gradlew generateConfigDocs aggregateJavadoc
+
+      - name: Stage Javadoc under docs/public/api
+        run: |
+          mkdir -p docs/public/api
+          cp -R build/docs/javadoc/. docs/public/api/
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: docs
+
+      - name: Build site
+        run: npm run docs:build
+        working-directory: docs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

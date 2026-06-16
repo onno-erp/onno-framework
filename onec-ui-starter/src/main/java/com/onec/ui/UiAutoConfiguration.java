@@ -43,8 +43,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public ListDataController listDataController(CatalogQueryService catalogQueryService,
                                                 DocumentQueryService documentQueryService,
-                                                UiAccessService access) {
-        return new ListDataController(catalogQueryService, documentQueryService, access);
+                                                UiAccessService access,
+                                                UiActionResolver uiActionResolver) {
+        return new ListDataController(catalogQueryService, documentQueryService, access, uiActionResolver);
     }
 
     @Bean

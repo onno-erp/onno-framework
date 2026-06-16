@@ -8,6 +8,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "onec.print")
 public class PrintProperties {
 
+    /** Master switch for the print starter (PDF rendering endpoints and services). */
     private boolean enabled = true;
 
     /** Packages scanned for {@link PrintTemplate}. Defaults to the application's base packages. */

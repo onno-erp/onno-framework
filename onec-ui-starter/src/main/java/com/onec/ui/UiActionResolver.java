@@ -61,6 +61,67 @@ public class UiActionResolver {
         return forEntity(entity).stream().filter(a -> a.key().equals(key)).findFirst().orElse(null);
     }
 
+    /**
+     * Whether any row action of {@code entity} varies per row — the cheap guard the list-data feed
+     * checks before decorating rows. When false (the common case), rows ship untouched.
+     */
+    public boolean hasDynamicRowActions(Class<?> entity) {
+        return forEntity(entity).stream().anyMatch(a -> a.scope() == ActionScope.ROW && a.isDynamic());
+    }
+
+    /**
+     * Per-row state for the entity's dynamic row actions, keyed by action key — what the list feed
+     * attaches to each row (under {@code _actions}) so the client can render that row's button with
+     * the right icon/label and honour its visibility/enabled state. Only dynamic row actions appear;
+     * static ones render from the descriptor unchanged. A function that throws is treated as a no-op
+     * (the descriptor value / visible+enabled) so one bad predicate can't break the list.
+     */
+    public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row) {
+        ActionRow actionRow = new ActionRow(row);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Action a : forEntity(entity)) {
+            if (a.scope() != ActionScope.ROW || !a.isDynamic()) {
+                continue;
+            }
+            Map<String, Object> state = new LinkedHashMap<>();
+            state.put("visible", eval(a.visibleFn(), actionRow, true));
+            state.put("enabled", eval(a.enabledFn(), actionRow, true));
+            if (a.iconFn() != null) {
+                String icon = evalString(a.iconFn(), actionRow);
+                if (icon != null) {
+                    state.put("icon", icon);
+                }
+            }
+            if (a.labelFn() != null) {
+                String label = evalString(a.labelFn(), actionRow);
+                if (label != null) {
+                    state.put("label", label);
+                }
+            }
+            out.put(a.key(), state);
+        }
+        return out;
+    }
+
+    private static boolean eval(java.util.function.Predicate<ActionRow> p, ActionRow row, boolean fallback) {
+        if (p == null) {
+            return fallback;
+        }
+        try {
+            return p.test(row);
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    private static String evalString(java.util.function.Function<ActionRow, String> f, ActionRow row) {
+        try {
+            return f.apply(row);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     public List<InputField> inputsForEntity(Class<?> entity) {
         return inputsByEntity.getOrDefault(entity, List.of());
     }
@@ -92,6 +153,9 @@ public class UiActionResolver {
             m.put("key", a.key());
             m.put("label", a.label());
             m.put("icon", a.icon());
+            if (a.logo() != null && !a.logo().isBlank()) {
+                m.put("logo", a.logo());
+            }
             m.put("scope", a.scope().name().toLowerCase());
             m.put("server", a.isServer());
             if (!a.isServer()) {

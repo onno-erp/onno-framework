@@ -147,6 +147,10 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`.
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
     `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` → options/contains/dateRange.
+  - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
+    `handler(ctx→ActionResult)` or `navigate(url)`. A **row** action may vary per row — `icon(row→String)`,
+    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
+    (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
   - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`, `relatedList(name, joinCatalog)`,
     `action(name)`, `icon(name)`.
   - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,

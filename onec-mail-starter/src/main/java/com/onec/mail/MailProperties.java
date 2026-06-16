@@ -11,6 +11,7 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "onec.mail")
 public class MailProperties {
 
+    /** Master switch for the mail starter. */
     private boolean enabled = true;
 
     /** Selects which {@code MailDispatcher} bean is active by its {@code name()}. */
@@ -28,6 +29,7 @@ public class MailProperties {
     /** Whether {@code MailService.queue(...)} writes to the outbox (true) or dispatches synchronously (false). */
     private boolean useOutbox = true;
 
+    /** Charset used when rendering templates and building the MIME message. */
     private String encoding = "UTF-8";
 
     /** When true and a template renders HTML only, a plain-text alternative is derived so mail is multipart. */
@@ -152,6 +154,7 @@ public class MailProperties {
 
     /** Dev-only HTTP endpoints for listing and rendering templates. Disabled by default. */
     public static class Preview {
+        /** Enables the dev-only template preview endpoints. Off by default. */
         private boolean enabled = false;
         /** Base path for the preview endpoints. */
         private String path = "/onec/mail/preview";
@@ -164,6 +167,7 @@ public class MailProperties {
 
     /** Inbound provider webhook (bounces/complaints) that feeds the suppression list. */
     public static class Webhook {
+        /** Enables the inbound delivery-event webhook that feeds the suppression list. Off by default. */
         private boolean enabled = false;
         /** Path the provider posts delivery events to. */
         private String path = "/onec/mail/events";

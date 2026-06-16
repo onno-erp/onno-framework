@@ -41,8 +41,11 @@ to future agents that may not have the full conversation context.
 | `onec-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
 | `onec-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
+| `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
 Commercial vertical connectors (`onec-guesty-starter`, `onec-hospedajes-starter`) are licensed separately and live in the [onec-enterprise](https://github.com/onec-erp/onec-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onec-auth-starter`) stays in the open-source core.
+
+Community extensions (connectors, SPI implementations, UI add-ons, skills) are built by anyone as separate artifacts on the published core — see [docs/EXTENDING.md](docs/EXTENDING.md) for the contract and conventions, and [CONTRIBUTING.md](CONTRIBUTING.md) for how they get listed. When you build a connector for a user, you can suggest they publish and list it.
 
 ### Before Editing
 
@@ -59,12 +62,20 @@ change** — stale docs are how every drift bug here started (e.g. a long-gone `
 endpoint and an `onec.base-packages` property that never existed for the core scan). When a doc and the
 code disagree, the code wins: fix the doc, don't propagate the claim.
 
+**[docs/CONFIGURATION.md](docs/CONFIGURATION.md) is generated — do not hand-edit it.** Its tables are
+rendered from each starter's `spring-configuration-metadata.json` (the `@ConfigurationProperties`
+field Javadoc). To change a row, edit the property's Javadoc — or, for a default the processor can't
+see, that module's `META-INF/additional-spring-configuration-metadata.json` — then run
+`./gradlew generateConfigDocs`. Editorial prose around the tables lives in `docs/_config/`.
+`./gradlew check` runs `checkConfigDocs` and **fails** if the committed file drifts from the metadata.
+
 | If you change… | Update |
 | --- | --- |
 | an annotation, model base class, or lifecycle interface | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [`onec-plugin/skills/onec/reference/cheatsheet.md`](onec-plugin/skills/onec/reference/cheatsheet.md) |
-| a `@ConfigurationProperties` field (any `onec.*`) | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and the owning module README |
+| a `@ConfigurationProperties` field (any `onec.*`) | edit the field's **Javadoc**, then `./gradlew generateConfigDocs` (regenerates [docs/CONFIGURATION.md](docs/CONFIGURATION.md)); update the owning module README if it documents the property |
 | a REST endpoint or its response contract | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md), and the module README |
 | the module set or open-core boundary | [README.md](README.md), this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/licensing/MODULE-SPLIT-PLAN.md](docs/licensing/MODULE-SPLIT-PLAN.md) |
+| an extension surface, naming/namespace conventions, or the community registry | [docs/EXTENDING.md](docs/EXTENDING.md), [README.md](README.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); regenerate [INTEGRATIONS.md](INTEGRATIONS.md) from [community/registry.json](community/registry.json) (`./gradlew generateIntegrationsDoc`) |
 | auth modes/endpoints, RBAC | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), `onec-auth-starter/README.md`, `onec-ui-starter/README.md` |
 | schema/migration or posting behaviour | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | a feature that was on the roadmap | move it from "next work" to "current state" in [ROADMAP.md](ROADMAP.md) |
@@ -682,6 +693,8 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
 `hint(String)` attaches optional help text to a field — surfaced in the UI as a hoverable/focusable `?` icon next to the field's label (on the edit form, the list column header, and the read-only detail view). Custom dashboard components carry the same affordance: `b.widget("Revenue").type("metric").hint("…")` shows a `?` next to the widget title. Keep hints to a sentence.
+
+`EntityView.actions(ActionSpec)` declares custom buttons — `a.action(key).scope(ActionScope.TOOLBAR|ROW|DETAIL)` running a server `handler(ctx -> ActionResult)` or `navigate(url)`. A **row** action can be *state-aware*: pass `icon(row -> …)`, `label(row -> …)`, `visibleWhen(row -> …)` or `enabledWhen(row -> …)` (each taking an `ActionRow` — `id()`, `text(col)`, `enumValue(col, Type)`) so one control adapts per row (a `pause` "Suspend" flipping to a `play` "Resume", a button shown only where it applies). Evaluated server-side as the list renders; static actions cost nothing. See `onec-ui-starter/README.md`.
 
 ## Questions To Ask For Common Domains
 

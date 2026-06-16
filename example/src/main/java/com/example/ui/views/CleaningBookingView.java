@@ -1,5 +1,6 @@
 package com.example.ui.views;
 
+import com.example.repositories.BookingRepository;
 import com.onec.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
@@ -9,10 +10,14 @@ import org.springframework.stereotype.Component;
  * task-focused table (which property, when to clean, who's assigned) instead of
  * the full back-office columns. Targets the "cleaning" profile, so cleaners get
  * this while everyone else gets {@link BookingView}. Reuses BookingView's entity
- * binding via plain Java inheritance.
+ * binding (and its state-aware row actions) via plain Java inheritance.
  */
 @Component
 public class CleaningBookingView extends BookingView {
+
+    public CleaningBookingView(BookingRepository bookings) {
+        super(bookings);
+    }
 
     @Override
     public String profile() {

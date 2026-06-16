@@ -8,6 +8,12 @@ import java.util.List;
 @ConfigurationProperties(prefix = "onec")
 public class OnecProperties {
 
+    /**
+     * Packages scanned for {@code @Catalog}, {@code @Document}, {@code @AccumulationRegister},
+     * {@code @InformationRegister}, {@code @Enumeration}, and {@code @Constant} types. Leave unset
+     * to scan from your {@code @SpringBootApplication} package. This is the core scan property —
+     * <strong>not</strong> {@code onec.base-packages} (which only exists for mail/print templates).
+     */
     private List<String> scanPackages = new ArrayList<>();
 
     private final Security security = new Security();

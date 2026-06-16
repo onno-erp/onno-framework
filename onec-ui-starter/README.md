@@ -128,6 +128,33 @@ Both delete paths open the in-app confirmation dialog and then issue `DELETE /ap
 (soft delete), so the server still enforces write access — a read-only user (or one without the
 entity's write role) gets a `403`, never a silent delete.
 
+### Custom & state-aware row actions
+
+An `EntityView.actions(ActionSpec)` declares custom buttons on the list (`ActionScope.TOOLBAR` /
+`ROW`) or the detail surface (`DETAIL`); each runs a server `handler(ctx -> ActionResult)` or
+`navigate(url)`. A **row** action's icon, label, visibility and enabled state may be **functions of
+the row** instead of fixed, so one control adapts to each record — a `pause` "Suspend" on a running
+row flipping to a `play` "Resume" once stopped, or a button shown only where it applies:
+
+```java
+public void actions(ActionSpec a) {
+    a.action("toggle").scope(ActionScope.ROW)
+     .icon(row  -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
+     .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
+     .visibleWhen(row -> row.enumValue("status", Status.class) != Status.ARCHIVED)
+     .enabledWhen(row -> row.canToggle())            // any predicate over the row
+     .handler(ctx -> { svc.toggle(ctx.id()); return ActionResult.refresh("Toggled"); });
+}
+```
+
+Each function receives an `ActionRow` — a read-only view of the row the list already rendered
+(`id()`, `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, or
+`get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list page
+is served (no extra query — the row is already in hand) and shipped to the grid under each row's
+`_actions`; the button falls back to the static `icon`/`label` when a function isn't set. Per-row
+functions apply to `ROW` actions only — toolbar/detail buttons have no row context and use the fixed
+icon/label. A static row action (no functions) costs nothing: the list ships its rows untouched.
+
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
@@ -182,6 +209,41 @@ registerWidget("gauge", GaugeWidget); // server: b.widget("SLA").type("gauge").d
 
 The server emits any non-native `type(...)` as an `onec-widget` descriptor; an unregistered type
 renders a labelled placeholder rather than vanishing.
+
+## Page action buttons
+
+`PageBuilder.actions(heading, spec)` adds a section of buttons to a page (the same `ActionSpec` an
+`EntityView.actions(...)` uses for list/row buttons). Each button either runs a **server handler**
+(`.handler(ctx -> ActionResult)` — POSTs to `/api/divkit/page-action`, runs for an authenticated
+user, self-authorizes via `ctx.user()`) or **navigates** (`.navigate("onec://...")`).
+
+```java
+b.actions("Connected accounts", a ->
+    a.action("connect-tochka")
+     .label("Connect Tochka Bank")
+     .logo("https://enter.tochka.com/favicon.ico")   // brand image, shown instead of a lucide icon
+     .handler(ctx -> ActionResult.redirect(oauth.beginConnect("tochka"))));
+```
+
+Button face — set **one**:
+
+| Builder | Renders |
+|---------|---------|
+| `.icon("download")` | a kebab-case [lucide](https://lucide.dev) icon |
+| `.logo("https://…/x.svg")` | an image (URL or app-static path) — for brand marks like "Connect with X". Rendered on page-action and list/row/toolbar buttons. |
+
+`ActionResult` (what a handler returns):
+
+| Factory | Effect |
+|---------|--------|
+| `ok()` | acknowledge, nothing observable |
+| `message(text)` | success toast |
+| `refresh(text)` | toast + reload the current surface |
+| `navigate("onec://…")` | route the client (internal `onec://` scheme; `{id}` is filled for row actions) |
+| `redirect(url)` | **full-page** navigation of the top-level browser to an external `url` (e.g. an OAuth consent screen that redirects back) — emitted as the `onec://redirect/<url>` scheme |
+
+`redirect(...)` differs from `navigate("onec://open/<url>")`, which opens a **new tab** (for viewing
+files); `redirect` replaces the current page so a provider round-trip lands back in the app.
 
 ### Misc — `/api`
 

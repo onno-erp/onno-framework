@@ -12,17 +12,46 @@ reference/enum expansion, secret redaction, list vs get) and how to react to cha
 
 ## Documentation
 
+The published docs site — hand-written guides plus reference **generated from the source of truth** —
+lives at **<https://docs.onno.su/>** (built with [VitePress](https://vitepress.dev)
+by [`.github/workflows/docs.yml`](.github/workflows/docs.yml)).
+
 | Doc | What it covers |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | Operating rules for AI agents + the playbook for modeling a business into framework concepts. |
 | [BUILDING_ERPS_WITH_AGENTS.md](BUILDING_ERPS_WITH_AGENTS.md) | Handoff guide for building an ERP in a separate project on the published libraries. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the framework fits together: boot pipeline, each subsystem, the full endpoint catalog, open-core boundary. |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onec.*` configuration property, by module, with defaults. |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onec.*` configuration property, by module, with defaults. **Generated** from the `@ConfigurationProperties` Javadoc — see below. |
 | [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) | JSON response contract for the generic read API. |
 | [docs/MEDIA_UPLOADS.md](docs/MEDIA_UPLOADS.md) | Binary upload endpoint and the `MediaStorage` SPI. |
+| [docs/EXTENDING.md](docs/EXTENDING.md) | How to build a community extension (connector, SPI, UI, skill), the naming/namespace conventions, and how to get it listed. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute code and how to list a community integration. |
+| [INTEGRATIONS.md](INTEGRATIONS.md) | Catalog of community-built integrations (generated from `community/registry.json`). |
+| Java API (Javadoc) | Aggregated API reference at [`/api`](https://docs.onno.su/api/) on the docs site (`./gradlew aggregateJavadoc`). |
 | [`onec` skill](onec-plugin/skills/onec/SKILL.md) | A hands-on expert playbook + cheat sheet that makes Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
 
 Each module also has its own `README.md` with integration-specific setup.
+
+### Generated reference (don't hand-edit)
+
+`docs/CONFIGURATION.md` is **generated**, not hand-maintained — its tables come from each starter's
+`spring-configuration-metadata.json`, which Spring's annotation processor builds from the
+`@ConfigurationProperties` field Javadoc. This keeps the config reference from drifting:
+
+```bash
+./gradlew generateConfigDocs   # rewrite docs/CONFIGURATION.md from the @ConfigurationProperties Javadoc
+./gradlew checkConfigDocs      # fail if it drifted (also runs as part of `./gradlew check`)
+```
+
+To change a property's docs, edit its **Javadoc** and regenerate — never edit the table by hand.
+
+Preview the full site locally:
+
+```bash
+./gradlew generateConfigDocs aggregateJavadoc       # refresh generated reference
+mkdir -p docs/public/api && cp -R build/docs/javadoc/. docs/public/api/   # stage Javadoc under /api
+cd docs && npm install && npm run docs:dev          # http://localhost:5173/onec-framework/
+```
 
 ### Using the onec skill
 
@@ -63,6 +92,19 @@ Commercial vertical connectors — `onec-guesty-starter` (Guesty Open API) and
 `onec-hospedajes-starter` (Spanish SES.HOSPEDAJES) — live in the separate, commercially licensed
 [onec-enterprise](https://github.com/onec-erp/onec-enterprise) repository. See the
 [License](#license) section.
+
+## Extending onec
+
+The framework is built to be extended **without forking** — you ship a separate artifact the host
+app opts into. Four extension surfaces: **connectors** (wrap an external system), **SPI
+implementations** (`MediaStorage`, `MailDispatcher`, custom auth, …), **UI** (widgets/pages/actions),
+and Claude **skills/plugins**. The full how-to — the starter shape, the naming/namespace conventions
+that keep the `io.github.onec-erp` and `com.onec.*` namespaces reserved, and a "definition of done"
+checklist — is in [docs/EXTENDING.md](docs/EXTENDING.md).
+
+Built one? Add it to the community catalog in [INTEGRATIONS.md](INTEGRATIONS.md): append an entry to
+[`community/registry.json`](community/registry.json), run `./gradlew generateIntegrationsDoc`, and
+open a PR (see [CONTRIBUTING.md](CONTRIBUTING.md#listing-a-community-integration)).
 
 ## Requirements
 

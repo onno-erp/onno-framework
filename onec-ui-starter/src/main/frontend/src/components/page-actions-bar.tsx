@@ -14,6 +14,8 @@ export type PageActionButton = {
   key: string;
   label: string;
   icon?: string;
+  /** Image URL/path shown instead of the lucide icon — e.g. a brand logo for "Connect with X". */
+  logo?: string;
   server: boolean;
   url?: string;
 };
@@ -86,6 +88,13 @@ export function PageActionsBar({
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : b.logo ? (
+                <img
+                  src={b.logo}
+                  alt=""
+                  aria-hidden="true"
+                  className="size-4 shrink-0 object-contain"
+                />
               ) : b.icon ? (
                 <DynamicLucide name={b.icon} size={16} />
               ) : null}
