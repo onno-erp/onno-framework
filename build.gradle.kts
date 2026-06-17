@@ -239,7 +239,7 @@ configure(subprojects.filter { it.name in configModuleProjects }) {
 }
 val configModuleTitles = mapOf(
     "onec-framework-starter" to "Core — `onec-framework-starter` (`OnecProperties`, prefix `onec`)",
-    "onec-ui-starter" to "UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`)",
+    "onec-ui-starter" to "UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`, `AppLinksProperties` prefix `onec.app-links`)",
     "onec-auth-starter" to "Auth — `onec-auth-starter` (`OnecAuthProperties`, prefix `onec.auth`)",
     "onec-mcp-starter" to "MCP — `onec-mcp-starter` (`OnecMcpProperties`, prefix `onec.mcp`)",
     "onec-import-starter" to "Import — `onec-import-starter` (`OnecImportProperties`, prefix `onec.import`)",

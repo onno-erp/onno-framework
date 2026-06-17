@@ -15,7 +15,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @AutoConfiguration(after = OnecAutoConfiguration.class)
-@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class})
+@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class, AppLinksProperties.class})
 @ConditionalOnBean(MetadataRegistry.class)
 @ConditionalOnProperty(prefix = "onec.ui", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class UiAutoConfiguration implements WebMvcConfigurer {
@@ -39,6 +39,15 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public SpaIndexController spaIndexController() {
         return new SpaIndexController(spaIndexHtml);
+    }
+
+    /**
+     * Serves the {@code /.well-known} app-association files (iOS Universal Links / Android App
+     * Links). Always wired; the endpoints 404 until {@code onec.app-links} is configured.
+     */
+    @Bean
+    public WellKnownController wellKnownController(AppLinksProperties appLinksProperties) {
+        return new WellKnownController(appLinksProperties);
     }
 
     @Bean

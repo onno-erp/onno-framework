@@ -18,6 +18,17 @@ onec:
     # composes its own SettingsPage at /settings, so turn the surface + admin nav entry on.
     settings:
       enabled: true
+  # Let the onec-mobile app open from this server's https:// links (iOS Universal Links / Android
+  # App Links). The two /.well-known files 404 until set; values are deployment-specific (Apple Team
+  # ID, app bundle id / package, signing-cert SHA-256). Self-hosted servers can set these, but the
+  # app only registers *.cloud.onno.su at build time — others fall back to the onec:// scheme / QR.
+  # app-links:
+  #   apple-app-ids:
+  #     - "ABCDE12345.su.onno.onec.mobile"   # <TeamID>.<bundleId>
+  #   android:
+  #     - package-name: su.onno.onec.mobile
+  #       sha256-cert-fingerprints:
+  #         - "AB:CD:EF:..."
   auth:
     # Authentication backend. Default is "in-memory" (the onec.auth.users below). Set to
     # "oidc" for server-side OIDC login (Keycloak, Zitadel, …; keeps the session cookie, "Sign in"

@@ -25,10 +25,12 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
 | `onec.security.secret-key` | `String` | — | Encryption key for `@Attribute(secret = true)` values. Any passphrase works (it is hashed to a 256-bit AES key). Required only when an entity declares a secret attribute; supply it from an environment variable, never hard-code it. |
 
-## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`)
+## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`, `AppLinksProperties` prefix `onec.app-links`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onec.app-links.android` | `List<AndroidApp>` | — | Android apps allowed to handle this domain's links, served in `/.well-known/assetlinks.json`. Empty → that endpoint 404s. |
+| `onec.app-links.apple-app-ids` | `List<String>` | — | Apple `appID`s (each `TeamID.bundleId`) allowed to handle this domain's links, served in `/.well-known/apple-app-site-association`. Empty → that endpoint 404s. |
 | `onec.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
 | `onec.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
 | `onec.comments.mentions.enabled` | `Boolean` | `true` | Whether `@`-mentions are parsed, resolved and offered in the compose typeahead. Turn it off to keep plain-text comments without touching `onec.comments.enabled`; existing mention tokens then degrade to their plain label text. |

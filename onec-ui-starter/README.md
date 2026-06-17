@@ -43,6 +43,8 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onec.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
 | `onec.ui.update-check.interval` | `24h` | Cadence after the first check (floored at 60s). |
 | `onec.ui.update-check.initial-delay` | `1m` | Delay before the first check. |
+| `onec.app-links.apple-app-ids` | empty | iOS `appID`s (`<TeamID>.<bundleId>`) served from `/.well-known/apple-app-site-association` for Universal Links. Empty → 404. |
+| `onec.app-links.android` | empty | Android apps (`package-name` + `sha256-cert-fingerprints`) served from `/.well-known/assetlinks.json` for App Links. Empty → 404. |
 
 ### Update-available notice
 
@@ -54,6 +56,38 @@ the web client raises a dismissible toast when `available` is true. Every failur
 unparseable body, unknown local version) is swallowed, so a flaky network never produces a wrong or
 alarming notice. The endpoint it polls is served by onec-cloud (`GET /releases/v1/latest`), which
 returns `204` when no release is announced.
+
+### Mobile app links — `/.well-known`
+
+So a native app (e.g. [onec-mobile](https://github.com/onec-erp/onec-mobile)) can open from this
+domain's `https://` links instead of the browser, the starter serves the two association files the
+OS fetches:
+
+| Endpoint | For |
+|----------|-----|
+| `GET /.well-known/apple-app-site-association` | iOS Universal Links |
+| `GET /.well-known/assetlinks.json` | Android App Links |
+
+Both are **public, unauthenticated `application/json`, no redirect** — the OS fetches them anonymously
+and rejects the association on any login wall or redirect. They live outside `/api/**` (public by
+default) and, being explicit controller mappings, win over the SPA's `index.html` fallback. Each
+answers `404` until configured, so an unconfigured deployment advertises no association:
+
+```yaml
+onec:
+  app-links:
+    apple-app-ids:
+      - "ABCDE12345.su.onno.onec.mobile"   # <TeamID>.<bundleId>
+    android:
+      - package-name: su.onno.onec.mobile
+        sha256-cert-fingerprints:
+          - "AB:CD:EF:..."                 # signing-cert SHA-256
+```
+
+The values are deployment-specific (Apple Team ID, app bundle id / package, signing-cert
+fingerprint). The cloud serves these from every tenant subdomain automatically; self-hosted servers
+on their own domains can set them too, but the app only registers the cloud's parent domain at build
+time, so self-hosted onboarding uses the app's `onec://` custom scheme / QR instead.
 
 ## REST endpoints
 

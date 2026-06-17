@@ -184,6 +184,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Mentions | `GET /api/mentions?q=` — cross-entity `@`-mention typeahead over readable catalogs/documents; comment bodies carry mentions as `@[Display](kind/name/id)` tokens resolved live, and each readable mention publishes `EntityMentionedEvent` (no consumers — additive via `@EventListener`) (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
+| App links | `GET /.well-known/apple-app-site-association`, `GET /.well-known/assetlinks.json` — public, unauthenticated `application/json` so iOS/Android verify the domain and open the mobile app from its links; 404 until `onec.app-links` is set (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
@@ -235,7 +236,9 @@ and `config(key,value)` reference.
 
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
 `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`,
-`/api/divkit/login`, `/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a
+`/api/divkit/login`, `/api/desktop/**`). Everything outside `/api/**` is public — including the SPA
+shell and the `/.well-known/*` app-association files (which the OS must fetch unauthenticated and
+without a redirect). **Per-entity RBAC is deny-by-default**: a
 catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onec.auth.enabled=false` and supplying your own
