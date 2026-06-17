@@ -63,6 +63,8 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.spring.security.core)
+    // Context-runner assertions for the auto-configuration gating tests.
+    testImplementation(libs.spring.boot.test)
     // In-memory engine for the read-path query-service tests (e.g. information-register
     // related-list rows) — same lightweight pattern the framework module uses.
     testImplementation(libs.h2)

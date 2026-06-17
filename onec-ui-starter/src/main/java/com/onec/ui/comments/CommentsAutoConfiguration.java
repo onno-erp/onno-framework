@@ -23,12 +23,16 @@ import org.springframework.context.annotation.Bean;
  * Wires the {@code /api/comments} discussion-thread endpoint, its {@link CommentService} store, and
  * the {@code onec.comments.*} configuration. Gated on a servlet web app and {@code onec.comments
  * .enabled} (default true), and runs after {@link UiAutoConfiguration} so the {@link UiAccessService}
- * and {@link CurrentUserResolver} it builds on are already present. Storage is the framework-owned
- * {@code onec_comments} table the service creates on startup — there is no app metadata to model.
+ * and {@link CurrentUserResolver} it builds on are already present. Comments are a UI-surface
+ * feature whose beans hard-depend on the UI beans, so it also requires {@link FieldHintResolver} —
+ * one of the beans {@code UiAutoConfiguration} only creates when {@code onec.ui.enabled} is true.
+ * That keeps the context from failing to start when the UI is disabled but comments are left at
+ * their default-on flag. Storage is the framework-owned {@code onec_comments} table the service
+ * creates on startup — there is no app metadata to model.
  */
 @AutoConfiguration(after = UiAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-@ConditionalOnBean(MetadataRegistry.class)
+@ConditionalOnBean({MetadataRegistry.class, FieldHintResolver.class})
 @EnableConfigurationProperties(CommentProperties.class)
 @ConditionalOnProperty(prefix = "onec.comments", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CommentsAutoConfiguration {
