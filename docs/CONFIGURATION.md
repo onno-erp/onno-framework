@@ -25,7 +25,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
 | `onec.security.secret-key` | `String` | — | Encryption key for `@Attribute(secret = true)` values. Any passphrase works (it is hashed to a 256-bit AES key). Required only when an entity declares a secret attribute; supply it from an environment variable, never hard-code it. |
 
-## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`)
+## UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`, `NotificationProperties` prefix `onec.notifications`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
@@ -39,6 +39,11 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onec.media.filesystem.directory` | `String` | — | Directory the filesystem backend writes uploads beneath. Defaults to `onec-media` under the JVM temp dir; set an absolute, persistent path in production. |
 | `onec.media.max-file-size` | `DataSize` | `10MB` | Largest single upload accepted. Also raises Spring's 1&nbsp;MB multipart default to match, so uploads up to this size reach the controller instead of being rejected by the container. |
 | `onec.media.public-base-path` | `String` | `/api/media` | URL prefix the filesystem backend builds stored-media URLs from, and the path `GET /api/media/{key}` serves from. Other backends (e.g. S3) ignore it. |
+| `onec.notifications.enabled` | `Boolean` | `true` | Whether the notifications endpoint, its storage table, and the bell widget are wired at all. Turn it off to drop the feature entirely without touching application code. |
+| `onec.notifications.inbox-limit` | `Integer` | `50` | Largest number of notifications a single inbox fetch returns, newest first. The bell only ever shows a recent window; older items age out of view (but stay in the table). Defaults to 50. |
+| `onec.notifications.mentions.enabled` | `Boolean` | `true` | Whether mentions raise inbox notifications. On by default. |
+| `onec.notifications.posting.enabled` | `Boolean` | `false` | Whether posting a document raises notifications. Off by default. |
+| `onec.notifications.posting.roles` | `List<String>` | — | Roles notified when a document is posted, e.g. `[FINANCE]`. Empty means notify no one. |
 | `onec.ui.enabled` | `Boolean` | `true` | Master switch for the UI starter. Also gated on a `MetadataRegistry` bean being present. |
 | `onec.ui.path` | `String` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the web client adopts it as its router basename and deep-link prefix; the bare root redirects here. Default `/ui`; set to `/` to mount the app at the web root. |
 | `onec.ui.read-only` | `Boolean` | `false` | When true, every mutating REST call is rejected with `403 UI is in read-only mode`. |

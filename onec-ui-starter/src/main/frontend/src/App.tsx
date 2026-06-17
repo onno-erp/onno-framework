@@ -18,6 +18,7 @@ import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
 import { UpdateNotice } from "@/components/update-notice";
+import { NotificationBell } from "@/components/notification-bell";
 import { BASE_PATH } from "@/lib/base-path";
 
 function ProtectedApp() {
@@ -43,6 +44,7 @@ function ProtectedApp() {
     <>
       <UpdateNotice />
       <DivKitView />
+      <NotificationBell />
       <WidgetPortals />
       <FormPortals />
       <ListPortals />
