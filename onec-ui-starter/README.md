@@ -377,12 +377,63 @@ resolved **live**, so renames and deletes stay correct on their own.
   can't read is stripped to plain text (no smuggling a link to a hidden record). On **read**, a
   mention the *viewer* can't read degrades to plain text instead of a clickable 403; one they can read
   resolves to its current display + avatar. ([`MentionResolver`](src/main/java/com/onec/ui/comments/MentionResolver.java) batches this per thread.)
-- **Notifications (additive).** Each readable mention in a freshly posted comment publishes an
-  [`EntityMentionedEvent`](src/main/java/com/onec/ui/comments/EntityMentionedEvent.java) — **no
-  consumers** ship with the framework. Wire delivery (in-app, the cross-node event bus, `onec-mail-starter`)
-  later by registering a Spring `@EventListener`, exactly as you would for `DocumentPostedEvent`.
+- **Notifications.** Each readable mention in a freshly posted comment publishes an
+  [`EntityMentionedEvent`](src/main/java/com/onec/ui/comments/EntityMentionedEvent.java). The
+  [notification inbox](#notifications--apinotifications) consumes it out of the box (the mention lands
+  in the mentioned user's bell); you can still wire extra delivery (the cross-node event bus,
+  `onec-mail-starter`) with your own `@EventListener`, exactly as you would for `DocumentPostedEvent`.
 - **Config.** `onec.comments.mentions.enabled` (default true) gates the whole feature;
   `onec.comments.mentions.suggestion-limit` / `…per-entity-limit` cap the typeahead.
+
+### Notifications — `/api/notifications`
+
+A per-user **notification inbox**, surfaced as a bell with an unread badge in the app's top-right and a
+popover list. Like comments, notifications are framework infrastructure, not modelled entities — they
+live in the framework-owned `onec_notifications` table (created at startup, never shown in the nav).
+The bell keeps itself live off the existing `/api/events` stream (and a slow poll fallback), so a
+notification raised anywhere lights the badge without a reload.
+
+A notification is addressed to an opaque **recipient key**, and a user sees it when the key matches any
+of the keys their session resolves to — their username (`user:<name>`), each of their roles
+(`role:<ROLE>`), or their linked identity record (`record:<uuid>`, the target of an `@`-mention). One
+`WHERE recipient IN (...)` query then serves the inbox however the notification was addressed.
+
+**Producing** notifications is server-side only — there is no "create" endpoint. App code injects
+[`NotificationService`](src/main/java/com/onec/ui/notifications/NotificationService.java):
+
+```java
+notifications.compose()
+    .toRole("FINANCE")
+    .title("Invoice approved")
+    .body("INV-42 cleared for payment")
+    .severity(NotificationSeverity.SUCCESS)
+    .link("onec://documents/invoices/" + id)   // optional deep-link the bell makes clickable
+    .send();
+// shortcuts: notifications.notifyUser(username, title, body) / notifyRole(...) / notifyRecord(...)
+```
+
+Two built-in producers turn existing events into notifications, both configurable:
+
+- **`@`-mentions** — a comment mention raises a notification for the mentioned user. On by default
+  (`onec.notifications.mentions.enabled`), and a no-op unless comment mentions are themselves enabled.
+- **Document posting** — a successful post notifies a set of roles. Off by default; enable with
+  `onec.notifications.posting.enabled=true` and `onec.notifications.posting.roles=[FINANCE]`.
+
+Each stored notification also publishes a
+[`NotificationCreatedEvent`](src/main/java/com/onec/ui/notifications/NotificationCreatedEvent.java), so
+another channel (e.g. `onec-mail-starter`) can fan it out further with an `@EventListener`.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/notifications` | The caller's inbox, newest first. `?unread=true` returns only unread. Capped at `onec.notifications.inbox-limit` (default 50). |
+| GET | `/api/notifications/unread-count` | `{ "count": N }` — what the badge shows. |
+| POST | `/api/notifications/{id}/read` | Mark one read. `204` when changed, `404` when it isn't the caller's. |
+| POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ "updated": N }`. |
+| DELETE | `/api/notifications/{id}` | Remove one. `204`/`404`, scoped to the caller. |
+
+Every operation is scoped to the authenticated principal — the caller can only read, mark, or dismiss
+notifications addressed to them. `onec.notifications.enabled=false` is the global kill switch (drops
+the endpoint, table, and bell).
 
 ### Misc — `/api`
 

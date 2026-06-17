@@ -209,6 +209,21 @@ export interface CommentView {
   canDelete: boolean;
 }
 
+/** One row of the current user's notification inbox (see NotificationController). */
+export interface NotificationView {
+  id: string;
+  title: string;
+  body: string | null;
+  severity: "info" | "success" | "warning" | "error";
+  /** Producer-set tag, e.g. "mention" / "posting" (null when unset). */
+  category: string | null;
+  /** Optional `onec://kind/name/id` route the bell deep-links to (null when none). */
+  link: string | null;
+  createdAt: string | null;
+  read: boolean;
+  readAt: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -330,6 +345,19 @@ export const api = {
   // matching q, ranked and capped server-side (see MentionController).
   searchMentions: (q: string) =>
     fetchJson<MentionSuggestion[]>(`${BASE}/mentions?q=${encodeURIComponent(q)}`),
+
+  // Notifications — the per-user inbox behind the bell widget (see NotificationController). Every
+  // call is scoped server-side to the authenticated user; there is no client-side "create".
+  listNotifications: (unreadOnly = false) =>
+    fetchJson<NotificationView[]>(`${BASE}/notifications${unreadOnly ? "?unread=true" : ""}`),
+  unreadNotificationCount: () =>
+    fetchJson<{ count: number }>(`${BASE}/notifications/unread-count`),
+  markNotificationRead: (id: string) =>
+    fetchJson<void>(`${BASE}/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () =>
+    fetchJson<{ updated: number }>(`${BASE}/notifications/read-all`, { method: "POST" }),
+  dismissNotification: (id: string) =>
+    fetchJson<void>(`${BASE}/notifications/${id}`, { method: "DELETE" }),
 
   postDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/post`, { method: "POST" }),
