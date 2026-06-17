@@ -352,6 +352,7 @@ that matters to an integrator:
 | POST | `/api/auth/login` | Body `{"username","password"}`. On success sets the session cookie and returns `{authenticated, username, roles}`; `401` on bad credentials, `400` on a malformed body. CSRF-exempt. |
 | POST | `/api/auth/logout` | Invalidates the session. |
 | GET | `/api/auth/me` | Current user, or `{authenticated:false,...}` when anonymous. |
+| GET | `/api/auth/csrf` | This session's CSRF token `{token, headerName, parameterName}`, for clients that can't read the `XSRF-TOKEN` cookie (e.g. native mobile). Public; `token` is `null` in `resource-server` mode. |
 
 ### Logging in to call the API
 

@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.RememberMeServices;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -104,6 +105,25 @@ class AuthApiController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * The current session's CSRF token, for cookie-based modes ({@code in-memory} / {@code oidc}).
+     * The token also rides in the {@code XSRF-TOKEN} cookie, which browser SPAs read directly — but
+     * a native mobile client can't: iOS hides {@code Set-Cookie} from JS and there is no
+     * {@code document.cookie}. This endpoint hands the token to such clients so they can echo it in
+     * the {@code headerName} header on mutating requests. The {@link CsrfCookieFilter} has already
+     * materialized the token (request attribute) by the time this runs. {@code token} is null in
+     * {@code resource-server} mode, which is stateless and has CSRF disabled (bearer tokens aren't
+     * CSRF-prone), so callers there don't need it.
+     */
+    @GetMapping("/csrf")
+    CsrfTokenResponse csrf(HttpServletRequest request) {
+        CsrfToken token = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+        if (token == null) {
+            return new CsrfTokenResponse(null, null, null);
+        }
+        return new CsrfTokenResponse(token.getToken(), token.getHeaderName(), token.getParameterName());
+    }
+
     private AuthMode authMode() {
         OnecAuthProperties.Mode mode = properties.getMode();
         if (mode != OnecAuthProperties.Mode.OIDC) {
@@ -133,6 +153,16 @@ class AuthApiController {
     }
 
     private record AuthMode(String mode, String loginUrl, String logoutUrl) {
+    }
+
+    /**
+     * The session CSRF token and the names to submit it under, mirroring Spring's {@link CsrfToken}.
+     *
+     * @param token         the raw token value to echo back; null in resource-server (CSRF-off) mode
+     * @param headerName    the request header to send the token in (default {@code X-XSRF-TOKEN})
+     * @param parameterName the form-parameter alternative (default {@code _csrf})
+     */
+    record CsrfTokenResponse(String token, String headerName, String parameterName) {
     }
 
     /**

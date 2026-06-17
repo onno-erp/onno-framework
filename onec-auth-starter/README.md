@@ -118,6 +118,9 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 - Mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`) must echo it back in the **`X-XSRF-TOKEN`**
   header. (The request handler uses the raw token value — `CsrfTokenRequestAttributeHandler` — not
   the BREACH-protected encoded form.)
+- **Clients that can't read the cookie** — native mobile apps in particular (iOS hides `Set-Cookie`
+  from JS and there's no `document.cookie`) — fetch the token from **`GET /api/auth/csrf`** instead
+  and echo it in the same header. Browser SPAs don't need it; they read the cookie directly.
 - A `CsrfCookieFilter` runs on every request and materializes the deferred token, so the
   `XSRF-TOKEN` cookie is present after the **first response** to a fresh client (e.g. `GET /api/auth/me`),
   rather than only after something downstream happens to read it.
@@ -130,6 +133,7 @@ CSRF protection is **enabled** using `CookieCsrfTokenRepository.withHttpOnlyFals
 |--------|------|------|------|----------|
 | `POST` | `/api/auth/login` | public, CSRF-exempt | `{"username":"...","password":"...","remember":true}` | `200` `{"authenticated":true,"username":"...","roles":["ROLE_ADMIN",...]}`; `401` on bad credentials; `400` if username/password missing. `remember` is optional (default `true`) and, when remember-me is enabled, controls whether the persistent cookie is issued |
 | `GET` | `/api/auth/me` | public | — | Current user, or `{"authenticated":false,"username":"","roles":[]}` when anonymous |
+| `GET` | `/api/auth/csrf` | public | — | This session's CSRF token: `{"token":"...","headerName":"X-XSRF-TOKEN","parameterName":"_csrf"}`. For clients that can't read the `XSRF-TOKEN` cookie; `token` is `null` in `resource-server` mode (CSRF off) |
 | `POST` | `/api/auth/logout` | authenticated (needs CSRF header) | — | `204 No Content`; cancels the remember-me cookie, clears the security context, and invalidates the session |
 
 `roles` are the granted authorities verbatim, so they include the `ROLE_` prefix (a `USER` role

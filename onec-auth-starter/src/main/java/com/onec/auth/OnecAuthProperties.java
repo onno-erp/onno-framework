@@ -59,6 +59,10 @@ public class OnecAuthProperties {
             // be reachable unauthenticated so the SPA can decide what to render before sign-in;
             // returns only non-sensitive routing info (anonymous state when not logged in).
             "/api/auth/me",
+            // The session CSRF token, for clients that can't read the XSRF-TOKEN cookie (native
+            // mobile: iOS hides Set-Cookie, no document.cookie). Public like /me so the token can be
+            // bootstrapped before sign-in; it's only ever this caller's own session token.
+            "/api/auth/csrf",
             // The server-driven (DivKit) login screen. Public so it can render before sign-in.
             "/api/divkit/login",
             // Desktop shell liveness + window manifest. The native shell polls these

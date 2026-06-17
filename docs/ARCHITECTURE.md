@@ -184,7 +184,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes (ui-starter) |
-| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` (auth-starter) |
+| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
@@ -226,14 +226,16 @@ and `config(key,value)` reference.
 `onec-auth-starter` contributes the `SecurityFilterChain` and picks a mode from `onec.auth.mode`:
 
 - **`in-memory`** (default) — users from `onec.auth.users[*]`, session cookie + optional remember-me,
-  JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header.
+  JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
+  the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
 - **`oidc`** — server-side OpenID Connect (Keycloak/Zitadel/custom); realm/client role mapping from
   the token via `onec.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.
 
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
-`/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/divkit/login`,
-`/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a catalog/document/register is invisible
+`/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`,
+`/api/divkit/login`, `/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a
+catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onec.auth.enabled=false` and supplying your own
 `SecurityFilterChain`.

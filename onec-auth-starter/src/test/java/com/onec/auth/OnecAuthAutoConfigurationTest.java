@@ -92,6 +92,15 @@ class OnecAuthAutoConfigurationTest {
     }
 
     @Test
+    void csrfTokenEndpointIsPublicSoClientsCanBootstrapTheToken() {
+        runner.run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(OnecAuthProperties.class).getPublicPaths())
+                    .contains("/api/auth/csrf");
+        });
+    }
+
+    @Test
     void csrfIgnoredPathsAreConfigurableAndTheChainStillBuilds() {
         runner.withPropertyValues(
                         "onec.auth.csrf-ignored-paths[0]=/api/auth/login",
