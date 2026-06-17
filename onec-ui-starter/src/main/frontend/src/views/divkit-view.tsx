@@ -219,6 +219,10 @@ function toSnake(name: string): string {
 // Does a server event touch a given surface (the path an island is showing)?
 function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!event || event.type === "ready") return false;
+  // Comment-thread changes live-sync through the comments widget's own listener; they never alter
+  // a list/detail/dashboard surface, so keep them off the content-pane refetch path — otherwise
+  // every comment post would needlessly refetch the home dashboard (which refreshes on any change).
+  if (event.entityType === "comment") return false;
   // Home shows counts/charts over many entities — refresh on any data change.
   if (pathname === "/" || pathname === "") return true;
 

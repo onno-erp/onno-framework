@@ -276,6 +276,13 @@ SSE stream and lets server-side consumers (cache revalidation, search indexing) 
 resource instead of polling. `@DomainEvent` declarations append to the transactional `onec_outbox`;
 `onec-kafka-starter` relays those rows when you want cross-service streaming.
 
+The `entityType` vocabulary is open: the modelled kinds are `catalog`, `document`, and `register`,
+but other modules emit their own. Comment-thread posts and deletes (`onec-ui-starter`; not a modelled
+entity) publish the same event with `entityType = comment`, scoped to the commented record's
+`(entityName, id)` — so the comments panel live-syncs across viewers, and across nodes via the same
+cluster relay, without each panel opening its own stream. Listeners filter on `entityType`, so the
+list/detail/dashboard surfaces (which react only to the modelled kinds) ignore it.
+
 The SSE fan-out is in-JVM by default — fine for one node. Add `onec-cluster-starter` (see below) to
 make `EntityChangedEvent`s reach browsers on **every** node of a scaled-out deployment.
 

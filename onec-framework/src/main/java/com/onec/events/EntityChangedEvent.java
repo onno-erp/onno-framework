@@ -24,7 +24,10 @@ import java.util.UUID;
  * @param changeType  what happened: {@code created}, {@code updated}, {@code deleted}, {@code posted},
  *                    {@code unposted}, or {@code changed} (a coarse "something changed" signal, e.g.
  *                    register movements after a post).
- * @param entityType  the kind of entity: {@code catalog}, {@code document}, or {@code register}.
+ * @param entityType  the kind of entity. The framework's modelled kinds are {@code catalog},
+ *                    {@code document}, and {@code register}; the vocabulary is open, and other
+ *                    modules emit their own (e.g. the UI's comment threads emit {@code comment}).
+ *                    Listeners filter on it, so an unrecognised kind is simply ignored.
  * @param entityName  the entity's registered logical name (e.g. {@code Properties}), or {@code *}
  *                    for a non-specific signal.
  * @param id          the affected row's id, or {@code null} when not applicable.

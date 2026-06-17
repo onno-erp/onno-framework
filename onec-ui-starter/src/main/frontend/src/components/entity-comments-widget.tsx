@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Send, Trash2, MessageSquare, AtSign } from "lucide-react";
 import { api, ApiError, type CommentView, type CommentMention, type MentionSuggestion } from "@/lib/api";
+import type { UiEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { linkify } from "@/lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -138,9 +139,11 @@ function activeMentionQuery(text: string, caret: number): { query: string; start
  * The discussion thread panel rendered on every catalog/document detail surface (the
  * `onec-comments` div-custom). Loads the thread from `/api/comments/...`, posts new comments (author
  * stamped server-side), deletes one's own, and supports `@`-mentioning any readable catalog/document
- * (users included) via the `/api/mentions` typeahead. Self-contained: it re-fetches after each write
- * rather than relying on the surface's SSE refresh, so it never touches the shared content-pane
- * machinery.
+ * (users included) via the `/api/mentions` typeahead. Live-syncs: besides re-fetching after the
+ * viewer's own writes, it refetches when the server signals a comment change on this thread — so
+ * other people's posts and deletes appear without a reload. It listens to the shared `onec:dataevent`
+ * fan-out (divkit-view's single SSE stream) the list islands use, so it adds no second connection and
+ * never touches the content-pane machinery.
  */
 export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   const { kind, name, id } = target;
@@ -173,6 +176,20 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   }, [kind, name, id]);
 
   useEffect(() => load(), [load]);
+
+  // Live-sync: refetch when the server signals a comment changed on this thread. We reuse the shared
+  // `onec:dataevent` fan-out (divkit-view's one SSE stream) the list islands consume rather than
+  // opening our own stream. The target id is globally unique, so it alone scopes the thread; the name
+  // is matched too as a cheap guard. The viewer's own post already shows optimistically — this just
+  // reconciles it — and it's how *other* viewers' posts and deletes appear without a reload.
+  useEffect(() => {
+    const onData = (e: Event) => {
+      const ev = (e as CustomEvent<UiEvent>).detail;
+      if (ev?.entityType === "comment" && ev.id === id && ev.entityName === name) load();
+    };
+    window.addEventListener("onec:dataevent", onData);
+    return () => window.removeEventListener("onec:dataevent", onData);
+  }, [load, id, name]);
 
   // Debounced typeahead fetch whenever the active mention query changes. A stale response (a slower
   // earlier request resolving last) is ignored via the request sequence guard.

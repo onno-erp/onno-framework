@@ -1,5 +1,6 @@
 package com.onec.ui.comments;
 
+import com.onec.events.EntityChangedEvent;
 import com.onec.ui.CatalogQueryService;
 import com.onec.ui.CurrentUserResolver;
 import com.onec.ui.CurrentUserResolver.CurrentUser;
@@ -42,6 +43,14 @@ import java.util.UUID;
 public class CommentController {
 
     private static final String SUPERUSER_ROLE = "ADMIN";
+
+    /**
+     * The {@link EntityChangedEvent#entityType()} stamped on a comment-thread change. It is its own
+     * kind (not {@code catalog}/{@code document}) so the live stream carries comment posts/deletes
+     * without the list, map, or content-pane surfaces — which only react to the modelled kinds —
+     * mistaking it for a row edit and refetching. Only the comments widget listens for it.
+     */
+    private static final String COMMENT_ENTITY_TYPE = "comment";
 
     private final CommentService comments;
     private final UiAccessService access;
@@ -117,6 +126,11 @@ public class CommentController {
             body = Mentions.degrade(body, ref -> !mentions.canRead(principal, ref));
         }
         Comment saved = comments.add(kind, name, id, me.recordId(), me.displayName(), body);
+        // Live-sync the thread: announce the post on the same EntityChangedEvent stream the SSE
+        // bridge fans to browsers, scoped to the target's (name, id) so only this thread's open
+        // panels refetch. The insert has already committed (its own JDBI transaction), so a viewer
+        // reacting to this event reads the new comment back, not a phantom (issues #28, #29).
+        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, COMMENT_ENTITY_TYPE, name, id, null));
         Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(List.of(saved), principal);
         if (mentionsEnabled()) {
             // Announce each surviving (author-readable) mention. No consumers ship with the framework;
@@ -141,6 +155,9 @@ public class CommentController {
                     "Only the author or an administrator can delete this comment");
         }
         comments.softDelete(commentId);
+        // Same live-sync signal as a post, so the deleted comment vanishes from other open threads.
+        events.publishEvent(new EntityChangedEvent(
+                EntityChangedEvent.DELETED, COMMENT_ENTITY_TYPE, comment.entityName(), comment.entityId(), null));
         return ResponseEntity.noContent().build();
     }
 

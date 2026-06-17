@@ -18,7 +18,7 @@ Implemented:
 - Production auth modes shipped in `onec-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
 - Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
-- Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, and registers
+- Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onec-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Hierarchical catalog fields and generated schema
 - Configurable catalog/document autonumbering prefixes
