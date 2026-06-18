@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useBranding } from "@/providers/branding-provider";
+import { useMessages } from "@/providers/messages-provider";
 import { api } from "@/lib/api";
 import { useUiEvents } from "@/hooks/use-ui-events";
 import type { UiEvent } from "@/lib/types";
@@ -256,6 +257,7 @@ export function DivKitView() {
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const branding = useBranding();
+  const t = useMessages();
   const [profile, setProfile] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
   const [shell, setShell] = useState<ShellData | null>(null);
@@ -562,17 +564,17 @@ export function DivKitView() {
         };
         if (kind === "documents") {
           setConfirm({
-            title: "Delete document?",
-            message: "This document will be marked for deletion. You can't undo this from here.",
-            confirmLabel: "Delete",
+            title: t("confirm.delete.document.title"),
+            message: t("confirm.delete.document.message"),
+            confirmLabel: t("action.delete"),
             danger: true,
             onConfirm: () => api.deleteDocument(name, id).then(after).catch(() => {}),
           });
         } else if (kind === "catalogs") {
           setConfirm({
-            title: "Delete item?",
-            message: "This item will be marked for deletion. You can't undo this from here.",
-            confirmLabel: "Delete",
+            title: t("confirm.delete.item.title"),
+            message: t("confirm.delete.item.message"),
+            confirmLabel: t("action.delete"),
             danger: true,
             onConfirm: () => api.deleteCatalogItem(name, id).then(after).catch(() => {}),
           });
@@ -586,7 +588,7 @@ export function DivKitView() {
         if (!kind || !name || !key) return;
         // The detail-header button is DivKit-rendered (no React control to spin), so a loading
         // toast gives feedback while a slow/async handler runs.
-        const loadingId = toast.loading("Working…");
+        const loadingId = toast.loading(t("loading.working"));
         api
           .runAction(kind, name, key, id)
           .then((result) => {
@@ -608,7 +610,7 @@ export function DivKitView() {
         const [name, id] = rest.slice((unpost ? "unpost/" : "post/").length).split("/");
         if (!name || !id) return;
         const op = unpost ? api.unpostDocument(name, id) : api.postDocument(name, id);
-        op.then(() => toast.success(unpost ? "Document unposted" : "Document posted")).catch(() => {});
+        op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
         return;
       }
       const path = "/" + rest;
@@ -620,7 +622,7 @@ export function DivKitView() {
         openPath(path);
       }
     },
-    [navigate, location.pathname, logout, setTheme, resolvedTheme, openPath, openDetailRight, closePath, shell?.navStyle]
+    [navigate, location.pathname, logout, setTheme, resolvedTheme, openPath, openDetailRight, closePath, shell?.navStyle, t]
   );
 
   // Right-click on a list row (stamped with data-onno-row by the DivKit "row" extension)
@@ -1172,14 +1174,14 @@ export function DivKitView() {
     ? contextMenu(
         rowMenu,
         [
-          { label: "Open", icon: ExternalLink, run: () => onCustomAction({ url: rowMenu.url }) },
-          { label: "Edit", icon: Pencil, run: () => onCustomAction({ url: rowMenu.url + "/edit" }) },
-          { label: "Duplicate", icon: Copy, run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }) },
-          { label: "Copy link", icon: Link2, run: () => copyLink(rowOpenPath(rowMenu.url)), divider: true },
+          { label: t("action.open"), icon: ExternalLink, run: () => onCustomAction({ url: rowMenu.url }) },
+          { label: t("action.edit"), icon: Pencil, run: () => onCustomAction({ url: rowMenu.url + "/edit" }) },
+          { label: t("action.duplicate"), icon: Copy, run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }) },
+          { label: t("action.copyLink"), icon: Link2, run: () => copyLink(rowOpenPath(rowMenu.url)), divider: true },
           // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
           // detail header's delete (handled in onCustomAction).
           {
-            label: "Delete",
+            label: t("action.delete"),
             icon: Trash2,
             run: () => onCustomAction({ url: rowDeleteUrl(rowMenu.url) }),
             danger: true,
@@ -1195,7 +1197,7 @@ export function DivKitView() {
   const tabMenuEl = tabMenu
     ? contextMenu(
         tabMenu,
-        [{ label: "Copy link", icon: Link2, run: () => copyLink(tabMenu.path) }],
+        [{ label: t("action.copyLink"), icon: Link2, run: () => copyLink(tabMenu.path) }],
         () => setTabMenu(null)
       )
     : null;

@@ -41,6 +41,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new SpaIndexController(spaIndexHtml);
     }
 
+    /** The resolved chrome strings (English defaults + {@code onno.ui.messages} overrides). */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public UiMessages uiMessages(UiProperties properties) {
+        return new UiMessages(properties.getMessages());
+    }
+
     @Bean
     public SettingsController settingsController(MetadataRegistry registry,
                                                 su.onno.repository.ConstantManager constantManager,
@@ -78,8 +85,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public ThemeController themeController(UiProperties properties, su.onno.ui.UiLayout uiLayout,
+                                          UiMessages uiMessages,
                                           org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker) {
-        return new ThemeController(properties, uiLayout, updateChecker);
+        return new ThemeController(properties, uiLayout, uiMessages, updateChecker);
     }
 
     /**
@@ -98,8 +106,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public LoginDivController loginDivController(
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsProvider> authMethods,
-            org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsContributor> contributors) {
-        return new LoginDivController(authMethods, contributors);
+            org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsContributor> contributors,
+            UiMessages uiMessages) {
+        return new LoginDivController(authMethods, contributors, uiMessages);
     }
 
     @Bean
@@ -251,10 +260,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              UiActionResolver uiActionResolver,
                                              RelatedListReader relatedListReader,
                                              UiProperties uiProperties,
+                                             UiMessages uiMessages,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties, commentProperties);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties);
     }
 
 }

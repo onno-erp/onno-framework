@@ -65,6 +65,9 @@ public class DivKitController {
     private final UiActionResolver actionResolver;
     private final RelatedListReader relatedLists;
     private final UiProperties uiProperties;
+    // The resolved chrome strings (English defaults + onno.ui.messages overrides) for the
+    // server-rendered DivKit chrome — login aside (that's LoginDivController's payload).
+    private final UiMessages messages;
     // Resolved per request (lazily): the comments module is wired after this controller, and is
     // absent entirely when onno.comments.enabled=false. getIfAvailable() yields null in that case.
     private final ObjectProvider<CommentProperties> commentProperties;
@@ -83,6 +86,7 @@ public class DivKitController {
                             UiActionResolver actionResolver,
                             RelatedListReader relatedLists,
                             UiProperties uiProperties,
+                            UiMessages messages,
                             ObjectProvider<CommentProperties> commentProperties) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
@@ -101,6 +105,7 @@ public class DivKitController {
         this.actionResolver = actionResolver;
         this.relatedLists = relatedLists;
         this.uiProperties = uiProperties;
+        this.messages = messages;
         this.commentProperties = commentProperties;
     }
 
@@ -145,9 +150,9 @@ public class DivKitController {
         // item, so a dashboard-less app opens on a real screen instead of a phantom one.
         out.put("home", landingPath(nav));
         out.put("nav", DivCard.of("onno-nav",
-                ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p)));
+                ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",
-                ShellLayoutBuilder.account(user.displayName(), profileLinks, activeProfile.id(), p)));
+                ShellLayoutBuilder.account(user.displayName(), profileLinks, activeProfile.id(), p, messages)));
         return out;
     }
 
@@ -160,7 +165,7 @@ public class DivKitController {
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         Map<String, Object> content = ShellLayoutBuilder.account(
-                user.displayName(), profileLinks, profileId, p);
+                user.displayName(), profileLinks, profileId, p, messages);
         // As a standalone page (mobile), the account card carries its own padding +
         // border, so it just needs an outer margin to not sit flush against the edges —
         // the breathing room the web shell used to add around content.
@@ -190,7 +195,7 @@ public class DivKitController {
         ShellLayoutBuilder.Logo logo = ShellLayoutBuilder.Logo.of(
                 branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
         Map<String, Object> content = ShellLayoutBuilder.menu(
-                brand, logo, nav, user.displayName(), profileLinks, activeProfile.id(), p);
+                brand, logo, nav, user.displayName(), profileLinks, activeProfile.id(), p, messages);
         Div.margins(content, 16, 16, 16, 16);
         return DivCard.of("onno-content", content);
     }
@@ -471,11 +476,11 @@ public class DivKitController {
         // Catalogs keep Edit/Delete as inline (primary) buttons — no posting, no overflow.
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "accent",
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
                     "onno://catalogs/" + name + "/" + id + "/edit", "primary"));
-            actions.add(new SurfaceDivBuilder.HeaderAction("copy", "Duplicate", "normal",
+            actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://catalogs/" + name + "/" + id + "/duplicate", "menu"));
-            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/catalogs/" + name + "/" + id, "primary"));
         }
         if (canWrite) {
@@ -485,7 +490,7 @@ public class DivKitController {
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
                 meta, catalogQuery.get(desc, id),
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
-                palette(theme));
+                palette(theme), messages);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -563,19 +568,20 @@ public class DivKitController {
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite && postable) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check", posted ? "Re-post" : "Post",
+            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check",
+                    messages.get(posted ? "action.repost" : "action.post"),
                     "primary", "onno://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
         }
         if (canWrite && postable && posted) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", "Unpost", "normal",
+            actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
                     "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
         }
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", "Edit", "normal",
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "normal",
                     "onno://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
-            actions.add(new SurfaceDivBuilder.HeaderAction("copy", "Duplicate", "normal",
+            actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://documents/" + name + "/" + id + "/duplicate", str(placement.getOrDefault("duplicate", "menu"))));
-            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", "Delete", "danger",
+            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
         }
         if (canWrite) {
@@ -585,7 +591,7 @@ public class DivKitController {
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(
                 meta, row, relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
-                palette(theme));
+                palette(theme), messages);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -632,7 +638,7 @@ public class DivKitController {
                 : null;
         Map<String, Object> content = SurfaceDivBuilder.registerReport(
                 resolvedMetadata.describeRegister(desc), registerQuery.movements(desc, from, to), balances,
-                palette(theme));
+                palette(theme), messages);
         return DivCard.of("onno-content", content);
     }
 

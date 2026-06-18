@@ -25,6 +25,26 @@ public class UiProperties {
     /** Free-form theme key/values served verbatim from {@code GET /api/theme}. */
     private Map<String, String> theme = new LinkedHashMap<>();
 
+    /**
+     * Overrides for the framework's own chrome strings — action buttons, confirmation dialogs, the
+     * login screen, empty/loading states, and client-side validation messages. Keys come from
+     * {@link UiMessages#DEFAULTS} (e.g. {@code login.title}, {@code action.new}); each value replaces
+     * the English default. The resolved map renders the server-side DivKit chrome and is handed to
+     * the web client via {@code GET /api/config}, so a one-language deployment can fully localize the
+     * shell without patching framework code.
+     *
+     * <p>Because the keys contain dots, quote them in YAML so they bind as literal map keys:
+     * <pre>
+     * onno:
+     *   ui:
+     *     messages:
+     *       "action.new": "Новый"
+     *       "login.title": "Вход"
+     * </pre>
+     * (in a properties file use bracket notation: {@code onno.ui.messages[action.new]=Новый}).
+     */
+    private Map<String, String> messages = new LinkedHashMap<>();
+
     /** App-settings page (the {@code @Constant} editor); opt-in via {@code onno.ui.settings.*}. */
     private Settings settings = new Settings();
 
@@ -58,6 +78,14 @@ public class UiProperties {
 
     public void setTheme(Map<String, String> theme) {
         this.theme = theme;
+    }
+
+    public Map<String, String> getMessages() {
+        return messages;
+    }
+
+    public void setMessages(Map<String, String> messages) {
+        this.messages = messages;
     }
 
     public Settings getSettings() {

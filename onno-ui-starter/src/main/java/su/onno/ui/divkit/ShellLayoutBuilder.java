@@ -1,6 +1,7 @@
 package su.onno.ui.divkit;
 
 import su.onno.ui.NavStyle;
+import su.onno.ui.UiMessages;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -109,15 +110,24 @@ public final class ShellLayoutBuilder {
      * theme / sign-out actions. On desktop it sits under the nav rail; on mobile
      * it's served as the {@code /account} page (reached from a bottom-bar tab).
      */
+    /** Back-compat overload rendering the English defaults (used by unit tests). */
     public static Map<String, Object> account(String userName,
                                               List<ProfileLink> profiles,
                                               String activeProfileId,
                                               Palette p) {
+        return account(userName, profiles, activeProfileId, p, UiMessages.defaults());
+    }
+
+    public static Map<String, Object> account(String userName,
+                                              List<ProfileLink> profiles,
+                                              String activeProfileId,
+                                              Palette p,
+                                              UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         List<Map<String, Object>> identityItems = new ArrayList<>();
         if (userName != null && !userName.isBlank()) {
-            Map<String, Object> caption = Div.text("Signed in as", 10, "medium");
+            Map<String, Object> caption = Div.text(msg.get("shell.signedInAs"), 10, "medium");
             Div.color(caption, p.muted());
             Div.maxLines(caption, 1);
             identityItems.add(caption);
@@ -132,10 +142,10 @@ public final class ShellLayoutBuilder {
         Div.alignV(identity, "center");
 
         String themeIcon = p.equals(Palette.DARK) ? "sun" : "moon";
-        Map<String, Object> themeBtn = iconButton(themeIcon, "Theme", p.muted(), TRANSPARENT, null);
+        Map<String, Object> themeBtn = iconButton(themeIcon, msg.get("shell.theme"), p.muted(), TRANSPARENT, null);
         Div.action(themeBtn, "theme", "onno://theme/toggle");
 
-        Map<String, Object> logout = iconButton("log-out", "Sign out", p.muted(), TRANSPARENT, null);
+        Map<String, Object> logout = iconButton("log-out", msg.get("shell.signOut"), p.muted(), TRANSPARENT, null);
         Div.action(logout, "logout", "onno://logout");
 
         Map<String, Object> actions = Div.horizontal(List.of(themeBtn, logout));
@@ -195,11 +205,17 @@ public final class ShellLayoutBuilder {
      * <p>{@code logo} (a configured branding {@link Logo}, or {@code null}) replaces the
      * text {@code brand} in the sidebar header when present.</p>
      */
+    /** Back-compat overload rendering the English defaults (used by unit tests). */
     public static Map<String, Object> nav(String brand, Logo logo, List<NavSection> nav, NavStyle style,
                                           boolean compact, Palette p) {
+        return nav(brand, logo, nav, style, compact, p, UiMessages.defaults());
+    }
+
+    public static Map<String, Object> nav(String brand, Logo logo, List<NavSection> nav, NavStyle style,
+                                          boolean compact, Palette p, UiMessages msg) {
         return switch (style) {
             case SIDEBAR -> sidebarNav(brand, logo, nav, p);
-            case BOTTOM_BAR -> bottomNav(nav, compact, p);
+            case BOTTOM_BAR -> bottomNav(nav, compact, p, msg);
             case TOPBAR -> topbarNav(nav, p);
         };
     }
@@ -357,7 +373,7 @@ public final class ShellLayoutBuilder {
     // without cramming a dozen tiny labels across the width.
     private static final int MAX_PRIMARY_TABS = 4;
 
-    private static Map<String, Object> bottomNav(List<NavSection> nav, boolean compact, Palette p) {
+    private static Map<String, Object> bottomNav(List<NavSection> nav, boolean compact, Palette p, UiMessages msg) {
         List<NavItem> items = new ArrayList<>();
         for (NavSection section : nav) {
             items.addAll(section.items());
@@ -370,7 +386,7 @@ public final class ShellLayoutBuilder {
         }
         // Always offer "More" — it's the hub for the overflow destinations, the persona
         // switcher, theme toggle, and sign-out (none of which fit on the bar itself).
-        tabs.add(bottomTab(new NavItem("More", "onno://menu", "menu", "/menu"), p, compact));
+        tabs.add(bottomTab(new NavItem(msg.get("shell.more"), "onno://menu", "menu", "/menu"), p, compact));
 
         // A floating island: rounded, bordered, elevated surface. The host pins it
         // near the bottom edge with margin (see divkit-view bottom_bar). When
@@ -429,8 +445,15 @@ public final class ShellLayoutBuilder {
      * It's the overflow target for the bottom bar's "More" tab, so nothing the bar
      * can't fit becomes unreachable.
      */
+    /** Back-compat overload rendering the English defaults (used by unit tests). */
     public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
                                            List<ProfileLink> profiles, String activeProfileId, Palette p) {
+        return menu(brand, logo, nav, userName, profiles, activeProfileId, p, UiMessages.defaults());
+    }
+
+    public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
+                                           List<ProfileLink> profiles, String activeProfileId, Palette p,
+                                           UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // The menu header mirrors the sidebar: a configured logo, else the text brand.
@@ -439,7 +462,7 @@ public final class ShellLayoutBuilder {
             Div.margins(title, 0, 0, 14, 0);
             items.add(title);
         } else {
-            Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : "Menu", 22, "bold");
+            Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : msg.get("shell.menu"), 22, "bold");
             Div.color(title, p.text());
             Div.margins(title, 0, 0, 14, 0);
             items.add(title);
@@ -458,7 +481,7 @@ public final class ShellLayoutBuilder {
             }
         }
 
-        Map<String, Object> accountBlock = account(userName, profiles, activeProfileId, p);
+        Map<String, Object> accountBlock = account(userName, profiles, activeProfileId, p, msg);
         Div.margins(accountBlock, 18, 0, 0, 0);
         items.add(accountBlock);
 

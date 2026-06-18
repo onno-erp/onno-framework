@@ -39,6 +39,7 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
 | `onno.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
 | `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. |
+| `onno.ui.messages.*` | empty map | Overrides for the framework's own chrome strings (see [Localizing the chrome](#localizing-the-chrome)). Each key (e.g. `login.title`, `action.new`) replaces the English default. Quote the dotted keys in YAML. |
 | `onno.ui.update-check.enabled` | `true` | Poll onno-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
 | `onno.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
 | `onno.ui.update-check.interval` | `24h` | Cadence after the first check (floored at 60s). |
@@ -54,6 +55,41 @@ the web client raises a dismissible toast when `available` is true. Every failur
 unparseable body, unknown local version) is swallowed, so a flaky network never produces a wrong or
 alarming notice. The endpoint it polls is served by onno-cloud (`GET /releases/v1/latest`), which
 returns `204` when no release is announced.
+
+### Localizing the chrome
+
+A deployment can already localize its **domain** — entity `title`, `@Attribute displayName`,
+list-column labels, ref data. `onno.ui.messages` covers the framework's own **chrome**: action
+buttons (`New`/`Write`/`Post`/`Delete`…), the delete-confirmation dialogs, the login screen, the
+empty/loading states, and the client-side validation messages. There is one English default per key
+(`su.onno.ui.UiMessages.DEFAULTS`, mirrored in the web client's `lib/messages.ts`); an override
+replaces it.
+
+The resolved map (defaults + overrides) is the single label source for both layers: the server-side
+DivKit builders read it directly, and it rides along on `GET /api/config` as a `messages` object the
+web client overlays on its bundled defaults. Scope is **one language per deployment** — there is no
+`Accept-Language` negotiation or runtime locale switch.
+
+Because the keys contain dots, quote them in YAML so they bind as literal map keys (in a `.properties`
+file use bracket notation: `onno.ui.messages[action.new]=Новый`):
+
+```yaml
+onno:
+  ui:
+    messages:
+      "login.title": "Вход"
+      "login.username": "Имя пользователя"
+      "login.password": "Пароль"
+      "action.new": "Создать"
+      "action.save": "Записать"
+      "action.post": "Провести"
+      "status.posted": "Проведён"
+      "status.draft": "Черновик"
+      "empty.noRecords": "Нет записей"
+```
+
+This is distinct from `config("locale", …)` (see [`config(key, value)` reference](#configkey-value-reference)),
+which only drives `Intl` number/currency formatting — it does not translate any chrome string.
 
 ## REST endpoints
 
@@ -389,7 +425,7 @@ resolved **live**, so renames and deletes stay correct on their own.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/theme` | The `onno.ui.theme.*` map. |
-| GET | `/api/config` | `{ readOnly, basePath }`, plus `update: { available, current, latest, url }` when the update check is enabled. |
+| GET | `/api/config` | `{ readOnly, basePath, messages }` (the resolved chrome-string map — see [Localizing the chrome](#localizing-the-chrome)), plus `update: { available, current, latest, url }` when the update check is enabled. |
 | GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). |
 
 > **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`

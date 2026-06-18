@@ -5,6 +5,7 @@ import type { AttributeMeta, EntityRecord, RelatedListMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { RefSelect } from "@/components/ref-select";
+import { useMessages } from "@/providers/messages-provider";
 
 const actionBtn =
   "inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
@@ -33,6 +34,7 @@ export function RelatedListPanel({
   parentId: string | null;
   meta: RelatedListMeta;
 }) {
+  const t = useMessages();
   // Register-backed junctions have no generic write REST yet, so they render read-only — no Add
   // button, no per-row remove (see RelatedList / Junctions on the server).
   const readOnly = meta.readOnly === true;
@@ -122,14 +124,16 @@ export function RelatedListPanel({
             disabled={busy}
           >
             <Plus className="size-4" aria-hidden="true" />
-            Add
+            {t("action.add")}
           </button>
         ) : null}
       </div>
 
       {!parentId ? (
         <p className="text-sm text-muted-foreground">
-          Save this record first to {readOnly ? "see" : "manage"} {title.toLowerCase()}.
+          {t(readOnly ? "relatedList.saveFirstView" : "relatedList.saveFirstManage", {
+            name: title.toLowerCase(),
+          })}
         </p>
       ) : (
         <>
@@ -150,15 +154,15 @@ export function RelatedListPanel({
                 onClick={() => setAdding(false)}
                 disabled={busy}
               >
-                Cancel
+                {t("action.cancel")}
               </button>
             </div>
           ) : null}
 
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <p className="text-sm text-muted-foreground">{t("loading.generic")}</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No rows yet.</p>
+            <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
           ) : (
             <div className="space-y-1">
               {rows.map((row) => {

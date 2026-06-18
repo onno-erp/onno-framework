@@ -2,6 +2,7 @@ package su.onno.ui.divkit;
 
 import su.onno.auth.spi.AuthMethods;
 import su.onno.auth.spi.SsoProvider;
+import su.onno.ui.UiMessages;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -24,18 +25,23 @@ public final class LoginDivBuilder {
 
     private LoginDivBuilder() {}
 
+    /** Back-compat overload rendering the English defaults (used by unit tests). */
     public static Map<String, Object> login(AuthMethods methods, Palette p) {
+        return login(methods, p, UiMessages.defaults());
+    }
+
+    public static Map<String, Object> login(AuthMethods methods, Palette p, UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         Map<String, Object> lock = Components.icon("lock-keyhole", p.text(), 24);
         if (lock != null) {
             items.add(lock);
         }
-        items.add(Div.color(Div.text("Sign in", 22, "bold"), p.text()));
+        items.add(Div.color(Div.text(msg.get("login.title"), 22, "bold"), p.text()));
 
         String subtitle = methods.passwordEnabled()
-                ? "Use your workspace credentials."
-                : "Continue with your organization account.";
+                ? msg.get("login.subtitle.password")
+                : msg.get("login.subtitle.sso");
         Map<String, Object> sub = Div.color(Div.text(subtitle, 13, "regular"), p.muted());
         Div.margins(sub, 0, 0, 8, 0);
         items.add(sub);
@@ -52,13 +58,13 @@ public final class LoginDivBuilder {
         // SSO buttons. The first is primary when no password form competes with it.
         boolean primary = !methods.passwordEnabled();
         for (SsoProvider provider : methods.providers()) {
-            items.add(ssoButton(provider, primary, p));
+            items.add(ssoButton(provider, primary, p, msg));
             primary = false;
         }
 
         if (!methods.passwordEnabled() && methods.providers().isEmpty()) {
             Map<String, Object> note = Div.color(
-                    Div.text("No interactive login is configured for this application.", 13, "regular"),
+                    Div.text(msg.get("login.none"), 13, "regular"),
                     p.muted());
             items.add(note);
         }
@@ -76,8 +82,8 @@ public final class LoginDivBuilder {
      * A full-width login button. Tapping it navigates to {@code onno://auth/sso/{id}}, which the
      * host turns into a full-page redirect to the provider's authorization URL.
      */
-    private static Map<String, Object> ssoButton(SsoProvider provider, boolean primary, Palette p) {
-        Map<String, Object> label = Div.text("Continue with " + provider.label(), 14, "medium");
+    private static Map<String, Object> ssoButton(SsoProvider provider, boolean primary, Palette p, UiMessages msg) {
+        Map<String, Object> label = Div.text(msg.format("login.sso", "provider", provider.label()), 14, "medium");
         Div.color(label, primary ? p.page() : p.text());
         Div.maxLines(label, 1);
 

@@ -15,12 +15,14 @@ public class ThemeController {
 
     private final UiProperties properties;
     private final BrandingConfig branding;
+    private final UiMessages messages;
     private final ObjectProvider<UpdateChecker> updateChecker;
 
-    public ThemeController(UiProperties properties, UiLayout layout,
+    public ThemeController(UiProperties properties, UiLayout layout, UiMessages messages,
                           ObjectProvider<UpdateChecker> updateChecker) {
         this.properties = properties;
         this.branding = layout.shell().branding();
+        this.messages = messages;
         this.updateChecker = updateChecker;
     }
 
@@ -34,6 +36,10 @@ public class ThemeController {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("readOnly", properties.isReadOnly());
         out.put("basePath", properties.getPath());
+        // The resolved chrome strings (English defaults + onno.ui.messages overrides). The web
+        // client overlays this on its bundled defaults so the whole shell — buttons, dialogs,
+        // login, empty/loading states, validation — speaks the app's configured language.
+        out.put("messages", messages.asMap());
         // When the update check is enabled, hand the client the last-known result so it can render
         // (or hide) the "update available" banner. Absent when the checker bean is disabled.
         UpdateChecker checker = updateChecker.getIfAvailable();

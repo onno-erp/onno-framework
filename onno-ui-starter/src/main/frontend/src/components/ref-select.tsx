@@ -5,6 +5,7 @@ import { cn, toSnakeCase } from "@/lib/utils";
 import type { EntityRecord } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useMessages } from "@/providers/messages-provider";
 
 interface RefSelectProps {
   /** The ref target's registered logical name (catalog or document). */
@@ -39,6 +40,7 @@ function displayOf(item: EntityRecord): string {
  * it's always reachable regardless of how many matches there are.
  */
 export function RefSelect({ targetName, refKind = "catalog", value, onChange }: RefSelectProps) {
+  const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
   const [open, setOpen] = useState(false);
@@ -120,13 +122,13 @@ export function RefSelect({ targetName, refKind = "catalog", value, onChange }: 
           className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
           <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
-          New {targetName}
+          {t("ref.new", { name: targetName })}
         </button>
         <SearchBox value={query} onChange={setQuery} />
         <div className="max-h-64 overflow-y-auto py-1">
           {items.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {loading ? "Searching…" : "No matches"}
+              {loading ? t("loading.searching") : t("empty.noMatches")}
             </div>
           ) : (
             items.map((item) => (

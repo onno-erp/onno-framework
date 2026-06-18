@@ -23,6 +23,8 @@ import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
 import { RelatedListPanel } from "@/components/related-list-panel";
+import { useMessages } from "@/providers/messages-provider";
+import type { Translate } from "@/lib/messages";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-lg, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -78,18 +80,19 @@ function fmtNum(n: number): string {
  * email) for instant inline feedback. The server re-checks authoritatively before write — this
  * just avoids a round-trip for the common cases. Returns a message, or null when the value is ok.
  */
-function validateField(attr: AttributeMeta, value: unknown): string | null {
+function validateField(attr: AttributeMeta, value: unknown, t: Translate): string | null {
+  const field = attr.displayName;
   const empty =
     value == null || value === "" || (typeof value === "string" && value.trim() === "");
-  if (attr.required && empty) return `${attr.displayName} is required`;
+  if (attr.required && empty) return t("validation.required", { field });
   if (empty) return null;
 
   if (typeof value === "string") {
     if (attr.length > 0 && attr.length <= MAX_VARCHAR && value.length > attr.length) {
-      return `${attr.displayName} must be at most ${attr.length} characters`;
+      return t("validation.maxLength", { field, n: attr.length });
     }
     if (attr.minLength && value.length < attr.minLength) {
-      return `${attr.displayName} must be at least ${attr.minLength} characters`;
+      return t("validation.minLength", { field, n: attr.minLength });
     }
     if (attr.pattern) {
       // Anchor to a full match, matching the server's Pattern.matches semantics.
@@ -99,18 +102,18 @@ function validateField(attr: AttributeMeta, value: unknown): string | null {
       } catch {
         ok = true; // a malformed pattern shouldn't block the user; the server is authoritative
       }
-      if (!ok) return `${attr.displayName} is not in the expected format`;
+      if (!ok) return t("validation.pattern", { field });
     }
     if (attr.email && !EMAIL_RE.test(value)) {
-      return `${attr.displayName} must be a valid email address`;
+      return t("validation.email", { field });
     }
   }
 
   if (isNumeric(attr.javaType)) {
     const n = typeof value === "number" ? value : Number(value);
     if (!Number.isNaN(n)) {
-      if (attr.min != null && n < attr.min) return `${attr.displayName} must be at least ${fmtNum(attr.min)}`;
-      if (attr.max != null && n > attr.max) return `${attr.displayName} must be at most ${fmtNum(attr.max)}`;
+      if (attr.min != null && n < attr.min) return t("validation.min", { field, n: fmtNum(attr.min) });
+      if (attr.max != null && n > attr.max) return t("validation.max", { field, n: fmtNum(attr.max) });
     }
   }
   return null;
@@ -127,6 +130,7 @@ function dispatchClose(path: string) {
 
 export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const { kind, name, id, meta, initial } = form;
+  const t = useMessages();
   // A duplicate carries the source id (for pane routing/close) but still creates a new record.
   const isDuplicate = form.duplicate === true;
   const isEdit = id != null && !isDuplicate;
@@ -224,7 +228,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     const errs: Record<string, string> = {};
     for (const f of fields) {
       if (f.kind !== "attr") continue;
-      const msg = validateField(f.attr, data[f.key]);
+      const msg = validateField(f.attr, data[f.key], t);
       if (msg) errs[f.key] = msg;
     }
     return errs;
@@ -309,7 +313,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         }
         setErrors(mapped);
       } else {
-        toast.error(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+        toast.error(t("form.saveError", { error: e instanceof Error ? e.message : String(e) }));
       }
       setSaving(false);
     }
@@ -364,7 +368,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           disabled={saving}
         >
           <X className="size-4" aria-hidden="true" />
-          Cancel
+          {t("action.cancel")}
         </button>
         <button
           type="button"
@@ -375,7 +379,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           disabled={saving}
         >
           <Check className="size-4" aria-hidden="true" />
-          {saving ? "Saving…" : postable ? "Write" : form.submitLabel}
+          {saving ? t("action.saving") : postable ? t("action.save") : form.submitLabel}
         </button>
         {postable ? (
           <button
@@ -388,7 +392,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
             disabled={saving}
           >
             <CircleCheck className="size-4" aria-hidden="true" />
-            {wasPosted ? "Re-post" : "Post"}
+            {wasPosted ? t("action.repost") : t("action.post")}
           </button>
         ) : null}
       </div>
@@ -412,6 +416,7 @@ function TabularSectionEditor({
   onRemove: (idx: number) => void;
   onCell: (idx: number, key: string, value: unknown) => void;
 }) {
+  const t = useMessages();
   const columns = useMemo<AttributeMeta[]>(
     () =>
       section.attributes
@@ -433,11 +438,11 @@ function TabularSectionEditor({
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
           <Plus className="size-4" aria-hidden="true" />
-          Add row
+          {t("action.addRow")}
         </button>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No rows yet.</p>
+        <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
       ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[28rem]">
@@ -586,6 +591,7 @@ function AttrControl({
   invalid?: boolean;
   placeholder?: string;
 }) {
+  const t = useMessages();
   const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
   if (/^(boolean|Boolean)$/.test(attr.javaType)) {
     const isSwitch = /^(switch|toggle)$/i.test(attr.widget ?? "");
@@ -641,12 +647,12 @@ function AttrControl({
     return (
       <Select value={(value as string) ?? ""} onValueChange={onChange}>
         <SelectTrigger>
-          <SelectValue placeholder={`Select ${attr.displayName}…`} />
+          <SelectValue placeholder={t("form.select", { name: attr.displayName })} />
         </SelectTrigger>
         <SelectContent>
           {attr.enumValues.map((ev) => (
             <SelectItem key={ev.id} value={ev.id}>
-              {ev.name}
+              {ev.label ?? ev.name}
             </SelectItem>
           ))}
         </SelectContent>

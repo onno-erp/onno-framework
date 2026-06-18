@@ -211,14 +211,27 @@ final class Components {
     private static final int CELL_PAD = 16; // slack so the widest value isn't flush-clipped
     private static final int CELL_GAP = 16;
 
+    /** The default empty-table text; localizable via the {@code emptyText} overloads below. */
+    private static final String DEFAULT_EMPTY = "No records";
+
     /** A bordered, horizontally-scrolling card: a header row + data rows. */
     static Map<String, Object> table(List<String> headers, List<Row> rows, Palette p) {
-        return scrollX(tableStack(tableItems(headers, rows, p)), p);
+        return table(headers, rows, p, DEFAULT_EMPTY);
+    }
+
+    /** As {@link #table(List, List, Palette)}, with the empty-state caption localized by the caller. */
+    static Map<String, Object> table(List<String> headers, List<Row> rows, Palette p, String emptyText) {
+        return scrollX(tableStack(tableItems(headers, rows, null, p, emptyText)), p);
     }
 
     /** Auto-fit every column to its content (no authored width overrides). */
     static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows, Palette p) {
-        return tableItems(headers, rows, null, p);
+        return tableItems(headers, rows, null, p, DEFAULT_EMPTY);
+    }
+
+    static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows,
+                                                List<String> widthHints, Palette p) {
+        return tableItems(headers, rows, widthHints, p, DEFAULT_EMPTY);
     }
 
     /**
@@ -228,10 +241,11 @@ final class Components {
      *
      * <p>{@code widthHints} is an optional per-column list of authored widths (e.g.
      * {@code "260"}); a null/blank/unparseable entry (or a null list) auto-fits that
-     * column to its widest cell instead.</p>
+     * column to its widest cell instead. {@code emptyText} is the caption shown when there
+     * are no rows (localized by the caller; defaults to {@value #DEFAULT_EMPTY}).</p>
      */
     static List<Map<String, Object>> tableItems(List<String> headers, List<Row> rows,
-                                                List<String> widthHints, Palette p) {
+                                                List<String> widthHints, Palette p, String emptyText) {
         List<Integer> widths = columnWidths(headers, rows, widthHints);
         List<Map<String, Object>> stack = new ArrayList<>();
 
@@ -247,7 +261,7 @@ final class Components {
         stack.add(Div.separator(p.border()));
 
         if (rows.isEmpty()) {
-            Map<String, Object> empty = Div.color(Div.text("No records", 13, "regular"), p.faint());
+            Map<String, Object> empty = Div.color(Div.text(emptyText, 13, "regular"), p.faint());
             Div.pad(empty, 16, 14);
             stack.add(empty);
         }

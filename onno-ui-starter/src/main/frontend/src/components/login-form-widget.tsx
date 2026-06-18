@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/auth-provider";
+import { useMessages } from "@/providers/messages-provider";
 
 /**
  * The React widget behind the DivKit {@code onno-login-form} custom block. DivKit can't read input
@@ -13,6 +14,7 @@ import { useAuth } from "@/providers/auth-provider";
  */
 export function LoginFormWidget() {
   const { login } = useAuth();
+  const t = useMessages();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState("admin");
@@ -29,7 +31,7 @@ export function LoginFormWidget() {
       await login(username, password);
       navigate(from, { replace: true });
     } catch {
-      setError("The username or password is not correct.");
+      setError(t("login.invalid"));
     } finally {
       setSubmitting(false);
     }
@@ -43,7 +45,7 @@ export function LoginFormWidget() {
     // focus ring isn't cut off.
     <form onSubmit={handleSubmit} className="space-y-4 px-2 pointer-events-auto">
       <div className="space-y-2">
-        <Label htmlFor="username">Username</Label>
+        <Label htmlFor="username">{t("login.username")}</Label>
         <Input
           id="username"
           autoComplete="username"
@@ -52,7 +54,7 @@ export function LoginFormWidget() {
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t("login.password")}</Label>
         <Input
           id="password"
           type="password"
@@ -63,7 +65,7 @@ export function LoginFormWidget() {
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button className="w-full" type="submit" disabled={submitting || !username || !password}>
-        {submitting ? "Signing in..." : "Sign in"}
+        {submitting ? t("login.submitting") : t("login.submit")}
       </Button>
     </form>
   );

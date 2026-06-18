@@ -1,6 +1,7 @@
 package su.onno.ui.divkit;
 
 import su.onno.ui.ResolvedListView;
+import su.onno.ui.UiMessages;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -215,7 +216,14 @@ public final class SurfaceDivBuilder {
     /** Back-compat overload for surfaces with no related-list panels (e.g. unit tests). */
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
                                                      List<HeaderAction> actions, Palette p) {
-        return documentDetail(meta, row, Map.of(), actions, p);
+        return documentDetail(meta, row, Map.of(), actions, p, UiMessages.defaults());
+    }
+
+    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
+    public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
+                                                     Map<String, List<Map<String, Object>>> relatedRows,
+                                                     List<HeaderAction> actions, Palette p) {
+        return documentDetail(meta, row, relatedRows, actions, p, UiMessages.defaults());
     }
 
     /**
@@ -232,11 +240,12 @@ public final class SurfaceDivBuilder {
     @SuppressWarnings("unchecked")
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
                                                      Map<String, List<Map<String, Object>>> relatedRows,
-                                                     List<HeaderAction> actions, Palette p) {
+                                                     List<HeaderAction> actions, Palette p, UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
-        Map<String, Object> badge = Components.statusBadge(posted, posted ? "Posted" : "Draft", p);
+        Map<String, Object> badge = Components.statusBadge(posted,
+                msg.get(posted ? "status.posted" : "status.draft"), p);
         items.add(detailHeader(titleOf(meta), str(row.get("_number")), badge, actions, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
@@ -272,7 +281,7 @@ public final class SurfaceDivBuilder {
                 line++;
             }
             items.add(sectionLabel(str(ts.get("name")), p));
-            items.add(Components.table(headers, body, p));
+            items.add(Components.table(headers, body, p, msg.get("empty.noRecords")));
         }
 
         // Related-list panels render read-only here — the document-side analogue of a catalog's
@@ -282,7 +291,7 @@ public final class SurfaceDivBuilder {
                 continue;
             }
             items.add(sectionLabel(relatedListTitle(rl), p));
-            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p));
+            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p, msg));
         }
 
         return content(items);
@@ -301,10 +310,17 @@ public final class SurfaceDivBuilder {
      * a panel renders (read-only, no add/remove) iff it is {@code showInDetail} and present
      * in that map (the caller omits panels the user may not read). Empty maps to no panel.
      */
-    @SuppressWarnings("unchecked")
+    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
     public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
                                                     Map<String, List<Map<String, Object>>> relatedRows,
                                                     List<HeaderAction> actions, Palette p) {
+        return catalogDetail(meta, row, relatedRows, actions, p, UiMessages.defaults());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
+                                                    Map<String, List<Map<String, Object>>> relatedRows,
+                                                    List<HeaderAction> actions, Palette p, UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // Code/description lead the header (title + subtitle), so the card carries just
@@ -331,7 +347,7 @@ public final class SurfaceDivBuilder {
                 continue;
             }
             items.add(sectionLabel(relatedListTitle(rl), p));
-            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p));
+            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p, msg));
         }
 
         return content(items);
@@ -354,7 +370,7 @@ public final class SurfaceDivBuilder {
      */
     @SuppressWarnings("unchecked")
     private static Map<String, Object> relatedListTable(Map<String, Object> rl,
-                                                        List<Map<String, Object>> rows, Palette p) {
+                                                        List<Map<String, Object>> rows, Palette p, UiMessages msg) {
         List<Map<String, Object>> columns = (List<Map<String, Object>>) rl.getOrDefault("columns", List.of());
         List<String> headers = new ArrayList<>();
         for (Map<String, Object> c : columns) {
@@ -370,7 +386,7 @@ public final class SurfaceDivBuilder {
             }
             body.add(new Components.Row(cells, null, cellUrls));
         }
-        return Components.table(headers, body, p);
+        return Components.table(headers, body, p, msg.get("empty.noRecords"));
     }
 
     // ----- create / edit form -----
@@ -392,10 +408,17 @@ public final class SurfaceDivBuilder {
 
     // ----- register report -----
 
-    @SuppressWarnings("unchecked")
+    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
     public static Map<String, Object> registerReport(Map<String, Object> meta,
                                                      List<Map<String, Object>> movements,
                                                      List<Map<String, Object>> balances, Palette p) {
+        return registerReport(meta, movements, balances, p, UiMessages.defaults());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> registerReport(Map<String, Object> meta,
+                                                     List<Map<String, Object>> movements,
+                                                     List<Map<String, Object>> balances, Palette p, UiMessages msg) {
         String type = str(meta.get("type"));
         List<Map<String, Object>> dimensions = (List<Map<String, Object>>) meta.getOrDefault("dimensions", List.of());
         List<Map<String, Object>> resources = (List<Map<String, Object>>) meta.getOrDefault("resources", List.of());
@@ -405,14 +428,14 @@ public final class SurfaceDivBuilder {
         items.add(Components.pageHeader(titleOf(meta),
                 isBalance ? "Balance register" : "Turnover register", p));
 
-        Map<String, Object> movementsTable = movementsTable(movements, dimensions, resources, p);
+        Map<String, Object> movementsTable = movementsTable(movements, dimensions, resources, p, msg);
 
         // Balance registers carry both a current balance and the movement log; show them
         // as Balance / Movements tabs rather than two stacked lists. A turnover register
         // has no balance, so it's just the movement log.
         if (isBalance && balances != null) {
             items.add(Components.tabs(List.of(
-                    Div.tab("Balance", tabBody(balanceTable(balances, dimensions, resources, p))),
+                    Div.tab("Balance", tabBody(balanceTable(balances, dimensions, resources, p, msg))),
                     Div.tab("Movements", tabBody(movementsTable))), p));
         } else {
             items.add(movementsTable);
@@ -424,7 +447,7 @@ public final class SurfaceDivBuilder {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> balanceTable(List<Map<String, Object>> balances,
                                                     List<Map<String, Object>> dimensions,
-                                                    List<Map<String, Object>> resources, Palette p) {
+                                                    List<Map<String, Object>> resources, Palette p, UiMessages msg) {
         List<String> headers = new ArrayList<>();
         for (Map<String, Object> d : dimensions) headers.add(str(d.get("displayName")));
         for (Map<String, Object> r : resources) headers.add(str(r.get("displayName")));
@@ -435,13 +458,13 @@ public final class SurfaceDivBuilder {
             for (Map<String, Object> r : resources) cells.add(cell(r, row));
             body.add(new Components.Row(cells, null));
         }
-        return Components.table(headers, body, p);
+        return Components.table(headers, body, p, msg.get("empty.noRecords"));
     }
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> movementsTable(List<Map<String, Object>> movements,
                                                       List<Map<String, Object>> dimensions,
-                                                      List<Map<String, Object>> resources, Palette p) {
+                                                      List<Map<String, Object>> resources, Palette p, UiMessages msg) {
         List<String> headers = new ArrayList<>(List.of("Period", "Type"));
         for (Map<String, Object> d : dimensions) headers.add(str(d.get("displayName")));
         for (Map<String, Object> r : resources) headers.add(str(r.get("displayName")));
@@ -454,7 +477,7 @@ public final class SurfaceDivBuilder {
             for (Map<String, Object> r : resources) cells.add(cell(r, row));
             body.add(new Components.Row(cells, null));
         }
-        return Components.table(headers, body, p);
+        return Components.table(headers, body, p, msg.get("empty.noRecords"));
     }
 
     /** Wrap a tab's content with breathing room below the tab strip. */

@@ -33,16 +33,19 @@ public class LoginDivController {
 
     private final ObjectProvider<AuthMethodsProvider> authMethods;
     private final ObjectProvider<AuthMethodsContributor> contributors;
+    private final UiMessages messages;
 
     public LoginDivController(ObjectProvider<AuthMethodsProvider> authMethods,
-                              ObjectProvider<AuthMethodsContributor> contributors) {
+                              ObjectProvider<AuthMethodsContributor> contributors,
+                              UiMessages messages) {
         this.authMethods = authMethods;
         this.contributors = contributors;
+        this.messages = messages;
     }
 
     @GetMapping("/login")
     public Map<String, Object> login(@RequestParam(required = false) String theme) {
-        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme));
+        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme), messages);
     }
 
     // Visible for testing.

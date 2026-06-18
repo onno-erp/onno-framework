@@ -19,6 +19,8 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { applyFormat, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
 import type { EntityRecord, UiEvent } from "@/lib/types";
+import { useMessages } from "@/providers/messages-provider";
+import type { Translate } from "@/lib/messages";
 
 /**
  * The {@code onno-list} React island: a virtualized, server-paged data grid. The DivKit list
@@ -128,8 +130,8 @@ function dispatchAction(url: string) {
 }
 
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
-function rawCellValue(row: EntityRecord, col: ListColumn): string {
-  if (col.columnName === "_posted") return row["_posted"] === true ? "Posted" : "Draft";
+function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string {
+  if (col.columnName === "_posted") return t(row["_posted"] === true ? "status.posted" : "status.draft");
   const v = row[`${col.columnName}_display`] ?? row[col.columnName];
   return v == null ? "" : String(v);
 }
@@ -143,7 +145,8 @@ function displayCellValue(raw: string, col: ListColumn): string {
 
 /** One list cell: an image thumbnail for image/avatar columns, otherwise formatted text. */
 function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
-  const raw = rawCellValue(row, col);
+  const t = useMessages();
+  const raw = rawCellValue(row, col, t);
   if (isImageWidget(col.widget) && raw && looksLikeImageUrl(raw)) {
     const avatar = isAvatarWidget(col.widget);
     return (
@@ -262,6 +265,7 @@ function ContainsFilter({
 
 export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const { kind, name, columns, pageSize } = list;
+  const t = useMessages();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const rows = useRef<Map<number, EntityRecord>>(new Map());
@@ -777,11 +781,11 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                 "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90",
                 compact ? "w-9 justify-center px-0" : "px-3"
               )}
-              title="New"
-              aria-label="New"
+              title={t("action.new")}
+              aria-label={t("action.new")}
             >
               <Plus className="size-4" aria-hidden="true" />
-              {compact ? null : "New"}
+              {compact ? null : t("action.new")}
             </button>
           ) : null}
         </div>
@@ -835,7 +839,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
             {/* virtualized body */}
             {total === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                {debounced ? "No matches." : "No records."}
+                {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
               <div style={{ height: (total ?? 0) * ROW_H, position: "relative" }}>

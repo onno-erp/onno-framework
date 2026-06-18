@@ -22,7 +22,7 @@ class LoginDivControllerTest {
 
     @Test
     void degradesToPasswordScreenWhenNoProviderIsPresent() {
-        LoginDivController controller = new LoginDivController(provider(), contributor());
+        LoginDivController controller = new LoginDivController(provider(), contributor(), UiMessages.defaults());
 
         AuthMethods m = controller.resolveMethods();
 
@@ -36,7 +36,7 @@ class LoginDivControllerTest {
         AuthMethods base = new AuthMethods(false,
                 List.of(new SsoProvider("keycloak", "Keycloak", "/oauth2/authorization/keycloak")),
                 "/logout", "oidc");
-        LoginDivController controller = new LoginDivController(provider(() -> base), contributor());
+        LoginDivController controller = new LoginDivController(provider(() -> base), contributor(), UiMessages.defaults());
 
         assertThat(controller.resolveMethods()).isSameAs(base);
     }
@@ -49,7 +49,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor telegram = () ->
                 List.of(new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(telegram)).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(telegram), UiMessages.defaults()).resolveMethods();
 
         // Scalar fields stay authoritative from the base provider.
         assertThat(m.passwordEnabled()).isFalse();
@@ -69,7 +69,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor github = () ->
                 List.of(new SsoProvider("github", "GitHub", "/oauth2/authorization/github"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(telegram, github)).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(telegram, github), UiMessages.defaults()).resolveMethods();
 
         assertThat(m.passwordEnabled()).isTrue();
         assertThat(m.providers()).extracting(SsoProvider::id).containsExactly("telegram", "github");
@@ -82,7 +82,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor real = () ->
                 List.of(new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(nullSafe, real)).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(nullSafe, real), UiMessages.defaults()).resolveMethods();
 
         assertThat(m.providers()).extracting(SsoProvider::id).containsExactly("telegram");
     }
@@ -91,7 +91,7 @@ class LoginDivControllerTest {
     void doesNotThrowWhenMultipleProvidersAreRegisteredAndTakesTheFirst() {
         AuthMethodsProvider first = () -> new AuthMethods(true, List.of(), null, "first");
         AuthMethodsProvider second = () -> new AuthMethods(false, List.of(), null, "second");
-        LoginDivController controller = new LoginDivController(provider(first, second), contributor());
+        LoginDivController controller = new LoginDivController(provider(first, second), contributor(), UiMessages.defaults());
 
         assertThatCode(controller::resolveMethods).doesNotThrowAnyException();
         assertThat(controller.resolveMethods().mode()).isEqualTo("first");

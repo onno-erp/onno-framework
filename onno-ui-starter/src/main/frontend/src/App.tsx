@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-route
 import { Toaster } from "sonner";
 import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
+import { MessagesProvider, useMessages } from "@/providers/messages-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
@@ -23,11 +24,12 @@ import { BASE_PATH } from "@/lib/base-path";
 function ProtectedApp() {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const t = useMessages();
 
   if (loading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Loading workspace...
+        {t("loading.workspace")}
       </div>
     );
   }
@@ -68,10 +70,12 @@ function WorkspaceProviders({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
       <BrandingProvider>
-        <AuthProvider>
-          {children}
-          <ThemedToaster />
-        </AuthProvider>
+        <MessagesProvider>
+          <AuthProvider>
+            {children}
+            <ThemedToaster />
+          </AuthProvider>
+        </MessagesProvider>
       </BrandingProvider>
     </ThemeProvider>
   );
