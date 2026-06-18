@@ -60,7 +60,7 @@ export function displayValue(attr: AttributeMeta, raw: unknown, row?: Record<str
   if (raw == null) return "";
   if (attr.isEnum && attr.enumValues) {
     const found = attr.enumValues.find((v) => v.id === raw);
-    return found ? found.name : String(raw);
+    return found ? (found.label ?? found.name) : String(raw);
   }
   return String(raw);
 }

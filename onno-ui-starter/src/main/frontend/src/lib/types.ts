@@ -5,7 +5,13 @@
 export const SECRET_SET = "__SECRET_SET__";
 
 export interface EnumValue {
+  /** Java constant name — the stable contract key written back to the server. */
   name: string;
+  /**
+   * Human/localized display label (from @EnumLabel); equals name when unlabelled. Optional so an
+   * older server payload (no label) still type-checks — callers fall back to name.
+   */
+  label?: string;
   id: string;
 }
 
@@ -22,6 +28,8 @@ export interface AttributeMeta {
   refKind?: "catalog" | "document";
   isEnum: boolean;
   enumName?: string;
+  /** Display title of the enumeration type (from @Enumeration.title); falls back to enumName. */
+  enumTitle?: string;
   enumValues?: EnumValue[];
   /** Sensitive attribute: write-only, rendered as a password control, masked in views. */
   secret?: boolean;
@@ -115,6 +123,9 @@ export interface RegisterMeta {
 export interface AppConfig {
   readOnly: boolean;
   basePath: string;
+  // The framework's chrome strings (English defaults + onno.ui.messages overrides), keyed by the
+  // ids in lib/messages.ts. MessagesProvider overlays this on the bundled defaults.
+  messages?: Record<string, string>;
   // Present when the server-side update check is enabled; drives the "update available" notice.
   update?: UpdateInfo;
 }

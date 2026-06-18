@@ -53,7 +53,11 @@ table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `contex
 `scale=2`.
 
 ### `@Enumeration` (on a Java `enum`)
-`name` (required), `tableName=""`. Persisted as a reference table; each value gets a stable UUID.
+`name` (required), `title=""` (display label for the type; falls back to `name`), `tableName=""`.
+Persisted as a reference table; each value gets a stable UUID. Annotate a constant with
+`@EnumLabel("…")` to give it a human/localized display label (surfaced in `{col}_display`, the
+`enumValues[].label` metadata, and the dropdown) without renaming the constant; unlabelled constants
+display as their name.
 
 ### `@Constant` (on a plain class with one value field)
 `name` (required).

@@ -85,7 +85,8 @@ and **does**. `get` returns `404` when the id is unknown.
 A `Ref<>` or `@Enumeration` attribute is stored as a UUID. For each such column the read layer adds
 two sibling keys so the client need not make a second call:
 
-- `{column}_display` — a human-readable label (catalog description or code; enum value name).
+- `{column}_display` — a human-readable label (catalog description or code; for an enum, the value's
+  `@EnumLabel`, falling back to the constant name when unlabelled).
 - `{column}_ref` — an object `{ "display", "code", "avatarUrl" }` (catalogs) for richer rendering.
 
 The raw `{column}` value remains the UUID, so writers can round-trip it unchanged.

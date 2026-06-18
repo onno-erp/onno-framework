@@ -646,7 +646,7 @@ function AttrControl({
         <SelectContent>
           {attr.enumValues.map((ev) => (
             <SelectItem key={ev.id} value={ev.id}>
-              {ev.name}
+              {ev.label ?? ev.name}
             </SelectItem>
           ))}
         </SelectContent>

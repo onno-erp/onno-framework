@@ -341,6 +341,20 @@ public enum OrderStatus {
 }
 ```
 
+Give the type a display `title` and each value a human/localized label with `@EnumLabel` — surfaced
+in list cells, the dropdown, and `{col}_display` — **without** renaming the constants (their names
+key the stored UUIDs and any importers/filters that map to them):
+
+```java
+@Enumeration(name = "Order Statuses", title = "Статусы заказов")
+public enum OrderStatus {
+    @EnumLabel("Новый") NEW,
+    @EnumLabel("Отгружен") SHIPPED
+}
+```
+
+An unlabelled constant displays as its name, so adding `@EnumLabel` is incremental.
+
 ### Constants
 
 Use constants for singleton business settings.
