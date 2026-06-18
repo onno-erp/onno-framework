@@ -355,6 +355,23 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             }
         }
 
+        // Single-dimension IN filters: col IN (...)
+        Map<String, Collection<?>> resolvedInFilters = new LinkedHashMap<>();
+        for (Map.Entry<String, Collection<?>> entry : builder.getInFilters().entrySet()) {
+            String col = fieldToColumn(entry.getKey());
+            resolvedInFilters.put(col, entry.getValue());
+            whereClauses.add(inClause(col, "fin_" + col, entry.getValue().size()));
+        }
+
+        // Tuple IN filters: (colA, colB) IN ((a1, b1), (a2, b2), ...)
+        List<su.onno.repository.RegisterQueryBuilder.TupleInFilter> tupleFilters =
+                builder.getTupleFilters();
+        for (int t = 0; t < tupleFilters.size(); t++) {
+            var tuple = tupleFilters.get(t);
+            List<String> cols = tuple.fieldNames().stream().map(this::fieldToColumn).toList();
+            whereClauses.add(tupleInClause(cols, t, tuple.tuples().size()));
+        }
+
         // Add GROUP BY for aggregated queries (not plain totals table select)
         boolean needsGroupBy = atDate != null || !groupByFields.isEmpty() ||
                 queryType == su.onno.repository.RegisterQueryBuilder.QueryType.TURNOVER;
@@ -370,7 +387,22 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             if (fromDate != null) query.bind("fromDate", fromDate);
             if (toDate != null) query.bind("toDate", toDate);
             if (resolvedFilters != null) {
-                resolvedFilters.forEach((col, val) -> query.bind("f_" + col, val));
+                resolvedFilters.forEach((col, val) -> query.bind("f_" + col, unwrapRef(val)));
+            }
+            resolvedInFilters.forEach((col, values) -> {
+                int i = 0;
+                for (Object value : values) {
+                    query.bind("fin_" + col + "_" + i++, unwrapRef(value));
+                }
+            });
+            for (int t = 0; t < tupleFilters.size(); t++) {
+                List<List<Object>> rows = tupleFilters.get(t).tuples();
+                for (int r = 0; r < rows.size(); r++) {
+                    List<Object> row = rows.get(r);
+                    for (int c = 0; c < row.size(); c++) {
+                        query.bind("tup_" + t + "_" + r + "_" + c, unwrapRef(row.get(c)));
+                    }
+                }
             }
 
             List<AttributeDescriptor> finalGroupDims = groupDims;
@@ -480,24 +512,88 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 List.of("_active = TRUE"), dimensionColumns(), null, null, null));
     }
 
-    /** {@code col = :col} clauses for caller-supplied (already column-named) filters. */
+    /**
+     * Predicate fragments for caller-supplied (already column-named) filters. A scalar value
+     * renders {@code col = :col}; a {@link Collection} value renders {@code col IN (:col_0, …)} so a
+     * caller can narrow to a set of dimension values in one query. An empty collection renders
+     * {@code 1 = 0} (matches nothing). Bound by {@link #bindFilterValues}.
+     */
     private List<String> filterClauses(Map<String, Object> filters) {
         if (filters == null || filters.isEmpty()) return List.of();
-        return filters.keySet().stream().map(k -> k + " = :" + k).toList();
+        List<String> clauses = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : filters.entrySet()) {
+            String col = entry.getKey();
+            if (entry.getValue() instanceof Collection<?> values) {
+                clauses.add(inClause(col, col, values.size()));
+            } else {
+                clauses.add(col + " = :" + col);
+            }
+        }
+        return clauses;
     }
 
     private Consumer<org.jdbi.v3.core.statement.Query> bindFilters(Map<String, Object> filters) {
-        return query -> {
-            if (filters != null) filters.forEach(query::bind);
-        };
+        return query -> bindFilterValues(query, filters);
     }
 
     private Consumer<org.jdbi.v3.core.statement.Query> bindTurnover(
             LocalDateTime from, LocalDateTime to, Map<String, Object> filters) {
         return query -> {
             query.bind("from", from).bind("to", to);
-            if (filters != null) filters.forEach(query::bind);
+            bindFilterValues(query, filters);
         };
+    }
+
+    /** Binds {@link #filterClauses} parameters: scalar {@code :col}, or {@code :col_0, :col_1, …}
+     *  for each element of a collection. {@code Ref} values are unwrapped to their id. */
+    private void bindFilterValues(org.jdbi.v3.core.statement.SqlStatement<?> query,
+                                  Map<String, Object> filters) {
+        if (filters == null) return;
+        for (Map.Entry<String, Object> entry : filters.entrySet()) {
+            String col = entry.getKey();
+            if (entry.getValue() instanceof Collection<?> values) {
+                int i = 0;
+                for (Object value : values) {
+                    query.bind(col + "_" + i++, unwrapRef(value));
+                }
+            } else {
+                query.bind(col, unwrapRef(entry.getValue()));
+            }
+        }
+    }
+
+    /** {@code col IN (:prefix_0, :prefix_1, …)}, or {@code 1 = 0} for an empty value set. */
+    private static String inClause(String column, String paramPrefix, int size) {
+        if (size == 0) return "1 = 0";
+        StringBuilder placeholders = new StringBuilder();
+        for (int i = 0; i < size; i++) {
+            if (i > 0) placeholders.append(", ");
+            placeholders.append(":").append(paramPrefix).append("_").append(i);
+        }
+        return column + " IN (" + placeholders + ")";
+    }
+
+    /**
+     * {@code (colA, colB, …) IN ((:tup_t_0_0, :tup_t_0_1, …), …)} for tuple {@code t}, or
+     * {@code 1 = 0} for an empty tuple set. Row-value IN is supported by both H2 and PostgreSQL.
+     */
+    private static String tupleInClause(List<String> columns, int tupleIndex, int rowCount) {
+        if (rowCount == 0) return "1 = 0";
+        StringBuilder rows = new StringBuilder();
+        for (int r = 0; r < rowCount; r++) {
+            if (r > 0) rows.append(", ");
+            rows.append("(");
+            for (int c = 0; c < columns.size(); c++) {
+                if (c > 0) rows.append(", ");
+                rows.append(":tup_").append(tupleIndex).append("_").append(r).append("_").append(c);
+            }
+            rows.append(")");
+        }
+        return "(" + String.join(", ", columns) + ") IN (" + rows + ")";
+    }
+
+    private static Object unwrapRef(Object value) {
+        return value instanceof Ref<?> ref ? ref.id() : value;
     }
 
     private List<Map<String, Object>> queryMap(String sql, Consumer<org.jdbi.v3.core.statement.Query> binder) {

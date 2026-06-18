@@ -130,7 +130,13 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
   `findByDateBetween(from, to)`.
 - `RegisterRepository<T>` — read-only for accumulation registers: `getBalance(...)`,
   `getTurnover(from,to,...)`, `getRecordsByDocument(uuid)`, plus `addReceipt/addExpense` used during
-  posting; writes happen via the `PostingEngine`.
+  posting; writes happen via the `PostingEngine`. Filters narrow a read in one query, not in Java:
+  a `Map`/`RegisterFilter` value that is a `Collection` renders `col IN (…)`
+  (`getBalance(Map.of("nomenclature", List.of(a, b)))`); the fluent `query()` builder
+  (`.balance()/.turnover()/.at()/.from()/.to()/.groupBy()/.where()`) adds `whereIn(field, values)`
+  and tuple `whereIn(fieldA, fieldB, tuples)` → `(colA, colB) IN ((…),(…))`, so a posting can fetch
+  balances for exactly a document's dimension-tuple set rather than the whole register slice. An
+  empty collection matches nothing.
 - `InformationRegisterRepository<T>` — write-enabled: `write(record)`, `getSliceLast(date,...)`,
   `getSliceFirst(date,...)`, `getRecords(...)`, `delete(record)`.
 - Optimistic locking: `@Version` mismatch on save throws `OptimisticLockException` (`409` via API).

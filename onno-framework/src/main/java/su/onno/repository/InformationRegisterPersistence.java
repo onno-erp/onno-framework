@@ -217,15 +217,23 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
         });
     }
 
+    /**
+     * Renders a filter clause padded with a leading and trailing space, so it can be concatenated
+     * directly onto surrounding SQL without gluing tokens together. Callers append it after a table
+     * name ({@code "...table" + " WHERE ..."}) or between an existing predicate and a following
+     * keyword ({@code "...:date " + " AND x = :filter_x " + "GROUP BY ..."}); without the padding the
+     * result was {@code "tableWHERE"} / {@code ":filter_xGROUP"} and the SQL failed to parse.
+     */
     private String buildWhereClause(Map<String, Object> filters, String prefix) {
         if (filters == null || filters.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder(prefix);
+        StringBuilder sb = new StringBuilder(" ").append(prefix);
         boolean first = true;
         for (Map.Entry<String, Object> entry : filters.entrySet()) {
             if (!first) sb.append(" AND ");
             sb.append(entry.getKey()).append(" = :filter_").append(entry.getKey());
             first = false;
         }
+        sb.append(" ");
         return sb.toString();
     }
 

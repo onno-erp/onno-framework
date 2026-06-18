@@ -131,6 +131,37 @@ class InformationRegisterPersistenceTest {
     }
 
     @Test
+    void getRecords_withDimensionFilter_returnsOnlyMatching() {
+        // Regression for #147: a filtered getRecords used to emit "...infoWHERE ..." (no space
+        // before WHERE) and threw a syntax error. Any non-empty filter must produce valid SQL.
+        writePrice(productA, warehouseA, "2024-01-01", "100.00");
+        writePrice(productB, warehouseA, "2024-01-01", "200.00");
+
+        List<TestPriceRegister> records = pricePersistence.getRecords(
+                java.util.Map.of("product", productA));
+
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getProduct()).isEqualTo(productA);
+        assertThat(records.get(0).getPrice()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void getSliceLast_withDimensionFilter_returnsLatestForThatDimension() {
+        // Regression for #147: a filtered slice-last glued ":filter_xGROUP BY" together
+        // (no space after the filter clause) and threw a syntax error.
+        writePrice(productA, warehouseA, "2024-01-01", "100.00");
+        writePrice(productA, warehouseA, "2024-02-01", "110.00");
+        writePrice(productB, warehouseA, "2024-02-01", "210.00");
+
+        List<TestPriceRegister> slice = pricePersistence.getSliceLast(
+                LocalDateTime.of(2024, 2, 20, 0, 0), java.util.Map.of("product", productA));
+
+        assertThat(slice).hasSize(1);
+        assertThat(slice.get(0).getProduct()).isEqualTo(productA);
+        assertThat(slice.get(0).getPrice()).isEqualByComparingTo("110.00");
+    }
+
+    @Test
     void getSliceFirst_returnsEarliestRecordPerDimension() {
         writePrice(productA, warehouseA, "2024-01-01", "100.00");
         writePrice(productA, warehouseA, "2024-02-01", "110.00");

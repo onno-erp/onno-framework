@@ -17,6 +17,10 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -309,5 +313,77 @@ class PostingTest {
 
         List<TestStockRegister> records = stockPersistence.getRecordsByDocument(receipt.getId());
         assertThat(records).hasSize(2);
+    }
+
+    @Test
+    void post_concurrentPosts_doNotCrossContaminateMovements() throws Exception {
+        // Regression for #148: movements buffered on the shared singleton
+        // RegisterRepositoryImpl.pendingMovements, so concurrent posts appended to / iterated /
+        // cleared one list at once — ConcurrentModificationException while a post iterated its
+        // movements, and movements leaking between unrelated documents. Each post must own its
+        // movement buffer. Each document here touches a distinct product (a distinct totals key),
+        // so this isolates the shared-buffer bug from the totals-upsert key race.
+        UUID warehouse = UUID.randomUUID();
+        int docCount = 50;
+        int threads = 8;
+
+        List<TestReceipt> receipts = new ArrayList<>();
+        List<UUID> products = new ArrayList<>();
+        for (int i = 0; i < docCount; i++) {
+            UUID product = UUID.randomUUID();
+            products.add(product);
+            receipts.add(createNumberedReceipt("CONC-" + i, warehouse, product, BigDecimal.ONE));
+        }
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<CompletableFuture<Void>> futures = receipts.stream()
+                    .map(r -> CompletableFuture.runAsync(() -> engine.post(r), pool))
+                    .toList();
+            // Joining surfaces any per-post exception (CME / cross-inserted movement) as a failure.
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(30, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // Exactly docCount movement rows total — no double-inserts, no leaked movements.
+        long movementRows = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT COUNT(*) FROM register_test_stock WHERE _active = TRUE")
+                .mapTo(Long.class).one());
+        assertThat(movementRows).isEqualTo(docCount);
+
+        // Each document posted exactly its own single movement, for its own product.
+        for (int i = 0; i < docCount; i++) {
+            List<TestStockRegister> records = stockPersistence.getRecordsByDocument(receipts.get(i).getId());
+            assertThat(records).hasSize(1);
+            assertThat(records.get(0).getProduct()).isEqualTo(products.get(i));
+            assertThat(records.get(0).getQuantity()).isEqualByComparingTo(BigDecimal.ONE);
+        }
+
+        assertThat(receipts).allMatch(TestReceipt::isPosted);
+    }
+
+    private TestReceipt createNumberedReceipt(String number, UUID warehouse, UUID product, BigDecimal qty) {
+        TestReceipt receipt = new TestReceipt();
+        receipt.setId(UUID.randomUUID());
+        receipt.setNumber(number);
+        receipt.setDate(LocalDateTime.of(2026, 3, 15, 10, 0));
+        receipt.setWarehouse(warehouse);
+
+        DocumentDescriptor docDesc = registry.getDocumentDescriptor(TestReceipt.class);
+        jdbi.useHandle(h -> h.createUpdate(
+                        "INSERT INTO " + docDesc.tableName() + " (_id, _number, _date, _posted, _deletion_mark) " +
+                                "VALUES (:id, :number, :date, FALSE, FALSE)")
+                .bind("id", receipt.getId())
+                .bind("number", receipt.getNumber())
+                .bind("date", receipt.getDate())
+                .execute());
+
+        TestReceiptLine line = new TestReceiptLine();
+        line.setProduct(product);
+        line.setQuantity(qty);
+        receipt.getItems().add(line);
+        return receipt;
     }
 }
