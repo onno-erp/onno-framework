@@ -195,6 +195,13 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 > deep-linking). A mistyped URL "succeeds" with the SPA shell. Only `/api/**` produces real
 > `404`/`401`/`403`. When debugging, hit API URLs, not page URLs.
 
+The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentCommandService`, shared by
+the REST API, the generated UI, CSV import, and the MCP tools) reconstruct the typed entity and run
+the same entity write lifecycle as `repository.save(...)` — `onFilling()` (create), `beforeWrite()`,
+and `Validated` business rules — before the JDBI write, so a field a model derives in `beforeWrite()`
+is persisted on every write path, not just on the repository path. Auto-numbering and secret
+encryption stay in the command services; posting still runs its own lifecycle in `PostingEngine`.
+
 ## UI layer
 
 The UI is authored as Spring beans, never as annotations on domain classes:

@@ -171,13 +171,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public CatalogCommandService catalogCommandService(Jdbi jdbi, UiProperties properties,
+    public CatalogCommandService catalogCommandService(MetadataRegistry registry, Jdbi jdbi,
+                                                       UiProperties properties,
                                                        NumberGenerator numberGenerator,
                                                        CatalogQueryService catalogQueryService,
                                                        UiAccessService access,
                                                        org.springframework.context.ApplicationEventPublisher events,
                                                        su.onno.security.SecretCipher secretCipher) {
-        return new CatalogCommandService(jdbi, properties, numberGenerator, catalogQueryService,
+        return new CatalogCommandService(registry, jdbi, properties, numberGenerator, catalogQueryService,
                 access, events, secretCipher);
     }
 
