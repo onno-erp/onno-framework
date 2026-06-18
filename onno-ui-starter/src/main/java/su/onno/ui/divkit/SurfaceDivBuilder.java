@@ -249,9 +249,11 @@ public final class SurfaceDivBuilder {
         items.add(detailHeader(titleOf(meta), str(row.get("_number")), badge, actions, p));
 
         List<Map<String, Object>> fieldRows = new ArrayList<>();
-        // The header date honors a .field("date").format(...) hint, like any other column.
+        // The header date honors a .field("date").format(...) hint, like any other column; its
+        // label honors a .field("date").label(...) hint (else the English "Date" fallback) — #154.
         String dateText = ValueFormat.apply(systemColumnFormat(meta, "_date"), row.get("_date"));
-        fieldRows.add(Components.fieldRow("Date", dateText != null ? dateText : str(row.get("_date")), p));
+        fieldRows.add(Components.fieldRow(systemColumnLabel(meta, "_date", "Date"),
+                dateText != null ? dateText : str(row.get("_date")), p));
         for (Map<String, Object> a : visible(
                 (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of()), "visibleInDetail")) {
             fieldRows.add(fieldRowFor(a, row, p));
@@ -670,6 +672,22 @@ public final class SurfaceDivBuilder {
             }
         }
         return "";
+    }
+
+    /**
+     * The resolved display label for a system column (e.g. {@code _date}) — the {@code displayName}
+     * the metadata service emitted, which already folds in any {@code .field(...).label(...)} hint
+     * (#154). Falls back to {@code fallback} when the column or a blank label leaves nothing to show.
+     */
+    @SuppressWarnings("unchecked")
+    private static String systemColumnLabel(Map<String, Object> meta, String columnName, String fallback) {
+        for (Map<String, Object> sc : (List<Map<String, Object>>) meta.getOrDefault("systemColumns", List.of())) {
+            if (columnName.equals(str(sc.get("columnName")))) {
+                String label = str(sc.get("displayName"));
+                return label.isBlank() ? fallback : label;
+            }
+        }
+        return fallback;
     }
 
     private static String cell(Map<String, Object> attr, Map<String, Object> row) {

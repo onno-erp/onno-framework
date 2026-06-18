@@ -166,8 +166,10 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
     `action(name)`, `icon(name)`.
   - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,
     `textarea`, `image`/`avatar`/`gallery`/`file`, `map`/`geo`, …), `placeholder`, `format`
-    (`currency:EUR`, `dd-MM-yy`, …), `hideInList/Form/Detail()`, `visibleInList/Form/Detail(bool)`,
-    chain `.field(next)`.
+    (`currency:EUR`, `dd-MM-yy`, …), `hint(String)`, `label(String)`, `hideInList/Form/Detail()`,
+    `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
+    form/detail/list label — including the built-in system columns (`code`/`description`,
+    `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
 
 An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
 that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the

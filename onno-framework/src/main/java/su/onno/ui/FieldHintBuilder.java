@@ -23,6 +23,7 @@ public class FieldHintBuilder {
     private String placeholder;
     private String format;
     private String hint;
+    private String label;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -94,6 +95,23 @@ public class FieldHintBuilder {
         return this;
     }
 
+    /**
+     * Override this field's display label — the text shown next to the input on the edit form, in
+     * the list column header, and on the read-only detail view. Works for both custom attributes
+     * (overriding {@code @Attribute(displayName=...)}) and the built-in <b>system columns</b>
+     * ({@code code}/{@code description} on catalogs; {@code number}/{@code date}/{@code posted} on
+     * documents), which otherwise have no DSL path to a label. The primary use is localization,
+     * e.g. {@code f.field("code").label("Код")} or {@code f.field("posted").label("Статус")}.
+     *
+     * <p>This is the form/detail counterpart to {@link ListSpec#label(String, String)} (which only
+     * relabels the list header); a {@code ListSpec.label(...)} on the same field still wins for the
+     * list column specifically. Blank/unset falls through to the descriptor's display name.</p>
+     */
+    public FieldHintBuilder label(String label) {
+        this.label = label;
+        return this;
+    }
+
     public FieldHintBuilder hideInList() {
         this.visibleInList = false;
         return this;
@@ -136,6 +154,6 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget, placeholder, format, hint);
+                order, group, width, widget, placeholder, format, hint, label);
     }
 }

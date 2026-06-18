@@ -208,8 +208,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
   chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
-  hints (`order`, `group`, `width`, `widget`, `format`, `hideInList/Form/Detail`, related lists,
-  actions). **An entity surface is only *served* if it has an `EntityView` for the active profile —
+  hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
+  related lists, actions; `label` localizes a field's form/detail/list label, including the built-in
+  system columns code/description/number/date/posted). **An entity surface is only *served* if it has an `EntityView` for the active profile —
   the view layer is the allowlist (no view → `404`).** This gates reachability, not nav presence: a
   view makes the entity reachable by its direct route, but it shows in the sidebar only once a
   `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not
