@@ -1,5 +1,6 @@
 package su.onno.metadata;
 
+import su.onno.fixtures.TestLabeledStatus;
 import su.onno.fixtures.TestOrderStatus;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -58,5 +59,40 @@ class EnumerationMetadataScannerTest {
         assertThatThrownBy(() -> scanner.scanEnumeration(String.class))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not annotated with @Enumeration");
+    }
+
+    @Test
+    void scanEnumeration_displayTitle_fallsBackToName() {
+        EnumerationDescriptor desc = scanner.scanEnumeration(TestOrderStatus.class);
+
+        assertThat(desc.displayTitle()).isEqualTo("OrderStatuses");
+    }
+
+    @Test
+    void scanEnumeration_unlabelled_valueLabelEqualsName() {
+        EnumerationDescriptor desc = scanner.scanEnumeration(TestOrderStatus.class);
+
+        assertThat(desc.values()).allSatisfy(v -> assertThat(v.label()).isEqualTo(v.name()));
+    }
+
+    @Test
+    void scanEnumeration_title_usesAnnotationValue() {
+        EnumerationDescriptor desc = scanner.scanEnumeration(TestLabeledStatus.class);
+
+        assertThat(desc.displayTitle()).isEqualTo("Статусы заказов");
+    }
+
+    @Test
+    void scanEnumeration_enumLabel_overridesNameButKeepsConstant() {
+        EnumerationDescriptor desc = scanner.scanEnumeration(TestLabeledStatus.class);
+
+        EnumerationValueDescriptor labelled = desc.values().get(0);
+        assertThat(labelled.name()).isEqualTo("NEW");
+        assertThat(labelled.label()).isEqualTo("Новый");
+
+        // An unlabelled constant keeps name == label, so display still works.
+        EnumerationValueDescriptor unlabelled = desc.values().get(2);
+        assertThat(unlabelled.name()).isEqualTo("COMPLETED");
+        assertThat(unlabelled.label()).isEqualTo("COMPLETED");
     }
 }

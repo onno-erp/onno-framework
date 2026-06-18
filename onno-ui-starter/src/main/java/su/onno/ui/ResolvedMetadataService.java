@@ -304,9 +304,11 @@ public class ResolvedMetadataService {
                         .findFirst().orElse(null);
                 if (enumDesc != null) {
                     map.put("enumName", enumDesc.logicalName());
+                    map.put("enumTitle", enumDesc.displayTitle());
                     map.put("enumValues", enumDesc.values().stream().map(v -> {
                         Map<String, Object> vm = new LinkedHashMap<>();
                         vm.put("name", v.name());
+                        vm.put("label", v.label());
                         vm.put("id", v.id().toString());
                         return vm;
                     }).toList());

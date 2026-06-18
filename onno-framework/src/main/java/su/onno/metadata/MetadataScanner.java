@@ -161,6 +161,7 @@ public class MetadataScanner {
         }
 
         String logicalName = enumAnnotation.name();
+        String displayTitle = enumAnnotation.title().isEmpty() ? logicalName : enumAnnotation.title();
         String storageKey = enumAnnotation.tableName().isEmpty() ? logicalName : enumAnnotation.tableName();
         String tableName = naming.enumerationTable(storageKey);
 
@@ -170,10 +171,28 @@ public class MetadataScanner {
             Enum<?> enumValue = (Enum<?>) constants[i];
             UUID id = UUID.nameUUIDFromBytes(
                     (clazz.getName() + "." + enumValue.name()).getBytes(StandardCharsets.UTF_8));
-            values.add(new EnumerationValueDescriptor(enumValue.name(), id, i));
+            values.add(new EnumerationValueDescriptor(enumValue.name(), enumLabel(clazz, enumValue), id, i));
         }
 
-        return new EnumerationDescriptor(logicalName, tableName, (Class<? extends Enum<?>>) clazz, values);
+        return new EnumerationDescriptor(
+                logicalName, displayTitle, tableName, (Class<? extends Enum<?>>) clazz, values);
+    }
+
+    /**
+     * Display label for an enum constant: the {@code @EnumLabel} value when present and non-empty,
+     * otherwise the constant name. The constant's field always exists (it is the enum constant),
+     * so the lookup never legitimately misses.
+     */
+    private static String enumLabel(Class<?> enumClass, Enum<?> value) {
+        try {
+            EnumLabel label = enumClass.getField(value.name()).getAnnotation(EnumLabel.class);
+            if (label != null && !label.value().isEmpty()) {
+                return label.value();
+            }
+        } catch (NoSuchFieldException ignored) {
+            // unreachable for a real enum constant; fall through to the name
+        }
+        return value.name();
     }
 
     public InformationRegisterDescriptor scanInformationRegister(Class<?> clazz) {

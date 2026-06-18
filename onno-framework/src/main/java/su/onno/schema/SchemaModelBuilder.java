@@ -167,6 +167,7 @@ public class SchemaModelBuilder {
         return new TableModel(enumeration.tableName(), List.of(
                 ColumnModel.primaryKey("_id", "UUID"),
                 ColumnModel.of("_name", "VARCHAR(255)"),
+                ColumnModel.of("_label", "VARCHAR(255)"),
                 ColumnModel.of("_order", "INTEGER")
         ), List.of(), List.of());
     }

@@ -86,7 +86,9 @@ In brief:
   `movementType = RECEIPT | EXPENSE`).
 - **`@InformationRegister`** — facts by dimension over time, `periodicity = NONE|DAY|MONTH|QUARTER|YEAR`;
   rows extend `InformationRecord`.
-- **`@Enumeration`** (on a Java `enum`), **`@Constant`** (singleton setting), **`@ScheduledJob`**
+- **`@Enumeration`** (on a Java `enum`; `title` for the type's display name, `@EnumLabel` on a
+  constant for its localized value label — both fall back to the name), **`@Constant`** (singleton
+  setting), **`@ScheduledJob`**
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
   (`readRoles`/`writeRoles`), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
