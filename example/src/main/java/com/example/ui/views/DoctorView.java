@@ -2,8 +2,8 @@ package com.example.ui.views;
 
 import com.example.domain.catalogs.ClinicDoctor;
 import com.example.domain.catalogs.Doctor;
-import com.onec.ui.EntityConfigBuilder;
-import com.onec.ui.EntityView;
+import su.onno.ui.EntityConfigBuilder;
+import su.onno.ui.EntityView;
 
 import org.springframework.stereotype.Component;
 

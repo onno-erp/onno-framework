@@ -1,13 +1,13 @@
 package com.example.ui.views;
 
 import com.example.domain.catalogs.Country;
-import com.onec.ui.ActionResult;
-import com.onec.ui.ActionScope;
-import com.onec.ui.ActionSpec;
-import com.onec.ui.EntityConfigBuilder;
-import com.onec.ui.EntityView;
-import com.onec.ui.InputSpec;
-import com.onec.ui.InputType;
+import su.onno.ui.ActionResult;
+import su.onno.ui.ActionScope;
+import su.onno.ui.ActionSpec;
+import su.onno.ui.EntityConfigBuilder;
+import su.onno.ui.EntityView;
+import su.onno.ui.InputSpec;
+import su.onno.ui.InputType;
 
 import org.springframework.stereotype.Component;
 
@@ -59,7 +59,7 @@ public class CountryView implements EntityView {
 
     /**
      * Demo toolbar inputs. These don't filter the list — their current values are handed to the
-     * action handlers above via {@link com.onec.ui.ActionContext#input(String)} when a button runs.
+     * action handlers above via {@link su.onno.ui.ActionContext#input(String)} when a button runs.
      */
     @Override
     public void inputs(InputSpec in) {

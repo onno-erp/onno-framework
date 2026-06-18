@@ -1,9 +1,9 @@
 package com.example.ui.views;
 
 import com.example.domain.catalogs.Property;
-import com.onec.ui.EntityConfigBuilder;
-import com.onec.ui.EntityView;
-import com.onec.ui.ListSpec;
+import su.onno.ui.EntityConfigBuilder;
+import su.onno.ui.EntityView;
+import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 

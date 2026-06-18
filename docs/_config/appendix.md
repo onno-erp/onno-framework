@@ -1,5 +1,5 @@
-## Enterprise connectors (`com.onec.enterprise`, separate repo)
+## Enterprise connectors (`su.onno.enterprise`, separate repo)
 
-Gated by `onec.guesty.enabled` / `onec.hospedajes.enabled` / `onec.tochka.enabled`. Each reads its
-own `onec.<connector>.*` block (base URL, credentials/tokens, timeouts, retry, token cache). See the
-[onec-enterprise](https://github.com/onec-erp/onec-enterprise) module READMEs.
+Gated by `onno.guesty.enabled` / `onno.hospedajes.enabled` / `onno.tochka.enabled`. Each reads its
+own `onno.<connector>.*` block (base URL, credentials/tokens, timeouts, retry, token cache). See the
+[onno-enterprise](https://github.com/onno-erp/onno-enterprise) module READMEs.

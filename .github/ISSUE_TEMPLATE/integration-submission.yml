@@ -6,25 +6,25 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for building on onec-framework! Use this form to propose your integration for the
-        [community catalog](https://github.com/onec-erp/onec-framework/blob/main/INTEGRATIONS.md).
+        Thanks for building on onno-framework! Use this form to propose your integration for the
+        [community catalog](https://github.com/onno-erp/onno-framework/blob/main/INTEGRATIONS.md).
 
         You can also skip the issue and open a PR directly that adds your entry to
-        [`community/registry.json`](https://github.com/onec-erp/onec-framework/blob/main/community/registry.json)
+        [`community/registry.json`](https://github.com/onno-erp/onno-framework/blob/main/community/registry.json)
         and regenerates `INTEGRATIONS.md` (`./gradlew generateIntegrationsDoc`). See the
-        [listing criteria](https://github.com/onec-erp/onec-framework/blob/main/CONTRIBUTING.md#listing-a-community-integration).
+        [listing criteria](https://github.com/onno-erp/onno-framework/blob/main/CONTRIBUTING.md#listing-a-community-integration).
   - type: input
     id: name
     attributes:
       label: Name
-      description: e.g. onec-shopify-starter
+      description: e.g. onno-shopify-starter
     validations:
       required: true
   - type: input
     id: repository
     attributes:
       label: Repository URL
-      placeholder: https://github.com/you/onec-something-starter
+      placeholder: https://github.com/you/onno-something-starter
     validations:
       required: true
   - type: textarea
@@ -51,13 +51,13 @@ body:
     attributes:
       label: Maven coordinates
       description: "group:artifact[:version] — leave blank if not published to Maven."
-      placeholder: io.github.you:onec-shopify-starter
+      placeholder: io.github.you:onno-shopify-starter
     validations:
       required: false
   - type: input
-    id: onecVersion
+    id: onnoVersion
     attributes:
-      label: onec-framework version
+      label: onno-framework version
       description: The version (or range) you build and test against.
       placeholder: 0.10.x
     validations:
@@ -86,9 +86,9 @@ body:
       label: Readiness
       description: See docs/EXTENDING.md for the full "definition of done".
       options:
-        - label: It builds against a supported onec-framework version and has a README.
+        - label: It builds against a supported onno-framework version and has a README.
           required: true
-        - label: It uses my own Maven group and Java package (not io.github.onec-erp / com.onec.*).
+        - label: It uses my own Maven group and Java package (not su.onno / su.onno.*).
           required: true
-        - label: It has a declared license and (for starters) an `onec.<name>.enabled` flag.
+        - label: It has a declared license and (for starters) an `onno.<name>.enabled` flag.
           required: true

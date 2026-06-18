@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
   - name: Build an integration
-    url: https://github.com/onec-erp/onec-framework/blob/main/docs/EXTENDING.md
-    about: How to build a connector, SPI, UI extension, or skill on onec-framework.
+    url: https://github.com/onno-erp/onno-framework/blob/main/docs/EXTENDING.md
+    about: How to build a connector, SPI, UI extension, or skill on onno-framework.
   - name: Community integrations catalog
-    url: https://github.com/onec-erp/onec-framework/blob/main/INTEGRATIONS.md
+    url: https://github.com/onno-erp/onno-framework/blob/main/INTEGRATIONS.md
     about: Browse integrations the community has already published.
   - name: Contributing guide
-    url: https://github.com/onec-erp/onec-framework/blob/main/CONTRIBUTING.md
+    url: https://github.com/onno-erp/onno-framework/blob/main/CONTRIBUTING.md
     about: How to contribute code and how to get your integration listed.

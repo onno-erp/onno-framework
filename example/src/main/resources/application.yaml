@@ -12,14 +12,14 @@ server:
   error:
     include-stacktrace: always
     include-message: always
-onec:
+onno:
   ui:
     # The built-in Settings page (the @Constant editor) is opt-in and off by default; this app
     # composes its own SettingsPage at /settings, so turn the surface + admin nav entry on.
     settings:
       enabled: true
   auth:
-    # Authentication backend. Default is "in-memory" (the onec.auth.users below). Set to
+    # Authentication backend. Default is "in-memory" (the onno.auth.users below). Set to
     # "oidc" for server-side OIDC login (Keycloak, Zitadel, …; keeps the session cookie, "Sign in"
     # becomes a redirect to the IdP), or "resource-server" for stateless JWT bearer-token
     # validation. See the commented spring.security.oauth2.* blocks at the bottom of this file.
@@ -37,7 +37,7 @@ onec:
         # any multi-node deployment) set a stable `key` instead — a blank key without this opt-in
         # fails fast, since per-node keys break remember-me behind a load balancer.
         allow-ephemeral-key: true
-        # key: ${ONEC_REMEMBER_ME_KEY:}   # stable secret in prod / multi-node
+        # key: ${ONNO_REMEMBER_ME_KEY:}   # stable secret in prod / multi-node
     users:
       - username: admin
         password: admin
@@ -91,18 +91,18 @@ onec:
     # allowed-content-types: [image/*, application/pdf]
 
 # --------------------------------------------------------------------------------------------
-# OIDC wiring. Uncomment ONE of the blocks below and set onec.auth.mode accordingly.
+# OIDC wiring. Uncomment ONE of the blocks below and set onno.auth.mode accordingly.
 # On the IdP client, register the redirect URI <app>/login/oauth2/code/{registrationId} and add
 # the app origin to the "Valid post logout redirect URIs" so RP-initiated logout can return here.
 #
-# Keycloak login (onec.auth.mode: oidc, onec.auth.oidc.provider: keycloak):
+# Keycloak login (onno.auth.mode: oidc, onno.auth.oidc.provider: keycloak):
 # spring:
 #   security:
 #     oauth2:
 #       client:
 #         provider:
 #           keycloak:
-#             issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onec}
+#             issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onno}
 #         registration:
 #           keycloak:
 #             client-id: ${KEYCLOAK_CLIENT_ID:rentals-app}
@@ -110,7 +110,7 @@ onec:
 #             authorization-grant-type: authorization_code
 #             scope: [openid, profile, email]
 #
-# Zitadel login (onec.auth.mode: oidc, onec.auth.oidc.provider: zitadel):
+# Zitadel login (onno.auth.mode: oidc, onno.auth.oidc.provider: zitadel):
 # spring:
 #   security:
 #     oauth2:
@@ -125,11 +125,11 @@ onec:
 #             authorization-grant-type: authorization_code
 #             scope: [openid, profile, email]
 #
-# Resource server (onec.auth.mode: resource-server) — stateless JWT bearer tokens:
+# Resource server (onno.auth.mode: resource-server) — stateless JWT bearer tokens:
 # spring:
 #   security:
 #     oauth2:
 #       resourceserver:
 #         jwt:
-#           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onec}
+#           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onno}
 # --------------------------------------------------------------------------------------------

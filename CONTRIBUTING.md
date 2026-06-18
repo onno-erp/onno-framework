@@ -1,6 +1,6 @@
-# Contributing to onec-framework
+# Contributing to onno-framework
 
-Thanks for helping build onec-framework. There are two ways to contribute, and they have different
+Thanks for helping build onno-framework. There are two ways to contribute, and they have different
 bars:
 
 - **[Contribute code](#contributing-code)** to the framework, a starter, or the example app.
@@ -19,8 +19,8 @@ By contributing you agree your contributions are licensed under the repository's
 ./gradlew publishToMavenLocal  # verify the artifacts are consumable (sources, javadoc, POM)
 ```
 
-Narrower loops: `./gradlew :onec-framework:test` for core changes,
-`./gradlew :onec-ui-starter:buildFrontend` for frontend-only changes. Java 21 is required (the Gradle
+Narrower loops: `./gradlew :onno-framework:test` for core changes,
+`./gradlew :onno-ui-starter:buildFrontend` for frontend-only changes. Java 21 is required (the Gradle
 toolchain pins it).
 
 ### Keep docs in sync — required
@@ -32,9 +32,9 @@ the code wins — fix the doc.
 
 ### Respect the open-core boundary
 
-This repository is the **open-core** (Apache-2.0, Maven group `io.github.onec-erp`). Commercial
+This repository is the **open-core** (Apache-2.0, Maven group `su.onno`). Commercial
 vertical connectors live in the separate, commercially licensed
-[onec-enterprise](https://github.com/onec-erp/onec-enterprise) repo (`com.onec.enterprise`). Don't
+[onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo (`su.onno.enterprise`). Don't
 add commercial or proprietary code here. See the [License section](README.md#license).
 
 ### Pull requests
@@ -62,12 +62,12 @@ To be listed, a project must:
 
 - Be **public** and have a **README** describing what it does and how to configure it.
 - Have a **declared license** (an SPDX id).
-- **Build against a supported onec-framework version** (state which one).
-- Use its **own Maven group and Java package** — not `io.github.onec-erp` or `com.onec.*` (reserved).
-- For a starter: be gated by an `onec.<name>.enabled` flag with beans that are
+- **Build against a supported onno-framework version** (state which one).
+- Use its **own Maven group and Java package** — not `su.onno` or `su.onno.*` (reserved).
+- For a starter: be gated by an `onno.<name>.enabled` flag with beans that are
   `@ConditionalOnMissingBean`.
 
-Listed projects are maintained by their authors and are **not endorsed** by the onec-framework team.
+Listed projects are maintained by their authors and are **not endorsed** by the onno-framework team.
 Maintainers may decline or remove entries that are abandoned, broken, or misrepresented.
 
 ### How to get listed
@@ -84,5 +84,5 @@ Maintainers may decline or remove entries that are abandoned, broken, or misrepr
 3. Open a PR including **both** `community/registry.json` and the regenerated `INTEGRATIONS.md`.
 
 Prefer not to open a PR? File a
-[community integration submission](https://github.com/onec-erp/onec-framework/issues/new?template=integration-submission.yml)
+[community integration submission](https://github.com/onno-erp/onno-framework/issues/new?template=integration-submission.yml)
 issue with the same details and a maintainer will add it.

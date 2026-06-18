@@ -1,6 +1,6 @@
 package com.example.domain.enumerations;
 
-import com.onec.annotations.Enumeration;
+import su.onno.annotations.Enumeration;
 
 /**
  * Lifecycle state of a {@link com.example.domain.documents.Booking}. An {@code @Enumeration} is a

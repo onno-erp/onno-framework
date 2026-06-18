@@ -1,4 +1,4 @@
-# onec Framework Roadmap
+# onno Framework Roadmap
 
 This project is a modern Java/Spring framework for modeling business processes with explicit domain concepts:
 catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,
@@ -15,11 +15,11 @@ Implemented:
 - Spring Boot starter auto-configuration
 - React/Vite UI starter with generic metadata, catalog, document, and register APIs
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
-- Production auth modes shipped in `onec-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
+- Production auth modes shipped in `onno-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
 - Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
-- Agent-readable business model surface via the MCP server (`onec-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
+- Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
 - Hierarchical catalog fields and generated schema
 - Configurable catalog/document autonumbering prefixes
 - Optimistic locking fields and generic UI conflict checks
@@ -27,13 +27,13 @@ Implemented:
 - Kafka starter foundation with CloudEvent relay, service registry, and remote reference client
 - Typed-Java posting (`Postable.handlePosting`) writing document-to-register movements
 - Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
-- Diff-based schema migration: `onec_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
+- Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews
 - Domain event metadata and outbox publication hooks
-- `onec-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onec.auth.users`, plus OIDC and resource-server modes
-- Integration starters: MCP server (`onec-mcp-starter`), CSV import (`onec-import-starter`), Kafka outbox relay (`onec-kafka-starter`), transactional mail (`onec-mail-starter`), PDF/print (`onec-print-starter`), native desktop packaging (`onec-desktop-starter` + Gradle plugin)
-- Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onec-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
+- `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
+- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Kafka outbox relay (`onno-kafka-starter`), transactional mail (`onno-mail-starter`), PDF/print (`onno-print-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
+- Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
 - UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present.
 
@@ -62,18 +62,18 @@ Good next slices:
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
-diffs, the server-driven DivKit UI layer, and horizontal scale-out (`onec-cluster-starter`).
+diffs, the server-driven DivKit UI layer, and horizontal scale-out (`onno-cluster-starter`).
 
 ## Auth Direction
 
-Current auth ships in `onec-auth-starter` with three modes selected by `onec.auth.mode`:
-- `in-memory` (default): JSON `POST /api/auth/login` and `/api/auth/logout`, session-backed (`JSESSIONID`), CSRF via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header, optional remember-me. In-memory users from `onec.auth.users[*]`; the example seeds admin/rentals/finance/cleaner from `application.yaml`.
+Current auth ships in `onno-auth-starter` with three modes selected by `onno.auth.mode`:
+- `in-memory` (default): JSON `POST /api/auth/login` and `/api/auth/logout`, session-backed (`JSESSIONID`), CSRF via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header, optional remember-me. In-memory users from `onno.auth.users[*]`; the example seeds admin/rentals/finance/cleaner from `application.yaml`.
 - `oidc`: server-side OpenID Connect SSO (Keycloak/Zitadel/custom) with realm/client role mapping and RP-initiated logout.
 - `resource-server`: stateless JWT bearer validation for API-only clients.
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.
 - Per-entity authorization is deny-by-default via `@AccessControl(readRoles, writeRoles)`; `ADMIN` is a superuser.
-- Any consumer can set `onec.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
-- Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) build on generic core UI primitives — action-button `.logo(...)` and `ActionResult.redirect(...)` for a full-page consent redirect — so an app can hand-roll the callback on just the core; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onec-connector-support`.
+- Any consumer can set `onno.auth.enabled=false` and override the `SecurityFilterChain`, `UserDetailsService`, or `PasswordEncoder` bean.
+- Delegated "connect external account" / "Connect with X" flows (distinct from logging a user *in*) build on generic core UI primitives — action-button `.logo(...)` and `ActionResult.redirect(...)` for a full-page consent redirect — so an app can hand-roll the callback on just the core; the turnkey authorization-code mechanics (`AuthorizationCodeFlow` + `TokenStore` that seeds a connector's `OAuthTokenManager`) live in the commercial `onno-connector-support`.
 
 Production direction:
 - Replace the demo `InMemoryUserDetailsManager` with a JDBC-backed `UserDetailsService` for real deployments.

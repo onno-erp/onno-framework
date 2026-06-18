@@ -2,11 +2,11 @@ package com.example.domain.catalogs;
 
 import com.example.domain.enumerations.DocType;
 import com.example.domain.enumerations.Gender;
-import com.onec.annotations.AccessControl;
-import com.onec.annotations.Attribute;
-import com.onec.annotations.Catalog;
-import com.onec.model.CatalogObject;
-import com.onec.types.Ref;
+import su.onno.annotations.AccessControl;
+import su.onno.annotations.Attribute;
+import su.onno.annotations.Catalog;
+import su.onno.model.CatalogObject;
+import su.onno.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;

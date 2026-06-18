@@ -1,6 +1,6 @@
 package com.example.domain.enumerations;
 
-import com.onec.annotations.Enumeration;
+import su.onno.annotations.Enumeration;
 
 /**
  * A {@link com.example.domain.catalogs.Client}'s gender — a code-controlled {@code @Enumeration}

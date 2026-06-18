@@ -18,8 +18,8 @@ import com.example.repositories.CountryRepository;
 import com.example.repositories.EmployeeRepository;
 import com.example.repositories.PaymentRepository;
 import com.example.repositories.PropertyRepository;
-import com.onec.posting.PostingService;
-import com.onec.types.Ref;
+import su.onno.posting.PostingService;
+import su.onno.types.Ref;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

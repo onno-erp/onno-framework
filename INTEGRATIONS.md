@@ -4,8 +4,8 @@
 
 # Community integrations
 
-Third-party integrations the community has built on onec-framework. These projects are
-maintained by their authors and are not endorsed by the onec-framework team — review before use.
+Third-party integrations the community has built on onno-framework. These projects are
+maintained by their authors and are not endorsed by the onno-framework team — review before use.
 
 > **Want to add yours?** Build it with [docs/EXTENDING.md](docs/EXTENDING.md), then add an entry
 > to [`community/registry.json`](community/registry.json) and run `./gradlew generateIntegrationsDoc`.

@@ -1,7 +1,7 @@
 package com.example.repositories;
 
 import com.example.domain.catalogs.BookingStaff;
-import com.onec.repository.CatalogRepository;
+import su.onno.repository.CatalogRepository;
 
 public interface BookingStaffRepository extends CatalogRepository<BookingStaff> {
 }

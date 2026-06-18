@@ -1,10 +1,10 @@
-# onec-framework
+# onno-framework
 
-Reusable Spring Boot starters for building onec-style business applications in Java.
+Reusable Spring Boot starters for building onno-style business applications in Java.
 
 The repository is a Gradle multi-module build. Applications usually consume one or more published artifacts rather than including this repository as a composite build.
 
-For teams or AI agents using these libraries to build an ERP application, start with [Building ERPs With onec-framework And AI Agents](BUILDING_ERPS_WITH_AGENTS.md).
+For teams or AI agents using these libraries to build an ERP application, start with [Building ERPs With onno-framework And AI Agents](BUILDING_ERPS_WITH_AGENTS.md).
 
 Building a headless front end or integration against the generic API? See the
 [Headless Read API](docs/HEADLESS_READ_API.md) for the JSON response contract (column-name keys,
@@ -21,14 +21,14 @@ by [`.github/workflows/docs.yml`](.github/workflows/docs.yml)).
 | [AGENTS.md](AGENTS.md) | Operating rules for AI agents + the playbook for modeling a business into framework concepts. |
 | [BUILDING_ERPS_WITH_AGENTS.md](BUILDING_ERPS_WITH_AGENTS.md) | Handoff guide for building an ERP in a separate project on the published libraries. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the framework fits together: boot pipeline, each subsystem, the full endpoint catalog, open-core boundary. |
-| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onec.*` configuration property, by module, with defaults. **Generated** from the `@ConfigurationProperties` Javadoc — see below. |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onno.*` configuration property, by module, with defaults. **Generated** from the `@ConfigurationProperties` Javadoc — see below. |
 | [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) | JSON response contract for the generic read API. |
 | [docs/MEDIA_UPLOADS.md](docs/MEDIA_UPLOADS.md) | Binary upload endpoint and the `MediaStorage` SPI. |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | How to build a community extension (connector, SPI, UI, skill), the naming/namespace conventions, and how to get it listed. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute code and how to list a community integration. |
 | [INTEGRATIONS.md](INTEGRATIONS.md) | Catalog of community-built integrations (generated from `community/registry.json`). |
 | Java API (Javadoc) | Aggregated API reference at [`/api`](https://docs.onno.su/api/) on the docs site (`./gradlew aggregateJavadoc`). |
-| [`onec` skill](onec-plugin/skills/onec/SKILL.md) | A hands-on expert playbook + cheat sheet that makes Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
+| [`onno` skill](onno-plugin/skills/onno/SKILL.md) | A hands-on expert playbook + cheat sheet that makes Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
 
 Each module also has its own `README.md` with integration-specific setup.
 
@@ -50,57 +50,57 @@ Preview the full site locally:
 ```bash
 ./gradlew generateConfigDocs aggregateJavadoc       # refresh generated reference
 mkdir -p docs/public/api && cp -R build/docs/javadoc/. docs/public/api/   # stage Javadoc under /api
-cd docs && npm install && npm run docs:dev          # http://localhost:5173/onec-framework/
+cd docs && npm install && npm run docs:dev          # http://localhost:5173/onno-framework/
 ```
 
-### Using the onec skill
+### Using the onno skill
 
-The `onec` skill teaches Claude Code to model a business into framework concepts, get posting /
+The `onno` skill teaches Claude Code to model a business into framework concepts, get posting /
 validation / migration right, and use the runtime API — the canonical copy lives in
-[`onec-plugin/skills/onec/`](onec-plugin/skills/onec/SKILL.md).
+[`onno-plugin/skills/onno/`](onno-plugin/skills/onno/SKILL.md).
 
-- **Working in this repo?** It's auto-discovered — `.claude/skills/onec` is a symlink to the canonical
+- **Working in this repo?** It's auto-discovered — `.claude/skills/onno` is a symlink to the canonical
   copy, so Claude Code loads it with no setup.
 - **Building a separate app on the published artifacts?** Install it as a plugin (this repo doubles as
   a plugin marketplace via [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)):
 
   ```text
-  /plugin marketplace add onec-erp/onec-framework
-  /plugin install onec@onec-framework
+  /plugin marketplace add onno-erp/onno-framework
+  /plugin install onno@onno-framework
   ```
 
-  Claude then auto-invokes it when relevant (or run `/onec:onec` explicitly).
+  Claude then auto-invokes it when relevant (or run `/onno:onno` explicitly).
 
 ## Modules
 
 | Module | Purpose |
 | --- | --- |
-| `onec-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, UI layout model, and shared types. |
-| `onec-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
-| `onec-ui-starter` | Generic web UI controllers and packaged frontend assets. |
-| `onec-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
-| `onec-print-starter` | Thymeleaf-based document rendering and PDF output support. |
-| `onec-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |
-| `onec-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
-| `onec-import-starter` | CSV import services and endpoints for catalogs. |
-| `onec-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out (pluggable bus; default Postgres LISTEN/NOTIFY). |
-| `onec-mcp-starter` | MCP server exposing metadata, CRUD, register queries, and posting as AI-agent tools. |
-| `onec-desktop-starter` | Desktop runtime support and packaged Tauri shell resources. |
-| `onec-desktop-gradle-plugin` | Gradle plugin for packaging a Spring Boot app as a native desktop bundle. |
+| `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, UI layout model, and shared types. |
+| `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
+| `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
+| `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
+| `onno-print-starter` | Thymeleaf-based document rendering and PDF output support. |
+| `onno-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |
+| `onno-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
+| `onno-import-starter` | CSV import services and endpoints for catalogs. |
+| `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out (pluggable bus; default Postgres LISTEN/NOTIFY). |
+| `onno-mcp-starter` | MCP server exposing metadata, CRUD, register queries, and posting as AI-agent tools. |
+| `onno-desktop-starter` | Desktop runtime support and packaged Tauri shell resources. |
+| `onno-desktop-gradle-plugin` | Gradle plugin for packaging a Spring Boot app as a native desktop bundle. |
 | `example` | Local example application. It is not intended to be published as a library. |
 
-Commercial vertical connectors — `onec-guesty-starter` (Guesty Open API) and
-`onec-hospedajes-starter` (Spanish SES.HOSPEDAJES) — live in the separate, commercially licensed
-[onec-enterprise](https://github.com/onec-erp/onec-enterprise) repository. See the
+Commercial vertical connectors — `onno-guesty-starter` (Guesty Open API) and
+`onno-hospedajes-starter` (Spanish SES.HOSPEDAJES) — live in the separate, commercially licensed
+[onno-enterprise](https://github.com/onno-erp/onno-enterprise) repository. See the
 [License](#license) section.
 
-## Extending onec
+## Extending onno
 
 The framework is built to be extended **without forking** — you ship a separate artifact the host
 app opts into. Four extension surfaces: **connectors** (wrap an external system), **SPI
 implementations** (`MediaStorage`, `MailDispatcher`, custom auth, …), **UI** (widgets/pages/actions),
 and Claude **skills/plugins**. The full how-to — the starter shape, the naming/namespace conventions
-that keep the `io.github.onec-erp` and `com.onec.*` namespaces reserved, and a "definition of done"
+that keep the `su.onno` and `su.onno.*` namespaces reserved, and a "definition of done"
 checklist — is in [docs/EXTENDING.md](docs/EXTENDING.md).
 
 Built one? Add it to the community catalog in [INTEGRATIONS.md](INTEGRATIONS.md): append an entry to
@@ -112,7 +112,7 @@ open a PR (see [CONTRIBUTING.md](CONTRIBUTING.md#listing-a-community-integration
 - Java 21
 - Gradle wrapper from this repository
 - Spring Boot 3.4.x in consuming applications
-- Node 20 is downloaded automatically when building `onec-ui-starter`
+- Node 20 is downloaded automatically when building `onno-ui-starter`
 
 ## Local Development
 
@@ -137,34 +137,34 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.onec-erp:onec-framework-starter:0.1.0-SNAPSHOT")
-    implementation("io.github.onec-erp:onec-ui-starter:0.1.0-SNAPSHOT")
+    implementation("su.onno:onno-framework-starter:0.1.0-SNAPSHOT")
+    implementation("su.onno:onno-ui-starter:0.1.0-SNAPSHOT")
 }
 ```
 
-> Maven coordinates use the `io.github.onec-erp` group; the Java packages are still `com.onec.*`,
+> Maven coordinates use the `su.onno` group; the Java packages are still `su.onno.*`,
 > so your imports don't change.
 
 ## Maven Central
 
-Released modules are published to [Maven Central](https://central.sonatype.com/namespace/io.github.onec-erp)
-under the `io.github.onec-erp` group. Consumers need **no credentials and no custom repository** —
+Released modules are published to [Maven Central](https://central.sonatype.com/namespace/su.onno)
+under the `su.onno` group. Consumers need **no credentials and no custom repository** —
 just `mavenCentral()`:
 
 ```kotlin
-val onecVersion = "<latest>"   // pick the latest release from the link below
+val onnoVersion = "<latest>"   // pick the latest release from the link below
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("io.github.onec-erp:onec-framework-starter:$onecVersion")
+    implementation("su.onno:onno-framework-starter:$onnoVersion")
 }
 ```
 
 > Replace `<latest>` with the latest released version from
-> [Maven Central](https://central.sonatype.com/namespace/io.github.onec-erp).
+> [Maven Central](https://central.sonatype.com/namespace/su.onno).
 
 ### Publishing a release
 
@@ -198,11 +198,11 @@ skipped for `-SNAPSHOT` versions).
 
 ## Desktop Plugin
 
-Inside this repository, `settings.gradle.kts` uses `includeBuild("onec-desktop-gradle-plugin")`, so the example app can apply:
+Inside this repository, `settings.gradle.kts` uses `includeBuild("onno-desktop-gradle-plugin")`, so the example app can apply:
 
 ```kotlin
 plugins {
-    id("com.onec.desktop")
+    id("su.onno.desktop")
 }
 ```
 
@@ -210,7 +210,7 @@ External projects should either resolve the plugin from the published package re
 
 ```kotlin
 pluginManagement {
-    includeBuild("../onec-framework/onec-desktop-gradle-plugin")
+    includeBuild("../onno-framework/onno-desktop-gradle-plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()
@@ -222,27 +222,27 @@ pluginManagement {
 
 Each starter exposes its auto-configuration through Spring Boot 3's `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` mechanism. In a consuming app, adding the starter dependency is enough to make its conditional beans available.
 
-Most integration starters are disabled by default and are enabled through `onec.*` configuration properties. See the module READMEs for integration-specific setup.
+Most integration starters are disabled by default and are enabled through `onno.*` configuration properties. See the module READMEs for integration-specific setup.
 
 ## Schema Migrations
 
 The database schema is derived from the metadata model (`@Catalog`, `@Document`, registers, …). At startup the framework diffs that model against the live database and brings it up to date — no migration files for structural changes.
 
 ```properties
-onec.schema.mode=apply              # apply | plan | validate | off (default: apply)
-onec.schema.allow-destructive=false # gate for drops and narrowing type changes
+onno.schema.mode=apply              # apply | plan | validate | off (default: apply)
+onno.schema.allow-destructive=false # gate for drops and narrowing type changes
 ```
 
 - **apply** (default) — execute safe changes: new tables/columns, renames, widening type
   changes (e.g. `VARCHAR(100)` → `VARCHAR(200)`, `INTEGER` → `BIGINT`). Destructive changes
   (dropped tables/columns, narrowing types) are logged and skipped unless
-  `onec.schema.allow-destructive=true`.
+  `onno.schema.allow-destructive=true`.
 - **plan** — log the full migration plan with its SQL and change nothing. Review in CI, then apply.
 - **validate** — fail startup if the database does not match the metadata or migrations are
   unapplied. Use in production with `apply` running as a deploy step.
 - **off** — schema is managed externally.
 
-Every applied change-set is recorded in `onec_schema_history` together with a snapshot of the
+Every applied change-set is recorded in `onno_schema_history` together with a snapshot of the
 metadata model; the snapshot is how type changes and removed entities are detected on later boots.
 
 **Renames keep data.** Without a hint, a renamed field would look like “drop + add”. Declare the
@@ -258,7 +258,7 @@ public class Counterparty extends CatalogObject {
 ```
 
 **Data migrations** (backfills, reshaping, seeding) are versioned Java beans, run exactly once
-per database — in version order, inside a transaction, recorded in `onec_schema_history`:
+per database — in version order, inside a transaction, recorded in `onno_schema_history`:
 
 ```java
 @Component
@@ -274,13 +274,13 @@ public class BackfillWarehouseCodes implements AppMigration {
 
 The framework follows an **open-core** model.
 
-- The modules in this repository (published to Maven Central under the `io.github.onec-erp` group)
+- The modules in this repository (published to Maven Central under the `su.onno` group)
   are open source under the [Apache License 2.0](LICENSE). See [`NOTICE`](NOTICE) for attribution.
-- Separately licensed **commercial** modules (published under the `com.onec.enterprise` group from a
+- Separately licensed **commercial** modules (published under the `su.onno.enterprise` group from a
   private repository — the vertical connectors Guesty and SES.HOSPEDAJES) are governed by the
-  [onec Commercial License](docs/licensing/COMMERCIAL-LICENSE.md) and are not part of this
+  [onno Commercial License](docs/licensing/COMMERCIAL-LICENSE.md) and are not part of this
   distribution. Authentication, including OIDC / single sign-on, is part of the open-source core
-  (`onec-auth-starter`).
+  (`onno-auth-starter`).
 
 The boundary, and the plan for extracting the commercial modules into their own repository, is
 documented in [docs/licensing/MODULE-SPLIT-PLAN.md](docs/licensing/MODULE-SPLIT-PLAN.md).

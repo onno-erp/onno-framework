@@ -1,6 +1,6 @@
 package com.example.domain.enumerations;
 
-import com.onec.annotations.Enumeration;
+import su.onno.annotations.Enumeration;
 
 /**
  * Where a {@link com.example.domain.documents.Booking} originated. A code-controlled

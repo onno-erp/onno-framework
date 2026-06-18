@@ -1,0 +1,10 @@
+{
+  "name": "onno",
+  "description": "Expert playbook for the onno-framework — the Java/Spring \"model-the-business\" ERP toolkit. Modeling a business into catalogs/documents/registers, posting and validation rules, diff-based schema migration, the generic REST + DivKit UI, the runtime API + auth recipe, and building apps on su.onno:onno-*.",
+  "author": {
+    "name": "onno-erp",
+    "url": "https://github.com/onno-erp"
+  },
+  "homepage": "https://github.com/onno-erp/onno-framework",
+  "license": "Apache-2.0"
+}

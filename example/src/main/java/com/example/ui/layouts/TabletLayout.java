@@ -6,10 +6,10 @@ import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
 import com.example.domain.documents.Payment;
-import com.onec.ui.Layout;
-import com.onec.ui.LayoutSpec;
-import com.onec.ui.NavStyle;
-import com.onec.ui.Viewport;
+import su.onno.ui.Layout;
+import su.onno.ui.LayoutSpec;
+import su.onno.ui.NavStyle;
+import su.onno.ui.Viewport;
 
 import org.springframework.stereotype.Component;
 

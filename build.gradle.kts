@@ -20,12 +20,11 @@ val releaseVersion = providers.gradleProperty("releaseVersion")
     .orElse("0.1.0-SNAPSHOT")
 
 allprojects {
-    // Maven coordinate group. The artifacts publish to Maven Central under the GitHub-org-verified
-    // `io.github.onec-erp` namespace (no domain ownership required). NOTE: this is the *publish
-    // coordinate* only — the Java packages stay `com.onec.*` and the Gradle plugin id stays
-    // `com.onec.desktop`. Consumers write `io.github.onec-erp:onec-framework-starter:<ver>` but still
-    // `import com.onec...`.
-    group = "io.github.onec-erp"
+    // Maven coordinate group. Artifacts publish to Maven Central under the `su.onno` namespace,
+    // verified on the Central Portal via ownership of the `onno.su` domain. The groupId, the Java
+    // package root (`su.onno.*`) and the Gradle plugin id (`su.onno.desktop`) are all aligned, so
+    // consumers write `su.onno:onno-framework-starter:<ver>` and `import su.onno...`.
+    group = "su.onno"
     version = releaseVersion.get()
 
     repositories {
@@ -66,16 +65,16 @@ java {
 // `example` is not published; the desktop Gradle plugin lives in a separate included build and is
 // released on its own.
 val publishedModules = mapOf(
-    "onec-framework" to "Core domain model, JDBI persistence, and entity-change events for the onec ERP toolkit.",
-    "onec-framework-starter" to "Spring Boot autoconfiguration for the onec core: datasource, JDBC repositories, and JobRunr background jobs.",
-    "onec-ui-starter" to "Server-driven admin UI starter for onec — bundles the frontend and its Spring MVC endpoints.",
-    "onec-auth-starter" to "Authentication starter for onec: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
-    "onec-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onec query and command services to AI agents.",
-    "onec-cluster-starter" to "Cross-node delivery of onec entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
-    "onec-kafka-starter" to "Kafka integration starter publishing onec entity-change events to topics.",
-    "onec-print-starter" to "PDF / printing starter for onec using Thymeleaf templates and Flying Saucer.",
-    "onec-mail-starter" to "Email starter for onec: SMTP and HTTP dispatch with Thymeleaf-templated bodies.",
-    "onec-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onec shell for native app builds.",
+    "onno-framework" to "Core domain model, JDBI persistence, and entity-change events for the onno ERP toolkit.",
+    "onno-framework-starter" to "Spring Boot autoconfiguration for the onno core: datasource, JDBC repositories, and JobRunr background jobs.",
+    "onno-ui-starter" to "Server-driven admin UI starter for onno — bundles the frontend and its Spring MVC endpoints.",
+    "onno-auth-starter" to "Authentication starter for onno: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
+    "onno-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onno query and command services to AI agents.",
+    "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
+    "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
+    "onno-print-starter" to "PDF / printing starter for onno using Thymeleaf templates and Flying Saucer.",
+    "onno-mail-starter" to "Email starter for onno: SMTP and HTTP dispatch with Thymeleaf-templated bodies.",
+    "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
 
 configure(subprojects.filter { it.name in publishedModules.keys }) {
@@ -86,7 +85,7 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
             name.set(project.name)
             description.set(publishedModules.getValue(project.name))
             inceptionYear.set("2025")
-            url.set("https://github.com/onec-erp/onec-framework")
+            url.set("https://github.com/onno-erp/onno-framework")
             licenses {
                 license {
                     name.set("The Apache License, Version 2.0")
@@ -96,15 +95,15 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
             }
             developers {
                 developer {
-                    id.set("onec-erp")
-                    name.set("onec-erp")
-                    url.set("https://github.com/onec-erp")
+                    id.set("onno-erp")
+                    name.set("onno-erp")
+                    url.set("https://github.com/onno-erp")
                 }
             }
             scm {
-                url.set("https://github.com/onec-erp/onec-framework")
-                connection.set("scm:git:https://github.com/onec-erp/onec-framework.git")
-                developerConnection.set("scm:git:ssh://git@github.com/onec-erp/onec-framework.git")
+                url.set("https://github.com/onno-erp/onno-framework")
+                connection.set("scm:git:https://github.com/onno-erp/onno-framework.git")
+                developerConnection.set("scm:git:ssh://git@github.com/onno-erp/onno-framework.git")
             }
         }
     }
@@ -134,7 +133,7 @@ tasks.register("generateIntegrationsDoc") {
 
         // Display order + heading + blurb per category (keys match registry.schema.json).
         val categories = linkedMapOf(
-            "connector" to ("Connectors" to "Integrations that bind onec to an external system."),
+            "connector" to ("Connectors" to "Integrations that bind onno to an external system."),
             "spi" to ("SPI implementations" to "Pluggable implementations of framework contracts (storage, mail, auth, …)."),
             "ui" to ("UI extensions" to "Custom widgets, pages, and actions."),
             "skill" to ("Agent skills & plugins" to "Skills/plugins that make AI agents good at a domain."),
@@ -150,8 +149,8 @@ tasks.register("generateIntegrationsDoc") {
         sb.appendLine()
         sb.appendLine("# Community integrations")
         sb.appendLine()
-        sb.appendLine("Third-party integrations the community has built on onec-framework. These projects are")
-        sb.appendLine("maintained by their authors and are not endorsed by the onec-framework team — review before use.")
+        sb.appendLine("Third-party integrations the community has built on onno-framework. These projects are")
+        sb.appendLine("maintained by their authors and are not endorsed by the onno-framework team — review before use.")
         sb.appendLine()
         sb.appendLine("> **Want to add yours?** Build it with [docs/EXTENDING.md](docs/EXTENDING.md), then add an entry")
         sb.appendLine("> to [`community/registry.json`](community/registry.json) and run `./gradlew generateIntegrationsDoc`.")
@@ -173,7 +172,7 @@ tasks.register("generateIntegrationsDoc") {
                 sb.appendLine()
                 sb.appendLine(meta.second)
                 sb.appendLine()
-                sb.appendLine("| Name | Description | Install | onec | License | Status |")
+                sb.appendLine("| Name | Description | Install | onno | License | Status |")
                 sb.appendLine("| --- | --- | --- | --- | --- | --- |")
                 for (row in rows) {
                     val name = row["name"] as? String ?: ""
@@ -183,7 +182,7 @@ tasks.register("generateIntegrationsDoc") {
                     val install = if (!coords.isNullOrBlank()) "`${coords}`" else "—"
                     sb.appendLine(
                         "| $nameCell | ${cell(row["description"])} | $install | " +
-                            "${cell(row["onecVersion"])} | ${cell(row["license"])} | ${cell(row["status"])} |"
+                            "${cell(row["onnoVersion"])} | ${cell(row["license"])} | ${cell(row["status"])} |"
                     )
                 }
                 sb.appendLine()
@@ -213,11 +212,11 @@ tasks.register("generateIntegrationsDoc") {
 val configDocFile = file("docs/CONFIGURATION.md")
 val configNotesDir = file("docs/_config")
 
-// Render order + human section titles. One entry per published starter that owns `onec.*` props.
+// Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
-    "onec-framework-starter", "onec-ui-starter", "onec-auth-starter", "onec-mcp-starter",
-    "onec-import-starter", "onec-cluster-starter", "onec-kafka-starter", "onec-mail-starter",
-    "onec-print-starter", "onec-desktop-starter",
+    "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
+    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter", "onno-mail-starter",
+    "onno-print-starter", "onno-desktop-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each
@@ -238,20 +237,20 @@ configure(subprojects.filter { it.name in configModuleProjects }) {
     }
 }
 val configModuleTitles = mapOf(
-    "onec-framework-starter" to "Core — `onec-framework-starter` (`OnecProperties`, prefix `onec`)",
-    "onec-ui-starter" to "UI — `onec-ui-starter` (`UiProperties` prefix `onec.ui`, `MediaProperties` prefix `onec.media`, `CommentProperties` prefix `onec.comments`)",
-    "onec-auth-starter" to "Auth — `onec-auth-starter` (`OnecAuthProperties`, prefix `onec.auth`)",
-    "onec-mcp-starter" to "MCP — `onec-mcp-starter` (`OnecMcpProperties`, prefix `onec.mcp`)",
-    "onec-import-starter" to "Import — `onec-import-starter` (`OnecImportProperties`, prefix `onec.import`)",
-    "onec-cluster-starter" to "Cluster — `onec-cluster-starter` (`OnecClusterProperties`, prefix `onec.cluster`)",
-    "onec-kafka-starter" to "Kafka — `onec-kafka-starter` (`OnecKafkaProperties`, prefix `onec.kafka`)",
-    "onec-mail-starter" to "Mail — `onec-mail-starter` (`MailProperties`, prefix `onec.mail`)",
-    "onec-print-starter" to "Print — `onec-print-starter` (`PrintProperties`, prefix `onec.print`)",
-    "onec-desktop-starter" to "Desktop — `onec-desktop-starter` (`DesktopProperties`, prefix `onec.desktop`)",
+    "onno-framework-starter" to "Core — `onno-framework-starter` (`OnnoProperties`, prefix `onno`)",
+    "onno-ui-starter" to "UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)",
+    "onno-auth-starter" to "Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)",
+    "onno-mcp-starter" to "MCP — `onno-mcp-starter` (`OnnoMcpProperties`, prefix `onno.mcp`)",
+    "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",
+    "onno-cluster-starter" to "Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)",
+    "onno-kafka-starter" to "Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)",
+    "onno-mail-starter" to "Mail — `onno-mail-starter` (`MailProperties`, prefix `onno.mail`)",
+    "onno-print-starter" to "Print — `onno-print-starter` (`PrintProperties`, prefix `onno.print`)",
+    "onno-desktop-starter" to "Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)",
 )
 
 // Collapse a fully-qualified type to readable simple names: java.util.List<java.lang.String> -> List<String>,
-// com.onec.auth.OnecAuthProperties$Mode -> Mode. Only identifier runs are rewritten; <,> are kept.
+// su.onno.auth.OnnoAuthProperties$Mode -> Mode. Only identifier runs are rewritten; <,> are kept.
 fun simplifyConfigType(type: String?): String {
     if (type.isNullOrBlank()) return ""
     return Regex("[A-Za-z0-9_.$]+").replace(type) { m -> m.value.substringAfterLast('.').substringAfterLast('$') }
@@ -312,7 +311,7 @@ fun renderConfigDocs(): String {
         if (!json.exists()) throw GradleException("Missing config metadata for $proj ($json). Run `:$proj:classes` first.")
         val parsed = slurper.parse(json) as Map<String, Any?>
         val props = (parsed["properties"] as? List<Map<String, Any?>> ?: emptyList())
-            .filter { (it["name"] as? String)?.startsWith("onec") == true }
+            .filter { (it["name"] as? String)?.startsWith("onno") == true }
             .sortedBy { it["name"] as String }
 
         sb.append("## ").append(configModuleTitles[proj] ?: proj).append("\n\n")
@@ -386,7 +385,7 @@ tasks.register<Javadoc>("aggregateJavadoc") {
     classpath = files(mains.map { it.compileClasspath }, mains.map { it.output })
     subprojects.filter { it.name in publishedModules.keys }.forEach { dependsOn("${it.path}:classes") }
 
-    title = "onec-framework API"
+    title = "onno-framework API"
     (options as StandardJavadocDocletOptions).apply {
         encoding = "UTF-8"
         addStringOption("Xdoclint:none", "-quiet")

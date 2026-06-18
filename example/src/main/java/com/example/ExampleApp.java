@@ -4,7 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * "Rentals ERP" — the reference application for onec-framework. It models a small holiday-rental
+ * "Rentals ERP" — the reference application for onno-framework. It models a small holiday-rental
  * business by declaring typed Java metadata; the framework generates the schema, REST API, DivKit
  * UI, MCP tools, and migration history from it. Nothing here hand-writes tables, DTOs, or CRUD
  * controllers.

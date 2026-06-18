@@ -1,6 +1,6 @@
 package com.example.domain.enumerations;
 
-import com.onec.annotations.Enumeration;
+import su.onno.annotations.Enumeration;
 
 /**
  * Kind of government ID held on a {@link com.example.domain.catalogs.Client} — a code-controlled

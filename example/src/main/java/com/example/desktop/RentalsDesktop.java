@@ -1,7 +1,7 @@
 package com.example.desktop;
 
-import com.onec.desktop.DesktopApp;
-import com.onec.desktop.DesktopSpec;
+import su.onno.desktop.DesktopApp;
+import su.onno.desktop.DesktopSpec;
 
 import org.springframework.stereotype.Component;
 

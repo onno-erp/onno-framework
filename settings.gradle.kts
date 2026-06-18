@@ -1,26 +1,26 @@
 pluginManagement {
-    // The desktop packaging plugin lives in a sibling build so `id("com.onec.desktop")`
+    // The desktop packaging plugin lives in a sibling build so `id("su.onno.desktop")`
     // resolves locally without first publishing it to a repository.
-    includeBuild("onec-desktop-gradle-plugin")
+    includeBuild("onno-desktop-gradle-plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()
     }
 }
 
-rootProject.name = "onec-framework"
+rootProject.name = "onno-framework"
 
 include(
-    "onec-framework",
-    "onec-framework-starter",
-    "onec-ui-starter",
-    "onec-auth-starter",
-    "onec-mcp-starter",
-    "onec-import-starter",
-    "onec-cluster-starter",
-    "onec-kafka-starter",
-    "onec-print-starter",
-    "onec-mail-starter",
-    "onec-desktop-starter",
+    "onno-framework",
+    "onno-framework-starter",
+    "onno-ui-starter",
+    "onno-auth-starter",
+    "onno-mcp-starter",
+    "onno-import-starter",
+    "onno-cluster-starter",
+    "onno-kafka-starter",
+    "onno-print-starter",
+    "onno-mail-starter",
+    "onno-desktop-starter",
     "example"
 )

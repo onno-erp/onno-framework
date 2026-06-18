@@ -2,7 +2,7 @@
 layout: home
 
 hero:
-  name: onec-framework
+  name: onno-framework
   text: Model the business. Generate the rest.
   tagline: >-
     Reusable Spring Boot starters that turn typed Java metadata — catalogs, documents, registers —
@@ -16,7 +16,7 @@ hero:
       link: /CONFIGURATION
     - theme: alt
       text: View on GitHub
-      link: https://github.com/onec-erp/onec-framework
+      link: https://github.com/onno-erp/onno-framework
 
 features:
   - icon: 🗂️
@@ -35,19 +35,19 @@ features:
 
 ## Get started
 
-Add the starter (Java 21, Spring Boot 3.4.x). Packages are `com.onec.*`; the Maven group is
-`io.github.onec-erp` (open core, Apache-2.0).
+Add the starter (Java 21, Spring Boot 3.4.x). Packages are `su.onno.*`; the Maven group is
+`su.onno` (open core, Apache-2.0).
 
 ```xml
 <dependency>
-  <groupId>io.github.onec-erp</groupId>
-  <artifactId>onec-framework-starter</artifactId>
+  <groupId>su.onno</groupId>
+  <artifactId>onno-framework-starter</artifactId>
   <version>0.10.0</version>
 </dependency>
 ```
 
 Then read **[Architecture](/ARCHITECTURE)** for how it fits together, or the
-**[handoff guide for building an ERP on the published libraries](https://github.com/onec-erp/onec-framework/blob/main/BUILDING_ERPS_WITH_AGENTS.md)**.
+**[handoff guide for building an ERP on the published libraries](https://github.com/onno-erp/onno-framework/blob/main/BUILDING_ERPS_WITH_AGENTS.md)**.
 
 ## How these docs are built
 
@@ -61,4 +61,4 @@ reference can't drift from the code:
 | Architecture, guides | maintained by hand | written Markdown |
 
 Changing a property? Edit its Javadoc and run `./gradlew generateConfigDocs` — never hand-edit the
-table. See [Keeping docs in sync](https://github.com/onec-erp/onec-framework/blob/main/AGENTS.md#keeping-docs-in-sync).
+table. See [Keeping docs in sync](https://github.com/onno-erp/onno-framework/blob/main/AGENTS.md#keeping-docs-in-sync).

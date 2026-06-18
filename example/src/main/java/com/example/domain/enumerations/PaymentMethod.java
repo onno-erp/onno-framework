@@ -1,6 +1,6 @@
 package com.example.domain.enumerations;
 
-import com.onec.annotations.Enumeration;
+import su.onno.annotations.Enumeration;
 
 /**
  * How a {@link com.example.domain.documents.Payment} was made — a code-controlled

@@ -1,7 +1,7 @@
 package com.example.jobs;
 
 import com.example.domain.constants.AutoArchiveEnabled;
-import com.onec.repository.ConstantManager;
+import su.onno.repository.ConstantManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

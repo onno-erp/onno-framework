@@ -1,7 +1,7 @@
-onec-framework
-Copyright 2026 onec-erp
+onno-framework
+Copyright 2026 onno-erp
 
-This product includes software developed at onec-erp.
+This product includes software developed at onno-erp.
 
 Licensed under the Apache License, Version 2.0. See the LICENSE file in the
 root of this repository for the full license text.
@@ -9,11 +9,11 @@ root of this repository for the full license text.
 ------------------------------------------------------------------------------
 Open-core boundary
 ------------------------------------------------------------------------------
-The modules published from this repository under the `com.onec` group are
+The modules published from this repository under the `su.onno` group are
 licensed under Apache-2.0.
 
-Separately licensed commercial modules (published under the `com.onec.enterprise`
-group from a different repository — e.g. onec-enterprise-auth-starter,
-onec-guesty-starter, onec-hospedajes-starter) are NOT covered by this license
-and are governed by the onec Commercial License. They are not part of this
+Separately licensed commercial modules (published under the `su.onno.enterprise`
+group from a different repository — e.g. onno-enterprise-auth-starter,
+onno-guesty-starter, onno-hospedajes-starter) are NOT covered by this license
+and are governed by the onno Commercial License. They are not part of this
 distribution.

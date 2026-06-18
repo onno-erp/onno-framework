@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/onec-erp/onec-framework/blob/main/community/registry.schema.json",
-  "title": "onec-framework community registry",
+  "$id": "https://github.com/onno-erp/onno-framework/blob/main/community/registry.schema.json",
+  "title": "onno-framework community registry",
   "description": "Schema for community/registry.json — the source of truth for the community integrations catalog rendered into INTEGRATIONS.md.",
   "type": "object",
   "additionalProperties": false,
@@ -27,7 +27,7 @@
         "author",
         "repository",
         "category",
-        "onecVersion",
+        "onnoVersion",
         "license",
         "status"
       ],
@@ -36,7 +36,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 80,
-          "description": "Display name of the integration, e.g. \"onec-shopify-starter\"."
+          "description": "Display name of the integration, e.g. \"onno-shopify-starter\"."
         },
         "description": {
           "type": "string",
@@ -71,10 +71,10 @@
           "pattern": "^[^:\\s]+:[^:\\s]+(:[^:\\s]+)?$",
           "description": "Maven coordinates as group:artifact[:version]. Omit for skills/plugins that aren't published to Maven."
         },
-        "onecVersion": {
+        "onnoVersion": {
           "type": "string",
           "minLength": 1,
-          "description": "onec-framework version (or range) the integration is built and tested against, e.g. \"0.10.x\" or \">=0.10.0\"."
+          "description": "onno-framework version (or range) the integration is built and tested against, e.g. \"0.10.x\" or \">=0.10.0\"."
         },
         "license": {
           "type": "string",

@@ -1,0 +1,263 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 92%;
+    --input: 0 0% 92%;
+    --ring: 0 0% 9%;
+    --radius: 0.5rem;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    /* Categorical chart palette (data widgets). Ordered so adjacent series stay
+       distinguishable; --chart-1 is also the default single-series accent. The
+       Java DSL can override per widget via config("colors", "..."). */
+    --chart-1: 222 83% 58%;
+    --chart-2: 152 60% 42%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 348 83% 58%;
+    --chart-5: 262 70% 60%;
+    --chart-6: 190 80% 42%;
+    --chart-7: 24 90% 55%;
+    --chart-8: 322 75% 58%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 4%;
+    --sidebar-primary: 0 0% 9%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 92%;
+    --sidebar-ring: 0 0% 9%;
+  }
+
+  .dark {
+    --background: 0 0% 5%;
+    --foreground: 0 0% 93%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 93%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 93%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 93%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 93%;
+    --destructive: 0 63% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 0 0% 80%;
+    --radius: 0.5rem;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    /* Lifted a touch in lightness/saturation so the palette reads on the dark canvas. */
+    --chart-1: 222 90% 66%;
+    --chart-2: 152 55% 52%;
+    --chart-3: 38 92% 58%;
+    --chart-4: 348 85% 66%;
+    --chart-5: 262 78% 70%;
+    --chart-6: 190 75% 52%;
+    --chart-7: 24 90% 62%;
+    --chart-8: 322 78% 66%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 60%;
+    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 93%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 0 0% 80%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
+  /* iOS auto-zooms in on tap when the focused input's font-size is below 16px,
+     and never zooms back out. Floor form controls at 16px on touch devices to
+     suppress the zoom without disabling user-scalable globally. */
+  @media (hover: none) and (pointer: coarse) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
+  /* Subtle, overlay-style scrollbars everywhere (the scroll panes — list islands,
+     sidebar, content — otherwise show the chunky default bar, which reads as a loud
+     light slab in dark mode). Scrolling still works; only the bar's appearance changes.
+     Firefox uses scrollbar-width/-color; WebKit/Chromium uses the ::-webkit-scrollbar
+     pseudo-elements. The thumb is a translucent neutral so it works in both themes and
+     brightens on hover. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(0 0% 50% / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(0 0% 50% / 0.35);
+    border-radius: 9999px;
+    /* Padding-box border insets the thumb so it reads as a thin pill, not a full-width slab. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(0 0% 50% / 0.55);
+  }
+}
+
+@layer utilities {
+  .animate-in-page {
+    animation: fadeSlideIn 0.15s ease-out;
+  }
+}
+
+/* DivKit tabs slide their content panel over 0.3s when switching tabs (the tabs
+   "swiper_animated" modifier; the base swiper is already 0s). We want Balance/Movements
+   to swap instantly, so collapse that transition. The hashed class comes from
+   @divkitframework/divkit's tabs component — revisit if the DivKit version is bumped. */
+.divkit-763f3 {
+  transition-duration: 0s !important;
+}
+
+@layer utilities {
+  .divkit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+  .divkit-header-row {
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* DivKit mounts div-custom blocks (chart/calendar/kanban widgets, the entity form)
+   into these elements; they're inline by default, so make them fill the cell DivKit
+   places them in. DivKit marks action-less custom blocks pointer-events:none, which
+   (being inherited) would disable every control inside the React subtree — so restore
+   it here; the React widgets/forms handle their own clicks/drags/hovers. */
+onno-widget,
+onno-form {
+  display: block;
+  width: 100%;
+  pointer-events: auto;
+}
+
+/* DivKit renders its text blocks with user-select:none (see client.css), so a record's
+   values — codes, numbers, references, error messages — can't be highlighted to copy.
+   Re-enable text selection for the rendered content surface (detail cards, list cells,
+   headers). !important beats DivKit's rule regardless of stylesheet order/specificity.
+   Selection doesn't suppress a click, so list rows still open on click; the row
+   right-click menu yields to an active selection (see divkit-view's contextmenu guard). */
+.onno-surface,
+.onno-surface * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Nav/account glyphs (onno-icon) are fixed-size, not full-width: center the lucide
+   SVG inside the size×size cell DivKit gives the block. */
+onno-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+/* List rows carry the "row" DivKit extension, which stamps [data-onno-row]. Highlight
+   the line on hover so it reads as clickable. !important overrides DivKit's inline
+   zebra-stripe background on alternating rows. The tint is a low-alpha wash of the brand
+   primary, so a branded app hovers in its accent and an unbranded one keeps the neutral
+   near-black/white (--primary defaults to a near-black/near-white per mode). */
+[data-onno-row] {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+[data-onno-row]:hover {
+  background-color: hsl(var(--primary) / 0.1) !important;
+}
+.dark [data-onno-row]:hover {
+  background-color: hsl(var(--primary) / 0.18) !important;
+}
+
+/* ---- MapLibre: theme the popup + keep attribution to a small ⓘ -------------------------- */
+/* MapLibre's popup is hardcoded white; re-skin it with the theme tokens so a popup title
+   (theme foreground) stays readable in dark mode instead of near-white on white. */
+.maplibregl-popup-content {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+  padding: 10px 12px;
+}
+/* The little triangle that points at the marker must match the popup background per side. */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip { border-top-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-left .maplibregl-popup-tip { border-right-color: hsl(var(--popover)); }
+.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: hsl(var(--popover)); }
+.maplibregl-popup-close-button { color: hsl(var(--muted-foreground)); }
+
+/* Attribution: a small, unobtrusive ⓘ by default that reveals the credit line on hover.
+   Hover-based (not the default click-to-toggle) so it's collapsed on load every time. */
+.maplibregl-ctrl-attrib.maplibregl-compact { min-height: 24px; background: hsl(var(--popover) / 0.85); }
+.maplibregl-ctrl-attrib.maplibregl-compact .maplibregl-ctrl-attrib-inner { display: none; }
+.maplibregl-ctrl-attrib.maplibregl-compact:hover .maplibregl-ctrl-attrib-inner { display: block; }
+.maplibregl-ctrl-attrib { font-size: 10px; }
+.maplibregl-ctrl-attrib a { color: hsl(var(--muted-foreground)); }

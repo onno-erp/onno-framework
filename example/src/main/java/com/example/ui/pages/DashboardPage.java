@@ -4,8 +4,8 @@ import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
 import com.example.domain.registers.RevenueRegister;
-import com.onec.ui.Page;
-import com.onec.ui.PageBuilder;
+import su.onno.ui.Page;
+import su.onno.ui.PageBuilder;
 
 import org.springframework.stereotype.Component;
 

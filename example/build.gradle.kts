@@ -2,18 +2,18 @@ plugins {
     application
     id("org.springframework.boot")
     id("io.spring.dependency-management")
-    id("com.onec.desktop")
+    id("su.onno.desktop")
 }
 
 dependencies {
-    implementation(project(":onec-framework-starter"))
-    implementation(project(":onec-ui-starter"))
-    implementation(project(":onec-auth-starter"))
-    implementation(project(":onec-mcp-starter"))
-    implementation(project(":onec-import-starter"))
-    implementation(project(":onec-print-starter"))
-    implementation(project(":onec-mail-starter"))
-    implementation(project(":onec-desktop-starter"))
+    implementation(project(":onno-framework-starter"))
+    implementation(project(":onno-ui-starter"))
+    implementation(project(":onno-auth-starter"))
+    implementation(project(":onno-mcp-starter"))
+    implementation(project(":onno-import-starter"))
+    implementation(project(":onno-print-starter"))
+    implementation(project(":onno-mail-starter"))
+    implementation(project(":onno-desktop-starter"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("com.h2database:h2")
@@ -28,7 +28,7 @@ application {
 
 // Native desktop bundle: `./gradlew :example:packageDesktop`.
 // Requires a Rust toolchain + cargo-tauri.
-onecDesktop {
+onnoDesktop {
     productName.set("Rentals ERP")
     identifier.set("com.example.rentals")
     iconSource.set(layout.projectDirectory.file("src/main/desktop/icon.png"))

@@ -17,8 +17,8 @@ Thumbs.db
 data/
 
 # Frontend build artifacts
-onec-ui-starter/src/main/frontend/dist/
-onec-ui-starter/src/main/frontend/node_modules/
+onno-ui-starter/src/main/frontend/dist/
+onno-ui-starter/src/main/frontend/node_modules/
 *.tsbuildinfo
 
 # Kotlin

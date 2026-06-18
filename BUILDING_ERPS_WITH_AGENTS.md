@@ -1,23 +1,23 @@
-# Building ERPs With onec-framework And AI Agents
+# Building ERPs With onno-framework And AI Agents
 
-This guide is for teams and AI coding agents using the published `onec-framework` libraries to build an ERP application in a separate project.
+This guide is for teams and AI coding agents using the published `onno-framework` libraries to build an ERP application in a separate project.
 
 Use this file as the agent handoff document in the consuming ERP repo. It explains how to install the libraries, how to model business domains, and how to verify that the generated ERP surface is coherent.
 
-> **Tip — install the `onec` skill.** For the best results with Claude Code, install the skill that
+> **Tip — install the `onno` skill.** For the best results with Claude Code, install the skill that
 > packages this guidance as an always-available expert playbook (this framework's repo doubles as a
 > plugin marketplace):
 >
 > ```text
-> /plugin marketplace add onec-erp/onec-framework
-> /plugin install onec@onec-framework
+> /plugin marketplace add onno-erp/onno-framework
+> /plugin install onno@onno-framework
 > ```
 >
 > It auto-loads when you model entities, write posting/validation, or call the runtime API.
 
 ## What The Framework Does
 
-`onec-framework` lets an ERP project describe business concepts directly in Java:
+`onno-framework` lets an ERP project describe business concepts directly in Java:
 
 - catalogs for master data
 - documents for business transactions
@@ -32,22 +32,22 @@ Do not start from database tables or controllers. Start from the business model.
 
 ## Add The Libraries
 
-Released modules are on **Maven Central** under the `io.github.onec-erp` group. Consumers need no
-credentials and no custom repository — just `mavenCentral()`. (The Java packages are still `com.onec.*`,
-so your imports don't change; only the Maven coordinate uses `io.github.onec-erp`.) Pin the version in
+Released modules are on **Maven Central** under the `su.onno` group. Consumers need no
+credentials and no custom repository — just `mavenCentral()`. (The Java packages are still `su.onno.*`,
+so your imports don't change; only the Maven coordinate uses `su.onno`.) Pin the version in
 one place and pick the latest release from
-[Maven Central](https://central.sonatype.com/namespace/io.github.onec-erp):
+[Maven Central](https://central.sonatype.com/namespace/su.onno):
 
 ```kotlin
-val onecVersion = "<latest>"   // https://central.sonatype.com/namespace/io.github.onec-erp
+val onnoVersion = "<latest>"   // https://central.sonatype.com/namespace/su.onno
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    implementation("io.github.onec-erp:onec-framework-starter:$onecVersion")
-    implementation("io.github.onec-erp:onec-ui-starter:$onecVersion")
+    implementation("su.onno:onno-framework-starter:$onnoVersion")
+    implementation("su.onno:onno-ui-starter:$onnoVersion")
 
     runtimeOnly("com.h2database:h2")
 }
@@ -56,25 +56,25 @@ dependencies {
 To consume an unreleased build, run `./gradlew publishToMavenLocal` in the framework repo and add
 `mavenLocal()` (it publishes `-SNAPSHOT`).
 
-Optional starters (same group and `$onecVersion`):
+Optional starters (same group and `$onnoVersion`):
 
 ```kotlin
-implementation("io.github.onec-erp:onec-auth-starter:$onecVersion")    // security: in-memory, OIDC/SSO, JWT
-implementation("io.github.onec-erp:onec-mcp-starter:$onecVersion")     // MCP server for AI agents
-implementation("io.github.onec-erp:onec-import-starter:$onecVersion")  // CSV import
-implementation("io.github.onec-erp:onec-print-starter:$onecVersion")   // PDF / print
-implementation("io.github.onec-erp:onec-mail-starter:$onecVersion")    // transactional email
-implementation("io.github.onec-erp:onec-kafka-starter:$onecVersion")   // outbox → Kafka
-implementation("io.github.onec-erp:onec-desktop-starter:$onecVersion") // native desktop
+implementation("su.onno:onno-auth-starter:$onnoVersion")    // security: in-memory, OIDC/SSO, JWT
+implementation("su.onno:onno-mcp-starter:$onnoVersion")     // MCP server for AI agents
+implementation("su.onno:onno-import-starter:$onnoVersion")  // CSV import
+implementation("su.onno:onno-print-starter:$onnoVersion")   // PDF / print
+implementation("su.onno:onno-mail-starter:$onnoVersion")    // transactional email
+implementation("su.onno:onno-kafka-starter:$onnoVersion")   // outbox → Kafka
+implementation("su.onno:onno-desktop-starter:$onnoVersion") // native desktop
 ```
 
 Commercial vertical connectors ship from the separately licensed
-[onec-enterprise](https://github.com/onec-erp/onec-enterprise) repository under the
-`com.onec.enterprise` group (Guesty, SES.HOSPEDAJES, Tochka), versioned independently of the core:
+[onno-enterprise](https://github.com/onno-erp/onno-enterprise) repository under the
+`su.onno.enterprise` group (Guesty, SES.HOSPEDAJES, Tochka), versioned independently of the core:
 
 ```kotlin
-implementation("com.onec.enterprise:onec-guesty-starter:<enterprise-version>")
-implementation("com.onec.enterprise:onec-hospedajes-starter:<enterprise-version>")
+implementation("su.onno.enterprise:onno-guesty-starter:<enterprise-version>")
+implementation("su.onno.enterprise:onno-hospedajes-starter:<enterprise-version>")
 ```
 
 ## Minimal Application Config
@@ -89,7 +89,7 @@ spring:
     username: sa
     password:
 
-onec:
+onno:
   scan-packages:
     - com.acme.erp
   auth:
@@ -97,10 +97,10 @@ onec:
       - { username: admin, password: admin, roles: [ADMIN] }
 ```
 
-`onec.scan-packages` (note: **not** `onec.base-packages`) points at the package where catalogs,
+`onno.scan-packages` (note: **not** `onno.base-packages`) points at the package where catalogs,
 documents, registers, constants, jobs, layouts, pages, and entity views live. It is optional — if you
-omit it, the framework scans from your `@SpringBootApplication` package. The `onec.base-packages` name
-only exists on the mail and print starters (`onec.mail.base-packages` / `onec.print.base-packages`)
+omit it, the framework scans from your `@SpringBootApplication` package. The `onno.base-packages` name
+only exists on the mail and print starters (`onno.mail.base-packages` / `onno.print.base-packages`)
 for template scanning.
 
 ## Recommended Project Layout
@@ -387,7 +387,7 @@ For a running app, introspect through the real generated endpoints. Everything u
 **authenticated** (log in with a JSON `POST /api/auth/login` to get a session cookie) and `{name}` is
 the entity's **display name** (e.g. `Sales Orders`), not the Java class name. **There is no anonymous
 `/api/ui/metadata/manifest` endpoint** — use the generated endpoints directly, or the MCP
-`describe_metadata` tool from `onec-mcp-starter` for a model overview:
+`describe_metadata` tool from `onno-mcp-starter` for a model overview:
 
 ```text
 GET /api/catalogs/{name}                       list a catalog

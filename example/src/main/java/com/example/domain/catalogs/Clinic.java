@@ -1,9 +1,9 @@
 package com.example.domain.catalogs;
 
-import com.onec.annotations.AccessControl;
-import com.onec.annotations.Attribute;
-import com.onec.annotations.Catalog;
-import com.onec.model.CatalogObject;
+import su.onno.annotations.AccessControl;
+import su.onno.annotations.Attribute;
+import su.onno.annotations.Catalog;
+import su.onno.model.CatalogObject;
 
 import lombok.Getter;
 import lombok.Setter;

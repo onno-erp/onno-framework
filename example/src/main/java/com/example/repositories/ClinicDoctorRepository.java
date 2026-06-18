@@ -1,7 +1,7 @@
 package com.example.repositories;
 
 import com.example.domain.catalogs.ClinicDoctor;
-import com.onec.repository.CatalogRepository;
+import su.onno.repository.CatalogRepository;
 
 public interface ClinicDoctorRepository extends CatalogRepository<ClinicDoctor> {
 }

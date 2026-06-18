@@ -39,19 +39,19 @@ f.field("photo").widget("image")      // single image
 Legacy records that still hold a base64 `data:` URL keep rendering, so the switch from base64 to
 binary upload is backward compatible — no migration required.
 
-## Configuration (`onec.media.*`)
+## Configuration (`onno.media.*`)
 
 | Property | Default | Meaning |
 | --- | --- | --- |
-| `onec.media.enabled` | `true` | Wire the endpoint and the default filesystem storage. |
-| `onec.media.max-file-size` | `10MB` | Largest accepted upload. Also raises Spring's 1 MB multipart default to match. |
-| `onec.media.allowed-content-types` | _(empty = any)_ | Exact (`image/png`) or wildcard-subtype (`image/*`) types to accept. |
-| `onec.media.public-base-path` | `/api/media` | URL prefix the filesystem backend builds reference URLs from. |
-| `onec.media.filesystem.directory` | `${java.io.tmpdir}/onec-media` | Where the filesystem backend writes. Set an absolute, persistent path in production. |
+| `onno.media.enabled` | `true` | Wire the endpoint and the default filesystem storage. |
+| `onno.media.max-file-size` | `10MB` | Largest accepted upload. Also raises Spring's 1 MB multipart default to match. |
+| `onno.media.allowed-content-types` | _(empty = any)_ | Exact (`image/png`) or wildcard-subtype (`image/*`) types to accept. |
+| `onno.media.public-base-path` | `/api/media` | URL prefix the filesystem backend builds reference URLs from. |
+| `onno.media.filesystem.directory` | `${java.io.tmpdir}/onno-media` | Where the filesystem backend writes. Set an absolute, persistent path in production. |
 
 ## Pluggable storage (the `MediaStorage` SPI)
 
-`com.onec.ui.media.MediaStorage` is the backend SPI:
+`su.onno.ui.media.MediaStorage` is the backend SPI:
 
 ```java
 StoredMedia store(InputStream content, String filename, String contentType, long size);

@@ -1,0 +1,209 @@
+package su.onno.ui;
+
+import su.onno.metadata.AccumulationRegisterDescriptor;
+import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.DocumentDescriptor;
+import su.onno.metadata.InformationRegisterDescriptor;
+import su.onno.metadata.MetadataRegistry;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.lang.reflect.Method;
+import java.security.Principal;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+public class UiAccessService {
+
+    /** The role that bypasses all per-entity read/write checks. */
+    private static final String SUPERUSER_ROLE = "ADMIN";
+
+    private final MetadataRegistry registry;
+
+    public UiAccessService(MetadataRegistry registry) {
+        this.registry = registry;
+    }
+
+    public boolean canRead(Principal principal, CatalogDescriptor descriptor) {
+        return hasAnyRole(principal, descriptor.readRoles());
+    }
+
+    public boolean canWrite(Principal principal, CatalogDescriptor descriptor) {
+        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+    }
+
+    public boolean canRead(Principal principal, DocumentDescriptor descriptor) {
+        return hasAnyRole(principal, descriptor.readRoles());
+    }
+
+    public boolean canWrite(Principal principal, DocumentDescriptor descriptor) {
+        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+    }
+
+    public boolean canRead(Principal principal, AccumulationRegisterDescriptor descriptor) {
+        return hasAnyRole(principal, descriptor.readRoles());
+    }
+
+    public boolean canWrite(Principal principal, AccumulationRegisterDescriptor descriptor) {
+        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+    }
+
+    public boolean canRead(Principal principal, InformationRegisterDescriptor descriptor) {
+        return hasAnyRole(principal, descriptor.readRoles());
+    }
+
+    public void requireRead(Principal principal, CatalogDescriptor descriptor) {
+        if (!canRead(principal, descriptor)) throw forbidden("catalog", descriptor.logicalName());
+    }
+
+    public void requireWrite(Principal principal, CatalogDescriptor descriptor) {
+        if (!canWrite(principal, descriptor)) throw forbidden("catalog", descriptor.logicalName());
+    }
+
+    public void requireRead(Principal principal, DocumentDescriptor descriptor) {
+        if (!canRead(principal, descriptor)) throw forbidden("document", descriptor.logicalName());
+    }
+
+    public void requireWrite(Principal principal, DocumentDescriptor descriptor) {
+        if (!canWrite(principal, descriptor)) throw forbidden("document", descriptor.logicalName());
+    }
+
+    public void requireRead(Principal principal, AccumulationRegisterDescriptor descriptor) {
+        if (!canRead(principal, descriptor)) throw forbidden("register", descriptor.logicalName());
+    }
+
+    public void requireRead(Principal principal, InformationRegisterDescriptor descriptor) {
+        if (!canRead(principal, descriptor)) throw forbidden("information register", descriptor.logicalName());
+    }
+
+    public boolean canRead(Principal principal, String type, String name) {
+        // {name} arrives as the route segment (e.g. "properties"), not the descriptor's display
+        // name ("Properties"). Resolve it the same case-/separator-insensitive way the generic
+        // controllers and query services do (see CatalogQueryService), or a perfectly-readable
+        // entity 403s just because its display name isn't already lower-cased. Fixes a 403 that hit
+        // every caller (ADMIN included) on the comment read check (#127).
+        String normalized = normalizeName(name);
+        return switch (type) {
+            case "catalog" -> registry.allCatalogs().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> canRead(principal, d))
+                    .orElse(false);
+            case "document" -> registry.allDocuments().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> canRead(principal, d))
+                    .orElse(false);
+            case "register" -> registry.allRegisters().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> canRead(principal, d))
+                    .orElse(false);
+            default -> false;
+        };
+    }
+
+    /** Strip spaces/underscores and lower-case, matching the generic controllers' {name} lookup. */
+    private static String normalizeName(String name) {
+        return name == null ? "" : name.replace(" ", "").replace("_", "").toLowerCase();
+    }
+
+    /**
+     * The normalized roles granted to the caller. Authorities are read off the request's
+     * {@code Authentication} reflectively, because this module deliberately does not depend on
+     * Spring Security — only its runtime presence.
+     *
+     * <p>The {@link Principal} that Spring injects into a controller is not guaranteed to be the
+     * authority-bearing {@code Authentication}: depending on the auth backend it can be a bare
+     * {@link Principal}, a {@code UserDetails}/{@code OidcUser}, or otherwise expose no readable
+     * {@code getAuthorities()}. When the injected principal yields nothing we fall back to the
+     * authenticated token held in the {@code SecurityContext}, which is the canonical source of
+     * authorities for the in-flight request. Without this fallback, write checks (the only callers
+     * of {@code requireWrite}) 403 even privileged users, including {@code ADMIN}. See issue #54.
+     */
+    public Set<String> roles(Principal principal) {
+        Set<String> roles = authoritiesOf(principal);
+        if (roles.isEmpty()) {
+            roles = authoritiesOf(currentAuthentication());
+        }
+        return roles;
+    }
+
+    /** Reflectively read {@code getAuthorities().getAuthority()} off any object, or empty if absent. */
+    private static Set<String> authoritiesOf(Object source) {
+        Set<String> roles = new LinkedHashSet<>();
+        if (source == null) return roles;
+        try {
+            Object result = invokePublic(source, "getAuthorities");
+            if (result instanceof Collection<?> collection) {
+                for (Object authority : collection) {
+                    Object value = invokePublic(authority, "getAuthority");
+                    if (value instanceof String role) {
+                        roles.add(normalizeRole(role));
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+        return roles;
+    }
+
+    /** The current request's {@code Authentication} from Spring Security's context, or null. */
+    private static Object currentAuthentication() {
+        try {
+            Class<?> holder = Class.forName("org.springframework.security.core.context.SecurityContextHolder");
+            Object context = holder.getMethod("getContext").invoke(null);
+            if (context == null) return null;
+            // Invoke through the SecurityContext interface so a non-public context implementation
+            // class doesn't trip an IllegalAccessException.
+            Class<?> contextType = Class.forName("org.springframework.security.core.context.SecurityContext");
+            return contextType.getMethod("getAuthentication").invoke(context);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Invoke a no-arg method, tolerating authority/authentication implementations whose concrete
+     * class is not {@code public} (a public method on a package-private class otherwise throws
+     * {@link IllegalAccessException}).
+     */
+    private static Object invokePublic(Object target, String method) throws ReflectiveOperationException {
+        Method m = target.getClass().getMethod(method);
+        m.setAccessible(true);
+        return m.invoke(target);
+    }
+
+    private boolean hasAnyRole(Principal principal, List<String> requiredRoles) {
+        // Don't gate on principal != null: roles() resolves authorities from the SecurityContext
+        // when the injected principal carries none (or is absent). Deny-by-default still applies —
+        // an unauthenticated caller simply resolves to no roles.
+        Set<String> actualRoles = roles(principal);
+        // ADMIN is the superuser: it sees and edits everything regardless of
+        // per-entity role lists.
+        if (actualRoles.contains(SUPERUSER_ROLE)) return true;
+        // Deny by default: an entity with no explicit grant is invisible and
+        // uneditable to everyone but the superuser. Access is opt-in, not opt-out.
+        if (requiredRoles == null || requiredRoles.isEmpty()) return false;
+        return requiredRoles.stream()
+                .map(UiAccessService::normalizeRole)
+                .anyMatch(actualRoles::contains);
+    }
+
+    private List<String> effectiveWriteRoles(List<String> readRoles, List<String> writeRoles) {
+        return writeRoles == null || writeRoles.isEmpty() ? readRoles : writeRoles;
+    }
+
+    private static String normalizeRole(String role) {
+        String normalized = role == null ? "" : role.trim().toUpperCase(Locale.ROOT);
+        return normalized.startsWith("ROLE_") ? normalized.substring("ROLE_".length()) : normalized;
+    }
+
+    private ResponseStatusException forbidden(String type, String name) {
+        return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Current user is not allowed to access " + type + ": " + name);
+    }
+}

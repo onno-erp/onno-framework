@@ -17,13 +17,13 @@ The human-readable catalog at [`../INTEGRATIONS.md`](../INTEGRATIONS.md) is **ge
 
    ```json
    {
-     "name": "onec-shopify-starter",
-     "description": "Sync Shopify orders and products into onec catalogs and documents.",
+     "name": "onno-shopify-starter",
+     "description": "Sync Shopify orders and products into onno catalogs and documents.",
      "author": "your-github-handle",
-     "repository": "https://github.com/your-handle/onec-shopify-starter",
+     "repository": "https://github.com/your-handle/onno-shopify-starter",
      "category": "connector",
-     "coordinates": "io.github.your-handle:onec-shopify-starter",
-     "onecVersion": "0.10.x",
+     "coordinates": "io.github.your-handle:onno-shopify-starter",
+     "onnoVersion": "0.10.x",
      "license": "Apache-2.0",
      "status": "active"
    }
@@ -44,6 +44,6 @@ The human-readable catalog at [`../INTEGRATIONS.md`](../INTEGRATIONS.md) is **ge
 ## Scope
 
 This registry is for **third-party / community** integrations. Official modules
-(`io.github.onec-erp:*`) are listed in the [README](../README.md#modules); commercial connectors
-live in the separate [onec-enterprise](https://github.com/onec-erp/onec-enterprise) repo. Listed
-projects are maintained by their authors, not by the onec-framework team.
+(`su.onno:*`) are listed in the [README](../README.md#modules); commercial connectors
+live in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. Listed
+projects are maintained by their authors, not by the onno-framework team.

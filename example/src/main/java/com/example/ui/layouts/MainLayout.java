@@ -14,9 +14,9 @@ import com.example.domain.registers.BankBalanceRegister;
 import com.example.domain.registers.OccupancyRegister;
 import com.example.domain.registers.ReceivablesRegister;
 import com.example.domain.registers.RevenueRegister;
-import com.onec.ui.Layout;
-import com.onec.ui.LayoutSpec;
-import com.onec.ui.NavStyle;
+import su.onno.ui.Layout;
+import su.onno.ui.LayoutSpec;
+import su.onno.ui.NavStyle;
 
 import org.springframework.stereotype.Component;
 

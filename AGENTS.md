@@ -1,4 +1,4 @@
-# Agent Guide: Modeling Businesses With onec Framework
+# Agent Guide: Modeling Businesses With onno Framework
 
 This project is a Java/Spring framework for modeling business processes as explicit business concepts:
 catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,
@@ -15,36 +15,36 @@ to future agents that may not have the full conversation context.
 ### Current Status
 
 - The framework is **open-core**. The modules in this repo are Apache-2.0 (see [`LICENSE`](LICENSE)
-  and [`NOTICE`](NOTICE)); commercial vertical connectors live in the separate `onec-enterprise` repo.
-- Published Maven coordinates use `group = "io.github.onec-erp"` (Maven Central). The Java packages
-  are still `com.onec.*` and the desktop plugin id is `com.onec.desktop` — only the publish
+  and [`NOTICE`](NOTICE)); commercial vertical connectors live in the separate `onno-enterprise` repo.
+- Published Maven coordinates use `group = "su.onno"` (Maven Central). The Java packages
+  are still `su.onno.*` and the desktop plugin id is `su.onno.desktop` — only the publish
   coordinate changed. Releases are tag-driven (`vX.Y.Z`); the latest is in the git tags.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
-- `onec-ui-starter` builds a bundled frontend with Node 20 via Gradle.
-- The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onec.*`
+- `onno-ui-starter` builds a bundled frontend with Node 20 via Gradle.
+- The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onno.*`
   property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); a hands-on playbook with the
-  concept cheat sheet lives in the [`onec` skill](onec-plugin/skills/onec/SKILL.md).
+  concept cheat sheet lives in the [`onno` skill](onno-plugin/skills/onno/SKILL.md).
 
 ### Repo Map
 
 | Path | Role |
 | --- | --- |
-| `onec-framework` | Core annotations, metadata, schema, posting, repository contracts, UI model, and shared types. |
-| `onec-framework-starter` | Spring Boot auto-configuration for the core framework. |
-| `onec-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
-| `onec-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
-| `onec-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
-| `onec-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
-| `onec-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
-| `onec-print-starter` | Print/PDF rendering support (`@PrintTemplate`, Thymeleaf + Flying Saucer). |
-| `onec-mail-starter` | Mail templates, dispatchers, preview endpoints, and outbox relay. |
-| `onec-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
-| `onec-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
-| `onec-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
+| `onno-framework` | Core annotations, metadata, schema, posting, repository contracts, UI model, and shared types. |
+| `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
+| `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
+| `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
+| `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
+| `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
+| `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
+| `onno-print-starter` | Print/PDF rendering support (`@PrintTemplate`, Thymeleaf + Flying Saucer). |
+| `onno-mail-starter` | Mail templates, dispatchers, preview endpoints, and outbox relay. |
+| `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
+| `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
+| `onno-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
-Commercial vertical connectors (`onec-guesty-starter`, `onec-hospedajes-starter`) are licensed separately and live in the [onec-enterprise](https://github.com/onec-erp/onec-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onec-auth-starter`) stays in the open-source core.
+Commercial vertical connectors (`onno-guesty-starter`, `onno-hospedajes-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
 
 Community extensions (connectors, SPI implementations, UI add-ons, skills) are built by anyone as separate artifacts on the published core — see [docs/EXTENDING.md](docs/EXTENDING.md) for the contract and conventions, and [CONTRIBUTING.md](CONTRIBUTING.md) for how they get listed. When you build a connector for a user, you can suggest they publish and list it.
 
@@ -60,7 +60,7 @@ Community extensions (connectors, SPI implementations, UI add-ons, skills) are b
 
 The docs are part of the public surface. When you change code, update the affected docs **in the same
 change** — stale docs are how every drift bug here started (e.g. a long-gone `/api/ui/metadata/manifest`
-endpoint and an `onec.base-packages` property that never existed for the core scan). When a doc and the
+endpoint and an `onno.base-packages` property that never existed for the core scan). When a doc and the
 code disagree, the code wins: fix the doc, don't propagate the claim.
 
 **[docs/CONFIGURATION.md](docs/CONFIGURATION.md) is generated — do not hand-edit it.** Its tables are
@@ -72,17 +72,17 @@ see, that module's `META-INF/additional-spring-configuration-metadata.json` — 
 
 | If you change… | Update |
 | --- | --- |
-| an annotation, model base class, or lifecycle interface | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [`onec-plugin/skills/onec/reference/cheatsheet.md`](onec-plugin/skills/onec/reference/cheatsheet.md) |
-| a `@ConfigurationProperties` field (any `onec.*`) | edit the field's **Javadoc**, then `./gradlew generateConfigDocs` (regenerates [docs/CONFIGURATION.md](docs/CONFIGURATION.md)); update the owning module README if it documents the property |
+| an annotation, model base class, or lifecycle interface | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [`onno-plugin/skills/onno/reference/cheatsheet.md`](onno-plugin/skills/onno/reference/cheatsheet.md) |
+| a `@ConfigurationProperties` field (any `onno.*`) | edit the field's **Javadoc**, then `./gradlew generateConfigDocs` (regenerates [docs/CONFIGURATION.md](docs/CONFIGURATION.md)); update the owning module README if it documents the property |
 | a REST endpoint or its response contract | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md), and the module README |
 | the module set or open-core boundary | [README.md](README.md), this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/licensing/MODULE-SPLIT-PLAN.md](docs/licensing/MODULE-SPLIT-PLAN.md) |
 | an extension surface, naming/namespace conventions, or the community registry | [docs/EXTENDING.md](docs/EXTENDING.md), [README.md](README.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); regenerate [INTEGRATIONS.md](INTEGRATIONS.md) from [community/registry.json](community/registry.json) (`./gradlew generateIntegrationsDoc`) |
-| auth modes/endpoints, RBAC | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), `onec-auth-starter/README.md`, `onec-ui-starter/README.md` |
+| auth modes/endpoints, RBAC | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), `onno-auth-starter/README.md`, `onno-ui-starter/README.md` |
 | schema/migration or posting behaviour | this file, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | a feature that was on the roadmap | move it from "next work" to "current state" in [ROADMAP.md](ROADMAP.md) |
 
 The deepest hands-on guidance for modeling and editing the framework lives in the
-[`onec` skill](onec-plugin/skills/onec/SKILL.md); keep it aligned with these docs too.
+[`onno` skill](onno-plugin/skills/onno/SKILL.md); keep it aligned with these docs too.
 
 ### Build And Verification Commands
 
@@ -102,10 +102,10 @@ GITHUB_ACTOR=... GITHUB_TOKEN=... ./gradlew publish
 For targeted iteration:
 
 ```bash
-./gradlew :onec-framework:test
-./gradlew :onec-framework-starter:compileJava
-./gradlew :onec-ui-starter:buildFrontend
-./gradlew :onec-ui-starter:compileJava
+./gradlew :onno-framework:test
+./gradlew :onno-framework-starter:compileJava
+./gradlew :onno-ui-starter:buildFrontend
+./gradlew :onno-ui-starter:compileJava
 ```
 
 `publishToMavenLocal` is important: a build can pass with project dependencies but still fail while producing
@@ -119,15 +119,15 @@ Do not commit generated or local-only files:
 - `build/`
 - `.kotlin/`
 - `data/`
-- `onec-ui-starter/src/main/frontend/dist/`
-- `onec-ui-starter/src/main/frontend/node_modules/`
+- `onno-ui-starter/src/main/frontend/dist/`
+- `onno-ui-starter/src/main/frontend/node_modules/`
 - `*.tsbuildinfo`
 
 If a tool creates a cache that appears in `git status`, remove it unless it is intentionally part of the change.
 
 ### Publication And Consumption Expectations
 
-The reusable surface is the set of published modules under `io.github.onec-erp:*` on Maven Central.
+The reusable surface is the set of published modules under `su.onno:*` on Maven Central.
 External projects consume them with a plain `mavenCentral()` (no credentials), or from `mavenLocal()`
 (`-SNAPSHOT`) during development. Avoid requiring consumers to use `includeBuild` except for local
 desktop-plugin development.
@@ -160,7 +160,7 @@ When adding a starter, include:
 
 - Prefer a vertical slice with tests over broad refactors.
 - Add tests near the module that owns the behavior.
-- For framework behavior, test core logic in `onec-framework` and Spring wiring in the relevant starter.
+- For framework behavior, test core logic in `onno-framework` and Spring wiring in the relevant starter.
 - For public API changes, include a tiny example or README snippet so future agents see intended usage.
 - Name business concepts clearly. The UI manifest and generated APIs should read like the business domain, not
   like database plumbing.
@@ -500,7 +500,7 @@ Likely outputs:
 - annotation `context`
 - background jobs
 - outbox events
-- `onec-kafka-starter` configuration
+- `onno-kafka-starter` configuration
 - remote reference resolution plans
 
 ## Modeling Workflow
@@ -689,13 +689,13 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell; one per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
 - **`Page`** — a route whose content you compose (e.g. a dashboard): `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.custom(...)`.
-- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onec.comments.enabled` switch.
+- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
 `hint(String)` attaches optional help text to a field — surfaced in the UI as a hoverable/focusable `?` icon next to the field's label (on the edit form, the list column header, and the read-only detail view). Custom dashboard components carry the same affordance: `b.widget("Revenue").type("metric").hint("…")` shows a `?` next to the widget title. Keep hints to a sentence.
 
-`EntityView.actions(ActionSpec)` declares custom buttons — `a.action(key).scope(ActionScope.TOOLBAR|ROW|DETAIL)` running a server `handler(ctx -> ActionResult)` or `navigate(url)`. A **row** action can be *state-aware*: pass `icon(row -> …)`, `label(row -> …)`, `visibleWhen(row -> …)` or `enabledWhen(row -> …)` (each taking an `ActionRow` — `id()`, `text(col)`, `enumValue(col, Type)`) so one control adapts per row (a `pause` "Suspend" flipping to a `play` "Resume", a button shown only where it applies). Evaluated server-side as the list renders; static actions cost nothing. See `onec-ui-starter/README.md`.
+`EntityView.actions(ActionSpec)` declares custom buttons — `a.action(key).scope(ActionScope.TOOLBAR|ROW|DETAIL)` running a server `handler(ctx -> ActionResult)` or `navigate(url)`. A **row** action can be *state-aware*: pass `icon(row -> …)`, `label(row -> …)`, `visibleWhen(row -> …)` or `enabledWhen(row -> …)` (each taking an `ActionRow` — `id()`, `text(col)`, `enumValue(col, Type)`) so one control adapts per row (a `pause` "Suspend" flipping to a `play` "Resume", a button shown only where it applies). Evaluated server-side as the list renders; static actions cost nothing. See `onno-ui-starter/README.md`.
 
 ## Questions To Ask For Common Domains
 
@@ -788,8 +788,8 @@ After implementation, choose the verification level that matches the change.
 For narrow Java changes, run the owning module's tests:
 
 ```bash
-./gradlew :onec-framework:test
-./gradlew :onec-mail-starter:test
+./gradlew :onno-framework:test
+./gradlew :onno-mail-starter:test
 ```
 
 For changes that affect public artifacts, starter wiring, frontend packaging, or the example app, run:
@@ -802,8 +802,8 @@ For changes that affect public artifacts, starter wiring, frontend packaging, or
 For UI frontend-only changes, at minimum run:
 
 ```bash
-./gradlew :onec-ui-starter:buildFrontend
-./gradlew :onec-ui-starter:processResources
+./gradlew :onno-ui-starter:buildFrontend
+./gradlew :onno-ui-starter:processResources
 ```
 
 ### Inspecting a running app (read this before you curl)
@@ -821,7 +821,7 @@ up every agent:
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
 token: it's delivered in a readable `XSRF-TOKEN` cookie and echoed back in the `X-XSRF-TOKEN` header.
-Users come from `onec.auth.users[*]` (there are **no** default credentials).
+Users come from `onno.auth.users[*]` (there are **no** default credentials).
 
 ```bash
 # 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.
@@ -839,7 +839,7 @@ curl -sb cookies.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json
 ```
 
 `{name}` is the entity's **display name** (e.g. `Properties`, `Reservations`), *not* the Java class
-name (`Property` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onec-ui-starter`):
+name (`Property` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onno-ui-starter`):
 
 ```text
 GET    /api/catalogs/{name}                       list

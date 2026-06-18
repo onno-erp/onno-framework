@@ -1,6 +1,6 @@
 package com.example.jobs;
 
-import com.onec.repository.ConstantManager;
+import su.onno.repository.ConstantManager;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -1,7 +1,7 @@
 package com.example.ui.views;
 
 import com.example.repositories.BookingRepository;
-import com.onec.ui.ListSpec;
+import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 

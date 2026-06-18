@@ -1,6 +1,6 @@
 # Headless Read API
 
-The generic REST API under `/api/**` (served by `onec-ui-starter`) is admin-shaped: its JSON uses
+The generic REST API under `/api/**` (served by `onno-ui-starter`) is admin-shaped: its JSON uses
 raw storage column names (`_id`, `_code`, …), expands references inline, and redacts secrets. This
 document is the response contract for headless consumers (a separate front end, a sync job, a search
 indexer) so you don't have to learn the shape by reading controller source (issue #33).
@@ -108,11 +108,11 @@ write — through the generic controllers **and** through `repository.save(...)`
 `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`; the `naturalKey` is the
 catalog code / document number, so a listener can revalidate a specific resource rather than
 everything. The same event drives the browser live-update SSE stream (`GET /api/events`). See
-[`com.onec.events.EntityChangedEvent`](../onec-framework/src/main/java/com/onec/events/EntityChangedEvent.java).
+[`su.onno.events.EntityChangedEvent`](../onno-framework/src/main/java/su/onno/events/EntityChangedEvent.java).
 
 ## Notes for a public read view
 
 There is no separate "public projection" endpoint yet; the generic read API is the contract above and
 is auth-gated. To expose a curated, anonymous read surface, front it with your own controller that
 maps these column-name keys to your DTOs, and (if it also accepts writes) add its path to
-`onec.auth.public-paths` and `onec.auth.csrf-ignored-paths`.
+`onno.auth.public-paths` and `onno.auth.csrf-ignored-paths`.

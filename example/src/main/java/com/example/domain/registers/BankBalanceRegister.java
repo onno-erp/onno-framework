@@ -1,13 +1,13 @@
 package com.example.domain.registers;
 
 import com.example.domain.catalogs.BankAccount;
-import com.onec.annotations.AccessControl;
-import com.onec.annotations.AccumulationRegister;
-import com.onec.annotations.Dimension;
-import com.onec.annotations.Resource;
-import com.onec.model.AccumulationRecord;
-import com.onec.model.AccumulationType;
-import com.onec.types.Ref;
+import su.onno.annotations.AccessControl;
+import su.onno.annotations.AccumulationRegister;
+import su.onno.annotations.Dimension;
+import su.onno.annotations.Resource;
+import su.onno.model.AccumulationRecord;
+import su.onno.model.AccumulationType;
+import su.onno.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;

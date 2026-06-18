@@ -1,9 +1,9 @@
 package com.example.domain.documents;
 
 import com.example.domain.catalogs.Client;
-import com.onec.annotations.Attribute;
-import com.onec.model.TabularSectionRow;
-import com.onec.types.Ref;
+import su.onno.annotations.Attribute;
+import su.onno.model.TabularSectionRow;
+import su.onno.types.Ref;
 
 import lombok.Getter;
 import lombok.Setter;

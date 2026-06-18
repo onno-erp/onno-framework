@@ -1,9 +1,9 @@
 package com.example.ui.pages;
 
 import com.example.domain.catalogs.Country;
-import com.onec.ui.ActionResult;
-import com.onec.ui.Page;
-import com.onec.ui.PageBuilder;
+import su.onno.ui.ActionResult;
+import su.onno.ui.Page;
+import su.onno.ui.PageBuilder;
 
 import org.springframework.stereotype.Component;
 
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  * {@code @Constant} editor with the framework's other primitives, so reference data can be managed
  * right here. Everything here is a reusable page primitive: the same toggles, button section, and
  * embedded list drop onto any page (a dashboard, or a catalog page authored at its route) — Settings
- * is just another page. The built-in Settings surface is opt-in ({@code onec.ui.settings.enabled},
+ * is just another page. The built-in Settings surface is opt-in ({@code onno.ui.settings.enabled},
  * enabled in this app's {@code application.yaml}); with it on, removing this bean falls back to the
  * framework's default Settings page (the full constant editor).
  */

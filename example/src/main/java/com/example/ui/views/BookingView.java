@@ -4,12 +4,12 @@ import com.example.domain.catalogs.BookingStaff;
 import com.example.domain.documents.Booking;
 import com.example.domain.enumerations.BookingStatus;
 import com.example.repositories.BookingRepository;
-import com.onec.ui.ActionResult;
-import com.onec.ui.ActionScope;
-import com.onec.ui.ActionSpec;
-import com.onec.ui.EntityConfigBuilder;
-import com.onec.ui.EntityView;
-import com.onec.ui.ListSpec;
+import su.onno.ui.ActionResult;
+import su.onno.ui.ActionScope;
+import su.onno.ui.ActionSpec;
+import su.onno.ui.EntityConfigBuilder;
+import su.onno.ui.EntityView;
+import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 

@@ -1,6 +1,6 @@
 package com.example.domain.constants;
 
-import com.onec.annotations.Constant;
+import su.onno.annotations.Constant;
 
 import lombok.Getter;
 import lombok.Setter;

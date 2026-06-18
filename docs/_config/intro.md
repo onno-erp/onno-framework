@@ -1,5 +1,5 @@
-Every `onec.*` configuration property, by module, with type and default. Each integration starter is
-auto-configured on the classpath and gated by its own `onec.<module>.enabled` flag (default `true`,
+Every `onno.*` configuration property, by module, with type and default. Each integration starter is
+auto-configured on the classpath and gated by its own `onno.<module>.enabled` flag (default `true`,
 except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail.*`,
 `spring.security.oauth2.client.*`) are used where noted and are not repeated here.
 
