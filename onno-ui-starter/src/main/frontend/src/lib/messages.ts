@@ -41,6 +41,12 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "status.posted": "Posted",
   "status.draft": "Draft",
 
+  // Workspace tab titles. The list tab reads the entity's localized title directly (from the
+  // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+  "tab.new": "New {entity}",
+  "tab.edit": "Edit {entity}",
+  "tab.duplicate": "Duplicate {entity}",
+
   // App shell / account island.
   "shell.signedInAs": "Signed in as",
   "shell.theme": "Theme",

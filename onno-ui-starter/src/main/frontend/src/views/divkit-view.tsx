@@ -11,6 +11,7 @@ import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useBranding } from "@/providers/branding-provider";
 import { useMessages } from "@/providers/messages-provider";
+import type { Translate } from "@/lib/messages";
 import { api } from "@/lib/api";
 import { useUiEvents } from "@/hooks/use-ui-events";
 import type { UiEvent } from "@/lib/types";
@@ -67,6 +68,10 @@ type ShellData = {
   home: string;
   nav: DivKitProps["json"];
   account: DivKitProps["json"];
+  // Route path → localized entity title (e.g. "/catalogs/customers" → "Клиенты"), from the same
+  // nav the sidebar renders. Workspace tabs title themselves from this instead of humanizing the
+  // URL segment, so a tab reads in the chrome language. Absent for entities not placed in the nav.
+  titles?: Record<string, string>;
 };
 
 type WorkspaceTab = { path: string; title: string };
@@ -129,6 +134,32 @@ function tabForPath(pathname: string): WorkspaceTab {
   if (action === "duplicate") return { path, title: `Duplicate ${entity}` };
   if (detail) return { path, title: `${entity} ${decodeSegment(detail).slice(0, 8)}` };
   return { path, title: entity };
+}
+
+// The tab's display title, resolved at render time (not stored) so it tracks the shell's
+// title map — which loads async after the first tab is already open — and the active chrome
+// language. Prefers the entity's localized title from {@code titles}; falls back to the
+// humanized route token when the entity isn't in the nav (a directly-routed, unlisted entity)
+// or the shell hasn't loaded yet. The new/edit/duplicate verbs come from UiMessages so the
+// whole tab localizes, not just the entity name.
+function titleForPath(
+  pathname: string,
+  titles: Record<string, string> | undefined,
+  t: Translate
+): string {
+  const path = pathname || "/";
+  if (path === "/") return titles?.["/"] ?? "Dashboard";
+
+  const [kind, name, detail, action] = path.split("/").filter(Boolean);
+  const basePath = name ? `/${kind}/${name}` : `/${kind ?? ""}`;
+  const entity =
+    titles?.[basePath] ?? (name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page"));
+
+  if (detail === "new") return t("tab.new", { entity });
+  if (action === "edit") return t("tab.edit", { entity });
+  if (action === "duplicate") return t("tab.duplicate", { entity });
+  if (detail) return `${entity} ${decodeSegment(detail).slice(0, 8)}`;
+  return entity;
 }
 
 // A record surface opened from a list — a document/catalog detail or a "new" form
@@ -276,6 +307,13 @@ export function DivKitView() {
   rowMenuOpenRef.current = rowMenu !== null;
   const confirmOpenRef = useRef(false);
   confirmOpenRef.current = confirm !== null;
+
+  // Resolve a tab's localized display title from its path. Memoized on the shell's title map and
+  // the translator so every open tab re-titles the moment the shell loads or the language changes.
+  const tabTitle = useCallback(
+    (path: string) => titleForPath(path, shell?.titles, t),
+    [shell?.titles, t]
+  );
 
   const resolvedTheme = useMemo<"light" | "dark">(() => {
     if (theme === "dark" || theme === "light") return theme;
@@ -1271,7 +1309,7 @@ export function DivKitView() {
         displayTabs = rest;
       } else {
         const rest: Slot[] = pane.tabs.map((t) => ({ kind: "tab", tab: t, dragged: false }));
-        rest.splice(at, 0, { kind: "ghost", title: tabForPath(dragState.path).title });
+        rest.splice(at, 0, { kind: "ghost", title: tabTitle(dragState.path) });
         displayTabs = rest;
       }
     }
@@ -1340,6 +1378,7 @@ export function DivKitView() {
               );
             }
             const tab = slot.tab;
+            const label = tabTitle(tab.path);
             const active = tab.path === pane.activePath;
             // Selection reads in the configured brand accent. With an explicit
             // primarySoft this matches the server-rendered DivKit tabs/nav; otherwise it
@@ -1352,7 +1391,7 @@ export function DivKitView() {
                 key={tab.path}
                 data-tab={tab.path}
                 data-flip={`${pane.id}:${tab.path}`}
-                title={tab.title}
+                title={label}
                 draggable
                 onDragStart={(e) => onTabDragStart(pane.id, tab.path, e)}
                 onDragEnd={onTabDragEnd}
@@ -1377,11 +1416,11 @@ export function DivKitView() {
                   className="min-w-0 flex-1 truncate px-2 text-left"
                   onClick={() => activateTab(pane.id, tab.path)}
                 >
-                  {tab.title}
+                  {label}
                 </button>
                 <button
                   type="button"
-                  aria-label={`Close ${tab.title}`}
+                  aria-label={`Close ${label}`}
                   className="mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-60 hover:bg-muted hover:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();

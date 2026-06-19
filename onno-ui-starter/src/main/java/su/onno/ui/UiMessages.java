@@ -65,6 +65,12 @@ public final class UiMessages {
         d.put("status.posted", "Posted");
         d.put("status.draft", "Draft");
 
+        // Workspace tab titles. The list tab reads the entity's localized title directly (from the
+        // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+        d.put("tab.new", "New {entity}");
+        d.put("tab.edit", "Edit {entity}");
+        d.put("tab.duplicate", "Duplicate {entity}");
+
         // App shell / account island.
         d.put("shell.signedInAs", "Signed in as");
         d.put("shell.theme", "Theme");

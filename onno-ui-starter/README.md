@@ -61,9 +61,15 @@ returns `204` when no release is announced.
 A deployment can already localize its **domain** — entity `title`, `@Attribute displayName`,
 list-column labels, ref data. `onno.ui.messages` covers the framework's own **chrome**: action
 buttons (`New`/`Write`/`Post`/`Delete`…), the delete-confirmation dialogs, the login screen, the
-empty/loading states, and the client-side validation messages. There is one English default per key
-(`su.onno.ui.UiMessages.DEFAULTS`, mirrored in the web client's `lib/messages.ts`); an override
-replaces it.
+empty/loading states, the client-side validation messages, and the workspace tab titles. There is
+one English default per key (`su.onno.ui.UiMessages.DEFAULTS`, mirrored in the web client's
+`lib/messages.ts`); an override replaces it.
+
+A workspace tab's name is the **domain** title, not a chrome string: the tab reads the entity's
+localized `title` from the shell's route→title map (the same labels the sidebar shows), so a list
+tab already follows the entity's language with no `onno.ui.messages` key. Only the record-tab verbs
+are chrome — `tab.new` / `tab.edit` / `tab.duplicate` (`New {entity}` etc.) wrap that localized
+name. A tab for an entity not placed in the nav falls back to the humanized route segment.
 
 The resolved map (defaults + overrides) is the single label source for both layers: the server-side
 DivKit builders read it directly, and it rides along on `GET /api/config` as a `messages` object the
