@@ -44,8 +44,9 @@ public class LoginDivController {
     }
 
     @GetMapping("/login")
-    public Map<String, Object> login(@RequestParam(required = false) String theme) {
-        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme), messages);
+    public Map<String, Object> login(@RequestParam(required = false) String theme,
+                                     @RequestParam(required = false) String step) {
+        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme), messages, step);
     }
 
     // Visible for testing.
