@@ -66,6 +66,13 @@ Enums annotated as framework enumerations are first-class persisted values. They
 (`EnumUuidConverters`), and their rows are seeded by the schema generator. If you find a seeder
 comment claiming enum-as-UUID is "not yet wired", that comment is stale — it works.
 
+The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
+text**, not just a native `uuid` column. This makes an attribute that changed from `String` to an
+`@Enumeration`/`Ref<T>` across deploys resilient: the column may still be `varchar` from when it
+held free text, yet onno keeps writing the value's UUID and reads it back correctly instead of
+throwing `Enum.valueOf(<uuid string>)` (issue #168). A value that is a bare enum `name()` (truly
+legacy data from before onno used UUIDs) still resolves by name.
+
 ## Usage
 
 Define metadata as annotated classes in your application package; the framework does the rest.
