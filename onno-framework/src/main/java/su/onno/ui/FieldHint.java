@@ -22,9 +22,10 @@ public record FieldHint(
         String widget,
         String placeholder,
         String format,
-        String hint
+        String hint,
+        String label
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null);
     }
 }

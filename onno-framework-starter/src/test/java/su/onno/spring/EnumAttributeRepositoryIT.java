@@ -91,6 +91,32 @@ class EnumAttributeRepositoryIT {
     }
 
     @Test
+    void enumStoredAsUuidTextInVarcharColumn_stillReadsBack() {
+        // Reproduces issue #168: an attribute migrated from String to @Enumeration leaves the
+        // pre-existing `varchar` column in place. onno still writes the enum's UUID, but the driver
+        // hands it back as a String, so UuidToEnum never fires and the default Enum.valueOf(<uuid>)
+        // used to throw. Simulate the legacy column by retyping it and storing the UUID as text.
+        Jdbi jdbi = Jdbi.create(dataSource);
+        jdbi.useHandle(h -> h.execute(
+                "ALTER TABLE catalog_test_services ALTER COLUMN category SET DATA TYPE VARCHAR(64)"));
+
+        UUID id = UUID.randomUUID();
+        UUID categoryId = EnumerationPersistence.resolveId(TestServiceCategory.class,
+                TestServiceCategory.SURGERY);
+        jdbi.useHandle(h -> h.createUpdate(
+                        "INSERT INTO catalog_test_services (_id, _code, name, category) "
+                                + "VALUES (:id, :code, :name, :category)")
+                .bind("id", id)
+                .bind("code", "S-3")
+                .bind("name", "Spaying")
+                .bind("category", categoryId.toString())
+                .execute());
+
+        TestService loaded = repository.findById(id).orElseThrow();
+        assertThat(loaded.getCategory()).isEqualTo(TestServiceCategory.SURGERY);
+    }
+
+    @Test
     void nullEnumAttribute_savesAsNull() {
         TestService service = new TestService();
         service.setCode("S-2");

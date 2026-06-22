@@ -6,6 +6,7 @@ import { useBranding } from "@/providers/branding-provider";
 import { DivKitContent, type ContentAction, type ContentCard } from "@/views/divkit-content";
 import { LoginFormPortals } from "@/lib/login-form-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
+import { SsoIconPortals } from "@/lib/sso-icon-bridge";
 
 /**
  * The login screen is server-driven, like the rest of the app: the server emits a DivKit card
@@ -32,11 +33,17 @@ export function LoginView() {
 
   const [card, setCard] = useState<ContentCard>(null);
   const [failed, setFailed] = useState(false);
+  // When the server offers several kinds of method it splits login into two steps: a method picker
+  // (default) and the password credentials step. Selecting a method re-requests the card for that
+  // step; a single-kind screen ignores `step` and renders inline. (Re-fetching keeps the server the
+  // single source of truth for what each step looks like.)
+  const [step, setStep] = useState<"choose" | "password">("choose");
 
   useEffect(() => {
     let cancelled = false;
     setFailed(false);
-    fetch(`/api/divkit/login?theme=${resolved}`, { credentials: "include" })
+    const q = step === "password" ? `&step=password` : "";
+    fetch(`/api/divkit/login?theme=${resolved}${q}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((json) => {
         if (!cancelled) setCard(json as ContentCard);
@@ -47,12 +54,22 @@ export function LoginView() {
     return () => {
       cancelled = true;
     };
-  }, [resolved]);
+  }, [resolved, step]);
 
   function onAction(action: ContentAction) {
     const url = action?.url;
     if (!url || !url.startsWith("onno://")) return;
     const rest = url.slice("onno://".length);
+    if (rest === "auth/password") {
+      // Advance to the credentials step.
+      setStep("password");
+      return;
+    }
+    if (rest === "auth/back") {
+      // Back to the method picker.
+      setStep("choose");
+      return;
+    }
     if (rest.startsWith("auth/sso/")) {
       // Full-page redirect to the IdP — the server-side authorization-code flow returns to the SPA
       // shell, where /api/auth/me reflects the new session. The server carries the destination as
@@ -107,7 +124,7 @@ export function LoginView() {
             <p className="text-sm text-destructive">Couldn't load the sign-in screen. Try refreshing.</p>
           ) : card ? (
             <DivKitContent
-              surfaceKey={`login:${resolved}`}
+              surfaceKey={`login:${resolved}:${step}`}
               card={card}
               theme={resolved}
               onAction={onAction}
@@ -121,6 +138,7 @@ export function LoginView() {
       {/* DivKit custom blocks on the card mount their React widgets through these portals. */}
       <LoginFormPortals />
       <IconPortals />
+      <SsoIconPortals />
     </main>
   );
 }

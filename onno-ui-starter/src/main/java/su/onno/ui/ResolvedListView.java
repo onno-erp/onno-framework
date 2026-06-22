@@ -57,11 +57,22 @@ public record ResolvedListView(String title, List<Column> columns,
      * {@code label}, the data {@code columnName} the query filters on (resolved + validated against
      * the entity's columns), the control {@code type} ({@code "options"}, {@code "multiOptions"},
      * {@code "contains"}, {@code "startsWith"} or {@code "dateRange"}) and, for the (multi-)options
-     * controls, its {@code options}.
+     * controls, its {@code options} (each a value→label pair).
      */
-    public record Filter(String key, String label, String columnName, String type, List<String> options) {
+    public record Filter(String key, String label, String columnName, String type, List<Option> options) {
         public Filter {
             options = options == null ? List.of() : List.copyOf(options);
+        }
+    }
+
+    /**
+     * One choice of a (multi-)options filter: the {@code value} the query matches against the column,
+     * and the {@code label} the control renders. The two are identical for a plain-string filter; a
+     * value→label split lets a filter over a code/English/enum-mirror column show a localized choice.
+     */
+    public record Option(String value, String label) {
+        public Option {
+            label = label == null ? value : label;
         }
     }
 

@@ -13,6 +13,8 @@ import su.onno.posting.PostingService;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretRedactor;
 import su.onno.types.Ref;
+import su.onno.validation.AttributeValidator;
+import su.onno.validation.ValidationErrors;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Update;
@@ -27,8 +29,10 @@ import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -53,7 +57,8 @@ public class DocumentCommandService {
     private final UiAccessService access;
     private final ApplicationEventPublisher events;
     private final SecretCipher secretCipher;
-    private final WriteValidator writeValidator = new WriteValidator();
+    private final AttributeValidator attributeValidator = new AttributeValidator();
+    private final WriteLifecycle lifecycle;
 
     public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                   NumberGenerator numberGenerator, PostingService postingService,
@@ -68,13 +73,39 @@ public class DocumentCommandService {
         this.access = access;
         this.events = events;
         this.secretCipher = secretCipher;
+        this.lifecycle = new WriteLifecycle(registry, secretCipher);
     }
 
-    public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> body, Principal principal) {
+    public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, Principal principal) {
         requireWritable();
         access.requireWrite(principal, desc);
-        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
+        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
         UUID id = UUID.randomUUID();
+
+        String number = resolveNumber(desc, body);
+        body.put("number", number); // resolved once; the INSERT below echoes it rather than regenerating
+        Object date = body.getOrDefault("date", LocalDateTime.now().toString());
+        body.put("date", date);
+
+        // Run the same write lifecycle the repository path runs (onFilling + beforeWrite + rules),
+        // then fold any field a hook derived back into the body so the INSERT captures it. (#158)
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validate(body, desc.attributes(), errors);
+        DocumentObject doc = instantiate(desc.javaClass());
+        if (doc != null) {
+            doc.setId(id);
+            doc.setNumber(number);
+            doc.setDate(toLocalDateTime(date));
+            lifecycle.applyBody(doc, desc.attributes(), body, errors);
+            overlayTabularSections(doc, desc, body, errors);
+            Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
+            if (bake(doc, true, errors)) {
+                lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
+                body.put("number", doc.getNumber());
+                if (doc.getDate() != null) body.put("date", doc.getDate().toString());
+            }
+        }
+        errors.throwIfAny();
 
         List<String> columns = new ArrayList<>(List.of(
                 "_id", "_number", "_date", "_posted", "_deletion_mark", "_version"));
@@ -94,7 +125,9 @@ public class DocumentCommandService {
             var update = h.createUpdate(sql)
                     .bind("_id", id)
                     .bind("_number", resolveNumber(desc, body))
-                    .bind("_date", body.getOrDefault("date", LocalDateTime.now().toString()))
+                    // Bind a real LocalDateTime, not its ISO string: PostgreSQL rejects a varchar
+                    // bound into the timestamp _date column (H2 silently coerces it). (#163)
+                    .bind("_date", toLocalDateTime(body.getOrDefault("date", LocalDateTime.now())))
                     .bind("_posted", false)
                     .bind("_deletion_mark", false)
                     .bind("_version", 0);
@@ -113,11 +146,36 @@ public class DocumentCommandService {
         return result;
     }
 
-    public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> body,
+    public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
                                        Principal principal) {
         requireWritable();
         access.requireWrite(principal, desc);
-        writeValidator.validate(desc.javaClass(), desc.attributes(), body);
+        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
+
+        // Reconstruct the stored document, overlay the submitted changes (including tabular rows),
+        // and run the write lifecycle (beforeWrite + rules) on the merged state so derived fields
+        // recompute the way they do on the repository path; only fields a hook actually changed are
+        // folded back in, leaving the partial-update semantics intact. (#158)
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validate(body, desc.attributes(), errors);
+        DocumentObject doc = loadForUpdate(desc, id);
+        if (doc != null) {
+            if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
+            if (body.containsKey("date")) doc.setDate(toLocalDateTime(body.get("date")));
+            lifecycle.applyBody(doc, desc.attributes(), body, errors);
+            overlayTabularSections(doc, desc, body, errors);
+            Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
+            String numberBefore = doc.getNumber();
+            LocalDateTime dateBefore = doc.getDate();
+            if (bake(doc, false, errors)) {
+                lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
+                if (!Objects.equals(doc.getNumber(), numberBefore)) body.put("number", doc.getNumber());
+                if (doc.getDate() != null && !Objects.equals(doc.getDate(), dateBefore)) {
+                    body.put("date", doc.getDate().toString());
+                }
+            }
+        }
+        errors.throwIfAny();
 
         List<String> setClauses = new ArrayList<>();
         if (body.containsKey("number")) setClauses.add("_number = :_number");
@@ -139,7 +197,8 @@ public class DocumentCommandService {
             int updated = jdbi.withHandle(h -> {
                 var update = h.createUpdate(sql).bind("_id", id);
                 if (body.containsKey("number")) update.bind("_number", body.get("number"));
-                if (body.containsKey("date")) update.bind("_date", body.get("date"));
+                // Same as create: bind the timestamp as a LocalDateTime so Postgres accepts it. (#163)
+                if (body.containsKey("date")) update.bind("_date", toLocalDateTime(body.get("date")));
                 if (hasExpectedVersion) {
                     update.bind("_expected_version", parseInt(body.getOrDefault("version", body.get("_version"))));
                 }
@@ -243,6 +302,95 @@ public class DocumentCommandService {
         );
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, number));
+    }
+
+    /**
+     * Run {@code onFilling}/{@code beforeWrite} and collect business rules. A hook or rule that
+     * throws on otherwise-valid input is a genuine failure and propagates; when other validation
+     * errors are already pending it is suppressed, since those explain the broken state and would
+     * otherwise be masked by a {@code 500}.
+     */
+    private boolean bake(Object entity, boolean isNew, ValidationErrors errors) {
+        try {
+            lifecycle.runHooks(entity, isNew);
+            lifecycle.collectRules(entity, errors);
+            return true;
+        } catch (RuntimeException failed) {
+            if (errors.isEmpty()) {
+                throw failed;
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Build the in-memory tabular-section rows from the submitted body so {@code beforeWrite} sees
+     * the lines that will be written (e.g. a total summed over them). Only sections present in the
+     * body are replaced; otherwise the rows reconstructed from the database are kept. The rows are
+     * not written back from here — {@link #insertTabularSections} persists them from the body.
+     */
+    @SuppressWarnings("unchecked")
+    private void overlayTabularSections(DocumentObject doc, DocumentDescriptor desc,
+                                        Map<String, Object> body, ValidationErrors errors) {
+        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+            if (!(body.get(ts.name()) instanceof List<?> rows)) {
+                continue;
+            }
+            List<TabularSectionRow> built = new ArrayList<>();
+            for (Object rawRow : rows) {
+                if (!(rawRow instanceof Map<?, ?> rowMap)) {
+                    continue;
+                }
+                try {
+                    TabularSectionRow rowObj = (TabularSectionRow) ts.rowClass()
+                            .getDeclaredConstructor().newInstance();
+                    lifecycle.applyBody(rowObj, ts.attributes(), (Map<String, Object>) rowMap, errors);
+                    built.add(rowObj);
+                } catch (ReflectiveOperationException skipRow) {
+                    // A row that can't be instantiated is left out of the in-memory view; the
+                    // declarative checks above and the insert below still run against the body.
+                }
+            }
+            Field listField = findField(desc.javaClass(), ts.fieldName());
+            if (listField != null) {
+                listField.setAccessible(true);
+                try {
+                    listField.set(doc, built);
+                } catch (IllegalAccessException unreachable) {
+                    throw new IllegalStateException(unreachable);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reconstruct the document for the update lifecycle, returning {@code null} (rather than 404ing)
+     * when the row is missing so any pending validation error surfaces first and the existing
+     * "update affects no rows → {@link DocumentQueryService#get} reports 404" path still applies.
+     */
+    private DocumentObject loadForUpdate(DocumentDescriptor desc, UUID id) {
+        try {
+            return loadDocumentObject(desc, id);
+        } catch (ResponseStatusException e) {
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return null;
+            }
+            throw e;
+        }
+    }
+
+    private static DocumentObject instantiate(Class<?> javaClass) {
+        try {
+            var ctor = javaClass.getDeclaredConstructor();
+            ctor.setAccessible(true);
+            return (DocumentObject) ctor.newInstance();
+        } catch (ReflectiveOperationException cannotBuild) {
+            return null; // no usable no-arg constructor: fall back to the body-only write path
+        }
+    }
+
+    private static String asString(Object value) {
+        return value == null ? null : value.toString();
     }
 
     @SuppressWarnings("unchecked")
@@ -469,28 +617,30 @@ public class DocumentCommandService {
      * Properly converts and binds an attribute value, handling Ref UUIDs and enums.
      */
     private void bindAttribute(Update update, AttributeDescriptor attr, Object value) {
+        // Coerce to the column's Java type, then bind null-safely so a null ref/enum/numeric/date
+        // binds as a typed (unspecified) null PostgreSQL can infer rather than varchar. (#163)
+        SqlBind.nullable(update, attr.columnName(), coerceAttribute(attr, value));
+    }
+
+    /** The value to store for an attribute: its column's Java type, or {@code null}/empty → null. */
+    private Object coerceAttribute(AttributeDescriptor attr, Object value) {
         if (value == null || "".equals(value)) {
-            update.bind(attr.columnName(), (UUID) null);
-            return;
+            return null;
         }
         if (attr.secret()) {
             // Write-only secret: store encrypted. A "set" sentinel echoed from a GET carries no
             // real value (on create there's nothing to keep, so store null; on update such
             // columns are dropped earlier by leaveSecretUnchanged).
-            if (SecretRedactor.SET.equals(value)) {
-                update.bind(attr.columnName(), (String) null);
-            } else {
-                update.bind(attr.columnName(), secretCipher.encrypt(value.toString()));
-            }
-        } else if (attr.isRef() || attr.javaType().isEnum()) {
-            // Ref and enum columns are UUID in the DB
-            UUID uuid = value instanceof UUID u ? u : UUID.fromString(value.toString());
-            update.bind(attr.columnName(), uuid);
-        } else if (attr.javaType() == BigDecimal.class) {
-            update.bind(attr.columnName(), value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString()));
-        } else {
-            update.bind(attr.columnName(), value);
+            return SecretRedactor.SET.equals(value) ? null : secretCipher.encrypt(value.toString());
         }
+        if (attr.isRef() || attr.javaType().isEnum()) {
+            // Ref and enum columns are UUID in the DB
+            return value instanceof UUID u ? u : UUID.fromString(value.toString());
+        }
+        if (attr.javaType() == BigDecimal.class) {
+            return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
+        }
+        return value;
     }
 
     /**

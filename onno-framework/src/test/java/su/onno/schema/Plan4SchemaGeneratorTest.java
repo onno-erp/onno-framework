@@ -39,7 +39,26 @@ class Plan4SchemaGeneratorTest {
 
         assertThat(enumDDL).contains("_id UUID PRIMARY KEY");
         assertThat(enumDDL).contains("_name VARCHAR(255)");
+        assertThat(enumDDL).contains("_label VARCHAR(255)");
         assertThat(enumDDL).contains("_order INTEGER");
+    }
+
+    @Test
+    void generateDDL_enumeration_seedsLocalizedLabels() {
+        registry.registerEnumeration(scanner.scanEnumeration(su.onno.fixtures.TestLabeledStatus.class));
+
+        SchemaGenerator generator = new SchemaGenerator(registry);
+        List<String> ddl = generator.generateDDL();
+
+        // The seed upsert carries the @EnumLabel value, not the constant name.
+        assertThat(ddl).anySatisfy(s -> assertThat(s)
+                .contains("enum_labeled_statuses")
+                .contains("'NEW'")
+                .contains("'Новый'"));
+        // An unlabelled constant seeds its name as the label.
+        assertThat(ddl).anySatisfy(s -> assertThat(s)
+                .contains("enum_labeled_statuses")
+                .contains("'COMPLETED'"));
     }
 
     @Test

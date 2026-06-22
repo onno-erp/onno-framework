@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
-import type { AttributeMeta, EntityRecord, RelatedListMeta, TabularSectionMeta } from "@/lib/types";
+import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,8 @@ export type FormDescriptor = {
     /** Documents that implement Postable can be posted from the form (1C-style). */
     postable?: boolean;
     attributes: AttributeMeta[];
+    /** Built-in system columns (code/description, number/date/posted) with resolved, localizable labels. */
+    systemColumns?: SystemColumnMeta[];
     tabularSections?: TabularSectionMeta[];
     /** Inline related-list (junction) panels — on catalogs and documents alike. */
     relatedLists?: RelatedListMeta[];
@@ -142,11 +144,20 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // description; both then list the visible-in-form attributes by their order hint.
   const fields = useMemo<Field[]>(() => {
     const out: Field[] = [];
+    // System-column labels are localizable via .field(name).label("…"); the server ships the
+    // resolved displayName in meta.systemColumns, so read it instead of hardcoding English (#154).
+    const sysLabel = (fieldName: string, fallback: string) =>
+      meta.systemColumns?.find((c) => c.fieldName === fieldName)?.displayName || fallback;
     if (kind === "catalogs") {
       if (!meta.autoNumber) {
-        out.push({ kind: "system", key: "code", label: "Code", column: "_code" });
+        out.push({ kind: "system", key: "code", label: sysLabel("code", "Code"), column: "_code" });
       }
-      out.push({ kind: "system", key: "description", label: "Description", column: "_description" });
+      out.push({
+        kind: "system",
+        key: "description",
+        label: sysLabel("description", "Description"),
+        column: "_description",
+      });
     }
     const attrs = meta.attributes
       .filter((a) => a.visibleInForm !== false)

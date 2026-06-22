@@ -341,6 +341,20 @@ public enum OrderStatus {
 }
 ```
 
+Give the type a display `title` and each value a human/localized label with `@EnumLabel` — surfaced
+in list cells, the dropdown, and `{col}_display` — **without** renaming the constants (their names
+key the stored UUIDs and any importers/filters that map to them):
+
+```java
+@Enumeration(name = "Order Statuses", title = "Статусы заказов")
+public enum OrderStatus {
+    @EnumLabel("Новый") NEW,
+    @EnumLabel("Отгружен") SHIPPED
+}
+```
+
+An unlabelled constant displays as its name, so adding `@EnumLabel` is incremental.
+
 ### Constants
 
 Use constants for singleton business settings.
@@ -691,7 +705,9 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 - **`Page`** — a route whose content you compose (e.g. a dashboard): `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.custom(...)`.
 - **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch.
 
-Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
+Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
+
+`label(String)` overrides a field's display label on the form, list header, and detail view — for custom attributes (over `@Attribute(displayName=…)`) and, crucially, for the built-in **system columns** that otherwise have no DSL label path: `code`/`description` (catalogs) and `number`/`date`/`posted` (documents). The primary use is localization, e.g. `f.field("code").label("Код")`, `f.field("posted").label("Статус")`. It is the form/detail counterpart to `ListSpec.label(field, …)` (which relabels only the list header); a `ListSpec.label` on the same field still wins for the list column specifically.
 
 `hint(String)` attaches optional help text to a field — surfaced in the UI as a hoverable/focusable `?` icon next to the field's label (on the edit form, the list column header, and the read-only detail view). Custom dashboard components carry the same affordance: `b.widget("Revenue").type("metric").hint("…")` shows a `?` next to the widget title. Keep hints to a sentence.
 

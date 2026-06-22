@@ -162,24 +162,24 @@ public class RefResolver {
     private record ResolvedRef(String display, String code, String avatarUrl) {}
 
     private void resolveEnumColumn(List<Map<String, Object>> rows, AttributeDescriptor attr) {
-        Map<String, String> idToName = enumDisplayNames.computeIfAbsent(attr.javaType(), type -> {
+        Map<String, String> idToLabel = enumDisplayNames.computeIfAbsent(attr.javaType(), type -> {
             EnumerationDescriptor enumDesc = registry.allEnumerations().stream()
                     .filter(e -> e.javaClass().equals(type))
                     .findFirst().orElse(null);
             if (enumDesc == null) return Map.of();
-            Map<String, String> names = new HashMap<>();
+            Map<String, String> labels = new HashMap<>();
             for (EnumerationValueDescriptor v : enumDesc.values()) {
-                names.put(v.id().toString(), v.name());
+                labels.put(v.id().toString(), v.label());
             }
-            return Map.copyOf(names);
+            return Map.copyOf(labels);
         });
-        if (idToName.isEmpty()) return;
+        if (idToLabel.isEmpty()) return;
 
         for (Map<String, Object> row : rows) {
             Object val = value(row, attr.columnName());
             if (val != null) {
-                String name = idToName.get(val.toString());
-                row.put(attr.columnName() + "_display", name != null ? name : val.toString());
+                String label = idToLabel.get(val.toString());
+                row.put(attr.columnName() + "_display", label != null ? label : val.toString());
             }
         }
     }

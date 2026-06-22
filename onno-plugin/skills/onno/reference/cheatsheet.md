@@ -53,7 +53,11 @@ table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `contex
 `scale=2`.
 
 ### `@Enumeration` (on a Java `enum`)
-`name` (required), `tableName=""`. Persisted as a reference table; each value gets a stable UUID.
+`name` (required), `title=""` (display label for the type; falls back to `name`), `tableName=""`.
+Persisted as a reference table; each value gets a stable UUID. Annotate a constant with
+`@EnumLabel("…")` to give it a human/localized display label (surfaced in `{col}_display`, the
+`enumValues[].label` metadata, and the dropdown) without renaming the constant; unlabelled constants
+display as their name.
 
 ### `@Constant` (on a plain class with one value field)
 `name` (required).
@@ -154,7 +158,10 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` → options/contains/dateRange.
+    `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` →
+    `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
+    (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
+    order) / `contains` / `startsWith` / `dateRange`.
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
@@ -163,8 +170,10 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
     `action(name)`, `icon(name)`.
   - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,
     `textarea`, `image`/`avatar`/`gallery`/`file`, `map`/`geo`, …), `placeholder`, `format`
-    (`currency:EUR`, `dd-MM-yy`, …), `hideInList/Form/Detail()`, `visibleInList/Form/Detail(bool)`,
-    chain `.field(next)`.
+    (`currency:EUR`, `dd-MM-yy`, …), `hint(String)`, `label(String)`, `hideInList/Form/Detail()`,
+    `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
+    form/detail/list label — including the built-in system columns (`code`/`description`,
+    `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
 
 An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
 that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the

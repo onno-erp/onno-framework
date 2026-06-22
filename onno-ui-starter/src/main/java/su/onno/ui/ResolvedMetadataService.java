@@ -211,13 +211,17 @@ public class ResolvedMetadataService {
      * honors the same field-hint config as custom attributes — a developer can hide
      * or reorder it from the layout DSL (e.g. {@code .field("code").hideInList()})
      * without touching frontend code. Visibility defaults to shown when unset.
+     *
+     * <p>The hardcoded English {@code displayName} ("Code"/"Description"/"Number"/"Date"/"Status")
+     * is a fallback: a {@code .field(fieldName).label("…")} hint overrides it, so system-column
+     * labels localize from the layout DSL the same way custom attributes do (see #154).</p>
      */
     private Map<String, Object> systemColumn(String fieldName, String displayName, String columnName,
                                              Map<String, FieldHint> hints) {
         FieldHint hint = hints.get(fieldName);
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("fieldName", fieldName);
-        map.put("displayName", displayName);
+        map.put("displayName", pick(hint == null ? null : hint.label(), displayName));
         map.put("columnName", columnName);
         map.put("visibleInList", pick(hint == null ? null : hint.visibleInList(), Boolean.TRUE));
         map.put("visibleInDetail", pick(hint == null ? null : hint.visibleInDetail(), Boolean.TRUE));
@@ -237,7 +241,10 @@ public class ResolvedMetadataService {
             FieldHint hint = layoutHints.get(a.fieldName());
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("fieldName", a.fieldName());
-            map.put("displayName", a.displayName());
+            // A .field(name).label("…") hint overrides the attribute's @Attribute(displayName=…),
+            // so a localized label can be authored from the layout DSL (#154); otherwise the
+            // descriptor's display name stands.
+            map.put("displayName", pick(hint == null ? null : hint.label(), a.displayName()));
             map.put("columnName", a.columnName());
             map.put("javaType", a.javaType().getSimpleName());
             map.put("length", a.length());
@@ -297,9 +304,11 @@ public class ResolvedMetadataService {
                         .findFirst().orElse(null);
                 if (enumDesc != null) {
                     map.put("enumName", enumDesc.logicalName());
+                    map.put("enumTitle", enumDesc.displayTitle());
                     map.put("enumValues", enumDesc.values().stream().map(v -> {
                         Map<String, Object> vm = new LinkedHashMap<>();
                         vm.put("name", v.name());
+                        vm.put("label", v.label());
                         vm.put("id", v.id().toString());
                         return vm;
                     }).toList());

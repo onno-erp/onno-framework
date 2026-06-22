@@ -410,8 +410,13 @@ public final class ShellLayoutBuilder {
 
     private static Map<String, Object> bottomTab(NavItem item, Palette p, boolean compact) {
         String color = activeColor(item.path(), p.primary(), p.muted());
-        Map<String, Object> label = Div.text(item.label(), 12, "regular");
-        Div.maxLines(label, 1);
+        // On a phone the bar splits its width five ways, so a roomy single-line label
+        // ellipsizes anything past a few characters ("Dashboard" -> "Dashb..."). Shrink
+        // the font and let it wrap to a second line so multi-word destinations ("Sales
+        // Orders") fit whole; ellipsis stays the last resort for a genuinely long word.
+        // The tablet island has room for the full-size single-line label.
+        Map<String, Object> label = Div.text(item.label(), compact ? 12 : 10, "regular");
+        Div.maxLines(label, compact ? 1 : 2);
         Div.color(label, color);
         Div.textAlign(label, "center");
 
@@ -427,7 +432,9 @@ public final class ShellLayoutBuilder {
             Div.pad(tab, 8, 14);
         } else {
             Div.weight(tab, 1);
-            Div.pad(tab, 8, 4);
+            // Tighter horizontal padding than the tablet island — every dp of width is
+            // label room when five tabs share a phone screen.
+            Div.pad(tab, 8, 2);
         }
         Div.gap(tab, 3);
         Div.corner(tab, compact ? 18 : 14);

@@ -363,6 +363,25 @@ AuthMethodsContributor telegramLogin() {
 }
 ```
 
+A provider may also give its button a logo via the optional fourth argument, `iconUrl`. The icon is
+rendered to the left of the label and tinted to the button's text color (so a monochrome SVG using
+`currentColor` reads correctly in both light and dark themes), and it flows to every client that reads
+the auth-methods list — not just the web login page. The connector that owns the provider serves the
+asset; the framework only renders the URL it is given:
+
+```java
+@Bean
+AuthMethodsContributor telegramLogin() {
+    return () -> List.of(new SsoProvider(
+            "telegram", "Telegram", "/api/auth/telegram/start", "/api/auth/telegram/logo.svg"));
+}
+```
+
+The three-argument constructor remains (it passes `iconUrl = null`), so existing buttons render
+label-only and need no change. When a deployment offers both a password form and SSO buttons, the
+login screen splits into two steps — a method picker, then the credentials form behind a back link —
+so it stays uncluttered; single-method screens render inline as before.
+
 ## Gotchas
 
 - **No default credentials.** `onno.auth.users` is empty by default — if you configure none, no one

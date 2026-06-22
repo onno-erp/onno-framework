@@ -86,7 +86,9 @@ In brief:
   `movementType = RECEIPT | EXPENSE`).
 - **`@InformationRegister`** — facts by dimension over time, `periodicity = NONE|DAY|MONTH|QUARTER|YEAR`;
   rows extend `InformationRecord`.
-- **`@Enumeration`** (on a Java `enum`), **`@Constant`** (singleton setting), **`@ScheduledJob`**
+- **`@Enumeration`** (on a Java `enum`; `title` for the type's display name, `@EnumLabel` on a
+  constant for its localized value label — both fall back to the name), **`@Constant`** (singleton
+  setting), **`@ScheduledJob`**
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
   (`readRoles`/`writeRoles`), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
@@ -195,6 +197,13 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 > deep-linking). A mistyped URL "succeeds" with the SPA shell. Only `/api/**` produces real
 > `404`/`401`/`403`. When debugging, hit API URLs, not page URLs.
 
+The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentCommandService`, shared by
+the REST API, the generated UI, CSV import, and the MCP tools) reconstruct the typed entity and run
+the same entity write lifecycle as `repository.save(...)` — `onFilling()` (create), `beforeWrite()`,
+and `Validated` business rules — before the JDBI write, so a field a model derives in `beforeWrite()`
+is persisted on every write path, not just on the repository path. Auto-numbering and secret
+encryption stay in the command services; posting still runs its own lifecycle in `PostingEngine`.
+
 ## UI layer
 
 The UI is authored as Spring beans, never as annotations on domain classes:
@@ -208,8 +217,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
   chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
-  hints (`order`, `group`, `width`, `widget`, `format`, `hideInList/Form/Detail`, related lists,
-  actions). **An entity surface is only *served* if it has an `EntityView` for the active profile —
+  hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
+  related lists, actions; `label` localizes a field's form/detail/list label, including the built-in
+  system columns code/description/number/date/posted). **An entity surface is only *served* if it has an `EntityView` for the active profile —
   the view layer is the allowlist (no view → `404`).** This gates reachability, not nav presence: a
   view makes the entity reachable by its direct route, but it shows in the sidebar only once a
   `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not

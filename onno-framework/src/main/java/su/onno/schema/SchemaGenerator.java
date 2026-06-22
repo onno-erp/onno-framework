@@ -154,16 +154,24 @@ public class SchemaGenerator {
 
     static List<String> enumerationInserts(EnumerationDescriptor enumeration, SqlDialect dialect) {
         List<String> inserts = new ArrayList<>();
-        List<String> columns = List.of("_id", "_name", "_order");
+        List<String> columns = List.of("_id", "_name", "_label", "_order");
         List<String> keyColumns = List.of("_id");
         for (EnumerationValueDescriptor value : enumeration.values()) {
             List<String> values = List.of(
-                    "'" + value.id() + "'",
-                    "'" + value.name() + "'",
+                    sqlString(value.id().toString()),
+                    sqlString(value.name()),
+                    sqlString(value.label()),
                     String.valueOf(value.order()));
             inserts.add(dialect.upsert(enumeration.tableName(), columns, keyColumns, values));
         }
         return inserts;
+    }
+
+    // Enum labels are author-supplied free text (e.g. "Won't fix") and may contain a single quote;
+    // double it so the seed upsert stays valid SQL. Names/UUIDs can't contain one, but escaping
+    // them too keeps the rendering uniform.
+    private static String sqlString(String raw) {
+        return "'" + raw.replace("'", "''") + "'";
     }
 
     // Above this declared length a String column is stored as TEXT rather than VARCHAR(n): the

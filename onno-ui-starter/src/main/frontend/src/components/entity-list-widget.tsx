@@ -92,12 +92,14 @@ export type ListInput = {
  * a {@code column >= from AND column <= to} range. The current value is sent to /api/list as
  * eq/in/like/prefix/ge/le params, and several filters narrow the list jointly (AND).
  */
+/** One choice of a (multi-)options filter: {@code value} is matched on the column, {@code label} is shown. */
+export type FilterOption = { value: string; label: string };
 export type ListFilterControl = {
   key: string;
   label: string;
   column: string;
   type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange";
-  options: string[];
+  options: FilterOption[];
 };
 export type ListDescriptor = {
   kind: "catalogs" | "documents";
@@ -186,14 +188,20 @@ function MultiOptionsFilter({
   selected,
   onChange,
 }: {
-  options: string[];
+  options: FilterOption[];
   selected: string[];
   onChange: (next: string[]) => void;
 }) {
+  // The popover renders labels but the selection (and the query) is keyed by value.
+  const labelOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
   const summary =
-    selected.length === 0 ? "All" : selected.length === 1 ? selected[0] : `${selected.length} selected`;
-  const toggle = (option: string) =>
-    onChange(selected.includes(option) ? selected.filter((v) => v !== option) : [...selected, option]);
+    selected.length === 0
+      ? "All"
+      : selected.length === 1
+        ? labelOf(selected[0])
+        : `${selected.length} selected`;
+  const toggle = (value: string) =>
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -217,11 +225,11 @@ function MultiOptionsFilter({
         ) : null}
         {options.map((o) => (
           <label
-            key={o}
+            key={o.value}
             className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
           >
-            <Checkbox checked={selected.includes(o)} onCheckedChange={() => toggle(o)} />
-            <span className="truncate">{o}</span>
+            <Checkbox checked={selected.includes(o.value)} onCheckedChange={() => toggle(o.value)} />
+            <span className="truncate">{o.label}</span>
           </label>
         ))}
       </PopoverContent>
@@ -682,8 +690,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                   <SelectContent>
                     <SelectItem value={SELECT_NONE}>All</SelectItem>
                     {f.options.map((o) => (
-                      <SelectItem key={o} value={o}>
-                        {o}
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
                       </SelectItem>
                     ))}
                   </SelectContent>

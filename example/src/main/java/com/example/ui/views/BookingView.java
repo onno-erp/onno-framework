@@ -13,6 +13,9 @@ import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Default booking list — the full back-office view. A profile-specific view
  * (see {@link CleaningBookingView}) can replace this for a persona.
@@ -59,9 +62,21 @@ public class BookingView implements EntityView {
                 // round out the control types.
                 .filter("checkIn").label("Check-in").dateRange();
         list.filter("nights").label("Nights").options("1", "2", "3", "4", "5", "6", "7");
-        list.filter("status").label("Status")
-                .multiOptions("DRAFT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELED");
+        // value→label split: the query still matches the stored enum names (DRAFT, …) while the
+        // dropdown shows friendly titles. A LinkedHashMap keeps the choices in lifecycle order.
+        list.filter("status").label("Status").multiOptions(statusLabels());
         list.filter("summary").label("Summary").contains();
+    }
+
+    /** The booking statuses in lifecycle order, mapped from their stored enum name to a display title. */
+    private static Map<String, String> statusLabels() {
+        Map<String, String> labels = new LinkedHashMap<>();
+        labels.put(BookingStatus.DRAFT.name(), "Draft");
+        labels.put(BookingStatus.CONFIRMED.name(), "Confirmed");
+        labels.put(BookingStatus.CHECKED_IN.name(), "Checked in");
+        labels.put(BookingStatus.CHECKED_OUT.name(), "Checked out");
+        labels.put(BookingStatus.CANCELED.name(), "Canceled");
+        return labels;
     }
 
     @Override

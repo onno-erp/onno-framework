@@ -132,8 +132,11 @@ public class UiViewResolver {
             if (cm == null) {
                 continue;
             }
+            List<ResolvedListView.Option> options = f.options().stream()
+                    .map(o -> new ResolvedListView.Option(o.value(), o.label()))
+                    .toList();
             filters.add(new ResolvedListView.Filter(
-                    f.field(), f.label(), cm.columnName(), filterType(f.type()), f.options()));
+                    f.field(), f.label(), cm.columnName(), filterType(f.type()), options));
         }
 
         ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);

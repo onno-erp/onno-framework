@@ -55,6 +55,24 @@ export interface AttributeMeta {
   email?: boolean;
 }
 
+/**
+ * A built-in system column (code/description on catalogs; number/date/posted on documents). It
+ * carries the same field-hint config as an attribute so the layout DSL can hide/reorder/relabel it.
+ * The {@link displayName} already folds in a {@code .field(...).label(...)} override (#154), so the
+ * form/detail read it instead of hardcoding an English label.
+ */
+export interface SystemColumnMeta {
+  fieldName: string;
+  displayName: string;
+  columnName: string;
+  visibleInList: boolean;
+  visibleInDetail: boolean;
+  order: number;
+  widthHint?: string;
+  placeholder?: string;
+  format?: string;
+}
+
 export interface TabularSectionMeta {
   name: string;
   tableName: string;

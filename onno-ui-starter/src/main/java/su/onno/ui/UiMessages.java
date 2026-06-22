@@ -37,7 +37,10 @@ public final class UiMessages {
         d.put("login.title", "Sign in");
         d.put("login.subtitle.password", "Use your workspace credentials.");
         d.put("login.subtitle.sso", "Continue with your organization account.");
+        d.put("login.subtitle.choose", "Choose how to sign in.");
         d.put("login.sso", "Continue with {provider}");
+        d.put("login.method.password", "Sign in with password");
+        d.put("login.back", "Back");
         d.put("login.none", "No interactive login is configured for this application.");
         d.put("login.username", "Username");
         d.put("login.password", "Password");
@@ -64,6 +67,12 @@ public final class UiMessages {
         // Document posting status.
         d.put("status.posted", "Posted");
         d.put("status.draft", "Draft");
+
+        // Workspace tab titles. The list tab reads the entity's localized title directly (from the
+        // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+        d.put("tab.new", "New {entity}");
+        d.put("tab.edit", "Edit {entity}");
+        d.put("tab.duplicate", "Duplicate {entity}");
 
         // App shell / account island.
         d.put("shell.signedInAs", "Signed in as");

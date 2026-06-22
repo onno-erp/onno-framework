@@ -106,6 +106,10 @@ public final class ListSpec {
      * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%
      * list.filter("role").multiOptions("Хирург", "Терапевт");        // multi-select -> role IN (…)
      * list.filter("checkIn").dateRange();                           // from/to pickers -> checkIn range
+     * // value→label split: the query matches the stored value, the dropdown shows the label
+     * var statuses = new LinkedHashMap&lt;String, String&gt;();           // ordered: dropdown follows it
+     * statuses.put("NEW", "Новый"); statuses.put("FILES_RECEIVED", "Файлы получены");
+     * list.filter("statusName").label("Статус").multiOptions(statuses);
      * </pre>
      */
     public FilterBuilder filter(String field) {
@@ -246,10 +250,24 @@ public final class ListSpec {
     }
 
     /**
-     * A resolved list filter: the bound field, its label, the control type and — for the
-     * {@link FilterType#OPTIONS}/{@link FilterType#MULTI_OPTIONS} controls — its choices.
+     * One choice of a {@link FilterType#OPTIONS}/{@link FilterType#MULTI_OPTIONS} filter: the
+     * {@code value} matched against the field by the query, and the {@code label} the UI renders for
+     * it. When a filter is declared with the plain {@code String...} overloads the two are identical
+     * (the value is shown verbatim); the {@code Map<String,String>} overloads carry a value→label
+     * split so a filter over a code/English/enum-mirror column can show a localized choice.
      */
-    public record Filter(String field, String label, FilterType type, List<String> options) {
+    public record Option(String value, String label) {
+        public Option {
+            label = label == null ? value : label;
+        }
+    }
+
+    /**
+     * A resolved list filter: the bound field, its label, the control type and — for the
+     * {@link FilterType#OPTIONS}/{@link FilterType#MULTI_OPTIONS} controls — its
+     * {@link Option choices} (each a value→label pair).
+     */
+    public record Filter(String field, String label, FilterType type, List<Option> options) {
         public Filter {
             options = options == null ? List.of() : List.copyOf(options);
         }
@@ -263,7 +281,7 @@ public final class ListSpec {
         private final String field;
         private String label;
         private FilterType type = FilterType.OPTIONS;
-        private List<String> options = List.of();
+        private List<Option> options = List.of();
 
         FilterBuilder(String field) {
             this.field = field;
@@ -275,20 +293,51 @@ public final class ListSpec {
             return this;
         }
 
-        /** A SELECT filter: pick one of {@code options}, matched for equality on the field. */
+        /**
+         * A SELECT filter: pick one of {@code options}, matched for equality on the field. Each
+         * option is shown verbatim (its value is also its label); use {@link #options(Map)} when the
+         * displayed choice should differ from the matched value.
+         */
         public FilterBuilder options(String... options) {
             this.type = FilterType.OPTIONS;
-            this.options = List.of(options);
+            this.options = identity(options);
+            return this;
+        }
+
+        /**
+         * A SELECT filter with a value→label split: the query matches each map <em>key</em> on the
+         * field while the dropdown renders the map <em>value</em>. The choices appear in the map's
+         * iteration order, so pass an ordered map (e.g. {@link java.util.LinkedHashMap}) to control
+         * the dropdown order — {@code Map.of(...)} is unordered. The answer for a filter over a
+         * column whose stored values are codes/English (or an enum text-mirror) in a localized UI.
+         */
+        public FilterBuilder options(Map<String, String> valueToLabel) {
+            this.type = FilterType.OPTIONS;
+            this.options = pairs(valueToLabel);
             return this;
         }
 
         /**
          * A multi-select filter: pick any number of {@code options}, matched as {@code field IN (…)}
-         * over the chosen values (an empty selection adds no constraint).
+         * over the chosen values (an empty selection adds no constraint). Each option is shown
+         * verbatim; use {@link #multiOptions(Map)} for a value→label split.
          */
         public FilterBuilder multiOptions(String... options) {
             this.type = FilterType.MULTI_OPTIONS;
-            this.options = List.of(options);
+            this.options = identity(options);
+            return this;
+        }
+
+        /**
+         * A multi-select filter with a value→label split: the query matches the map <em>keys</em> as
+         * {@code field IN (…)} while the dropdown renders the map <em>values</em>. The choices appear
+         * in the map's iteration order, so pass an ordered map (e.g.
+         * {@link java.util.LinkedHashMap}) to control the dropdown order — {@code Map.of(...)} is
+         * unordered.
+         */
+        public FilterBuilder multiOptions(Map<String, String> valueToLabel) {
+            this.type = FilterType.MULTI_OPTIONS;
+            this.options = pairs(valueToLabel);
             return this;
         }
 
@@ -316,6 +365,22 @@ public final class ListSpec {
 
         Filter build() {
             return new Filter(field, label != null ? label : field, type, options);
+        }
+
+        /** Plain values shown verbatim (value == label). */
+        private static List<Option> identity(String... values) {
+            List<Option> opts = new ArrayList<>(values.length);
+            for (String v : values) {
+                opts.add(new Option(v, v));
+            }
+            return opts;
+        }
+
+        /** Value→label pairs in the map's iteration order. */
+        private static List<Option> pairs(Map<String, String> valueToLabel) {
+            List<Option> opts = new ArrayList<>(valueToLabel.size());
+            valueToLabel.forEach((value, label) -> opts.add(new Option(value, label)));
+            return opts;
         }
     }
 }

@@ -153,6 +153,16 @@ public class DivKitController {
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",
                 ShellLayoutBuilder.account(user.displayName(), profileLinks, activeProfile.id(), p, messages)));
+        // A flat route-path → localized label map (e.g. "/catalogs/customers" → "Клиенты"), built
+        // from the same nav the sidebar renders. The web client titles its workspace tabs from this
+        // so a tab reads in the chrome language instead of the humanized URL segment ("Customers").
+        Map<String, String> titles = new LinkedHashMap<>();
+        for (ShellLayoutBuilder.NavSection section : nav) {
+            for (ShellLayoutBuilder.NavItem item : section.items()) {
+                titles.putIfAbsent(item.path(), item.label());
+            }
+        }
+        out.put("titles", titles);
         return out;
     }
 

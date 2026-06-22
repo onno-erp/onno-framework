@@ -13,7 +13,10 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "login.title": "Sign in",
   "login.subtitle.password": "Use your workspace credentials.",
   "login.subtitle.sso": "Continue with your organization account.",
+  "login.subtitle.choose": "Choose how to sign in.",
   "login.sso": "Continue with {provider}",
+  "login.method.password": "Sign in with password",
+  "login.back": "Back",
   "login.none": "No interactive login is configured for this application.",
   "login.username": "Username",
   "login.password": "Password",
@@ -40,6 +43,12 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Document posting status.
   "status.posted": "Posted",
   "status.draft": "Draft",
+
+  // Workspace tab titles. The list tab reads the entity's localized title directly (from the
+  // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+  "tab.new": "New {entity}",
+  "tab.edit": "Edit {entity}",
+  "tab.duplicate": "Duplicate {entity}",
 
   // App shell / account island.
   "shell.signedInAs": "Signed in as",

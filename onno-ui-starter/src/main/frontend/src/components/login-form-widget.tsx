@@ -41,9 +41,10 @@ export function LoginFormWidget() {
     // The login screen is a server-driven DivKit card whose container blocks carry
     // pointer-events:none (taps fall through to DivKit actions). That inherits into this React
     // island and would make the inputs/button unclickable, so re-enable pointer events here.
-    // The horizontal padding insets the inputs from the DivKit block edge (which clips), so their
-    // focus ring isn't cut off.
-    <form onSubmit={handleSubmit} className="space-y-4 px-2 pointer-events-auto">
+    // No extra horizontal inset here: the card already pads its content (Div.pad in LoginDivBuilder),
+    // and adding px-2 on top made the password "Sign in" button narrower than the full-width DivKit
+    // SSO buttons. Sharing the single card inset keeps every button the same width.
+    <form onSubmit={handleSubmit} className="space-y-4 pointer-events-auto">
       <div className="space-y-2">
         <Label htmlFor="username">{t("login.username")}</Label>
         <Input
