@@ -31,17 +31,10 @@ public class UiProperties {
      * {@link UiMessages#DEFAULTS} (e.g. {@code login.title}, {@code action.new}); each value replaces
      * the English default. The resolved map renders the server-side DivKit chrome and is handed to
      * the web client via {@code GET /api/config}, so a one-language deployment can fully localize the
-     * shell without patching framework code.
-     *
-     * <p>Because the keys contain dots, quote them in YAML so they bind as literal map keys:
-     * <pre>
-     * onno:
-     *   ui:
-     *     messages:
-     *       "action.new": "Новый"
-     *       "login.title": "Вход"
-     * </pre>
-     * (in a properties file use bracket notation: {@code onno.ui.messages[action.new]=Новый}).
+     * shell without patching framework code. Because the keys contain dots, quote them in YAML so
+     * they bind as literal map keys (e.g. {@code "action.new": "Новый"} nested under
+     * {@code onno.ui.messages}); in a properties file use bracket notation instead
+     * ({@code onno.ui.messages[action.new]=Новый}).
      */
     private Map<String, String> messages = new LinkedHashMap<>();
 
