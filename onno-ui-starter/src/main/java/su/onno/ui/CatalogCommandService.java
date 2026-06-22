@@ -260,6 +260,12 @@ public class CatalogCommandService {
         if (attr.javaType() == BigDecimal.class) {
             return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
         }
+        // Date/datetime columns arrive as JSON strings (JSON has no temporal type). Parse them so
+        // JDBI binds a typed value PostgreSQL accepts instead of a varchar it rejects. (#163)
+        Object temporal = TemporalValues.coerce(attr.javaType(), value);
+        if (temporal != null) {
+            return temporal;
+        }
         return value;
     }
 
