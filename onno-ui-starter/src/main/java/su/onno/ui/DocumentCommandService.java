@@ -539,32 +539,15 @@ public class DocumentCommandService {
         return null;
     }
 
-    /**
-     * Coerce a JDBC value into a {@link LocalDate}. The driver may hand back a {@code LocalDate},
-     * a {@code java.sql.Date}/{@code Timestamp}, or a string — and a TIMESTAMP renders as
-     * {@code "2026-06-04 08:44:44.4"} (space, not {@code T}), so a strict {@code LocalDate.parse}
-     * would fail at the space. Take just the date part.
-     */
-    static LocalDate toLocalDate(Object value) { // package-private for DocumentDateCoercionTest
-        if (value instanceof LocalDate ld) return ld;
-        if (value instanceof LocalDateTime ldt) return ldt.toLocalDate();
-        if (value instanceof java.sql.Date d) return d.toLocalDate();
-        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime().toLocalDate();
-        String s = value.toString();
-        return LocalDate.parse(s.length() >= 10 ? s.substring(0, 10) : s);
+    // Date/datetime coercion lives in TemporalValues, shared with the catalog/document write paths.
+    // Kept here as package-private delegators for the reconstruct call sites and DocumentDateCoercionTest.
+
+    static LocalDate toLocalDate(Object value) {
+        return TemporalValues.toLocalDate(value);
     }
 
-    /**
-     * Coerce a JDBC value into a {@link LocalDateTime}, accepting {@code Timestamp}/{@code Date}
-     * instances and both {@code T}- and space-separated strings (H2 returns the latter for
-     * TIMESTAMP columns).
-     */
-    static LocalDateTime toLocalDateTime(Object value) { // package-private for DocumentDateCoercionTest
-        if (value instanceof LocalDateTime ldt) return ldt;
-        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
-        if (value instanceof LocalDate ld) return ld.atStartOfDay();
-        if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
-        return LocalDateTime.parse(value.toString().replace(' ', 'T'));
+    static LocalDateTime toLocalDateTime(Object value) {
+        return TemporalValues.toLocalDateTime(value);
     }
 
     /** Natural key for a document row is its number (the slug used to address the resource). */
@@ -639,6 +622,12 @@ public class DocumentCommandService {
         }
         if (attr.javaType() == BigDecimal.class) {
             return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
+        }
+        // Date/datetime columns arrive as JSON strings (JSON has no temporal type). Parse them so
+        // JDBI binds a typed value PostgreSQL accepts instead of a varchar it rejects. (#163)
+        Object temporal = TemporalValues.coerce(attr.javaType(), value);
+        if (temporal != null) {
+            return temporal;
         }
         return value;
     }
