@@ -107,6 +107,36 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
             }
         }
     }
+
+    // Mirror the same open-source artifacts into the onno-cloud /modules registry, alongside Maven
+    // Central. Central stays the canonical public channel; /modules is an instant cache so onno's own
+    // builds (onno-enterprise, tenant builds) resolve a freshly released core right away instead of
+    // waiting for Central to sync. These are open-core coordinates (su.onno:*), which the registry
+    // serves without a license; the PUT is authenticated by the shared publish credential (CI secrets).
+    // Defined unconditionally — it's only exercised by `publish…ToOnnoCloudRepository`, so a local
+    // `publishToMavenLocal` (no token) is unaffected.
+    val onnoRegistryUrl = providers.gradleProperty("onnoRegistryUrl")
+        .orElse(providers.environmentVariable("ONNO_REGISTRY_URL"))
+        .orElse("https://cloud.onno.su/modules").get()
+    val onnoRegistryUser = providers.gradleProperty("onnoRegistryUser")
+        .orElse(providers.environmentVariable("ONNO_REGISTRY_USER"))
+        .orElse("publisher").get()
+    val onnoRegistryToken = providers.gradleProperty("onnoRegistryToken")
+        .orElse(providers.environmentVariable("ONNO_REGISTRY_TOKEN"))
+        .orElse("").get()
+    configure<org.gradle.api.publish.PublishingExtension> {
+        repositories {
+            maven {
+                name = "onnoCloud"
+                setUrl(onnoRegistryUrl)
+                isAllowInsecureProtocol = onnoRegistryUrl.startsWith("http://")
+                credentials {
+                    username = onnoRegistryUser
+                    password = onnoRegistryToken
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

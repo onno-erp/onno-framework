@@ -79,3 +79,18 @@ jobs:
           name: onno-framework ${{ steps.version.outputs.release_version }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           generate_release_notes: true
+
+      - name: Mirror to the onno-cloud module registry
+        # Push the same open-source artifacts to onno-cloud's /modules registry so onno's own builds
+        # (onno-enterprise, tenant builds) resolve this release instantly instead of waiting for Maven
+        # Central to sync. Central (above) is the canonical channel and already succeeded; this is a
+        # best-effort mirror — if it fails (registry down, missing token) re-run just this task with
+        # `./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion=<v>`, without
+        # re-touching Central. The publication is signed, so the signing key is needed here too.
+        env:
+          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://cloud.onno.su/modules' }}
+          ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
+          ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: ./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
