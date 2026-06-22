@@ -10,9 +10,24 @@ describe("SsoIcon", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("masks the provider SVG and fills it with the given color", () => {
+  it("renders a full-color image by default so the logo keeps its brand colors", () => {
     const { container } = render(
       <SsoIcon src="/api/auth/telegram/logo.svg" color="rgb(10, 20, 30)" size={18} />
+    );
+    const icon = container.querySelector("[data-onno-sso-icon]") as HTMLImageElement;
+    expect(icon).not.toBeNull();
+    expect(icon.tagName).toBe("IMG");
+    expect(icon.getAttribute("src")).toBe("/api/auth/telegram/logo.svg");
+    // No tint: a full-color mark is shown as-is, not masked/recolored.
+    const style = icon.getAttribute("style") ?? "";
+    expect(style).not.toMatch(/mask-image/i);
+    expect(icon.style.width).toBe("18px");
+    expect(icon.style.height).toBe("18px");
+  });
+
+  it("masks the provider SVG and fills it with the given color when monochrome", () => {
+    const { container } = render(
+      <SsoIcon src="/api/auth/telegram/logo.svg" color="rgb(10, 20, 30)" size={18} monochrome />
     );
     const icon = container.querySelector("[data-onno-sso-icon]") as HTMLElement;
     expect(icon).not.toBeNull();
@@ -27,8 +42,8 @@ describe("SsoIcon", () => {
     expect(icon.style.height).toBe("18px");
   });
 
-  it("falls back to currentColor so it inherits the button text color when no color is given", () => {
-    const { container } = render(<SsoIcon src="/logo.svg" />);
+  it("falls back to currentColor when monochrome and no color is given", () => {
+    const { container } = render(<SsoIcon src="/logo.svg" monochrome />);
     const icon = container.querySelector("[data-onno-sso-icon]") as HTMLElement;
     // jsdom normalizes the keyword to lowercase; compare case-insensitively.
     expect(icon.style.backgroundColor.toLowerCase()).toBe("currentcolor");

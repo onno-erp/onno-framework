@@ -150,36 +150,45 @@ public final class LoginDivBuilder {
         return row;
     }
 
+    /** Brand-mark / glyph size on the login method buttons (px). */
+    private static final int MARK = 18;
+
     /**
      * The "Sign in with password" method button shown on the picker. Taps {@code onno://auth/password},
      * which the client turns into a re-request of the {@code password} step (the credentials form).
      */
     private static Map<String, Object> passwordButton(boolean primary, Palette p, UiMessages msg) {
         String fg = primary ? p.page() : p.text();
-        Map<String, Object> icon = Components.icon("lock-keyhole", fg, 18);
+        Map<String, Object> icon = Components.icon("lock-keyhole", fg, MARK);
         return methodButton(icon, msg.get("login.method.password"), "onno://auth/password", "password", primary, p);
     }
 
     /**
      * A full-width login button. Tapping it navigates to {@code onno://auth/sso/{id}}, which the
      * host turns into a full-page redirect to the provider's authorization URL. When the provider
-     * supplies an {@link SsoProvider#iconUrl()} a leading logo is shown to the left of the label,
-     * tinted to the button's text color; otherwise the button is label-only.
+     * supplies an {@link SsoProvider#iconUrl()} its brand mark is shown on the right of the label;
+     * otherwise the button is label-only. The label is the provider's full
+     * {@link SsoProvider#buttonLabel()} verbatim when set (so an already-localized phrase isn't
+     * re-wrapped into a mixed-language {@code "Continue with …"}), otherwise the {@code login.sso}
+     * framing around its name.
      */
     private static Map<String, Object> ssoButton(SsoProvider provider, boolean primary, Palette p, UiMessages msg) {
-        // The button foreground: light text on the primary fill, normal text on the ghost variant.
-        // The icon is tinted to this same color so the logo and label read as one unit in both themes.
+        // The button foreground: light text on the primary fill, normal text on the ghost variant. A
+        // monochrome mark is tinted to this; a full-color mark keeps its own colors.
         String fg = primary ? p.page() : p.text();
         Map<String, Object> icon = providerIcon(provider, fg);
-        String label = msg.format("login.sso", "provider", provider.label());
+        String label = provider.buttonLabel() != null && !provider.buttonLabel().isBlank()
+                ? provider.buttonLabel()
+                : msg.format("login.sso", "provider", provider.label());
         return methodButton(icon, label, ssoAction(provider), "sso", primary, p);
     }
 
     /**
-     * A full-width method button: an optional leading {@code icon} (already built and tinted by the
-     * caller) + label over an {@code onno://} action. Primary buttons get the accent fill; the rest
-     * are ghost (surface + hairline). Every login button is built here so they share one width and
-     * shape — the picker's options, the password button, and the SSO buttons all line up.
+     * A full-width method button: a centered label with an optional {@code icon} (already built by the
+     * caller) on the <em>right</em> over an {@code onno://} action. An invisible spacer the mark's
+     * width leads the row so the label stays optically centered. Primary buttons get the accent fill;
+     * the rest are ghost (surface + hairline). Every login button is built here so they share one
+     * width and shape — the picker's options, the password button, and the SSO buttons all line up.
      */
     private static Map<String, Object> methodButton(Map<String, Object> icon, String text, String action,
                                                     String logId, boolean primary, Palette p) {
@@ -188,16 +197,21 @@ public final class LoginDivBuilder {
         Map<String, Object> label = Div.text(text, 14, "medium");
         Div.color(label, fg);
         Div.maxLines(label, 1);
+        // Fill the row (so the mark is pinned to the right edge) and center the label within it.
+        Div.weight(label, 1);
+        Div.textAlign(label, "center");
 
         List<Map<String, Object>> parts = new ArrayList<>();
         if (icon != null) {
-            parts.add(icon);
+            parts.add(spacer(MARK));
         }
         parts.add(label);
+        if (icon != null) {
+            parts.add(icon);
+        }
 
         Map<String, Object> btn = Div.horizontal(parts);
         Div.matchWidth(btn);
-        Div.alignH(btn, "center");
         Div.alignV(btn, "center");
         Div.gap(btn, 8);
         Div.pad(btn, 12, 14);
@@ -212,28 +226,37 @@ public final class LoginDivBuilder {
         return btn;
     }
 
+    /** A fixed square of empty space — balances the right-hand mark so the label stays centered. */
+    private static Map<String, Object> spacer(int size) {
+        Map<String, Object> s = Div.container("vertical", List.of());
+        Div.width(s, size);
+        Div.height(s, size);
+        return s;
+    }
+
     /**
-     * The optional leading logo for an SSO button. When the provider supplies an
+     * The optional brand mark for an SSO button. When the provider supplies an
      * {@link SsoProvider#iconUrl()}, render it as an {@code onno-sso-icon} custom block carrying the
-     * URL plus the button's foreground {@code color} and a {@code size}; the client paints the
-     * (monochrome) SVG in that color — as if it were drawn in {@code currentColor} — so it inherits
-     * the button text color and reads in both light and dark themes. Returns {@code null} when no
-     * icon is supplied, so the button degrades to label-only. Generic for any provider — nothing
-     * here is provider-specific; the framework just renders whatever URL it is given.
+     * URL, the button's foreground {@code color}, a {@code size}, and the provider's
+     * {@link SsoProvider#monochrome()} flag. The client shows a full-color logo as-is (keeping the
+     * brand's colors, e.g. Telegram blue), or — when {@code monochrome} — paints the SVG in
+     * {@code color} so a single-color glyph follows the button text in both themes. Returns
+     * {@code null} when no icon is supplied, so the button degrades to label-only. Generic for any
+     * provider — nothing here is provider-specific; the framework just renders whatever URL it is given.
      */
     private static Map<String, Object> providerIcon(SsoProvider provider, String color) {
         String url = provider.iconUrl();
         if (url == null || url.isBlank()) {
             return null;
         }
-        int size = 18;
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("src", url);
         props.put("color", color);
-        props.put("size", size);
+        props.put("size", MARK);
+        props.put("monochrome", provider.monochrome());
         Map<String, Object> node = Div.custom("onno-sso-icon", props);
-        Div.width(node, size);
-        Div.height(node, size);
+        Div.width(node, MARK);
+        Div.height(node, MARK);
         return node;
     }
 

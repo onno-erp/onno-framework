@@ -35,9 +35,9 @@ class LoginDivBuilderTest {
     }
 
     @Test
-    void rendersAProviderIconToTheLeftOfTheLabelWhenIconUrlIsPresent() {
-        // Password enabled, so the SSO button is the ghost (secondary) variant whose icon/label use
-        // the normal text color rather than the on-primary "page" color.
+    void rendersAProviderBrandMarkOnTheRightWhenIconUrlIsPresent() {
+        // Password enabled, so the SSO button is the ghost (secondary) variant whose label uses the
+        // normal text color rather than the on-primary "page" color.
         AuthMethods methods = new AuthMethods(true, List.of(
                 new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start",
                         "/api/auth/telegram/logo.svg")),
@@ -49,39 +49,89 @@ class LoginDivBuilderTest {
         assertThat(icons).singleElement().satisfies(icon -> {
             Map<String, Object> props = customProps(icon);
             assertThat(props.get("src")).isEqualTo("/api/auth/telegram/logo.svg");
-            // Tinted to the button's text color so the monochrome logo reads in both themes.
+            // Full color by default: the client shows the logo as-is, keeping its brand colors.
+            assertThat(props.get("monochrome")).isEqualTo(false);
+            // The button foreground is still carried (used only when monochrome), and a box size is set.
             assertThat(props.get("color")).isEqualTo(Palette.of("light").text());
-            // Sized as a box so DivKit lays it out before the client paints into it.
             assertThat(icon).containsKey("width").containsKey("height");
         });
-        // The icon precedes the label inside its button row ("to the left of the label").
-        assertThat(iconIsBeforeLabel(card)).isTrue();
+        // The mark is the last item in its button row ("on the right of the label").
+        assertThat(iconIsAfterLabel(card)).isTrue();
     }
 
-    /** True when an {@code onno-sso-icon} appears before the text node inside an SSO button row. */
+    @Test
+    void monochromeProviderTintsTheMarkToTheButtonForeground() {
+        // A password-less single provider is the primary button, so its foreground is the on-primary
+        // "page" color; a monochrome mark is tinted to that so it reads on the accent fill.
+        AuthMethods methods = new AuthMethods(false, List.of(
+                new SsoProvider("acme", "Acme", "/oauth2/authorization/acme",
+                        "/api/auth/acme/logo.svg", true, null)),
+                "/logout", "oidc");
+
+        Map<String, Object> icon = ssoIcons(LoginDivBuilder.login(methods, Palette.of("light"))).get(0);
+        Map<String, Object> props = customProps(icon);
+
+        assertThat(props.get("monochrome")).isEqualTo(true);
+        assertThat(props.get("color")).isEqualTo(Palette.of("light").page());
+    }
+
+    @Test
+    void buttonLabelOverridesTheContinueWithFramingVerbatim() {
+        // An already-localized phrase is shown as-is, not re-wrapped into "Continue with Войти …".
+        AuthMethods methods = new AuthMethods(false, List.of(
+                new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start",
+                        "/api/auth/telegram/logo.svg", false, "Войти через Telegram")),
+                "/logout", "oidc");
+
+        List<String> texts = textValues(LoginDivBuilder.login(methods, Palette.of("light")));
+
+        assertThat(texts).contains("Войти через Telegram");
+        assertThat(texts).doesNotContain("Continue with Telegram");
+    }
+
+    /** True when an {@code onno-sso-icon} is the last item (after the text label) inside an SSO button row. */
     @SuppressWarnings("unchecked")
-    private static boolean iconIsBeforeLabel(Object node) {
+    private static boolean iconIsAfterLabel(Object node) {
         if (node instanceof Map<?, ?> map) {
             Object action = map.get("action");
             Object items = map.get("items");
             if (action instanceof Map<?, ?> a && String.valueOf(a.get("url")).startsWith("onno://auth/sso/")
                     && items instanceof List<?> list && list.size() >= 2) {
-                Object first = list.get(0);
-                return first instanceof Map<?, ?> m && "onno-sso-icon".equals(m.get("custom_type"));
+                Object last = list.get(list.size() - 1);
+                return last instanceof Map<?, ?> m && "onno-sso-icon".equals(m.get("custom_type"));
             }
             for (Object v : ((Map<String, Object>) map).values()) {
-                if (iconIsBeforeLabel(v)) {
+                if (iconIsAfterLabel(v)) {
                     return true;
                 }
             }
         } else if (node instanceof List<?> list) {
             for (Object v : list) {
-                if (iconIsBeforeLabel(v)) {
+                if (iconIsAfterLabel(v)) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    /** Every {@code text} block value on the card, in document order. */
+    @SuppressWarnings("unchecked")
+    private static List<String> textValues(Object node) {
+        List<String> out = new ArrayList<>();
+        if (node instanceof Map<?, ?> map) {
+            if ("text".equals(map.get("type")) && map.get("text") instanceof String s) {
+                out.add(s);
+            }
+            for (Object v : ((Map<String, Object>) map).values()) {
+                out.addAll(textValues(v));
+            }
+        } else if (node instanceof List<?> list) {
+            for (Object v : list) {
+                out.addAll(textValues(v));
+            }
+        }
+        return out;
     }
 
     @Test
@@ -109,20 +159,6 @@ class LoginDivBuilderTest {
         assertThat(icons).extracting(LoginDivBuilderTest::customProps)
                 .extracting(props -> props.get("src"))
                 .containsExactly("/api/auth/telegram/logo.svg", "/api/auth/github/logo.svg");
-    }
-
-    @Test
-    void tintsThePrimaryButtonIconWithThePrimaryForegroundColor() {
-        // A password-less screen makes the first (and only) SSO button the primary one, whose text
-        // (and thus icon) is the on-primary "page" color rather than the normal text color.
-        AuthMethods methods = new AuthMethods(false, List.of(
-                new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start",
-                        "/api/auth/telegram/logo.svg")),
-                "/logout", "oidc");
-
-        Map<String, Object> icon = ssoIcons(LoginDivBuilder.login(methods, Palette.of("light"))).get(0);
-
-        assertThat(customProps(icon).get("color")).isEqualTo(Palette.of("light").page());
     }
 
     // ---- Two-step picker: when both a password and SSO are offered, login splits into steps. ----

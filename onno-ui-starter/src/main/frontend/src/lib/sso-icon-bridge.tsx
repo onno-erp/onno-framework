@@ -2,35 +2,52 @@ import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 /**
- * Bridges DivKit's {@code div-custom} blocks of type {@code onno-sso-icon} to a monochrome provider
- * logo on an SSO login button. The server (LoginDivBuilder) emits an {@code onno-sso-icon} node
- * carrying {@code src/color/size} when a provider supplies an {@code iconUrl}; DivKit instantiates
+ * Bridges DivKit's {@code div-custom} blocks of type {@code onno-sso-icon} to a provider brand logo on
+ * an SSO login button. The server (LoginDivBuilder) emits an {@code onno-sso-icon} node carrying
+ * {@code src/color/size/monochrome} when a provider supplies an {@code iconUrl}; DivKit instantiates
  * the {@link OnnoSsoIconElement} custom element and assigns those as properties, and {@link
  * SsoIconPortals} (mounted on the login route) renders an {@link SsoIcon} into each.
  *
  * <p>Mirrors {@code icon-bridge} / {@code hint-bridge} exactly — the same store/portal pattern DivKit
- * needs to host a React node inside a custom block — but renders an arbitrary same-origin SVG URL
+ * needs to host a React node inside a custom block — but renders an arbitrary same-origin logo URL
  * (the connector that owns the provider serves it, e.g. {@code /api/auth/telegram/logo.svg}) rather
  * than a named lucide glyph.</p>
  */
 
 /**
- * A provider logo painted in the button's text color. The SVG is used as a CSS mask and filled with
- * {@code color} (the foreground the server resolved for the button), so a monochrome logo inherits
- * the button text color — equivalent to the SVG's own {@code currentColor}, but reliable for an
- * external URL (a plain {@code <img>} wouldn't inherit the host's color). Falls back to
- * {@code currentColor} when no color is supplied.
+ * A provider brand logo for an SSO button. By default the logo is rendered as-is (an {@code <img>}),
+ * keeping its own brand colors — e.g. the blue Telegram mark. When {@code monochrome} is set, the SVG
+ * is instead used as a CSS mask filled with {@code color} (the foreground the server resolved for the
+ * button), so a single-color glyph follows the button text color and reads in both light and dark
+ * themes — equivalent to the SVG's own {@code currentColor}, but reliable for an external URL (a plain
+ * {@code <img>} wouldn't inherit the host's color). Renders nothing without a {@code src}.
  */
 export function SsoIcon({
   src,
   color,
   size = 18,
+  monochrome = false,
 }: {
   src: string;
   color?: string;
   size?: number;
+  monochrome?: boolean;
 }) {
   if (!src) return null;
+  if (!monochrome) {
+    // Full color: show the logo with its own colors. object-fit keeps a non-square mark uncropped.
+    return (
+      <img
+        src={src}
+        alt=""
+        aria-hidden="true"
+        data-onno-sso-icon=""
+        width={size}
+        height={size}
+        style={{ display: "inline-block", width: size, height: size, flex: "none", objectFit: "contain" }}
+      />
+    );
+  }
   // CSS url() in a mask resolves relative to the document, so a same-origin path (e.g.
   // "/api/auth/telegram/logo.svg") works as given. Quote it to survive any odd characters.
   const maskImage = `url("${src.replace(/"/g, "%22")}")`;
@@ -65,6 +82,7 @@ type Mount = {
   src: string;
   color?: string;
   size?: number;
+  monochrome?: boolean;
 };
 
 // A new array reference is published on every change so useSyncExternalStore sees it.
@@ -88,6 +106,7 @@ class OnnoSsoIconElement extends HTMLElement {
   private _src = "";
   private _color: string | undefined;
   private _size: number | undefined;
+  private _monochrome = false;
 
   // DivKit assigns each custom_props key as a property on the element.
   set src(value: string) {
@@ -111,6 +130,14 @@ class OnnoSsoIconElement extends HTMLElement {
   get size(): number | undefined {
     return this._size;
   }
+  // DivKit may deliver the boolean as a real boolean or a string; accept both.
+  set monochrome(value: boolean | string | undefined) {
+    this._monochrome = value === true || value === "true";
+    this.sync();
+  }
+  get monochrome(): boolean {
+    return this._monochrome;
+  }
 
   connectedCallback() {
     this.sync();
@@ -130,10 +157,11 @@ class OnnoSsoIconElement extends HTMLElement {
       existing.src = this._src;
       existing.color = this._color;
       existing.size = this._size;
+      existing.monochrome = this._monochrome;
     } else {
       mounts = [
         ...mounts,
-        { id: this._id, el: this, src: this._src, color: this._color, size: this._size },
+        { id: this._id, el: this, src: this._src, color: this._color, size: this._size, monochrome: this._monochrome },
       ];
     }
     mounts = [...mounts];
@@ -169,7 +197,7 @@ export function SsoIconPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <SsoIcon src={m.src} color={m.color} size={m.size} />,
+          <SsoIcon src={m.src} color={m.color} size={m.size} monochrome={m.monochrome} />,
           m.el,
           String(m.id)
         )

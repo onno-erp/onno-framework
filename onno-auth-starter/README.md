@@ -363,24 +363,34 @@ AuthMethodsContributor telegramLogin() {
 }
 ```
 
-A provider may also give its button a logo via the optional fourth argument, `iconUrl`. The icon is
-rendered to the left of the label and tinted to the button's text color (so a monochrome SVG using
-`currentColor` reads correctly in both light and dark themes), and it flows to every client that reads
-the auth-methods list — not just the web login page. The connector that owns the provider serves the
-asset; the framework only renders the URL it is given:
+A provider may also give its button a brand logo via the optional fourth argument, `iconUrl`, and a
+full, already-localized label via `buttonLabel`. The mark is rendered on the **right** of the label
+and flows to every client that reads the auth-methods list — not just the web login page. The
+connector that owns the provider serves the asset; the framework only renders the URL it is given:
 
 ```java
 @Bean
 AuthMethodsContributor telegramLogin() {
     return () -> List.of(new SsoProvider(
-            "telegram", "Telegram", "/api/auth/telegram/start", "/api/auth/telegram/logo.svg"));
+            "telegram", "Telegram", "/api/auth/telegram/start",
+            "/api/auth/telegram/logo.svg",   // iconUrl: the provider's brand logo
+            false,                           // monochrome: false = keep brand colors (Telegram blue)
+            "Войти через Telegram"));        // buttonLabel: full text, shown verbatim
 }
 ```
 
-The three-argument constructor remains (it passes `iconUrl = null`), so existing buttons render
-label-only and need no change. When a deployment offers both a password form and SSO buttons, the
-login screen splits into two steps — a method picker, then the credentials form behind a back link —
-so it stays uncluttered; single-method screens render inline as before.
+- **`iconUrl`** is shown in **full color by default**, so a real brand logo keeps its colors. Pass
+  `monochrome = true` for a single-color glyph instead: the framework then tints the SVG to the
+  button's text color (as if drawn in `currentColor`), so it reads in both light and dark themes.
+- **`buttonLabel`**, when set, replaces the default `"Continue with {provider}"` framing entirely —
+  use it when the label is already a complete localized phrase, so it isn't double-wrapped into a
+  mixed-language string. Leave it null to keep the default framing (override the wording via the
+  `login.sso` key in [`onno.ui.messages`](../onno-ui-starter/README.md)).
+
+The three- and four-argument constructors remain (they default `monochrome = false` and
+`buttonLabel = null`), so existing buttons need no change. When a deployment offers both a password
+form and SSO buttons, the login screen splits into two steps — a method picker, then the credentials
+form behind a back link — so it stays uncluttered; single-method screens render inline as before.
 
 ## Gotchas
 

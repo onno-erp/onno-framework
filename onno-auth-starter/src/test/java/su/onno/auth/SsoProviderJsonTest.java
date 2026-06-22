@@ -56,4 +56,15 @@ class SsoProviderJsonTest {
         assertThat(restored.providers()).extracting(SsoProvider::iconUrl)
                 .containsExactly(null, "/api/auth/telegram/logo.svg");
     }
+
+    @Test
+    void roundTripsTheMonochromeFlagAndButtonLabel() throws Exception {
+        SsoProvider provider = new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start",
+                "/api/auth/telegram/logo.svg", true, "Войти через Telegram");
+
+        SsoProvider restored = mapper.readValue(mapper.writeValueAsString(provider), SsoProvider.class);
+
+        assertThat(restored.monochrome()).isTrue();
+        assertThat(restored.buttonLabel()).isEqualTo("Войти через Telegram");
+    }
 }

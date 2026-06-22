@@ -187,16 +187,26 @@
   }
 }
 
-/* DivKit mounts div-custom blocks (chart/calendar/kanban widgets, the entity form)
-   into these elements; they're inline by default, so make them fill the cell DivKit
-   places them in. DivKit marks action-less custom blocks pointer-events:none, which
-   (being inherited) would disable every control inside the React subtree — so restore
+/* DivKit mounts div-custom blocks (chart/calendar/kanban widgets, the entity form, the
+   login password form) into these elements; they're inline by default, so make them fill
+   the cell DivKit places them in. DivKit marks action-less custom blocks pointer-events:none,
+   which (being inherited) would disable every control inside the React subtree — so restore
    it here; the React widgets/forms handle their own clicks/drags/hovers. */
 onno-widget,
-onno-form {
+onno-form,
+onno-login-form {
   display: block;
   width: 100%;
   pointer-events: auto;
+}
+
+/* DivKit wraps every block in an overflow:clip box. The login password form is full-width (its
+   inputs share the card inset with the SSO buttons), so each input sits flush to that clip edge and
+   its focus ring — an outset box-shadow drawn a few px beyond the field — gets cut off (notably along
+   the top). Lift the clip on the form's own wrapper so the ring paints fully on all four sides; the
+   login card's own padding (Div.pad in LoginDivBuilder) keeps it within the card's clip. */
+.onno-surface :has(> onno-login-form) {
+  overflow: visible !important;
 }
 
 /* DivKit renders its text blocks with user-select:none (see client.css), so a record's
