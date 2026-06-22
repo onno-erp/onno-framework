@@ -2,6 +2,8 @@ package su.onno.ui.comments;
 
 import org.jdbi.v3.core.Jdbi;
 
+import su.onno.ui.SqlBind;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -64,19 +66,25 @@ public class CommentService {
                        String authorId, String authorName, String body) {
         UUID id = UUID.randomUUID();
         LocalDateTime now = LocalDateTime.now();
-        jdbi.useHandle(h -> h.createUpdate("INSERT INTO " + TABLE +
-                        " (_id, _entity_type, _entity_name, _entity_id, _author_id, _author_name," +
-                        " _body, _created_at, _edited_at, _deleted)" +
-                        " VALUES (:id, :type, :name, :entityId, :authorId, :authorName, :body, :createdAt, NULL, FALSE)")
-                .bind("id", id)
-                .bind("type", entityType)
-                .bind("name", entityName)
-                .bind("entityId", entityId)
-                .bind("authorId", authorId == null ? null : UUID.fromString(authorId))
-                .bind("authorName", authorName)
-                .bind("body", body)
-                .bind("createdAt", now)
-                .execute());
+        UUID authorUuid = authorId == null ? null : UUID.fromString(authorId);
+        jdbi.useHandle(h -> {
+            var update = h.createUpdate("INSERT INTO " + TABLE +
+                            " (_id, _entity_type, _entity_name, _entity_id, _author_id, _author_name," +
+                            " _body, _created_at, _edited_at, _deleted)" +
+                            " VALUES (:id, :type, :name, :entityId, :authorId, :authorName, :body, :createdAt, NULL, FALSE)")
+                    .bind("id", id)
+                    .bind("type", entityType)
+                    .bind("name", entityName)
+                    .bind("entityId", entityId)
+                    .bind("authorName", authorName)
+                    .bind("body", body)
+                    .bind("createdAt", now);
+            // An unlinked principal (e.g. an in-memory onno.auth.users login) has no record id, so
+            // _author_id is null — bind it as a typed uuid null, not varchar, or Postgres rejects
+            // the insert ("uuid but expression is of type character varying"). (#171, same as #163)
+            SqlBind.nullable(update, "authorId", authorUuid);
+            update.execute();
+        });
         return new Comment(id, entityType, entityName, entityId, authorId, authorName, body, now, null);
     }
 
