@@ -16,11 +16,11 @@ import { createPortal } from "react-dom";
 
 /**
  * A provider brand logo for an SSO button. By default the logo is rendered as-is (an {@code <img>}),
- * keeping its own brand colors — e.g. the blue Telegram mark. When {@code monochrome} is set, the SVG
- * is instead used as a CSS mask filled with {@code color} (the foreground the server resolved for the
- * button), so a single-color glyph follows the button text color and reads in both light and dark
- * themes — equivalent to the SVG's own {@code currentColor}, but reliable for an external URL (a plain
- * {@code <img>} wouldn't inherit the host's color). Renders nothing without a {@code src}.
+ * keeping its own brand colors — e.g. a full-color badge. When {@code monochrome} is set, the SVG is
+ * instead used as a CSS mask filled with {@code color} (the app's accent color, which the server
+ * resolved for the button), so a single-color glyph picks up the theme — an orange primary paints it
+ * orange — and reads in both light and dark. The mask approach is reliable for an external URL (a
+ * plain {@code <img>} wouldn't inherit the host's color). Renders nothing without a {@code src}.
  */
 export function SsoIcon({
   src,

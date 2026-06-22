@@ -173,10 +173,16 @@ public final class LoginDivBuilder {
      * framing around its name.
      */
     private static Map<String, Object> ssoButton(SsoProvider provider, boolean primary, Palette p, UiMessages msg) {
-        // The button foreground: light text on the primary fill, normal text on the ghost variant. A
-        // monochrome mark is tinted to this; a full-color mark keeps its own colors.
+        // The button foreground (label color): light text on the primary fill, normal text on the
+        // ghost variant.
         String fg = primary ? p.page() : p.text();
-        Map<String, Object> icon = providerIcon(provider, fg);
+        // A monochrome brand mark is tinted to the app's accent (primary) color so it picks up the
+        // theme — an orange primary paints the mark orange, matching the primary-filled password
+        // button — while the default neutral primary keeps it near-black/near-white and legible in
+        // both light and dark. On a primary-filled SSO button the mark uses the page color instead,
+        // for contrast against the accent fill. A full-color mark ignores this and keeps its colors.
+        String markColor = provider.monochrome() ? (primary ? p.page() : p.primary()) : fg;
+        Map<String, Object> icon = providerIcon(provider, markColor);
         String label = provider.buttonLabel() != null && !provider.buttonLabel().isBlank()
                 ? provider.buttonLabel()
                 : msg.format("login.sso", "provider", provider.label());
@@ -239,8 +245,9 @@ public final class LoginDivBuilder {
      * {@link SsoProvider#iconUrl()}, render it as an {@code onno-sso-icon} custom block carrying the
      * URL, the button's foreground {@code color}, a {@code size}, and the provider's
      * {@link SsoProvider#monochrome()} flag. The client shows a full-color logo as-is (keeping the
-     * brand's colors, e.g. Telegram blue), or — when {@code monochrome} — paints the SVG in
-     * {@code color} so a single-color glyph follows the button text in both themes. Returns
+     * brand's colors), or — when {@code monochrome} — paints the SVG in {@code color} (the app's
+     * accent color, resolved by the caller) so a single-color glyph picks up the theme and reads in
+     * both light and dark. Returns
      * {@code null} when no icon is supplied, so the button degrades to label-only. Generic for any
      * provider — nothing here is provider-specific; the framework just renders whatever URL it is given.
      */

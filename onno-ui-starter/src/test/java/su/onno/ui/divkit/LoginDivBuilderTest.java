@@ -76,6 +76,24 @@ class LoginDivBuilderTest {
     }
 
     @Test
+    void monochromeProviderOnAGhostButtonTintsTheMarkToTheAccent() {
+        // With a password present, the SSO button is the ghost variant. A monochrome mark there is
+        // tinted to the app's accent (primary) color — not the label's text color — so it picks up
+        // the theme (an orange primary paints the mark orange), matching the primary password button.
+        AuthMethods methods = new AuthMethods(true, List.of(
+                new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start",
+                        "/api/auth/telegram/logo.svg", true, null)),
+                "/logout", "oidc");
+
+        Map<String, Object> icon = ssoIcons(LoginDivBuilder.login(methods, Palette.of("light"))).get(0);
+        Map<String, Object> props = customProps(icon);
+
+        assertThat(props.get("monochrome")).isEqualTo(true);
+        assertThat(props.get("color")).isEqualTo(Palette.of("light").primary());
+        assertThat(props.get("color")).isNotEqualTo(Palette.of("light").text());
+    }
+
+    @Test
     void buttonLabelOverridesTheContinueWithFramingVerbatim() {
         // An already-localized phrase is shown as-is, not re-wrapped into "Continue with Войти …".
         AuthMethods methods = new AuthMethods(false, List.of(

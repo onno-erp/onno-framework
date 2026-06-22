@@ -21,10 +21,14 @@ package su.onno.auth.spi;
  *                         {@code /api/auth/telegram/logo.svg}); the framework only renders the URL it is
  *                         given. {@code null} renders a label-only button.
  * @param monochrome       how the {@code iconUrl} is painted: {@code false} (the default) renders the
- *                         logo as-is, keeping its brand colors (e.g. Telegram blue); {@code true} treats
- *                         it as a single-color glyph and tints it to the button's text color so it reads
- *                         in both light and dark themes (use this for a monochrome mark that should
- *                         follow {@code currentColor}). Ignored when {@code iconUrl} is null.
+ *                         logo as-is, keeping its brand colors (e.g. a full-color badge); {@code true}
+ *                         treats it as a single-color glyph and tints it to the app's accent (primary)
+ *                         color, so the mark picks up the theme — an orange primary paints it orange,
+ *                         matching the primary-filled password button — and still reads in both light
+ *                         and dark (the default neutral primary is near-black / near-white). On a
+ *                         primary-filled SSO button the mark uses the on-primary page color instead,
+ *                         for contrast against the fill. Use {@code true} for a single-color brand
+ *                         glyph supplied as bare paths. Ignored when {@code iconUrl} is null.
  * @param buttonLabel      optional full, ready-to-render button label that replaces the
  *                         {@code "Continue with {provider}"} framing entirely — set this when the label
  *                         is already a complete, localized phrase (e.g. the Russian
