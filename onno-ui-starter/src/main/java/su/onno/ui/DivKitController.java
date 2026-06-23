@@ -518,7 +518,6 @@ public class DivKitController {
                 meta, catalogQuery.get(desc, id),
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
                 palette(theme), messages);
-        content = SurfaceDivBuilder.withPresence(content, "catalogs", name, id.toString());
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -626,7 +625,6 @@ public class DivKitController {
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(
                 meta, row, relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
                 palette(theme), messages);
-        content = SurfaceDivBuilder.withPresence(content, "documents", name, id.toString());
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }

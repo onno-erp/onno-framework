@@ -95,12 +95,15 @@ public class UiEventPublisher {
      * <p>Its {@code entityType} is the distinct sentinel {@code "presence"}, <strong>not</strong> the
      * record's {@code catalog}/{@code document} kind — exactly as comment events use {@code "comment"} —
      * so the list/detail/dashboard surfaces, which refetch on a row change to their entity, never mistake
-     * a presence ping for one. Only the presence bar listens for it (matching on {@code entityName}/{@code id}).
+     * a presence ping for one. The record's route {@code kind} ({@code catalogs}/{@code documents}) and
+     * {@code entityName} ride alongside so the ambient-presence store can map a viewed record to its nav
+     * item and list rows; the marker surfaces match on {@code id} (globally unique).
      */
-    public void publishPresence(String entityName, String id, List<Map<String, String>> viewers) {
+    public void publishPresence(String kind, String entityName, String id, List<Map<String, String>> viewers) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "presence");
         payload.put("entityType", "presence");
+        payload.put("kind", kind);
         payload.put("entityName", entityName);
         payload.put("id", id);
         payload.put("viewers", viewers);

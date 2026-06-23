@@ -535,34 +535,6 @@ public final class SurfaceDivBuilder {
     }
 
     /**
-     * Add the record-level presence bar to a built detail surface. The bar is an {@code onno-presence}
-     * {@code div-custom} carrying the entity's {@code (kind, name, id)} triple; the React bridge marks the
-     * viewer present at {@code /api/presence/...} and renders the avatars of anyone else viewing the same
-     * record. It tucks in right under the detail header (right-aligned by the widget, the Google-Docs spot)
-     * and is invisible until a second viewer appears, so a solo viewer sees nothing. A full-width block
-     * rather than an inline header element, so it dodges the custom-block measure-empty sizing problem.
-     * Mirrors {@link #withComments}: returns the same content map with an extended {@code items} list, a
-     * no-op when there is no list to extend.
-     */
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> withPresence(Map<String, Object> content, String kind,
-                                                   String name, String id) {
-        Object items = content.get("items");
-        if (!(items instanceof List<?> existing)) {
-            return content;
-        }
-        Map<String, Object> bar = Div.custom("onno-presence",
-                Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
-        Div.matchWidth(bar);
-        List<Map<String, Object>> next = new ArrayList<>((List<Map<String, Object>>) existing);
-        // Just under the header (item 0) rather than above the title — the header is always the first
-        // item of a detail surface; min() keeps it safe if some surface had no leading header.
-        next.add(Math.min(1, next.size()), bar);
-        content.put("items", next);
-        return content;
-    }
-
-    /**
      * The detail surface header: a title (with an optional muted subtitle — e.g. a
      * document number or catalog code, which keeps long identifiers out of the big
      * title so it no longer wraps into the corner) on the left, and an action cluster

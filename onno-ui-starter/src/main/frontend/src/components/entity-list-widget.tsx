@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
+import { PresenceAvatars } from "@/components/presence-avatars";
+import { useViewersById } from "@/lib/presence-store";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -291,6 +293,8 @@ function ContainsFilter({
 export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const { kind, name, columns, pageSize } = list;
   const t = useMessages();
+  // Ambient presence: other users viewing each row's record, looked up by row id at render time.
+  const viewersById = useViewersById();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const rows = useRef<Map<number, EntityRecord>>(new Map());
@@ -871,6 +875,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                 {visible.map((i) => {
                 const row = rows.current.get(i);
                 const url = row ? `onno://${kind}/${name}/${row._id}` : undefined;
+                const rowViewers = row ? viewersById.get(String(row._id)) : undefined;
                 return (
                   <div
                     key={i}
@@ -890,6 +895,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                       : columns.map((c) => (
                           <span key={c.columnName} className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
                         ))}
+                    {rowViewers ? (
+                      // Who else is viewing this record — overlaid right, clearing the row actions.
+                      <div
+                        className="pointer-events-none absolute top-1/2 z-10 -translate-y-1/2"
+                        style={{ right: rowActions.length ? rowActions.length * 30 + 12 : 12 }}
+                      >
+                        <PresenceAvatars viewers={rowViewers} size={18} />
+                      </div>
+                    ) : null}
                     {rowActions.length ? (
                       <div className="flex items-center justify-end gap-1">
                         {row

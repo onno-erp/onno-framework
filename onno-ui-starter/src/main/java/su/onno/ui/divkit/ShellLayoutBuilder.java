@@ -354,15 +354,32 @@ public final class ShellLayoutBuilder {
     }
 
     private static Map<String, Object> sidebarLink(NavItem item, Palette p) {
-        Map<String, Object> link = Div.text(item.label(), 14, "regular");
-        Div.maxLines(link, 1);
-        Div.color(link, activeColor(item.path(), p.primary(), p.text()));
-        Div.matchWidth(link);
-        Div.pad(link, 9, 10);
-        Div.corner(link, 8);
-        Div.background(link, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
-        Div.action(link, "nav", item.url());
-        return link;
+        Map<String, Object> label = Div.text(item.label(), 14, "regular");
+        Div.maxLines(label, 1);
+        Div.color(label, activeColor(item.path(), p.primary(), p.text()));
+        Div.weight(label, 1);
+        Div.matchWidth(label);
+
+        // Ambient presence: a small reserved slot the React bridge fills with who's viewing this entity
+        // (empty for non-entity routes or when nobody is here). The whole row is the nav action.
+        Map<String, Object> row = Div.horizontal(List.of(label, navPresence(item.path())));
+        Div.matchWidth(row);
+        Div.alignV(row, "center");
+        Div.gap(row, 6);
+        Div.pad(row, 9, 10);
+        Div.corner(row, 8);
+        Div.background(row, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
+        Div.action(row, "nav", item.url());
+        return row;
+    }
+
+    /** A fixed-size {@code onno-nav-presence} custom block — sized like {@link #icon} so the React island
+     *  has a measured box to portal into, and so an empty slot never shifts the nav layout. */
+    private static Map<String, Object> navPresence(String path) {
+        Map<String, Object> node = Div.custom("onno-nav-presence", Map.of("path", path));
+        Div.width(node, 18);
+        Div.height(node, 18);
+        return node;
     }
 
     // ----- BOTTOM_BAR: tab bar pinned below content -----

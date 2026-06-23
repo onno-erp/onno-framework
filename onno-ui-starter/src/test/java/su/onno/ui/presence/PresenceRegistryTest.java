@@ -126,13 +126,13 @@ class PresenceRegistryTest {
     }
 
     static final class RecordingPublisher extends UiEventPublisher {
-        record Push(String entityName, String id, List<Map<String, String>> viewers) {}
+        record Push(String kind, String entityName, String id, List<Map<String, String>> viewers) {}
 
         final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public void publishPresence(String entityName, String id, List<Map<String, String>> viewers) {
-            pushes.add(new Push(entityName, id, viewers));
+        public void publishPresence(String kind, String entityName, String id, List<Map<String, String>> viewers) {
+            pushes.add(new Push(kind, entityName, id, viewers));
         }
 
         List<Map<String, String>> last() {

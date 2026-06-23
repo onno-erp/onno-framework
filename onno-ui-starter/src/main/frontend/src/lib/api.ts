@@ -223,6 +223,23 @@ export interface PresenceState {
   viewers: PresenceViewer[];
 }
 
+/** One record currently being viewed, in the ambient-presence snapshot. */
+export interface PresenceRecord {
+  /** Route kind — "catalogs" | "documents". */
+  kind: string;
+  /** Route name (e.g. "properties"). */
+  name: string;
+  /** Record id (uuid). */
+  id: string;
+  viewers: PresenceViewer[];
+}
+
+/** The whole-app presence picture: every viewed record the caller may read, plus the caller's own id. */
+export interface PresenceSnapshot {
+  you: string;
+  records: PresenceRecord[];
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -345,6 +362,9 @@ export const api = {
   searchMentions: (q: string) =>
     fetchJson<MentionSuggestion[]>(`${BASE}/mentions?q=${encodeURIComponent(q)}`),
 
+  // The ambient-presence snapshot: every viewed record the caller may read. Loaded once on startup;
+  // live `presence` SSE deltas keep the client store current after that.
+  getPresenceSnapshot: () => fetchJson<PresenceSnapshot>(`${BASE}/presence`),
   // Presence — record-level collaboration markers (see PresenceController). `enter` on open and a
   // periodic `heartbeat` keep the viewer alive (the server expires them by TTL once heartbeats stop);
   // both return the record's current viewers. Gated server-side on read access to the owning entity.

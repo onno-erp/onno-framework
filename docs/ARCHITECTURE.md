@@ -187,7 +187,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter) |
-| Presence | `POST /api/presence/{kind}/{name}/{id}` — record-level collaboration markers; body `{ "action": "enter"\|"heartbeat"\|"leave" }`, gated on read access to the entity, identity stamped from the session; returns the record's current viewers. Heartbeat-kept, TTL-expired, relayed across nodes over the `ClusterEventBus` (ui-starter) |
+| Presence | `POST /api/presence/{kind}/{name}/{id}` — mark presence (`enter`/`heartbeat`/`leave`), gated on read access, identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (every viewed record the caller may read) that seeds the client store behind the tab/row/sidebar collaborator avatars; kept live by `presence` SSE deltas (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |

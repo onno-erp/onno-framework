@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,9 +38,10 @@ class PresenceControllerTest {
         Map<String, Object> response = controller.ping("catalogs", "Customers", id,
                 new PresenceController.PresenceRequest("enter"), principal);
 
-        // Identity is stamped from the principal (the record id), never asserted by the client.
+        // Identity is stamped from the principal (the record id), never asserted by the client; the
+        // registry stores the route kind ("catalogs"), not the singular access type.
         assertThat(registry.lastCall).isEqualTo(
-                new CapturingRegistry.Call("enter", "catalog", "Customers", id.toString(), "rec-1", "Alice Adams"));
+                new CapturingRegistry.Call("enter", "catalogs", "Customers", id.toString(), "rec-1", "Alice Adams"));
         assertThat(response).containsEntry("you", "rec-1");
         assertThat(response.get("viewers")).isEqualTo(List.of(Map.of("userId", "rec-2", "displayName", "Babbage")));
     }
@@ -98,6 +100,38 @@ class PresenceControllerTest {
                 .isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+    @Test
+    void snapshotReturnsReadableRecordsAndYou() {
+        access.canRead = true;
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        Map<String, Object> rec = new HashMap<>();
+        rec.put("kind", "catalogs");
+        rec.put("name", "Properties");
+        rec.put("id", "p1");
+        rec.put("viewers", List.of(Map.of("userId", "rec-2", "displayName", "Babbage")));
+        registry.allViewersFixture = List.of(rec);
+
+        Map<String, Object> response = controller.snapshot(principal);
+
+        assertThat(response).containsEntry("you", "rec-1");
+        assertThat(response.get("records")).isEqualTo(List.of(rec));
+    }
+
+    @Test
+    void snapshotOmitsRecordsInEntitiesTheCallerCannotRead() {
+        access.canRead = false;
+        Map<String, Object> rec = new HashMap<>();
+        rec.put("kind", "catalogs");
+        rec.put("name", "Salaries");
+        rec.put("id", "s1");
+        rec.put("viewers", List.of(Map.of("userId", "x", "displayName", "X")));
+        registry.allViewersFixture = List.of(rec);
+
+        Map<String, Object> response = controller.snapshot(principal);
+
+        assertThat((List<?>) response.get("records")).isEmpty();
+    }
+
     static final class FakeAccess extends UiAccessService {
         boolean canRead = true;
 
@@ -129,20 +163,26 @@ class PresenceControllerTest {
 
         Call lastCall;
         List<Map<String, String>> viewersFixture = List.of();
+        List<Map<String, Object>> allViewersFixture = List.of();
 
         CapturingRegistry() {
             super(new NoOpClusterEventBus(), new UiEventPublisher());
         }
 
         @Override
-        public void onLocal(String action, String entityType, String entityName, String id,
+        public void onLocal(String action, String kind, String entityName, String id,
                             String userId, String displayName) {
-            lastCall = new Call(action, entityType, entityName, id, userId, displayName);
+            lastCall = new Call(action, kind, entityName, id, userId, displayName);
         }
 
         @Override
-        public List<Map<String, String>> viewers(String entityType, String entityName, String id) {
+        public List<Map<String, String>> viewers(String kind, String entityName, String id) {
             return viewersFixture;
+        }
+
+        @Override
+        public List<Map<String, Object>> allViewers() {
+            return allViewersFixture;
         }
     }
 }

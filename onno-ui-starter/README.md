@@ -476,21 +476,31 @@ resolved **live**, so renames and deletes stay correct on their own.
 
 ### Presence — `/api/presence`
 
-Every catalog or document detail surface carries **record-level presence markers**: the avatars of
-anyone else currently viewing the same record, like the collaborator dots in a shared document. The
-server inserts an `onno-presence` DivKit panel just under the detail header; the React bridge marks the
-viewer present and renders the markers, right-aligned (the Google-Docs spot). It is invisible when you're alone, so a solo
-viewer sees nothing — markers only appear once a second viewer arrives. Presence is framework
-infrastructure with **no per-entity modelling and no opt-in**; it's on for every detail surface.
+**Ambient presence markers**: live collaborator avatars showing who else is viewing what, across the
+whole app — like Notion. Presence is framework infrastructure with **no per-entity modelling and no
+opt-in**, and surfaces in three places:
 
-**How it works.** The client `POST`s `enter` on open, a `heartbeat` every ~15s, and `leave` on close.
-A per-node in-memory [`PresenceRegistry`](src/main/java/su/onno/ui/presence/PresenceRegistry.java)
-holds who is viewing what, keyed by the `{kind, name, id}` triple, and pushes the viewer set onto the
-SSE stream as a `presence` event whenever it changes (a join or a leave — never on a bare heartbeat).
-A viewer is kept alive by heartbeats and **expires by TTL** (~45s) once they stop, so a closed tab or
-a crashed node self-heals without relying on the `leave` arriving. Identity is stamped from the session
-([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts
-who it is, and the markers exclude the caller themselves.
+- **Tab bar** — the other viewers of the focused pane's record, pinned right of its tabs.
+- **List rows** — a marker on each row whose record someone is viewing.
+- **Sidebar** — a dot on each catalog/document nav item whose entity has active viewers.
+
+**How it works.** Each open pane marks its record present by route — the client `POST`s `enter` on open,
+a `heartbeat` every ~15s, and `leave` on close. A per-node in-memory
+[`PresenceRegistry`](src/main/java/su/onno/ui/presence/PresenceRegistry.java) holds who is viewing what,
+keyed by `{kind, name, id}`, and pushes the viewer set onto the SSE stream as a `presence` event whenever
+it changes (a join or a leave — never on a bare heartbeat). A viewer is kept alive by heartbeats and
+**expires by TTL** (~45s) once they stop, so a closed tab or a crashed node self-heals without relying on
+the `leave` arriving. Identity is stamped from the session
+([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts who
+it is, and the markers exclude the caller themselves.
+
+**The client store.** All three surfaces read one client-wide store
+(`src/main/frontend/src/lib/presence-store.ts`): seeded once from `GET /api/presence`, then kept current
+by the `presence` deltas on the shared SSE fan-out. The snapshot is filtered to entities the caller may
+read — you never learn that someone is viewing a record in an entity you can't open. (Live deltas are
+broadcast app-wide, but only ever rendered on surfaces — rows, nav items — the caller already sees.) The
+`presence` event carries `entityType: "presence"` (a sentinel, not the record's kind) so no list/detail
+surface mistakes a ping for a row change.
 
 **Across nodes.** Each change is relayed as a `Presence` `ClusterEvent` over the same
 [`ClusterEventBus`](../onno-framework/src/main/java/su/onno/cluster/ClusterEventBus.java) that carries
@@ -500,7 +510,8 @@ best-effort — a dropped ping costs at most one TTL of staleness.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/api/presence/{kind}/{name}/{id}` | Mark presence on a record — body `{ "action": "enter" \| "heartbeat" \| "leave" }`. `{kind}` is `catalogs`/`documents`. Gated on read access to the entity (`403` otherwise); `404` for an unknown kind. Returns `{ you, viewers: [{ userId, displayName }] }` — `you` is the caller's id so the client can omit itself. |
+| GET | `/api/presence` | The ambient snapshot: `{ you, records: [{ kind, name, id, viewers: [{ userId, displayName }] }] }` — every viewed record the caller may read. The client loads it once, then live `presence` SSE deltas keep its store current. |
+| POST | `/api/presence/{kind}/{name}/{id}` | Mark presence on a record — body `{ "action": "enter" \| "heartbeat" \| "leave" }`. `{kind}` is `catalogs`/`documents`. Gated on read access to the entity (`403` otherwise); `404` for an unknown kind. Returns `{ you, viewers }`. |
 
 ### Misc — `/api`
 

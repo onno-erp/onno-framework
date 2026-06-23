@@ -51,7 +51,9 @@ public class PresenceRegistry {
     /** Default interval between expiry sweeps. */
     public static final long DEFAULT_SWEEP_INTERVAL_MILLIS = 15_000;
 
-    private record RecordKey(String entityType, String entityName, String id) {}
+    // kind is the route form ("catalogs"/"documents") so the client can map a viewed record straight to
+    // its nav item and list-row urls; entityName is the route name; id (a UUID) is globally unique.
+    private record RecordKey(String kind, String entityName, String id) {}
     private record Entry(String displayName, long lastSeen) {}
 
     private final Map<RecordKey, Map<String, Entry>> byRecord = new ConcurrentHashMap<>();
@@ -101,14 +103,14 @@ public class PresenceRegistry {
     }
 
     /** A browser on this node entered/refreshed/left a record. Apply, relay to peers, fan out locally. */
-    public void onLocal(String action, String entityType, String entityName, String id,
+    public void onLocal(String action, String kind, String entityName, String id,
                         String userId, String displayName) {
         if (userId == null || id == null) {
             return; // can't track an anonymous viewer or a record without an id
         }
-        RecordKey key = new RecordKey(entityType, entityName, id);
+        RecordKey key = new RecordKey(kind, entityName, id);
         boolean membershipChanged = apply(action, key, userId, displayName);
-        bus.publish(ClusterEvent.presence(action, entityType, entityName, id, userId, displayName));
+        bus.publish(ClusterEvent.presence(action, kind, entityName, id, userId, displayName));
         if (membershipChanged) {
             publishSnapshot(key);
         }
@@ -170,14 +172,36 @@ public class PresenceRegistry {
     }
 
     /** The current viewers of a record as {@code {userId, displayName}} maps — what the enter response returns. */
-    public List<Map<String, String>> viewers(String entityType, String entityName, String id) {
-        return viewers(new RecordKey(entityType, entityName, id));
+    public List<Map<String, String>> viewers(String kind, String entityName, String id) {
+        return viewers(new RecordKey(kind, entityName, id));
+    }
+
+    /**
+     * A snapshot of every record with viewers, as {@code {kind, name, id, viewers}} maps — the initial
+     * picture the ambient-presence store loads before live SSE deltas keep it current. Built under each
+     * record's bin lock, so it is internally consistent per record.
+     */
+    public List<Map<String, Object>> allViewers() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (RecordKey key : byRecord.keySet()) {
+            List<Map<String, String>> viewers = viewers(key);
+            if (viewers.isEmpty()) {
+                continue; // raced with an expiry/leave that emptied it
+            }
+            Map<String, Object> rec = new LinkedHashMap<>();
+            rec.put("kind", key.kind());
+            rec.put("name", key.entityName());
+            rec.put("id", key.id());
+            rec.put("viewers", viewers);
+            out.add(rec);
+        }
+        return out;
     }
 
     private void publishSnapshot(RecordKey key) {
-        // entityName + id scope the bar to its record; the SSE event's entityType is the "presence"
-        // sentinel (set in publishPresence), not the record's kind, so no list/detail surface refetches.
-        publisher.publishPresence(key.entityName(), key.id(), viewers(key));
+        // The event's entityType is the "presence" sentinel (set in publishPresence) so no list/detail
+        // surface refetches; kind + name + id let the ambient store place the viewers on the right surfaces.
+        publisher.publishPresence(key.kind(), key.entityName(), key.id(), viewers(key));
     }
 
     private List<Map<String, String>> viewers(RecordKey key) {
