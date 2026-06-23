@@ -225,6 +225,46 @@ is served (no extra query — the row is already in hand) and shipped to the gri
 functions apply to `ROW` actions only — toolbar/detail buttons have no row context and use the fixed
 icon/label. A static row action (no functions) costs nothing: the list ships its rows untouched.
 
+A `DETAIL` action lands in the detail-header overflow (⋯) menu by default, but honors the same
+placement override the built-in `post`/`edit`/`delete` actions do — promote a key workflow action to
+a primary button (given the brand accent), keep it in the menu, or hide it, from the entity's
+`fields(...)`:
+
+```java
+public void fields(EntityConfigBuilder f) {
+    f.action("advanceStatus").primary();   // prominent button next to Post, instead of buried in ⋯
+    f.action("recalc").inMenu();           // the default — overflow menu
+    f.action("archive").hidden();          // dropped from the UI (still reachable via REST)
+}
+```
+
+### New-record forms & ref pickers
+
+A **New** form seeds its inputs from a fresh instance of the entity, so a domain field initializer is
+the idiomatic place for a default — it pre-fills the form, not just new records written through code:
+
+```java
+public class Order extends DocumentObject {
+    private OrderStatus status = OrderStatus.NEW;   // pre-selected in the New form
+    private Integer photoCount = 1;                 // pre-filled
+}
+```
+
+(An entity with no usable no-arg constructor opens blank, as before. A `Ref` default can't be a
+literal initializer, so it isn't seeded.)
+
+A **ref picker** (the typeahead for a `Ref` field) searches every text column of the target — code,
+description/number, and each String attribute — so a record is findable by a secondary attribute
+(e.g. a phone), not just its name. To also *show* that attribute under each option's name (to
+disambiguate same-named records), name it on the ref field from the entity's `fields(...)`:
+
+```java
+f.field("customer").refSecondary("phone");   // shows the customer's phone under the name in the picker
+```
+
+The named field is on the ref's **target** entity; the value already rides along in the picker
+payload, so this only tells the client which extra line to render.
+
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and

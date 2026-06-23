@@ -24,6 +24,7 @@ public class FieldHintBuilder {
     private String format;
     private String hint;
     private String label;
+    private String refSecondary;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -142,6 +143,20 @@ public class FieldHintBuilder {
         return this;
     }
 
+    /**
+     * For a {@code Ref} field: show a <em>secondary</em> attribute of the picked record beneath its
+     * name in the ref picker, to disambiguate same-named records (e.g. a customer's phone). Names a
+     * field on the ref's <em>target</em> entity; the data already rides along in the picker payload,
+     * so this only tells the client which extra value to render. No effect on a non-ref field.
+     *
+     * <p>Independent of search: the typeahead already matches every text column of the target, so a
+     * record is findable by this attribute whether or not it's shown. See issue #184.</p>
+     */
+    public FieldHintBuilder refSecondary(String targetFieldName) {
+        this.refSecondary = targetFieldName;
+        return this;
+    }
+
     /** Switch to configuring another field on the same entity. */
     public FieldHintBuilder field(String name) {
         return parent.field(name);
@@ -154,6 +169,6 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget, placeholder, format, hint, label);
+                order, group, width, widget, placeholder, format, hint, label, refSecondary);
     }
 }

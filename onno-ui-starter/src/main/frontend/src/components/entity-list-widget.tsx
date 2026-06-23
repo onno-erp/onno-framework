@@ -165,6 +165,23 @@ function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
       </span>
     );
   }
+  // A Ref column whose target carries an avatar (resolved into {col}_avatar by the read API): show
+  // the photo as a small round avatar beside the display text (issue #182). The data is already
+  // here; only image/avatar-widget columns drew it before, so a plain Ref cell stayed text-only.
+  const refAvatar = row[`${col.columnName}_avatar`];
+  if (typeof refAvatar === "string" && looksLikeImageUrl(refAvatar)) {
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <img
+          src={refAvatar}
+          alt=""
+          loading="lazy"
+          className="size-6 shrink-0 rounded-full border border-border object-cover"
+        />
+        <span className="truncate text-foreground">{displayCellValue(raw, col)}</span>
+      </span>
+    );
+  }
   return <span className="truncate text-foreground">{displayCellValue(raw, col)}</span>;
 }
 

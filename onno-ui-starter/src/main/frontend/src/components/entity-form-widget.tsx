@@ -648,6 +648,7 @@ function AttrControl({
       <RefSelect
         targetName={attr.refTarget}
         refKind={attr.refKind}
+        secondaryField={attr.refSecondary}
         value={value as string | undefined}
         onChange={onChange}
       />

@@ -12,6 +12,8 @@ interface RefSelectProps {
   targetName: string;
   /** Whether the target is a catalog or a document; drives which endpoints we hit. */
   refKind?: "catalog" | "document";
+  /** Optional target column shown as a secondary line under each option's name (issue #184). */
+  secondaryField?: string;
   value?: string;
   onChange: (id: string) => void;
 }
@@ -39,7 +41,7 @@ function displayOf(item: EntityRecord): string {
  * shows even when it isn't in the current result page. "+ New" is pinned at the top so
  * it's always reachable regardless of how many matches there are.
  */
-export function RefSelect({ targetName, refKind = "catalog", value, onChange }: RefSelectProps) {
+export function RefSelect({ targetName, refKind = "catalog", secondaryField, value, onChange }: RefSelectProps) {
   const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
@@ -141,7 +143,7 @@ export function RefSelect({ targetName, refKind = "catalog", value, onChange }: 
                   item._id === value && "bg-accent/60"
                 )}
               >
-                <RefRow item={item} />
+                <RefRow item={item} secondary={secondaryField} />
               </button>
             ))
           )}
@@ -172,10 +174,13 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-function RefRow({ item }: { item: EntityRecord }) {
+function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string }) {
   const display = displayOf(item);
   const avatarUrl = (item.avatar_url as string | undefined) ?? undefined;
   const code = item._code as string | undefined;
+  // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
+  const sub = secondary ? item[secondary] : undefined;
+  const subText = sub == null ? "" : String(sub);
   return (
     <span className="inline-flex min-w-0 items-center gap-2" title={code ? `${display} · ${code}` : display}>
       {avatarUrl ? (
@@ -184,7 +189,10 @@ function RefRow({ item }: { item: EntityRecord }) {
           <AvatarFallback>{initials(display)}</AvatarFallback>
         </Avatar>
       ) : null}
-      <span className="truncate">{display}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate">{display}</span>
+        {subText ? <span className="truncate text-xs text-muted-foreground">{subText}</span> : null}
+      </span>
     </span>
   );
 }

@@ -23,9 +23,10 @@ public record FieldHint(
         String placeholder,
         String format,
         String hint,
-        String label
+        String label,
+        String refSecondary
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }

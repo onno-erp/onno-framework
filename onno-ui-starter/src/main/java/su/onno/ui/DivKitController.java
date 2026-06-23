@@ -440,7 +440,14 @@ public class DivKitController {
      * navigation action fills its {@code {id}} placeholder and routes directly. Custom actions sit
      * in the overflow menu so they never crowd the built-in Edit/Post/Delete buttons.
      */
-    private List<SurfaceDivBuilder.HeaderAction> detailActions(Class<?> entity, String kind, String name, UUID id) {
+    /**
+     * Custom DETAIL-scope action buttons for an entity's detail header. Each honors the same
+     * placement override the built-in post/edit/delete actions do — {@code f.action(key).primary()}
+     * surfaces it as a prominent inline button, {@code .inMenu()} (the default) tucks it into the
+     * overflow ⋯ menu, {@code .hidden()} drops it (the caller removes hidden entries). Issue #183.
+     */
+    private List<SurfaceDivBuilder.HeaderAction> detailActions(Class<?> entity, String kind, String name, UUID id,
+                                                               Map<String, String> placement) {
         List<SurfaceDivBuilder.HeaderAction> out = new ArrayList<>();
         for (ActionSpec.Action a : actionResolver.forEntity(entity)) {
             if (a.scope() != ActionScope.DETAIL) {
@@ -450,7 +457,11 @@ public class DivKitController {
                     ? "onno://action/" + kind + "/" + name + "/" + a.key() + "/" + id
                     : a.navigateUrl().replace("{id}", id.toString());
             String icon = a.icon() == null || a.icon().isBlank() ? "zap" : a.icon();
-            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), "normal", url, "menu"));
+            // Default to the overflow menu (the prior, only behavior); a view can promote a key
+            // workflow action to a primary button — given the brand "accent" tone — via .primary().
+            String place = placement.getOrDefault(a.key(), "menu");
+            String tone = "primary".equals(place) ? "accent" : "normal";
+            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), tone, url, place));
         }
         return out;
     }
@@ -496,8 +507,12 @@ public class DivKitController {
                     "onno://delete/catalogs/" + name + "/" + id, "primary"));
         }
         if (canWrite) {
-            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id));
+            // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
+            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
+                    resolvedMetadata.actionOverrides(desc.javaClass())));
         }
+        // A custom action set to .hidden() drops out of the UI (it stays available via REST).
+        actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
                 meta, catalogQuery.get(desc, id),
@@ -514,7 +529,10 @@ public class DivKitController {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
         Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
-        return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create", meta, null);
+        // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
+        // (issue #181); blank for an entity with no usable no-arg constructor.
+        return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
+                meta, catalogQuery.newDraft(desc));
     }
 
     @GetMapping("/catalogs/{name}/{id}/edit")
@@ -597,7 +615,10 @@ public class DivKitController {
                     "onno://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
         }
         if (canWrite) {
-            actions.addAll(detailActions(desc.javaClass(), "documents", name, id));
+            // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183),
+            // the same override map the built-in post/edit/delete actions read above.
+            actions.addAll(detailActions(desc.javaClass(), "documents", name, id,
+                    resolvedMetadata.actionOverrides(desc.javaClass())));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -615,7 +636,10 @@ public class DivKitController {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
         Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
-        return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create", meta, null);
+        // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
+        // (issue #181); blank for an entity with no usable no-arg constructor.
+        return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
+                meta, documentQuery.newDraft(desc));
     }
 
     @GetMapping("/documents/{name}/{id}/edit")

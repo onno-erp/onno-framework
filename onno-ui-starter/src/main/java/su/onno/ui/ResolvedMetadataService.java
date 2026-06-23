@@ -191,6 +191,18 @@ public class ResolvedMetadataService {
         return map;
     }
 
+    /**
+     * Raw per-action placement overrides authored on an entity's view via
+     * {@code f.action(key).primary()/inMenu()/hidden()} — keyed by action key, valued
+     * {@code primary|menu|hidden}. Unlike the {@code "actions"} map baked into
+     * {@link #describeDocument} (which only carries the built-in post/unpost/edit/delete defaults),
+     * this includes <em>custom</em> DETAIL action keys, so {@code DivKitController.detailActions}
+     * can honor a placement override on a custom action too (issue #183).
+     */
+    public Map<String, String> actionOverrides(Class<?> entity) {
+        return fieldHints.actionsFor(entity);
+    }
+
     public Map<String, Object> describeRegister(AccumulationRegisterDescriptor d) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
@@ -258,6 +270,13 @@ public class ResolvedMetadataService {
                 boolean isDocument = registry.allDocuments().stream()
                         .anyMatch(d -> d.logicalName().equals(a.refTarget()));
                 map.put("refKind", isDocument ? "document" : "catalog");
+                // Optional secondary attribute shown under the name in the ref picker (issue #184).
+                // The hint names a field on the target; resolve it to that target's column so the
+                // client reads the right key from the option payload (which carries every column).
+                String secondary = hint == null ? null : hint.refSecondary();
+                if (secondary != null && !secondary.isBlank()) {
+                    map.put("refSecondary", refSecondaryColumn(a.refTarget(), secondary));
+                }
             }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
@@ -320,5 +339,32 @@ public class ResolvedMetadataService {
 
     private static <T> T pick(T fromHint, T fromDescriptor) {
         return fromHint != null ? fromHint : fromDescriptor;
+    }
+
+    /**
+     * Resolve a ref picker's secondary field (named against the target entity) to the target's
+     * actual column name, so the client reads the right key. Matches by field name or column name;
+     * an unrecognized name falls through unchanged (best effort — a typo shows nothing rather than
+     * breaking the picker).
+     */
+    private String refSecondaryColumn(String refTarget, String fieldName) {
+        return targetAttributes(refTarget).stream()
+                .filter(a -> a.fieldName().equals(fieldName) || a.columnName().equals(fieldName))
+                .map(AttributeDescriptor::columnName)
+                .findFirst()
+                .orElse(fieldName);
+    }
+
+    /** The attributes of a ref target named by its registered logical name (catalog or document). */
+    private List<AttributeDescriptor> targetAttributes(String refTarget) {
+        return registry.allCatalogs().stream()
+                .filter(c -> c.logicalName().equals(refTarget))
+                .map(CatalogDescriptor::attributes)
+                .findFirst()
+                .or(() -> registry.allDocuments().stream()
+                        .filter(d -> d.logicalName().equals(refTarget))
+                        .map(DocumentDescriptor::attributes)
+                        .findFirst())
+                .orElse(List.of());
     }
 }

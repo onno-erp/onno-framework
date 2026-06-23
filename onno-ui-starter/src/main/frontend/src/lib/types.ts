@@ -26,6 +26,11 @@ export interface AttributeMeta {
   refTarget?: string;
   /** Whether refTarget names a catalog or a document (set only when isRef). */
   refKind?: "catalog" | "document";
+  /**
+   * Column on the ref target shown as a secondary line under the name in the picker, to
+   * disambiguate same-named records (from f.field(...).refSecondary(...); set only when isRef).
+   */
+  refSecondary?: string;
   isEnum: boolean;
   enumName?: string;
   /** Display title of the enumeration type (from @Enumeration.title); falls back to enumName. */

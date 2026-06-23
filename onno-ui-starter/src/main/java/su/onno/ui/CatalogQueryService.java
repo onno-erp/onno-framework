@@ -82,24 +82,35 @@ public class CatalogQueryService {
     }
 
     /**
-     * Server-side typeahead for ref pickers: case-insensitive match on code/description,
-     * capped at {@code limit}, so a 2000-row catalog never ships whole to the client.
+     * Server-side typeahead for ref pickers: case-insensitive match across the same text columns the
+     * paged list search covers — code, description, and every (non-secret) String attribute — so a
+     * record is findable by a secondary attribute like a phone, not just its name (issue #184).
+     * Capped at {@code limit}, so a 2000-row catalog never ships whole to the client.
      */
     public List<Map<String, Object>> search(CatalogDescriptor desc, String query, int limit) {
-        String like = "%" + (query == null ? "" : query.toLowerCase()) + "%";
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false" +
-                                " AND (LOWER(_description) LIKE :q OR LOWER(_code) LIKE :q)" +
-                                " ORDER BY _description LIMIT :limit")
-                        .bind("q", like)
-                        .bind("limit", limit)
-                        .mapToMap()
-                        .list()
-        );
+        String where = "_deletion_mark = false" + searchClause(desc, query);
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                            " WHERE " + where +
+                            " ORDER BY _description LIMIT :limit")
+                    .bind("limit", limit);
+            bindSearch(q, query);
+            return q.mapToMap().list();
+        });
         refResolver.resolveAttributes(rows, desc.attributes());
         SecretRedactor.redact(rows, desc.attributes());
         return rows;
+    }
+
+    /**
+     * The seed row for a <em>new</em> catalog form: a fresh instance's field-initializer defaults in
+     * the same column-keyed, ref-resolved shape {@link #get} returns for an existing record, so the
+     * New form pre-fills declared defaults instead of opening blank (issue #181).
+     */
+    public Map<String, Object> newDraft(CatalogDescriptor desc) {
+        Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), desc.attributes(), registry);
+        refResolver.resolveAttributes(List.of(row), desc.attributes());
+        return row;
     }
 
     public long count(CatalogDescriptor desc) {
