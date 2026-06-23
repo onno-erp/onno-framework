@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useBranding } from "@/providers/branding-provider";
+import { useMessages } from "@/providers/messages-provider";
 import { DivKitContent, type ContentAction, type ContentCard } from "@/views/divkit-content";
 import { LoginFormPortals } from "@/lib/login-form-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
@@ -21,6 +22,7 @@ export function LoginView() {
   const location = useLocation();
   const { theme } = useTheme();
   const branding = useBranding();
+  const t = useMessages();
   const resolved: "light" | "dark" =
     theme === "dark" || theme === "light"
       ? theme
@@ -110,12 +112,10 @@ export function LoginView() {
           <div className="text-sm font-semibold">{branding.appName ?? "onno"}</div>
         )}
         <div className="max-w-md">
-          <p className="text-3xl font-semibold tracking-tight">Business apps shaped around roles.</p>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            Sign in to see the catalogs, documents, dashboards, and forms your role is allowed to use.
-          </p>
+          <p className="text-3xl font-semibold tracking-tight">{t("login.hero.title")}</p>
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">{t("login.hero.subtitle")}</p>
         </div>
-        <p className="text-xs text-muted-foreground">Server-driven sign-in.</p>
+        <p className="text-xs text-muted-foreground">{t("login.footer")}</p>
       </section>
 
       <section className="flex min-h-screen w-full items-center justify-center px-5 md:w-[440px]">

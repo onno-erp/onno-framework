@@ -34,6 +34,11 @@ public final class UiMessages {
         Map<String, String> d = new LinkedHashMap<>();
 
         // Login screen (DivKit card + the onno-login-form React island).
+        // Left-panel hero + footer copy (React shell, login.tsx) — keep in sync with DEFAULT_MESSAGES.
+        d.put("login.hero.title", "Business apps shaped around roles.");
+        d.put("login.hero.subtitle",
+                "Sign in to see the catalogs, documents, dashboards, and forms your role is allowed to use.");
+        d.put("login.footer", "Server-driven sign-in.");
         d.put("login.title", "Sign in");
         d.put("login.subtitle.password", "Use your workspace credentials.");
         d.put("login.subtitle.sso", "Continue with your organization account.");

@@ -10,6 +10,10 @@
  */
 export const DEFAULT_MESSAGES: Record<string, string> = {
   // Login screen.
+  "login.hero.title": "Business apps shaped around roles.",
+  "login.hero.subtitle":
+    "Sign in to see the catalogs, documents, dashboards, and forms your role is allowed to use.",
+  "login.footer": "Server-driven sign-in.",
   "login.title": "Sign in",
   "login.subtitle.password": "Use your workspace credentials.",
   "login.subtitle.sso": "Continue with your organization account.",

@@ -22,7 +22,7 @@ class LoginDivControllerTest {
 
     @Test
     void degradesToPasswordScreenWhenNoProviderIsPresent() {
-        LoginDivController controller = new LoginDivController(provider(), contributor(), UiMessages.defaults());
+        LoginDivController controller = new LoginDivController(provider(), contributor(), UiMessages.defaults(), BrandingConfig.defaults());
 
         AuthMethods m = controller.resolveMethods();
 
@@ -32,11 +32,27 @@ class LoginDivControllerTest {
     }
 
     @Test
+    void loginCardMergesTheBrandingPalette() {
+        // #191: the public login card must merge the app's brand palette like the authenticated shell.
+        // Recolor the `text` slot (the card title uses p.text()) and prove it reaches the rendered card.
+        BrandPalette brand = new BrandPalette(null, null, null, "#EA825D", null, null, null);
+        BrandingConfig branding = new BrandingConfig(null, null, null, null, null, null, brand, brand);
+
+        String branded = new LoginDivController(provider(), contributor(), UiMessages.defaults(), branding)
+                .login("light", null).toString();
+        String neutral = new LoginDivController(provider(), contributor(), UiMessages.defaults(), BrandingConfig.defaults())
+                .login("light", null).toString();
+
+        assertThat(branded).contains("#EA825D");        // brand color reaches the card
+        assertThat(neutral).doesNotContain("#EA825D");  // unbranded card stays neutral
+    }
+
+    @Test
     void usesTheSoleProviderUnchangedWhenNoContributors() {
         AuthMethods base = new AuthMethods(false,
                 List.of(new SsoProvider("keycloak", "Keycloak", "/oauth2/authorization/keycloak")),
                 "/logout", "oidc");
-        LoginDivController controller = new LoginDivController(provider(() -> base), contributor(), UiMessages.defaults());
+        LoginDivController controller = new LoginDivController(provider(() -> base), contributor(), UiMessages.defaults(), BrandingConfig.defaults());
 
         assertThat(controller.resolveMethods()).isSameAs(base);
     }
@@ -49,7 +65,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor telegram = () ->
                 List.of(new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(telegram), UiMessages.defaults()).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(telegram), UiMessages.defaults(), BrandingConfig.defaults()).resolveMethods();
 
         // Scalar fields stay authoritative from the base provider.
         assertThat(m.passwordEnabled()).isFalse();
@@ -69,7 +85,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor github = () ->
                 List.of(new SsoProvider("github", "GitHub", "/oauth2/authorization/github"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(telegram, github), UiMessages.defaults()).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(telegram, github), UiMessages.defaults(), BrandingConfig.defaults()).resolveMethods();
 
         assertThat(m.passwordEnabled()).isTrue();
         assertThat(m.providers()).extracting(SsoProvider::id).containsExactly("telegram", "github");
@@ -82,7 +98,7 @@ class LoginDivControllerTest {
         AuthMethodsContributor real = () ->
                 List.of(new SsoProvider("telegram", "Telegram", "/api/auth/telegram/start"));
 
-        AuthMethods m = new LoginDivController(provider(base), contributor(nullSafe, real), UiMessages.defaults()).resolveMethods();
+        AuthMethods m = new LoginDivController(provider(base), contributor(nullSafe, real), UiMessages.defaults(), BrandingConfig.defaults()).resolveMethods();
 
         assertThat(m.providers()).extracting(SsoProvider::id).containsExactly("telegram");
     }
@@ -91,7 +107,7 @@ class LoginDivControllerTest {
     void doesNotThrowWhenMultipleProvidersAreRegisteredAndTakesTheFirst() {
         AuthMethodsProvider first = () -> new AuthMethods(true, List.of(), null, "first");
         AuthMethodsProvider second = () -> new AuthMethods(false, List.of(), null, "second");
-        LoginDivController controller = new LoginDivController(provider(first, second), contributor(), UiMessages.defaults());
+        LoginDivController controller = new LoginDivController(provider(first, second), contributor(), UiMessages.defaults(), BrandingConfig.defaults());
 
         assertThatCode(controller::resolveMethods).doesNotThrowAnyException();
         assertThat(controller.resolveMethods().mode()).isEqualTo("first");
