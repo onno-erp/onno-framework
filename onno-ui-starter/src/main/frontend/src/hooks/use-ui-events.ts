@@ -1,30 +1,13 @@
 import { useEffect } from "react";
-import { streamUiEvents } from "@/lib/api";
+import { subscribeUiEvents } from "@/lib/ui-event-bus";
 import type { UiEvent } from "@/lib/types";
 
+/**
+ * Subscribe to live entity-change events. All tabs of the origin share one SSE connection (see
+ * {@link subscribeUiEvents}), so opening many tabs no longer exhausts the browser's per-origin
+ * connection pool. `handler` should be stable (e.g. `useCallback`) so the subscription isn't torn
+ * down and re-created on every render.
+ */
 export function useUiEvents(handler: (event: UiEvent) => void) {
-  useEffect(() => {
-    let stopped = false;
-    let retry: number | undefined;
-    const controller = new AbortController();
-
-    async function connect() {
-      try {
-        await streamUiEvents((event) => {
-          if (!stopped) handler(event);
-        }, controller.signal);
-      } catch {
-        if (!stopped) {
-          retry = window.setTimeout(connect, 3000);
-        }
-      }
-    }
-
-    connect();
-    return () => {
-      stopped = true;
-      controller.abort();
-      if (retry) window.clearTimeout(retry);
-    };
-  }, [handler]);
+  useEffect(() => subscribeUiEvents(handler), [handler]);
 }

@@ -480,7 +480,7 @@ resolved **live**, so renames and deletes stay correct on their own.
 |--------|------|-------|
 | GET | `/api/theme` | The `onno.ui.theme.*` map. |
 | GET | `/api/config` | `{ readOnly, basePath, messages }` (the resolved chrome-string map — see [Localizing the chrome](#localizing-the-chrome)), plus `update: { available, current, latest, url }` when the update check is enabled. |
-| GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). |
+| GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). The SPA shares **one** such connection across all tabs of an origin (leader elected via the Web Locks API, events rebroadcast over a `BroadcastChannel`), so many open tabs don't exhaust the browser's per-origin connection limit. |
 
 > **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`
 > route is the desktop shell's `/api/desktop/manifest`). To introspect the business model at runtime,
