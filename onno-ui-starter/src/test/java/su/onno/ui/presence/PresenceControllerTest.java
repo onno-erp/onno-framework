@@ -5,6 +5,7 @@ import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 import su.onno.ui.UiAccessService;
 import su.onno.ui.UiEventPublisher;
+import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,8 @@ class PresenceControllerTest {
     private final CapturingRegistry registry = new CapturingRegistry();
     private final FakeAccess access = new FakeAccess();
     private final FakeUser currentUser = new FakeUser();
-    private final PresenceController controller = new PresenceController(registry, access, currentUser);
+    private final FakeAvatars avatars = new FakeAvatars();
+    private final PresenceController controller = new PresenceController(registry, access, currentUser, avatars);
 
     private final Principal principal = () -> "alice";
     private final UUID id = UUID.randomUUID();
@@ -41,7 +43,8 @@ class PresenceControllerTest {
         // Identity is stamped from the principal (the record id), never asserted by the client; the
         // registry stores the route kind ("catalogs"), not the singular access type.
         assertThat(registry.lastCall).isEqualTo(
-                new CapturingRegistry.Call("enter", "catalogs", "Customers", id.toString(), "rec-1", "Alice Adams"));
+                new CapturingRegistry.Call("enter", "catalogs", "Customers", id.toString(), "rec-1", "Alice Adams",
+                        "pic/rec-1"));
         assertThat(response).containsEntry("you", "rec-1");
         assertThat(response.get("viewers")).isEqualTo(List.of(Map.of("userId", "rec-2", "displayName", "Babbage")));
     }
@@ -159,7 +162,8 @@ class PresenceControllerTest {
     }
 
     static final class CapturingRegistry extends PresenceRegistry {
-        record Call(String action, String type, String name, String id, String userId, String displayName) {}
+        record Call(String action, String type, String name, String id, String userId, String displayName,
+                    String avatarUrl) {}
 
         Call lastCall;
         List<Map<String, String>> viewersFixture = List.of();
@@ -173,8 +177,8 @@ class PresenceControllerTest {
 
         @Override
         public void onLocal(String action, String kind, String entityName, String id,
-                            String userId, String displayName) {
-            lastCall = new Call(action, kind, entityName, id, userId, displayName);
+                            String userId, String displayName, String avatarUrl) {
+            lastCall = new Call(action, kind, entityName, id, userId, displayName, avatarUrl);
         }
 
         @Override
@@ -185,6 +189,18 @@ class PresenceControllerTest {
         @Override
         public List<Map<String, Object>> allViewers() {
             return allViewersFixture;
+        }
+    }
+
+    static final class FakeAvatars extends CommentAuthorAvatars {
+        FakeAvatars() {
+            // resolveSource() returns null for a null layout, so this is safe; avatarFor is overridden.
+            super(null, null, null, null);
+        }
+
+        @Override
+        public String avatarFor(String authorId) {
+            return authorId == null ? null : "pic/" + authorId;
         }
     }
 }

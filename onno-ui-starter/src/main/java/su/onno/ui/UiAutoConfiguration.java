@@ -4,6 +4,7 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingService;
 import su.onno.spring.OnnoAutoConfiguration;
+import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -156,14 +157,26 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public su.onno.ui.presence.PresenceController presenceController(su.onno.ui.presence.PresenceRegistry presenceRegistry,
                                                                      UiAccessService access,
-                                                                     CurrentUserResolver currentUserResolver) {
-        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver);
+                                                                     CurrentUserResolver currentUserResolver,
+                                                                     CommentAuthorAvatars authorAvatars) {
+        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver, authorAvatars);
     }
 
     @Bean
     public FieldHintResolver fieldHintResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
         return new FieldHintResolver(entityViews.orderedStream().toList());
+    }
+
+    /**
+     * Resolves a user's avatar image URL from the identity catalog's avatar/image-hinted column.
+     * Always-on (not gated on {@code onno.comments.enabled}) so both the comments panel and record-level
+     * presence markers render a viewer's photo from the one identity source.
+     */
+    @Bean
+    public CommentAuthorAvatars commentAuthorAvatars(su.onno.ui.UiLayout uiLayout, MetadataRegistry registry,
+                                                     FieldHintResolver fieldHintResolver, Jdbi jdbi) {
+        return new CommentAuthorAvatars(uiLayout, registry, fieldHintResolver, jdbi);
     }
 
     @Bean

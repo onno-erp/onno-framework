@@ -210,7 +210,7 @@ export interface UiEvent {
   /** Present only on a `presence` event: the record's route kind ("catalogs"/"documents"). */
   kind?: string;
   /** Present only on a `presence` event: the current viewer set of the record. */
-  viewers?: { userId: string; displayName: string }[];
+  viewers?: { userId: string; displayName: string; avatarUrl?: string }[];
 }
 
 export interface DashboardWidgetMeta {

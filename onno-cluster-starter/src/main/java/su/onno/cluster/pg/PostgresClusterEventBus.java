@@ -234,7 +234,8 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
                         text(node, "entityName"),
                         text(node, "id"),
                         text(node, "userId"),
-                        text(node, "displayName"));
+                        text(node, "displayName"),
+                        text(node, "avatarUrl"));
             }
             log.debug("onno-cluster: ignoring notification of unknown kind '{}'", kind);
             return null;
@@ -262,6 +263,7 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
             node.put("id", p.id());
             node.put("userId", p.userId());
             node.put("displayName", p.displayName());
+            node.put("avatarUrl", p.avatarUrl());
         }
         return node;
     }

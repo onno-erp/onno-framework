@@ -53,8 +53,8 @@ public sealed interface ClusterEvent {
      * {@link ClusterEventBus} stamps that during {@link ClusterEventBus#publish}.
      */
     static Presence presence(String action, String entityType, String entityName, String id,
-                             String userId, String displayName) {
-        return new Presence(null, action, entityType, entityName, id, userId, displayName);
+                             String userId, String displayName, String avatarUrl) {
+        return new Presence(null, action, entityType, entityName, id, userId, displayName, avatarUrl);
     }
 
     /**
@@ -105,6 +105,8 @@ public sealed interface ClusterEvent {
      * @param id           the viewed record's id as a string.
      * @param userId       a stable id for the viewing user (their domain record id, or username).
      * @param displayName  the viewing user's display name, for rendering the avatar/marker.
+     * @param avatarUrl    the viewing user's avatar image URL, or {@code null} (the marker then falls
+     *                     back to initials).
      */
     record Presence(
             String originNodeId,
@@ -113,7 +115,8 @@ public sealed interface ClusterEvent {
             String entityName,
             String id,
             String userId,
-            String displayName) implements ClusterEvent {
+            String displayName,
+            String avatarUrl) implements ClusterEvent {
 
         /** A user opened the record's live view. Treated as an upsert by the registry. */
         public static final String ENTER = "enter";
@@ -129,7 +132,7 @@ public sealed interface ClusterEvent {
 
         @Override
         public Presence withOrigin(String originNodeId) {
-            return new Presence(originNodeId, action, entityType, entityName, id, userId, displayName);
+            return new Presence(originNodeId, action, entityType, entityName, id, userId, displayName, avatarUrl);
         }
     }
 }

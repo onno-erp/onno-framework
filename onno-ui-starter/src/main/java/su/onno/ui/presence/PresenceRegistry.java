@@ -54,7 +54,7 @@ public class PresenceRegistry {
     // kind is the route form ("catalogs"/"documents") so the client can map a viewed record straight to
     // its nav item and list-row urls; entityName is the route name; id (a UUID) is globally unique.
     private record RecordKey(String kind, String entityName, String id) {}
-    private record Entry(String displayName, long lastSeen) {}
+    private record Entry(String displayName, String avatarUrl, long lastSeen) {}
 
     private final Map<RecordKey, Map<String, Entry>> byRecord = new ConcurrentHashMap<>();
 
@@ -104,13 +104,13 @@ public class PresenceRegistry {
 
     /** A browser on this node entered/refreshed/left a record. Apply, relay to peers, fan out locally. */
     public void onLocal(String action, String kind, String entityName, String id,
-                        String userId, String displayName) {
+                        String userId, String displayName, String avatarUrl) {
         if (userId == null || id == null) {
             return; // can't track an anonymous viewer or a record without an id
         }
         RecordKey key = new RecordKey(kind, entityName, id);
-        boolean membershipChanged = apply(action, key, userId, displayName);
-        bus.publish(ClusterEvent.presence(action, kind, entityName, id, userId, displayName));
+        boolean membershipChanged = apply(action, key, userId, displayName, avatarUrl);
+        bus.publish(ClusterEvent.presence(action, kind, entityName, id, userId, displayName, avatarUrl));
         if (membershipChanged) {
             publishSnapshot(key);
         }
@@ -122,14 +122,14 @@ public class PresenceRegistry {
             return;
         }
         RecordKey key = new RecordKey(presence.entityType(), presence.entityName(), presence.id());
-        boolean membershipChanged = apply(presence.action(), key, presence.userId(), presence.displayName());
+        boolean membershipChanged = apply(presence.action(), key, presence.userId(), presence.displayName(), presence.avatarUrl());
         if (membershipChanged) {
             publishSnapshot(key);
         }
     }
 
     /** Apply one change atomically per record. Returns whether the viewer set changed (a join or a leave). */
-    private boolean apply(String action, RecordKey key, String userId, String displayName) {
+    private boolean apply(String action, RecordKey key, String userId, String displayName, String avatarUrl) {
         boolean[] changed = {false};
         if (ClusterEvent.Presence.LEAVE.equals(action)) {
             byRecord.compute(key, (k, users) -> {
@@ -144,7 +144,7 @@ public class PresenceRegistry {
             long now = clock.millis();
             byRecord.compute(key, (k, users) -> {
                 Map<String, Entry> viewers = users == null ? new HashMap<>() : users;
-                changed[0] = viewers.put(userId, new Entry(displayName, now)) == null;
+                changed[0] = viewers.put(userId, new Entry(displayName, avatarUrl, now)) == null;
                 return viewers;
             });
         }
@@ -211,6 +211,9 @@ public class PresenceRegistry {
                 Map<String, String> viewer = new LinkedHashMap<>();
                 viewer.put("userId", userId);
                 viewer.put("displayName", entry.displayName());
+                if (entry.avatarUrl() != null) {
+                    viewer.put("avatarUrl", entry.avatarUrl());
+                }
                 result.add(viewer);
             });
             return users;

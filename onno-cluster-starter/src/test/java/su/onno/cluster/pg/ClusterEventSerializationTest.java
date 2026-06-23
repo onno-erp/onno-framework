@@ -56,7 +56,7 @@ class ClusterEventSerializationTest {
     @Test
     void roundTripsAPresenceEvent() {
         ClusterEvent event = ClusterEvent.presence(ClusterEvent.Presence.ENTER,
-                "document", "Invoices", "id-7", "u-42", "Ada Lovelace").withOrigin("node-A");
+                "document", "Invoices", "id-7", "u-42", "Ada Lovelace", "https://pics/u-42.png").withOrigin("node-A");
 
         String json = PostgresClusterEventBus.serialize(mapper, event, 7000);
         ClusterEvent back = PostgresClusterEventBus.deserialize(mapper, json);
@@ -64,6 +64,7 @@ class ClusterEventSerializationTest {
         assertThat(back).isEqualTo(event);
         assertThat(back).isInstanceOf(ClusterEvent.Presence.class);
         assertThat(((ClusterEvent.Presence) back).displayName()).isEqualTo("Ada Lovelace");
+        assertThat(((ClusterEvent.Presence) back).avatarUrl()).isEqualTo("https://pics/u-42.png");
     }
 
     @Test

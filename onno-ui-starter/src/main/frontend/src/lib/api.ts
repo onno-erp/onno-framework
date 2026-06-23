@@ -214,6 +214,8 @@ export interface CommentView {
 export interface PresenceViewer {
   userId: string;
   displayName: string;
+  /** The viewer's avatar image URL, when their identity record has one; absent → render initials. */
+  avatarUrl?: string;
 }
 
 /** The response to a presence ping: the record's current viewers plus the caller's own id. */

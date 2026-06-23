@@ -4,6 +4,7 @@ import su.onno.cluster.ClusterEvent;
 import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 import su.onno.ui.UiAccessService;
+import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,11 +45,14 @@ public class PresenceController {
     private final PresenceRegistry registry;
     private final UiAccessService access;
     private final CurrentUserResolver currentUser;
+    private final CommentAuthorAvatars authorAvatars;
 
-    public PresenceController(PresenceRegistry registry, UiAccessService access, CurrentUserResolver currentUser) {
+    public PresenceController(PresenceRegistry registry, UiAccessService access, CurrentUserResolver currentUser,
+                              CommentAuthorAvatars authorAvatars) {
         this.registry = registry;
         this.access = access;
         this.currentUser = currentUser;
+        this.authorAvatars = authorAvatars;
     }
 
     /** The heartbeat body: {@code action} is one of {@code enter} / {@code heartbeat} / {@code leave}. */
@@ -70,9 +74,12 @@ public class PresenceController {
             // A guest with no stable identity has nothing to mark presence with.
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Presence requires a signed-in user");
         }
+        // Resolve the viewer's avatar the same way the comments panel does — from the identity catalog's
+        // avatar/image-hinted column, keyed by their record id (null when unlinked → marker uses initials).
+        String avatarUrl = authorAvatars.avatarFor(me.recordId());
         // Store the route kind ("catalogs"/"documents") so ambient surfaces can map the record back to
         // its nav item and rows; the singular `type` is only for the access check above.
-        registry.onLocal(action, kind, name, id.toString(), userId, me.displayName());
+        registry.onLocal(action, kind, name, id.toString(), userId, me.displayName(), avatarUrl);
 
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("you", userId);
