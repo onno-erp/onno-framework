@@ -163,15 +163,64 @@ UI is authored as Spring beans on the *view* side, never as annotations on domai
 - **`Layout`** — nav structure, shell style, branding, persona (`profile()`), `roles`, viewport.
   **Nav is curated:** an entity shows in the sidebar only if a `spec.section(...)` lists it; there is
   no auto-listing of unclaimed catalogs.
-- **`Page`** — a composed route (dashboards): `compose(PageBuilder)` with `widget`/`text`/`list`/`custom`.
+- **`Page`** — a composed route (dashboards): `compose(PageBuilder)` with `widget`/`text`/`list(entity)`/
+  `constants`/`custom`, plus `actions(heading, …)` for a row of server-handled buttons (same `ActionSpec`
+  DSL as entity actions).
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
   hints. **An entity surface is only served if it has an `EntityView` for the active profile** (no
   view → `404`). That is *necessary but not sufficient* for nav presence: a view makes the entity
   reachable by direct route, but it appears in the sidebar only once a `Layout` section lists it.
+  Beyond columns and field hints, `EntityView` also drives: custom **detail-action placement**
+  (`f.action("post").primary()` / `.inMenu()` / `.hidden()`), catalog-side **related lists**
+  (`f.relatedList("doctors", ClinicDoctor.class).via("clinic").display("doctor")` — the catalog
+  analogue of a document `@TabularSection`), **Ref-picker secondary lines + avatars**
+  (`f.field("client").refSecondary("phone")`, `.widget("avatar")`), and a **list map view**
+  (`spec.map().lat("latitude").lng("longitude")`). The full per-method list is in
+  [reference/cheatsheet.md](reference/cheatsheet.md).
 
 Do **not** add `@UiHint`, `@UiSection`, or `@DashboardWidget` to new code — they are deprecated.
 The widget DSL and `config(key,value)` reference are in
 [onno-ui-starter/README.md](https://github.com/onno-erp/onno-framework/blob/main/onno-ui-starter/README.md).
+
+## Make the first pass production-grade — don't ship the scaffold
+
+A model that *compiles* is not a model that's *done*. The framework generates a working UI from bare
+metadata, but the default output is generic — English chrome, blank New forms, raw field names, no
+formatting. Close that gap in the same pass you model the business, not "later":
+
+- **Localize to the business's language — never leave it half-English.** Decide the app's language
+  from the user's prompt and domain terms, then carry it through *every* surface, because they
+  localize independently:
+  - entity `title=` and attribute `displayName=` → the domain nouns in that language;
+  - enum values → `@Enumeration(title="…")` for the type label and `@EnumLabel("…")` on each constant
+    (the constant stays an ASCII Java identifier; the label is what users see);
+  - list-filter dropdowns → `filter(f).options(Map<value,label>)` (query matches the value, UI shows
+    the label) — don't expose raw stored values;
+  - field + **system-column** labels (`code`/`description`/`number`/`date`/`posted`) → field-hint
+    `.label("…")` (the only path that relabels the built-in columns);
+  - shell strings (buttons, login, tabs, toasts, empty states) → `onno.ui.messages.*` overrides in
+    config. There is a full default key set; override the ones users read.
+
+  Mixed-language UI ("Sign in" over a Russian catalog of "Контрагенты") is the #1 tell of an
+  unfinished first pass.
+
+- **Seed defaults so the New form opens populated, not blank.** Implement `OnFillingHandler.onFilling()`
+  to pre-fill a new instance — status = the initial enum, `date`/`period` = now, sensible
+  `quantity = 1`, a default counterparty or warehouse, etc. This runs on the generic create path, so
+  the rendered New form shows those values. Use `@Constant` for global defaults and plain Java field
+  initializers for fixed constants. A blank form the user must fill from scratch is a missed default.
+
+- **Author field hints — don't hand back an auto-dumped form.** In `fields(EntityConfigBuilder)`, set
+  `.order()`/`.group()`/`.width()` for layout, `.widget()` (`switch`, `textarea`, `avatar`/`gallery`,
+  `map`), `.format()` (`currency:EUR`, `dd-MM-yyyy`, `percent`), `.placeholder()`/`.hint()`, and
+  `hideInList/Form/Detail()` to suppress noise. A money column rendered as a bare number, or a status
+  shown as a dropdown of UUIDs, reads as unfinished.
+
+- **Model the real nouns — never keep placeholder/scaffold names.** Name attributes after what the
+  business actually tracks (`invoiceNumber`, `checkInDate`), not generic stand-ins (`name`, `field1`,
+  or leftover demo fields copied from an example like a "subscription" sample). Delete any scaffolded
+  sample entity you didn't deliberately model. Every attribute should map to a thing the user named in
+  the interview; if you can't say which, it shouldn't be there.
 
 ## Inspecting a running app
 
@@ -233,6 +282,15 @@ onno:
   auth:
     users: [{ username: admin, password: admin, roles: [ADMIN] }]
 ```
+
+`onno.auth.mode` picks the auth model: **`IN_MEMORY`** (default — the `users` list above, session
+cookie, JSON `/api/auth/login`), **`OIDC`** (server-side OpenID Connect auth-code login; provider
+preset `onno.auth.oidc.provider` = `KEYCLOAK` / `ZITADEL` / `CUSTOM`, with token-claim → role mapping
+under `onno.auth.oidc.roles.*`), or **`RESOURCE_SERVER`** (stateless bearer-token validation). The
+SPA's `/api/auth/me` advertises the available login methods, so the login screen renders the right
+password form and/or SSO buttons automatically. Full auth config is in
+[onno-auth-starter/README.md](https://github.com/onno-erp/onno-framework/blob/main/onno-auth-starter/README.md)
+and [docs/CONFIGURATION.md](https://github.com/onno-erp/onno-framework/blob/main/docs/CONFIGURATION.md).
 
 ## Building a commercial connector (onno-enterprise)
 

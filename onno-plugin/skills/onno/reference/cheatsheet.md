@@ -95,7 +95,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | --- | --- | --- |
 | `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
 | `AfterWriteHandler` | `afterWrite()` | After save. |
-| `OnFillingHandler` | `onFilling()` | When a new instance is filled. |
+| `OnFillingHandler` | `onFilling()` | When a new instance is filled (generic create path) — **seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
@@ -125,7 +125,10 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
 `Q` static helpers build type-safe paths from method references:
 `Q.col(SalesOrder::getNumber)`, `Q.ref(SalesOrder::getCustomer, Customer::getName)` (emits the join),
 `Q.count()/sum/avg/min/max`, predicates `Q.eq/ne/gt/gte/lt/lte/between/like/in/isNull/isNotNull`,
-`Q.as(item, alias)`. Predicate ops: `EQ,NE,GT,GTE,LT,LTE,BETWEEN,IN,LIKE,IS_NULL,IS_NOT_NULL`.
+`Q.as(item, alias)`, ordering `Q.asc(ref)/Q.desc(ref)`. Predicate ops:
+`EQ,NE,GT,GTE,LT,LTE,BETWEEN,IN,LIKE,IS_NULL,IS_NOT_NULL`. `Row` (the untyped result) has coercing
+typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime(col)`, plus `has(col)`,
+`columns()`, `asMap()` — so you rarely cast a raw `Object`.
 
 ## Repositories (package `su.onno.repository`)
 
@@ -143,6 +146,9 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
   empty collection matches nothing.
 - `InformationRegisterRepository<T>` — write-enabled: `write(record)`, `getSliceLast(date,...)`,
   `getSliceFirst(date,...)`, `getRecords(...)`, `delete(record)`.
+- `RegisterRepository` also exposes admin/diagnostic `rebuildTotals()` (recompute cached BALANCE
+  totals from raw movements) and `verifyTotals()` (consistency check) — reach for them after a bulk
+  migration or to debug a drifted balance.
 - Optimistic locking: `@Version` mismatch on save throws `OptimisticLockException` (`409` via API).
 
 ## UI DSL (package `su.onno.ui`)
@@ -152,7 +158,9 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
-  `b.list(entity)`, `b.constants()`, `b.custom(type, payload)`.
+  `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
+  search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
+  (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`.
 - `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
@@ -161,16 +169,27 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
     `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order) / `contains` / `startsWith` / `dateRange`.
-  - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
+    order) / `contains` / `startsWith` / `dateRange`; `map()` → `MapSpec` adds a Table⇄Map toggle —
+    `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
+    (open on the map).
+  - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
+    instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
-  - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`, `relatedList(name, joinCatalog)`,
-    `action(name)`, `icon(name)`.
+  - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
+    name); `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
+    `edit`/`delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
+    on REST), #185; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
+    related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
+    `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
+    row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
   - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,
-    `textarea`, `image`/`avatar`/`gallery`/`file`, `map`/`geo`, …), `placeholder`, `format`
-    (`currency:EUR`, `dd-MM-yy`, …), `hint(String)`, `label(String)`, `hideInList/Form/Detail()`,
+    `textarea`; media: `image`/`photo`/`avatar`/`images`/`gallery`/`photos`/`file` — streamed to
+    `POST /api/media`, the attribute stores the returned URL; `map`/`geo`), `placeholder`, `format`
+    (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
+    `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each
+    Ref-picker option to disambiguate same-named records, #185), `hideInList/Form/Detail()`,
     `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
     form/detail/list label — including the built-in system columns (`code`/`description`,
     `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
