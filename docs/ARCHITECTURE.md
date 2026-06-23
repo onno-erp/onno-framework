@@ -296,6 +296,13 @@ list/detail/dashboard surfaces (which react only to the modelled kinds) ignore i
 The SSE fan-out is in-JVM by default — fine for one node. Add `onno-cluster-starter` (see below) to
 make `EntityChangedEvent`s reach browsers on **every** node of a scaled-out deployment.
 
+On the browser side, all tabs of an origin share a **single** `/api/events` connection: one tab is
+elected leader (via the Web Locks API) and holds the stream, rebroadcasting each event to the other
+tabs over a `BroadcastChannel`; if the leader tab closes, another transparently takes over. This
+keeps a handful of open tabs from exhausting the browser's per-origin connection limit (~6 over
+HTTP/1.1, shared across all tabs), which would otherwise starve both the extra streams and ordinary
+API calls. Browsers without Web Locks/`BroadcastChannel` fall back to one stream per tab.
+
 ## Scaling out (horizontal)
 
 Running more than one instance behind a load balancer needs these, beyond a shared database:

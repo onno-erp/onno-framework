@@ -13,6 +13,9 @@ out/
 .DS_Store
 Thumbs.db
 
+# Playwright MCP artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # H2 database files
 data/
 
