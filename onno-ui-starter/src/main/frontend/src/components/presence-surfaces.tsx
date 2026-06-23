@@ -15,9 +15,9 @@ export function PanePresence({ path }: { path: string }) {
   return null;
 }
 
-/** The focused pane's other viewers, as a compact avatar stack pinned to the right of the tab bar. */
+/** The focused pane's other viewers, as a stacked avatar pile pinned to the right of the tab bar. */
 export function TabPresence({ path }: { path: string }) {
   const viewers = useRecordViewers(idFromPath(path));
   if (viewers.length === 0) return null;
-  return <PresenceAvatars viewers={viewers} size={22} />;
+  return <PresenceAvatars viewers={viewers} size={22} max={4} overlap />;
 }

@@ -26,16 +26,22 @@ export function tint(userId: string): string {
 export function PresenceAvatars({
   viewers,
   size = 24,
+  max = MAX_AVATARS,
+  overlap = false,
   label,
   className,
 }: {
   viewers: PresenceViewer[];
   size?: number;
+  /** How many avatars to show before collapsing the rest into a "+N" chip. */
+  max?: number;
+  /** Tuck avatars into a tight face-pile (for narrow spots) instead of a gapped row. */
+  overlap?: boolean;
   label?: string;
   className?: string;
 }) {
   if (viewers.length === 0) return null;
-  const shown = viewers.slice(0, MAX_AVATARS);
+  const shown = viewers.slice(0, max);
   const overflow = viewers.length - shown.length;
   const dim = { width: size, height: size };
   const fontSize = Math.max(8, Math.round(size * 0.42));
@@ -46,16 +52,16 @@ export function PresenceAvatars({
       role="status"
       aria-label={`${viewers.length} ${viewers.length === 1 ? "person" : "people"} viewing`}
     >
-      <div className="flex -space-x-1.5">
+      <div className={overlap ? "flex -space-x-1" : "flex gap-1"}>
         {shown.map((v) => (
-          <Avatar key={v.userId} className="border-2 border-background" style={dim} title={v.displayName}>
+          <Avatar key={v.userId} style={dim} title={v.displayName}>
             <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
               {initials(v.displayName)}
             </AvatarFallback>
           </Avatar>
         ))}
         {overflow > 0 && (
-          <Avatar className="border-2 border-background" style={dim} title={`+${overflow} more`}>
+          <Avatar style={dim} title={`+${overflow} more`}>
             <AvatarFallback style={{ fontSize }}>+{overflow}</AvatarFallback>
           </Avatar>
         )}

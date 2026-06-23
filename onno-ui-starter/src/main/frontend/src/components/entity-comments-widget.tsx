@@ -6,6 +6,7 @@ import type { UiEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { linkify } from "@/lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { tint } from "@/components/presence-avatars";
 
 /** The entity a thread hangs off — the same triple the detail route uses. */
 export type CommentTarget = { kind: "catalogs" | "documents"; name: string; id: string };
@@ -352,7 +353,12 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
                 {c.authorAvatarUrl ? (
                   <AvatarImage src={c.authorAvatarUrl} alt={c.authorName ?? ""} />
                 ) : null}
-                <AvatarFallback className="text-[11px]">{initials(c.authorName)}</AvatarFallback>
+                <AvatarFallback
+                  className="text-[11px] text-white"
+                  style={{ backgroundColor: tint(c.authorName ?? "") }}
+                >
+                  {initials(c.authorName)}
+                </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">

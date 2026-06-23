@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { tint, initials } from "@/components/presence-avatars";
+import { PresenceAvatars } from "@/components/presence-avatars";
 import { useEntityViewers } from "@/lib/presence-store";
 
 /**
@@ -78,20 +77,11 @@ export const NAV_PRESENCE_CUSTOM_COMPONENTS = new Map<string, { element: string 
   ["onno-nav-presence", { element: "onno-nav-presence" }],
 ]);
 
-/** Compact one-avatar indicator: the first viewer's initial, or the count when more than one. */
+/** A compact face-pile of the entity's viewers — up to three tiny avatars, pinned to the slot's right. */
 function NavPresenceIndicator({ path }: { path: string }) {
   const seg = path.split("/").filter(Boolean);
   const viewers = useEntityViewers(seg[0] ?? "", seg[1] ?? "");
-  if (viewers.length === 0) return null;
-  const first = viewers[0];
-  const title = viewers.map((v) => v.displayName).join(", ");
-  return (
-    <Avatar className="size-4 ring-2 ring-background" title={title}>
-      <AvatarFallback className="text-[8px] text-white" style={{ backgroundColor: tint(first.userId) }}>
-        {viewers.length > 1 ? viewers.length : initials(first.displayName)}
-      </AvatarFallback>
-    </Avatar>
-  );
+  return <PresenceAvatars viewers={viewers} size={14} max={3} overlap className="h-full w-full justify-end" />;
 }
 
 /** Portals each mounted `onno-nav-presence` element to its nav indicator. Mount once, inside providers. */

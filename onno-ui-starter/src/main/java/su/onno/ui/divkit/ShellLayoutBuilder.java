@@ -377,7 +377,7 @@ public final class ShellLayoutBuilder {
      *  has a measured box to portal into, and so an empty slot never shifts the nav layout. */
     private static Map<String, Object> navPresence(String path) {
         Map<String, Object> node = Div.custom("onno-nav-presence", Map.of("path", path));
-        Div.width(node, 18);
+        Div.width(node, 40);
         Div.height(node, 18);
         return node;
     }
@@ -557,7 +557,9 @@ public final class ShellLayoutBuilder {
         Map<String, Object> label = Div.color(Div.text(item.label(), 15, "regular"),
                 activeColor(item.path(), p.primary(), p.text()));
         Div.maxLines(label, 1);
+        Div.weight(label, 1); // take the remaining width so the presence pile pins right
         cells.add(label);
+        cells.add(navPresence(item.path())); // ambient presence — the mobile counterpart of the sidebar dots
 
         Map<String, Object> row = Div.horizontal(cells);
         Div.gap(row, 12);

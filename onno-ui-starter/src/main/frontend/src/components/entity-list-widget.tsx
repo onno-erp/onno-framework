@@ -376,6 +376,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       .concat(ACTION_COL_W ? [`${ACTION_COL_W}px`] : [])
       .join(" ");
 
+  // When any loaded row has viewers, widen the whole list's left padding so the presence face-pile sits
+  // in its own gutter instead of over the first column. Applied to the header too, so columns stay
+  // aligned; it collapses back when nobody is viewing (a rare, gentle shift).
+  const listHasPresence = [...rows.current.values()].some((r) => r && viewersById.has(String(r._id)));
+  const leftPad = listHasPresence ? "pl-11 pr-4" : "px-4";
+
   // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
   // plus the action column, the 12px inter-column gaps and the 32px (px-4) row padding. When the
   // card is wider, the grid fills it (1fr expands); when narrower, this drives a horizontal scroll.
@@ -831,7 +837,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           <div style={{ minWidth: minTableWidth }}>
             {/* sticky header */}
             <div
-              className="sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card px-4 py-2.5"
+              className={cn("sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card py-2.5", leftPad)}
               style={{ gridTemplateColumns: template }}
             >
               {columns.map((c) => {
@@ -885,7 +891,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                       // Hover highlight is owned by the [data-onno-row]:hover rule in index.css
                       // (a brand-primary wash with !important, to beat DivKit's inline zebra bg);
                       // here we only set the resting alt-row stripe.
-                      "absolute left-0 right-0 grid cursor-pointer items-center gap-3 px-4 text-sm transition-colors",
+                      "absolute left-0 right-0 grid cursor-pointer items-center gap-3 text-sm transition-colors",
+                      leftPad,
                       i % 2 === 1 && "bg-muted/20"
                     )}
                     style={{ top: i * ROW_H, height: ROW_H, gridTemplateColumns: template }}
@@ -896,12 +903,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                           <span key={c.columnName} className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
                         ))}
                     {rowViewers ? (
-                      // Who else is viewing this record — overlaid right, clearing the row actions.
-                      <div
-                        className="pointer-events-none absolute top-1/2 z-10 -translate-y-1/2"
-                        style={{ right: rowActions.length ? rowActions.length * 30 + 12 : 12 }}
-                      >
-                        <PresenceAvatars viewers={rowViewers} size={18} />
+                      // Who else is viewing this record — a face-pile right-aligned in the row's left
+                      // gutter (w-11 == pl-11), so it hugs the text whether it's one avatar or three.
+                      <div className="pointer-events-none absolute left-0 top-1/2 z-10 flex w-11 -translate-y-1/2 items-center justify-end pr-1.5">
+                        <PresenceAvatars viewers={rowViewers} size={16} max={3} overlap />
                       </div>
                     ) : null}
                     {rowActions.length ? (
