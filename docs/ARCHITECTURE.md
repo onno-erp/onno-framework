@@ -186,7 +186,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Mentions | `GET /api/mentions?q=` — cross-entity `@`-mention typeahead over readable catalogs/documents; comment bodies carry mentions as `@[Display](kind/name/id)` tokens resolved live, and each readable mention publishes `EntityMentionedEvent` (no consumers — additive via `@EventListener`) (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
-| Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter) |
+| Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by per-entity read access (#190) |
 | Presence | `POST /api/presence/{kind}/{name}/{id}` — mark presence (`enter`/`heartbeat`/`leave`), gated on read access, identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (every viewed record the caller may read) that seeds the client store behind the tab/row/sidebar collaborator avatars; kept live by `presence` SSE deltas (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
@@ -284,7 +284,11 @@ Every write — through the generic controllers **and** through `repository.save
 Spring `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`
 (`onno-framework/src/main/java/su/onno/events/EntityChangedEvent.java`). It drives the `/api/events`
 SSE stream and lets server-side consumers (cache revalidation, search indexing) react to a specific
-resource instead of polling. `@DomainEvent` declarations append to the transactional `onno_outbox`;
+resource instead of polling. The browser stream is **filtered per subscriber by per-entity read
+access** — an event (including `comment` and `presence` events) reaches a viewer only when their roles
+may read the affected record, so the live channel honours the same deny-by-default RBAC as the
+REST/UI/MCP surfaces; unknown event kinds are delivered only to `ADMIN` (fail closed) (#190).
+`@DomainEvent` declarations append to the transactional `onno_outbox`;
 `onno-kafka-starter` relays those rows when you want cross-service streaming.
 
 The `entityType` vocabulary is open: the modelled kinds are `catalog`, `document`, and `register`,

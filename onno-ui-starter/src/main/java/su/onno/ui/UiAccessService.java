@@ -80,29 +80,59 @@ public class UiAccessService {
     }
 
     public boolean canRead(Principal principal, String type, String name) {
-        // {name} arrives as the route segment (e.g. "properties"), not the descriptor's display
-        // name ("Properties"). Resolve it the same case-/separator-insensitive way the generic
-        // controllers and query services do (see CatalogQueryService), or a perfectly-readable
-        // entity 403s just because its display name isn't already lower-cased. Fixes a 403 that hit
-        // every caller (ADMIN included) on the comment read check (#127).
+        return canRead(roles(principal), type, name);
+    }
+
+    /**
+     * Read-access check against a <em>pre-resolved</em> role set, for callers that capture the
+     * subscriber's authorities up front and evaluate access off the request thread. The live SSE
+     * stream ({@link UiEventPublisher}) fans events from the event-publishing / cluster-relay thread,
+     * where {@code SecurityContextHolder} no longer holds the subscriber's authentication — so the
+     * {@link Principal} overloads (which resolve roles from the in-flight request) can't be used there.
+     * Capture roles with {@link #roles(Principal)} at subscribe time, then gate each event with this.
+     *
+     * <p>Semantics mirror {@link #canRead(Principal, String, String)} exactly: {name} arrives as the
+     * route segment (e.g. "properties"), not the descriptor's display name ("Properties"), so it is
+     * resolved the same case-/separator-insensitive way the generic controllers and query services do
+     * (see {@code CatalogQueryService}) — otherwise a perfectly-readable entity is treated as unknown
+     * just because its display name isn't already lower-cased (#127).
+     */
+    public boolean canRead(Set<String> roles, String type, String name) {
         String normalized = normalizeName(name);
         return switch (type) {
             case "catalog" -> registry.allCatalogs().stream()
                     .filter(d -> normalizeName(d.logicalName()).equals(normalized))
                     .findFirst()
-                    .map(d -> canRead(principal, d))
+                    .map(d -> hasAnyRole(roles, d.readRoles()))
                     .orElse(false);
             case "document" -> registry.allDocuments().stream()
                     .filter(d -> normalizeName(d.logicalName()).equals(normalized))
                     .findFirst()
-                    .map(d -> canRead(principal, d))
+                    .map(d -> hasAnyRole(roles, d.readRoles()))
                     .orElse(false);
             case "register" -> registry.allRegisters().stream()
                     .filter(d -> normalizeName(d.logicalName()).equals(normalized))
                     .findFirst()
-                    .map(d -> canRead(principal, d))
+                    .map(d -> hasAnyRole(roles, d.readRoles()))
                     .orElse(false);
             default -> false;
+        };
+    }
+
+    /**
+     * Whether a live SSE event for {@code entityType}/{@code entityName} may be delivered to a
+     * subscriber holding {@code roles} (#190). Modelled kinds (catalog/document/register) use the
+     * per-entity read grant. A {@code comment} event is scoped to the commented record — a catalog or
+     * document named {@code entityName} (see {@code CommentController}) — so it is authorized by that
+     * record's read grant. Any other event type is delivered only to the {@code ADMIN} superuser:
+     * fail closed, so a new event kind can't leak before this filter is taught to authorize it. (The
+     * {@code presence} sentinel is authorized by the publisher, which maps the record kind itself.)
+     */
+    public boolean canReceiveEvent(Set<String> roles, String entityType, String entityName) {
+        return switch (entityType == null ? "" : entityType) {
+            case "catalog", "document", "register" -> canRead(roles, entityType, entityName);
+            case "comment" -> canRead(roles, "catalog", entityName) || canRead(roles, "document", entityName);
+            default -> roles != null && roles.contains(SUPERUSER_ROLE);
         };
     }
 
@@ -181,7 +211,10 @@ public class UiAccessService {
         // Don't gate on principal != null: roles() resolves authorities from the SecurityContext
         // when the injected principal carries none (or is absent). Deny-by-default still applies —
         // an unauthenticated caller simply resolves to no roles.
-        Set<String> actualRoles = roles(principal);
+        return hasAnyRole(roles(principal), requiredRoles);
+    }
+
+    private boolean hasAnyRole(Set<String> actualRoles, List<String> requiredRoles) {
         // ADMIN is the superuser: it sees and edits everything regardless of
         // per-entity role lists.
         if (actualRoles.contains(SUPERUSER_ROLE)) return true;
