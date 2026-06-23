@@ -107,8 +107,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public LoginDivController loginDivController(
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsProvider> authMethods,
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsContributor> contributors,
-            UiMessages uiMessages) {
-        return new LoginDivController(authMethods, contributors, uiMessages);
+            UiMessages uiMessages,
+            su.onno.ui.LayoutSet layoutSet) {
+        // Branding is viewport-independent — take the desktop layout's, the same source DivKitController uses.
+        su.onno.ui.BrandingConfig branding = layoutSet.forViewport(su.onno.ui.Viewport.DESKTOP).shell().branding();
+        return new LoginDivController(authMethods, contributors, uiMessages, branding);
     }
 
     @Bean

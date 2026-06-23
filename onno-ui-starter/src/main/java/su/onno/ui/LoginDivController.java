@@ -34,19 +34,24 @@ public class LoginDivController {
     private final ObjectProvider<AuthMethodsProvider> authMethods;
     private final ObjectProvider<AuthMethodsContributor> contributors;
     private final UiMessages messages;
+    // The app's branding palette, so the public login card honors shell().light/.dark overrides exactly
+    // like the authenticated shell (issue #191) — and a monochrome SSO mark tints to the brand accent.
+    private final BrandingConfig branding;
 
     public LoginDivController(ObjectProvider<AuthMethodsProvider> authMethods,
                               ObjectProvider<AuthMethodsContributor> contributors,
-                              UiMessages messages) {
+                              UiMessages messages,
+                              BrandingConfig branding) {
         this.authMethods = authMethods;
         this.contributors = contributors;
         this.messages = messages;
+        this.branding = branding;
     }
 
     @GetMapping("/login")
     public Map<String, Object> login(@RequestParam(required = false) String theme,
                                      @RequestParam(required = false) String step) {
-        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme), messages, step);
+        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme, branding), messages, step);
     }
 
     // Visible for testing.
