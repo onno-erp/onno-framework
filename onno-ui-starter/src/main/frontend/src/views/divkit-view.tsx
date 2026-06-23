@@ -255,6 +255,10 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   // a list/detail/dashboard surface, so keep them off the content-pane refetch path — otherwise
   // every comment post would needlessly refetch the home dashboard (which refreshes on any change).
   if (event.entityType === "comment") return false;
+  // Likewise presence (collaboration-marker) pings: handled only by the presence bar's own listener.
+  // Without this, every heartbeat/join would refetch the open detail pane (and the home dashboard),
+  // remounting the bar, which re-enters and emits another ping — an endless refetch/flicker loop.
+  if (event.entityType === "presence") return false;
   // Home shows counts/charts over many entities — refresh on any data change.
   if (pathname === "/" || pathname === "") return true;
 

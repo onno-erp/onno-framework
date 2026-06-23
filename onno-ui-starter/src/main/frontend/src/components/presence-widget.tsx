@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type PresenceViewer } from "@/lib/api";
 import type { UiEvent } from "@/lib/types";
-import { useUiEvents } from "@/hooks/use-ui-events";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 /** The record a presence bar tracks — the same triple the detail route uses. */
@@ -37,7 +36,6 @@ function tint(userId: string): string {
  */
 export function PresenceBar({ target }: { target: PresenceTarget }) {
   const { kind, name, id } = target;
-  const expectedType = kind === "catalogs" ? "catalog" : "document";
   const [viewers, setViewers] = useState<PresenceViewer[]>([]);
   const meRef = useRef<string | null>(null);
 
@@ -78,15 +76,19 @@ export function PresenceBar({ target }: { target: PresenceTarget }) {
     };
   }, [kind, name, id, others]);
 
-  const onEvent = useCallback(
-    (ev: UiEvent) => {
-      if (ev.type === "presence" && ev.entityType === expectedType && ev.entityName === name && ev.id === id) {
+  // Live updates ride the shared `onno:dataevent` fan-out (divkit-view's single SSE stream) the other
+  // island widgets use, rather than opening a second stream. The id is globally unique so it scopes the
+  // record; the event's entityType is the "presence" sentinel, so it never collides with row changes.
+  useEffect(() => {
+    const onData = (e: Event) => {
+      const ev = (e as CustomEvent<UiEvent>).detail;
+      if (ev?.type === "presence" && ev.entityName === name && ev.id === id) {
         setViewers(others(ev.viewers ?? []));
       }
-    },
-    [expectedType, name, id, others]
-  );
-  useUiEvents(onEvent);
+    };
+    window.addEventListener("onno:dataevent", onData);
+    return () => window.removeEventListener("onno:dataevent", onData);
+  }, [name, id, others]);
 
   if (viewers.length === 0) return null;
 

@@ -91,11 +91,16 @@ public class UiEventPublisher {
      * Fans the current viewer set of one record out to every open stream as a {@code presence} event, for
      * record-level collaboration markers. Each viewer is a {@code {userId, displayName}} map. Sent only
      * when a record's viewer set changes (a join or a leave), never on a bare heartbeat.
+     *
+     * <p>Its {@code entityType} is the distinct sentinel {@code "presence"}, <strong>not</strong> the
+     * record's {@code catalog}/{@code document} kind — exactly as comment events use {@code "comment"} —
+     * so the list/detail/dashboard surfaces, which refetch on a row change to their entity, never mistake
+     * a presence ping for one. Only the presence bar listens for it (matching on {@code entityName}/{@code id}).
      */
-    public void publishPresence(String entityType, String entityName, String id, List<Map<String, String>> viewers) {
+    public void publishPresence(String entityName, String id, List<Map<String, String>> viewers) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "presence");
-        payload.put("entityType", entityType);
+        payload.put("entityType", "presence");
         payload.put("entityName", entityName);
         payload.put("id", id);
         payload.put("viewers", viewers);

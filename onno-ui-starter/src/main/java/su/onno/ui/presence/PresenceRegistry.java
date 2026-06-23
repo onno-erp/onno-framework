@@ -175,7 +175,9 @@ public class PresenceRegistry {
     }
 
     private void publishSnapshot(RecordKey key) {
-        publisher.publishPresence(key.entityType(), key.entityName(), key.id(), viewers(key));
+        // entityName + id scope the bar to its record; the SSE event's entityType is the "presence"
+        // sentinel (set in publishPresence), not the record's kind, so no list/detail surface refetches.
+        publisher.publishPresence(key.entityName(), key.id(), viewers(key));
     }
 
     private List<Map<String, String>> viewers(RecordKey key) {
