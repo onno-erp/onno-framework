@@ -207,6 +207,8 @@ export interface UiEvent {
   entityName?: string;
   id?: string;
   timestamp?: string;
+  /** Present only on a `presence` event: the current viewer set of the record. */
+  viewers?: { userId: string; displayName: string }[];
 }
 
 export interface DashboardWidgetMeta {

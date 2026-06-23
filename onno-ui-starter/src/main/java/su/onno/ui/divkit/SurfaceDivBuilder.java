@@ -535,6 +535,31 @@ public final class SurfaceDivBuilder {
     }
 
     /**
+     * Prepend the record-level presence bar to a built detail surface. The bar is an {@code onno-presence}
+     * {@code div-custom} carrying the entity's {@code (kind, name, id)} triple; the React bridge marks the
+     * viewer present at {@code /api/presence/...} and renders the avatars of anyone else viewing the same
+     * record. It sits at the top of the content (above the header) and is invisible until a second viewer
+     * appears, so a solo viewer sees nothing. Mirrors {@link #withComments}: returns the same content map
+     * with an extended {@code items} list, a no-op when there is no list to extend.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> withPresence(Map<String, Object> content, String kind,
+                                                   String name, String id) {
+        Object items = content.get("items");
+        if (!(items instanceof List<?> existing)) {
+            return content;
+        }
+        Map<String, Object> bar = Div.custom("onno-presence",
+                Map.of("target", Map.of("kind", kind, "name", name, "id", id)));
+        Div.matchWidth(bar);
+        List<Map<String, Object>> next = new ArrayList<>();
+        next.add(bar);
+        next.addAll((List<Map<String, Object>>) existing);
+        content.put("items", next);
+        return content;
+    }
+
+    /**
      * The detail surface header: a title (with an optional muted subtitle — e.g. a
      * document number or catalog code, which keeps long identifiers out of the big
      * title so it no longer wraps into the corner) on the left, and an action cluster

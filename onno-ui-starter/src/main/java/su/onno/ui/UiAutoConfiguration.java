@@ -138,6 +138,25 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new ClusterUiBridge(clusterEventBus, publisher);
     }
 
+    /**
+     * Tracks who is viewing each record for record-level collaboration markers. It subscribes to the
+     * {@link su.onno.cluster.ClusterEventBus} for peer presence and pushes viewer-set changes onto the SSE
+     * stream. With the default no-op bus it is a single-node, in-memory registry.
+     */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public su.onno.ui.presence.PresenceRegistry presenceRegistry(su.onno.cluster.ClusterEventBus clusterEventBus,
+                                                                 UiEventPublisher publisher) {
+        return new su.onno.ui.presence.PresenceRegistry(clusterEventBus, publisher);
+    }
+
+    @Bean
+    public su.onno.ui.presence.PresenceController presenceController(su.onno.ui.presence.PresenceRegistry presenceRegistry,
+                                                                     UiAccessService access,
+                                                                     CurrentUserResolver currentUserResolver) {
+        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver);
+    }
+
     @Bean
     public FieldHintResolver fieldHintResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {

@@ -27,8 +27,9 @@ class PostgresClusterEventBusUnitTest {
         return new PostgresClusterEventBus(mock(DataSource.class), mapper, props);
     }
 
-    private String json(ClusterEvent event) throws Exception {
-        return mapper.writeValueAsString(event);
+    private String json(ClusterEvent event) {
+        // Go through the real wire encoder so dispatch parses exactly what a peer NOTIFY would carry.
+        return PostgresClusterEventBus.serialize(mapper, event, 8000);
     }
 
     @Test
@@ -41,7 +42,8 @@ class PostgresClusterEventBusUnitTest {
                 .withOrigin("node-B")));
 
         assertThat(received).hasSize(1);
-        assertThat(received.get(0).entityName()).isEqualTo("Customers");
+        assertThat(received.get(0)).isInstanceOf(ClusterEvent.EntityChanged.class);
+        assertThat(((ClusterEvent.EntityChanged) received.get(0)).entityName()).isEqualTo("Customers");
     }
 
     @Test

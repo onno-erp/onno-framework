@@ -34,7 +34,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
-| `onno-cluster-starter` | `su.onno` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI in sync across instances. |
+| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes and presence) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI and collaboration markers in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-mail-starter` | `su.onno` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
 | `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
@@ -186,7 +186,8 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Mentions | `GET /api/mentions?q=` — cross-entity `@`-mention typeahead over readable catalogs/documents; comment bodies carry mentions as `@[Display](kind/name/id)` tokens resolved live, and each readable mention publishes `EntityMentionedEvent` (no consumers — additive via `@EventListener`) (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
-| Events | `GET /api/events` — SSE stream of CRUD/posting changes (ui-starter) |
+| Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter) |
+| Presence | `POST /api/presence/{kind}/{name}/{id}` — record-level collaboration markers; body `{ "action": "enter"\|"heartbeat"\|"leave" }`, gated on read access to the entity, identity stamped from the session; returns the record's current viewers. Heartbeat-kept, TTL-expired, relayed across nodes over the `ClusterEventBus` (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
@@ -315,6 +316,13 @@ Running more than one instance behind a load balancer needs these, beyond a shar
   once, on the node that made the change. `DocumentPostedEvent`/`DocumentUnpostedEvent` are node-local
   by design; their cross-node *visibility* rides on the `posted`/`unposted` `EntityChangedEvent`. To
   swap in Kafka/Redis, expose your own `ClusterEventBus` bean (`@ConditionalOnMissingBean`).
+  `ClusterEvent` is a sealed family discriminated by `kind`: `EntityChanged` (above) and `Presence`
+  (record-level collaboration markers) share the one channel, so the same bus carries both.
+- **Presence markers across nodes** — record-level presence ("who else is viewing this") is held in an
+  in-memory per-node registry (`PresenceRegistry`, ui-starter) and relayed as a `Presence` `ClusterEvent`
+  over the same bus, so a viewer on any node sees viewers on every node. It is deliberately best-effort
+  and heartbeat-kept: a viewer expires by TTL once heartbeats stop, so a closed tab or a crashed node
+  self-heals without an explicit leave and without cross-node clock agreement.
 - **Schema apply** — every node runs the boot-time diff/migration. On Postgres it is serialized by a
   session-level advisory lock, so one node applies DDL while the others wait and then re-run against
   the now-current schema (idempotent via the diff + `onno_schema_history`). H2 is single-node and

@@ -72,7 +72,7 @@ class PostgresClusterEventBusPostgresIT {
         // Retry-publish until B is listening (no readiness signal); once it is, the NOTIFY arrives.
         awaitDelivered(nodeA, onB, "Customers");
 
-        assertThat(onB).extracting(ClusterEvent::entityName).contains("Customers");
+        assertThat(onB).extracting(e -> ((ClusterEvent.EntityChanged) e).entityName()).contains("Customers");
         // A published it, so A's LISTEN echoes it back — but the self-filter drops it.
         assertThat(onA).isEmpty();
     }
@@ -90,7 +90,7 @@ class PostgresClusterEventBusPostgresIT {
 
         // After backoff + re-LISTEN, delivery resumes.
         awaitDelivered(nodeA, onB, "AfterReconnect");
-        assertThat(onB).extracting(ClusterEvent::entityName).contains("AfterReconnect");
+        assertThat(onB).extracting(e -> ((ClusterEvent.EntityChanged) e).entityName()).contains("AfterReconnect");
     }
 
     /** Publish a uniquely-named change from {@code publisher} every 250ms until {@code sink} sees it (≤20s). */
@@ -98,7 +98,7 @@ class PostgresClusterEventBusPostgresIT {
         long deadline = System.nanoTime() + Duration.ofSeconds(20).toNanos();
         while (System.nanoTime() < deadline) {
             publisher.publish(ClusterEvent.entityChanged("created", "catalog", entityName, "id-1", "C-1"));
-            if (sink.stream().anyMatch(e -> entityName.equals(e.entityName()))) {
+            if (sink.stream().anyMatch(e -> e instanceof ClusterEvent.EntityChanged ec && entityName.equals(ec.entityName()))) {
                 return;
             }
             sleep(250);

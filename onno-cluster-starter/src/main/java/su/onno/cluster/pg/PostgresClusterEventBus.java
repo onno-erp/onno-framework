@@ -1,6 +1,8 @@
 package su.onno.cluster.pg;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import su.onno.cluster.ClusterEvent;
 import su.onno.cluster.ClusterEventBus;
 
@@ -96,8 +98,8 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
                     .execute());
         } catch (RuntimeException e) {
             // Fail soft: a missed NOTIFY only costs peers a live refresh, which they recover on next fetch.
-            log.debug("onno-cluster: failed to NOTIFY a {} change; peers may miss this live update: {}",
-                    event.changeType(), e.toString());
+            log.debug("onno-cluster: failed to NOTIFY a {} event; peers may miss this live update: {}",
+                    event.kind(), e.toString());
         }
     }
 
@@ -148,15 +150,9 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
     }
 
     void dispatch(String payload) {
-        if (payload == null || payload.isBlank()) {
-            return;
-        }
-        ClusterEvent event;
-        try {
-            event = mapper.readValue(payload, ClusterEvent.class);
-        } catch (Exception e) {
-            log.debug("onno-cluster: ignoring unparseable notification payload: {}", e.toString());
-            return;
+        ClusterEvent event = deserialize(mapper, payload);
+        if (event == null) {
+            return; // blank, unparseable, or an unknown kind — deserialize already logged the reason
         }
         if (nodeId.equals(event.originNodeId())) {
             return; // our own echo — already fanned out to local SSE clients synchronously
@@ -165,44 +161,115 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
             try {
                 sink.accept(event);
             } catch (RuntimeException e) {
-                log.debug("onno-cluster: sink threw handling a {} event: {}", event.changeType(), e.toString());
+                log.debug("onno-cluster: sink threw handling a {} event: {}", event.kind(), e.toString());
             }
         }
     }
 
     /**
-     * Serialize to JSON, keeping under {@link #maxPayloadBytes} (Postgres caps a {@code NOTIFY} payload
-     * at 8000 bytes). On overflow, drop the only unbounded field ({@code naturalKey}); if still too big,
-     * degrade to a coarse {@code entityName="*"} notice the SSE clients already understand. Never throws.
+     * Serialize to JSON, keeping under {@link #maxPayloadBytes} (Postgres caps a {@code NOTIFY} payload at
+     * 8000 bytes). The {@link ClusterEvent#kind()} tag is written explicitly so {@link #deserialize} can
+     * pick the right variant. On overflow of an {@link ClusterEvent.EntityChanged}, drop the only unbounded
+     * field ({@code naturalKey}); if still too big, degrade to a coarse {@code entityName="*"} notice the
+     * SSE clients already understand. Never throws.
      */
     static String serialize(ObjectMapper mapper, ClusterEvent event, int maxPayloadBytes) {
         try {
-            String json = mapper.writeValueAsString(event);
+            String json = mapper.writeValueAsString(toJson(mapper, event));
             if (utf8Length(json) <= maxPayloadBytes) {
                 return json;
             }
-            ClusterEvent trimmed = new ClusterEvent(event.kind(), event.originNodeId(), event.changeType(),
-                    event.entityType(), event.entityName(), event.id(), null);
-            json = mapper.writeValueAsString(trimmed);
-            if (utf8Length(json) <= maxPayloadBytes) {
-                log.debug("onno-cluster: dropped oversized naturalKey from a {} event on {}",
-                        event.changeType(), event.entityName());
-                return json;
+            if (event instanceof ClusterEvent.EntityChanged ec) {
+                ClusterEvent trimmed = new ClusterEvent.EntityChanged(ec.originNodeId(), ec.changeType(),
+                        ec.entityType(), ec.entityName(), ec.id(), null);
+                json = mapper.writeValueAsString(toJson(mapper, trimmed));
+                if (utf8Length(json) <= maxPayloadBytes) {
+                    log.debug("onno-cluster: dropped oversized naturalKey from a {} event on {}",
+                            ec.changeType(), ec.entityName());
+                    return json;
+                }
+                ClusterEvent coarse = new ClusterEvent.EntityChanged(ec.originNodeId(), ec.changeType(),
+                        ec.entityType(), "*", null, null);
+                json = mapper.writeValueAsString(toJson(mapper, coarse));
+                if (utf8Length(json) <= maxPayloadBytes) {
+                    log.debug("onno-cluster: degraded an oversized {} event to a coarse '*' notice", ec.changeType());
+                    return json;
+                }
             }
-            ClusterEvent coarse = new ClusterEvent(event.kind(), event.originNodeId(), event.changeType(),
-                    event.entityType(), "*", null, null);
-            json = mapper.writeValueAsString(coarse);
-            if (utf8Length(json) <= maxPayloadBytes) {
-                log.debug("onno-cluster: degraded an oversized {} event to a coarse '*' notice", event.changeType());
-                return json;
-            }
-            log.debug("onno-cluster: dropping a {} event; even the coarse envelope exceeds {} bytes",
-                    event.changeType(), maxPayloadBytes);
+            log.debug("onno-cluster: dropping a {} event; even the minimal envelope exceeds {} bytes",
+                    event.kind(), maxPayloadBytes);
             return null;
         } catch (Exception e) {
             log.debug("onno-cluster: failed to serialize a cluster event: {}", e.toString());
             return null;
         }
+    }
+
+    /**
+     * Parse a {@code NOTIFY} payload back into the {@link ClusterEvent} variant named by its {@code kind}
+     * tag. Returns {@code null} (never throws) for a blank, unparseable, or unknown-kind payload — the
+     * symmetric inverse of {@link #serialize}, used by both {@link #dispatch} and the unit tests.
+     */
+    static ClusterEvent deserialize(ObjectMapper mapper, String payload) {
+        if (payload == null || payload.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = mapper.readTree(payload);
+            String kind = text(node, "kind");
+            if (ClusterEvent.KIND_ENTITY_CHANGED.equals(kind)) {
+                return new ClusterEvent.EntityChanged(
+                        text(node, "originNodeId"),
+                        text(node, "changeType"),
+                        text(node, "entityType"),
+                        text(node, "entityName"),
+                        text(node, "id"),
+                        text(node, "naturalKey"));
+            }
+            if (ClusterEvent.KIND_PRESENCE.equals(kind)) {
+                return new ClusterEvent.Presence(
+                        text(node, "originNodeId"),
+                        text(node, "action"),
+                        text(node, "entityType"),
+                        text(node, "entityName"),
+                        text(node, "id"),
+                        text(node, "userId"),
+                        text(node, "displayName"));
+            }
+            log.debug("onno-cluster: ignoring notification of unknown kind '{}'", kind);
+            return null;
+        } catch (Exception e) {
+            log.debug("onno-cluster: ignoring unparseable notification payload: {}", e.toString());
+            return null;
+        }
+    }
+
+    /** Encode a variant to a JSON object, always stamping {@code kind} so the receiver can route it. */
+    private static ObjectNode toJson(ObjectMapper mapper, ClusterEvent event) {
+        ObjectNode node = mapper.createObjectNode();
+        node.put("kind", event.kind());
+        node.put("originNodeId", event.originNodeId());
+        if (event instanceof ClusterEvent.EntityChanged ec) {
+            node.put("changeType", ec.changeType());
+            node.put("entityType", ec.entityType());
+            node.put("entityName", ec.entityName());
+            node.put("id", ec.id());
+            node.put("naturalKey", ec.naturalKey());
+        } else if (event instanceof ClusterEvent.Presence p) {
+            node.put("action", p.action());
+            node.put("entityType", p.entityType());
+            node.put("entityName", p.entityName());
+            node.put("id", p.id());
+            node.put("userId", p.userId());
+            node.put("displayName", p.displayName());
+        }
+        return node;
+    }
+
+    /** Read a string field, mapping a missing or JSON-null value to {@code null}. */
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : value.asText();
     }
 
     private static int utf8Length(String value) {

@@ -12,25 +12,25 @@ class ClusterEventSerializationTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    void roundTripsThroughJsonIncludingNulls() throws Exception {
+    void roundTripsThroughJsonIncludingNulls() {
         ClusterEvent event = ClusterEvent.entityChanged("deleted", "catalog", "Customers", null, null)
                 .withOrigin("node-A");
 
         String json = PostgresClusterEventBus.serialize(mapper, event, 7000);
-        ClusterEvent back = mapper.readValue(json, ClusterEvent.class);
+        ClusterEvent back = PostgresClusterEventBus.deserialize(mapper, json);
 
         assertThat(back).isEqualTo(event);
     }
 
     @Test
-    void dropsNaturalKeyWhenOverTheCap() throws Exception {
+    void dropsNaturalKeyWhenOverTheCap() {
         String hugeKey = "x".repeat(500);
         ClusterEvent event = ClusterEvent.entityChanged("updated", "document", "Invoices", "id-1", hugeKey)
                 .withOrigin("node-A");
 
         // Cap large enough for the event without the 500-char key, but not with it.
         String json = PostgresClusterEventBus.serialize(mapper, event, 200);
-        ClusterEvent back = mapper.readValue(json, ClusterEvent.class);
+        ClusterEvent.EntityChanged back = (ClusterEvent.EntityChanged) PostgresClusterEventBus.deserialize(mapper, json);
 
         assertThat(back.naturalKey()).isNull();
         assertThat(back.entityName()).isEqualTo("Invoices");
@@ -38,19 +38,32 @@ class ClusterEventSerializationTest {
     }
 
     @Test
-    void degradesToCoarseNoticeWhenStillTooLarge() throws Exception {
+    void degradesToCoarseNoticeWhenStillTooLarge() {
         String hugeName = "N".repeat(500);
         ClusterEvent event = ClusterEvent.entityChanged("changed", "register", hugeName, "id-1", "key-1")
                 .withOrigin("node-A");
 
         // Cap big enough for the coarse "*" envelope (~141 bytes) but not the 500-char entityName.
         String json = PostgresClusterEventBus.serialize(mapper, event, 200);
-        ClusterEvent back = mapper.readValue(json, ClusterEvent.class);
+        ClusterEvent.EntityChanged back = (ClusterEvent.EntityChanged) PostgresClusterEventBus.deserialize(mapper, json);
 
         assertThat(back.entityName()).isEqualTo("*");
         assertThat(back.id()).isNull();
         assertThat(back.naturalKey()).isNull();
         assertThat(back.changeType()).isEqualTo("changed");
+    }
+
+    @Test
+    void roundTripsAPresenceEvent() {
+        ClusterEvent event = ClusterEvent.presence(ClusterEvent.Presence.ENTER,
+                "document", "Invoices", "id-7", "u-42", "Ada Lovelace").withOrigin("node-A");
+
+        String json = PostgresClusterEventBus.serialize(mapper, event, 7000);
+        ClusterEvent back = PostgresClusterEventBus.deserialize(mapper, json);
+
+        assertThat(back).isEqualTo(event);
+        assertThat(back).isInstanceOf(ClusterEvent.Presence.class);
+        assertThat(((ClusterEvent.Presence) back).displayName()).isEqualTo("Ada Lovelace");
     }
 
     @Test

@@ -54,7 +54,7 @@ It should remain friendly to normal Java:
 
 Good next slices:
 - UI widgets for hierarchy browsing and posting-preview inspection
-- Richer live collaboration signals, such as record-level locks and stale-record banners
+- Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
 - Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)
 - More generated test fixtures from business models
 - Tabular-section field hints in the authored UI DSL so `@UiHint` can be deleted entirely when custom row-field hints are needed
@@ -62,7 +62,8 @@ Good next slices:
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
-diffs, the server-driven DivKit UI layer, and horizontal scale-out (`onno-cluster-starter`).
+diffs, the server-driven DivKit UI layer, horizontal scale-out (`onno-cluster-starter`), and
+record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed).
 
 ## Auth Direction
 

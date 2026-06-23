@@ -39,7 +39,8 @@ class ClusterEntityChangeRelayTest {
                 .onEntityChanged(new EntityChangedEvent("created", "catalog", "Customers", id, "C-1"));
 
         assertThat(bus.published).hasSize(1);
-        ClusterEvent event = bus.published.get(0);
+        assertThat(bus.published.get(0)).isInstanceOf(ClusterEvent.EntityChanged.class);
+        ClusterEvent.EntityChanged event = (ClusterEvent.EntityChanged) bus.published.get(0);
         assertThat(event.kind()).isEqualTo(ClusterEvent.KIND_ENTITY_CHANGED);
         assertThat(event.changeType()).isEqualTo("created");
         assertThat(event.entityType()).isEqualTo("catalog");
@@ -57,7 +58,8 @@ class ClusterEntityChangeRelayTest {
         new ClusterEntityChangeRelay(bus)
                 .onEntityChanged(new EntityChangedEvent("deleted", "document", "Invoices", null, null));
 
-        assertThat(bus.published.get(0).id()).isNull();
-        assertThat(bus.published.get(0).naturalKey()).isNull();
+        ClusterEvent.EntityChanged event = (ClusterEvent.EntityChanged) bus.published.get(0);
+        assertThat(event.id()).isNull();
+        assertThat(event.naturalKey()).isNull();
     }
 }

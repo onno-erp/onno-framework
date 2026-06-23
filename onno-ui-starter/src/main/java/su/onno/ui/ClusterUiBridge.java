@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.cluster.ClusterEvent;
 import su.onno.cluster.ClusterEventBus;
 
 import jakarta.annotation.PostConstruct;
@@ -32,8 +33,11 @@ public class ClusterUiBridge {
 
     @PostConstruct
     void wire() {
-        bus.subscribe(event -> publisher.publish(
-                event.changeType(), event.entityType(), event.entityName(), event.id(), event.naturalKey()));
+        bus.subscribe(event -> {
+            if (event instanceof ClusterEvent.EntityChanged ec) {
+                publisher.publish(ec.changeType(), ec.entityType(), ec.entityName(), ec.id(), ec.naturalKey());
+            }
+        });
         if (bus.isDistributed()) {
             log.info("Cluster live-UI sync active: forwarding peer-node entity changes to local SSE clients.");
         }

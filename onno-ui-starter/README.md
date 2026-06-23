@@ -474,13 +474,41 @@ resolved **live**, so renames and deletes stay correct on their own.
 - **Config.** `onno.comments.mentions.enabled` (default true) gates the whole feature;
   `onno.comments.mentions.suggestion-limit` / `…per-entity-limit` cap the typeahead.
 
+### Presence — `/api/presence`
+
+Every catalog or document detail surface carries **record-level presence markers**: the avatars of
+anyone else currently viewing the same record, like the collaborator dots in a shared document. The
+server prepends an `onno-presence` DivKit panel to the detail content (above the header); the React
+bridge marks the viewer present and renders the markers. It is invisible when you're alone, so a solo
+viewer sees nothing — markers only appear once a second viewer arrives. Presence is framework
+infrastructure with **no per-entity modelling and no opt-in**; it's on for every detail surface.
+
+**How it works.** The client `POST`s `enter` on open, a `heartbeat` every ~15s, and `leave` on close.
+A per-node in-memory [`PresenceRegistry`](src/main/java/su/onno/ui/presence/PresenceRegistry.java)
+holds who is viewing what, keyed by the `{kind, name, id}` triple, and pushes the viewer set onto the
+SSE stream as a `presence` event whenever it changes (a join or a leave — never on a bare heartbeat).
+A viewer is kept alive by heartbeats and **expires by TTL** (~45s) once they stop, so a closed tab or
+a crashed node self-heals without relying on the `leave` arriving. Identity is stamped from the session
+([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts
+who it is, and the markers exclude the caller themselves.
+
+**Across nodes.** Each change is relayed as a `Presence` `ClusterEvent` over the same
+[`ClusterEventBus`](../onno-framework/src/main/java/su/onno/cluster/ClusterEventBus.java) that carries
+live entity changes (default Postgres `LISTEN`/`NOTIFY` via `onno-cluster-starter`; in-memory single-node
+otherwise), so a viewer on any node sees viewers on every node. Like all cluster traffic it is
+best-effort — a dropped ping costs at most one TTL of staleness.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/presence/{kind}/{name}/{id}` | Mark presence on a record — body `{ "action": "enter" \| "heartbeat" \| "leave" }`. `{kind}` is `catalogs`/`documents`. Gated on read access to the entity (`403` otherwise); `404` for an unknown kind. Returns `{ you, viewers: [{ userId, displayName }] }` — `you` is the caller's id so the client can omit itself. |
+
 ### Misc — `/api`
 
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/theme` | The `onno.ui.theme.*` map. |
 | GET | `/api/config` | `{ readOnly, basePath, messages }` (the resolved chrome-string map — see [Localizing the chrome](#localizing-the-chrome)), plus `update: { available, current, latest, url }` when the update check is enabled. |
-| GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes (`text/event-stream`). The SPA shares **one** such connection across all tabs of an origin (leader elected via the Web Locks API, events rebroadcast over a `BroadcastChannel`), so many open tabs don't exhaust the browser's per-origin connection limit. |
+| GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes and `presence` viewer-set updates (`text/event-stream`). The SPA shares **one** such connection across all tabs of an origin (leader elected via the Web Locks API, events rebroadcast over a `BroadcastChannel`), so many open tabs don't exhaust the browser's per-origin connection limit. |
 
 > **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`
 > route is the desktop shell's `/api/desktop/manifest`). To introspect the business model at runtime,

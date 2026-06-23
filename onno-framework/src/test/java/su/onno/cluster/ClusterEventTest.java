@@ -8,7 +8,7 @@ class ClusterEventTest {
 
     @Test
     void entityChangedFactorySetsKindAndLeavesOriginUnset() {
-        ClusterEvent event = ClusterEvent.entityChanged("created", "catalog", "Customers", "id-1", "C-1");
+        ClusterEvent.EntityChanged event = ClusterEvent.entityChanged("created", "catalog", "Customers", "id-1", "C-1");
 
         assertThat(event.kind()).isEqualTo(ClusterEvent.KIND_ENTITY_CHANGED);
         assertThat(event.originNodeId()).isNull();
@@ -21,7 +21,7 @@ class ClusterEventTest {
 
     @Test
     void withOriginStampsTheNodeIdAndPreservesEverythingElse() {
-        ClusterEvent stamped = ClusterEvent.entityChanged("updated", "document", "Invoices", "id-2", "INV-2")
+        ClusterEvent.EntityChanged stamped = ClusterEvent.entityChanged("updated", "document", "Invoices", "id-2", "INV-2")
                 .withOrigin("node-A");
 
         assertThat(stamped.originNodeId()).isEqualTo("node-A");
