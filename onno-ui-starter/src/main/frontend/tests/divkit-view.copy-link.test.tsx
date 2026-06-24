@@ -13,6 +13,16 @@ vi.mock("@divkitframework/divkit/client-hydratable", () => ({
   createVariable: () => ({ setValue: vi.fn() }),
 }));
 
+// DivKitView drives presence (usePanePresence) — a no-op here so it doesn't issue a stray fetch that
+// would consume the single mocked shell Response before the title-map load reads it.
+vi.mock("@/lib/presence-store", () => ({
+  usePanePresence: vi.fn(),
+  useRecordViewers: () => [],
+  useEntityViewers: () => [],
+  useViewersById: () => new Map(),
+  startPresence: vi.fn(),
+}));
+
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => ({ logout: vi.fn().mockResolvedValue(undefined) }),
 }));
