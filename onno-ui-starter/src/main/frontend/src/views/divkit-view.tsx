@@ -1454,8 +1454,10 @@ export function DivKitView() {
             </div>
           )}
         </div>
-        {/* Invisible: marks this pane's active record present (enter/heartbeat/leave) by its route. */}
-        <PanePresence path={pane.activePath} />
+        {/* Invisible: marks ONLY the focused pane's active route present (enter/heartbeat/leave), so a
+            user shows on the one page they're actually on — not every open or split pane. Switching focus
+            unmounts this (leave) for the old pane and mounts it (enter) for the new one. */}
+        {focused && <PanePresence path={pane.activePath} />}
 
         {/* Every open tab stays mounted in its own scroll container; only the active
             one is shown. Keeping them alive preserves each tab's scroll position,
