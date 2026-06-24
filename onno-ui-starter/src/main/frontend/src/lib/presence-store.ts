@@ -116,35 +116,24 @@ export function useEntityViewers(kind: string, name: string): PresenceViewer[] {
 
 const HEARTBEAT_MS = 15_000;
 
-type RecordRoute = { kind: "catalogs" | "documents"; name: string; id: string };
-
-/** Parse a pane path like "/catalogs/properties/<uuid>" into its record route, or null if not a detail. */
-function parseRecordPath(path: string): RecordRoute | null {
-  const seg = path.split("/").filter(Boolean);
-  if (seg.length === 3 && (seg[0] === "catalogs" || seg[0] === "documents")) {
-    return { kind: seg[0], name: seg[1], id: seg[2] };
-  }
-  return null;
-}
-
 /**
  * Drive presence for one pane from its route: enter on open, heartbeat while open, leave on close or when
- * the pane navigates elsewhere. Mounted once per pane; a no-op when the pane isn't on a record detail.
- * The viewer data itself comes back through the store (snapshot + SSE), so this only owns the lifecycle.
+ * the pane navigates elsewhere. Mounted once per pane and posts for EVERY route — a record, an entity list,
+ * or any page (dashboards/custom pages); the server derives the presence identity from the path. The viewer
+ * data itself comes back through the store (snapshot + SSE), so this only owns the lifecycle.
  */
 export function usePanePresence(path: string) {
   useEffect(() => {
-    const rec = parseRecordPath(path);
-    if (!rec) return;
+    if (!path) return;
     let active = true;
-    api.presence(rec.kind, rec.name, rec.id, "enter").catch(() => {});
+    api.presence(path, "enter").catch(() => {});
     const beat = window.setInterval(() => {
-      if (active) api.presence(rec.kind, rec.name, rec.id, "heartbeat").catch(() => {});
+      if (active) api.presence(path, "heartbeat").catch(() => {});
     }, HEARTBEAT_MS);
     return () => {
       active = false;
       window.clearInterval(beat);
-      api.leavePresence(rec.kind, rec.name, rec.id);
+      api.leavePresence(path);
     };
   }, [path]);
 }

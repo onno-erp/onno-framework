@@ -132,6 +132,10 @@ public class UiAccessService {
         return switch (entityType == null ? "" : entityType) {
             case "catalog", "document", "register" -> canRead(roles, entityType, entityName);
             case "comment" -> canRead(roles, "catalog", entityName) || canRead(roles, "document", entityName);
+            // A page (dashboard / entity list / custom route) is not entity-scoped — its presence is
+            // visible to any signed-in viewer (every SSE subscriber is authenticated). See the route model
+            // in PresenceController.
+            case "page" -> true;
             default -> roles != null && roles.contains(SUPERUSER_ROLE);
         };
     }
