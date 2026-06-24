@@ -147,6 +147,15 @@ name returns `404`.
 | GET | `/{name}/balance?{dim}={value}...` | Current balances (query params are dimension filters). |
 | GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover; `from` and `to` are required. |
 
+The register **report surface** doesn't load these whole — it's a virtualized `onno-list` island that
+pages its data (newest-first, server-sorted) from a dedicated feed, so a register packed with movements
+never ships its whole log to the client:
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/list/registers/{name}/movements?offset=&limit=&sort=&dir=&from=&to=` | One window of movements + the live total, for the virtualized register surface. |
+| GET | `/api/list/registers/{name}/balance?offset=&limit=&sort=&dir=` | One window of current balances + the live total (BALANCE registers). |
+
 ### DivKit server-driven UI — `/api/divkit`
 
 These return DivKit card JSON resolved for the caller's persona/roles, theme (`?theme=`) and
@@ -160,7 +169,7 @@ data-bearing surfaces.
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
 | `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new`, `/catalogs/{name}/{id}/edit` | Catalog list, detail, create and edit forms. |
 | `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new`, `/documents/{name}/{id}/edit` | Document list, detail, create and edit forms. |
-| `GET /registers/{name}` | Register report (balances for BALANCE registers, movements otherwise). |
+| `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. |
 
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
@@ -277,6 +286,12 @@ a React component.
 b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
  .config("metric", "sum").config("metricField", "gross").config("currency", "EUR");
 ```
+
+Each `count`/`metric` card resolves a server-side aggregate (one SQL query). The dashboard renderer
+resolves them **concurrently** and de-duplicates identical `(entity, metric, field, filter)` queries,
+so a wide dashboard isn't N sequential round-trips. The fan-out is bounded by
+`onno.ui.dashboard.widget-parallelism` (default 8) — keep it below the datasource's pool size; set it
+to `1` for the old sequential behaviour.
 
 ### Widget types
 

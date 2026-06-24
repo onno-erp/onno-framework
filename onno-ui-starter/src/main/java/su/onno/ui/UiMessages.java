@@ -98,6 +98,12 @@ public final class UiMessages {
         d.put("shell.menu", "Menu");
         d.put("shell.more", "More");
 
+        // Register surface (the virtualized movements/balance lists).
+        d.put("register.period", "Period");
+        d.put("register.type", "Type");
+        d.put("register.balanceTab", "Balance");
+        d.put("register.movementsTab", "Movements");
+
         // Empty / loading states.
         d.put("empty.noRecords", "No records");
         d.put("empty.noMatches", "No matches");

@@ -104,7 +104,7 @@ export type ListFilterControl = {
   options: FilterOption[];
 };
 export type ListDescriptor = {
-  kind: "catalogs" | "documents";
+  kind: "catalogs" | "documents" | "registers";
   name: string;
   title: string;
   columns: ListColumn[];
@@ -121,6 +121,10 @@ export type ListDescriptor = {
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
   // with the page's other full-width components (constants editor, action sections).
   embedded?: boolean;
+  // Override the data feed URL. Catalogs/documents page from /api/list/{kind}/{name}; a register
+  // has no such route, so its descriptor points the island at /api/list/registers/{name}/movements
+  // (or /balance). When unset, the default {kind}/{name} feed is used.
+  feed?: string;
 };
 
 const ROW_H = 40;
@@ -193,7 +197,8 @@ function toSnake(name: string): string {
 }
 function eventMatches(event: UiEvent, kind: string, name: string): boolean {
   if (!event || event.type === "ready") return false;
-  const singular = kind === "catalogs" ? "catalog" : "document";
+  // catalogs→"catalog", documents→"document", registers→"register" (posting emits register changes).
+  const singular = kind === "catalogs" ? "catalog" : kind === "registers" ? "register" : "document";
   return event.entityType === singular && (event.entityName === "*" || toSnake(event.entityName ?? "") === name);
 }
 
@@ -321,6 +326,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // rows, so the grid's search/filters/sort are hidden while it's shown.
   const [view, setView] = useState<"table" | "map">(list.map?.defaultView ? "map" : "table");
   const mapMode = !!list.map && view === "map";
+  // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
+  // so they aren't clickable. Also gates the single-row live patch (registers have no row identity).
+  const openable = kind === "catalogs" || kind === "documents";
+  // Where pages are fetched from: a register points the island at its own feed; others use the
+  // standard /api/list/{kind}/{name} route.
+  const feedBase = list.feed ?? `/api/list/${kind}/${name}`;
 
   const allActions = list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
@@ -433,7 +444,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           params.append("eq", `${f.column},${st.eq}`);
         }
       }
-      fetch(`/api/list/${kind}/${name}?${params.toString()}`, { credentials: "include" })
+      fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { total: number; offset: number; rows: EntityRecord[] }) => {
           if (myGen !== gen.current) return; // sort/search changed under us
@@ -447,7 +458,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           inflight.current.delete(page);
         });
     },
-    [kind, name, pageSize, sort.column, sort.descending, debounced, filters, filterSig, rerender]
+    [feedBase, pageSize, sort.column, sort.descending, debounced, filters, filterSig, rerender]
   );
 
   // Reset and reload from the top whenever the sort, the (debounced) search, or a filter changes.
@@ -539,17 +550,60 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     [reload]
   );
 
+  // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
+  // page) and swap it where it sits — no cache wipe, no skeleton flash, no scroll jump. If the row
+  // isn't in the loaded window we ignore it (it'll load fresh on scroll); if it has left the result
+  // set (e.g. deletion-marked via an update) we fall back to a window reload.
+  const patchRow = useCallback(
+    (id: string) => {
+      let idx: number | null = null;
+      for (const [i, r] of rows.current) {
+        if (r && String(r._id) === id) {
+          idx = i;
+          break;
+        }
+      }
+      if (idx === null) return;
+      const myGen = gen.current;
+      fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then((data: { rows: EntityRecord[] }) => {
+          if (myGen !== gen.current) return; // sort/search/filter reset under us
+          const fresh = data.rows?.[0];
+          if (fresh) {
+            rows.current.set(idx!, fresh);
+            rerender();
+          } else {
+            reload(); // row dropped out of the set — refresh the window
+          }
+        })
+        .catch(() => {});
+    },
+    [feedBase, reload, rerender]
+  );
+
   // Live updates: divkit-view fans out every SSE row change as an "onno:dataevent" window event
-  // (one shared stream). A write to this entity reloads the visible window in place.
+  // (one shared stream). An in-place update to an already-loaded row patches just that row; a
+  // create/delete (or a wildcard event, or a register change) reloads the visible window — the row
+  // count and ordering shift, so a window refresh is the correct, cheap response.
   useEffect(() => {
     const onData = (e: Event) => {
       const event = (e as CustomEvent).detail as UiEvent;
       if (!eventMatches(event, kind, name)) return;
-      reload();
+      const surgical =
+        openable &&
+        !!event.id &&
+        event.entityName !== "*" &&
+        (event.type === "updated" ||
+          event.type === "posted" ||
+          event.type === "unposted" ||
+          event.type === "changed");
+      if (surgical) patchRow(event.id!);
+      else reload();
     };
     window.addEventListener("onno:dataevent", onData);
     return () => window.removeEventListener("onno:dataevent", onData);
-  }, [kind, name, reload]);
+  }, [kind, name, openable, reload, patchRow]);
 
   // Hug the content: the scroll viewport grows to fit the rows it actually holds, capped at the
   // space to the window bottom — so a 1-row list reads as a short card instead of a full-height one
@@ -827,7 +881,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       </div>
 
       {mapMode ? (
-        <ListMapView kind={kind} name={name} config={list.map!} />
+        // Only catalog/document lists ever declare a map config, so mapMode is never true for a
+        // register — narrow the kind for the map view, which pages from /api/list/{kind}/{name}.
+        <ListMapView kind={kind as "catalogs" | "documents"} name={name} config={list.map!} />
       ) : (
       /* table card — one scroller for both axes; the header sticks to the top (so it scrolls
          horizontally in lock-step with the rows) and the inner min-width drives horizontal
@@ -880,8 +936,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               <div style={{ height: (total ?? 0) * ROW_H, position: "relative" }}>
                 {visible.map((i) => {
                 const row = rows.current.get(i);
-                const url = row ? `onno://${kind}/${name}/${row._id}` : undefined;
-                const rowViewers = row ? viewersById.get(String(row._id)) : undefined;
+                const url = openable && row ? `onno://${kind}/${name}/${row._id}` : undefined;
+                const rowViewers = openable && row ? viewersById.get(String(row._id)) : undefined;
                 return (
                   <div
                     key={i}
@@ -890,8 +946,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     className={cn(
                       // Hover highlight is owned by the [data-onno-row]:hover rule in index.css
                       // (a brand-primary wash with !important, to beat DivKit's inline zebra bg);
-                      // here we only set the resting alt-row stripe.
-                      "absolute left-0 right-0 grid cursor-pointer items-center gap-3 text-sm transition-colors",
+                      // here we only set the resting alt-row stripe. Register rows aren't clickable
+                      // (no detail route), so they don't get the pointer cursor.
+                      "absolute left-0 right-0 grid items-center gap-3 text-sm transition-colors",
+                      url && "cursor-pointer",
                       leftPad,
                       i % 2 === 1 && "bg-muted/20"
                     )}

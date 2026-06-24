@@ -275,15 +275,13 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!kind || !name) return false;
   const ename = event.entityName ?? "";
 
-  // A 2-segment catalog/document path is a list surface — now the self-refreshing onno-list
-  // island (it reloads its own window via the "onno:dataevent" fan-out), so the DivKit content
-  // pane must NOT refetch/remount it. Detail surfaces (3 segments) still refresh in place.
-  if (seg.length === 2 && (kind === "catalogs" || kind === "documents")) return false;
+  // A 2-segment catalog/document/register path is a list surface — now the self-refreshing
+  // onno-list island (it reloads its own window via the "onno:dataevent" fan-out), so the DivKit
+  // content pane must NOT refetch/remount it. Detail surfaces (3 segments) still refresh in place.
+  // Registers are virtualized islands too (movements + balance), fed from /api/list/registers/...;
+  // posting emits ("changed","register","*"), which the island picks up via the fan-out.
+  if (seg.length === 2 && (kind === "catalogs" || kind === "documents" || kind === "registers")) return false;
 
-  if (kind === "registers") {
-    // Posting emits ("changed","register","*"); any register surface should refresh.
-    return event.entityType === "register" && (ename === "*" || toSnake(ename) === name);
-  }
   if (kind === "documents") {
     return event.entityType === "document" && toSnake(ename) === name;
   }

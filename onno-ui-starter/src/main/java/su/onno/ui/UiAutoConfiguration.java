@@ -264,6 +264,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public RegisterListController registerListController(RegisterQueryService registerQueryService,
+                                                         UiAccessService access) {
+        return new RegisterListController(registerQueryService, access);
+    }
+
+    @Bean
     public CurrentUserResolver currentUserResolver(su.onno.ui.UiLayout uiLayout,
                                                    MetadataRegistry registry, Jdbi jdbi) {
         return new CurrentUserResolver(uiLayout, registry, jdbi);

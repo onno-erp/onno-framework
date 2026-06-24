@@ -41,6 +41,9 @@ public class UiProperties {
     /** App-settings page (the {@code @Constant} editor); opt-in via {@code onno.ui.settings.*}. */
     private Settings settings = new Settings();
 
+    /** Dashboard rendering tuning (how the home/Page widget grid resolves its KPI tiles). */
+    private Dashboard dashboard = new Dashboard();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -89,6 +92,14 @@ public class UiProperties {
         this.settings = settings;
     }
 
+    public Dashboard getDashboard() {
+        return dashboard;
+    }
+
+    public void setDashboard(Dashboard dashboard) {
+        this.dashboard = dashboard;
+    }
+
     /**
      * The built-in Settings page — the {@code @Constant} editor surfaced at {@code /settings} with
      * an auto-injected admin nav entry. Opt-in: off by default so an app shows it only when it wants
@@ -106,6 +117,30 @@ public class UiProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    /**
+     * Dashboard rendering tuning. A dashboard's {@code count}/{@code metric} tiles each resolve a
+     * server-side aggregate (one SQL query per tile). The renderer resolves them concurrently and
+     * de-duplicates identical (entity, metric, field, filter) queries, so a 12-tile dashboard no
+     * longer pays 12 sequential round-trips.
+     */
+    public static class Dashboard {
+
+        /**
+         * Maximum number of widget aggregates resolved in parallel per dashboard render. Bounded so a
+         * wide dashboard can't exhaust the JDBC connection pool — keep it comfortably below the
+         * datasource's {@code maximum-pool-size}. {@code 1} forces the old sequential behaviour.
+         */
+        private int widgetParallelism = 8;
+
+        public int getWidgetParallelism() {
+            return widgetParallelism;
+        }
+
+        public void setWidgetParallelism(int widgetParallelism) {
+            this.widgetParallelism = widgetParallelism;
         }
     }
 }

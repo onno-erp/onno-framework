@@ -155,6 +155,26 @@ public class DocumentQueryService {
         return rows;
     }
 
+    /**
+     * Fetch specific live documents by id, decorated exactly like {@link #page} (refs resolved,
+     * secrets redacted) so the list island can refresh just the rows that changed instead of
+     * re-paging the whole window. Returns only the rows that still exist and aren't deletion-marked.
+     */
+    public List<Map<String, Object>> rowsByIds(DocumentDescriptor desc, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false AND _id IN (<ids>)")
+                        .bindList("ids", ids)
+                        .mapToMap()
+                        .list());
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
     /** Total live rows matching the search (+ optional date range and declarative filters). */
     public long count(DocumentDescriptor desc, String search, String from, String to,
                       List<String> eq, List<String> in, List<String> like,

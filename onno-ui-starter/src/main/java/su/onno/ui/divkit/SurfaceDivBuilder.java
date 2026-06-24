@@ -419,84 +419,120 @@ public final class SurfaceDivBuilder {
 
     // ----- register report -----
 
-    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
-    public static Map<String, Object> registerReport(Map<String, Object> meta,
-                                                     List<Map<String, Object>> movements,
-                                                     List<Map<String, Object>> balances, Palette p) {
-        return registerReport(meta, movements, balances, p, UiMessages.defaults());
-    }
-
+    /**
+     * The register surface as a virtualized {@code onno-list} island (or a Balance/Movements tab
+     * pair for a BALANCE register), fed page-by-page from {@code /api/list/registers/...}. This
+     * replaces the old fully-server-rendered table: a packed register no longer streams its whole
+     * movement log into one DivKit document — the island windows it like any catalog/document list.
+     */
     @SuppressWarnings("unchecked")
-    public static Map<String, Object> registerReport(Map<String, Object> meta,
-                                                     List<Map<String, Object>> movements,
-                                                     List<Map<String, Object>> balances, Palette p, UiMessages msg) {
+    public static Map<String, Object> registerSurface(Map<String, Object> meta, String name,
+                                                      Palette p, UiMessages msg) {
         String type = str(meta.get("type"));
+        boolean isBalance = "BALANCE".equals(type);
         List<Map<String, Object>> dimensions = (List<Map<String, Object>>) meta.getOrDefault("dimensions", List.of());
         List<Map<String, Object>> resources = (List<Map<String, Object>>) meta.getOrDefault("resources", List.of());
-        boolean isBalance = "BALANCE".equals(type);
+        String title = titleOf(meta);
 
-        List<Map<String, Object>> items = new ArrayList<>();
-        items.add(Components.pageHeader(titleOf(meta),
-                isBalance ? "Balance register" : "Turnover register", p));
+        Map<String, Object> movements = registerListDescriptor(title, name,
+                "/api/list/registers/" + name + "/movements",
+                movementColumns(dimensions, resources, msg), "_period", true);
 
-        Map<String, Object> movementsTable = movementsTable(movements, dimensions, resources, p, msg);
-
-        // Balance registers carry both a current balance and the movement log; show them
-        // as Balance / Movements tabs rather than two stacked lists. A turnover register
-        // has no balance, so it's just the movement log.
-        if (isBalance && balances != null) {
-            items.add(Components.tabs(List.of(
-                    Div.tab("Balance", tabBody(balanceTable(balances, dimensions, resources, p, msg))),
-                    Div.tab("Movements", tabBody(movementsTable))), p));
-        } else {
-            items.add(movementsTable);
+        if (isBalance) {
+            // Current balance + the movement log, as Balance / Movements tabs (each its own island).
+            Map<String, Object> balance = registerListDescriptor(title, name,
+                    "/api/list/registers/" + name + "/balance",
+                    balanceColumns(dimensions, resources), firstColumnName(dimensions), false);
+            Map<String, Object> tabs = Components.tabs(List.of(
+                    Div.tab(msg.get("register.balanceTab"), tabIsland(balance)),
+                    Div.tab(msg.get("register.movementsTab"), tabIsland(movements))), p);
+            Map<String, Object> root = Div.vertical(List.of(tabs));
+            Div.id(root, "onno-content");
+            Div.contentPadding(root);
+            Div.matchWidth(root);
+            return root;
         }
-
-        return content(items);
+        // Turnover registers have no balance — just the movement log as a single island surface
+        // (mirrors a catalog/document list surface: the island carries its own content gutter).
+        Map<String, Object> custom = Div.custom("onno-list", Map.of("list", movements));
+        Div.matchWidth(custom);
+        Map<String, Object> root = Div.vertical(List.of(custom));
+        Div.id(root, "onno-content");
+        Div.matchWidth(root);
+        return root;
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> balanceTable(List<Map<String, Object>> balances,
-                                                    List<Map<String, Object>> dimensions,
-                                                    List<Map<String, Object>> resources, Palette p, UiMessages msg) {
-        List<String> headers = new ArrayList<>();
-        for (Map<String, Object> d : dimensions) headers.add(str(d.get("displayName")));
-        for (Map<String, Object> r : resources) headers.add(str(r.get("displayName")));
-        List<Components.Row> body = new ArrayList<>();
-        for (Map<String, Object> row : balances) {
-            List<String> cells = new ArrayList<>();
-            for (Map<String, Object> d : dimensions) cells.add(cell(d, row));
-            for (Map<String, Object> r : resources) cells.add(cell(r, row));
-            body.add(new Components.Row(cells, null));
-        }
-        return Components.table(headers, body, p, msg.get("empty.noRecords"));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> movementsTable(List<Map<String, Object>> movements,
-                                                      List<Map<String, Object>> dimensions,
-                                                      List<Map<String, Object>> resources, Palette p, UiMessages msg) {
-        List<String> headers = new ArrayList<>(List.of("Period", "Type"));
-        for (Map<String, Object> d : dimensions) headers.add(str(d.get("displayName")));
-        for (Map<String, Object> r : resources) headers.add(str(r.get("displayName")));
-        List<Components.Row> body = new ArrayList<>();
-        for (Map<String, Object> row : movements) {
-            List<String> cells = new ArrayList<>();
-            cells.add(str(row.get("_period")));
-            cells.add(str(row.get("_movement_type")));
-            for (Map<String, Object> d : dimensions) cells.add(cell(d, row));
-            for (Map<String, Object> r : resources) cells.add(cell(r, row));
-            body.add(new Components.Row(cells, null));
-        }
-        return Components.table(headers, body, p, msg.get("empty.noRecords"));
-    }
-
-    /** Wrap a tab's content with breathing room below the tab strip. */
-    private static Map<String, Object> tabBody(Map<String, Object> content) {
-        Map<String, Object> wrap = Div.vertical(List.of(content));
+    /** An island embedded in a register tab: drops its own gutter (the surface pads) + a top margin. */
+    private static Map<String, Object> tabIsland(Map<String, Object> descriptor) {
+        descriptor.put("embedded", true);
+        Map<String, Object> custom = Div.custom("onno-list", Map.of("list", descriptor));
+        Div.matchWidth(custom);
+        Map<String, Object> wrap = Div.vertical(List.of(custom));
         Div.matchWidth(wrap);
         Div.margins(wrap, 12, 0, 0, 0);
         return wrap;
+    }
+
+    /** A register {@code onno-list} descriptor: no search/filters/New, fed by an explicit feed URL. */
+    private static Map<String, Object> registerListDescriptor(String title, String name, String feed,
+                                                              List<Map<String, Object>> columns,
+                                                              String sortColumn, boolean sortDescending) {
+        Map<String, Object> sort = new LinkedHashMap<>();
+        sort.put("column", sortColumn);
+        sort.put("descending", sortDescending);
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("kind", "registers");
+        d.put("name", name);
+        d.put("title", title);
+        d.put("columns", columns);
+        d.put("searchable", false);
+        d.put("sort", sort);
+        d.put("filters", List.of());
+        d.put("newUrl", null);
+        d.put("actions", List.of());
+        d.put("inputs", List.of());
+        d.put("pageSize", 100);
+        // Where the island fetches its windows from (a register has no /api/list/{kind}/{name} route).
+        d.put("feed", feed);
+        return d;
+    }
+
+    private static List<Map<String, Object>> movementColumns(List<Map<String, Object>> dimensions,
+                                                             List<Map<String, Object>> resources, UiMessages msg) {
+        List<Map<String, Object>> cols = new ArrayList<>();
+        cols.add(column("_period", msg.get("register.period"), null, null));
+        cols.add(column("_movement_type", msg.get("register.type"), null, null));
+        for (Map<String, Object> d : dimensions) cols.add(columnFromMeta(d));
+        for (Map<String, Object> r : resources) cols.add(columnFromMeta(r));
+        return cols;
+    }
+
+    private static List<Map<String, Object>> balanceColumns(List<Map<String, Object>> dimensions,
+                                                            List<Map<String, Object>> resources) {
+        List<Map<String, Object>> cols = new ArrayList<>();
+        for (Map<String, Object> d : dimensions) cols.add(columnFromMeta(d));
+        for (Map<String, Object> r : resources) cols.add(columnFromMeta(r));
+        return cols;
+    }
+
+    private static Map<String, Object> columnFromMeta(Map<String, Object> attr) {
+        return column(str(attr.get("columnName")), str(attr.get("displayName")),
+                str(attr.get("widget")), str(attr.get("format")));
+    }
+
+    private static Map<String, Object> column(String columnName, String label, String widget, String format) {
+        Map<String, Object> c = new LinkedHashMap<>();
+        c.put("columnName", columnName);
+        c.put("label", label);
+        c.put("width", "");
+        c.put("widget", widget == null ? "" : widget);
+        c.put("format", format == null ? "" : format);
+        c.put("hint", "");
+        return c;
+    }
+
+    private static String firstColumnName(List<Map<String, Object>> dimensions) {
+        return dimensions.isEmpty() ? null : str(dimensions.get(0).get("columnName"));
     }
 
     // ----- shared helpers -----

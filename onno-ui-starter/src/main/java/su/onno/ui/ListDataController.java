@@ -14,6 +14,7 @@ import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Serves pages of list data to the virtualized list grid (the {@code onno-list} React island).
@@ -52,6 +53,16 @@ public class ListDataController {
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
+        // Surgical refresh: when the island asks for specific ids (a single-row live patch), return
+        // just those decorated rows and skip paging/filtering entirely. The presence of the param —
+        // not the parse result — selects ids-mode, so an all-unparseable request returns no rows
+        // (the requested ids matched nothing) rather than falling back to a full page.
+        if (request.getParameterValues("ids") != null) {
+            List<UUID> ids = parseIds(request);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(desc, ids);
+            decorateRowActions(desc.javaClass(), picked);
+            return page(picked.size(), 0, picked);
+        }
         int lim = clamp(limit);
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
         // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
@@ -79,6 +90,13 @@ public class ListDataController {
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
+        // Surgical refresh by id (single-row live patch) — see catalogPage.
+        if (request.getParameterValues("ids") != null) {
+            List<UUID> ids = parseIds(request);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(desc, ids);
+            decorateRowActions(desc.javaClass(), picked);
+            return page(picked.size(), 0, picked);
+        }
         int lim = clamp(limit);
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
         List<String> eq = multi(request, "eq");
@@ -114,6 +132,32 @@ public class ListDataController {
     private static List<String> multi(HttpServletRequest request, String name) {
         String[] values = request.getParameterValues(name);
         return values == null ? List.of() : List.of(values);
+    }
+
+    /**
+     * The requested row ids for a surgical refresh: the repeated {@code ids} param, also accepting a
+     * single comma-separated value. Unparseable tokens are skipped, so a malformed id never 400s the
+     * refresh (it just resolves to fewer/zero rows and the client falls back to a full reload).
+     */
+    private static List<UUID> parseIds(HttpServletRequest request) {
+        String[] raw = request.getParameterValues("ids");
+        if (raw == null || raw.length == 0) {
+            return List.of();
+        }
+        List<UUID> out = new java.util.ArrayList<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            for (String token : value.split(",")) {
+                String trimmed = token.trim();
+                if (trimmed.isEmpty()) continue;
+                try {
+                    out.add(UUID.fromString(trimmed));
+                } catch (IllegalArgumentException ignored) {
+                    // skip a malformed id rather than failing the whole refresh
+                }
+            }
+        }
+        return out;
     }
 
     private static Map<String, Object> page(long total, int offset, List<Map<String, Object>> rows) {

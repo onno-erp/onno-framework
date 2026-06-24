@@ -15,6 +15,7 @@ import su.onno.ui.divkit.ShellLayoutBuilder;
 import su.onno.ui.divkit.SurfaceDivBuilder;
 import su.onno.ui.comments.CommentProperties;
 
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,11 +29,17 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 /**
@@ -45,7 +52,7 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/divkit")
-public class DivKitController {
+public class DivKitController implements DisposableBean {
 
     private final LayoutSet layoutSet;
     private final UiLayout layout;
@@ -71,6 +78,10 @@ public class DivKitController {
     // Resolved per request (lazily): the comments module is wired after this controller, and is
     // absent entirely when onno.comments.enabled=false. getIfAvailable() yields null in that case.
     private final ObjectProvider<CommentProperties> commentProperties;
+    // Resolves a dashboard's count/metric tiles concurrently (one SQL aggregate each), so a wide
+    // dashboard doesn't pay N sequential round-trips. Bounded by onno.ui.dashboard.widget-parallelism
+    // to stay under the JDBC pool; null when parallelism == 1 (resolve inline on the request thread).
+    private final ExecutorService widgetPool;
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -107,6 +118,19 @@ public class DivKitController {
         this.uiProperties = uiProperties;
         this.messages = messages;
         this.commentProperties = commentProperties;
+        int parallelism = Math.max(1, uiProperties.getDashboard().getWidgetParallelism());
+        this.widgetPool = parallelism == 1 ? null : Executors.newFixedThreadPool(parallelism, r -> {
+            Thread t = new Thread(r, "onno-dashboard-widget");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    @Override
+    public void destroy() {
+        if (widgetPool != null) {
+            widgetPool.shutdownNow();
+        }
     }
 
     /** Whether the comments module is wired and enabled — decided per request (see the field). */
@@ -244,9 +268,11 @@ public class DivKitController {
             // back" / "Nothing here yet" card — the client lands the user on the first real
             // nav item (see #shell "home"), and this is only the surface for an app that
             // exposes nothing at all.
+            Map<DashboardWidgetDescriptor, String> values = resolveWidgetValues(widgets);
             content = widgets.isEmpty()
                     ? DashboardDivBuilder.empty()
-                    : DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns, this::widgetValue, p);
+                    : DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns,
+                            w -> values.getOrDefault(w, "—"), p);
         }
         return DivCard.of("onno-content", content);
     }
@@ -337,7 +363,9 @@ public class DivKitController {
         List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
         String title = pb.title() != null ? pb.title() : defaultTitle;
         String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
-        return PageDivBuilder.build(title, subtitle, widgets, components, columns, this::widgetValue, p);
+        Map<DashboardWidgetDescriptor, String> values = resolveWidgetValues(widgets);
+        return PageDivBuilder.build(title, subtitle, widgets, components, columns,
+                w -> values.getOrDefault(w, "—"), p);
     }
 
     /**
@@ -663,19 +691,16 @@ public class DivKitController {
 
     @GetMapping("/registers/{name}")
     public Map<String, Object> registerReport(@PathVariable String name,
-                                              @RequestParam(required = false) String from,
-                                              @RequestParam(required = false) String to,
                                               @RequestParam(required = false) String theme,
                                               Principal principal) {
         AccumulationRegisterDescriptor desc = registerQuery.require(name);
         access.requireRead(principal, desc);
-        List<Map<String, Object>> balances = desc.accumulationType() == AccumulationType.BALANCE
-                ? registerQuery.balance(desc, Map.of())
-                : null;
-        Map<String, Object> content = SurfaceDivBuilder.registerReport(
-                resolvedMetadata.describeRegister(desc), registerQuery.movements(desc, from, to), balances,
-                palette(theme), messages);
-        return DivCard.of("onno-content", content);
+        // The register is now a virtualized onno-list island (movements, plus a Balance tab for
+        // BALANCE registers) — we emit only its descriptor; it pages the data itself from
+        // /api/list/registers/... so a packed register never ships its whole movement log.
+        return DivCard.of("onno-content",
+                SurfaceDivBuilder.registerSurface(resolvedMetadata.describeRegister(desc), name,
+                        palette(theme), messages));
     }
 
     // ----- helpers -----
@@ -881,6 +906,68 @@ public class DivKitController {
      * server-side. The value is formatted here — currency- and locale-aware — so every
      * client renders the same string ("—" if the widget can't be resolved).
      */
+    /** Mirrors {@code Widgets.NATIVE_CARD_TYPES}: the widget types that carry a server-resolved value. */
+    private static final Set<String> VALUE_CARD_TYPES = Set.of("count", "metric");
+
+    /**
+     * Resolve the big-number text for every {@code count}/{@code metric} tile in one pass, keyed by
+     * the descriptor instance. Identical tiles (same entity/metric/field/filter) share a single
+     * query, and the distinct queries run concurrently on {@link #widgetPool} — so a dashboard of N
+     * KPI cards costs one batch of parallel aggregates instead of N sequential ones. Non-card widgets
+     * (chart/list/…) carry no value and are skipped (they fetch their own data client-side).
+     */
+    private Map<DashboardWidgetDescriptor, String> resolveWidgetValues(List<DashboardWidgetDescriptor> widgets) {
+        // Group the value-bearing tiles by their resolution key so duplicates query once.
+        Map<String, List<DashboardWidgetDescriptor>> byKey = new LinkedHashMap<>();
+        for (DashboardWidgetDescriptor w : widgets) {
+            if (w.widgetType() == null || VALUE_CARD_TYPES.contains(w.widgetType())) {
+                byKey.computeIfAbsent(valueKey(w), k -> new ArrayList<>()).add(w);
+            }
+        }
+        if (byKey.isEmpty()) {
+            return Map.of();
+        }
+        // Resolve each distinct key once: inline when there's nothing to parallelize (or the pool is
+        // disabled), otherwise fan the queries out and join. widgetValue swallows its own errors
+        // (→ "—"), so a single failing tile never sinks the whole render.
+        Map<String, String> resolved = new ConcurrentHashMap<>();
+        if (widgetPool == null || byKey.size() == 1) {
+            byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.get(0))));
+        } else {
+            List<Future<?>> futures = new ArrayList<>(byKey.size());
+            for (Map.Entry<String, List<DashboardWidgetDescriptor>> e : byKey.entrySet()) {
+                futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().get(0)))));
+            }
+            for (Future<?> f : futures) {
+                try {
+                    f.get();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (ExecutionException ignored) {
+                    // widgetValue never throws; defensive only.
+                }
+            }
+        }
+        Map<DashboardWidgetDescriptor, String> out = new IdentityHashMap<>();
+        byKey.forEach((key, ws) -> {
+            String v = resolved.getOrDefault(key, "—");
+            for (DashboardWidgetDescriptor w : ws) {
+                out.put(w, v);
+            }
+        });
+        return out;
+    }
+
+    /** The de-dup key for a tile's resolved value: same key ⇒ same query ⇒ resolved once. */
+    private static String valueKey(DashboardWidgetDescriptor w) {
+        Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
+        return String.join(" ",
+                String.valueOf(w.entityType()), String.valueOf(w.entityName()),
+                cfg.getOrDefault("metric", "count"),
+                String.valueOf(cfg.get("metricField")), String.valueOf(cfg.get("filter")));
+    }
+
     private String widgetValue(DashboardWidgetDescriptor w) {
         Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
         String metric = cfg.getOrDefault("metric", "count");

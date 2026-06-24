@@ -191,6 +191,28 @@ public class CatalogQueryService {
         return rows;
     }
 
+    /**
+     * Fetch specific live rows by id, decorated exactly like {@link #page} (refs resolved, secrets
+     * redacted) so a client can refresh just the rows that changed without re-paging the whole
+     * window. Drives the list island's surgical single-row live patch. Returns only the rows that
+     * still exist and aren't deletion-marked, in no particular order; an empty/blank input yields an
+     * empty list.
+     */
+    public List<Map<String, Object>> rowsByIds(CatalogDescriptor desc, List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false AND _id IN (<ids>)")
+                        .bindList("ids", ids)
+                        .mapToMap()
+                        .list());
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return rows;
+    }
+
     /** Total live rows matching the search (+ any declarative filters) — for the virtual scroller. */
     public long count(CatalogDescriptor desc, String search,
                       List<String> eq, List<String> in, List<String> like,
