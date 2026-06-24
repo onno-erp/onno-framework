@@ -7,7 +7,6 @@ import su.onno.ui.DocumentQueryService;
 import su.onno.ui.FieldHintResolver;
 import su.onno.ui.UiAccessService;
 import su.onno.ui.UiAutoConfiguration;
-import su.onno.ui.UiLayout;
 import su.onno.ui.UiViewResolver;
 
 import org.jdbi.v3.core.Jdbi;
@@ -40,12 +39,6 @@ public class CommentsAutoConfiguration {
     @Bean
     public CommentService commentService(Jdbi jdbi) {
         return new CommentService(jdbi);
-    }
-
-    @Bean
-    public CommentAuthorAvatars commentAuthorAvatars(UiLayout uiLayout, MetadataRegistry registry,
-                                                     FieldHintResolver fieldHintResolver, Jdbi jdbi) {
-        return new CommentAuthorAvatars(uiLayout, registry, fieldHintResolver, jdbi);
     }
 
     @Bean

@@ -214,6 +214,8 @@ export interface CommentView {
 export interface PresenceViewer {
   userId: string;
   displayName: string;
+  /** The viewer's avatar image URL, when their identity record has one; absent → render initials. */
+  avatarUrl?: string;
 }
 
 /** The response to a presence ping: the record's current viewers plus the caller's own id. */
@@ -365,27 +367,28 @@ export const api = {
   // The ambient-presence snapshot: every viewed record the caller may read. Loaded once on startup;
   // live `presence` SSE deltas keep the client store current after that.
   getPresenceSnapshot: () => fetchJson<PresenceSnapshot>(`${BASE}/presence`),
-  // Presence — record-level collaboration markers (see PresenceController). `enter` on open and a
-  // periodic `heartbeat` keep the viewer alive (the server expires them by TTL once heartbeats stop);
-  // both return the record's current viewers. Gated server-side on read access to the owning entity.
-  presence: (kind: "catalogs" | "documents", name: string, id: string,
-             action: "enter" | "heartbeat") =>
-    fetchJson<PresenceState>(`${BASE}/presence/${kind}/${name}/${id}`, {
+  // Presence — route-level collaboration markers (see PresenceController). Post the pane's route `path`;
+  // the server derives the presence identity (record / entity list / page). `enter` on open and a periodic
+  // `heartbeat` keep the viewer alive (the server expires them by TTL once heartbeats stop); both return the
+  // route's current viewers. Entity routes are gated server-side on read access; pages are visible to any
+  // signed-in user.
+  presence: (path: string, action: "enter" | "heartbeat") =>
+    fetchJson<PresenceState>(`${BASE}/presence`, {
       method: "POST",
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ path, action }),
     }),
   // Best-effort leave on page/island teardown: `keepalive` lets the request outlive the unloading
   // document (and still carry the CSRF header, unlike sendBeacon). A dropped leave is harmless — the
   // server's presence TTL reaps the viewer anyway; this just makes them vanish for others promptly.
-  leavePresence: (kind: "catalogs" | "documents", name: string, id: string) => {
+  leavePresence: (path: string) => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     const csrf = readCsrfToken();
     if (csrf) headers[CSRF_HEADER] = csrf;
-    return fetch(`${BASE}/presence/${kind}/${name}/${id}`, {
+    return fetch(`${BASE}/presence`, {
       method: "POST",
       credentials: "same-origin",
       headers,
-      body: JSON.stringify({ action: "leave" }),
+      body: JSON.stringify({ path, action: "leave" }),
       keepalive: true,
     }).catch(() => {
       /* best-effort; TTL backstops */

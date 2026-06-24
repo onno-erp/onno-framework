@@ -137,17 +137,18 @@ public class UiEventPublisher {
         payload.put("timestamp", Instant.now().toString());
 
         for (Subscriber subscriber : subscribers) {
-            if (access.canRead(subscriber.roles(), entityType, entityName)) {
+            if (access.canReceiveEvent(subscriber.roles(), entityType, entityName)) {
                 send(subscriber, "presence", payload);
             }
         }
     }
 
-    /** Map a presence route {@code kind} ("catalogs"/"documents") to the access-check entity type. */
+    /** Map a presence route {@code kind} ("catalogs"/"documents"/"page") to the access-check entity type. */
     private static String entityTypeForKind(String kind) {
         return switch (kind == null ? "" : kind) {
             case "catalogs" -> "catalog";
             case "documents" -> "document";
+            case "page" -> "page";
             default -> "";
         };
     }

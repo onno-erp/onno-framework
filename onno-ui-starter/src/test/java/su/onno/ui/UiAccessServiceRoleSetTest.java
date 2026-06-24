@@ -93,4 +93,13 @@ class UiAccessServiceRoleSetTest {
         assertThat(access.canReceiveEvent(Set.of("RENTALS"), "telemetry", "properties")).isFalse();
         assertThat(access.canReceiveEvent(Set.of("ADMIN"), "telemetry", "properties")).isTrue();
     }
+
+    @Test
+    void deliversPageEventsToAnySignedInViewer() {
+        UiAccessService access = withCatalog();
+        // A page route (dashboard / entity list / custom page) is not entity-scoped — any authenticated
+        // viewer receives it, even one with no read grant on anything.
+        assertThat(access.canReceiveEvent(Set.of("FINANCE"), "page", "/dashboard")).isTrue();
+        assertThat(access.canReceiveEvent(Set.of(), "page", "/")).isTrue();
+    }
 }

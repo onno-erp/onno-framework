@@ -5,6 +5,7 @@ import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 import su.onno.ui.UiAccessService;
 import su.onno.ui.UiEventPublisher;
+import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,8 @@ class PresenceControllerTest {
     private final CapturingRegistry registry = new CapturingRegistry();
     private final FakeAccess access = new FakeAccess();
     private final FakeUser currentUser = new FakeUser();
-    private final PresenceController controller = new PresenceController(registry, access, currentUser);
+    private final FakeAvatars avatars = new FakeAvatars();
+    private final PresenceController controller = new PresenceController(registry, access, currentUser, avatars);
 
     private final Principal principal = () -> "alice";
     private final UUID id = UUID.randomUUID();
@@ -35,13 +37,14 @@ class PresenceControllerTest {
         currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
         registry.viewersFixture = List.of(Map.of("userId", "rec-2", "displayName", "Babbage"));
 
-        Map<String, Object> response = controller.ping("catalogs", "Customers", id,
-                new PresenceController.PresenceRequest("enter"), principal);
+        Map<String, Object> response = controller.ping(
+                new PresenceController.PresenceRequest("/catalogs/Customers/" + id, "enter"), principal);
 
         // Identity is stamped from the principal (the record id), never asserted by the client; the
         // registry stores the route kind ("catalogs"), not the singular access type.
         assertThat(registry.lastCall).isEqualTo(
-                new CapturingRegistry.Call("enter", "catalogs", "Customers", id.toString(), "rec-1", "Alice Adams"));
+                new CapturingRegistry.Call("enter", "catalogs", "Customers", id.toString(), "rec-1", "Alice Adams",
+                        "pic/rec-1"));
         assertThat(response).containsEntry("you", "rec-1");
         assertThat(response.get("viewers")).isEqualTo(List.of(Map.of("userId", "rec-2", "displayName", "Babbage")));
     }
@@ -51,8 +54,8 @@ class PresenceControllerTest {
         access.canRead = true;
         currentUser.user = new CurrentUser("admin", "admin", null, null);
 
-        Map<String, Object> response = controller.ping("catalogs", "Customers", id,
-                new PresenceController.PresenceRequest("heartbeat"), principal);
+        Map<String, Object> response = controller.ping(
+                new PresenceController.PresenceRequest("/catalogs/Customers/" + id, "heartbeat"), principal);
 
         assertThat(registry.lastCall.userId()).isEqualTo("admin");
         assertThat(registry.lastCall.action()).isEqualTo("heartbeat");
@@ -63,8 +66,8 @@ class PresenceControllerTest {
     void rejectsAnUnknownActionWith422() {
         access.canRead = true;
 
-        assertThatThrownBy(() -> controller.ping("catalogs", "Customers", id,
-                new PresenceController.PresenceRequest("bogus"), principal))
+        assertThatThrownBy(() -> controller.ping(
+                new PresenceController.PresenceRequest("/catalogs/Customers/" + id, "bogus"), principal))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
@@ -74,27 +77,44 @@ class PresenceControllerTest {
     void rejectsAMissingBodyWith422() {
         access.canRead = true;
 
-        assertThatThrownBy(() -> controller.ping("catalogs", "Customers", id, null, principal))
+        assertThatThrownBy(() -> controller.ping(null, principal))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @Test
-    void rejectsAnUnknownKindWith404() {
-        assertThatThrownBy(() -> controller.ping("widgets", "Customers", id,
-                new PresenceController.PresenceRequest("enter"), principal))
-                .isInstanceOf(ResponseStatusException.class)
-                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
-                .isEqualTo(HttpStatus.NOT_FOUND);
+    void entityListRouteIsTrackedAndKeyedByItsPath() {
+        access.canRead = true;
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+
+        controller.ping(new PresenceController.PresenceRequest("/catalogs/Materials", "enter"), principal);
+
+        // A list page keys by its path so it aggregates onto the catalog's nav alongside record viewers.
+        assertThat(registry.lastCall.type()).isEqualTo("catalogs");
+        assertThat(registry.lastCall.name()).isEqualTo("Materials");
+        assertThat(registry.lastCall.id()).isEqualTo("/catalogs/Materials");
+    }
+
+    @Test
+    void pageRouteIsTrackedForAnySignedInUserWithoutEntityAccess() {
+        access.canRead = false; // not an entity route, so the read gate never applies
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+
+        controller.ping(new PresenceController.PresenceRequest("/dashboard", "enter"), principal);
+
+        // Non-entity routes register as a "page" keyed by the normalized path.
+        assertThat(registry.lastCall.type()).isEqualTo("page");
+        assertThat(registry.lastCall.name()).isEqualTo("/dashboard");
+        assertThat(registry.lastCall.id()).isEqualTo("/dashboard");
     }
 
     @Test
     void forbidsAViewerWithoutReadAccessWith403() {
         access.canRead = false;
 
-        assertThatThrownBy(() -> controller.ping("documents", "Invoices", id,
-                new PresenceController.PresenceRequest("enter"), principal))
+        assertThatThrownBy(() -> controller.ping(
+                new PresenceController.PresenceRequest("/documents/Invoices/" + id, "enter"), principal))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.FORBIDDEN);
@@ -159,7 +179,8 @@ class PresenceControllerTest {
     }
 
     static final class CapturingRegistry extends PresenceRegistry {
-        record Call(String action, String type, String name, String id, String userId, String displayName) {}
+        record Call(String action, String type, String name, String id, String userId, String displayName,
+                    String avatarUrl) {}
 
         Call lastCall;
         List<Map<String, String>> viewersFixture = List.of();
@@ -173,8 +194,8 @@ class PresenceControllerTest {
 
         @Override
         public void onLocal(String action, String kind, String entityName, String id,
-                            String userId, String displayName) {
-            lastCall = new Call(action, kind, entityName, id, userId, displayName);
+                            String userId, String displayName, String avatarUrl) {
+            lastCall = new Call(action, kind, entityName, id, userId, displayName, avatarUrl);
         }
 
         @Override
@@ -185,6 +206,18 @@ class PresenceControllerTest {
         @Override
         public List<Map<String, Object>> allViewers() {
             return allViewersFixture;
+        }
+    }
+
+    static final class FakeAvatars extends CommentAuthorAvatars {
+        FakeAvatars() {
+            // resolveSource() returns null for a null layout, so this is safe; avatarFor is overridden.
+            super(null, null, null, null);
+        }
+
+        @Override
+        public String avatarFor(String authorId) {
+            return authorId == null ? null : "pic/" + authorId;
         }
     }
 }

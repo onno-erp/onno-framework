@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import type { PresenceViewer } from "@/lib/api";
 
@@ -55,6 +55,7 @@ export function PresenceAvatars({
       <div className={overlap ? "flex -space-x-1" : "flex gap-1"}>
         {shown.map((v) => (
           <Avatar key={v.userId} style={dim} title={v.displayName}>
+            {v.avatarUrl ? <AvatarImage src={v.avatarUrl} alt={v.displayName} /> : null}
             <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
               {initials(v.displayName)}
             </AvatarFallback>

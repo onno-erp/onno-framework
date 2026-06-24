@@ -30,7 +30,7 @@ class PresenceRegistryTest {
 
     @Test
     void enterAddsAViewerBroadcastsAndPushesSnapshot() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
 
         // Broadcast to peers, and one SSE snapshot because the viewer set changed.
         assertThat(bus.published).hasSize(1);
@@ -42,8 +42,8 @@ class PresenceRegistryTest {
 
     @Test
     void heartbeatBroadcastsButDoesNotRepushSnapshot() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
-        registry.onLocal(ClusterEvent.Presence.HEARTBEAT, "document", "Invoices", "id-7", "u1", "Ada");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
+        registry.onLocal(ClusterEvent.Presence.HEARTBEAT, "document", "Invoices", "id-7", "u1", "Ada", null);
 
         // The heartbeat still relays to peers (keeps their TTL fresh) but the local viewer set is unchanged.
         assertThat(bus.published).hasSize(2);
@@ -52,8 +52,8 @@ class PresenceRegistryTest {
 
     @Test
     void secondViewerPushesAgainWithBothViewers() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u2", "Babbage");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u2", "Babbage", null);
 
         assertThat(publisher.pushes).hasSize(2);
         assertThat(userIds(publisher.last())).containsExactlyInAnyOrder("u1", "u2");
@@ -61,13 +61,13 @@ class PresenceRegistryTest {
 
     @Test
     void sweepExpiresAStaleViewerAndPushesTheRemainder() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u2", "Babbage");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u2", "Babbage", null);
         int pushesBefore = publisher.pushes.size();
 
         // u2 heartbeats just before the cutoff; u1 goes silent and ages past the TTL.
         clock.advance(TTL - 1);
-        registry.onLocal(ClusterEvent.Presence.HEARTBEAT, "document", "Invoices", "id-7", "u2", "Babbage");
+        registry.onLocal(ClusterEvent.Presence.HEARTBEAT, "document", "Invoices", "id-7", "u2", "Babbage", null);
         clock.advance(2);
         registry.sweepExpired();
 
@@ -78,7 +78,7 @@ class PresenceRegistryTest {
 
     @Test
     void sweepWithNothingStalePushesNothing() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
         int pushesBefore = publisher.pushes.size();
 
         clock.advance(TTL - 1);
@@ -90,8 +90,8 @@ class PresenceRegistryTest {
 
     @Test
     void leaveRemovesTheViewerAndPushesEmpty() {
-        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada");
-        registry.onLocal(ClusterEvent.Presence.LEAVE, "document", "Invoices", "id-7", "u1", "Ada");
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", null);
+        registry.onLocal(ClusterEvent.Presence.LEAVE, "document", "Invoices", "id-7", "u1", "Ada", null);
 
         assertThat(userIds(publisher.last())).isEmpty();
         assertThat(registry.viewers("document", "Invoices", "id-7")).isEmpty();
@@ -100,12 +100,19 @@ class PresenceRegistryTest {
     @Test
     void remoteEventAppliesAndPushesButNeverRebroadcasts() {
         registry.onRemote((ClusterEvent.Presence)
-                ClusterEvent.presence(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u9", "Hopper")
+                ClusterEvent.presence(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u9", "Hopper", null)
                         .withOrigin("node-B"));
 
         assertThat(bus.published).as("a relayed event must not loop back onto the bus").isEmpty();
         assertThat(publisher.pushes).hasSize(1);
         assertThat(userIds(publisher.last())).containsExactly("u9");
+    }
+
+    @Test
+    void carriesTheViewersAvatarThroughToTheSnapshot() {
+        registry.onLocal(ClusterEvent.Presence.ENTER, "document", "Invoices", "id-7", "u1", "Ada", "pic/u1");
+        assertThat(registry.viewers("document", "Invoices", "id-7").get(0))
+                .containsEntry("avatarUrl", "pic/u1");
     }
 
     private static List<String> userIds(List<Map<String, String>> viewers) {
