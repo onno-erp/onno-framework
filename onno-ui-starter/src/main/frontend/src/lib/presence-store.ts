@@ -59,6 +59,24 @@ function setMyRoute(id: string | null) {
   emit();
 }
 
+/**
+ * Optimistically drop yourself from a route's viewer set the instant you leave it — without waiting for
+ * the server's leave to round-trip back as an SSE delta. Otherwise, as the route stops being "yours"
+ * (so your marker un-hides) you briefly flash in your own old position before the delta clears you.
+ */
+function removeSelfFrom(routeId: string) {
+  if (you === null) return;
+  const entry = byId.get(routeId);
+  if (!entry) return;
+  const remaining = entry.viewers.filter((v) => v.userId !== you);
+  if (remaining.length === entry.viewers.length) return; // you weren't in this entry
+  const next = new Map(byId);
+  if (remaining.length) next.set(routeId, { ...entry, viewers: remaining });
+  else next.delete(routeId);
+  byId = next;
+  emit();
+}
+
 // Mirror of the server's snake-casing, so a route name matches an entity name across cases.
 function toSnake(name: string): string {
   return name.replace(/ /g, "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
@@ -78,11 +96,11 @@ function applyEvent(ev: UiEvent | undefined) {
   emit();
 }
 
-/** Start the store: load the snapshot and subscribe to live presence deltas. Idempotent. */
-export function startPresence() {
-  if (started) return;
-  started = true;
-  api
+const RESYNC_MS = 20_000;
+
+/** (Re)load the authoritative snapshot into the store. */
+function loadSnapshot(): Promise<void> {
+  return api
     .getPresenceSnapshot()
     .then((snap) => {
       you = snap.you || null;
@@ -94,7 +112,22 @@ export function startPresence() {
     .catch(() => {
       /* offline / not yet authed — live deltas will still populate the store */
     });
+}
+
+/** Start the store: load the snapshot and subscribe to live presence deltas. Idempotent. */
+export function startPresence() {
+  if (started) return;
+  started = true;
+  loadSnapshot();
   window.addEventListener("onno:dataevent", (e) => applyEvent((e as CustomEvent<UiEvent>).detail));
+  // SSE deltas fire only on join/leave, never on heartbeats — so a tab that missed one (loaded mid-
+  // session, was backgrounded, or had an SSE hiccup) wouldn't see another session until it next moved.
+  // Re-seed from the authoritative snapshot on a slow timer and whenever the tab regains focus, so every
+  // session — including your own other tabs — converges without waiting for a move.
+  window.setInterval(loadSnapshot, RESYNC_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") loadSnapshot();
+  });
 }
 
 const EMPTY: PresenceViewer[] = [];
@@ -177,6 +210,7 @@ export function usePanePresence(path: string) {
       active = false;
       window.clearInterval(beat);
       window.removeEventListener("pagehide", onPageHide);
+      removeSelfFrom(myId); // drop self from the old route first, so un-marking it doesn't flash
       if (myRouteId === myId) setMyRoute(null);
       api.leavePresence(path);
     };
