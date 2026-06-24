@@ -2,6 +2,7 @@ package su.onno.ui.presence;
 
 import su.onno.cluster.ClusterEvent;
 import su.onno.cluster.ClusterEventBus;
+import su.onno.ui.UiAccessService;
 import su.onno.ui.UiEventPublisher;
 
 import org.junit.jupiter.api.Test;
@@ -129,6 +130,11 @@ class PresenceRegistryTest {
         record Push(String kind, String entityName, String id, List<Map<String, String>> viewers) {}
 
         final List<Push> pushes = new ArrayList<>();
+
+        RecordingPublisher() {
+            // publishPresence(...) is overridden to record, so the access service is never consulted.
+            super(new UiAccessService(null));
+        }
 
         @Override
         public void publishPresence(String kind, String entityName, String id, List<Map<String, String>> viewers) {

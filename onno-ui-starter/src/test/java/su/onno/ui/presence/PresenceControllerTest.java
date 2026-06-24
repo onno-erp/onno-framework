@@ -166,7 +166,9 @@ class PresenceControllerTest {
         List<Map<String, Object>> allViewersFixture = List.of();
 
         CapturingRegistry() {
-            super(new NoOpClusterEventBus(), new UiEventPublisher());
+            // The publisher is never exercised here (onLocal is overridden to just record the call,
+            // bypassing the fan-out), so a null-registry access service is fine.
+            super(new NoOpClusterEventBus(), new UiEventPublisher(new UiAccessService(null)));
         }
 
         @Override

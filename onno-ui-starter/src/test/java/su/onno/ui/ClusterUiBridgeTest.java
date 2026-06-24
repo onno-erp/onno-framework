@@ -34,6 +34,11 @@ class ClusterUiBridgeTest {
 
         final List<Call> calls = new ArrayList<>();
 
+        RecordingPublisher() {
+            // publish(...) is overridden to record, so the access service is never consulted.
+            super(new UiAccessService(null));
+        }
+
         @Override
         public void publish(String type, String entityType, String entityName, Object id, String naturalKey) {
             calls.add(new Call(type, entityType, entityName, id, naturalKey));

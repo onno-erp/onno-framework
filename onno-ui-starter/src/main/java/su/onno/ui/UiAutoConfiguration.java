@@ -121,13 +121,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public UiEventPublisher uiEventPublisher() {
-        return new UiEventPublisher();
+    public UiEventPublisher uiEventPublisher(UiAccessService access) {
+        return new UiEventPublisher(access);
     }
 
     @Bean
-    public UiEventController uiEventController(UiEventPublisher publisher) {
-        return new UiEventController(publisher);
+    public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access) {
+        return new UiEventController(publisher, access);
     }
 
     /**
