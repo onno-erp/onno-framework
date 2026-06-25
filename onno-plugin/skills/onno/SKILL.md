@@ -251,7 +251,7 @@ media, import, MCP, etc.) are cataloged in [docs/ARCHITECTURE.md](https://github
 the JSON read contract (`{col}_display`/`{col}_ref`, `__SECRET_SET__` redaction, list vs get) is in
 [docs/HEADLESS_READ_API.md](https://github.com/onno-erp/onno-framework/blob/main/docs/HEADLESS_READ_API.md).
 
-## Two more behaviours you will hit
+## Three behaviours you will hit
 
 - **Upserts are decided by `isNew`.** Base objects default `isNew = true`; the framework resets it
   to `false` after every load. So "load, mutate, save" UPDATEs. If you build an entity by hand
@@ -260,6 +260,16 @@ the JSON read contract (`{col}_display`/`{col}_ref`, `__SECRET_SET__` redaction,
 - **Per-entity RBAC is deny-by-default.** A catalog/document/register is invisible and uneditable
   unless its `@AccessControl(readRoles=…, writeRoles=…)` grants the caller; the `ADMIN` role is a
   superuser. This applies to the REST API, the UI, and the MCP tools alike.
+- **Deletion is soft — and the raw repository finders return the tombstones.** "Delete" sets
+  `deletionMark = true` and the row stays in the table; the UI/REST read layer hides it, but
+  `CatalogRepository`/`DocumentRepository` `findAll()`/`findById()`/`findByCode()`/`findByNumber()`
+  **still return deletion-marked rows** (so `RefResolver` can resolve a `Ref<T>` to a deleted target,
+  and restore/admin can reach them). **Business logic must never count a deleted row** — auth/login
+  admission, posting, totals, validation, picker option lists. Use the soft-delete-aware finders —
+  `findAllActive()`, `findActiveById(id)`, `findActiveByCode(code)`/`findActiveByNumber(number)`,
+  `findActiveByDateBetween(...)` — or filter `!isDeletionMark()` yourself. Reaching for the bare
+  `findAll()` in business code is the single most common way a "deleted" record silently keeps taking
+  effect (e.g. a deleted employee still admitted to log in).
 
 ## Modules & config
 

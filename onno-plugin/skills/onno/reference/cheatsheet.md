@@ -135,6 +135,13 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
 - `CatalogRepository<T> extends ListCrudRepository<T,UUID>` + `findByCode(String)`.
 - `DocumentRepository<T> extends ListCrudRepository<T,UUID>` + `findByNumber(String)`,
   `findByDateBetween(from, to)`.
+- **Soft-delete-aware finders** (on both `CatalogRepository` and `DocumentRepository`): deletion is
+  soft (`deletionMark = true`, row stays), and the inherited `findAll()`/`findById()`/`findByCode()`/
+  `findByNumber()`/`findByDateBetween()` **return deletion-marked rows** (needed by `RefResolver` and
+  restore/admin). Business logic (auth, posting, totals, option lists) must exclude them: use
+  `findAllActive()`, `findActiveById(UUID)`, `findActiveByCode(String)` (catalog) /
+  `findActiveByNumber(String)` + `findActiveByDateBetween(from,to)` (document) — or filter
+  `!isDeletionMark()`. Backed by derived queries (`findByDeletionMarkFalse()` etc.).
 - `RegisterRepository<T>` — read-only for accumulation registers: `getBalance(...)`,
   `getTurnover(from,to,...)`, `getRecordsByDocument(uuid)`, plus `addReceipt/addExpense` used during
   posting; writes happen via the `PostingEngine`. Filters narrow a read in one query, not in Java:

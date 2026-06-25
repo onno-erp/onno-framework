@@ -95,6 +95,17 @@ In brief:
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
 
+**Soft delete.** `deletionMark` on `CatalogObject`/`DocumentObject` is a tombstone, not a hard
+delete: "delete" sets it `true` and the row stays (the UI/REST read layer hides rows where
+`_deletion_mark = true`). The inherited repository finders — `findAll()`, `findById()`,
+`findByCode()`, `findByNumber()`, `findByDateBetween()` — **deliberately still return marked rows**,
+because `RefResolver` must resolve a `Ref<T>` to a deleted target (an old document still shows
+"Customer X") and restore/admin must reach them. **Business logic must not count deleted rows** —
+auth/admission, posting, totals, validation, picker option lists. Use the soft-delete-aware finders
+on `CatalogRepository`/`DocumentRepository` — `findAllActive()`, `findActiveById(UUID)`,
+`findActiveByCode(String)` / `findActiveByNumber(String)`, `findActiveByDateBetween(from, to)`
+(backed by derived `findByDeletionMarkFalse()`-style queries) — or filter `!isDeletionMark()`.
+
 Deprecated, do not add to new code: `@UiHint`, `@UiSection`, `@DashboardWidget` (UI is authored as
 beans instead).
 
