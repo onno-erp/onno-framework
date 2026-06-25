@@ -11,6 +11,7 @@ import { DivKitView } from "@/views/divkit-view";
 import { WidgetPortals } from "@/lib/widget-bridge";
 import { FormPortals } from "@/lib/form-bridge";
 import { ListPortals } from "@/lib/list-bridge";
+import { RegisterPortals } from "@/lib/register-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
@@ -49,6 +50,7 @@ function ProtectedApp() {
       <WidgetPortals />
       <FormPortals />
       <ListPortals />
+      <RegisterPortals />
       <IconPortals />
       <HintPortals />
       <ActionsMenuPortals />

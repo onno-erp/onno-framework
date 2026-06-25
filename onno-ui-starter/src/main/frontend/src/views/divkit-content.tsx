@@ -12,6 +12,7 @@ import { SSO_ICON_CUSTOM_COMPONENTS } from "@/lib/sso-icon-bridge";
 import { HINT_CUSTOM_COMPONENTS } from "@/lib/hint-bridge";
 import { ACTIONS_MENU_CUSTOM_COMPONENTS } from "@/lib/actions-menu-bridge";
 import { LIST_CUSTOM_COMPONENTS } from "@/lib/list-bridge";
+import { REGISTER_CUSTOM_COMPONENTS } from "@/lib/register-bridge";
 import { CONSTANTS_CUSTOM_COMPONENTS } from "@/lib/constants-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
 import { COMMENTS_CUSTOM_COMPONENTS } from "@/lib/comments-bridge";
@@ -31,6 +32,7 @@ const CUSTOM_COMPONENTS = new Map([
   ...HINT_CUSTOM_COMPONENTS,
   ...ACTIONS_MENU_CUSTOM_COMPONENTS,
   ...LIST_CUSTOM_COMPONENTS,
+  ...REGISTER_CUSTOM_COMPONENTS,
   ...CONSTANTS_CUSTOM_COMPONENTS,
   ...ACTIONS_BAR_CUSTOM_COMPONENTS,
   ...COMMENTS_CUSTOM_COMPONENTS,

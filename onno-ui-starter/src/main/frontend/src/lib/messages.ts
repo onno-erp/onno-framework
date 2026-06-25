@@ -72,6 +72,18 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "shell.menu": "Menu",
   "shell.more": "More",
 
+  // List grid: toolbar count, search, sort, view toggle, and the pager footer.
+  "list.count": "{count} rows",
+  "list.search": "Search…",
+  "list.all": "All",
+  "list.sortBy": "Sort by {column}",
+  "list.tableView": "Table",
+  "list.mapView": "Map",
+  "list.pageRange": "{from}–{to} of {total}",
+  "list.pageOf": "Page {page} of {pages}",
+  "list.prev": "Prev",
+  "list.next": "Next",
+
   // Empty / loading states.
   "empty.noRecords": "No records",
   "empty.noMatches": "No matches",

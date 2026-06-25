@@ -104,6 +104,18 @@ public final class UiMessages {
         d.put("register.balanceTab", "Balance");
         d.put("register.movementsTab", "Movements");
 
+        // List grid: toolbar count, search, sort, view toggle, and the pager footer.
+        d.put("list.count", "{count} rows");
+        d.put("list.search", "Search…");
+        d.put("list.all", "All");
+        d.put("list.sortBy", "Sort by {column}");
+        d.put("list.tableView", "Table");
+        d.put("list.mapView", "Map");
+        d.put("list.pageRange", "{from}–{to} of {total}");
+        d.put("list.pageOf", "Page {page} of {pages}");
+        d.put("list.prev", "Prev");
+        d.put("list.next", "Next");
+
         // Empty / loading states.
         d.put("empty.noRecords", "No records");
         d.put("empty.noMatches", "No matches");

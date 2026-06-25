@@ -100,7 +100,8 @@ public final class SurfaceDivBuilder {
         descriptor.put("newUrl", newUrl);
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
-        descriptor.put("pageSize", 100);
+        // One page per pager click; 50 keeps a page scannable without much in-page scroll.
+        descriptor.put("pageSize", 50);
         // Optional map view: a Table ⇄ Map toggle the island renders, plotting the rows as markers
         // (the geo columns are resolved + validated server-side; see ResolvedListView.MapView).
         if (view.mapView() != null) {
@@ -420,10 +421,12 @@ public final class SurfaceDivBuilder {
     // ----- register report -----
 
     /**
-     * The register surface as a virtualized {@code onno-list} island (or a Balance/Movements tab
-     * pair for a BALANCE register), fed page-by-page from {@code /api/list/registers/...}. This
-     * replaces the old fully-server-rendered table: a packed register no longer streams its whole
-     * movement log into one DivKit document — the island windows it like any catalog/document list.
+     * The register surface as an {@code onno-register} custom block: one or more named, paginated
+     * list views fed page-by-page from {@code /api/list/registers/...}. A BALANCE register carries a
+     * Balance + a Movements view; a TURNOVER register just Movements. The view switch is a plain
+     * React toggle (no DivKit tabs) — React owns which list is mounted, so switching can never blank
+     * the surface, and there's no animation. This replaces the old fully-server-rendered table: a
+     * packed register no longer streams its whole movement log into one DivKit document.
      */
     @SuppressWarnings("unchecked")
     public static Map<String, Object> registerSurface(Map<String, Object> meta, String name,
@@ -434,27 +437,19 @@ public final class SurfaceDivBuilder {
         List<Map<String, Object>> resources = (List<Map<String, Object>>) meta.getOrDefault("resources", List.of());
         String title = titleOf(meta);
 
-        Map<String, Object> movements = registerListDescriptor(title, name,
-                "/api/list/registers/" + name + "/movements",
-                movementColumns(dimensions, resources, msg), "_period", true);
-
+        List<Map<String, Object>> views = new ArrayList<>();
         if (isBalance) {
-            // Current balance + the movement log, as Balance / Movements tabs (each its own island).
-            Map<String, Object> balance = registerListDescriptor(title, name,
-                    "/api/list/registers/" + name + "/balance",
-                    balanceColumns(dimensions, resources), firstColumnName(dimensions), false);
-            Map<String, Object> tabs = Components.tabs(List.of(
-                    Div.tab(msg.get("register.balanceTab"), tabIsland(balance)),
-                    Div.tab(msg.get("register.movementsTab"), tabIsland(movements))), p);
-            Map<String, Object> root = Div.vertical(List.of(tabs));
-            Div.id(root, "onno-content");
-            Div.contentPadding(root);
-            Div.matchWidth(root);
-            return root;
+            views.add(registerView("balance", msg.get("register.balanceTab"),
+                    registerListDescriptor(title, name, "/api/list/registers/" + name + "/balance",
+                            balanceColumns(dimensions, resources), firstColumnName(dimensions), false)));
         }
-        // Turnover registers have no balance — just the movement log as a single island surface
-        // (mirrors a catalog/document list surface: the island carries its own content gutter).
-        Map<String, Object> custom = Div.custom("onno-list", Map.of("list", movements));
+        views.add(registerView("movements", msg.get("register.movementsTab"),
+                registerListDescriptor(title, name, "/api/list/registers/" + name + "/movements",
+                        movementColumns(dimensions, resources, msg), "_period", true)));
+
+        Map<String, Object> register = new LinkedHashMap<>();
+        register.put("views", views);
+        Map<String, Object> custom = Div.custom("onno-register", Map.of("register", register));
         Div.matchWidth(custom);
         Map<String, Object> root = Div.vertical(List.of(custom));
         Div.id(root, "onno-content");
@@ -462,15 +457,13 @@ public final class SurfaceDivBuilder {
         return root;
     }
 
-    /** An island embedded in a register tab: drops its own gutter (the surface pads) + a top margin. */
-    private static Map<String, Object> tabIsland(Map<String, Object> descriptor) {
-        descriptor.put("embedded", true);
-        Map<String, Object> custom = Div.custom("onno-list", Map.of("list", descriptor));
-        Div.matchWidth(custom);
-        Map<String, Object> wrap = Div.vertical(List.of(custom));
-        Div.matchWidth(wrap);
-        Div.margins(wrap, 12, 0, 0, 0);
-        return wrap;
+    /** One named view of a register surface: {@code {key, label, list}} for the React toggle. */
+    private static Map<String, Object> registerView(String key, String label, Map<String, Object> list) {
+        Map<String, Object> v = new LinkedHashMap<>();
+        v.put("key", key);
+        v.put("label", label);
+        v.put("list", list);
+        return v;
     }
 
     /** A register {@code onno-list} descriptor: no search/filters/New, fed by an explicit feed URL. */
@@ -491,7 +484,7 @@ public final class SurfaceDivBuilder {
         d.put("newUrl", null);
         d.put("actions", List.of());
         d.put("inputs", List.of());
-        d.put("pageSize", 100);
+        d.put("pageSize", 50);
         // Where the island fetches its windows from (a register has no /api/list/{kind}/{name} route).
         d.put("feed", feed);
         return d;

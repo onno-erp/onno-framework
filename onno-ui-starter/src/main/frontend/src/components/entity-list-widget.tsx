@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronsUpDown, Loader2, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Map as MapIcon, Plus, Search, Table2 } from "lucide-react";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
 import { PresenceAvatars } from "@/components/presence-avatars";
@@ -128,7 +128,6 @@ export type ListDescriptor = {
 };
 
 const ROW_H = 40;
-const OVERSCAN = 8;
 // Radix Select forbids an empty-string item value, so the "no selection" / placeholder choice
 // uses this sentinel and is mapped back to "" in state.
 const SELECT_NONE = "__onno_none__";
@@ -302,17 +301,16 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const viewersById = useViewersById();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const rows = useRef<Map<number, EntityRecord>>(new Map());
-  const loadedPages = useRef<Set<number>>(new Set());
-  const inflight = useRef<Set<number>>(new Set());
-  const gen = useRef(0); // bumped on sort/search/refresh so stale fetches are ignored
+  const gen = useRef(0); // bumped on each query so a stale page fetch is ignored
 
+  // Explicit pagination: one page of rows at a time (null = still loading), the live total, and the
+  // 0-based page index. No virtualization — a page is small enough to render whole, and discrete
+  // pages make "there's more" obvious (the old infinite scroll didn't).
+  const [pageRows, setPageRows] = useState<EntityRecord[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
-  const [, force] = useState(0);
-  const rerender = useCallback(() => force((n) => n + 1), []);
-  const [scrollTop, setScrollTop] = useState(0);
-  // The space from the scroller's top to the window bottom — the *most* the viewport may grow to.
-  // The actual height hugs the content (see bodyH below), so a short list isn't a full-height card.
+  const [page, setPage] = useState(0);
+  // Cap the scroll body at the space to the window bottom (minus room for the pager footer); a page
+  // taller than that scrolls inside the cap so the footer stays visible.
   const [maxBodyH, setMaxBodyH] = useState(420);
   // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
   // so the toolbar layout is driven by the measured container width, not a media query.
@@ -390,7 +388,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // When any loaded row has viewers, widen the whole list's left padding so the presence face-pile sits
   // in its own gutter instead of over the first column. Applied to the header too, so columns stay
   // aligned; it collapses back when nobody is viewing (a rare, gentle shift).
-  const listHasPresence = [...rows.current.values()].some((r) => r && viewersById.has(String(r._id)));
+  const listHasPresence = openable && (pageRows ?? []).some((r) => r && viewersById.has(String(r._id)));
   const leftPad = listHasPresence ? "pl-11 pr-4" : "px-4";
 
   // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
@@ -412,13 +410,17 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     return () => window.clearTimeout(t);
   }, [query]);
 
-  const fetchPage = useCallback(
-    (page: number) => {
-      if (loadedPages.current.has(page) || inflight.current.has(page)) return;
-      inflight.current.add(page);
-      const myGen = gen.current;
+  // Fetch one page (the sole data path now). Bumps the generation so a slow page that lands after a
+  // newer query/page request is discarded. Sort/search/filters are applied server-side, same as before.
+  const loadPage = useCallback(
+    (p: number, soft = false) => {
+      const myGen = ++gen.current;
+      // A hard load (first paint, query change, page turn) blanks to the skeleton; a soft load (a
+      // live refresh after some entity changed) keeps the current rows on screen and swaps them in
+      // place when the new data lands — so an unaffected register doesn't flash empty on every post.
+      if (!soft) setPageRows(null);
       const params = new URLSearchParams({
-        offset: String(page * pageSize),
+        offset: String(p * pageSize),
         limit: String(pageSize),
       });
       if (sort.column) {
@@ -447,32 +449,28 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { total: number; offset: number; rows: EntityRecord[] }) => {
-          if (myGen !== gen.current) return; // sort/search changed under us
-          inflight.current.delete(page);
-          loadedPages.current.add(page);
+          if (myGen !== gen.current) return; // a newer query/page superseded this fetch
           setTotal(data.total);
-          data.rows.forEach((row, i) => rows.current.set(data.offset + i, row));
-          rerender();
+          setPageRows(data.rows);
+          if (!soft && scrollRef.current) scrollRef.current.scrollTop = 0;
         })
         .catch(() => {
-          inflight.current.delete(page);
+          if (myGen === gen.current) setPageRows([]);
         });
     },
-    [feedBase, pageSize, sort.column, sort.descending, debounced, filters, filterSig, rerender]
+    [feedBase, pageSize, sort.column, sort.descending, debounced, filters, filterSig]
   );
 
-  // Reset and reload from the top whenever the sort, the (debounced) search, or a filter changes.
+  // Snap back to the first page whenever the sort, the (debounced) search, or a filter changes.
   useEffect(() => {
-    gen.current += 1;
-    rows.current.clear();
-    loadedPages.current.clear();
-    inflight.current.clear();
-    setTotal(null);
-    if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    setScrollTop(0);
-    fetchPage(0);
+    setPage(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort.column, sort.descending, debounced, filterSig]);
+
+  // Fetch the active page whenever it (or the query, via loadPage's identity) changes.
+  useEffect(() => {
+    loadPage(page);
+  }, [page, loadPage]);
 
   // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
@@ -485,13 +483,14 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     return () => ro.disconnect();
   }, []);
 
-  // Size the scroll viewport to fill from its top to the bottom of the window.
+  // Cap the scroll body at the space from its top to the window bottom, leaving room for the pager
+  // footer (~56px) so it never gets pushed off-screen.
   useLayoutEffect(() => {
     const measure = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      setMaxBodyH(Math.max(160, Math.floor(window.innerHeight - top - 16)));
+      setMaxBodyH(Math.max(160, Math.floor(window.innerHeight - top - 72)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -503,15 +502,11 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     };
   }, []);
 
-  // Reload the visible window in place (keeps scroll position rather than jumping to the top).
+  // Re-fetch the current page in place (after a server action or a live event) — a soft refresh
+  // that keeps the visible rows until the new data lands, so it never flashes the skeleton.
   const reload = useCallback(() => {
-    gen.current += 1;
-    rows.current.clear();
-    loadedPages.current.clear();
-    inflight.current.clear();
-    fetchPage(Math.floor(scrollTop / ROW_H / pageSize));
-    rerender();
-  }, [fetchPage, scrollTop, pageSize, rerender]);
+    loadPage(page, true);
+  }, [loadPage, page]);
 
   // Run a custom action button. A navigation action just routes (filling {id} for a row); a
   // server action POSTs to /api/actions and applies the ActionResult — toast, navigate, refresh.
@@ -556,30 +551,26 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // set (e.g. deletion-marked via an update) we fall back to a window reload.
   const patchRow = useCallback(
     (id: string) => {
-      let idx: number | null = null;
-      for (const [i, r] of rows.current) {
-        if (r && String(r._id) === id) {
-          idx = i;
-          break;
-        }
-      }
-      if (idx === null) return;
-      const myGen = gen.current;
-      fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((data: { rows: EntityRecord[] }) => {
-          if (myGen !== gen.current) return; // sort/search/filter reset under us
-          const fresh = data.rows?.[0];
-          if (fresh) {
-            rows.current.set(idx!, fresh);
-            rerender();
-          } else {
-            reload(); // row dropped out of the set — refresh the window
-          }
-        })
-        .catch(() => {});
+      setPageRows((current) => {
+        if (!current || !current.some((r) => r && String(r._id) === id)) return current; // not on this page
+        // Fetch just this row (same decorated shape as a page) and splice it in place.
+        fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+          .then((data: { rows: EntityRecord[] }) => {
+            const fresh = data.rows?.[0];
+            if (fresh) {
+              setPageRows((rows) =>
+                rows ? rows.map((r) => (String(r._id) === id ? fresh : r)) : rows
+              );
+            } else {
+              reload(); // row dropped out of the set — refresh the page
+            }
+          })
+          .catch(() => {});
+        return current;
+      });
     },
-    [feedBase, reload, rerender]
+    [feedBase, reload]
   );
 
   // Live updates: divkit-view fans out every SSE row change as an "onno:dataevent" window event
@@ -605,25 +596,14 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     return () => window.removeEventListener("onno:dataevent", onData);
   }, [kind, name, openable, reload, patchRow]);
 
-  // Hug the content: the scroll viewport grows to fit the rows it actually holds, capped at the
-  // space to the window bottom — so a 1-row list reads as a short card instead of a full-height one
-  // that leaves most of the screen empty (#77). Beyond the cap it stays put and the rows scroll.
-  // While the first page is loading (total unknown) it fills the available space for the skeleton.
-  const HEADER_H = 41; // sticky header: py-2.5 + text-xs row + 1px border
-  const EMPTY_BODY_H = 120; // the "No records" / "No matches" placeholder block
-  const contentHeight = HEADER_H + (total === 0 ? EMPTY_BODY_H : (total ?? 0) * ROW_H);
-  const bodyH = total == null ? maxBodyH : Math.min(maxBodyH, contentHeight);
-
-  // Ensure every page covering the visible window is loaded.
-  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
-  const endIndex = total == null
-    ? Math.ceil(bodyH / ROW_H) + OVERSCAN
-    : Math.min(total, Math.ceil((scrollTop + bodyH) / ROW_H) + OVERSCAN);
+  // Pager math: how many pages, and the 1-based "from–to of total" range for the current page.
+  const pageCount = total == null ? 1 : Math.max(1, Math.ceil(total / pageSize));
+  const rangeFrom = total ? page * pageSize + 1 : 0;
+  const rangeTo = total == null ? 0 : Math.min(total, page * pageSize + pageSize);
+  // Clamp the page if the row count shrank under us (a filter/delete) and left us past the last page.
   useEffect(() => {
-    const firstPage = Math.floor(startIndex / pageSize);
-    const lastPage = Math.floor(Math.max(startIndex, endIndex - 1) / pageSize);
-    for (let p = firstPage; p <= lastPage; p++) fetchPage(p);
-  }, [startIndex, endIndex, pageSize, fetchPage]);
+    if (total != null && page > 0 && page > pageCount - 1) setPage(pageCount - 1);
+  }, [total, page, pageCount]);
 
   // Cycle a column through three states on repeated clicks: ascending → descending → off
   // (off clears the sort entirely, so the list falls back to the server's default order).
@@ -634,9 +614,6 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       return { column: null, descending: false }; // descending → off
     });
   };
-
-  const visible: number[] = [];
-  for (let i = startIndex; i < endIndex; i++) visible.push(i);
 
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
@@ -655,7 +632,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold text-foreground">{list.title}</h1>
           <p className="whitespace-nowrap text-xs text-muted-foreground">
-            {total == null ? "…" : `${total} ${total === 1 ? "row" : "rows"}`}
+            {total == null ? "…" : t("list.count", { count: total })}
           </p>
         </div>
         <div className={cn("flex flex-wrap items-center gap-2", stacked ? "justify-start" : "ml-auto justify-end")}>
@@ -665,33 +642,33 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                 type="button"
                 onClick={() => setView("table")}
                 className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium",
                   view === "table"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
-                title="Table view"
-                aria-label="Table view"
+                title={t("list.tableView")}
+                aria-label={t("list.tableView")}
                 aria-pressed={view === "table"}
               >
                 <Table2 className="size-4" />
-                {compact ? null : "Table"}
+                {compact ? null : t("list.tableView")}
               </button>
               <button
                 type="button"
                 onClick={() => setView("map")}
                 className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+                  "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium",
                   view === "map"
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
-                title="Map view"
-                aria-label="Map view"
+                title={t("list.mapView")}
+                aria-label={t("list.mapView")}
                 aria-pressed={view === "map"}
               >
                 <MapIcon className="size-4" />
-                {compact ? null : "Map"}
+                {compact ? null : t("list.mapView")}
               </button>
             </div>
           ) : null}
@@ -769,7 +746,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     <SelectValue placeholder={f.label} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={SELECT_NONE}>All</SelectItem>
+                    <SelectItem value={SELECT_NONE}>{t("list.all")}</SelectItem>
                     {f.options.map((o) => (
                       <SelectItem key={o.value} value={o.value}>
                         {o.label}
@@ -826,7 +803,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search…"
+                placeholder={t("list.search")}
                 className={cn("h-9 pl-8", stacked ? "w-full" : "w-44 sm:w-60")}
               />
             </div>
@@ -889,7 +866,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
          horizontally in lock-step with the rows) and the inner min-width drives horizontal
          scroll when the card is narrower than the columns need. */
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div ref={scrollRef} className="overflow-auto" style={{ height: bodyH }} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+        {/* one scroller for both axes; the header sticks to the top; the inner min-width drives
+            horizontal scroll when the card is narrower than the columns need. The body is capped at
+            maxBodyH and scrolls inside, so the pager footer below always stays visible. */}
+        <div ref={scrollRef} className="overflow-auto" style={{ maxHeight: maxBodyH }}>
           <div style={{ minWidth: minTableWidth }}>
             {/* sticky header */}
             <div
@@ -906,12 +886,12 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                       type="button"
                       onClick={() => toggleSort(c.columnName)}
                       className={cn(
-                        "flex min-w-0 items-center gap-1 truncate text-left text-xs font-medium transition-colors",
+                        "flex min-w-0 items-center gap-1 truncate text-left text-xs font-medium",
                         // The sorted column carries the brand (accent = state): which column orders
                         // the list. Inactive headers stay muted and brighten on hover.
                         active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                       )}
-                      title={`Sort by ${c.label}`}
+                      title={t("list.sortBy", { column: c.label })}
                     >
                       <span className="truncate">{c.label}</span>
                       {active ? (
@@ -927,92 +907,127 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               {rowActions.length ? <span aria-hidden="true" /> : null}
             </div>
 
-            {/* virtualized body */}
+            {/* body — one page of rows, rendered whole (the page is small; no virtualization) */}
             {total === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
+            ) : pageRows == null ? (
+              // Loading placeholder — static bars (no pulse), one card-row each.
+              Array.from({ length: Math.min(pageSize, 10) }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn("grid items-center gap-3 border-b border-border/50", leftPad)}
+                  style={{ minHeight: ROW_H, gridTemplateColumns: template }}
+                >
+                  {columns.map((c) => (
+                    <span key={c.columnName} className="h-3.5 w-2/3 rounded bg-muted/60" />
+                  ))}
+                  {rowActions.length ? <span aria-hidden="true" /> : null}
+                </div>
+              ))
             ) : (
-              <div style={{ height: (total ?? 0) * ROW_H, position: "relative" }}>
-                {visible.map((i) => {
-                const row = rows.current.get(i);
-                const url = openable && row ? `onno://${kind}/${name}/${row._id}` : undefined;
-                const rowViewers = openable && row ? viewersById.get(String(row._id)) : undefined;
+              pageRows.map((row, i) => {
+                const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
+                const rowViewers = openable ? viewersById.get(String(row._id)) : undefined;
                 return (
+                  // Key by position within the page: register (balance) rows have no _id, so an
+                  // id-based key collides to the same value for every row and React mis-reconciles
+                  // into ghost/duplicate rows on reload. The page is a fresh fixed list each load,
+                  // so the index is a stable, correct key here.
                   <div
                     key={i}
                     data-onno-row={url}
                     onClick={() => url && dispatchAction(url)}
                     className={cn(
-                      // Hover highlight is owned by the [data-onno-row]:hover rule in index.css
-                      // (a brand-primary wash with !important, to beat DivKit's inline zebra bg);
-                      // here we only set the resting alt-row stripe. Register rows aren't clickable
-                      // (no detail route), so they don't get the pointer cursor.
-                      "absolute left-0 right-0 grid items-center gap-3 text-sm transition-colors",
+                      // Hover highlight is owned by the [data-onno-row]:hover rule in index.css.
+                      // Register rows aren't clickable (no detail route), so no pointer cursor.
+                      "relative grid items-center gap-3 border-b border-border/50 text-sm last:border-b-0",
                       url && "cursor-pointer",
                       leftPad,
                       i % 2 === 1 && "bg-muted/20"
                     )}
-                    style={{ top: i * ROW_H, height: ROW_H, gridTemplateColumns: template }}
+                    style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                   >
-                    {row
-                      ? columns.map((c) => <ListCell key={c.columnName} row={row} col={c} />)
-                      : columns.map((c) => (
-                          <span key={c.columnName} className="h-3.5 w-2/3 animate-pulse rounded bg-muted" />
-                        ))}
+                    {columns.map((c) => (
+                      <ListCell key={c.columnName} row={row} col={c} />
+                    ))}
                     {rowViewers ? (
-                      // Who else is viewing this record — a face-pile right-aligned in the row's left
-                      // gutter (w-11 == pl-11), so it hugs the text whether it's one avatar or three.
                       <div className="pointer-events-none absolute left-0 top-1/2 z-10 flex w-11 -translate-y-1/2 items-center justify-end pr-1.5">
                         <PresenceAvatars viewers={rowViewers} size={16} max={3} overlap />
                       </div>
                     ) : null}
                     {rowActions.length ? (
                       <div className="flex items-center justify-end gap-1">
-                        {row
-                          ? rowActions.map((a) => {
-                              // State-aware row actions: the server attaches a per-row override
-                              // (icon/label/visible/enabled) under `_actions`, computed from the row's
-                              // data. Absent → the action is static and uses its descriptor values.
-                              const st = (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
-                              if (st?.visible === false) return null;
-                              const icon = st?.icon ?? a.icon;
-                              const label = st?.label ?? a.label;
-                              const busy = pending.has(`${a.key}:${row._id}`);
-                              const disabled = busy || st?.enabled === false;
-                              return (
-                                <button
-                                  key={a.key}
-                                  type="button"
-                                  disabled={disabled}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    runAction(a, String(row._id));
-                                  }}
-                                  className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                                  title={label}
-                                  aria-label={label}
-                                >
-                                  {busy ? (
-                                    <Loader2 className="size-[15px] animate-spin" aria-hidden="true" />
-                                  ) : a.logo ? (
-                                    <img src={a.logo} alt="" aria-hidden="true" className="size-[15px] shrink-0 object-contain" />
-                                  ) : (
-                                    <DynamicLucide name={icon || "zap"} size={15} />
-                                  )}
-                                </button>
-                              );
-                            })
-                          : null}
+                        {rowActions.map((a) => {
+                          // State-aware row actions: the server attaches a per-row override
+                          // (icon/label/visible/enabled) under `_actions`, computed from the row's data.
+                          const st = (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+                          if (st?.visible === false) return null;
+                          const icon = st?.icon ?? a.icon;
+                          const label = st?.label ?? a.label;
+                          const busy = pending.has(`${a.key}:${row._id}`);
+                          const disabled = busy || st?.enabled === false;
+                          return (
+                            <button
+                              key={a.key}
+                              type="button"
+                              disabled={disabled}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                runAction(a, String(row._id));
+                              }}
+                              className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                              title={label}
+                              aria-label={label}
+                            >
+                              {busy ? (
+                                <Loader2 className="size-[15px] animate-spin" aria-hidden="true" />
+                              ) : a.logo ? (
+                                <img src={a.logo} alt="" aria-hidden="true" className="size-[15px] shrink-0 object-contain" />
+                              ) : (
+                                <DynamicLucide name={icon || "zap"} size={15} />
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : null}
                   </div>
                 );
-              })}
-              </div>
+              })
             )}
           </div>
         </div>
+        {/* pager footer — only when there's more than one page; the toolbar already shows the count */}
+        {total != null && total > pageSize ? (
+          <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5 text-xs text-muted-foreground">
+            <span className="tabular-nums">{t("list.pageRange", { from: rangeFrom, to: rangeTo, total })}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={t("list.prev")}
+              >
+                <ChevronLeft className="size-4" />
+                {compact ? null : t("list.prev")}
+              </button>
+              <span className="px-1.5 tabular-nums">{t("list.pageOf", { page: page + 1, pages: pageCount })}</span>
+              <button
+                type="button"
+                disabled={page >= pageCount - 1}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={t("list.next")}
+              >
+                {compact ? null : t("list.next")}
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
       )}
     </div>
