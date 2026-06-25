@@ -269,7 +269,12 @@ the JSON read contract (`{col}_display`/`{col}_ref`, `__SECRET_SET__` redaction,
   `findAllActive()`, `findActiveById(id)`, `findActiveByCode(code)`/`findActiveByNumber(number)`,
   `findActiveByDateBetween(...)` — or filter `!isDeletionMark()` yourself. Reaching for the bare
   `findAll()` in business code is the single most common way a "deleted" record silently keeps taking
-  effect (e.g. a deleted employee still admitted to log in).
+  effect (e.g. a deleted employee still admitted to log in). A **boot-time guardrail**
+  (`onno.repository.deletion-check` = `warn` default / `strict` / `off`) scans every catalog/document
+  repository and flags any *consumer-declared* finder that returns entities without being
+  deletion-scoped (e.g. a custom `findByExternalNumber`); a finder that genuinely must see tombstones
+  declares `@IncludesDeleted` to opt out. So write a custom finder as
+  `findByExternalNumberAndDeletionMarkFalse` (or annotate `@IncludesDeleted`), not bare `findByExternalNumber`.
 
 ## Modules & config
 

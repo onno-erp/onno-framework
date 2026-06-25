@@ -140,6 +140,18 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return new su.onno.security.SecretCipher(properties.getSecurity().getSecretKey());
     }
 
+    /**
+     * Boot-time guardrail that flags catalog/document repository finders which may return soft-deleted
+     * rows into business logic (see {@link DeletionAwareFinderValidator}). Controlled by
+     * {@code onno.repository.deletion-check} ({@code warn} default / {@code strict} / {@code off}).
+     */
+    @Bean
+    public DeletionAwareFinderValidator deletionAwareFinderValidator(ApplicationContext context,
+                                                                     OnnoProperties properties) {
+        return new DeletionAwareFinderValidator(context,
+                DeletionAwareFinderValidator.Mode.fromString(properties.getRepository().getDeletionCheck()));
+    }
+
     @Bean
     public OnnoBeforeConvertCallback onnoBeforeConvertCallback(MetadataRegistry registry,
                                                                 su.onno.numbering.NumberGenerator numberGenerator,
