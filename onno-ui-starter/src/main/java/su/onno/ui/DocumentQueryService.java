@@ -124,20 +124,28 @@ public class DocumentQueryService {
      * One page of a document list — server-side sorted, filtered, optionally date-ranged. The
      * engine behind the virtualized/paged list grid. {@code sortColumn} is validated against the
      * entity's columns; {@code search} matches case-insensitively across the text columns.
+     *
+     * <p>{@code widgetFilter} is an optional authored {@link WidgetFilter} predicate (the same
+     * {@code config("filter", …)} a dashboard card uses) — it lets a chart/list/calendar widget
+     * scope its rows to, say, {@code "status != 'DRAFT'"} server-side, on top of any user-driven
+     * column filters.
      */
     public List<Map<String, Object>> page(DocumentDescriptor desc, int offset, int limit,
                                           String sortColumn, boolean descending, String search,
                                           String from, String to,
                                           List<String> eq, List<String> in, List<String> like,
-                                          List<String> prefix, List<String> ge, List<String> le) {
+                                          List<String> prefix, List<String> ge, List<String> le,
+                                          String widgetFilter) {
         boolean defaultSort = sortColumn == null || !sortableColumns(desc).contains(sortColumn);
         String orderBy = defaultSort ? "_date" : sortColumn;
         boolean dirDesc = defaultSort ? true : descending; // newest-first by default
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
+        if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                     " WHERE " + where +
@@ -148,6 +156,7 @@ public class DocumentQueryService {
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
             filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
             return q.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
@@ -175,21 +184,25 @@ public class DocumentQueryService {
         return rows;
     }
 
-    /** Total live rows matching the search (+ optional date range and declarative filters). */
+    /** Total live rows matching the search (+ optional date range, declarative filters, widget filter). */
     public long count(DocumentDescriptor desc, String search, String from, String to,
                       List<String> eq, List<String> in, List<String> like,
-                      List<String> prefix, List<String> ge, List<String> le) {
+                      List<String> prefix, List<String> ge, List<String> le,
+                      String widgetFilter) {
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
+        if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
             bindSearch(q, search);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
             filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
             return q.mapTo(Long.class).one();
         });
     }

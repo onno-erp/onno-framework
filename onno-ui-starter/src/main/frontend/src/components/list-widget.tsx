@@ -79,12 +79,14 @@ export function ListWidget({ widget }: ListWidgetProps) {
 
   useEffect(() => {
     const name = toSnakeCase(widget.entityName);
+    // config("filter", …) scopes the list server-side (e.g. drop DRAFT/CANCELED bookings).
+    const filter = cfg.filter || undefined;
     if (widget.entityType === "document") {
-      api.listDocuments(name).then(setItems);
+      api.listDocuments(name, undefined, undefined, filter).then(setItems);
     } else if (widget.entityType === "catalog") {
-      api.listCatalog(name).then(setItems);
+      api.listCatalog(name, filter).then(setItems);
     }
-  }, [widget]);
+  }, [widget, cfg.filter]);
 
   const rows = useMemo(() => {
     // Most-recent first when the entity is dated; otherwise as served.

@@ -172,10 +172,12 @@ public class CatalogQueryService {
     public List<Map<String, Object>> page(CatalogDescriptor desc, int offset, int limit,
                                            String sortColumn, boolean descending, String search,
                                            List<String> eq, List<String> in, List<String> like,
-                                           List<String> prefix, List<String> ge, List<String> le) {
+                                           List<String> prefix, List<String> ge, List<String> le,
+                                           String widgetFilter) {
         String orderBy = safeSort(desc, sortColumn, "_code");
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
-        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter);
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
+        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                     " WHERE " + where +
@@ -184,6 +186,7 @@ public class CatalogQueryService {
                     .bind("limit", limit).bind("offset", Math.max(0, offset));
             bindSearch(q, search);
             filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
             return q.mapToMap().list();
         });
         refResolver.resolveAttributes(rows, desc.attributes());
@@ -213,16 +216,19 @@ public class CatalogQueryService {
         return rows;
     }
 
-    /** Total live rows matching the search (+ any declarative filters) — for the virtual scroller. */
+    /** Total live rows matching the search (+ declarative filters + widget filter) — for the virtual scroller. */
     public long count(CatalogDescriptor desc, String search,
                       List<String> eq, List<String> in, List<String> like,
-                      List<String> prefix, List<String> ge, List<String> le) {
+                      List<String> prefix, List<String> ge, List<String> le,
+                      String widgetFilter) {
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
-        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter);
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
+        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
             bindSearch(q, search);
             filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
             return q.mapTo(Long.class).one();
         });
     }
@@ -235,6 +241,10 @@ public class CatalogQueryService {
     }
 
     private static String filterClause(ListFilter.Result filter) {
+        return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
+    }
+
+    private static String filterClause(WidgetFilter.Result filter) {
         return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
 

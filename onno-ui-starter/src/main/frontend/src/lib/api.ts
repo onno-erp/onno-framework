@@ -274,8 +274,14 @@ export const api = {
     fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }),
 
   // Catalog CRUD
-  listCatalog: (name: string) =>
-    fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}`),
+  // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
+  // server-side — lets a dashboard widget scope its rows, e.g. "status != 'DRAFT'".
+  listCatalog: (name: string, filter?: string) => {
+    const params = new URLSearchParams();
+    if (filter) params.set("filter", filter);
+    const qs = params.toString();
+    return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}${qs ? "?" + qs : ""}`);
+  },
   // Server-side typeahead for ref pickers: capped, case-insensitive code/description match.
   searchCatalog: (name: string, q: string, limit = 30) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
@@ -301,10 +307,13 @@ export const api = {
     fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`),
 
   // Document CRUD
-  listDocuments: (name: string, from?: string, to?: string) => {
+  // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
+  // server-side — lets a chart/list/calendar widget scope its rows, e.g. "status != 'DRAFT'".
+  listDocuments: (name: string, from?: string, to?: string, filter?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    if (filter) params.set("filter", filter);
     const qs = params.toString();
     return fetchJson<EntityRecord[]>(`${BASE}/documents/${name}${qs ? "?" + qs : ""}`);
   },

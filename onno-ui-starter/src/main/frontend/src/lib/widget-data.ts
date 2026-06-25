@@ -26,10 +26,13 @@ export function useWidgetRows(widget: DashboardWidgetMeta): EntityRecord[] {
   useEffect(() => {
     let alive = true;
     const name = toSnakeCase(widget.entityName);
+    // An authored config("filter", …) (a WidgetFilter predicate) scopes the widget's rows
+    // server-side — e.g. a revenue chart that excludes DRAFT/CANCELED bookings.
+    const filter = widget.extraConfig?.filter || undefined;
     const set = (rows: EntityRecord[]) => alive && setItems(rows);
     const fail = () => alive && setItems([]);
-    if (widget.entityType === "document") api.listDocuments(name).then(set).catch(fail);
-    else if (widget.entityType === "catalog") api.listCatalog(name).then(set).catch(fail);
+    if (widget.entityType === "document") api.listDocuments(name, undefined, undefined, filter).then(set).catch(fail);
+    else if (widget.entityType === "catalog") api.listCatalog(name, filter).then(set).catch(fail);
     else if (widget.entityType === "register") api.getTurnover(name, ALL_TIME_FROM, ALL_TIME_TO).then(set).catch(fail);
     else fail();
     return () => {

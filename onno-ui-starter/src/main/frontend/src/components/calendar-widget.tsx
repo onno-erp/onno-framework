@@ -125,8 +125,10 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
 
   useEffect(() => {
     const name = toSnakeCase(widget.entityName);
+    // config("filter", …) scopes the calendar server-side (e.g. drop DRAFT/CANCELED bookings).
+    const filter = widget.extraConfig?.filter || undefined;
     if (widget.entityType === "document") {
-      api.listDocuments(name, range.from, range.to).then(setItems);
+      api.listDocuments(name, range.from, range.to, filter).then(setItems);
     }
   }, [widget, range]);
 

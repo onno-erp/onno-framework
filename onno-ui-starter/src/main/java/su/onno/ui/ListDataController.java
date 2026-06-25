@@ -49,6 +49,7 @@ public class ListDataController {
                                            @RequestParam(required = false) String sort,
                                            @RequestParam(required = false) String dir,
                                            @RequestParam(required = false) String q,
+                                           @RequestParam(required = false) String filter,
                                            HttpServletRequest request,
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
@@ -72,9 +73,9 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, in, like, prefix, ge, le);
+        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), rows);
-        return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le), offset, rows);
+        return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter), offset, rows);
     }
 
     @GetMapping("/documents/{name}")
@@ -86,6 +87,7 @@ public class ListDataController {
                                             @RequestParam(required = false) String q,
                                             @RequestParam(required = false) String from,
                                             @RequestParam(required = false) String to,
+                                            @RequestParam(required = false) String filter,
                                             HttpServletRequest request,
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
@@ -105,9 +107,9 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, in, like, prefix, ge, le);
+        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), rows);
-        return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le), offset, rows);
+        return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter), offset, rows);
     }
 
     /**

@@ -319,7 +319,7 @@ to `1` for the old sequential behaviour.
 |-----|-----------|--------|
 | `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
 | `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
-| `filter` | count, metric | Safe predicate, e.g. `status != cancelled AND _posted = true`. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. |
+| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND _posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
 | `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |

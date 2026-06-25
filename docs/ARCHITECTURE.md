@@ -198,7 +198,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`DELETE /{id}` (ui-starter) |
 | Documents | `GET /api/documents/{name}` (`?from=&to=`), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost` (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
-| List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — paged/sorted/filtered data for grids; `?ids=` returns just those rows (the grid's single-row live patch). `GET /api/list/registers/{name}/movements`, `/balance` — paged/sorted register data for the virtualized register surface (ui-starter) |
+| List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — paged/sorted/filtered data for grids; `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — paged/sorted register data for the virtualized register surface (ui-starter) |
 | Settings | `GET`/`PUT /api/settings` — `@Constant` values, ADMIN (ui-starter) |
 | Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions (ui-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}` — uploads ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
