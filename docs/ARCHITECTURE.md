@@ -106,6 +106,15 @@ on `CatalogRepository`/`DocumentRepository` — `findAllActive()`, `findActiveBy
 `findActiveByCode(String)` / `findActiveByNumber(String)`, `findActiveByDateBetween(from, to)`
 (backed by derived `findByDeletionMarkFalse()`-style queries) — or filter `!isDeletionMark()`.
 
+Because Spring Data JDBC has no global soft-delete filter (no JPA `@Where` equivalent), a
+**boot-time guardrail** catches the cases people forget: at startup every
+`CatalogRepository`/`DocumentRepository` is scanned, and any *consumer-declared* finder that returns
+entities but isn't deletion-scoped (no `…AndDeletionMarkFalse` predicate, no `deletion_mark` in its
+`@Query`, not delegating to `findActive*`) is flagged. Configure with `onno.repository.deletion-check`
+= `warn` (default — logs), `strict` (fails startup; good for CI), or `off`. A finder that *must* see
+tombstones (a `Ref`-resolution or restore/admin lookup) declares it with
+`@su.onno.repository.IncludesDeleted` to opt out.
+
 Deprecated, do not add to new code: `@UiHint`, `@UiSection`, `@DashboardWidget` (UI is authored as
 beans instead).
 

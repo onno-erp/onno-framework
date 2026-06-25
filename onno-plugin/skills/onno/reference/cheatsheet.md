@@ -142,6 +142,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   `findAllActive()`, `findActiveById(UUID)`, `findActiveByCode(String)` (catalog) /
   `findActiveByNumber(String)` + `findActiveByDateBetween(from,to)` (document) — or filter
   `!isDeletionMark()`. Backed by derived queries (`findByDeletionMarkFalse()` etc.).
+- **Deletion-check guardrail** — boot-time scan (`onno.repository.deletion-check` = `warn` default /
+  `strict` / `off`) flags any *consumer-declared* catalog/document finder returning entities that
+  isn't deletion-scoped (no `…AndDeletionMarkFalse`, no `deletion_mark` in `@Query`, not `findActive*`).
+  Opt a finder out with `@su.onno.repository.IncludesDeleted` when it must see tombstones (Ref
+  resolution, restore/admin).
 - `RegisterRepository<T>` — read-only for accumulation registers: `getBalance(...)`,
   `getTurnover(from,to,...)`, `getRecordsByDocument(uuid)`, plus `addReceipt/addExpense` used during
   posting; writes happen via the `PostingEngine`. Filters narrow a read in one query, not in Java:

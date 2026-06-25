@@ -20,6 +20,8 @@ public class OnnoProperties {
 
     private final Schema schema = new Schema();
 
+    private final Repository repository = new Repository();
+
     public List<String> getScanPackages() {
         return scanPackages;
     }
@@ -34,6 +36,32 @@ public class OnnoProperties {
 
     public Schema getSchema() {
         return schema;
+    }
+
+    public Repository getRepository() {
+        return repository;
+    }
+
+    /** Repository guardrails ({@code onno.repository.*}). */
+    public static class Repository {
+
+        /**
+         * Boot-time check that flags catalog/document repository finders which may return
+         * soft-deleted ({@code deletionMark = true}) rows into business logic: {@code warn} (default
+         * — log a warning), {@code strict} (fail startup), or {@code off}. A finder is exempt when it
+         * is deletion-scoped (a {@code ...AndDeletionMarkFalse} derived query, a {@code @Query}
+         * filtering {@code deletion_mark}, or a delegate to {@code findAllActive()} /
+         * {@code findActiveBy*}) or annotated {@code @su.onno.repository.IncludesDeleted}.
+         */
+        private String deletionCheck = "warn";
+
+        public String getDeletionCheck() {
+            return deletionCheck;
+        }
+
+        public void setDeletionCheck(String deletionCheck) {
+            this.deletionCheck = deletionCheck;
+        }
     }
 
     /** Schema lifecycle configuration ({@code onno.schema.*}). */

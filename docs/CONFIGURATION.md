@@ -20,6 +20,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.repository.deletion-check` | `String` | `warn` | Boot-time check that flags catalog/document repository finders which may return soft-deleted (`deletionMark = true`) rows into business logic: `warn` (default — log a warning), `strict` (fail startup), or `off`. A finder is exempt when it is deletion-scoped (a `...AndDeletionMarkFalse` derived query, a `@Query` filtering `deletion_mark`, or a delegate to `findAllActive()` / `findActiveBy*`) or annotated `@su.onno.repository.IncludesDeleted`. |
 | `onno.scan-packages` | `List<String>` | — | Packages scanned for `@Catalog`, `@Document`, `@AccumulationRegister`, `@InformationRegister`, `@Enumeration`, and `@Constant` types. Leave unset to scan from your `@SpringBootApplication` package. This is the core scan property — <strong>not</strong> `onno.base-packages` (which only exists for mail/print templates). |
 | `onno.schema.allow-destructive` | `Boolean` | `false` | Allow `apply` to execute data-losing changes (dropped tables/columns, narrowing type changes). Off by default: such changes are logged and skipped. |
 | `onno.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
