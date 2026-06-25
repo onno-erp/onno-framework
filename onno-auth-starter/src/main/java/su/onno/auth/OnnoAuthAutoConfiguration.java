@@ -1,6 +1,8 @@
 package su.onno.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import su.onno.auth.spi.AuthMethodsProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -20,6 +22,8 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.context.DeferredSecurityContext;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -39,6 +43,11 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
+import org.springframework.security.web.context.DelegatingSecurityContextRepository;
+import org.springframework.security.web.context.HttpRequestResponseHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
@@ -223,7 +232,18 @@ public class OnnoAuthAutoConfiguration {
             if (rms != null) {
                 http.rememberMe(rm -> rm.rememberMeServices(rms).key(rms.getKey()));
             }
+
+            // Reconstruct Spring's default (request-attribute + HTTP-session) context repository, but skip the
+            // save once the response is committed — e.g. the /api/events SSE stream flushes its headers, then
+            // the remember-me filter tries to persist the re-authenticated context, which would have to create
+            // a session (Set-Cookie) on an already-committed response. See the wrapper below.
+            SecurityContextRepository contextRepository = new ResponseCommittedAwareSecurityContextRepository(
+                    new DelegatingSecurityContextRepository(
+                            new RequestAttributeSecurityContextRepository(),
+                            new HttpSessionSecurityContextRepository()));
+
             return http
+                    .securityContext(sc -> sc.securityContextRepository(contextRepository))
                     .sessionManagement(session -> session
                             .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                     .csrf(csrf -> csrf
@@ -236,6 +256,47 @@ public class OnnoAuthAutoConfiguration {
                     .httpBasic(basic -> basic.disable())
                     .logout(logout -> logout.disable())
                     .build();
+        }
+
+        /**
+         * Wraps a {@link SecurityContextRepository} so a save is skipped once the HTTP response is committed.
+         * The {@code /api/events} SSE stream commits its headers immediately; the remember-me filter then
+         * tries to persist the re-authenticated context, which would create a session (needing a Set-Cookie)
+         * on an already-committed response — Tomcat rejects that with "Cannot create a session after the
+         * response has been committed". The context is still set for the in-flight request; it just isn't
+         * persisted from this committed response, and the next ordinary request re-establishes the session.
+         */
+        static final class ResponseCommittedAwareSecurityContextRepository implements SecurityContextRepository {
+
+            private final SecurityContextRepository delegate;
+
+            ResponseCommittedAwareSecurityContextRepository(SecurityContextRepository delegate) {
+                this.delegate = delegate;
+            }
+
+            @Override
+            @SuppressWarnings("deprecation")
+            public SecurityContext loadContext(HttpRequestResponseHolder requestResponseHolder) {
+                return delegate.loadContext(requestResponseHolder);
+            }
+
+            @Override
+            public DeferredSecurityContext loadDeferredContext(HttpServletRequest request) {
+                return delegate.loadDeferredContext(request);
+            }
+
+            @Override
+            public boolean containsContext(HttpServletRequest request) {
+                return delegate.containsContext(request);
+            }
+
+            @Override
+            public void saveContext(SecurityContext context, HttpServletRequest request, HttpServletResponse response) {
+                if (response.isCommitted()) {
+                    return;
+                }
+                delegate.saveContext(context, request, response);
+            }
         }
     }
 
