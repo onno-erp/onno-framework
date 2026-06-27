@@ -40,6 +40,7 @@ Requires **JDK 21**.
 ./gradlew :example:bootRun --args='--server.port=8090'   # or pick another port
 ```
 
-On first launch `BookstoreSeeder` fills a fresh database with categories, suppliers, customers,
-staff, a dozen books, an opening stock receipt, and a spread of orders across the lifecycle. Delete
-`example/data/` to re-seed.
+On first launch `BookstoreSeeder` fills a fresh database with a populated shop — 12 categories, 8
+suppliers and staff, ~36 customers, ~80 books, a generous opening stock receipt, and ~80 orders
+spread over the last quarter across the whole lifecycle. It's generated from a fixed RNG seed, so the
+dataset is identical every time. Delete `example/data/` to re-seed.
