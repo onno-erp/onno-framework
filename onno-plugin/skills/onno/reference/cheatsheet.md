@@ -192,7 +192,12 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
   - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
-    name); `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
+    name); a **tabular-section column** is addressed with a section-scoped key
+    `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the
+    prefix is the `@TabularSection(name=…)`, and it scopes the hint so it can't collide with a
+    same-named top-level field; a **register's** resource columns format the same way via an
+    `EntityView` whose `entity()` is the register class (no served surface, just the hints);
+    `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
     `edit`/`delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
     on REST), #185; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
     related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
