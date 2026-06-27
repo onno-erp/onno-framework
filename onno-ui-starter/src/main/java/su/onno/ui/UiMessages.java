@@ -52,6 +52,14 @@ public final class UiMessages {
         d.put("login.submit", "Sign in");
         d.put("login.submitting", "Signing in...");
         d.put("login.invalid", "The username or password is not correct.");
+        // Sign-in error banner, keyed by the ?error=<code> the server redirects back with (e.g. a
+        // failed SSO/Telegram round-trip lands on /login?error=telegram). Keep in sync with the
+        // frontend DEFAULT_MESSAGES.
+        d.put("login.error.telegram", "Telegram sign-in failed. Please try again.");
+        d.put("login.error.access_denied", "This account isn't authorized to use this app.");
+        d.put("login.error.session_expired", "Your session expired — please sign in again.");
+        d.put("login.error.sso", "Single sign-on failed. Please try again.");
+        d.put("login.error.generic", "Sign-in failed. Please try again.");
 
         // Action buttons / row-menu items.
         d.put("action.new", "New");
