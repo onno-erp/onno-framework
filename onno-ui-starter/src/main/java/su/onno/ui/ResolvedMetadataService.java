@@ -217,6 +217,10 @@ public class ResolvedMetadataService {
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
         map.put("dimensions", describeAttributes(d.dimensions(), hints));
         map.put("resources", describeAttributes(d.resources(), hints));
+        // Display format for the movement timestamp column, authored on the register's view as
+        // field("period").format(…) — the register analogue of a document's _date system column.
+        FieldHint periodHint = hints.get("period");
+        map.put("periodFormat", periodHint == null ? "" : pick(periodHint.format(), ""));
         return map;
     }
 

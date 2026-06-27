@@ -23,6 +23,8 @@ public class BookSalesView implements EntityView {
 
     @Override
     public void fields(EntityConfigBuilder f) {
-        f.field("revenue").format("currency:USD");
+        f.field("revenue").format("currency:USD")
+            // Format the movement timestamp column in the register report (raw ISO otherwise).
+            .field("period").format("dd-MM-yyyy");
     }
 }

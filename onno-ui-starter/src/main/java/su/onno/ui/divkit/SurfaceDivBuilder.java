@@ -445,7 +445,8 @@ public final class SurfaceDivBuilder {
         }
         views.add(registerView("movements", msg.get("register.movementsTab"),
                 registerListDescriptor(title, name, "/api/list/registers/" + name + "/movements",
-                        movementColumns(dimensions, resources, msg), "_period", true)));
+                        movementColumns(dimensions, resources, msg, str(meta.get("periodFormat"))),
+                        "_period", true)));
 
         Map<String, Object> register = new LinkedHashMap<>();
         register.put("views", views);
@@ -491,9 +492,13 @@ public final class SurfaceDivBuilder {
     }
 
     private static List<Map<String, Object>> movementColumns(List<Map<String, Object>> dimensions,
-                                                             List<Map<String, Object>> resources, UiMessages msg) {
+                                                             List<Map<String, Object>> resources,
+                                                             UiMessages msg, String periodFormat) {
         List<Map<String, Object>> cols = new ArrayList<>();
-        cols.add(column("_period", msg.get("register.period"), null, null));
+        // The movement timestamp honors a display format authored on the register's view
+        // (field("period").format("dd-MM-yyyy HH:mm")) — the register analogue of a document's
+        // _date column. Blank/absent leaves the raw timestamp.
+        cols.add(column("_period", msg.get("register.period"), null, periodFormat));
         cols.add(column("_movement_type", msg.get("register.type"), null, null));
         for (Map<String, Object> d : dimensions) cols.add(columnFromMeta(d));
         for (Map<String, Object> r : resources) cols.add(columnFromMeta(r));
