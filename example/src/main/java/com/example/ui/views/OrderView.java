@@ -58,9 +58,16 @@ public class OrderView implements EntityView {
             .field("date").order(3).format("dd-MM-yyyy")
             .field("total").order(4).hideInForm().format("currency:USD")
                 .hint("Auto-computed from the line amounts. Read-only.")
-            .field("open").order(5).hideInForm().hideInList()
+            .field("open").order(5).hideInForm().hideInList().hideInDetail()
             .field("note").order(10).widget("textarea")
                 .hint("Internal notes on the order.");
+
+        // Line-item column hints, addressed with the "<section>.<field>" key (the section is "items").
+        // Money columns render as currency in the order's line table, like the Total above.
+        f.field("items.book").label("Book")
+            .field("items.quantity").label("Qty")
+            .field("items.unitPrice").label("Unit price").format("currency:USD")
+            .field("items.amount").label("Amount").format("currency:USD");
 
         // Surface "Advance" as a primary button on the detail header next to Post; Cancel goes to the ⋯ menu.
         f.action("advanceTop").primary();
