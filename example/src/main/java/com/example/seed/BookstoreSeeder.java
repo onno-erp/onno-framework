@@ -26,6 +26,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -188,6 +189,28 @@ public class BookstoreSeeder implements ApplicationRunner {
         "Tanaka", "Berg", "Sokolov", "Adeyemi", "Petrova", "Singh", "Moreau", "Fischer", "Diaz", "Ahmed"
     };
 
+    /** Cities customers are spread across: {name, latitude, longitude}. */
+    private static final String[][] CITIES = {
+        {"New York", "40.7128", "-74.0060"},
+        {"Los Angeles", "34.0522", "-118.2437"},
+        {"Chicago", "41.8781", "-87.6298"},
+        {"Toronto", "43.6532", "-79.3832"},
+        {"London", "51.5074", "-0.1278"},
+        {"Paris", "48.8566", "2.3522"},
+        {"Berlin", "52.5200", "13.4050"},
+        {"Madrid", "40.4168", "-3.7038"},
+        {"Rome", "41.9028", "12.4964"},
+        {"Amsterdam", "52.3676", "4.9041"},
+        {"Tokyo", "35.6762", "139.6503"},
+        {"Singapore", "1.3521", "103.8198"},
+        {"Dubai", "25.2048", "55.2708"},
+        {"Mumbai", "19.0760", "72.8777"},
+        {"Sydney", "-33.8688", "151.2093"},
+        {"São Paulo", "-23.5505", "-46.6333"},
+        {"Mexico City", "19.4326", "-99.1332"},
+        {"Cape Town", "-33.9249", "18.4241"},
+    };
+
     /** Order-status mix, weighted toward completed/shipped business with a few open and cancelled. */
     private static final OrderStatus[] STATUS_MIX = {
         OrderStatus.COMPLETED, OrderStatus.COMPLETED, OrderStatus.COMPLETED, OrderStatus.COMPLETED,
@@ -252,7 +275,12 @@ public class BookstoreSeeder implements ApplicationRunner {
             String first = FIRST_NAMES[i % FIRST_NAMES.length];
             String last = LAST_NAMES[(i * 7 + 3) % LAST_NAMES.length];
             String email = (first + "." + last).toLowerCase().replace(" ", "") + "@example.com";
-            customerRefs.add(customer(first + " " + last, email));
+            // Spread customers across cities, with a little jitter so two in the same city don't
+            // sit on the exact same pixel on the map.
+            String[] cityRow = CITIES[i % CITIES.length];
+            double lat = Double.parseDouble(cityRow[1]) + (rnd.nextDouble() - 0.5) * 0.12;
+            double lng = Double.parseDouble(cityRow[2]) + (rnd.nextDouble() - 0.5) * 0.12;
+            customerRefs.add(customer(first + " " + last, email, cityRow[0], lat, lng));
         }
 
         // Books, with prices kept in a parallel list so order lines charge the catalog price.
@@ -315,10 +343,13 @@ public class BookstoreSeeder implements ApplicationRunner {
         return Ref.of(Supplier.class, suppliers.save(s).getId());
     }
 
-    private Ref<Customer> customer(String name, String email) {
+    private Ref<Customer> customer(String name, String email, String city, double lat, double lng) {
         Customer c = new Customer();
         c.setDescription(name);
         c.setEmail(email);
+        c.setCity(city);
+        c.setLatitude(BigDecimal.valueOf(lat).setScale(6, RoundingMode.HALF_UP));
+        c.setLongitude(BigDecimal.valueOf(lng).setScale(6, RoundingMode.HALF_UP));
         return Ref.of(Customer.class, customers.save(c).getId());
     }
 

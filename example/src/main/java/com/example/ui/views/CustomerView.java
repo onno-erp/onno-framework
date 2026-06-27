@@ -7,7 +7,11 @@ import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 
-/** The customers catalog. */
+/**
+ * The customers catalog — with a <b>map view</b>. {@code list.map()} adds a Table⇄Map toggle to the
+ * list: each customer with coordinates is plotted as a marker (its name in the popup). The list still
+ * opens as a table by default; {@code .defaultView()} would open straight on the map instead.
+ */
 @Component
 public class CustomerView implements EntityView {
 
@@ -18,9 +22,11 @@ public class CustomerView implements EntityView {
 
     @Override
     public void list(ListSpec list) {
-        list.columns("description", "email", "phone")
+        list.columns("description", "city", "email", "phone")
                 .label("description", "Name")
                 .sortBy("description", false);
+        // Plot each customer from its latitude/longitude; the marker popup shows the name.
+        list.map().lat("latitude").lng("longitude").label("description");
     }
 
     @Override
@@ -28,6 +34,8 @@ public class CustomerView implements EntityView {
         f.field("description").order(0).label("Name")
             .field("email").order(1)
             .field("phone").order(2)
-            .field("address").order(3).widget("textarea");
+            .field("city").order(3)
+            .field("latitude").order(4)
+            .field("longitude").order(5);
     }
 }
