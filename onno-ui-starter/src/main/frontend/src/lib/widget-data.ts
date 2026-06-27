@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, startOfISOWeek, startOfMonth } from "date-fns";
 import { api } from "@/lib/api";
 import { toSnakeCase } from "@/lib/utils";
 import { toNumber } from "@/lib/format";
@@ -79,20 +79,28 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
 // A sortable key + display label for a bucket. Date buckets get a zero-padded key (yyyy-MM-dd,
 // yyyy-MM, ISO week-year) so chronological order is plain string order; everything else keys on
 // its own label and keeps insertion order.
-function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string } {
+// `iso` is the bucket's start date (yyyy-MM-dd) for a date bucket — used to map a drag-selected
+// region on a chart back to an absolute time range. Empty for non-date buckets (no zoom).
+function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string; iso: string } {
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
-      if (groupByDate === "day") return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d") };
-      if (groupByDate === "week") return { key: format(d, "RRRR-'W'II"), label: `Wk ${format(d, "II")}` };
-      if (groupByDate === "month") return { key: format(d, "yyyy-MM"), label: format(d, "MMM yyyy") };
+      if (groupByDate === "day")
+        return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d"), iso: format(d, "yyyy-MM-dd") };
+      if (groupByDate === "week")
+        return { key: format(d, "RRRR-'W'II"), label: `Wk ${format(d, "II")}`, iso: format(startOfISOWeek(d), "yyyy-MM-dd") };
+      if (groupByDate === "month")
+        return { key: format(d, "yyyy-MM"), label: format(d, "MMM yyyy"), iso: format(startOfMonth(d), "yyyy-MM-dd") };
     } catch {
       // fall through
     }
   }
   const label = bucketLabel(value, undefined);
-  return { key: label, label };
+  return { key: label, label, iso: "" };
 }
+
+/** The bucket-start ISO date carried on each chart row, for drag-to-zoom (kept off the series keys). */
+export const ISO_KEY = "__iso";
 
 export interface SeriesSpec extends AggregateSpec {
   /** Field that defines the x-axis buckets. */
@@ -139,14 +147,14 @@ export function buildCombo(
   const measure = (row: EntityRecord, m: ComboMeasure) =>
     m.metric === "count" ? 1 : m.metricField ? toNumber(row[m.metricField]) ?? 0 : 0;
 
-  const buckets = new Map<string, { sortKey: string; label: string; primary: number; secondary: number }>();
+  const buckets = new Map<string, { sortKey: string; label: string; iso: string; primary: number; secondary: number }>();
   let primaryTotal = 0;
   let secondaryTotal = 0;
   for (const row of rows) {
-    const { key, label } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { sortKey: key, label, primary: 0, secondary: 0 };
+      bucket = { sortKey: key, label, iso, primary: 0, secondary: 0 };
       buckets.set(key, bucket);
     }
     const p = measure(row, spec.primary);
@@ -162,7 +170,7 @@ export function buildCombo(
     ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
   }
   return {
-    rows: ordered.map((b) => ({ label: b.label, primary: b.primary, secondary: b.secondary })),
+    rows: ordered.map((b) => ({ label: b.label, [ISO_KEY]: b.iso, primary: b.primary, secondary: b.secondary })),
     totals: { primary: primaryTotal, secondary: secondaryTotal },
   };
 }
@@ -263,7 +271,7 @@ export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
     factor.set(key, base > 0 ? 100 / base : 1);
   }
   const rows = data.rows.map((row) => {
-    const out: Record<string, number | string> = { label: row.label };
+    const out: Record<string, number | string> = { label: row.label, [ISO_KEY]: row[ISO_KEY] ?? "" };
     for (const key of data.seriesKeys) out[key] = (Number(row[key]) || 0) * (factor.get(key) ?? 1);
     return out;
   });
@@ -280,15 +288,15 @@ export const SINGLE_SERIES = "value";
  */
 export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData {
   const maxSeries = spec.maxSeries ?? 8;
-  const buckets = new Map<string, { sortKey: string; label: string; series: Map<string, number> }>();
+  const buckets = new Map<string, { sortKey: string; label: string; iso: string; series: Map<string, number> }>();
   const seriesTotals = new Map<string, number>();
   let total = 0;
 
   for (const row of rows) {
-    const { key, label } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { sortKey: key, label, series: new Map() };
+      bucket = { sortKey: key, label, iso, series: new Map() };
       buckets.set(key, bucket);
     }
     const seriesKey = spec.seriesBy ? bucketLabel(row[spec.seriesBy]) : SINGLE_SERIES;
@@ -328,7 +336,7 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
   }
 
   const out = ordered.map((bucket) => {
-    const wide: Record<string, number | string> = { label: bucket.label };
+    const wide: Record<string, number | string> = { label: bucket.label, [ISO_KEY]: bucket.iso };
     for (const key of seriesKeys) wide[key] = bucket.series.get(key) ?? 0;
     return wide;
   });

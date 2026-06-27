@@ -14,6 +14,7 @@ import {
   LineChart,
   Pie,
   PieChart,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -26,6 +27,7 @@ import {
   buildCombo,
   buildSeries,
   filterWindow,
+  ISO_KEY,
   RANGE_LABELS,
   SCALE_LABELS,
   SINGLE_SERIES,
@@ -41,6 +43,7 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { useTimeRange } from "@/providers/time-range-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
+import { DatePicker } from "@/components/date-picker";
 import { cn } from "@/lib/utils";
 
 interface ChartWidgetProps {
@@ -184,6 +187,57 @@ function buildChartData(
   return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null, round };
 }
 
+interface DragProps {
+  onMouseDown: (e: { activeLabel?: string | number } | null) => void;
+  onMouseMove: (e: { activeLabel?: string | number } | null) => void;
+  onMouseUp: () => void;
+  onMouseLeave: () => void;
+}
+interface RefAreaSel {
+  x1: string;
+  x2: string;
+}
+
+/**
+ * Drag-select a region on a time chart to set an absolute range (Grafana-style zoom). Maps the
+ * x-axis labels under the cursor back to their bucket dates ({@link ISO_KEY}) and calls {@code onZoom}.
+ */
+function useDragZoom(
+  rows: Array<Record<string, number | string>>,
+  onZoom: (fromIso: string, toIso: string) => void
+): { dragProps: DragProps; refArea: RefAreaSel | null } {
+  const [sel, setSel] = useState<{ left: string | null; right: string | null }>({ left: null, right: null });
+  const isoFor = (label: string) => {
+    const r = rows.find((row) => String(row.label) === label);
+    return r ? String(r[ISO_KEY] ?? "") : "";
+  };
+  const dragProps: DragProps = {
+    onMouseDown: (e) => {
+      const l = e?.activeLabel;
+      if (l != null) setSel({ left: String(l), right: String(l) });
+    },
+    onMouseMove: (e) => {
+      const l = e?.activeLabel;
+      if (l != null) setSel((s) => (s.left ? { ...s, right: String(l) } : s));
+    },
+    onMouseUp: () =>
+      setSel((s) => {
+        if (s.left && s.right && s.left !== s.right) {
+          let a = isoFor(s.left);
+          let b = isoFor(s.right);
+          if (a && b) {
+            if (a > b) [a, b] = [b, a];
+            onZoom(a, b);
+          }
+        }
+        return { left: null, right: null };
+      }),
+    onMouseLeave: () => setSel({ left: null, right: null }),
+  };
+  const refArea = sel.left && sel.right && sel.left !== sel.right ? { x1: sel.left, x2: sel.right } : null;
+  return { dragProps, refArea };
+}
+
 /** A compact segmented toggle for the chart control row. */
 function Segmented<T extends string>({
   value,
@@ -218,7 +272,7 @@ function Segmented<T extends string>({
 export function ChartWidget({ widget }: ChartWidgetProps) {
   const config = useMemo(() => readConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
-  const { range } = useTimeRange(); // the shared dashboard time window
+  const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
 
   // Local control state, seeded from the authored config; applied only when its control is enabled.
   const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
@@ -267,6 +321,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Once rescaled the grand total mixes units / is relative — hide the header figure then. A combo
   // chart has two measures, so no single grand total applies either.
   const showTotal = effScale === "absolute" && data.rows.length > 0 && !config.combo;
+
+  // Drag-select a region to set the shared absolute range (Grafana-style zoom).
+  const zoomRows = config.combo ? comboData?.rows ?? [] : data.rows;
+  const { dragProps, refArea } = useDragZoom(zoomRows, setAbsolute);
 
   const controlNodes: React.ReactNode[] = [];
   if (controls.enabled.has("granularity") && !round)
@@ -317,8 +375,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         ) : (
           <ResponsiveContainer width="100%" height={round && !config.combo ? 230 : 210}>
             {config.combo && comboData
-              ? renderCombo(comboData, config, fmt, fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix)
-              : renderChart(effKind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix, hidden, toggleSeries)}
+              ? renderCombo(comboData, config, fmt, fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix, dragProps, refArea)
+              : renderChart(effKind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix, hidden, toggleSeries, dragProps, refArea)}
           </ResponsiveContainer>
         )}
       </CardContent>
@@ -377,7 +435,9 @@ function renderChart(
   stacked: boolean,
   gradientPrefix: string,
   hidden: Set<string>,
-  onToggle: (key: string) => void
+  onToggle: (key: string) => void,
+  dragProps?: DragProps,
+  refArea?: RefAreaSel | null
 ): React.ReactElement {
   // Recharts' Formatter passes a wide value type; coerce and render a single string. Blank the
   // name for the single-series sentinel so its tooltip shows just the value, not "value: …".
@@ -454,7 +514,8 @@ function renderChart(
   if (kind === "line" || kind === "area") {
     const ChartImpl = kind === "line" ? LineChart : AreaChart;
     return (
-      <ChartImpl data={data.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+      <ChartImpl data={data.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} {...dragProps}>
+        {refArea && <ReferenceArea x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
         {kind === "area" && (
           <defs>
             {seriesKeys.map((_, i) => (
@@ -503,7 +564,8 @@ function renderChart(
   }
 
   return (
-    <BarChart data={data.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+    <BarChart data={data.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} {...dragProps}>
+      {refArea && <ReferenceArea x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
       <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
       <XAxis dataKey="label" {...axis} />
       <YAxis {...axis} width={52} tickFormatter={fmtAxis} />
@@ -540,7 +602,9 @@ function renderCombo(
   fmtSecondary: (n: number) => string,
   fmtSecondaryAxis: (n: number) => string,
   colors: string[],
-  gradientPrefix: string
+  gradientPrefix: string,
+  dragProps?: DragProps,
+  refArea?: RefAreaSel | null
 ): React.ReactElement {
   const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 11, tickLine: false, axisLine: false } as const;
   const [pColor, sColor] = colors;
@@ -567,7 +631,8 @@ function renderCombo(
     name as string,
   ];
   return (
-    <ComposedChart data={data.rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+    <ComposedChart data={data.rows} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} {...dragProps}>
+      {refArea && <ReferenceArea yAxisId="left" x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
       <defs>
         <linearGradient id={`${gradientPrefix}-combo-primary`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="5%" stopColor={pColor} stopOpacity={0.3} />
@@ -610,23 +675,13 @@ function TimeRangeControls() {
         }}
         options={options}
       />
-      <input
-        type="date"
-        value={range.from ?? ""}
-        max={range.to || undefined}
-        onChange={(e) => setAbsolute(e.target.value || undefined, range.to)}
-        className="h-6 rounded-md border border-border bg-background px-2 text-[11px]"
-        aria-label="From"
-      />
+      <div className="w-[140px]">
+        <DatePicker value={range.from} onChange={(v) => setAbsolute(v || undefined, range.to)} />
+      </div>
       <span className="text-[11px] text-muted-foreground">→</span>
-      <input
-        type="date"
-        value={range.to ?? ""}
-        min={range.from || undefined}
-        onChange={(e) => setAbsolute(range.from, e.target.value || undefined)}
-        className="h-6 rounded-md border border-border bg-background px-2 text-[11px]"
-        aria-label="To"
-      />
+      <div className="w-[140px]">
+        <DatePicker value={range.to} onChange={(v) => setAbsolute(range.from, v || undefined)} />
+      </div>
     </div>
   );
 }
@@ -693,7 +748,7 @@ function ExploreModal({
   items: EntityRecord[];
   onClose: () => void;
 }) {
-  const { range } = useTimeRange();
+  const { range, setAbsolute } = useTimeRange();
   const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
   const [kind, setKind] = useState<ChartKind>(config.kind);
   const [scale, setScale] = useState<ScaleMode>("absolute");
@@ -720,6 +775,8 @@ function ExploreModal({
   const comboColors = useMemo(() => resolveColors(2, config.colors), [config.colors]);
   const gradientPrefix = `explore-${useId().replace(/:/g, "")}`;
   const empty = config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0;
+  const zoomRows = config.combo ? comboData?.rows ?? [] : data.rows;
+  const { dragProps, refArea } = useDragZoom(zoomRows, setAbsolute);
 
   return (
     <Modal title={widget.title} onClose={onClose}>
@@ -745,8 +802,8 @@ function ExploreModal({
         ) : (
           <ResponsiveContainer width="100%" height={320}>
             {config.combo && comboData
-              ? renderCombo(comboData, config, fmts.fmt, fmts.fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix)
-              : renderChart(kind, data, colors, fmts.fmt, fmts.fmtAxis, config.stacked, gradientPrefix, hidden, toggle)}
+              ? renderCombo(comboData, config, fmts.fmt, fmts.fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix, dragProps, refArea)
+              : renderChart(kind, data, colors, fmts.fmt, fmts.fmtAxis, config.stacked, gradientPrefix, hidden, toggle, dragProps, refArea)}
           </ResponsiveContainer>
         )}
       </div>
