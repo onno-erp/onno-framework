@@ -57,11 +57,12 @@ public class DashboardPage implements Page {
                 .config("metric", "count")
                 .hint("Where orders sit in the lifecycle.");
 
-        b.widget("Order value by day").type("chart").width("1/2").order(11).document(Order.class)
+        b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
                 .config("groupBy", "_date").config("groupByDate", "day")
                 .config("metric", "sum").config("metricField", "total")
-                .hint("Total order value placed per day (the precise posted figure is the tile above).");
+                .config("filter", "_posted = true")
+                .hint("Posted-order revenue over time.");
 
         // ---- Recent orders ----------------------------------------------------------------------
         b.widget("Recent orders").type("list").width("full").order(20).document(Order.class).maxItems(10)

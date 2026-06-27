@@ -35,16 +35,18 @@ public class GenericDocumentController {
                                           @RequestParam(required = false) String to,
                                           @RequestParam(required = false) String q,
                                           @RequestParam(required = false) Integer limit,
+                                          @RequestParam(required = false) String filter,
                                           Principal principal) {
         DocumentDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
         // A search query or explicit limit switches to the capped typeahead used by the
-        // document ref picker; otherwise it's the full (date-ranged) list.
+        // document ref picker; otherwise it's the full (date-ranged) list. `filter` is an
+        // authored WidgetFilter predicate so chart/list widgets scope their rows server-side.
         if (q != null || limit != null) {
             int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
             return query.search(desc, q, cap);
         }
-        return query.list(desc, from, to);
+        return query.list(desc, from, to, filter);
     }
 
     @GetMapping("/{name}/{id}")

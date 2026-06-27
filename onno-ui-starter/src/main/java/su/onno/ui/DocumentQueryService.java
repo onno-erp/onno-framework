@@ -57,10 +57,23 @@ public class DocumentQueryService {
     }
 
     public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to) {
+        return list(desc, from, to, null);
+    }
+
+    /**
+     * The full document list, optionally narrowed by an authored {@link WidgetFilter} predicate (the
+     * same {@code config("filter", …)} a dashboard card uses). The un-paged endpoint that chart/list
+     * widgets fetch from goes through here, so passing the predicate makes those widgets honor the
+     * filter consistently with the server-aggregated count tiles. A null/blank/invalid predicate is
+     * simply no filter.
+     */
+    public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to, String filter) {
+        WidgetFilter.Result wf = WidgetFilter.parse(filter, columnNames(desc));
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false");
         if (from != null) sql.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _date <= CAST(:to AS TIMESTAMP)");
+        if (!wf.isEmpty()) sql.append(" AND (").append(wf.sql()).append(")");
         sql.append(" ORDER BY _date DESC LIMIT :rowCap");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
@@ -68,6 +81,7 @@ public class DocumentQueryService {
                     .bind("rowCap", CatalogQueryService.MAX_LIST_ROWS + 1);
             if (from != null) query.bind("from", from);
             if (to != null) query.bind("to", to);
+            wf.bindings().forEach(query::bind);
             return query.mapToMap().list();
         });
         if (rows.size() > CatalogQueryService.MAX_LIST_ROWS) {

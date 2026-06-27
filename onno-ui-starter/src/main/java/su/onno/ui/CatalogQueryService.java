@@ -63,13 +63,26 @@ public class CatalogQueryService {
     }
 
     public List<Map<String, Object>> list(CatalogDescriptor desc) {
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false ORDER BY _code LIMIT :limit")
-                        .bind("limit", MAX_LIST_ROWS + 1)
-                        .mapToMap()
-                        .list()
-        );
+        return list(desc, null);
+    }
+
+    /**
+     * The full catalog list, optionally narrowed by an authored {@link WidgetFilter} predicate (the
+     * same {@code config("filter", …)} a dashboard card uses). The un-paged endpoint that chart/list
+     * widgets fetch from goes through here, so passing the predicate makes those widgets honor the
+     * filter consistently with the server-aggregated count tiles. A null/blank/invalid predicate is
+     * simply no filter.
+     */
+    public List<Map<String, Object>> list(CatalogDescriptor desc, String filter) {
+        WidgetFilter.Result wf = WidgetFilter.parse(filter, columnNames(desc));
+        String where = "_deletion_mark = false" + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")");
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                            " WHERE " + where + " ORDER BY _code LIMIT :limit")
+                    .bind("limit", MAX_LIST_ROWS + 1);
+            wf.bindings().forEach(q::bind);
+            return q.mapToMap().list();
+        });
         if (rows.size() > MAX_LIST_ROWS) {
             log.warn("Catalog '{}' has more than {} live records; the un-paged list API truncated "
                     + "the result. Use the paged list endpoint for complete data.",
