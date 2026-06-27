@@ -1,19 +1,21 @@
 package com.example.ui.pages;
 
-import com.example.domain.catalogs.Property;
-import com.example.domain.documents.Bill;
-import com.example.domain.documents.Booking;
-import com.example.domain.registers.RevenueRegister;
+import com.example.domain.documents.Order;
 import su.onno.ui.Page;
 import su.onno.ui.PageBuilder;
 
 import org.springframework.stereotype.Component;
 
 /**
- * The home dashboard, authored as a {@link Page}. Showcases the data-widget DSL end to end: KPI
- * tiles with trend ({@code stat}/{@code sparkline}/{@code gauge}), a multi-series time-series chart
- * ({@code seriesBy} splits one chart into colored, stacked series), and the categorical charts.
- * Colors come from the theme palette by default; {@code config("colors", ...)} overrides per widget.
+ * The home dashboard ({@code /}) — an at-a-glance board for the shop. Pinned to the admin profile,
+ * so it's ADMIN-only: onno has no per-page RBAC, so the gate is the profile (a MANAGER resolves to
+ * the default profile, whose {@code /} is the Orders list, and this page does not exist there — see
+ * {@link com.example.ui.layouts.AdminLayout}).
+ *
+ * <p>Everything is server-aggregated from the {@link Order} document — count tiles that honor a
+ * {@code filter} (an AND-chain of {@code col op value}), charts that group by a column, and a recent
+ * list. Tiles aggregate a single column, which is why the order carries the derived {@code open}
+ * boolean: "open orders" is then a plain {@code open = true} count.</p>
  */
 @Component
 public class DashboardPage implements Page {
@@ -24,66 +26,46 @@ public class DashboardPage implements Page {
     }
 
     @Override
+    public String profile() {
+        return "admin";
+    }
+
+    @Override
     public void compose(PageBuilder b) {
         b.title("Dashboard");
+        b.subtitle("Onno Books — orders and stock at a glance");
 
-        // ---- KPI row: figures with momentum, not just static numbers -------------------------
-        // A stat tile: the headline total + period-over-period trend + a sparkline of the series.
-        b.widget("Revenue").type("stat").width("1/4").order(0).document(Bill.class)
-                .config("metric", "sum").config("metricField", "gross")
-                .config("groupByDate", "month").config("currency", "EUR")
-                .hint("Sum of gross across all bills, with the latest month's trend.");
-        // A bare sparkline: count of bookings per month by check-in date.
-        b.widget("Bookings").type("sparkline").width("1/4").order(1).document(Booking.class)
-                .config("groupBy", "check_in").config("groupByDate", "month");
-        // A radial gauge: revenue against a target (the ring fills toward it).
-        b.widget("Revenue vs target").type("gauge").width("1/4").order(2).document(Bill.class)
-                .config("metric", "sum").config("metricField", "gross")
-                .config("target", "250000").config("currency", "EUR")
-                .hint("Gross billed against the annual target.");
-        // A plain count, narrowed by a safe filter predicate (system column).
-        b.widget("Posted bills").type("count").width("1/4").order(3).document(Bill.class)
+        // ---- KPI row ----------------------------------------------------------------------------
+        b.widget("Open orders").type("count").width("1/3").order(0).document(Order.class)
+                .config("metric", "count")
+                .config("filter", "open = true")
+                .hint("Orders not yet completed or cancelled.");
+
+        b.widget("Total orders").type("count").width("1/3").order(1).document(Order.class)
+                .config("metric", "count");
+
+        b.widget("Revenue (posted)").type("count").width("1/3").order(2).document(Order.class)
+                .config("metric", "sum").config("metricField", "total")
+                // System columns carry the `_` prefix in widget configs (cf. `_date` below): the
+                // posted flag is `_posted`, not `posted`.
                 .config("filter", "_posted = true")
-                .hint("Bills posted to the ledger; drafts are excluded.");
+                .hint("Sum of order totals across posted orders.");
 
-        // ---- Time series: one chart, a colored series per property, stacked -------------------
-        b.widget("Revenue over time").type("chart").width("full").order(10).document(Bill.class)
+        // ---- Charts -----------------------------------------------------------------------------
+        b.widget("Orders by status").type("chart").width("1/2").order(10).document(Order.class)
+                .config("kind", "pie").config("groupBy", "status_display")
+                .config("metric", "count")
+                .hint("Where orders sit in the lifecycle.");
+
+        b.widget("Order value by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
-                .config("groupBy", "_date").config("groupByDate", "month")
-                .config("seriesBy", "property_display").config("stacked", "true")
-                .config("metric", "sum").config("metricField", "gross").config("currency", "EUR")
-                .hint("Monthly gross, split and stacked by property.");
+                .config("groupBy", "_date").config("groupByDate", "day")
+                .config("metric", "sum").config("metricField", "total")
+                .hint("Total order value placed per day (the precise posted figure is the tile above).");
 
-        // ---- Categorical charts ---------------------------------------------------------------
-        // Bar sourced from the Revenue register's server-side turnover (sum of a resource).
-        b.widget("Revenue by property").type("chart").width("1/2").order(20).register(RevenueRegister.class)
-                .config("kind", "bar").config("groupBy", "property_display")
-                .config("metric", "sum").config("metricField", "gross_amount").config("currency", "EUR");
-        // A pie with an explicit two-color override: posted (green) vs draft (muted).
-        b.widget("Bills by status").type("chart").width("1/2").order(21).document(Bill.class)
-                .config("kind", "pie").config("groupBy", "_posted").config("metric", "count")
-                .config("colors", "success,muted");
-
-        // ---- Donut + recent list --------------------------------------------------------------
-        b.widget("Bookings by channel").type("chart").width("1/2").order(30).document(Booking.class)
-                .config("kind", "donut").config("groupBy", "channel").config("metric", "count");
-        // Configurable list rows — templated title, EUR amount field, _number on line 2.
-        b.widget("Recent bills").type("list").width("1/2").order(31).document(Bill.class).maxItems(8)
-                .config("titleTemplate", "{client_display} — {property_display}")
-                .config("secondaryField", "_number")
-                .config("amountField", "gross").config("currency", "EUR");
-
-        // ---- Calendar -------------------------------------------------------------------------
-        b.widget("Bookings calendar").type("calendar").width("full").order(40).document(Booking.class)
-                .dateField("check_in").titleField("summary")
-                .config("endDateField", "check_out")
-                .config("secondaryField", "client_display,property_display")
-                .config("amountField", "total_gross").config("currency", "EUR");
-
-        // ---- Map: properties as markers + drawn service areas (point + GeoJSON sources) --------
-        b.widget("Properties map").type("map").width("full").order(50).catalog(Property.class)
-                .config("geoField", "location").config("geoJsonField", "service_area")
-                .titleField("displayName")
-                .hint("Every property with a pinned location and any drawn service area; click to open.");
+        // ---- Recent orders ----------------------------------------------------------------------
+        b.widget("Recent orders").type("list").width("full").order(20).document(Order.class).maxItems(10)
+                .config("titleTemplate", "{_number} · {customer_display}")
+                .config("secondaryField", "status_display");
     }
 }

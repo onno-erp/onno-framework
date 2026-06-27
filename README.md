@@ -198,7 +198,7 @@ skipped for `-SNAPSHOT` versions).
 
 ## Desktop Plugin
 
-Inside this repository, `settings.gradle.kts` uses `includeBuild("onno-desktop-gradle-plugin")`, so the example app can apply:
+Inside this repository, `settings.gradle.kts` uses `includeBuild("onno-desktop-gradle-plugin")`, so a project in this build can apply:
 
 ```kotlin
 plugins {

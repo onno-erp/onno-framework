@@ -1,5 +1,0 @@
-<svg width="150" height="28" viewBox="0 0 150 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="4" width="20" height="20" rx="6" fill="#3B82F6"/>
-  <path d="M8 14.5l3.2 3.2L16.8 11" stroke="#0D0D0D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="32" y="19" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="#EDEDED" letter-spacing="-0.3">Acme Rentals</text>
-</svg>

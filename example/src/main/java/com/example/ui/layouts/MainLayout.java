@@ -1,19 +1,14 @@
 package com.example.ui.layouts;
 
-import com.example.domain.catalogs.BankAccount;
-import com.example.domain.catalogs.Client;
-import com.example.domain.catalogs.Clinic;
-import com.example.domain.catalogs.Country;
-import com.example.domain.catalogs.Doctor;
+import com.example.domain.catalogs.Book;
+import com.example.domain.catalogs.BookCategory;
+import com.example.domain.catalogs.Customer;
 import com.example.domain.catalogs.Employee;
-import com.example.domain.catalogs.Property;
-import com.example.domain.documents.Bill;
-import com.example.domain.documents.Booking;
-import com.example.domain.documents.Payment;
-import com.example.domain.registers.BankBalanceRegister;
-import com.example.domain.registers.OccupancyRegister;
-import com.example.domain.registers.ReceivablesRegister;
-import com.example.domain.registers.RevenueRegister;
+import com.example.domain.catalogs.Supplier;
+import com.example.domain.documents.Order;
+import com.example.domain.documents.StockReceipt;
+import com.example.domain.registers.BookSales;
+import com.example.domain.registers.BookStock;
 import su.onno.ui.Layout;
 import su.onno.ui.LayoutSpec;
 import su.onno.ui.NavStyle;
@@ -21,75 +16,82 @@ import su.onno.ui.NavStyle;
 import org.springframework.stereotype.Component;
 
 /**
- * The default back-office shell: navigation sections, per-field hints, the nav
- * presentation, and the login→Employee identity link. Replaces the old
- * {@code UiConfig} configurer — UI structure is now authored as classes
- * ({@link Layout} / {@code Page} / {@code EntityView}).
+ * The back-office shell for everyone — the <b>default (manager) UI profile</b>. UI structure is
+ * authored here as a bean (sidebar sections, branding, the login→Employee identity link), never as
+ * annotations on the domain classes.
+ *
+ * <p>Nav is curated: an entity shows in the sidebar only because a section lists it here. This
+ * profile carries no {@code roles()} restriction, so it's the baseline every signed-in user resolves
+ * to — a MANAGER lands here, and the "People" section deliberately omits {@link Employee} (managing
+ * staff is ADMIN-only; see {@link Employee}'s {@code @AccessControl} and {@link AdminLayout}). An
+ * ADMIN, on the higher-priority admin profile, sees Employees and the dashboard instead. MANAGER
+ * still has read access to {@link Employee} so the order "Assigned to" picker works — it just has no
+ * nav entry here.</p>
  */
 @Component
 public class MainLayout implements Layout {
 
     @Override
     public void configure(LayoutSpec layout) {
-        // The universal shell: a sidebar rail. Mobile gets its own curated layout
-        // (see MobileLayout); tablet/desktop fall back to this.
-        //
-        // Branding is configured entirely here in Java (issue #97): an app name, a logo
-        // (with a dark-mode variant) and favicon served from src/main/resources/static/ui,
-        // and brand color overrides that retint the DivKit chrome's accent in each mode.
+        // No roles() here: the default profile is the baseline every user can resolve to. The admin
+        // profile (AdminLayout) is additive and higher-priority, so an ADMIN lands there instead.
+        build(layout, false);
+    }
+
+    /**
+     * Builds the shared shell, branding, sections and identity link. {@code includeEmployees} adds the
+     * {@link Employee} catalog to the "People" section — true only for the admin profile, since staff
+     * management is ADMIN-only. Keeping both profiles on one builder stops their navs from drifting.
+     */
+    static void build(LayoutSpec layout, boolean includeEmployees) {
+        // Branding configured in Java: app name, brand colors retinting the DivKit chrome accent in
+        // light and dark modes, plus a logo/favicon served from src/main/resources/static/ui.
         layout.shell()
                 .nav(NavStyle.SIDEBAR)
-                .brand("Acme Rentals")
-                .logo("/branding/logo.svg", "/branding/logo-dark.svg")
+                .brand("Onno Books")
+                .logo("/branding/logo.svg")
                 .favicon("/branding/favicon.svg")
-                .light(c -> c.primary("#2563EB").primarySoft("#EFF6FF"))
-                .dark(c -> c.primary("#3B82F6").primarySoft("#1E293B"));
+                .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))
+                .dark(c -> c.primary("#6366F1").primarySoft("#1E1B4B"));
 
-        layout.section("Rentals")
+        layout.section("Sales")
                 .order(0)
-                .icon("house")
-                // Property carries an explicit nav icon — authored icons win over the
-                // name heuristic (which would otherwise pick "building").
-                .catalog(Property.class, "key")
-                .catalog(Client.class)
-                .document(Booking.class);
+                .icon("shopping-cart")
+                .document(Order.class)
+                .catalog(Customer.class);
 
-        layout.section("Finance")
+        layout.section("Catalog")
                 .order(1)
-                .icon("euro")
-                .document(Bill.class)
-                .document(Payment.class)
-                .catalog(BankAccount.class)
-                .register(ReceivablesRegister.class)
-                .register(BankBalanceRegister.class);
+                .icon("book")
+                .catalog(Book.class)
+                .catalog(BookCategory.class);
 
-        layout.section("People")
+        layout.section("Inventory")
                 .order(2)
-                .icon("users")
-                .catalog(Employee.class);
+                .icon("package")
+                .document(StockReceipt.class)
+                .register(BookStock.class);
 
-        // Demonstrates declarative related-list panels: Clinic and Doctor are a catalog↔catalog
-        // many-to-many, edited inline on either side over the ClinicDoctor join catalog (which
-        // needs no nav entry — the related-list panels read/write it directly).
-        layout.section("Health")
+        layout.section("Suppliers")
+                .order(3)
+                .icon("truck")
+                .catalog(Supplier.class);
+
+        var people = layout.section("People")
                 .order(4)
-                .icon("stethoscope")
-                .catalog(Clinic.class, "hospital")
-                .catalog(Doctor.class, "stethoscope");
+                .icon("users");
+        if (includeEmployees) {
+            people.catalog(Employee.class);
+        }
 
         layout.section("Reports")
-                .order(3)
+                .order(5)
                 .icon("chart-column")
-                .register(OccupancyRegister.class)
-                .register(RevenueRegister.class);
+                .register(BookSales.class);
 
-        layout.section("Reference")
-                .order(9)
-                .icon("book")
-                .catalog(Country.class);
-
-        // Link login accounts to Employee records, matched on email, so persona
-        // UIs can greet and (later) scope to the signed-in person.
+        // Link a signed-in login to its Employee row by email, so the person can be greeted and shown
+        // as a comment author. The lookup reads the row directly, bypassing @AccessControl, so it
+        // resolves for MANAGERs too even though they have no Employees nav entry.
         layout.identity(Employee.class, "email");
     }
 }

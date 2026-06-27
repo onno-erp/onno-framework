@@ -1,24 +1,24 @@
 package com.example.ui.views;
 
-import com.example.domain.catalogs.Employee;
+import com.example.domain.catalogs.Customer;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
 import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 
-/** The employees catalog (ADMIN-only writes; see the catalog's @AccessControl). */
+/** The customers catalog. */
 @Component
-public class EmployeeView implements EntityView {
+public class CustomerView implements EntityView {
 
     @Override
     public Class<?> entity() {
-        return Employee.class;
+        return Customer.class;
     }
 
     @Override
     public void list(ListSpec list) {
-        list.columns("description", "email", "position")
+        list.columns("description", "email", "phone")
                 .label("description", "Name")
                 .sortBy("description", false);
     }
@@ -27,6 +27,7 @@ public class EmployeeView implements EntityView {
     public void fields(EntityConfigBuilder f) {
         f.field("description").order(0).label("Name")
             .field("email").order(1)
-            .field("position").order(2);
+            .field("phone").order(2)
+            .field("address").order(3).widget("textarea");
     }
 }
