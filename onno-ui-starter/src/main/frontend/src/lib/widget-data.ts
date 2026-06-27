@@ -205,6 +205,28 @@ export function filterRange(rows: EntityRecord[], dateField: string, range: Rang
   });
 }
 
+/**
+ * Window rows by either an absolute {@code from}/{@code to} (inclusive of the whole {@code to} day)
+ * or, when neither is set, the relative preset — the shared dashboard time range applied to a chart.
+ */
+export function filterWindow(
+  rows: EntityRecord[],
+  dateField: string,
+  window: { preset: RangeKey; from?: string; to?: string }
+): EntityRecord[] {
+  if (window.from || window.to) {
+    const fromT = window.from ? Date.parse(window.from) : -Infinity;
+    const toT = window.to ? Date.parse(window.to) + 86_400_000 : Infinity; // include the whole `to` day
+    return rows.filter((r) => {
+      const v = r[dateField];
+      if (typeof v !== "string") return true;
+      const t = Date.parse(v);
+      return Number.isNaN(t) ? true : t >= fromT && t < toT;
+    });
+  }
+  return filterRange(rows, dateField, window.preset);
+}
+
 export type ScaleMode = "absolute" | "indexed" | "normalized";
 
 export const SCALE_LABELS: Record<ScaleMode, string> = {

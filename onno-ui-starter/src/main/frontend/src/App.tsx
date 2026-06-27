@@ -5,6 +5,7 @@ import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
 import { MessagesProvider, useMessages } from "@/providers/messages-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
+import { TimeRangeProvider } from "@/providers/time-range-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
 import { DivKitView } from "@/views/divkit-view";
@@ -44,7 +45,7 @@ function ProtectedApp() {
   // WidgetPortals lives alongside it so DivKit's div-custom blocks (charts,
   // calendars, kanban) render as React widgets within the app's providers.
   return (
-    <>
+    <TimeRangeProvider>
       <UpdateNotice />
       <DivKitView />
       <WidgetPortals />
@@ -59,7 +60,7 @@ function ProtectedApp() {
       <CommentsPortals />
       <NavPresencePortals />
       <GeoPortals />
-    </>
+    </TimeRangeProvider>
   );
 }
 

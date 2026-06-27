@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import type { DashboardWidgetMeta } from "@/lib/types";
-import { ChartWidget } from "@/components/chart-widget";
+import { ChartWidget, TimeRangeWidget } from "@/components/chart-widget";
 import { CalendarWidget } from "@/components/calendar-widget";
 import { KanbanWidget } from "@/components/kanban-widget";
 import { ListWidget } from "@/components/list-widget";
@@ -29,6 +29,7 @@ import { MapWidget } from "@/components/map-widget";
  */
 const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> = {
   chart: ChartWidget,
+  timeRange: TimeRangeWidget,
   calendar: CalendarWidget,
   kanban: KanbanWidget,
   list: ListWidget,

@@ -358,7 +358,8 @@ public class DivKitController implements DisposableBean {
     private Map<String, Object> renderPage(PageBuilder pb, String route, int columns, Palette p, Principal principal,
                                            String profileId, String defaultTitle, String defaultSubtitle) {
         List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
-                .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
+                // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
+                .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
                 .toList();
         List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
         String title = pb.title() != null ? pb.title() : defaultTitle;

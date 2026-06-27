@@ -1,4 +1,6 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { CalendarRange, Maximize2, X } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -23,7 +25,7 @@ import {
   applyScale,
   buildCombo,
   buildSeries,
-  filterRange,
+  filterWindow,
   RANGE_LABELS,
   SCALE_LABELS,
   SINGLE_SERIES,
@@ -35,7 +37,8 @@ import {
   type ScaleMode,
   type SeriesData,
 } from "@/lib/widget-data";
-import type { DashboardWidgetMeta } from "@/lib/types";
+import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
+import { useTimeRange } from "@/providers/time-range-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { cn } from "@/lib/utils";
@@ -110,7 +113,6 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
 
 // ----- interactive controls -------------------------------------------------------------------
 
-const RANGE_OPTIONS: RangeKey[] = ["7d", "30d", "90d", "12m", "all"];
 const GRANULARITY_OPTIONS: GroupByDate[] = ["day", "week", "month"];
 const GRANULARITY_LABELS: Record<GroupByDate, string> = { day: "Day", week: "Week", month: "Month" };
 const TYPE_OPTIONS: ChartKind[] = ["bar", "line", "area"];
@@ -119,24 +121,22 @@ const SCALE_OPTIONS: ScaleMode[] = ["absolute", "indexed", "normalized"];
 
 interface ControlsSpec {
   enabled: Set<string>;
-  defaultRange: RangeKey;
   /** Series-split options for the "series" control: `{value, label}` ("" = the single unsplit series). */
   series: { value: string; label: string }[];
   defaultSeries: string;
 }
 
 /**
- * Which interactive controls a chart exposes, from `config("controls", "range,granularity,type,scale,series")`
- * ("all" = range,granularity,type,scale). Everything stays opt-in, so charts that declare no controls
- * render exactly as before. `config("defaultRange", …)` and `config("seriesOptions", "field:Label,…")`
- * tune the range and series controls.
+ * Which per-chart controls a chart exposes, from `config("controls", "granularity,type,scale,series")`
+ * ("all" = granularity,type,scale). The date range is the <em>shared</em> dashboard time picker, not a
+ * per-chart control. Charts that declare no controls render exactly as before. The explore view shows
+ * every control regardless. `config("seriesOptions", "field:Label,…")` tunes the series control.
  */
 function readControls(widget: DashboardWidgetMeta, base: ChartConfig): ControlsSpec {
   const cfg = widget.extraConfig ?? {};
   let raw = (cfg.controls ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (raw.includes("all")) raw = ["range", "granularity", "type", "scale"];
+  if (raw.includes("all")) raw = ["granularity", "type", "scale"];
   const enabled = new Set(raw);
-  const defaultRange = (RANGE_OPTIONS.includes(cfg.defaultRange as RangeKey) ? cfg.defaultRange : "all") as RangeKey;
   const series = (cfg.seriesOptions ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -148,7 +148,40 @@ function readControls(widget: DashboardWidgetMeta, base: ChartConfig): ControlsS
       return { value: value === "none" ? "" : value, label };
     });
   const defaultSeries = base.seriesBy ?? series[0]?.value ?? "";
-  return { enabled, defaultRange, series, defaultSeries };
+  return { enabled, series, defaultSeries };
+}
+
+/**
+ * The shared chart data pipeline used by both the dashboard card and the explore view: window the
+ * rows (done by the caller), bucket into a series (or a dual-axis combo), and rescale. Centralizing
+ * it keeps the card and the explore view showing exactly the same numbers.
+ */
+function buildChartData(
+  config: ChartConfig,
+  rows: EntityRecord[],
+  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode }
+): { data: SeriesData; comboData: ComboData | null; round: boolean } {
+  if (config.combo) {
+    return {
+      data: { rows: [], seriesKeys: [SINGLE_SERIES], total: 0 },
+      comboData: buildCombo(rows, {
+        groupBy: config.groupBy,
+        groupByDate: opts.granularity,
+        primary: { metric: config.metric, metricField: config.metricField },
+        secondary: { metric: config.secondaryMetric, metricField: config.secondaryField },
+      }),
+      round: false,
+    };
+  }
+  const round = opts.kind === "donut" || opts.kind === "pie";
+  const built = buildSeries(rows, {
+    groupBy: config.groupBy,
+    groupByDate: opts.granularity,
+    seriesBy: round ? undefined : opts.seriesBy,
+    metric: config.metric,
+    metricField: config.metricField,
+  });
+  return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null, round };
 }
 
 /** A compact segmented toggle for the chart control row. */
@@ -185,9 +218,9 @@ function Segmented<T extends string>({
 export function ChartWidget({ widget }: ChartWidgetProps) {
   const config = useMemo(() => readConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
+  const { range } = useTimeRange(); // the shared dashboard time window
 
   // Local control state, seeded from the authored config; applied only when its control is enabled.
-  const [range, setRange] = useState<RangeKey>(controls.defaultRange);
   const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
   const [kind, setKind] = useState<ChartKind>(config.kind);
   const [scale, setScale] = useState<ScaleMode>("absolute");
@@ -201,6 +234,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       else next.add(key);
       return next;
     });
+  const [explore, setExplore] = useState(false);
 
   const items = useWidgetRows(widget);
 
@@ -209,56 +243,16 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const effGranularity = controls.enabled.has("granularity") ? granularity : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
-  const round = effKind === "donut" || effKind === "pie";
 
-  const numberOpts = useMemo(
-    () => ({
-      currency: config.currency,
-      unit: config.unit,
-      unitPosition: config.unitPosition,
-      format: config.format,
-      locale: config.locale,
-    }),
-    [config]
+  const fmts = useChartFormatters(config);
+  const { fmt, fmtAxis } = fmts;
+
+  // The shared dashboard time range windows the rows before bucketing.
+  const ranged = useMemo(() => filterWindow(items, config.groupBy, range), [items, config.groupBy, range]);
+  const { data, comboData, round } = useMemo(
+    () => buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
+    [config, ranged, effGranularity, effKind, effSeriesBy, effScale]
   );
-  // Full figures in the tooltip + header; compact ones on the axis, where a full currency value
-  // would clip.
-  const fmt = useMemo(() => (n: number) => formatNumber(n, numberOpts), [numberOpts]);
-  const fmtAxis = useMemo(() => (n: number) => formatCompact(n, numberOpts), [numberOpts]);
-
-  // The range control windows the rows by the group-by date before bucketing.
-  const ranged = useMemo(
-    () => (controls.enabled.has("range") ? filterRange(items, config.groupBy, range) : items),
-    [items, controls, config.groupBy, range]
-  );
-
-  const data = useMemo<SeriesData>(() => {
-    const built = buildSeries(ranged, {
-      groupBy: config.groupBy,
-      groupByDate: effGranularity,
-      // A pie's slices ARE the buckets; splitting into series doesn't apply there.
-      seriesBy: round ? undefined : effSeriesBy,
-      metric: config.metric,
-      metricField: config.metricField,
-    });
-    // Rescaling compares real series; a pie's slice set is left absolute.
-    return applyScale(built, round ? "absolute" : effScale);
-  }, [ranged, config, effGranularity, round, effSeriesBy, effScale]);
-
-  // The secondary measure of a dual-axis chart counts events, so it reads as integers.
-  const secondaryOpts = useMemo(() => ({ format: "integer" }), []);
-  const fmtSecondary = useMemo(() => (n: number) => formatNumber(n, secondaryOpts), [secondaryOpts]);
-  const fmtSecondaryAxis = useMemo(() => (n: number) => formatCompact(n, secondaryOpts), [secondaryOpts]);
-
-  const comboData = useMemo<ComboData | null>(() => {
-    if (!config.combo) return null;
-    return buildCombo(ranged, {
-      groupBy: config.groupBy,
-      groupByDate: effGranularity,
-      primary: { metric: config.metric, metricField: config.metricField },
-      secondary: { metric: config.secondaryMetric, metricField: config.secondaryField },
-    });
-  }, [config, ranged, effGranularity]);
 
   const colors = useMemo(
     () => resolveColors(round ? data.rows.length : data.seriesKeys.length, config.colors),
@@ -275,10 +269,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const showTotal = effScale === "absolute" && data.rows.length > 0 && !config.combo;
 
   const controlNodes: React.ReactNode[] = [];
-  if (controls.enabled.has("range"))
-    controlNodes.push(
-      <Segmented key="range" value={range} onChange={setRange} options={RANGE_OPTIONS.map((r) => ({ value: r, label: RANGE_LABELS[r] }))} />
-    );
   if (controls.enabled.has("granularity") && !round)
     controlNodes.push(
       <Segmented key="gran" value={granularity} onChange={setGranularity} options={GRANULARITY_OPTIONS.map((g) => ({ value: g, label: GRANULARITY_LABELS[g] }))} />
@@ -302,13 +292,24 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
           <HintIcon text={widget.hint} size={13} />
         </div>
-        {/* The controls live where the grand-total figure would be; a chart with no controls keeps
-            the figure there instead. */}
-        {controlNodes.length > 0 ? (
-          <div className="flex flex-wrap items-center justify-end gap-1.5">{controlNodes}</div>
-        ) : showTotal ? (
-          <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(data.total)}</span>
-        ) : null}
+        <div className="flex items-center gap-1.5">
+          {/* The controls live where the grand-total figure would be; a chart with no controls keeps
+              the figure there instead. */}
+          {controlNodes.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-end gap-1.5">{controlNodes}</div>
+          ) : showTotal ? (
+            <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(data.total)}</span>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setExplore(true)}
+            title="Explore"
+            aria-label="Explore"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Maximize2 size={13} />
+          </button>
+        </div>
       </CardHeader>
       <CardContent className="p-4 pt-2">
         {(config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0) ? (
@@ -316,12 +317,39 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         ) : (
           <ResponsiveContainer width="100%" height={round && !config.combo ? 230 : 210}>
             {config.combo && comboData
-              ? renderCombo(comboData, config, fmt, fmtAxis, fmtSecondary, fmtSecondaryAxis, comboColors, gradientPrefix)
+              ? renderCombo(comboData, config, fmt, fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix)
               : renderChart(effKind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix, hidden, toggleSeries)}
           </ResponsiveContainer>
         )}
       </CardContent>
+      {explore && <ExploreModal widget={widget} config={config} controls={controls} items={items} onClose={() => setExplore(false)} />}
     </Card>
+  );
+}
+
+interface ChartFormatters {
+  fmt: (n: number) => string;
+  fmtAxis: (n: number) => string;
+  fmtSecondary: (n: number) => string;
+  fmtSecondaryAxis: (n: number) => string;
+}
+
+/** Primary (full + compact) and secondary (integer) number formatters for a chart's config. */
+function useChartFormatters(config: ChartConfig): ChartFormatters {
+  const numberOpts = useMemo(
+    () => ({ currency: config.currency, unit: config.unit, unitPosition: config.unitPosition, format: config.format, locale: config.locale }),
+    [config]
+  );
+  const secondaryOpts = useMemo(() => ({ format: "integer" }), []);
+  return useMemo(
+    () => ({
+      // Full figures in the tooltip/header; compact on the axis, where a full currency value clips.
+      fmt: (n: number) => formatNumber(n, numberOpts),
+      fmtAxis: (n: number) => formatCompact(n, numberOpts),
+      fmtSecondary: (n: number) => formatNumber(n, secondaryOpts),
+      fmtSecondaryAxis: (n: number) => formatCompact(n, secondaryOpts),
+    }),
+    [numberOpts, secondaryOpts]
   );
 }
 
@@ -558,5 +586,222 @@ function renderCombo(
       <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
       {ordered.map(renderMeasure)}
     </ComposedChart>
+  );
+}
+
+// ----- shared time range + explore view -------------------------------------------------------
+
+const PRESETS: RangeKey[] = ["7d", "30d", "90d", "12m", "all"];
+
+/** Preset buttons + absolute From/To, bound to the shared dashboard time range. */
+function TimeRangeControls() {
+  const { range, setPreset, setAbsolute } = useTimeRange();
+  const absolute = !!(range.from || range.to);
+  const options = [
+    ...PRESETS.map((r) => ({ value: r as string, label: RANGE_LABELS[r] })),
+    ...(absolute ? [{ value: "custom", label: "Custom" }] : []),
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Segmented
+        value={absolute ? "custom" : range.preset}
+        onChange={(v) => {
+          if (v !== "custom") setPreset(v as RangeKey);
+        }}
+        options={options}
+      />
+      <input
+        type="date"
+        value={range.from ?? ""}
+        max={range.to || undefined}
+        onChange={(e) => setAbsolute(e.target.value || undefined, range.to)}
+        className="h-6 rounded-md border border-border bg-background px-2 text-[11px]"
+        aria-label="From"
+      />
+      <span className="text-[11px] text-muted-foreground">→</span>
+      <input
+        type="date"
+        value={range.to ?? ""}
+        min={range.from || undefined}
+        onChange={(e) => setAbsolute(range.from, e.target.value || undefined)}
+        className="h-6 rounded-md border border-border bg-background px-2 text-[11px]"
+        aria-label="To"
+      />
+    </div>
+  );
+}
+
+/** The shared dashboard time picker, placed once at the top of a dashboard (widget type "timeRange"). */
+export function TimeRangeWidget({ widget }: ChartWidgetProps) {
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
+        <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+          <CalendarRange size={14} />
+          {widget.title || "Time range"}
+        </div>
+        <TimeRangeControls />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** A lightweight modal (no dialog primitive in the kit); closes on backdrop click or Escape. */
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/** The explore view: a bigger chart with every control (incl. the shared range) + the data table. */
+function ExploreModal({
+  widget,
+  config,
+  controls,
+  items,
+  onClose,
+}: {
+  widget: DashboardWidgetMeta;
+  config: ChartConfig;
+  controls: ControlsSpec;
+  items: EntityRecord[];
+  onClose: () => void;
+}) {
+  const { range } = useTimeRange();
+  const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
+  const [kind, setKind] = useState<ChartKind>(config.kind);
+  const [scale, setScale] = useState<ScaleMode>("absolute");
+  const [seriesBy, setSeriesBy] = useState<string>(controls.defaultSeries);
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const toggle = (k: string) =>
+    setHidden((p) => {
+      const n = new Set(p);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+
+  const fmts = useChartFormatters(config);
+  const ranged = useMemo(() => filterWindow(items, config.groupBy, range), [items, config.groupBy, range]);
+  const { data, comboData, round } = useMemo(
+    () => buildChartData(config, ranged, { granularity, kind, seriesBy: seriesBy || undefined, scale }),
+    [config, ranged, granularity, kind, seriesBy, scale]
+  );
+  const colors = useMemo(
+    () => resolveColors(round ? data.rows.length : data.seriesKeys.length, config.colors),
+    [round, data, config.colors]
+  );
+  const comboColors = useMemo(() => resolveColors(2, config.colors), [config.colors]);
+  const gradientPrefix = `explore-${useId().replace(/:/g, "")}`;
+  const empty = config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0;
+
+  return (
+    <Modal title={widget.title} onClose={onClose}>
+      {/* The shared range + every per-chart control, regardless of what the card exposes. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
+        <TimeRangeControls />
+        {!round && (
+          <Segmented value={granularity} onChange={setGranularity} options={GRANULARITY_OPTIONS.map((g) => ({ value: g, label: GRANULARITY_LABELS[g] }))} />
+        )}
+        {!config.combo && controls.series.length > 0 && (
+          <Segmented value={seriesBy} onChange={setSeriesBy} options={controls.series} />
+        )}
+        {!config.combo && (
+          <Segmented value={kind} onChange={setKind} options={TYPE_OPTIONS.map((k) => ({ value: k, label: TYPE_LABELS[k] }))} />
+        )}
+        {!config.combo && !round && (
+          <Segmented value={scale} onChange={setScale} options={SCALE_OPTIONS.map((s) => ({ value: s, label: SCALE_LABELS[s] }))} />
+        )}
+      </div>
+      <div className="px-4 pt-4">
+        {empty ? (
+          <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">No data in range</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            {config.combo && comboData
+              ? renderCombo(comboData, config, fmts.fmt, fmts.fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix)
+              : renderChart(kind, data, colors, fmts.fmt, fmts.fmtAxis, config.stacked, gradientPrefix, hidden, toggle)}
+          </ResponsiveContainer>
+        )}
+      </div>
+      {!empty && <DataTable config={config} data={data} comboData={comboData} fmt={fmts.fmt} fmtSecondary={fmts.fmtSecondary} />}
+    </Modal>
+  );
+}
+
+/** The numbers behind the chart — one row per x bucket, one column per series/measure. */
+function DataTable({
+  config,
+  data,
+  comboData,
+  fmt,
+  fmtSecondary,
+}: {
+  config: ChartConfig;
+  data: SeriesData;
+  comboData: ComboData | null;
+  fmt: (n: number) => string;
+  fmtSecondary: (n: number) => string;
+}) {
+  const combo = config.combo && comboData != null;
+  const rows = combo ? comboData!.rows : data.rows;
+  const keys = combo ? ["primary", "secondary"] : data.seriesKeys;
+  const headers = combo
+    ? [config.primaryLabel, config.secondaryLabel]
+    : data.seriesKeys.map((k) => (k === SINGLE_SERIES ? config.primaryLabel || "Value" : k));
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Data</div>
+      <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-muted/60 backdrop-blur">
+            <tr>
+              <th className="px-3 py-1.5 text-left font-medium">Period</th>
+              {headers.map((h, i) => (
+                <th key={i} className="px-3 py-1.5 text-right font-medium">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className="border-t border-border">
+                <td className="px-3 py-1.5 text-left text-muted-foreground">{String(row.label)}</td>
+                {keys.map((k, ci) => (
+                  <td key={ci} className="px-3 py-1.5 text-right tabular-nums">
+                    {combo && k === "secondary" ? fmtSecondary(Number(row[k]) || 0) : fmt(Number(row[k]) || 0)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

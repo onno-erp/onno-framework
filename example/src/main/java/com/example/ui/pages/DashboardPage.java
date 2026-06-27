@@ -35,6 +35,10 @@ public class DashboardPage implements Page {
         b.title("Dashboard");
         b.subtitle("Onno Books — orders and stock at a glance");
 
+        // Shared time picker — one range every chart on the board reads from (preset or absolute
+        // From/To). A "timeRange" widget needs no entity; it just drives the dashboard window.
+        b.widget("Time range").type("timeRange").width("full").order(-10);
+
         // ---- KPI row ----------------------------------------------------------------------------
         b.widget("Open orders").type("count").width("1/3").order(0).document(Order.class)
                 .config("metric", "count")
@@ -57,15 +61,14 @@ public class DashboardPage implements Page {
                 .config("metric", "count")
                 .hint("Where orders sit in the lifecycle.");
 
-        // Posted-order revenue over time, with a time-range selector and a Day/Week/Month granularity
-        // toggle (config("controls", …)).
+        // Posted-order revenue over time, with a Day/Week/Month granularity toggle. The date window
+        // comes from the shared time picker above; the maximize icon opens the explore view.
         b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
                 .config("groupBy", "_date").config("groupByDate", "day")
                 .config("metric", "sum").config("metricField", "total")
                 .config("filter", "_posted = true")
-                .config("controls", "range,granularity")
-                .config("defaultRange", "90d")
+                .config("controls", "granularity")
                 .hint("Posted-order revenue over time.");
 
         // Dual-axis: revenue (area, left axis, $) and order count (bars, right axis) on one chart —
@@ -77,8 +80,7 @@ public class DashboardPage implements Page {
                 .config("metric", "sum").config("metricField", "total")
                 .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
                 .config("filter", "_posted = true")
-                .config("controls", "range,granularity")
-                .config("defaultRange", "90d")
+                .config("controls", "granularity")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------
