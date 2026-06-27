@@ -179,9 +179,11 @@ public class ResolvedMetadataService {
             Map<String, Object> tsMap = new LinkedHashMap<>();
             tsMap.put("name", ts.name());
             tsMap.put("tableName", ts.tableName());
-            // Tabular section field hints are not yet configurable via the layout
-            // DSL; they continue to come from @UiHint on the row class for now.
-            tsMap.put("attributes", describeAttributes(ts.attributes(), Map.of()));
+            // Tabular-section column hints are addressed with a section-scoped key on the document's
+            // own EntityView — e.g. f.field("items.unitPrice").format("currency:USD"). The prefix is
+            // the section name; it keeps a line-field hint from colliding with a same-named top-level
+            // field, and a document with no such keys behaves exactly as before (empty hint map).
+            tsMap.put("attributes", describeAttributes(ts.attributes(), sectionHints(ts.name(), hints)));
             return tsMap;
         }).toList());
         // Documents surface related-list panels too (1C parity): a booking can show its guests —
@@ -245,6 +247,24 @@ public class ResolvedMetadataService {
         // Display format (e.g. a date pattern on the _date column): list + detail rendering.
         map.put("format", hint == null ? "" : pick(hint.format(), ""));
         return map;
+    }
+
+    /**
+     * The subset of a document's field hints that target a tabular section, re-keyed to the bare row
+     * field name. A hint authored as {@code field("items.unitPrice")} on the document's view is keyed
+     * {@code "items.unitPrice"}; for section {@code "items"} this returns it under {@code "unitPrice"}
+     * so {@link #describeAttributes} matches it to the row attribute. Returns an empty map when no
+     * hint targets the section, preserving the prior (hint-less) behaviour.
+     */
+    private static Map<String, FieldHint> sectionHints(String sectionName, Map<String, FieldHint> hints) {
+        String prefix = sectionName + ".";
+        Map<String, FieldHint> scoped = new LinkedHashMap<>();
+        for (Map.Entry<String, FieldHint> e : hints.entrySet()) {
+            if (e.getKey().startsWith(prefix)) {
+                scoped.put(e.getKey().substring(prefix.length()), e.getValue());
+            }
+        }
+        return scoped;
     }
 
     public List<Map<String, Object>> describeAttributes(List<AttributeDescriptor> attrs,
