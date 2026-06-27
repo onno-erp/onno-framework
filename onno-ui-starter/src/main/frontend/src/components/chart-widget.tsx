@@ -28,6 +28,7 @@ import {
   buildSeries,
   filterWindow,
   ISO_KEY,
+  RANGE_DAYS,
   RANGE_LABELS,
   SCALE_LABELS,
   SINGLE_SERIES,
@@ -40,10 +41,11 @@ import {
   type SeriesData,
 } from "@/lib/widget-data";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
-import { useTimeRange } from "@/providers/time-range-provider";
+import { useTimeRange, type TimeRange } from "@/providers/time-range-provider";
+import { parseDate } from "@internationalized/date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
-import { DatePicker } from "@/components/date-picker";
+import { DateRangeInput } from "@/components/ui/date-input";
 import { cn } from "@/lib/utils";
 
 interface ChartWidgetProps {
@@ -238,6 +240,20 @@ function useDragZoom(
   return { dragProps, refArea };
 }
 
+/** Pick a sensible bucket size for a time window: days for ≤1 month, weeks for ≤6 months, else months. */
+function autoGranularity(range: TimeRange): GroupByDate {
+  let days: number;
+  if (range.from && range.to) {
+    days = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
+  } else {
+    const d = RANGE_DAYS[range.preset];
+    days = d == null ? Infinity : d;
+  }
+  if (days <= 31) return "day";
+  if (days <= 182) return "week";
+  return "month";
+}
+
 /** A compact segmented toggle for the chart control row. */
 function Segmented<T extends string>({
   value,
@@ -274,8 +290,13 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
   const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
 
+  // Granularity auto-follows the shared range (day → week → month); a range change re-applies it,
+  // and the user can still override until the next change.
+  const autoGran = useMemo(() => autoGranularity(range), [range]);
+  const [granularity, setGranularity] = useState<GroupByDate>(autoGran);
+  useEffect(() => setGranularity(autoGran), [autoGran]);
+
   // Local control state, seeded from the authored config; applied only when its control is enabled.
-  const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
   const [kind, setKind] = useState<ChartKind>(config.kind);
   const [scale, setScale] = useState<ScaleMode>("absolute");
   const [seriesBy, setSeriesBy] = useState<string>(controls.defaultSeries);
@@ -292,17 +313,20 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
 
   const items = useWidgetRows(widget);
 
-  // Effective settings: control state when that control is on, else the authored config.
+  // Effective settings: control state when that control is on, else the authored config. A time
+  // chart (groupByDate set) always uses the auto/overridden granularity.
   const effKind = controls.enabled.has("type") ? kind : config.kind;
-  const effGranularity = controls.enabled.has("granularity") ? granularity : config.groupByDate;
+  const effGranularity = config.groupByDate != null ? granularity : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
 
   const fmts = useChartFormatters(config);
   const { fmt, fmtAxis } = fmts;
 
-  // The shared dashboard time range windows the rows before bucketing.
-  const ranged = useMemo(() => filterWindow(items, config.groupBy, range), [items, config.groupBy, range]);
+  // The shared dashboard time range windows the rows by the document's date BEFORE bucketing — so it
+  // applies to every chart (a status pie filters to in-range orders too), not just time series.
+  const windowField = widget.dateField || "_date";
+  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
   const { data, comboData, round } = useMemo(
     () => buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
     [config, ranged, effGranularity, effKind, effSeriesBy, effScale]
@@ -675,12 +699,16 @@ function TimeRangeControls() {
         }}
         options={options}
       />
-      <div className="w-[140px]">
-        <DatePicker value={range.from} onChange={(v) => setAbsolute(v || undefined, range.to)} />
-      </div>
-      <span className="text-[11px] text-muted-foreground">→</span>
-      <div className="w-[140px]">
-        <DatePicker value={range.to} onChange={(v) => setAbsolute(range.from, v || undefined)} />
+      <div className="w-[260px]">
+        <DateRangeInput
+          aria-label="Date range"
+          value={
+            range.from && range.to
+              ? { start: parseDate(range.from), end: parseDate(range.to) }
+              : null
+          }
+          onChange={(v) => setAbsolute(v?.start?.toString(), v?.end?.toString())}
+        />
       </div>
     </div>
   );
@@ -749,7 +777,9 @@ function ExploreModal({
   onClose: () => void;
 }) {
   const { range, setAbsolute } = useTimeRange();
-  const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
+  const autoGran = useMemo(() => autoGranularity(range), [range]);
+  const [granularity, setGranularity] = useState<GroupByDate>(autoGran);
+  useEffect(() => setGranularity(autoGran), [autoGran]);
   const [kind, setKind] = useState<ChartKind>(config.kind);
   const [scale, setScale] = useState<ScaleMode>("absolute");
   const [seriesBy, setSeriesBy] = useState<string>(controls.defaultSeries);
@@ -763,7 +793,8 @@ function ExploreModal({
     });
 
   const fmts = useChartFormatters(config);
-  const ranged = useMemo(() => filterWindow(items, config.groupBy, range), [items, config.groupBy, range]);
+  const windowField = widget.dateField || "_date";
+  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
   const { data, comboData, round } = useMemo(
     () => buildChartData(config, ranged, { granularity, kind, seriesBy: seriesBy || undefined, scale }),
     [config, ranged, granularity, kind, seriesBy, scale]
