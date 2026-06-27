@@ -114,6 +114,140 @@ export interface SeriesData {
   total: number;
 }
 
+// ----- dual-axis (combo) charts -----------------------------------------------------------------
+
+export interface ComboMeasure {
+  metric: Metric;
+  metricField?: string;
+}
+
+export interface ComboData {
+  /** Wide rows for recharts: `{ label, primary, secondary }`, one per x bucket, x-ordered. */
+  rows: Array<Record<string, number | string>>;
+  totals: { primary: number; secondary: number };
+}
+
+/**
+ * Bucket rows once and compute TWO measures per bucket — a primary and a secondary — for a dual-axis
+ * (combo) chart. The two measures keep their own magnitudes (e.g. revenue vs order count) and the
+ * chart binds each to its own Y axis, so very different scales read cleanly side by side.
+ */
+export function buildCombo(
+  rows: EntityRecord[],
+  spec: { groupBy: string; groupByDate?: GroupByDate; primary: ComboMeasure; secondary: ComboMeasure }
+): ComboData {
+  const measure = (row: EntityRecord, m: ComboMeasure) =>
+    m.metric === "count" ? 1 : m.metricField ? toNumber(row[m.metricField]) ?? 0 : 0;
+
+  const buckets = new Map<string, { sortKey: string; label: string; primary: number; secondary: number }>();
+  let primaryTotal = 0;
+  let secondaryTotal = 0;
+  for (const row of rows) {
+    const { key, label } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { sortKey: key, label, primary: 0, secondary: 0 };
+      buckets.set(key, bucket);
+    }
+    const p = measure(row, spec.primary);
+    const s = measure(row, spec.secondary);
+    bucket.primary += p;
+    bucket.secondary += s;
+    primaryTotal += p;
+    secondaryTotal += s;
+  }
+
+  const ordered = [...buckets.values()];
+  if (spec.groupByDate) {
+    ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+  }
+  return {
+    rows: ordered.map((b) => ({ label: b.label, primary: b.primary, secondary: b.secondary })),
+    totals: { primary: primaryTotal, secondary: secondaryTotal },
+  };
+}
+
+// ----- interactive control transforms (range window, value rescaling) ---------------------------
+
+export type RangeKey = "7d" | "30d" | "90d" | "12m" | "all";
+
+/** Days back for each range preset; `null` means "all time" (no windowing). */
+export const RANGE_DAYS: Record<RangeKey, number | null> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  "12m": 365,
+  all: null,
+};
+
+export const RANGE_LABELS: Record<RangeKey, string> = {
+  "7d": "7D",
+  "30d": "30D",
+  "90d": "90D",
+  "12m": "12M",
+  all: "All",
+};
+
+/**
+ * Keep rows whose `dateField` falls within the last N days (range window). A no-op for the "all"
+ * preset, for a non-date field, or for rows whose value isn't a parseable timestamp (kept, so a
+ * malformed date never silently drops a row). Uses the client clock — fine for a relative window.
+ */
+export function filterRange(rows: EntityRecord[], dateField: string, range: RangeKey): EntityRecord[] {
+  const days = RANGE_DAYS[range];
+  if (days == null) return rows;
+  const cutoff = Date.now() - days * 86_400_000;
+  return rows.filter((r) => {
+    const v = r[dateField];
+    if (typeof v !== "string") return true;
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? true : t >= cutoff;
+  });
+}
+
+export type ScaleMode = "absolute" | "indexed" | "normalized";
+
+export const SCALE_LABELS: Record<ScaleMode, string> = {
+  absolute: "Absolute",
+  indexed: "Indexed",
+  normalized: "Normalized",
+};
+
+/**
+ * Rescale each series independently so series of very different magnitudes (e.g. revenue in RUB vs
+ * EUR) become comparable on one axis:
+ * - "indexed": each series rebased to 100 at its first non-zero bucket — relative movement over time.
+ * - "normalized": each series scaled so its own max = 100 — share of its own peak.
+ *
+ * "absolute" returns the data unchanged. A series that is entirely zero is left as-is. The grand
+ * total is meaningless once rescaled, so callers hide the header figure in those modes.
+ */
+export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
+  if (mode === "absolute" || data.rows.length === 0) return data;
+  const factor = new Map<string, number>();
+  for (const key of data.seriesKeys) {
+    let base = 0;
+    if (mode === "normalized") {
+      for (const row of data.rows) base = Math.max(base, Number(row[key]) || 0);
+    } else {
+      for (const row of data.rows) {
+        const v = Number(row[key]) || 0;
+        if (v !== 0) {
+          base = v;
+          break;
+        }
+      }
+    }
+    factor.set(key, base > 0 ? 100 / base : 1);
+  }
+  const rows = data.rows.map((row) => {
+    const out: Record<string, number | string> = { label: row.label };
+    for (const key of data.seriesKeys) out[key] = (Number(row[key]) || 0) * (factor.get(key) ?? 1);
+    return out;
+  });
+  return { rows, seriesKeys: data.seriesKeys, total: data.total };
+}
+
 /** The single-series sentinel key used when `seriesBy` is unset. */
 export const SINGLE_SERIES = "value";
 

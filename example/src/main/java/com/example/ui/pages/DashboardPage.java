@@ -57,12 +57,29 @@ public class DashboardPage implements Page {
                 .config("metric", "count")
                 .hint("Where orders sit in the lifecycle.");
 
+        // Posted-order revenue over time, with a time-range selector and a Day/Week/Month granularity
+        // toggle (config("controls", …)).
         b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
                 .config("groupBy", "_date").config("groupByDate", "day")
                 .config("metric", "sum").config("metricField", "total")
                 .config("filter", "_posted = true")
+                .config("controls", "range,granularity")
+                .config("defaultRange", "90d")
                 .hint("Posted-order revenue over time.");
+
+        // Dual-axis: revenue (area, left axis, $) and order count (bars, right axis) on one chart —
+        // two very different magnitudes read cleanly because each measure has its own Y axis.
+        // config("measure2", …) adds the secondary measure.
+        b.widget("Orders & revenue").type("chart").width("full").order(12).document(Order.class)
+                .config("kind", "area").config("label", "Revenue")
+                .config("groupBy", "_date").config("groupByDate", "week")
+                .config("metric", "sum").config("metricField", "total")
+                .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
+                .config("filter", "_posted = true")
+                .config("controls", "range,granularity")
+                .config("defaultRange", "90d")
+                .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------
         b.widget("Recent orders").type("list").width("full").order(20).document(Order.class).maxItems(10)
