@@ -61,14 +61,13 @@ public class DashboardPage implements Page {
                 .config("metric", "count")
                 .hint("Where orders sit in the lifecycle.");
 
-        // Posted-order revenue over time, with a Day/Week/Month granularity toggle. The date window
-        // comes from the shared time picker above; the maximize icon opens the explore view.
+        // Posted-order revenue over time. The window comes from the shared time picker above, and the
+        // bucket size (day/week/month) auto-follows it; the maximize icon opens the explore view.
         b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
                 .config("groupBy", "_date").config("groupByDate", "day")
                 .config("metric", "sum").config("metricField", "total")
                 .config("filter", "_posted = true")
-                .config("controls", "granularity")
                 .hint("Posted-order revenue over time.");
 
         // Dual-axis: revenue (area, left axis, $) and order count (bars, right axis) on one chart —
@@ -80,7 +79,6 @@ public class DashboardPage implements Page {
                 .config("metric", "sum").config("metricField", "total")
                 .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
                 .config("filter", "_posted = true")
-                .config("controls", "granularity")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------

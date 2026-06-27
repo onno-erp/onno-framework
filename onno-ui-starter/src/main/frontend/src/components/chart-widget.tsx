@@ -350,12 +350,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const zoomRows = config.combo ? comboData?.rows ?? [] : data.rows;
   const { dragProps, refArea } = useDragZoom(zoomRows, setAbsolute);
 
+  // Granularity is automatic on the card (it follows the shared range) — no button. A manual
+  // override lives in the explore view. Series / type / scale don't apply to a dual-axis combo.
   const controlNodes: React.ReactNode[] = [];
-  if (controls.enabled.has("granularity") && !round)
-    controlNodes.push(
-      <Segmented key="gran" value={granularity} onChange={setGranularity} options={GRANULARITY_OPTIONS.map((g) => ({ value: g, label: GRANULARITY_LABELS[g] }))} />
-    );
-  // Series / type / scale don't apply to a dual-axis combo (two fixed measures, two axes).
   if (controls.enabled.has("series") && controls.series.length > 0 && !config.combo)
     controlNodes.push(<Segmented key="series" value={seriesBy} onChange={setSeriesBy} options={controls.series} />);
   if (controls.enabled.has("type") && !config.combo)
