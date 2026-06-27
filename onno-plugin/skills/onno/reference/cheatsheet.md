@@ -97,7 +97,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | --- | --- | --- |
 | `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
 | `AfterWriteHandler` | `afterWrite()` | After save. |
-| `OnFillingHandler` | `onFilling()` | When a new instance is filled (generic create path) — **seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). |
+| `OnFillingHandler` | `onFilling()` | **Seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). ⚠️ Runs on **every save of a new entity** (`isNew==true`), not just the blank-form pre-fill — the repository persist path calls it too (`OnnoBeforeConvertCallback`). So make it **idempotent / guard on null** (`if (getDate()==null) setDate(now)`); an unconditional `status = NEW` clobbers a status set by a seeder/import or chosen on the form. For a fixed default that should never be overwritten, prefer a Java field initializer over `onFilling`. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
