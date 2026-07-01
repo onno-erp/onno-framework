@@ -12,6 +12,8 @@ import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.types.Ref;
 
 import org.jdbi.v3.core.Jdbi;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -32,6 +34,8 @@ import java.util.UUID;
  * gating) use {@link SchemaUpgrader}.
  */
 public class SchemaGenerator {
+
+    private static final Logger log = LoggerFactory.getLogger(SchemaGenerator.class);
 
     private final MetadataRegistry registry;
 
@@ -84,6 +88,7 @@ public class SchemaGenerator {
                 handle.execute(statement);
             }
         });
+        applySearchIndexes(jdbi, dialect);
     }
 
     /**
@@ -97,6 +102,11 @@ public class SchemaGenerator {
         List<String> statements = new ArrayList<>();
         statements.add(index("onno_outbox", "_status"));
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
+            // Keyset pagination seeks by (sortKey, _id); the composite lets the database satisfy both
+            // the default list order (_code) and the ref-picker order (_description) — plus their seek
+            // comparison — as an index-only range scan in either direction.
+            statements.add(index(catalog.tableName(), "_code", "_id"));
+            statements.add(index(catalog.tableName(), "_description", "_id"));
             if (catalog.hierarchical()) {
                 statements.add(index(catalog.tableName(), "_parent"));
             }
@@ -107,7 +117,9 @@ public class SchemaGenerator {
             }
         }
         for (DocumentDescriptor document : registry.allDocuments()) {
-            statements.add(index(document.tableName(), "_date"));
+            // (_date, _id) covers both plain date filtering (the _date prefix) and the newest-first
+            // keyset seek used by the default document list order.
+            statements.add(index(document.tableName(), "_date", "_id"));
             for (AttributeDescriptor attr : document.attributes()) {
                 if (attr.isRef()) {
                     statements.add(index(document.tableName(), attr.columnName()));
@@ -137,9 +149,74 @@ public class SchemaGenerator {
         return statements;
     }
 
-    private static String index(String table, String column) {
-        return "CREATE INDEX IF NOT EXISTS " + indexName(table, column)
-                + " ON " + table + " (" + column + ")";
+    private static String index(String table, String... columns) {
+        String cols = String.join(", ", columns);
+        return "CREATE INDEX IF NOT EXISTS " + indexName(table, String.join("_", columns))
+                + " ON " + table + " (" + cols + ")";
+    }
+
+    /**
+     * PostgreSQL trigram (GIN) indexes that turn the list/search {@code LOWER(CAST(col AS VARCHAR))
+     * LIKE '%term%'} scan into an index lookup — the single biggest win for substring search on a
+     * large table. The indexed expression is byte-for-byte the one the query services emit, so the
+     * planner actually uses it. Empty on any non-PostgreSQL dialect (H2 has no pg_trgm; it falls back
+     * to the LIKE scan), and applied best-effort by {@link #applySearchIndexes} since {@code CREATE
+     * EXTENSION} may require privileges the app role lacks.
+     */
+    public List<String> generateSearchIndexDDL(SqlDialect dialect) {
+        if (dialect != SqlDialect.POSTGRESQL) {
+            return List.of();
+        }
+        List<String> statements = new ArrayList<>();
+        statements.add("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+        for (CatalogDescriptor catalog : registry.allCatalogs()) {
+            for (String column : textSearchColumns(catalog.attributes(), "_code", "_description")) {
+                statements.add(trigramIndex(catalog.tableName(), column));
+            }
+        }
+        for (DocumentDescriptor document : registry.allDocuments()) {
+            for (String column : textSearchColumns(document.attributes(), "_number")) {
+                statements.add(trigramIndex(document.tableName(), column));
+            }
+        }
+        return statements;
+    }
+
+    /**
+     * Apply the trigram search indexes best-effort: a missing {@code pg_trgm} extension (or a role
+     * without rights to create it) logs a warning and the app keeps running on LIKE scans rather than
+     * failing to boot. A no-op on non-PostgreSQL dialects.
+     */
+    public void applySearchIndexes(Jdbi jdbi, SqlDialect dialect) {
+        List<String> statements = generateSearchIndexDDL(dialect);
+        if (statements.isEmpty()) {
+            return;
+        }
+        try {
+            jdbi.useHandle(handle -> {
+                for (String statement : statements) {
+                    handle.execute(statement);
+                }
+            });
+        } catch (RuntimeException e) {
+            log.warn("Trigram search indexes unavailable — continuing with LIKE scans. Install the "
+                    + "pg_trgm extension (or grant the app role rights to) for indexed substring "
+                    + "search. Cause: {}", e.getMessage());
+        }
+    }
+
+    /** The system text columns plus every non-secret String attribute — what list/ref search covers. */
+    private static List<String> textSearchColumns(List<AttributeDescriptor> attributes, String... systemColumns) {
+        List<String> columns = new ArrayList<>(List.of(systemColumns));
+        attributes.stream()
+                .filter(a -> a.javaType() == String.class && !a.secret())
+                .forEach(a -> columns.add(a.columnName()));
+        return columns;
+    }
+
+    private static String trigramIndex(String table, String column) {
+        return "CREATE INDEX IF NOT EXISTS " + indexName("trgm_" + table, column)
+                + " ON " + table + " USING gin (LOWER(CAST(" + column + " AS VARCHAR)) gin_trgm_ops)";
     }
 
     // PostgreSQL truncates identifiers beyond 63 characters, which would make two long

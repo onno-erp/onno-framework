@@ -3,6 +3,8 @@ package su.onno.ui;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
+import su.onno.query.Cursor;
+import su.onno.query.Keyset;
 import su.onno.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
@@ -176,6 +178,100 @@ public class DocumentQueryService {
         refResolver.resolveAttributes(rows, desc.attributes());
         SecretRedactor.redact(rows, desc.attributes());
         return rows;
+    }
+
+    /**
+     * One keyset-paginated window of a document list — the constant-time default for the list grid.
+     * Seeks past {@code cursorToken} (null/blank for the first window) instead of counting past an
+     * offset, so deep paging stays O(window). Honors the same sort/search/date-range/filters as
+     * {@link #page}; fetches one extra row for {@code hasMore} (no COUNT) and mints the next cursor
+     * from the last row. The default newest-first order seeks on {@code (_date, _id)}.
+     */
+    public KeysetPage keysetPage(DocumentDescriptor desc, String cursorToken, int limit,
+                                 String sortColumn, boolean descending, String search,
+                                 String from, String to,
+                                 List<String> eq, List<String> in, List<String> like,
+                                 List<String> prefix, List<String> ge, List<String> le,
+                                 String widgetFilter) {
+        boolean defaultSort = sortColumn == null || !sortableColumns(desc).contains(sortColumn);
+        String col = defaultSort ? "_date" : sortColumn;
+        boolean dirDesc = defaultSort || descending; // newest-first by default
+        Cursor cursor = Cursor.decodeFor(cursorToken, col, dirDesc);
+        Keyset.Plan plan = Keyset.plan(col, dirDesc, !isNonNullableSort(desc, col), cursor);
+
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
+        if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
+        if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
+        if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
+        if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
+        where.append(plan.predicate());
+        int lim = Keyset.clampLimit(limit);
+
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                            " WHERE " + where +
+                            " ORDER BY " + plan.orderBy() +
+                            " LIMIT :limit")
+                    .bind("limit", lim + 1); // one extra row tells us whether another window exists
+            bindSearch(q, search);
+            if (from != null) q.bind("from", from);
+            if (to != null) q.bind("to", to);
+            filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
+            if (plan.hasCursor()) {
+                q.bind(Keyset.ID_BIND, cursor.id());
+                if (plan.bindsValue()) q.bind(Keyset.VALUE_BIND, cursor.value());
+            }
+            return q.mapToMap().list();
+        });
+
+        boolean hasMore = rows.size() > lim;
+        if (hasMore) {
+            rows = rows.subList(0, lim);
+        }
+        String nextCursor = (hasMore && !rows.isEmpty())
+                ? Cursor.from(col, dirDesc, rows.get(rows.size() - 1)).encode()
+                : null;
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return new KeysetPage(rows, nextCursor, hasMore);
+    }
+
+    /**
+     * Whether {@code column} is safe for the fast (index-only) keyset seek — the framework keeps it
+     * populated, so the seek never has to reason about NULLs. True for {@code _date}, {@code _number}
+     * and {@code _posted} (all framework-set) and any {@code required} attribute; optional attributes
+     * use the NULL-safe seek instead.
+     */
+    private boolean isNonNullableSort(DocumentDescriptor desc, String column) {
+        if (column.equals("_date") || column.equals("_number") || column.equals("_posted")) {
+            return true;
+        }
+        return desc.attributes().stream()
+                .anyMatch(a -> a.columnName().equals(column) && a.required());
+    }
+
+    /**
+     * A cheap live-row estimate for the scroll-height hint, or {@code null} when none is available
+     * (H2, or any active search/date-range/filter). Uses PostgreSQL planner statistics
+     * ({@code pg_class.reltuples}) so it never scans the table; callers wanting an exact figure use
+     * {@link #count} instead.
+     */
+    public Long estimateCount(DocumentDescriptor desc, boolean filtered) {
+        if (filtered) {
+            return null;
+        }
+        return jdbi.withHandle(h -> {
+            try {
+                return h.createQuery("SELECT reltuples::bigint FROM pg_class WHERE relname = :t")
+                        .bind("t", desc.tableName())
+                        .mapTo(Long.class).findOne().filter(n -> n >= 0).orElse(null);
+            } catch (RuntimeException e) {
+                return null; // not PostgreSQL (no pg_class) → no estimate
+            }
+        });
     }
 
     /**

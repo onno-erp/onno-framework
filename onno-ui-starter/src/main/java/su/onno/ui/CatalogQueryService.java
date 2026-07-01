@@ -2,6 +2,8 @@ package su.onno.ui;
 
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.query.Cursor;
+import su.onno.query.Keyset;
 import su.onno.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
@@ -205,6 +207,93 @@ public class CatalogQueryService {
         refResolver.resolveAttributes(rows, desc.attributes());
         SecretRedactor.redact(rows, desc.attributes());
         return rows;
+    }
+
+    /**
+     * One keyset-paginated window — the constant-time default for the list grid. Seeks past
+     * {@code cursorToken} (null/blank for the first window) instead of counting past an offset, so
+     * page 1 and page 10 000 cost the same. Same server-side sort/search/filters as {@link #page};
+     * fetches one extra row to report {@code hasMore} without a COUNT, and mints the next cursor from
+     * the last row. A cursor minted for a different sort is ignored (paging restarts), and a sort by
+     * a column the framework doesn't keep populated uses the NULL-safe seek shape.
+     */
+    public KeysetPage keysetPage(CatalogDescriptor desc, String cursorToken, int limit,
+                                 String sortColumn, boolean descending, String search,
+                                 List<String> eq, List<String> in, List<String> like,
+                                 List<String> prefix, List<String> ge, List<String> le,
+                                 String widgetFilter) {
+        String col = safeSort(desc, sortColumn, "_code");
+        Cursor cursor = Cursor.decodeFor(cursorToken, col, descending);
+        Keyset.Plan plan = Keyset.plan(col, descending, !isNonNullableSort(desc, col), cursor);
+
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
+        String where = "_deletion_mark = false" + searchClause(desc, search)
+                + filterClause(filter) + filterClause(wf) + plan.predicate();
+        int lim = Keyset.clampLimit(limit);
+
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+                            " WHERE " + where +
+                            " ORDER BY " + plan.orderBy() +
+                            " LIMIT :limit")
+                    .bind("limit", lim + 1); // one extra row tells us whether another window exists
+            bindSearch(q, search);
+            filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
+            if (plan.hasCursor()) {
+                q.bind(Keyset.ID_BIND, cursor.id());
+                if (plan.bindsValue()) q.bind(Keyset.VALUE_BIND, cursor.value());
+            }
+            return q.mapToMap().list();
+        });
+
+        boolean hasMore = rows.size() > lim;
+        if (hasMore) {
+            rows = rows.subList(0, lim);
+        }
+        // Mint the cursor from the raw last row before ref-resolution/redaction reshape the map.
+        String nextCursor = (hasMore && !rows.isEmpty())
+                ? Cursor.from(col, descending, rows.get(rows.size() - 1)).encode()
+                : null;
+        refResolver.resolveAttributes(rows, desc.attributes());
+        SecretRedactor.redact(rows, desc.attributes());
+        return new KeysetPage(rows, nextCursor, hasMore);
+    }
+
+    /**
+     * Whether {@code column} is safe for the fast (index-only) keyset seek — i.e. the framework keeps
+     * it populated, so the seek never has to reason about NULLs. True for {@code _code} (always
+     * generated) and any {@code required} attribute; {@code _description} and optional attributes use
+     * the NULL-safe seek instead.
+     */
+    private boolean isNonNullableSort(CatalogDescriptor desc, String column) {
+        if (column.equals("_code")) {
+            return true;
+        }
+        return desc.attributes().stream()
+                .anyMatch(a -> a.columnName().equals(column) && a.required());
+    }
+
+    /**
+     * A cheap live-row estimate for the scroll-height hint, or {@code null} when none is available.
+     * Uses PostgreSQL planner statistics ({@code pg_class.reltuples}) so it never scans the table;
+     * returns {@code null} on H2 or whenever a search/filter is active (the estimate can't reflect a
+     * predicate). Callers wanting an exact figure use {@link #count} instead.
+     */
+    public Long estimateCount(CatalogDescriptor desc, boolean filtered) {
+        if (filtered) {
+            return null;
+        }
+        return jdbi.withHandle(h -> {
+            try {
+                return h.createQuery("SELECT reltuples::bigint FROM pg_class WHERE relname = :t")
+                        .bind("t", desc.tableName())
+                        .mapTo(Long.class).findOne().filter(n -> n >= 0).orElse(null);
+            } catch (RuntimeException e) {
+                return null; // not PostgreSQL (no pg_class) → no estimate
+            }
+        });
     }
 
     /**

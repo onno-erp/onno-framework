@@ -147,9 +147,31 @@ name returns `404`.
 | GET | `/{name}/balance?{dim}={value}...` | Current balances (query params are dimension filters). |
 | GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover; `from` and `to` are required. |
 
-The register **report surface** doesn't load these whole — it's a virtualized `onno-list` island that
-pages its data (newest-first, server-sorted) from a dedicated feed, so a register packed with movements
-never ships its whole log to the client:
+The catalog/document **list grid** is fed window-by-window from a dedicated feed so a 100k-row entity
+never ships whole to the client. The default is **keyset (seek) pagination**: indexed, constant-time
+at any depth, and immune to the skip/duplicate that offset paging suffers when rows shift mid-scroll.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
+| GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`_date`). |
+
+- **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
+  needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
+  total, or `?count=estimate` for a cheap PostgreSQL planner figure (omitted on H2 or when a
+  search/filter is active).
+- **Cursor is opaque and self-describing.** It encodes the sort column + direction + the last row's
+  `(sortValue, _id)`; a cursor replayed against a different sort is ignored (paging restarts) rather
+  than seeking to a wrong position. It is a position, not a credential — every value is bound, never
+  inlined.
+- **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
+  and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
+  `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
+- **Legacy offset.** Passing `?offset=N` switches to the old `LIMIT/OFFSET` mode with the
+  `{ total, offset, rows }` envelope, kept for back-compat. New clients omit `offset`.
+
+The register **report surface** is likewise fed window-by-window, but still offset-paged (newest-first,
+server-sorted):
 
 | Method | Path | Notes |
 |--------|------|-------|

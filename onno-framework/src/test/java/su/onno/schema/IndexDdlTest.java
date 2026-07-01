@@ -39,9 +39,14 @@ class IndexDdlTest {
                 // ref attribute on a catalog
                 "CREATE INDEX IF NOT EXISTS idx_catalog_test_customers_region"
                         + " ON catalog_test_customers (region)",
-                // document lists order by date
-                "CREATE INDEX IF NOT EXISTS idx_document_test_invoices__date"
-                        + " ON document_test_invoices (_date)",
+                // keyset pagination seeks by (sortKey, _id) on catalogs
+                "CREATE INDEX IF NOT EXISTS idx_catalog_test_customers__code__id"
+                        + " ON catalog_test_customers (_code, _id)",
+                "CREATE INDEX IF NOT EXISTS idx_catalog_test_customers__description__id"
+                        + " ON catalog_test_customers (_description, _id)",
+                // document lists order newest-first; keyset seeks on (_date, _id)
+                "CREATE INDEX IF NOT EXISTS idx_document_test_invoices__date__id"
+                        + " ON document_test_invoices (_date, _id)",
                 // tabular-section rows are loaded by owning document
                 "CREATE INDEX IF NOT EXISTS idx_document_test_invoices_items__parent_id"
                         + " ON document_test_invoices_items (_parent_id)",
@@ -90,5 +95,24 @@ class IndexDdlTest {
         // Distinct long names must not collide after capping.
         String other = SchemaGenerator.indexName("a".repeat(80), "other_ref_column");
         assertThat(name).isNotEqualTo(other);
+    }
+
+    @Test
+    void trigramSearchIndexesAreEmittedOnPostgresOnly() {
+        SchemaGenerator generator = new SchemaGenerator(registry());
+
+        // H2 has no pg_trgm — no statements, so search falls back to LIKE scans.
+        assertThat(generator.generateSearchIndexDDL(SqlDialect.H2)).isEmpty();
+
+        List<String> pg = generator.generateSearchIndexDDL(SqlDialect.POSTGRESQL);
+        assertThat(pg).first().isEqualTo("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+        // The indexed expression must match the query services' search clause byte-for-byte.
+        assertThat(pg).contains(
+                "CREATE INDEX IF NOT EXISTS idx_trgm_catalog_test_customers__description"
+                        + " ON catalog_test_customers USING gin"
+                        + " (LOWER(CAST(_description AS VARCHAR)) gin_trgm_ops)",
+                "CREATE INDEX IF NOT EXISTS idx_trgm_document_test_invoices__number"
+                        + " ON document_test_invoices USING gin"
+                        + " (LOWER(CAST(_number AS VARCHAR)) gin_trgm_ops)");
     }
 }

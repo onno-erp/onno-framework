@@ -27,8 +27,11 @@ GET /api/registers/{name}/turnover?from=&to=
 Both list endpoints also accept `?q=<text>&limit=<n>` to switch to a capped typeahead search (used by
 ref pickers); without either parameter you get the full list, **capped at 1000 rows** as a safety
 limit (catalogs ordered by `_code`, documents newest first). Past the cap the server logs a warning
-and truncates; consumers that need everything should use the paged list endpoints or, for documents,
-narrow the date range.
+and truncates; consumers that need everything should page the **keyset list feed**
+(`GET /api/list/catalogs/{name}?cursor=&limit=` / `/api/list/documents/{name}?cursor=&limit=`,
+returning `{ rows, nextCursor, hasMore }` — loop while `nextCursor` is non-null) or, for documents,
+narrow the date range. See [onno-ui-starter/README](../onno-ui-starter/README.md) for the full
+keyset contract.
 
 ## Response shape
 
