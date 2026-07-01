@@ -3,6 +3,7 @@ import { format, parseISO, startOfISOWeek, startOfMonth } from "date-fns";
 import { api } from "@/lib/api";
 import { toSnakeCase } from "@/lib/utils";
 import { toNumber } from "@/lib/format";
+import { resolveRange, type TimeRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 
 /**
@@ -17,7 +18,7 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 const ALL_TIME_FROM = "1970-01-01T00:00:00";
 const ALL_TIME_TO = "2999-12-31T23:59:59";
 
-export type GroupByDate = "day" | "week" | "month";
+export type GroupByDate = "minute" | "hour" | "day" | "week" | "month";
 export type Metric = "count" | "sum";
 
 /** Fetch the rows backing a widget: a document/catalog list, or a register's server-side turnover. */
@@ -64,8 +65,10 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
+      if (groupByDate === "minute") return format(d, "HH:mm");
+      if (groupByDate === "hour") return format(d, "HH:mm");
       if (groupByDate === "day") return format(d, "MMM d");
-      if (groupByDate === "week") return `Wk ${format(d, "II")}`;
+      if (groupByDate === "week") return format(startOfISOWeek(d), "MMM d");
       if (groupByDate === "month") return format(d, "MMM yyyy");
     } catch {
       // fall through
@@ -85,10 +88,14 @@ function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; la
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
+      if (groupByDate === "minute")
+        return { key: format(d, "yyyy-MM-dd'T'HH:mm"), label: format(d, "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:mm") };
+      if (groupByDate === "hour")
+        return { key: format(d, "yyyy-MM-dd'T'HH"), label: format(d, "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:00") };
       if (groupByDate === "day")
         return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d"), iso: format(d, "yyyy-MM-dd") };
       if (groupByDate === "week")
-        return { key: format(d, "RRRR-'W'II"), label: `Wk ${format(d, "II")}`, iso: format(startOfISOWeek(d), "yyyy-MM-dd") };
+        return { key: format(d, "RRRR-'W'II"), label: format(startOfISOWeek(d), "MMM d"), iso: format(startOfISOWeek(d), "yyyy-MM-dd") };
       if (groupByDate === "month")
         return { key: format(d, "yyyy-MM"), label: format(d, "MMM yyyy"), iso: format(startOfMonth(d), "yyyy-MM-dd") };
     } catch {
@@ -177,62 +184,22 @@ export function buildCombo(
 
 // ----- interactive control transforms (range window, value rescaling) ---------------------------
 
-export type RangeKey = "7d" | "30d" | "90d" | "12m" | "all";
-
-/** Days back for each range preset; `null` means "all time" (no windowing). */
-export const RANGE_DAYS: Record<RangeKey, number | null> = {
-  "7d": 7,
-  "30d": 30,
-  "90d": 90,
-  "12m": 365,
-  all: null,
-};
-
-export const RANGE_LABELS: Record<RangeKey, string> = {
-  "7d": "7D",
-  "30d": "30D",
-  "90d": "90D",
-  "12m": "12M",
-  all: "All",
-};
-
 /**
- * Keep rows whose `dateField` falls within the last N days (range window). A no-op for the "all"
- * preset, for a non-date field, or for rows whose value isn't a parseable timestamp (kept, so a
- * malformed date never silently drops a row). Uses the client clock — fine for a relative window.
+ * Keep only the rows whose `dateField` falls inside the shared time window. The window — a relative
+ * "last N", an absolute from/to, or all-time — is resolved to absolute instants by {@link resolveRange},
+ * so this one filter serves every range shape, and it applies to any widget (a status pie filters to
+ * in-range rows too), not just time series. A row whose value isn't a parseable timestamp is kept, so
+ * a malformed date never silently drops it. Uses the client clock — fine for a relative window.
  */
-export function filterRange(rows: EntityRecord[], dateField: string, range: RangeKey): EntityRecord[] {
-  const days = RANGE_DAYS[range];
-  if (days == null) return rows;
-  const cutoff = Date.now() - days * 86_400_000;
+export function filterWindow(rows: EntityRecord[], dateField: string, range: TimeRange): EntityRecord[] {
+  const { from, to } = resolveRange(range);
+  if (from === -Infinity && to === Infinity) return rows;
   return rows.filter((r) => {
     const v = r[dateField];
     if (typeof v !== "string") return true;
     const t = Date.parse(v);
-    return Number.isNaN(t) ? true : t >= cutoff;
+    return Number.isNaN(t) ? true : t >= from && t < to;
   });
-}
-
-/**
- * Window rows by either an absolute {@code from}/{@code to} (inclusive of the whole {@code to} day)
- * or, when neither is set, the relative preset — the shared dashboard time range applied to a chart.
- */
-export function filterWindow(
-  rows: EntityRecord[],
-  dateField: string,
-  window: { preset: RangeKey; from?: string; to?: string }
-): EntityRecord[] {
-  if (window.from || window.to) {
-    const fromT = window.from ? Date.parse(window.from) : -Infinity;
-    const toT = window.to ? Date.parse(window.to) + 86_400_000 : Infinity; // include the whole `to` day
-    return rows.filter((r) => {
-      const v = r[dateField];
-      if (typeof v !== "string") return true;
-      const t = Date.parse(v);
-      return Number.isNaN(t) ? true : t >= fromT && t < toT;
-    });
-  }
-  return filterRange(rows, dateField, window.preset);
 }
 
 export type ScaleMode = "absolute" | "indexed" | "normalized";

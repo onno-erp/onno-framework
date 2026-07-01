@@ -1,4 +1,14 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { CalendarRange, Maximize2, X } from "lucide-react";
 import {
@@ -15,7 +25,6 @@ import {
   Pie,
   PieChart,
   ReferenceArea,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -28,20 +37,18 @@ import {
   buildSeries,
   filterWindow,
   ISO_KEY,
-  RANGE_DAYS,
-  RANGE_LABELS,
   SCALE_LABELS,
   SINGLE_SERIES,
   useWidgetRows,
   type ComboData,
   type GroupByDate,
   type Metric,
-  type RangeKey,
   type ScaleMode,
   type SeriesData,
 } from "@/lib/widget-data";
+import { presetsFromConfig, sameRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
-import { useTimeRange, type TimeRange } from "@/providers/time-range-provider";
+import { useTimeRange } from "@/providers/time-range-provider";
 import { parseDate } from "@internationalized/date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
@@ -118,8 +125,14 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
 
 // ----- interactive controls -------------------------------------------------------------------
 
-const GRANULARITY_OPTIONS: GroupByDate[] = ["day", "week", "month"];
-const GRANULARITY_LABELS: Record<GroupByDate, string> = { day: "Day", week: "Week", month: "Month" };
+const GRANULARITY_OPTIONS: GroupByDate[] = ["minute", "hour", "day", "week", "month"];
+const GRANULARITY_LABELS: Record<GroupByDate, string> = {
+  minute: "Min",
+  hour: "Hour",
+  day: "Day",
+  week: "Week",
+  month: "Month",
+};
 const TYPE_OPTIONS: ChartKind[] = ["bar", "line", "area"];
 const TYPE_LABELS: Record<string, string> = { bar: "Bar", line: "Line", area: "Area" };
 const SCALE_OPTIONS: ScaleMode[] = ["absolute", "indexed", "normalized"];
@@ -190,10 +203,9 @@ function buildChartData(
 }
 
 interface DragProps {
+  style: React.CSSProperties;
   onMouseDown: (e: { activeLabel?: string | number } | null) => void;
   onMouseMove: (e: { activeLabel?: string | number } | null) => void;
-  onMouseUp: () => void;
-  onMouseLeave: () => void;
 }
 interface RefAreaSel {
   x1: string;
@@ -203,26 +215,26 @@ interface RefAreaSel {
 /**
  * Drag-select a region on a time chart to set an absolute range (Grafana-style zoom). Maps the
  * x-axis labels under the cursor back to their bucket dates ({@link ISO_KEY}) and calls {@code onZoom}.
+ *
+ * Release is committed from a window-level {@code mouseup}, not the chart's own, so a drag that ends
+ * with the cursor off the plot (or past the last bar) still zooms instead of silently cancelling —
+ * the previous version reset on {@code mouseleave}, which is what made it feel finicky to trigger.
  */
 function useDragZoom(
   rows: Array<Record<string, number | string>>,
   onZoom: (fromIso: string, toIso: string) => void
 ): { dragProps: DragProps; refArea: RefAreaSel | null } {
   const [sel, setSel] = useState<{ left: string | null; right: string | null }>({ left: null, right: null });
-  const isoFor = (label: string) => {
-    const r = rows.find((row) => String(row.label) === label);
-    return r ? String(r[ISO_KEY] ?? "") : "";
-  };
-  const dragProps: DragProps = {
-    onMouseDown: (e) => {
-      const l = e?.activeLabel;
-      if (l != null) setSel({ left: String(l), right: String(l) });
-    },
-    onMouseMove: (e) => {
-      const l = e?.activeLabel;
-      if (l != null) setSel((s) => (s.left ? { ...s, right: String(l) } : s));
-    },
-    onMouseUp: () =>
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    const isoFor = (label: string) => {
+      const r = rows.find((row) => String(row.label) === label);
+      return r ? String(r[ISO_KEY] ?? "") : "";
+    };
+    const up = () => {
+      if (!dragging.current) return;
+      dragging.current = false;
       setSel((s) => {
         if (s.left && s.right && s.left !== s.right) {
           let a = isoFor(s.left);
@@ -233,49 +245,95 @@ function useDragZoom(
           }
         }
         return { left: null, right: null };
-      }),
-    onMouseLeave: () => setSel({ left: null, right: null }),
+      });
+    };
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
+  }, [rows, onZoom]);
+
+  const dragProps: DragProps = {
+    // crosshair signals the region-select affordance; userSelect:none stops the drag from
+    // highlighting axis labels mid-gesture.
+    style: { cursor: "crosshair", userSelect: "none" },
+    onMouseDown: (e) => {
+      const l = e?.activeLabel;
+      if (l != null) {
+        dragging.current = true;
+        setSel({ left: String(l), right: String(l) });
+      }
+    },
+    onMouseMove: (e) => {
+      const l = e?.activeLabel;
+      if (l != null && dragging.current) setSel((s) => (s.left ? { ...s, right: String(l) } : s));
+    },
   };
   const refArea = sel.left && sel.right && sel.left !== sel.right ? { x1: sel.left, x2: sel.right } : null;
   return { dragProps, refArea };
 }
 
-/** Pick a sensible bucket size for a time window: days for ≤1 month, weeks for ≤6 months, else months. */
-function autoGranularity(range: TimeRange): GroupByDate {
-  let days: number;
-  if (range.from && range.to) {
-    days = Math.max(1, (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
-  } else {
-    const d = RANGE_DAYS[range.preset];
-    days = d == null ? Infinity : d;
-  }
-  if (days <= 31) return "day";
-  if (days <= 182) return "week";
-  return "month";
+/** Min buckets a chart should show before stepping up to a coarser granularity. */
+const MIN_POINTS = 10;
+
+/**
+ * Pick the bucket size for a span (in days) of the data actually in the window: the COARSEST
+ * granularity that still yields at least {@link MIN_POINTS} bars, stepping down to hour/minute for
+ * sub-day spans. Sizing off the data present (not the nominal window length) keeps a wide range over
+ * sparse data readable — a 1-year range over ~3 months of data shows weekly bars, not 3 monthly ones.
+ */
+function granularityForSpan(days: number): GroupByDate {
+  if (days / 30 >= MIN_POINTS) return "month";
+  if (days / 7 >= MIN_POINTS) return "week";
+  if (days >= MIN_POINTS) return "day";
+  if (days * 24 >= MIN_POINTS) return "hour";
+  return "minute";
 }
 
-/** A compact segmented toggle for the chart control row. */
+/** The span (in days) covered by a chart's rows on its date field — for sizing "all"-range buckets. */
+function dataSpanDays(rows: EntityRecord[], dateField: string): number {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const r of rows) {
+    const v = r[dateField];
+    if (typeof v !== "string") continue;
+    const t = Date.parse(v);
+    if (Number.isNaN(t)) continue;
+    if (t < min) min = t;
+    if (t > max) max = t;
+  }
+  return max > min ? (max - min) / 86_400_000 + 1 : 1;
+}
+
+/** A segmented toggle for the control rows. `size="md"` is the chunkier, tactile time-range variant. */
 function Segmented<T extends string>({
   value,
   options,
   onChange,
+  size = "sm",
 }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  size?: "sm" | "md";
 }) {
+  const md = size === "md";
   return (
-    <div className="inline-flex items-center rounded-md border border-border bg-muted/40 p-0.5">
+    <div
+      className={cn(
+        "inline-flex items-center rounded-lg border border-border bg-muted/50 shadow-inner",
+        md ? "gap-0.5 p-1" : "p-0.5"
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[11px] font-medium leading-none transition-colors",
+            "font-medium leading-none transition-all duration-150 active:scale-[0.96]",
+            md ? "rounded-md px-3 py-1.5 text-[13px]" : "rounded px-1.5 py-0.5 text-[11px]",
             value === o.value
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+              : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
           )}
         >
           {o.label}
@@ -289,10 +347,16 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const config = useMemo(() => readConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
   const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
+  const items = useWidgetRows(widget);
+  // The shared range windows the rows by the document's date BEFORE bucketing — so it applies to
+  // every chart (a status pie filters to in-range orders too), not just time series.
+  const windowField = widget.dateField || "_date";
+  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
 
-  // Granularity auto-follows the shared range (day → week → month); a range change re-applies it,
-  // and the user can still override until the next change.
-  const autoGran = useMemo(() => autoGranularity(range), [range]);
+  // Granularity auto-follows the data actually inside the window (not the nominal range length), so a
+  // range change re-applies it and the user can still override until the next change.
+  const spanDays = useMemo(() => dataSpanDays(ranged, windowField), [ranged, windowField]);
+  const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
   const [granularity, setGranularity] = useState<GroupByDate>(autoGran);
   useEffect(() => setGranularity(autoGran), [autoGran]);
 
@@ -311,8 +375,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     });
   const [explore, setExplore] = useState(false);
 
-  const items = useWidgetRows(widget);
-
   // Effective settings: control state when that control is on, else the authored config. A time
   // chart (groupByDate set) always uses the auto/overridden granularity.
   const effKind = controls.enabled.has("type") ? kind : config.kind;
@@ -323,10 +385,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const fmts = useChartFormatters(config);
   const { fmt, fmtAxis } = fmts;
 
-  // The shared dashboard time range windows the rows by the document's date BEFORE bucketing — so it
-  // applies to every chart (a status pie filters to in-range orders too), not just time series.
-  const windowField = widget.dateField || "_date";
-  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
   const { data, comboData, round } = useMemo(
     () => buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
     [config, ranged, effGranularity, effKind, effSeriesBy, effScale]
@@ -394,11 +452,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         {(config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0) ? (
           <div className="flex h-[210px] items-center justify-center text-xs text-muted-foreground">No data yet</div>
         ) : (
-          <ResponsiveContainer width="100%" height={round && !config.combo ? 230 : 210}>
+          <ResponsiveChart height={round && !config.combo ? 230 : 210}>
             {config.combo && comboData
               ? renderCombo(comboData, config, fmt, fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix, dragProps, refArea)
               : renderChart(effKind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix, hidden, toggleSeries, dragProps, refArea)}
-          </ResponsiveContainer>
+          </ResponsiveChart>
         )}
       </CardContent>
       {explore && <ExploreModal widget={widget} config={config} controls={controls} items={items} onClose={() => setExplore(false)} />}
@@ -444,9 +502,38 @@ const tooltipStyle = {
 // stacks *under* the legend. Lift it above.
 const TOOLTIP_WRAPPER = { zIndex: 50 } as const;
 
-// A plain function (not a component) so it can be the direct child of ResponsiveContainer, which
-// clones its single child to inject the measured width/height — a wrapper component would swallow
-// them and the chart would render at 0×0.
+/**
+ * A drop-in replacement for recharts' {@code ResponsiveContainer} that measures its own width with a
+ * ResizeObserver and hands the chart explicit numeric {@code width}/{@code height}. ResponsiveContainer
+ * intermittently collapses to an 8×8 surface for charts that carry a Legend when mounted inside our
+ * DivKit portals — it reads a 0 size before layout settles and never recovers. Measuring ourselves is
+ * reliable, and skipping its internal observer is marginally cheaper.
+ */
+function ResponsiveChart({ height, children }: { height: number; children: ReactElement }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Only publish a genuinely new width: ResizeObserver fires once on observe() (often with the same
+    // size we just measured), and a redundant width update mid-animation aborts the pie's enter
+    // transition — leaving the slices undrawn. Skipping no-op updates also saves a chart re-render.
+    const measure = () => setWidth((prev) => (el.clientWidth > 0 && el.clientWidth !== prev ? el.clientWidth : prev));
+    measure(); // synchronous first measure, before paint — no 0-width flash
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={ref} style={{ width: "100%", height }}>
+      {width > 0 ? cloneElement(children, { width, height }) : null}
+    </div>
+  );
+}
+
+// A plain function (not a component) so it can be the direct child of ResponsiveChart, which clones
+// its single child to inject the measured width/height — a wrapper component would swallow them and
+// the chart would render at 0×0.
 function renderChart(
   kind: ChartKind,
   data: SeriesData,
@@ -523,6 +610,9 @@ function renderChart(
           paddingAngle={kind === "pie" ? 0 : 2}
           stroke="hsl(var(--card))"
           strokeWidth={2}
+          // recharts' Pie enter-animation is fragile — a re-render during it (e.g. a width change)
+          // can drop every sector and never restore them. The slices matter more than the flourish.
+          isAnimationActive={false}
         >
           {pieRows.map((_, i) => (
             <Cell key={i} fill={colors[i % colors.length]} />
@@ -547,7 +637,7 @@ function renderChart(
             ))}
           </defs>
         )}
-        <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+        <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} strokeDasharray="3 3" />
         <XAxis dataKey="label" {...axis} />
         <YAxis {...axis} width={40} tickFormatter={fmtAxis} />
         <Tooltip wrapperStyle={TOOLTIP_WRAPPER} contentStyle={tooltipStyle} cursor={{ stroke: "hsl(var(--border))" }} formatter={tooltipFormatter} />
@@ -677,33 +767,35 @@ function renderCombo(
 
 // ----- shared time range + explore view -------------------------------------------------------
 
-const PRESETS: RangeKey[] = ["7d", "30d", "90d", "12m", "all"];
+/** A from/to bound the date-only custom picker can display; a datetime bound (drag-zoom) can't. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Preset buttons + absolute From/To, bound to the shared dashboard time range. */
+/** Preset quick-picks + an absolute From/To, bound to the shared dashboard time range. */
 function TimeRangeControls() {
-  const { range, setPreset, setAbsolute } = useTimeRange();
-  const absolute = !!(range.from || range.to);
+  const { range, presets, setPreset, setAbsolute } = useTimeRange();
+  const absolute = range.kind === "absolute";
+  // Light up the preset whose window matches the live selection; "custom" once an absolute window is set.
+  const activeId = absolute ? "custom" : presets.find((p) => sameRange(p.range, range))?.id ?? "";
   const options = [
-    ...PRESETS.map((r) => ({ value: r as string, label: RANGE_LABELS[r] })),
+    ...presets.map((p) => ({ value: p.id, label: p.label })),
     ...(absolute ? [{ value: "custom", label: "Custom" }] : []),
   ];
+  const dateOnly =
+    absolute && range.from && range.to && DATE_ONLY.test(range.from) && DATE_ONLY.test(range.to);
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-2">
       <Segmented
-        value={absolute ? "custom" : range.preset}
+        size="md"
+        value={activeId}
         onChange={(v) => {
-          if (v !== "custom") setPreset(v as RangeKey);
+          if (v !== "custom") setPreset(v);
         }}
         options={options}
       />
       <div className="w-[260px]">
         <DateRangeInput
           aria-label="Date range"
-          value={
-            range.from && range.to
-              ? { start: parseDate(range.from), end: parseDate(range.to) }
-              : null
-          }
+          value={dateOnly ? { start: parseDate(range.from!), end: parseDate(range.to!) } : null}
           onChange={(v) => setAbsolute(v?.start?.toString(), v?.end?.toString())}
         />
       </div>
@@ -711,8 +803,18 @@ function TimeRangeControls() {
   );
 }
 
-/** The shared dashboard time picker, placed once at the top of a dashboard (widget type "timeRange"). */
+/**
+ * The shared dashboard time picker, placed once at the top of a dashboard (widget type "timeRange").
+ * Authors tune it per dashboard: {@code config("presets", "15m,1h,24h,7d,30d")} (a comma-separated
+ * list of duration ids — any `<n><unit>`, plus `all`) and {@code config("default", "30d")}.
+ */
 export function TimeRangeWidget({ widget }: ChartWidgetProps) {
+  const { configure } = useTimeRange();
+  const presetsCsv = widget.extraConfig?.presets;
+  const defaultId = widget.extraConfig?.default;
+  useEffect(() => {
+    configure({ presets: presetsFromConfig(presetsCsv), defaultRangeId: defaultId });
+  }, [configure, presetsCsv, defaultId]);
   return (
     <Card className="overflow-hidden">
       <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
@@ -774,7 +876,10 @@ function ExploreModal({
   onClose: () => void;
 }) {
   const { range, setAbsolute } = useTimeRange();
-  const autoGran = useMemo(() => autoGranularity(range), [range]);
+  const windowField = widget.dateField || "_date";
+  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
+  const spanDays = useMemo(() => dataSpanDays(ranged, windowField), [ranged, windowField]);
+  const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
   const [granularity, setGranularity] = useState<GroupByDate>(autoGran);
   useEffect(() => setGranularity(autoGran), [autoGran]);
   const [kind, setKind] = useState<ChartKind>(config.kind);
@@ -790,8 +895,6 @@ function ExploreModal({
     });
 
   const fmts = useChartFormatters(config);
-  const windowField = widget.dateField || "_date";
-  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
   const { data, comboData, round } = useMemo(
     () => buildChartData(config, ranged, { granularity, kind, seriesBy: seriesBy || undefined, scale }),
     [config, ranged, granularity, kind, seriesBy, scale]
@@ -828,11 +931,11 @@ function ExploreModal({
         {empty ? (
           <div className="flex h-[320px] items-center justify-center text-xs text-muted-foreground">No data in range</div>
         ) : (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveChart height={320}>
             {config.combo && comboData
               ? renderCombo(comboData, config, fmts.fmt, fmts.fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix, dragProps, refArea)
               : renderChart(kind, data, colors, fmts.fmt, fmts.fmtAxis, config.stacked, gradientPrefix, hidden, toggle, dragProps, refArea)}
-          </ResponsiveContainer>
+          </ResponsiveChart>
         )}
       </div>
       {!empty && <DataTable config={config} data={data} comboData={comboData} fmt={fmts.fmt} fmtSecondary={fmts.fmtSecondary} />}

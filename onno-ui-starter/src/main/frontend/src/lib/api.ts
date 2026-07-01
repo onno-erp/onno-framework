@@ -82,7 +82,23 @@ export async function streamUiEvents(
   }
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+// Collapse concurrent identical GETs into a single network round-trip: a dashboard with several
+// widgets reading the same entity would otherwise fire the same request once per widget on load.
+// Keyed by URL and cleared the moment the request settles, so this only dedupes in-flight overlap —
+// no cached response, hence no staleness (a later fetch always hits the network afresh).
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (method !== "GET") return doFetch<T>(url, init);
+  const existing = inFlightGets.get(url);
+  if (existing) return existing as Promise<T>;
+  const p = doFetch<T>(url, init).finally(() => inFlightGets.delete(url));
+  inFlightGets.set(url, p);
+  return p;
+}
+
+async function doFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

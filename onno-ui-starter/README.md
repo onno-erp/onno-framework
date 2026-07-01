@@ -325,7 +325,8 @@ to `1` for the old sequential behaviour.
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
 | `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
 | `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. For `stat`/`sparkline` it picks the sparkline shape (`area` default, or `line`). |
-| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `day`/`week`/`month` for date buckets (date buckets are ordered chronologically). |
+| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `minute`/`hour`/`day`/`week`/`month` for date buckets (date buckets are ordered chronologically). On a chart the granularity auto-follows the shared time range — sub-day windows bucket by hour/minute — and stays overridable in the explore view. |
+| `presets`, `default` | timeRange | The shared picker's quick-picks and starting window. `presets` is a comma list of duration ids (`<n><unit>` where `s`/`m`/`h`/`d`/`w`/`M`/`y` are second…year — note `m`=minute, `M`=month — plus `all`), e.g. `15m,1h,24h,7d,30d,90d,1y,all`. `default` names one of them (e.g. `30d`). Omit both for the built-in ladder defaulting to the last 30 days; a user's saved selection always wins over `default`. |
 | `seriesBy` | chart | Field that splits the chart into one colored series per distinct value (multi-series `bar`/`line`/`area`). Ignored by `pie`/`donut`. Series rank by total; the tail beyond the palette folds into "Other". |
 | `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
 | `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |

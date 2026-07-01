@@ -31,10 +31,10 @@ const MONTHS = [
 ];
 
 const baseCellCls = cn(
-  "relative inline-flex h-8 w-8 cursor-pointer items-center justify-center text-sm rounded-md outline-none",
+  "relative inline-flex h-9 w-9 cursor-pointer items-center justify-center text-sm rounded-lg outline-none transition-colors",
   "data-[outside-month]:text-muted-foreground/50",
   "data-[hovered]:bg-accent data-[hovered]:text-accent-foreground",
-  "data-[focus-visible]:ring-1 data-[focus-visible]:ring-ring",
+  "data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring/50",
   "data-[unavailable]:line-through data-[unavailable]:opacity-60",
   "data-[disabled]:opacity-40 data-[disabled]:cursor-not-allowed"
 );

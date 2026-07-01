@@ -37,7 +37,12 @@ public class DashboardPage implements Page {
 
         // Shared time picker — one range every chart on the board reads from (preset or absolute
         // From/To). A "timeRange" widget needs no entity; it just drives the dashboard window.
-        b.widget("Time range").type("timeRange").width("full").order(-10);
+        // Quick-picks ("presets") and the starting window ("default") are configurable: each preset
+        // is a duration id (<n><unit>, where m=minute and M=month, plus "all"); omit both for the
+        // built-in ladder (15m…all) defaulting to the last 30 days.
+        b.widget("Time range").type("timeRange").width("full").order(-10)
+                .config("presets", "24h,7d,30d,90d,1y,all")
+                .config("default", "30d");
 
         // ---- KPI row ----------------------------------------------------------------------------
         b.widget("Open orders").type("count").width("1/3").order(0).document(Order.class)
