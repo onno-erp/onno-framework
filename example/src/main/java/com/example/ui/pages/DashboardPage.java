@@ -3,6 +3,7 @@ package com.example.ui.pages;
 import com.example.domain.catalogs.Property;
 import com.example.domain.documents.Bill;
 import com.example.domain.documents.Booking;
+import com.example.domain.documents.Payment;
 import com.example.domain.registers.RevenueRegister;
 import su.onno.ui.Page;
 import su.onno.ui.PageBuilder;
@@ -85,5 +86,16 @@ public class DashboardPage implements Page {
                 .config("geoField", "location").config("geoJsonField", "service_area")
                 .titleField("displayName")
                 .hint("Every property with a pinned location and any drawn service area; click to open.");
+
+        // ---- Custom widget: a type the framework has no built-in for ---------------------------
+        // "eventLog" has no server-side renderer — its React component ships as
+        // example/src/main/widgets/EventLog.tsx, compiled by the su.onno.widgets Gradle plugin and
+        // loaded into the SPA at boot. The .config(...) values arrive as widget.extraConfig.
+        b.widget("Recent activity").type("eventLog").width("full").order(60).document(Payment.class)
+                .maxItems(10)
+                .config("dateField", "_date").config("titleField", "_number")
+                .config("secondaryDisplay", "client_display")
+                .config("amountField", "amount").config("currency", "EUR")
+                .hint("A dev-authored widget — its renderer is a .tsx compiled by su.onno.widgets.");
     }
 }

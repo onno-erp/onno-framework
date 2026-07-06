@@ -5,7 +5,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 
@@ -17,13 +19,16 @@ public class ThemeController {
     private final BrandingConfig branding;
     private final UiMessages messages;
     private final ObjectProvider<UpdateChecker> updateChecker;
+    private final ObjectProvider<WidgetPluginScanner> widgetPlugins;
 
     public ThemeController(UiProperties properties, UiLayout layout, UiMessages messages,
-                          ObjectProvider<UpdateChecker> updateChecker) {
+                          ObjectProvider<UpdateChecker> updateChecker,
+                          ObjectProvider<WidgetPluginScanner> widgetPlugins) {
         this.properties = properties;
         this.branding = layout.shell().branding();
         this.messages = messages;
         this.updateChecker = updateChecker;
+        this.widgetPlugins = widgetPlugins;
     }
 
     @GetMapping("/theme")
@@ -52,7 +57,27 @@ public class ThemeController {
             update.put("url", s.releaseUrl());
             out.put("update", update);
         }
+        // Custom widget plugins to load at boot: each classpath module under {path}/plugins/<name>,
+        // plus any configured external URLs. The client dynamic-imports these; each self-registers
+        // its widget type(s). Omitted (never null) when plugins are disabled or none are present.
+        List<String> pluginScripts = pluginScripts();
+        if (!pluginScripts.isEmpty()) {
+            out.put("pluginScripts", pluginScripts);
+        }
         return out;
+    }
+
+    private List<String> pluginScripts() {
+        List<String> urls = new ArrayList<>();
+        WidgetPluginScanner scanner = widgetPlugins.getIfAvailable();
+        if (scanner != null) {
+            String base = "/".equals(properties.getPath()) ? "" : properties.getPath();
+            for (String name : scanner.scriptNames()) {
+                urls.add(base + "/plugins/" + name);
+            }
+        }
+        urls.addAll(properties.getPlugins().getExtraUrls());
+        return urls;
     }
 
     /**

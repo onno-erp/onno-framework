@@ -341,15 +341,61 @@ to `1` for the old sequential behaviour.
 > A register-backed `metric`/`chart` sums a register **resource** over its turnover; `metricField`
 > must name a resource column, and `filter` may reference its **dimensions**.
 
-### Registering a custom widget (client)
+### Authoring a custom widget (consumer app — no frontend project)
+
+The framework renders a fixed set of widget types. To ship one it has no built-in for — an advanced
+filter, an unusual chart, an event log — write a React component in **your Java project** and apply
+the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fork.
+
+1. Apply the plugin:
+
+   ```kotlin
+   // build.gradle.kts
+   plugins { id("su.onno.widgets") }
+   ```
+
+2. Write the widget in `src/main/widgets/EventLog.tsx` using `@onno/widget-sdk` (types + hooks + a
+   read-only data client; the SDK is bundled in the Gradle plugin, so it resolves with no npm access):
+
+   ```tsx
+   import { registerWidget, useEffect, useState, api, type WidgetProps } from "@onno/widget-sdk";
+
+   function EventLog({ widget }: WidgetProps) {
+     const [rows, setRows] = useState<any[]>([]);
+     useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
+     return <ul className="text-sm text-foreground">{rows.map((r) =>
+       <li key={String(r.id)}>{String(r._date)} — {String(r._number)}</li>)}</ul>;
+   }
+   registerWidget("eventLog", EventLog);
+   ```
+
+3. Declare the widget server-side with a matching `type(...)` — its `.config(...)` values arrive as
+   `widget.extraConfig`:
+
+   ```java
+   b.widget("Recent activity").type("eventLog").document(Payment.class)
+       .config("amountField", "amount").config("currency", "EUR");
+   ```
+
+`./gradlew bootJar` compiles each `.tsx` (managed Node + esbuild, React aliased to the host SPA so
+the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
+The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises
+them as `pluginScripts` from `GET /api/config`; the SPA dynamic-imports each at boot and each
+self-registers. An unregistered `type(...)` renders a labelled placeholder rather than vanishing.
+
+Config: `onno.ui.plugins.enabled` (default true), `onno.ui.plugins.extra-urls` (load extra modules,
+e.g. from a CDN). Dev loop: `./gradlew compileWidgetsWatch` rebuilds on change. Plugin JS runs
+first-party in the app origin (full session) — author it as trusted code.
+
+### Registering a widget from framework/SPA source
+
+Contributors extending the bundled SPA register built-ins directly, the same call the SDK proxies via
+`window.onno`:
 
 ```ts
 import { registerWidget } from "@/lib/widget-bridge";
 registerWidget("heatmap", HeatmapWidget); // server: b.widget("Load").type("heatmap").document(Shift.class)
 ```
-
-The server emits any non-native `type(...)` as an `onno-widget` descriptor; an unregistered type
-renders a labelled placeholder rather than vanishing.
 
 ## Maps
 

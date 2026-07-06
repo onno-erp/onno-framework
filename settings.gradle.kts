@@ -1,7 +1,8 @@
 pluginManagement {
-    // The desktop packaging plugin lives in a sibling build so `id("su.onno.desktop")`
-    // resolves locally without first publishing it to a repository.
+    // The desktop packaging + custom-widget plugins live in sibling builds so `id("su.onno.desktop")`
+    // and `id("su.onno.widgets")` resolve locally without first publishing them to a repository.
     includeBuild("onno-desktop-gradle-plugin")
+    includeBuild("onno-widgets-gradle-plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()

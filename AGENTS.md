@@ -41,6 +41,8 @@ to future agents that may not have the full conversation context.
 | `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
 | `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
 | `onno-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
+| `onno-widgets-gradle-plugin` | Gradle plugin (`su.onno.widgets`) that compiles consumer `src/main/widgets/*.tsx` into onno UI widget plugins; bundles `@onno/widget-sdk`. |
+| `onno-widget-sdk` | npm `@onno/widget-sdk` — the custom-widget authoring API (types, hooks, read-only data client) resolving to the host SPA at runtime. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
@@ -706,7 +708,7 @@ The compiler checks the field references, the IDE refactors through them, and th
 UI is authored as Java classes registered as Spring beans — never as annotations on domain classes. Three kinds:
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell; one per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
-- **`Page`** — a route whose content you compose (e.g. a dashboard): `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.custom(...)`.
+- **`Page`** — a route whose content you compose (e.g. a dashboard): `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.custom(...)`. A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Authoring a custom widget".
 - **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
