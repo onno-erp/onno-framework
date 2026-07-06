@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { api } from "@/lib/api";
+import { loadPlugins } from "@/lib/plugin-loader";
 import { Toaster } from "sonner";
 import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
@@ -29,6 +31,24 @@ function ProtectedApp() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const t = useMessages();
+
+  // Load consumer widget plugins once the authenticated shell mounts. Each plugin self-registers its
+  // widget types with window.onno.registerWidget; the DivKit content then renders div-custom widgets
+  // of those types. Fire-and-forget — registerWidget re-publishes, so late arrivals still render.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getConfig()
+      .then((cfg) => {
+        if (!cancelled) void loadPlugins(cfg?.pluginScripts);
+      })
+      .catch(() => {
+        // No config / offline — the built-in widgets still work; custom ones stay unregistered.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return (

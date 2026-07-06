@@ -2,6 +2,9 @@ plugins {
     application
     id("org.springframework.boot")
     id("io.spring.dependency-management")
+    id("su.onno.desktop")
+    // Compiles src/main/widgets/*.tsx into onno UI widget plugins (see DashboardPage's "eventLog").
+    id("su.onno.widgets")
 }
 
 dependencies {

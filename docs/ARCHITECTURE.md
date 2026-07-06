@@ -40,6 +40,8 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
+| `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
+| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, and a read-only data client that resolve to the host SPA at runtime. |
 | `example` | (not published) | A vacation-rentals ERP that exercises every concept; the canonical reference app. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
@@ -255,6 +257,15 @@ today and is intended to drive a native client later. The frontend lives in
 `onno-ui-starter/src/main/frontend` and is built by Gradle (`buildFrontend`, Node 20) into
 `static/ui/`. See [onno-ui-starter/README.md](../onno-ui-starter/README.md) for the full widget DSL
 and `config(key,value)` reference.
+
+**Custom widgets.** For a widget type the framework has no built-in for, a consumer app authors a
+React component in `src/main/widgets/*.tsx` and applies the `su.onno.widgets` Gradle plugin, which
+compiles it (managed Node + esbuild, React aliased to the host SPA) into `onno-plugins/<name>.js` on
+the classpath. The starter scans that location (`onno.ui.plugins.*`), serves the modules under
+`{onno.ui.path}/plugins/**`, and advertises them as `pluginScripts` from `GET /api/config`; the SPA
+dynamic-imports each at boot, where it self-registers via the `window.onno` host bridge. Authoring
+uses `@onno/widget-sdk` (bundled in the Gradle plugin — no npm needed). See the README's
+"Authoring a custom widget" section.
 
 ## Auth & RBAC
 

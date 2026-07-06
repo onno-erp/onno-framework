@@ -36,6 +36,7 @@ Implemented:
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
 - UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present.
+- Custom widgets: a consumer authors a React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and applies the `su.onno.widgets` Gradle plugin, which compiles it (managed Node + esbuild, React aliased to the host SPA) into an `onno-plugins/*.js` module served under `{onno.ui.path}/plugins/**` and auto-loaded at boot — a widget type the framework has no built-in for, with no frontend project to maintain.
 
 ## Design Direction
 

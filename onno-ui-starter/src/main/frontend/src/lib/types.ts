@@ -156,6 +156,9 @@ export interface AppConfig {
   messages?: Record<string, string>;
   // Present when the server-side update check is enabled; drives the "update available" notice.
   update?: UpdateInfo;
+  // Absolute URLs of consumer widget-plugin ESM modules to load at boot (from onno-plugins/ on the
+  // classpath, plus any onno.ui.plugins.extra-urls). Each self-registers via window.onno.registerWidget.
+  pluginScripts?: string[];
 }
 
 // The result of the server's framework-version check (see UpdateChecker / ReleaseController).

@@ -2,7 +2,9 @@ package su.onno.ui;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @ConfigurationProperties(prefix = "onno.ui")
@@ -49,6 +51,9 @@ public class UiProperties {
 
     /** List/table grid defaults — how every list feeds rows unless an {@code EntityView} overrides. */
     private ListView list = new ListView();
+
+    /** Custom widget plugins — consumer-authored React widgets loaded into the SPA at boot. */
+    private Plugins plugins = new Plugins();
 
     public boolean isEnabled() {
         return enabled;
@@ -120,6 +125,14 @@ public class UiProperties {
 
     public void setList(ListView list) {
         this.list = list;
+    }
+
+    public Plugins getPlugins() {
+        return plugins;
+    }
+
+    public void setPlugins(Plugins plugins) {
+        this.plugins = plugins;
     }
 
     /**
@@ -261,6 +274,57 @@ public class UiProperties {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+    }
+
+    /**
+     * Custom widget plugins. A consumer authors a React widget (a {@code .tsx} compiled by the
+     * {@code su.onno.widgets} Gradle plugin into {@code onno-plugins/<name>.js} on the classpath);
+     * the SPA loads every such module at boot and each self-registers its widget type via
+     * {@code window.onno.registerWidget}. The scanned scripts (plus any {@link #extraUrls}) are
+     * advertised to the client as {@code pluginScripts} from {@code GET /api/config} and served
+     * under {@code {onno.ui.path}/plugins/**}.
+     */
+    public static class Plugins {
+
+        /** Whether to scan for, serve, and advertise custom widget plugins. */
+        private boolean enabled = true;
+
+        /**
+         * Classpath location holding the compiled plugin modules ({@code *.js}). The Gradle plugin
+         * emits here; change it only if you stage plugin bundles somewhere non-standard. Must be a
+         * {@code classpath:}/{@code classpath*:} location ending in {@code /}.
+         */
+        private String location = "classpath*:/onno-plugins/";
+
+        /**
+         * Extra absolute plugin-module URLs to load in addition to the classpath ones — e.g. a
+         * CDN-hosted widget or one served by another app. Appended verbatim to {@code pluginScripts}.
+         */
+        private List<String> extraUrls = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public List<String> getExtraUrls() {
+            return extraUrls;
+        }
+
+        public void setExtraUrls(List<String> extraUrls) {
+            this.extraUrls = extraUrls;
         }
     }
 }

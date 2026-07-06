@@ -175,6 +175,10 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
   search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
   (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`.
+  A widget's `type(…)` may be a **custom widget** the framework has no built-in for: author it as a
+  React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
+  Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under
+  `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
 - `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion

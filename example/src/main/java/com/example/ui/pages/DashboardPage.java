@@ -90,5 +90,16 @@ public class DashboardPage implements Page {
         b.widget("Recent orders").type("list").width("full").order(20).document(Order.class).maxItems(10)
                 .config("titleTemplate", "{_number} · {customer_display}")
                 .config("secondaryField", "status_display");
+
+        // ---- Custom widget: a type the framework has no built-in for ---------------------------
+        // "eventLog" has no server-side renderer — its React component ships as
+        // example/src/main/widgets/EventLog.tsx, compiled by the su.onno.widgets Gradle plugin and
+        // loaded into the SPA at boot. The .config(...) values arrive as widget.extraConfig.
+        b.widget("Recent activity").type("eventLog").width("full").order(60).document(Order.class)
+                .maxItems(10)
+                .config("dateField", "_date").config("titleField", "_number")
+                .config("secondaryDisplay", "customer_display")
+                .config("amountField", "total").config("currency", "USD")
+                .hint("A dev-authored widget — its renderer is a .tsx compiled by su.onno.widgets.");
     }
 }

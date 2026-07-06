@@ -24,17 +24,39 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     // The SPA shell with onno.ui.path baked in — shared by the deep-link fallback resolver and the
     // root controller so both serve a shell that knows the app's mount prefix.
     private final SpaIndexHtml spaIndexHtml;
+    private final UiProperties uiProperties;
+    private final WidgetPluginScanner widgetPluginScanner;
 
     public UiAutoConfiguration(UiProperties uiProperties) {
+        this.uiProperties = uiProperties;
         this.spaIndexHtml = new SpaIndexHtml(uiProperties.getPath());
+        this.widgetPluginScanner = uiProperties.getPlugins().isEnabled()
+                ? new WidgetPluginScanner(uiProperties.getPlugins().getLocation())
+                : null;
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // Serve compiled widget plugins under {path}/plugins/** BEFORE the catch-all so a plugin
+        // module isn't swallowed by the SPA's index.html fallback. Registered first → higher precedence.
+        if (widgetPluginScanner != null) {
+            String base = "/".equals(uiProperties.getPath()) ? "" : uiProperties.getPath();
+            registry.addResourceHandler(base + "/plugins/**")
+                    .addResourceLocations(widgetPluginScanner.serveLocation())
+                    .resourceChain(true);
+        }
         registry.addResourceHandler("/**")
                 .addResourceLocations("classpath:/static/ui/")
                 .resourceChain(true)
                 .addResolver(new SpaResourceResolver(spaIndexHtml));
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "onno.ui.plugins", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
+    public WidgetPluginScanner widgetPluginScanner() {
+        return widgetPluginScanner != null ? widgetPluginScanner
+                : new WidgetPluginScanner(uiProperties.getPlugins().getLocation());
     }
 
     @Bean
@@ -87,8 +109,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public ThemeController themeController(UiProperties properties, su.onno.ui.UiLayout uiLayout,
                                           UiMessages uiMessages,
-                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker) {
-        return new ThemeController(properties, uiLayout, uiMessages, updateChecker);
+                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker,
+                                          org.springframework.beans.factory.ObjectProvider<WidgetPluginScanner> widgetPlugins) {
+        return new ThemeController(properties, uiLayout, uiMessages, updateChecker, widgetPlugins);
     }
 
     /**
