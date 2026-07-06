@@ -1176,9 +1176,17 @@ export function DivKitView() {
   const accountEl = shell ? shellCard(shell.account, "account") : null;
 
   // A single content surface for the non-desktop layouts (no islands/tabs there).
+  // Driven by the focused pane's activePath — which openPath() updates synchronously in
+  // the tap handler — not by useLocation: react-router v7 wraps navigation in
+  // startTransition, so sustained default-lane render churn can starve the location
+  // update and freeze bottom-bar/topbar navigation. The workspace seeds from the URL on
+  // first mount (initialWorkspace) and mirrors location changes (popstate/back) via the
+  // URL-mirror effect above, so deep links and history navigation still land here; the
+  // URL itself is just a cosmetic sync.
+  const focusedPane = workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0];
   const plainContent = (
     <ContentPane
-      path={location.pathname}
+      path={focusedPane?.activePath || location.pathname}
       viewport={viewport}
       theme={resolvedTheme}
       profile={profile}
