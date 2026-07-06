@@ -104,7 +104,7 @@ export function ListMapView({
   if (rows === null) {
     return (
       <div
-        className="flex items-center justify-center rounded-2xl border border-border bg-card text-sm text-muted-foreground"
+        className="flex items-center justify-center rounded-card border border-border bg-card text-sm text-muted-foreground"
         style={{ height }}
       >
         <Loader2 className="mr-2 size-4 animate-spin" /> Loading map…
@@ -121,7 +121,7 @@ export function ListMapView({
         features={features}
         height={height}
         interactive
-        className="w-full overflow-hidden rounded-2xl border border-border"
+        className="w-full overflow-hidden rounded-card border border-border"
       />
       <p className="text-xs text-muted-foreground">
         {features.length === 0

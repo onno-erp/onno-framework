@@ -110,15 +110,25 @@ public final class ShellLayoutBuilder {
      * theme / sign-out actions. On desktop it sits under the nav rail; on mobile
      * it's served as the {@code /account} page (reached from a bottom-bar tab).
      */
-    /** Back-compat overload rendering the English defaults (used by unit tests). */
+    /** Back-compat overload: no avatar, English defaults (used by unit tests). */
     public static Map<String, Object> account(String userName,
                                               List<ProfileLink> profiles,
                                               String activeProfileId,
                                               Palette p) {
-        return account(userName, profiles, activeProfileId, p, UiMessages.defaults());
+        return account(userName, null, profiles, activeProfileId, p, UiMessages.defaults());
+    }
+
+    /** Back-compat overload: no avatar. */
+    public static Map<String, Object> account(String userName,
+                                              List<ProfileLink> profiles,
+                                              String activeProfileId,
+                                              Palette p,
+                                              UiMessages msg) {
+        return account(userName, null, profiles, activeProfileId, p, msg);
     }
 
     public static Map<String, Object> account(String userName,
+                                              String avatarUrl,
                                               List<ProfileLink> profiles,
                                               String activeProfileId,
                                               Palette p,
@@ -140,6 +150,9 @@ public final class ShellLayoutBuilder {
         Map<String, Object> identity = Div.vertical(identityItems);
         Div.gap(identity, 2);
         Div.alignV(identity, "center");
+        // The name column takes the slack so the actions stay pinned right whether or not
+        // an avatar sits to its left.
+        Div.weight(identity, 1);
 
         String themeIcon = p.equals(Palette.DARK) ? "sun" : "moon";
         Map<String, Object> themeBtn = iconButton(themeIcon, msg.get("shell.theme"), p.muted(), TRANSPARENT, null);
@@ -152,10 +165,19 @@ public final class ShellLayoutBuilder {
         Div.gap(actions, 2);
         Div.alignV(actions, "center");
         Div.alignH(actions, "right");
-        Div.weight(actions, 1);
 
-        Map<String, Object> row = Div.horizontal(List.of(identity, actions));
-        Div.gap(row, 6);
+        // A leading avatar when the signed-in user's identity record has one; else the row
+        // is just the name + actions, exactly as before.
+        List<Map<String, Object>> rowCells = new ArrayList<>();
+        Map<String, Object> avatar = avatar(avatarUrl, 34);
+        if (avatar != null) {
+            rowCells.add(avatar);
+        }
+        rowCells.add(identity);
+        rowCells.add(actions);
+
+        Map<String, Object> row = Div.horizontal(rowCells);
+        Div.gap(row, 8);
         Div.alignV(row, "center");
         Div.matchWidth(row);
         items.add(row);
@@ -178,6 +200,23 @@ public final class ShellLayoutBuilder {
         Div.corner(root, 12);
         Div.stroke(root, p.border(), 1);
         return root;
+    }
+
+    /**
+     * A circular avatar image for the account block, or {@code null} when the user has none
+     * (so the caller degrades to the name-only identity, unchanged). {@code fill} scale crops
+     * the image to the square, and the {@code 999} corner rounds it to a circle.
+     */
+    private static Map<String, Object> avatar(String url, int size) {
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        Map<String, Object> img = Div.image(url);
+        img.put("scale", "fill");
+        Div.width(img, size);
+        Div.height(img, size);
+        Div.corner(img, 999);
+        return img;
     }
 
     /** A compact icon action. {@code border} null = no stroke. */
@@ -471,15 +510,22 @@ public final class ShellLayoutBuilder {
      * It's the overflow target for the bottom bar's "More" tab, so nothing the bar
      * can't fit becomes unreachable.
      */
-    /** Back-compat overload rendering the English defaults (used by unit tests). */
+    /** Back-compat overload: no avatar, English defaults (used by unit tests). */
     public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
                                            List<ProfileLink> profiles, String activeProfileId, Palette p) {
-        return menu(brand, logo, nav, userName, profiles, activeProfileId, p, UiMessages.defaults());
+        return menu(brand, logo, nav, userName, null, profiles, activeProfileId, p, UiMessages.defaults());
     }
 
+    /** Back-compat overload: no avatar. */
     public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
                                            List<ProfileLink> profiles, String activeProfileId, Palette p,
                                            UiMessages msg) {
+        return menu(brand, logo, nav, userName, null, profiles, activeProfileId, p, msg);
+    }
+
+    public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
+                                           String avatarUrl, List<ProfileLink> profiles, String activeProfileId,
+                                           Palette p, UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // The menu header mirrors the sidebar: a configured logo, else the text brand.
@@ -507,7 +553,7 @@ public final class ShellLayoutBuilder {
             }
         }
 
-        Map<String, Object> accountBlock = account(userName, profiles, activeProfileId, p, msg);
+        Map<String, Object> accountBlock = account(userName, avatarUrl, profiles, activeProfileId, p, msg);
         Div.margins(accountBlock, 18, 0, 0, 0);
         items.add(accountBlock);
 

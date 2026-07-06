@@ -8,7 +8,7 @@ import { RefSelect } from "@/components/ref-select";
 import { useMessages } from "@/providers/messages-provider";
 
 const actionBtn =
-  "inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
 
 /**
  * Inline related-list panel for a catalog or document view: the analogue of a document's tabular
@@ -113,7 +113,7 @@ export function RelatedListPanel({
   };
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         {!readOnly && parentId && !adding ? (

@@ -29,7 +29,7 @@ import type { Translate } from "@/lib/messages";
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-lg, text-sm/medium, with the same vertical/horizontal rhythm.
 const actionBtn =
-  "inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
 
 // The portable form descriptor the server emits as the onno-form custom component.
 export type FormDescriptor = {
@@ -338,7 +338,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   return (
     <div className="mx-auto w-full max-w-2xl">
       <h1 className="mb-5 text-xl font-semibold text-foreground">{form.title}</h1>
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+      <div className="space-y-4 rounded-card border border-border bg-card p-5">
         {fields.map((f) => (
           <FormFieldRow
             key={f.key}
@@ -444,7 +444,7 @@ function TabularSectionEditor({
     isBoolCol(a) ? "shrink-0 basis-20" : "min-w-0 grow basis-44";
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>

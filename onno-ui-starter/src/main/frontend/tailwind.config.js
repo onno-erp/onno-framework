@@ -60,6 +60,10 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        // Configurable shape tokens (see --radius-control / --radius-card in index.css): rounded-control
+        // for interactive controls, rounded-card for surfaces. Reshaped app-wide from onno.ui.theme.
+        control: "var(--radius-control)",
+        card: "var(--radius-card)",
       },
     },
   },

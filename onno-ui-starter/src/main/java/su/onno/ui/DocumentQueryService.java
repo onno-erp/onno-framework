@@ -317,6 +317,79 @@ public class DocumentQueryService {
         });
     }
 
+    /**
+     * Group a document list by {@code groupColumn} (a validated sortable column): one header per
+     * distinct value, or — for a date/time column (e.g. {@code _date}) — per {@code granularity}
+     * bucket, over the same WHERE (search + date range + declarative + widget filters) as the flat
+     * list. Each header carries its row count, the requested {@code aggregates}, and the
+     * {@code expand} filter the client replays on the normal feed. Headers capped at
+     * {@link ListGroups#MAX_GROUPS}.
+     */
+    public ListGroups.GroupResult groups(DocumentDescriptor desc, String groupColumn, String granularity,
+                                         String search, String from, String to,
+                                         List<String> eq, List<String> in, List<String> like,
+                                         List<String> prefix, List<String> ge, List<String> le,
+                                         String widgetFilter, List<ListGroups.Agg> aggregates) {
+        if (groupColumn == null || !sortableColumns(desc).contains(groupColumn)) {
+            return new ListGroups.GroupResult(List.of(), false);
+        }
+        Set<String> columns = columnNames(desc);
+        boolean date = isTemporalColumn(desc, groupColumn);
+        String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
+
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns);
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(desc, search));
+        if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
+        if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
+        if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
+        if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
+
+        StringBuilder select = new StringBuilder(groupExpr).append(" AS ").append(groupColumn)
+                .append(", COUNT(*) AS _count");
+        List<ListGroups.Agg> valid = new ArrayList<>();
+        for (ListGroups.Agg a : aggregates) {
+            try {
+                select.append(", ").append(WidgetAggregate.expression(a.fn(), a.column(), columns))
+                        .append(" AS a").append(valid.size());
+                valid.add(a);
+            } catch (IllegalArgumentException ignored) {
+                // skip an aggregate over an unknown column/fn
+            }
+        }
+
+        String sql = "SELECT " + select + " FROM " + desc.tableName()
+                + " WHERE " + where
+                + " GROUP BY " + groupExpr
+                + " ORDER BY " + groupExpr + " ASC"
+                + " LIMIT :limit";
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery(sql).bind("limit", ListGroups.MAX_GROUPS + 1);
+            bindSearch(q, search);
+            if (from != null) q.bind("from", from);
+            if (to != null) q.bind("to", to);
+            filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
+            return q.mapToMap().list();
+        });
+        boolean capped = rows.size() > ListGroups.MAX_GROUPS;
+        if (capped) {
+            rows = new ArrayList<>(rows.subList(0, ListGroups.MAX_GROUPS));
+        }
+        refResolver.resolveAttributes(rows, desc.attributes());
+        return new ListGroups.GroupResult(
+                ListGroups.buildGroups(rows, groupColumn, date, granularity, valid), capped);
+    }
+
+    /** Whether a group column is a date/time — so grouping buckets it by period (see {@link ListGroups}). */
+    private static boolean isTemporalColumn(DocumentDescriptor desc, String column) {
+        if (column.equals("_date") || column.equals("_period")) {
+            return true;
+        }
+        return desc.attributes().stream()
+                .anyMatch(a -> a.columnName().equalsIgnoreCase(column) && ListGroups.isTemporalType(a.javaType()));
+    }
+
     /** Lowercased attribute column names a declarative list filter may bind to (see {@link ListFilter}). */
     private Set<String> filterableColumns(DocumentDescriptor desc) {
         return desc.attributes().stream()

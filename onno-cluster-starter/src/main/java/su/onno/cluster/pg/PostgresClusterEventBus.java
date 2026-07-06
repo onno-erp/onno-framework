@@ -196,6 +196,18 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
                     return json;
                 }
             }
+            if (event instanceof ClusterEvent.Notification n) {
+                // The durable copy is already in onno_notifications; drop the unbounded display fields and
+                // let the recipient's peer-node browsers refetch from just the recipientId + id envelope.
+                ClusterEvent trimmed = new ClusterEvent.Notification(n.originNodeId(), n.recipientId(),
+                        n.notificationId(), n.type(), null, null, null, null);
+                json = mapper.writeValueAsString(toJson(mapper, trimmed));
+                if (utf8Length(json) <= maxPayloadBytes) {
+                    log.debug("onno-cluster: dropped oversized display fields from a notification event; "
+                            + "recipient's peers will refetch");
+                    return json;
+                }
+            }
             log.debug("onno-cluster: dropping a {} event; even the minimal envelope exceeds {} bytes",
                     event.kind(), maxPayloadBytes);
             return null;
@@ -237,6 +249,17 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
                         text(node, "displayName"),
                         text(node, "avatarUrl"));
             }
+            if (ClusterEvent.KIND_NOTIFICATION.equals(kind)) {
+                return new ClusterEvent.Notification(
+                        text(node, "originNodeId"),
+                        text(node, "recipientId"),
+                        text(node, "notificationId"),
+                        text(node, "type"),
+                        text(node, "title"),
+                        text(node, "body"),
+                        text(node, "link"),
+                        text(node, "actorName"));
+            }
             log.debug("onno-cluster: ignoring notification of unknown kind '{}'", kind);
             return null;
         } catch (Exception e) {
@@ -264,6 +287,14 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
             node.put("userId", p.userId());
             node.put("displayName", p.displayName());
             node.put("avatarUrl", p.avatarUrl());
+        } else if (event instanceof ClusterEvent.Notification n) {
+            node.put("recipientId", n.recipientId());
+            node.put("notificationId", n.notificationId());
+            node.put("type", n.type());
+            node.put("title", n.title());
+            node.put("body", n.body());
+            node.put("link", n.link());
+            node.put("actorName", n.actorName());
         }
         return node;
     }

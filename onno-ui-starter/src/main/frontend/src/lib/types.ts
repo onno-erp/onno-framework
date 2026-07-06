@@ -216,6 +216,17 @@ export interface UiEvent {
   kind?: string;
   /** Present only on a `presence` event: the current viewer set of the record. */
   viewers?: { userId: string; displayName: string; avatarUrl?: string }[];
+  // Present only on a `notification` event (see UiEventPublisher.publishNotification). `id` carries the
+  // stored notification's id. The store prepends the delta optimistically; a peer-node event trimmed to
+  // fit the cluster payload cap arrives without `title`, which the store treats as "refetch the feed".
+  notificationType?: string;
+  title?: string;
+  body?: string;
+  link?: string;
+  actorName?: string;
+  actorAvatar?: string;
+  createdAt?: string;
+  unread?: boolean;
 }
 
 export interface DashboardWidgetMeta {

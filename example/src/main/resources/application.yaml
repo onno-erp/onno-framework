@@ -18,12 +18,33 @@ onno:
     # editable in-app (the one knob this example ships under Settings).
     settings:
       enabled: true
+    # One-tap demo logins on the sign-in screen (demo-only: passwords reach the browser). Each button
+    # signs in as the matching in-memory user below, so an evaluator never types the email/password.
+    login:
+      demo-accounts:
+        - label: Sign in as Admin
+          username: admin@onnobooks.local
+          password: admin
+        - label: Sign in as Store manager
+          username: manager@onnobooks.local
+          password: manager
   # Per-document discussion threads, opted into per view via EntityView.comments(). Used on Orders.
   comments:
     enabled: true
+  # The top-right notification center. On by default; shown here to make the two built-in producers
+  # explicit. Mentions fire when a staff member is @-mentioned in an order comment; assignments fire
+  # when an order's @AssigneeField (Order.assignedTo) is set to an employee.
+  notifications:
+    enabled: true
+    mentions:
+      enabled: true
+    assignments:
+      enabled: true
   auth:
     # In-memory users (the default). Two roles: ADMIN (dashboard + staff management) and MANAGER
-    # (runs the shop). Change these passwords before any real use.
+    # (runs the shop). Usernames are the staff email addresses so a signed-in user links to their
+    # Employee row (see MainLayout.identity) — that's what lets the shell show their photo bottom-left
+    # and greet them by name. Change these passwords before any real use.
     mode: in-memory
     session:
       timeout: 8h
@@ -33,10 +54,10 @@ onno:
         # Single-node dev: start with a built-in non-secret key. Set a stable `key` in production.
         allow-ephemeral-key: true
     users:
-      - username: admin
+      - username: admin@onnobooks.local
         password: admin
         roles: [ADMIN]
-      - username: manager
+      - username: manager@onnobooks.local
         password: manager
         roles: [MANAGER]
   media:

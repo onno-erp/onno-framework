@@ -45,8 +45,14 @@ public class UiEventPublisher {
      */
     private static final long KEEPALIVE_SECONDS = 20;
 
-    /** An open stream plus the read-authorities its viewer held when it was opened. */
-    private record Subscriber(SseEmitter emitter, Set<String> roles) {}
+    /**
+     * An open stream plus the read-authorities its viewer held when it was opened, and the viewer's
+     * notification-routing id ({@code userId}: their identity record id, or username for an unlinked
+     * login). Roles gate the broadcast entity/presence events (#190); {@code userId} routes the
+     * per-user {@code notification} events, which are addressed to exactly one recipient rather than
+     * filtered by role.
+     */
+    private record Subscriber(SseEmitter emitter, Set<String> roles, String userId) {}
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final UiAccessService access;
@@ -69,8 +75,18 @@ public class UiEventPublisher {
      * snapshotted: every event is filtered against it for the life of the connection.
      */
     public SseEmitter subscribe(Set<String> roles) {
+        return subscribe(roles, null);
+    }
+
+    /**
+     * Open a stream for a viewer holding {@code roles} and identified for notification routing by
+     * {@code userId} (their identity record id, or username for an unlinked login; may be {@code null}
+     * for a guest, whose stream then receives no per-user notifications). Roles are snapshotted and
+     * filter every broadcast event; {@code userId} routes {@code notification} events addressed to it.
+     */
+    public SseEmitter subscribe(Set<String> roles, String userId) {
         SseEmitter emitter = new SseEmitter(0L);
-        Subscriber subscriber = new Subscriber(emitter, roles == null ? Set.of() : Set.copyOf(roles));
+        Subscriber subscriber = new Subscriber(emitter, roles == null ? Set.of() : Set.copyOf(roles), userId);
         subscribers.add(subscriber);
         emitter.onCompletion(() -> subscribers.remove(subscriber));
         emitter.onTimeout(() -> subscribers.remove(subscriber));
@@ -139,6 +155,30 @@ public class UiEventPublisher {
         for (Subscriber subscriber : subscribers) {
             if (access.canReceiveEvent(subscriber.roles(), entityType, entityName)) {
                 send(subscriber, "presence", payload);
+            }
+        }
+    }
+
+    /**
+     * Pushes one {@code notification} event to every open stream owned by {@code recipientId} — the
+     * per-user counterpart of the role-filtered {@link #publish} fan-out. A notification is addressed to
+     * exactly one person (it was raised <em>for</em> them and already persisted), so delivery routes on
+     * the subscriber's {@code userId} rather than an entity read check: the recipient may have several
+     * streams open (tabs/devices) and all of them light up; nobody else's does.
+     *
+     * <p>Its {@code entityType} is the distinct sentinel {@code "notification"} — like {@code presence}
+     * and {@code comment} — so the list/detail/dashboard surfaces never mistake it for a row change to
+     * one of their entities. The {@code payload} is the wire shape the client's notification store
+     * consumes ({@code id}, {@code type}, {@code title}, {@code link}, …); when its display fields are
+     * absent (a peer-node event trimmed to fit the cluster payload cap) the client refetches the feed.
+     */
+    public void publishNotification(String recipientId, Map<String, Object> payload) {
+        if (recipientId == null) {
+            return;
+        }
+        for (Subscriber subscriber : subscribers) {
+            if (recipientId.equals(subscriber.userId())) {
+                send(subscriber, "notification", payload);
             }
         }
     }

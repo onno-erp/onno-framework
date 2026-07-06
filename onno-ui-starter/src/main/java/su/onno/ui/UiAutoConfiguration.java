@@ -109,10 +109,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsProvider> authMethods,
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsContributor> contributors,
             UiMessages uiMessages,
-            su.onno.ui.LayoutSet layoutSet) {
+            su.onno.ui.LayoutSet layoutSet,
+            UiProperties properties) {
         // Branding is viewport-independent — take the desktop layout's, the same source DivKitController uses.
         su.onno.ui.BrandingConfig branding = layoutSet.forViewport(su.onno.ui.Viewport.DESKTOP).shell().branding();
-        return new LoginDivController(authMethods, contributors, uiMessages, branding);
+        return new LoginDivController(authMethods, contributors, uiMessages, branding, properties);
     }
 
     @Bean
@@ -127,8 +128,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access) {
-        return new UiEventController(publisher, access);
+    public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access,
+                                              CurrentUserResolver currentUserResolver) {
+        return new UiEventController(publisher, access, currentUserResolver);
     }
 
     /**
@@ -271,14 +273,17 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public CurrentUserResolver currentUserResolver(su.onno.ui.UiLayout uiLayout,
-                                                   MetadataRegistry registry, Jdbi jdbi) {
-        return new CurrentUserResolver(uiLayout, registry, jdbi);
+                                                   MetadataRegistry registry,
+                                                   FieldHintResolver fieldHintResolver, Jdbi jdbi) {
+        return new CurrentUserResolver(uiLayout, registry, fieldHintResolver, jdbi);
     }
 
     @Bean
     public UiViewResolver uiViewResolver(ResolvedMetadataService resolvedMetadata,
-                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
-        return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList());
+                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews,
+                                         UiProperties properties) {
+        return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList(),
+                properties.getList().getDefaultFeed(), properties.getList().getPageSize());
     }
 
     @Bean

@@ -47,6 +47,7 @@ public final class UiMessages {
         d.put("login.method.password", "Sign in with password");
         d.put("login.back", "Back");
         d.put("login.none", "No interactive login is configured for this application.");
+        d.put("login.orManual", "or sign in manually");
         d.put("login.username", "Username");
         d.put("login.password", "Password");
         d.put("login.submit", "Sign in");
@@ -99,6 +100,21 @@ public final class UiMessages {
         d.put("settings.title", "Settings");
         d.put("settings.subtitle", "App-wide configuration.");
 
+        // Notification center (bell beside the profile + right slide-over). Mirror messages.ts DEFAULT_MESSAGES.
+        d.put("notifications.title", "Notifications");
+        d.put("notifications.empty", "You're all caught up");
+        d.put("notifications.markAllRead", "Mark all read");
+        d.put("notifications.all", "All");
+        d.put("notifications.unread", "Unread");
+        d.put("notifications.typeAll", "All");
+        d.put("notifications.typeMention", "Mentions");
+        d.put("notifications.typeAssignment", "Assigned");
+        d.put("notifications.today", "Today");
+        d.put("notifications.thisWeek", "Earlier this week");
+        d.put("notifications.older", "Older");
+        d.put("notifications.tagMention", "Mention");
+        d.put("notifications.tagAssignment", "Assignment");
+
         // App shell / account island.
         d.put("shell.signedInAs", "Signed in as");
         d.put("shell.theme", "Theme");
@@ -123,6 +139,25 @@ public final class UiMessages {
         d.put("list.pageOf", "Page {page} of {pages}");
         d.put("list.prev", "Prev");
         d.put("list.next", "Next");
+        d.put("list.loadingMore", "Loading more…");
+        d.put("list.groupBy", "Group by");
+        d.put("list.groupNone", "None");
+        d.put("list.showMore", "Show more");
+        d.put("list.groupsCapped", "Showing the first groups only — narrow with a filter to see the rest.");
+        d.put("list.granDay", "Day");
+        d.put("list.granMonth", "Month");
+        d.put("list.granYear", "Year");
+        // Faceted filter bar: chip labels, date-range presets, clear-all.
+        d.put("list.filters", "Filters");
+        d.put("list.clear", "Clear");
+        d.put("list.clearAll", "Clear all");
+        d.put("list.selected", "{count} selected");
+        d.put("list.dateToday", "Today");
+        d.put("list.dateYesterday", "Yesterday");
+        d.put("list.dateLast7", "Last 7 days");
+        d.put("list.dateLast30", "Last 30 days");
+        d.put("list.dateThisMonth", "This month");
+        d.put("list.dateThisYear", "This year");
 
         // Empty / loading states.
         d.put("empty.noRecords", "No records");

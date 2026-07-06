@@ -37,21 +37,33 @@ public class LoginDivController {
     // The app's branding palette, so the public login card honors shell().light/.dark overrides exactly
     // like the authenticated shell (issue #191) — and a monochrome SSO mark tints to the brand accent.
     private final BrandingConfig branding;
+    private final UiProperties properties;
 
     public LoginDivController(ObjectProvider<AuthMethodsProvider> authMethods,
                               ObjectProvider<AuthMethodsContributor> contributors,
                               UiMessages messages,
-                              BrandingConfig branding) {
+                              BrandingConfig branding,
+                              UiProperties properties) {
         this.authMethods = authMethods;
         this.contributors = contributors;
         this.messages = messages;
         this.branding = branding;
+        this.properties = properties;
     }
 
     @GetMapping("/login")
     public Map<String, Object> login(@RequestParam(required = false) String theme,
                                      @RequestParam(required = false) String step) {
-        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme, branding), messages, step);
+        return LoginDivBuilder.login(resolveMethods(), Palette.of(theme, branding), messages, step, demoAccounts());
+    }
+
+    /** The configured one-tap demo accounts as plain {label, username, password} maps for the login card. */
+    private List<Map<String, Object>> demoAccounts() {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (UiProperties.DemoAccount a : properties.getLogin().getDemoAccounts()) {
+            out.add(Map.of("label", a.getLabel(), "username", a.getUsername(), "password", a.getPassword()));
+        }
+        return out;
     }
 
     // Visible for testing.

@@ -9,29 +9,83 @@ import java.util.List;
  */
 public record ResolvedListView(String title, List<Column> columns,
                                boolean searchable, String sortColumn, boolean sortDescending,
-                               List<Filter> filters, MapView mapView) {
+                               List<Filter> filters, MapView mapView,
+                               String feedMode, int pageSize, Grouping grouping) {
 
     public ResolvedListView {
         filters = filters == null ? List.of() : List.copyOf(filters);
+        // The grid keys off these verbatim; normalize here so every constructor path (and every
+        // renderer) sees a valid feed mode + a positive page size + a non-null grouping.
+        feedMode = (feedMode == null || feedMode.isBlank()) ? "infinite" : feedMode;
+        pageSize = pageSize <= 0 ? 50 : pageSize;
+        grouping = grouping == null ? Grouping.none() : grouping;
     }
 
     /** Back-compat: a non-searchable, default-sorted view. */
     public ResolvedListView(String title, List<Column> columns) {
-        this(title, columns, false, null, false, List.of(), null);
+        this(title, columns, false, null, false, List.of(), null, "infinite", 50, Grouping.none());
     }
 
     /** Back-compat: a view with no declarative filters. */
     public ResolvedListView(String title, List<Column> columns,
                             boolean searchable, String sortColumn, boolean sortDescending) {
-        this(title, columns, searchable, sortColumn, sortDescending, List.of(), null);
+        this(title, columns, searchable, sortColumn, sortDescending, List.of(), null, "infinite", 50, Grouping.none());
     }
 
     /** Back-compat: a view with filters but no map view. */
     public ResolvedListView(String title, List<Column> columns,
                             boolean searchable, String sortColumn, boolean sortDescending,
                             List<Filter> filters) {
-        this(title, columns, searchable, sortColumn, sortDescending, filters, null);
+        this(title, columns, searchable, sortColumn, sortDescending, filters, null, "infinite", 50, Grouping.none());
     }
+
+    /** Back-compat: a view with filters + map but default (infinite/50) feed + no grouping. */
+    public ResolvedListView(String title, List<Column> columns,
+                            boolean searchable, String sortColumn, boolean sortDescending,
+                            List<Filter> filters, MapView mapView) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView, "infinite", 50, Grouping.none());
+    }
+
+    /** Back-compat: a full feed spec but no grouping. */
+    public ResolvedListView(String title, List<Column> columns,
+                            boolean searchable, String sortColumn, boolean sortDescending,
+                            List<Filter> filters, MapView mapView, String feedMode, int pageSize) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView, feedMode, pageSize, Grouping.none());
+    }
+
+    /**
+     * The list's grouping capability: the columns a user may group by (the "Group by ▾" picker) and
+     * the per-group subtotals to show. Empty {@link #columns()} means the list can't be grouped.
+     */
+    public record Grouping(List<GroupColumn> columns, List<Aggregate> aggregates) {
+        public Grouping {
+            columns = columns == null ? List.of() : List.copyOf(columns);
+            aggregates = aggregates == null ? List.of() : List.copyOf(aggregates);
+        }
+
+        public static Grouping none() {
+            return new Grouping(List.of(), List.of());
+        }
+
+        public boolean isEmpty() {
+            return columns.isEmpty();
+        }
+    }
+
+    /**
+     * One groupable column: the data {@code columnName} the {@code GROUP BY} runs on, its picker
+     * {@code label}, and whether it is a date/time column ({@code date}) — a date column offers a
+     * day/month/year granularity and buckets rows by period instead of exact value.
+     */
+    public record GroupColumn(String columnName, String label, boolean date) {}
+
+    /**
+     * One per-group subtotal: the numeric {@code columnName} to aggregate, the {@code fn}
+     * ({@code sum}/{@code avg}/{@code min}/{@code max}), its header {@code label}, and the display
+     * {@code format} carried from the column (so a money subtotal renders as money). {@code format}
+     * may be blank.
+     */
+    public record Aggregate(String columnName, String fn, String label, String format) {}
 
     /**
      * A resolved map view: the data {@code columnName}s the geometry reads — a marker point (a

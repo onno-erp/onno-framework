@@ -27,6 +27,8 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -166,8 +168,12 @@ public class BookstoreSeeder implements ApplicationRunner {
         {"Oxford University Press", "trade@oup.example"},
     };
 
-    /** Staff: {name, email, position}. */
+    /** Staff: {name, email, position}. The first two emails double as the demo logins (see
+     *  application.yaml): {@code admin@onnobooks.local} (ADMIN) and {@code manager@onnobooks.local}
+     *  (MANAGER) — so the signed-in person links to a real Employee row and the shell shows their
+     *  photo. */
     private static final String[][] EMPLOYEES = {
+        {"Ada Sinclair", "admin@onnobooks.local", "MANAGER"},
         {"Mara Ellis", "manager@onnobooks.local", "MANAGER"},
         {"Owen Reid", "owen@onnobooks.local", "MANAGER"},
         {"Theo Park", "theo@onnobooks.local", "BOOKSELLER"},
@@ -358,7 +364,16 @@ public class BookstoreSeeder implements ApplicationRunner {
         e.setDescription(name);
         e.setEmail(email);
         e.setPosition(position);
+        e.setAvatarUrl(avatarUrl(name));
         return Ref.of(Employee.class, employees.save(e).getId());
+    }
+
+    /** A deterministic notionists-neutral avatar per staff name (DiceBear), so every employee has a
+     *  photo and the signed-in person's shows in the shell's account block without shipping image
+     *  files. */
+    private static String avatarUrl(String name) {
+        String seed = URLEncoder.encode(name, StandardCharsets.UTF_8);
+        return "https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50&seed=" + seed;
     }
 
     private Ref<Book> book(String title, String author, String isbn,

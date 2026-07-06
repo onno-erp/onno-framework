@@ -16,6 +16,7 @@ import su.onno.posting.PostingContext;
 import su.onno.rules.BusinessRule;
 import su.onno.rules.Validated;
 import su.onno.types.Ref;
+import su.onno.ui.notifications.AssigneeField;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -57,6 +58,9 @@ public class Order extends DocumentObject
     @Attribute(displayName = "Status")
     private OrderStatus status = OrderStatus.NEW;
 
+    // @AssigneeField makes the built-in assignment producer notify the employee whenever an order is
+    // assigned (or re-assigned) to them — they get a top-right notification the moment it's set.
+    @AssigneeField
     @Attribute(displayName = "Assigned to")
     private Ref<Employee> assignedTo;
 

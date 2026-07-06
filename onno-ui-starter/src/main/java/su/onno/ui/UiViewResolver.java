@@ -21,11 +21,22 @@ public class UiViewResolver {
     private static final String DEFAULT = "";
 
     private final ResolvedMetadataService metadata;
+    // Global fallbacks for lists that don't author their own feed mode / page size.
+    private final ListSpec.FeedMode defaultFeed;
+    private final int defaultPageSize;
     // entity -> (profile id | "" for default) -> view
     private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
 
+    /** Back-compat: resolver with the built-in defaults (infinite feed, 50 rows). */
     public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews) {
+        this(metadata, entityViews, ListSpec.FeedMode.INFINITE, 50);
+    }
+
+    public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews,
+                          ListSpec.FeedMode defaultFeed, int defaultPageSize) {
         this.metadata = metadata;
+        this.defaultFeed = defaultFeed == null ? ListSpec.FeedMode.INFINITE : defaultFeed;
+        this.defaultPageSize = defaultPageSize <= 0 ? 50 : defaultPageSize;
         for (EntityView view : entityViews) {
             if (view.entity() == null) {
                 continue;
@@ -141,8 +152,36 @@ public class UiViewResolver {
 
         ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);
 
+        // Feed mode + page size: the authored value wins, else the global default. Carried to the
+        // renderer as the lowercase token the grid keys off ("infinite" / "paged").
+        ListSpec.FeedMode feed = spec.feedMode() != null ? spec.feedMode() : defaultFeed;
+        int pageSize = spec.pageSize() > 0 ? spec.pageSize() : defaultPageSize;
+
+        // Grouping: resolve each groupable field + each subtotal's field to its data column
+        // (validated against the available columns); an unknown field is dropped rather than emitted.
+        List<ResolvedListView.GroupColumn> groupCols = new ArrayList<>();
+        for (String field : spec.groupable()) {
+            ColumnMeta cm = available.get(field);
+            if (cm == null) {
+                continue;
+            }
+            groupCols.add(new ResolvedListView.GroupColumn(cm.columnName(), cm.label(), cm.isTemporal()));
+        }
+        List<ResolvedListView.Aggregate> aggregates = new ArrayList<>();
+        for (ListSpec.Aggregate a : spec.aggregates()) {
+            ColumnMeta cm = available.get(a.field());
+            if (cm == null) {
+                continue;
+            }
+            aggregates.add(new ResolvedListView.Aggregate(cm.columnName(),
+                    a.fn().name().toLowerCase(java.util.Locale.ROOT),
+                    a.label() != null ? a.label() : cm.label(), cm.format()));
+        }
+        ResolvedListView.Grouping grouping = new ResolvedListView.Grouping(groupCols, aggregates);
+
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
-                spec.sortDescending(), filters, mapView);
+                spec.sortDescending(), filters, mapView,
+                feed.name().toLowerCase(java.util.Locale.ROOT), pageSize, grouping);
     }
 
     /**
@@ -189,7 +228,7 @@ public class UiViewResolver {
     }
 
     private record ColumnMeta(String label, String columnName, boolean visibleInList, int order,
-                              String width, String widget, String format, String hint) {
+                              String width, String widget, String format, String hint, String javaType) {
         static ColumnMeta of(Map<String, Object> m) {
             Object order = m.get("order");
             return new ColumnMeta(
@@ -197,7 +236,20 @@ public class UiViewResolver {
                     Boolean.TRUE.equals(m.get("visibleInList")),
                     order == null ? 0 : ((Number) order).intValue(),
                     str(m.get("widthHint")), str(m.get("widget")), str(m.get("format")),
-                    str(m.get("hint")));
+                    str(m.get("hint")), str(m.get("javaType")));
+        }
+
+        /**
+         * Whether this column is a date/time — so grouping buckets it by period (day/month/year)
+         * rather than exact value. Driven by the attribute's Java type; the built-in {@code _date} /
+         * {@code _period} system columns carry no javaType, so they're recognized by name.
+         */
+        boolean isTemporal() {
+            return switch (javaType) {
+                case "LocalDate", "LocalDateTime", "Instant", "OffsetDateTime", "ZonedDateTime",
+                     "Date", "Timestamp" -> true;
+                default -> columnName.equals("_date") || columnName.equals("_period");
+            };
         }
     }
 

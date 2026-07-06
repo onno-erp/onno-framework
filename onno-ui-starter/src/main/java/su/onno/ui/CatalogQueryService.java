@@ -335,6 +335,74 @@ public class CatalogQueryService {
         });
     }
 
+    /**
+     * Group a catalog list by {@code groupColumn} (a validated sortable column): one header per
+     * distinct value, or — for a date/time column — per {@code granularity} bucket, over the same
+     * WHERE (search + declarative + widget filters) as the flat list. Each header carries its row
+     * count, the requested {@code aggregates}, and the {@code expand} filter the client replays on the
+     * normal feed to load that group's rows. Headers are capped at {@link ListGroups#MAX_GROUPS}.
+     */
+    public ListGroups.GroupResult groups(CatalogDescriptor desc, String groupColumn, String granularity,
+                                         String search, List<String> eq, List<String> in, List<String> like,
+                                         List<String> prefix, List<String> ge, List<String> le,
+                                         String widgetFilter, List<ListGroups.Agg> aggregates) {
+        if (groupColumn == null || !sortableColumns(desc).contains(groupColumn)) {
+            return new ListGroups.GroupResult(List.of(), false);
+        }
+        Set<String> columns = columnNames(desc);
+        boolean date = isTemporalColumn(desc, groupColumn);
+        String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
+
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns);
+        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
+
+        // Aggregate select list: drop any the validator rejects (unknown fn/column) rather than fail.
+        StringBuilder select = new StringBuilder(groupExpr).append(" AS ").append(groupColumn)
+                .append(", COUNT(*) AS _count");
+        List<ListGroups.Agg> valid = new ArrayList<>();
+        for (ListGroups.Agg a : aggregates) {
+            try {
+                select.append(", ").append(WidgetAggregate.expression(a.fn(), a.column(), columns))
+                        .append(" AS a").append(valid.size());
+                valid.add(a);
+            } catch (IllegalArgumentException ignored) {
+                // skip an aggregate over an unknown column/fn
+            }
+        }
+
+        String sql = "SELECT " + select + " FROM " + desc.tableName()
+                + " WHERE " + where
+                + " GROUP BY " + groupExpr
+                + " ORDER BY " + groupExpr + " ASC"
+                + " LIMIT :limit";
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var q = h.createQuery(sql).bind("limit", ListGroups.MAX_GROUPS + 1);
+            bindSearch(q, search);
+            filter.bindings().forEach(q::bind);
+            wf.bindings().forEach(q::bind);
+            return q.mapToMap().list();
+        });
+        boolean capped = rows.size() > ListGroups.MAX_GROUPS;
+        if (capped) {
+            rows = new ArrayList<>(rows.subList(0, ListGroups.MAX_GROUPS));
+        }
+        // Resolve the group column if it's a ref/enum so the header reads as a label (+ pill colour),
+        // not a raw UUID/code; a no-op for a date bucket (not a ref).
+        refResolver.resolveAttributes(rows, desc.attributes());
+        return new ListGroups.GroupResult(
+                ListGroups.buildGroups(rows, groupColumn, date, granularity, valid), capped);
+    }
+
+    /** Whether a group column is a date/time — so grouping buckets it by period (see {@link ListGroups}). */
+    private static boolean isTemporalColumn(CatalogDescriptor desc, String column) {
+        if (column.equals("_date") || column.equals("_period")) {
+            return true;
+        }
+        return desc.attributes().stream()
+                .anyMatch(a -> a.columnName().equalsIgnoreCase(column) && ListGroups.isTemporalType(a.javaType()));
+    }
+
     /** Lowercased attribute column names a declarative list filter may bind to (see {@link ListFilter}). */
     private Set<String> filterableColumns(CatalogDescriptor desc) {
         return desc.attributes().stream()

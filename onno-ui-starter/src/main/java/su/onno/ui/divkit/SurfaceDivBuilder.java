@@ -100,8 +100,33 @@ public final class SurfaceDivBuilder {
         descriptor.put("newUrl", newUrl);
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
-        // One page per pager click; 50 keeps a page scannable without much in-page scroll.
-        descriptor.put("pageSize", 50);
+        // How the grid feeds rows: "infinite" (cursor/keyset scroll — the default) or "paged"
+        // (numbered offset pages), plus the window/page size. Both resolved from the view over the
+        // global onno.ui.list.* defaults (see UiViewResolver / ListSpec.feed).
+        descriptor.put("feedMode", view.feedMode());
+        descriptor.put("pageSize", view.pageSize());
+        // Grouping: the columns the "Group by ▾" picker offers, and the per-group subtotals to show.
+        // A date column carries date:true so the picker offers a day/month/year granularity. Fetched
+        // from /api/list/{kind}/{name}/groups; a group's rows expand through the normal feed.
+        List<Map<String, Object>> groupable = new ArrayList<>();
+        for (ResolvedListView.GroupColumn g : view.grouping().columns()) {
+            Map<String, Object> col = new LinkedHashMap<>();
+            col.put("columnName", g.columnName());
+            col.put("label", g.label());
+            col.put("date", g.date());
+            groupable.add(col);
+        }
+        descriptor.put("groupable", groupable);
+        List<Map<String, Object>> aggregates = new ArrayList<>();
+        for (ResolvedListView.Aggregate a : view.grouping().aggregates()) {
+            Map<String, Object> agg = new LinkedHashMap<>();
+            agg.put("columnName", a.columnName());
+            agg.put("fn", a.fn());
+            agg.put("label", a.label());
+            agg.put("format", a.format());
+            aggregates.add(agg);
+        }
+        descriptor.put("aggregates", aggregates);
         // Optional map view: a Table ⇄ Map toggle the island renders, plotting the rows as markers
         // (the geo columns are resolved + validated server-side; see ResolvedListView.MapView).
         if (view.mapView() != null) {
@@ -485,6 +510,8 @@ public final class SurfaceDivBuilder {
         d.put("newUrl", null);
         d.put("actions", List.of());
         d.put("inputs", List.of());
+        // A register's movement log / balance is append-heavy and depth-scrolled — cursor-stream it.
+        d.put("feedMode", "infinite");
         d.put("pageSize", 50);
         // Where the island fetches its windows from (a register has no /api/list/{kind}/{name} route).
         d.put("feed", feed);

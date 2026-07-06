@@ -327,7 +327,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
     // pointer-events-auto: this widget is portaled into a DivKit div-custom whose container blocks
     // are rendered pointer-events:none; opt the panel back in so the textarea and Send button are
     // focusable/clickable (matches entity-list-widget, page-actions-bar, constants-editor, login).
-    <div className="pointer-events-auto mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <div className="pointer-events-auto mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-foreground">Comments</h2>
@@ -341,7 +341,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
       {comments === null ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : comments.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
+        <div className="rounded-card border border-dashed border-border px-4 py-6 text-center">
           <MessageSquare className="mx-auto mb-2 size-5 text-muted-foreground/60" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">No comments yet. Start the conversation below.</p>
         </div>
@@ -392,7 +392,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
         {pickerOpen ? (
           <ul
             // Opens upward (bottom-full) so it never clips at the bottom of a scrolling detail pane.
-            className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full overflow-auto rounded-xl border border-border bg-popover p-1 shadow-lg"
+            className="absolute bottom-full left-0 z-20 mb-1 max-h-64 w-full overflow-auto rounded-card border border-border bg-popover p-1 shadow-lg"
             role="listbox"
           >
             {suggestions.map((s, i) => (
@@ -447,7 +447,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
             className={cn(
               // shrink-0 + whitespace-nowrap: the textarea is w-full, so without these the button is
               // squeezed below its content width in a narrow pane and the label wraps ("Sen d").
-              "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-primary px-3.5 text-sm font-medium",
+              "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control bg-primary px-3.5 text-sm font-medium",
               "text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             )}
           >

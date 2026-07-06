@@ -21,6 +21,7 @@ import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
 import { NavPresencePortals } from "@/lib/nav-presence-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
+import { NotificationCenter } from "@/components/notification-center";
 import { UpdateNotice } from "@/components/update-notice";
 import { BASE_PATH } from "@/lib/base-path";
 
@@ -47,6 +48,7 @@ function ProtectedApp() {
   return (
     <TimeRangeProvider>
       <UpdateNotice />
+      <NotificationCenter />
       <DivKitView />
       <WidgetPortals />
       <FormPortals />

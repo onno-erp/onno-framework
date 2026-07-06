@@ -29,4 +29,10 @@ public class Employee extends CatalogObject {
 
     @Attribute(displayName = "Position")
     private Position position = Position.BOOKSELLER;
+
+    /** Staff photo. Rendered as an avatar in the People list and, for the signed-in person, in the
+     *  shell's account block (see {@link com.example.ui.views.EmployeeView} — the {@code avatar}
+     *  widget marks this as the identity photo the framework reads). Stores an image URL. */
+    @Attribute(displayName = "Photo", length = 500)
+    private String avatarUrl;
 }

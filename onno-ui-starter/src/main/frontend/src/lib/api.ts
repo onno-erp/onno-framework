@@ -258,6 +258,30 @@ export interface PresenceSnapshot {
   records: PresenceRecord[];
 }
 
+/** One notification in the per-user timeline (see NotificationController). */
+export interface NotificationView {
+  id: string;
+  /** Source tag ("mention" | "assignment" | …) — the client maps it to an icon and a template. */
+  type: string;
+  title: string;
+  body?: string | null;
+  /** The "kind/name/id" route the row opens (an onno:// url body), or null for a non-navigating notice. */
+  link?: string | null;
+  actorName?: string | null;
+  actorAvatar?: string | null;
+  createdAt: string;
+  readAt?: string | null;
+  unread: boolean;
+}
+
+/** One newest-first window of the notification timeline, plus the badge's unread total. */
+export interface NotificationPage {
+  items: NotificationView[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  unreadCount: number;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -388,6 +412,23 @@ export const api = {
   // matching q, ranked and capped server-side (see MentionController).
   searchMentions: (q: string) =>
     fetchJson<MentionSuggestion[]>(`${BASE}/mentions?q=${encodeURIComponent(q)}`),
+
+  // Per-user notifications (see NotificationController). One newest-first window; `unread` restricts to
+  // unread rows, `cursor` (from a previous page's nextCursor) resumes. Marking read returns the fresh
+  // unread total so the badge updates without a refetch.
+  getNotifications: (opts?: { unread?: boolean; cursor?: string }) => {
+    const params = new URLSearchParams();
+    if (opts?.unread) params.set("unread", "true");
+    if (opts?.cursor) params.set("cursor", opts.cursor);
+    const qs = params.toString();
+    return fetchJson<NotificationPage>(`${BASE}/notifications${qs ? "?" + qs : ""}`);
+  },
+  markNotificationRead: (id: string) =>
+    fetchJson<{ unreadCount: number }>(`${BASE}/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () =>
+    fetchJson<{ marked: number; unreadCount: number }>(`${BASE}/notifications/read-all`, {
+      method: "POST",
+    }),
 
   // The ambient-presence snapshot: every viewed record the caller may read. Loaded once on startup;
   // live `presence` SSE deltas keep the client store current after that.

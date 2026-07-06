@@ -143,6 +143,77 @@ public class ListDataController {
     }
 
     /**
+     * Group a catalog list by a column: one collapsible header per distinct value (or per date
+     * bucket), with a row count + requested subtotals, over the same sort/search/filters as the flat
+     * list. The flat list ({@link #catalogPage}) loads a group's rows via the {@code expand} filter
+     * each header carries. Envelope: {@code {groups, capped}} — {@code capped} true when the group
+     * count hit {@link ListGroups#MAX_GROUPS}.
+     */
+    @GetMapping("/catalogs/{name}/groups")
+    public Map<String, Object> catalogGroups(@PathVariable String name,
+                                             @RequestParam String groupBy,
+                                             @RequestParam(required = false) String granularity,
+                                             @RequestParam(required = false) String q,
+                                             @RequestParam(required = false) String filter,
+                                             HttpServletRequest request,
+                                             Principal principal) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(principal, desc);
+        ListGroups.GroupResult result = catalogQuery.groups(desc, groupBy, granularity, q,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                filter, aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    /** Group a document list by a column — the document analogue of {@link #catalogGroups}. */
+    @GetMapping("/documents/{name}/groups")
+    public Map<String, Object> documentGroups(@PathVariable String name,
+                                              @RequestParam String groupBy,
+                                              @RequestParam(required = false) String granularity,
+                                              @RequestParam(required = false) String q,
+                                              @RequestParam(required = false) String from,
+                                              @RequestParam(required = false) String to,
+                                              @RequestParam(required = false) String filter,
+                                              HttpServletRequest request,
+                                              Principal principal) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(principal, desc);
+        ListGroups.GroupResult result = documentQuery.groups(desc, groupBy, granularity, q, from, to,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                filter, aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    private static Map<String, Object> groupsEnvelope(ListGroups.GroupResult result) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("groups", result.groups());
+        out.put("capped", result.capped());
+        return out;
+    }
+
+    /**
+     * The requested per-group subtotals: the repeated {@code agg} param, each a {@code "fn,column"}
+     * pair (e.g. {@code agg=sum,total}). Malformed tokens are skipped; the query service re-validates
+     * every fn/column, so an unknown one is dropped rather than 400ing the request.
+     */
+    private static List<ListGroups.Agg> aggregates(HttpServletRequest request) {
+        String[] raw = request.getParameterValues("agg");
+        if (raw == null || raw.length == 0) {
+            return List.of();
+        }
+        List<ListGroups.Agg> out = new java.util.ArrayList<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            int comma = value.indexOf(',');
+            if (comma <= 0 || comma == value.length() - 1) continue;
+            out.add(new ListGroups.Agg(value.substring(0, comma).trim(), value.substring(comma + 1).trim()));
+        }
+        return out;
+    }
+
+    /**
      * Attach per-row state for any state-aware row actions (see {@link ActionSpec}) under each row's
      * {@code _actions} key, so the grid can render a row's button with the right icon/label and
      * honour its visibility/enabled. A no-op (rows untouched) when the entity has only static row

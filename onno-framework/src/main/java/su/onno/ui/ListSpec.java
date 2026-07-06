@@ -29,6 +29,10 @@ public final class ListSpec {
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
     private MapSpec map;
+    private FeedMode feedMode;
+    private int pageSize;
+    private final List<String> groupable = new ArrayList<>();
+    private final List<Aggregate> aggregates = new ArrayList<>();
 
     public ListSpec title(String title) {
         this.title = title;
@@ -143,6 +147,72 @@ public final class ListSpec {
         return map;
     }
 
+    /**
+     * How this list feeds rows to the grid: {@link FeedMode#INFINITE} streams a cursor-scrolled
+     * (keyset) window that loads more as you scroll — fast at any depth, no total — or
+     * {@link FeedMode#PAGED} shows discrete numbered pages with a Prev/Next pager and an exact
+     * total. Left unset, the list inherits the global default ({@code onno.ui.list.default-feed},
+     * itself {@code INFINITE} out of the box).
+     *
+     * <pre>
+     * list.feed(FeedMode.PAGED);   // numbered pages for this entity, whatever the global default
+     * </pre>
+     */
+    public ListSpec feed(FeedMode mode) {
+        this.feedMode = mode;
+        return this;
+    }
+
+    /**
+     * Rows fetched per window (infinite) or per page (paged). Left unset (or {@code <= 0}) the list
+     * inherits the global default ({@code onno.ui.list.page-size}, itself {@code 50}). Clamped to the
+     * server's list ceiling.
+     */
+    public ListSpec pageSize(int pageSize) {
+        this.pageSize = pageSize;
+        return this;
+    }
+
+    /**
+     * Declare the columns a user may group this list by, offered in a "Group by ▾" toolbar picker
+     * (with "None" — the flat list — as the default). Grouping is <b>backend-powered</b>: picking a
+     * column runs a {@code GROUP BY} on the server and shows one collapsible header per distinct
+     * value (or, for a date/time column, per day/month/year bucket — the picker offers a granularity)
+     * with the group's row count and any declared {@link #aggregate subtotals}; expanding a header
+     * lazily loads that group's rows. Field names are entity field names, like the column/sort ones;
+     * an unknown field is dropped. Low-cardinality columns (status, category, warehouse, a date)
+     * group usefully; a free-text column does not.
+     *
+     * <pre>
+     * list.groupable("status", "warehouse", "orderDate");   // Group by ▾: None | Status | Warehouse | Order date
+     * </pre>
+     */
+    public ListSpec groupable(String... fields) {
+        groupable.addAll(List.of(fields));
+        return this;
+    }
+
+    /**
+     * Declare a per-group subtotal shown on each group header (and rolled up as a grand total): an
+     * aggregate {@code fn} over a numeric {@code field}. Only meaningful alongside {@link #groupable};
+     * every group always carries its row count regardless. The subtotal is formatted with the field's
+     * own {@code .format(...)} hint, so a money column reads as money.
+     *
+     * <pre>
+     * list.groupable("status").aggregate("total", Agg.SUM);          // Σ total per status
+     * list.groupable("region").aggregate("amount", Agg.AVG, "Avg");  // labelled average per region
+     * </pre>
+     */
+    public ListSpec aggregate(String field, Agg fn) {
+        return aggregate(field, fn, null);
+    }
+
+    /** As {@link #aggregate(String, Agg)} with an explicit header label (else the field name). */
+    public ListSpec aggregate(String field, Agg fn, String label) {
+        aggregates.add(new Aggregate(field, fn, label));
+        return this;
+    }
+
     public String title() { return title; }
 
     public List<String> include() { return List.copyOf(include); }
@@ -158,6 +228,18 @@ public final class ListSpec {
     public String sortField() { return sortField; }
 
     public boolean sortDescending() { return sortDescending; }
+
+    /** The authored feed mode, or {@code null} to inherit the global {@code onno.ui.list.default-feed}. */
+    public FeedMode feedMode() { return feedMode; }
+
+    /** The authored page size, or {@code 0} to inherit the global {@code onno.ui.list.page-size}. */
+    public int pageSize() { return pageSize; }
+
+    /** The fields offered in the group-by picker, in declaration order (empty = no grouping). */
+    public List<String> groupable() { return List.copyOf(groupable); }
+
+    /** The declared per-group subtotals, in declaration order. */
+    public List<Aggregate> aggregates() { return List.copyOf(aggregates); }
 
     /** The declared list filters, in declaration order. */
     public List<Filter> filters() {
@@ -234,6 +316,29 @@ public final class ListSpec {
 
         public boolean isDefaultView() { return defaultView; }
     }
+
+    /** How a list feeds its rows to the grid (and which pagination engine it drives). */
+    public enum FeedMode {
+        /**
+         * Cursor (keyset) pagination: the grid loads a window, then more as you scroll, seeking each
+         * next window with an indexed comparison — so a list stays fast at any depth and rows are
+         * never skipped/duplicated when data shifts mid-scroll. No exact total (a cheap estimate is
+         * shown). The default, and the natural fit for large, append-heavy lists.
+         */
+        INFINITE,
+        /**
+         * Offset pagination: discrete numbered pages with a Prev/Next pager and an exact total.
+         * Familiar and jump-to-page, but a deep page costs a scan — best for small or well-filtered
+         * lists where the total matters more than depth performance.
+         */
+        PAGED
+    }
+
+    /** A per-group subtotal function (row count is always present and needs no declaration). */
+    public enum Agg { SUM, AVG, MIN, MAX }
+
+    /** A declared per-group subtotal: the aggregate {@code fn} over a numeric {@code field}. */
+    public record Aggregate(String field, Agg fn, String label) {}
 
     /** How a filter narrows the list query (and which control the grid renders). */
     public enum FilterType {

@@ -166,7 +166,7 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             disabled={busy}
             onClick={() => run(a)}
             className={cn(
-              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               a.tone === "primary"
                 ? "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] hover:bg-[hsl(var(--success))]/90"
                 : a.tone === "accent"
@@ -193,7 +193,7 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             <button
               type="button"
               aria-label="More actions"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-border bg-secondary text-foreground transition-colors hover:bg-accent"
             >
               <Ellipsis className="size-4" aria-hidden="true" />
             </button>

@@ -23,7 +23,7 @@ export function RegisterSurface({ register }: { register: RegisterDescriptor }) 
     <div className="pointer-events-auto flex flex-col">
       {views.length > 1 ? (
         <div className="px-4 pt-4 sm:px-6">
-          <div className="inline-flex h-9 items-center rounded-lg border border-input bg-muted p-0.5">
+          <div className="inline-flex h-9 items-center rounded-control border border-input bg-muted p-0.5">
             {views.map((v) => (
               <button
                 key={v.key}
@@ -31,7 +31,7 @@ export function RegisterSurface({ register }: { register: RegisterDescriptor }) 
                 onClick={() => setActive(v.key)}
                 aria-pressed={v.key === view.key}
                 className={cn(
-                  "inline-flex h-8 items-center rounded-md px-3 text-sm font-medium",
+                  "inline-flex h-8 items-center rounded-control px-3 text-sm font-medium",
                   v.key === view.key
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"

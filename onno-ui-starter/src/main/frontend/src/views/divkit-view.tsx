@@ -24,6 +24,7 @@ import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
 import { startPresence } from "@/lib/presence-store";
 import { TabPresence } from "@/components/presence-surfaces";
 import { usePanePresence } from "@/lib/presence-store";
+import { NotificationTrigger } from "@/components/notification-center";
 import "@divkitframework/divkit/dist/client.css";
 
 // The shell nav/account cards render lucide icons and the ambient sidebar presence dots as React islands.
@@ -1192,7 +1193,7 @@ export function DivKitView() {
   type MenuItem = { label: string; icon: LucideIcon; run: () => void; danger?: boolean; divider?: boolean };
   const contextMenu = (pos: { x: number; y: number }, items: MenuItem[], close: () => void) => (
     <div
-      className="fixed z-50 min-w-44 overflow-hidden rounded-xl border py-1 shadow-lg"
+      className="fixed z-50 min-w-44 overflow-hidden rounded-card border py-1 shadow-lg"
       style={{
         left: Math.min(pos.x, window.innerWidth - 184),
         top: Math.min(pos.y, window.innerHeight - 168),
@@ -1269,7 +1270,7 @@ export function DivKitView() {
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={() => setConfirm(null)} />
       <div
-        className="relative z-10 w-full max-w-sm rounded-2xl border p-5 shadow-2xl"
+        className="relative z-10 w-full max-w-sm rounded-card border p-5 shadow-2xl"
         style={{ background: surfaceBg, borderColor }}
       >
         <h2 className="text-base font-semibold text-foreground">{confirm.title}</h2>
@@ -1334,7 +1335,7 @@ export function DivKitView() {
     }
     return (
       <section
-        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border transition-colors"
+        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-card border transition-colors"
         style={{ background: surfaceBg, borderColor: focused ? focusBorder : borderColor }}
         onMouseDownCapture={() => {
           if (!focused) setWorkspace((ws) => ({ ...ws, focused: pane.id }));
@@ -1527,7 +1528,7 @@ export function DivKitView() {
         {/* drop hints while dragging a tab over the body (append / split) */}
         {isDropInto ? (
           <div
-            className="pointer-events-none absolute inset-0 rounded-2xl"
+            className="pointer-events-none absolute inset-0 rounded-card"
             style={{ background: `${accent}14`, boxShadow: `inset 0 0 0 2px ${accent}66` }}
           />
         ) : null}
@@ -1552,11 +1553,12 @@ export function DivKitView() {
       <div className="flex h-screen w-full overflow-hidden" style={{ background: pageBg }}>
         <aside className="flex h-screen w-64 shrink-0 flex-col gap-3 p-3">
           <div
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-2xl border"
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-card border"
             style={{ background: surfaceBg, borderColor }}
           >
             {navEl}
           </div>
+          <NotificationTrigger />
           {accountEl}
         </aside>
         <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-3 pr-3">

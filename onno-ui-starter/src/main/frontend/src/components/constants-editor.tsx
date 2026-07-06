@@ -75,21 +75,21 @@ export function ConstantsEditor({ title, names }: { title?: string; names?: stri
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-border bg-card p-5 text-sm text-destructive">
+        <div className="rounded-card border border-border bg-card p-5 text-sm text-destructive">
           Failed to load settings: {error}
         </div>
       ) : !settings ? (
         <div className="space-y-2">
-          <div className="h-16 animate-pulse rounded-xl bg-muted/40" />
-          <div className="h-16 animate-pulse rounded-xl bg-muted/40" />
+          <div className="h-16 animate-pulse rounded-card bg-muted/40" />
+          <div className="h-16 animate-pulse rounded-card bg-muted/40" />
         </div>
       ) : settings.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+        <div className="rounded-card border border-border bg-card p-5 text-sm text-muted-foreground">
           No settings defined yet. Add a <code>@Constant</code> to your app and it shows up here.
         </div>
       ) : (
         <>
-          <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="divide-y divide-border overflow-hidden rounded-card border border-border bg-card">
             {settings.map((s) => (
               <div key={s.name} className="flex items-center justify-between gap-4 px-5 py-4">
                 <div className="min-w-0">
@@ -127,7 +127,7 @@ export function ConstantsEditor({ title, names }: { title?: string; names?: stri
               type="button"
               disabled={saving || !dirty}
               onClick={save}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
             >
               <Check className="size-4" aria-hidden="true" />
               {saving ? "Saving…" : "Save changes"}

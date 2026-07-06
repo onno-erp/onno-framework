@@ -176,7 +176,7 @@ public class DivKitController implements DisposableBean {
         out.put("nav", DivCard.of("onno-nav",
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",
-                ShellLayoutBuilder.account(user.displayName(), profileLinks, activeProfile.id(), p, messages)));
+                ShellLayoutBuilder.account(user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(), p, messages)));
         // A flat route-path → localized label map (e.g. "/catalogs/customers" → "Клиенты"), built
         // from the same nav the sidebar renders. The web client titles its workspace tabs from this
         // so a tab reads in the chrome language instead of the humanized URL segment ("Customers").
@@ -199,7 +199,7 @@ public class DivKitController implements DisposableBean {
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
         List<ShellLayoutBuilder.ProfileLink> profileLinks = profileLinksFor(principal);
         Map<String, Object> content = ShellLayoutBuilder.account(
-                user.displayName(), profileLinks, profileId, p, messages);
+                user.displayName(), user.avatarUrl(), profileLinks, profileId, p, messages);
         // As a standalone page (mobile), the account card carries its own padding +
         // border, so it just needs an outer margin to not sit flush against the edges —
         // the breathing room the web shell used to add around content.
@@ -229,7 +229,7 @@ public class DivKitController implements DisposableBean {
         ShellLayoutBuilder.Logo logo = ShellLayoutBuilder.Logo.of(
                 branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
         Map<String, Object> content = ShellLayoutBuilder.menu(
-                brand, logo, nav, user.displayName(), profileLinks, activeProfile.id(), p, messages);
+                brand, logo, nav, user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(), p, messages);
         Div.margins(content, 16, 16, 16, 16);
         return DivCard.of("onno-content", content);
     }

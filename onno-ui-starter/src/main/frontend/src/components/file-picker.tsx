@@ -124,7 +124,7 @@ export function FilePicker({
             void accept(e.dataTransfer.files?.[0]);
           }}
           className={cn(
-            "flex h-20 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "flex h-20 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-card border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             dragging && "border-primary bg-primary/10 text-foreground",
             busy && "pointer-events-none opacity-70"
           )}

@@ -70,7 +70,7 @@ export function PageActionsBar({
       {heading ? (
         <h2 className="mb-2 text-sm font-semibold text-foreground">{heading}</h2>
       ) : null}
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap gap-2 rounded-card border border-border bg-card p-4">
         {buttons.map((b) => {
           const busy = pending[b.key];
           return (
@@ -80,7 +80,7 @@ export function PageActionsBar({
               disabled={busy}
               onClick={() => run(b)}
               className={cn(
-                "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-secondary px-3",
+                "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control bg-secondary px-3",
                 "text-sm font-medium text-foreground transition-colors hover:bg-accent",
                 "disabled:cursor-not-allowed disabled:opacity-60"
               )}

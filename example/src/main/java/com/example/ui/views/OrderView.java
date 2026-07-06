@@ -44,7 +44,15 @@ public class OrderView implements EntityView {
     public void list(ListSpec list) {
         list.columns("number", "date", "customer", "status", "total", "assignedTo")
                 .label("total", "Total")
-                .sortBy("date", true);
+                .sortBy("date", true)
+                // Group the board by status/assignee (discrete) or by date (bucketed day/month/year),
+                // with the order total summed per group.
+                .groupable("status", "assignedTo", "date")
+                .aggregate("total", ListSpec.Agg.SUM, "Total");
+        // Faceted filter bar: a date-range facet (with Today / Last 7 days / This month presets) and
+        // a note typeahead. They narrow the same query the grouping and search run over.
+        list.filter("date").label("Order date").dateRange();
+        list.filter("note").label("Note").contains();
     }
 
     @Override

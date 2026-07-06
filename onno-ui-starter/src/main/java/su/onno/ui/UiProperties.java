@@ -44,6 +44,12 @@ public class UiProperties {
     /** Dashboard rendering tuning (how the home/Page widget grid resolves its KPI tiles). */
     private Dashboard dashboard = new Dashboard();
 
+    /** Login-screen options — currently the optional one-tap demo accounts. */
+    private Login login = new Login();
+
+    /** List/table grid defaults — how every list feeds rows unless an {@code EntityView} overrides. */
+    private ListView list = new ListView();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -100,6 +106,22 @@ public class UiProperties {
         this.dashboard = dashboard;
     }
 
+    public Login getLogin() {
+        return login;
+    }
+
+    public void setLogin(Login login) {
+        this.login = login;
+    }
+
+    public ListView getList() {
+        return list;
+    }
+
+    public void setList(ListView list) {
+        this.list = list;
+    }
+
     /**
      * The built-in Settings page — the {@code @Constant} editor surfaced at {@code /settings} with
      * an auto-injected admin nav entry. Opt-in: off by default so an app shows it only when it wants
@@ -141,6 +163,104 @@ public class UiProperties {
 
         public void setWidgetParallelism(int widgetParallelism) {
             this.widgetParallelism = widgetParallelism;
+        }
+    }
+
+    /**
+     * Login-screen options. The one setting today is {@code demo-accounts}: a list of one-tap sign-in
+     * shortcuts the login screen renders above the password form, each filling and submitting the
+     * credentials for you.
+     *
+     * <p><b>Demo/evaluation only.</b> The passwords are handed to the browser in the login payload, so
+     * enable this only for a public demo or a throwaway sandbox — never for a deployment holding real
+     * data. Leave the list empty (the default) to show a plain password form.</p>
+     */
+    public static class Login {
+
+        /** One-tap sign-in shortcuts shown on the login screen; empty (default) shows none. */
+        private java.util.List<DemoAccount> demoAccounts = new java.util.ArrayList<>();
+
+        public java.util.List<DemoAccount> getDemoAccounts() {
+            return demoAccounts;
+        }
+
+        public void setDemoAccounts(java.util.List<DemoAccount> demoAccounts) {
+            this.demoAccounts = demoAccounts;
+        }
+    }
+
+    /**
+     * List/table grid defaults, applied to every entity list unless its {@link EntityView} overrides
+     * them via {@link ListSpec#feed}/{@link ListSpec#pageSize}. Two knobs: which pagination engine a
+     * list uses by default, and how many rows it fetches per window/page.
+     */
+    public static class ListView {
+
+        /**
+         * Default feed mode for lists that don't declare one. {@code INFINITE} (the out-of-the-box
+         * default) cursor-scrolls a keyset stream — fast at any depth, no exact total; {@code PAGED}
+         * shows numbered offset pages with a Prev/Next pager and an exact total. Bind from config as
+         * {@code onno.ui.list.default-feed: paged} (relaxed/case-insensitive).
+         */
+        private ListSpec.FeedMode defaultFeed = ListSpec.FeedMode.INFINITE;
+
+        /**
+         * Default rows fetched per window (infinite) or per page (paged), for lists that don't set
+         * their own. Clamped to the server's list ceiling (500). Default {@code 50}.
+         */
+        private int pageSize = 50;
+
+        public ListSpec.FeedMode getDefaultFeed() {
+            return defaultFeed;
+        }
+
+        public void setDefaultFeed(ListSpec.FeedMode defaultFeed) {
+            this.defaultFeed = defaultFeed;
+        }
+
+        public int getPageSize() {
+            return pageSize;
+        }
+
+        public void setPageSize(int pageSize) {
+            this.pageSize = pageSize;
+        }
+    }
+
+    /** A single one-tap demo login: a button {@code label} plus the {@code username}/{@code password} it submits. */
+    public static class DemoAccount {
+
+        /** The button text, e.g. {@code "Admin"} or {@code "Store manager"}. */
+        private String label = "";
+
+        /** The username submitted on tap. */
+        private String username = "";
+
+        /** The password submitted on tap. Sent to the browser — demo use only. */
+        private String password = "";
+
+        public String getLabel() {
+            return label;
+        }
+
+        public void setLabel(String label) {
+            this.label = label;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
         }
     }
 }

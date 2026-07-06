@@ -24,6 +24,13 @@
     --input: 0 0% 92%;
     --ring: 0 0% 9%;
     --radius: 0.5rem;
+    /* Shape tokens — the single source of truth for corner rounding, so the whole UI reshapes from
+       config. Override via onno.ui.theme (e.g. onno.ui.theme.radius-control: 0.5rem to switch pill
+       controls back to rounded rectangles). --radius-control drives every interactive control
+       (buttons, inputs, selects, filter chips); --radius-card drives surfaces (cards, the toolbar
+       island, popovers, menus, dialogs). Avatars and status pills stay fully round independently. */
+    --radius-control: 9999px;
+    --radius-card: 0.9rem;
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;

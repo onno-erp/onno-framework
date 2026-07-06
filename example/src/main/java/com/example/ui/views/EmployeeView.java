@@ -18,8 +18,9 @@ public class EmployeeView implements EntityView {
 
     @Override
     public void list(ListSpec list) {
-        list.columns("description", "email", "position")
+        list.columns("avatarUrl", "description", "email", "position")
                 .label("description", "Name")
+                .label("avatarUrl", "")
                 .sortBy("description", false);
     }
 
@@ -27,6 +28,10 @@ public class EmployeeView implements EntityView {
     public void fields(EntityConfigBuilder f) {
         f.field("description").order(0).label("Name")
             .field("email").order(1)
-            .field("position").order(2);
+            .field("position").order(2)
+            // The avatar widget marks this as the staff photo: the framework reads it for the
+            // signed-in person's shell account block and for comment-author avatars.
+            .field("avatarUrl").order(3).label("Photo").widget("avatar")
+                .hint("Link to a staff photo.");
     }
 }

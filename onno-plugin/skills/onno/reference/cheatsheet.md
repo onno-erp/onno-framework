@@ -180,7 +180,13 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` →
+    `column(field,label)`, `label(field,label)`, `hide(...)`, `feed(FeedMode.INFINITE|PAGED)`
+    (INFINITE = cursor/keyset scroll, the default; PAGED = numbered offset pages — else inherits
+    `onno.ui.list.default-feed`), `pageSize(n)` (rows per window/page; else `onno.ui.list.page-size`),
+    `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
+    day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
+    (per-group subtotal on each header),
+    `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
     order) / `contains` / `startsWith` / `dateRange`; `map()` → `MapSpec` adds a Table⇄Map toggle —
@@ -220,11 +226,28 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 #69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
+## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
+
+- Per-user timeline behind the top-right bell + `/api/notifications`. Persisted in the framework-owned
+  `onno_notifications` table; delivered live over the `notification` SSE event (routed by recipient,
+  relayed cross-node over the `ClusterEventBus`).
+- Produce one from any bean: `notificationService.notify(NotificationRequest.to(recipientId).type("…")
+  .title("…").body("…").link("kind/name/id").actor(currentUser).build())`. `recipientId` is the
+  target's identity `recordId` (from `CurrentUserResolver`). This is the extension point — add a source
+  by calling it from an `@EventListener`.
+- Built-in, config-gated producers: **mentions** (`onno.notifications.mentions.enabled`) turn a comment
+  `@`-mention of a user into a notification; **assignment** (`onno.notifications.assignments.enabled`)
+  notifies the target of an `@AssigneeField`-annotated `Ref<>` when it's set/changed to a user.
+- `@AssigneeField` (on a catalog/document `Ref<>` attribute pointing at the identity catalog) — marks
+  the assignee; setting it fires the assignment producer. Notification hint only; no storage/UI effect.
+
 ## Events & outbox (packages `su.onno.events`, `su.onno.messaging`)
 
 - `EntityChangedEvent(changeType, entityType, entityName, UUID id, naturalKey)` — published on every
   write through controllers and `repository.save(...)`; drives `/api/events` SSE. Constants:
   changeType `created/updated/deleted/posted/unposted/changed`; entityType `catalog/document/register`.
+- `EntityMentionedEvent(comment, mention, actor)` — published per readable `@`-mention in a posted
+  comment; consumed by the notifications feature, and by any app `@EventListener` (mail, etc.).
 - `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; relayed by
   `onno-kafka-starter` as CloudEvents.
 

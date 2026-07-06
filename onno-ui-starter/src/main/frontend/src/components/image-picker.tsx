@@ -103,7 +103,7 @@ export function ImagePicker({
           "relative flex cursor-pointer items-center justify-center overflow-hidden border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           dragging && "border-primary bg-primary/10 text-foreground",
           busy && "pointer-events-none opacity-70",
-          avatar ? "size-28 rounded-full" : "h-44 w-full rounded-xl"
+          avatar ? "size-28 rounded-full" : "h-44 w-full rounded-card"
         )}
       >
         {hasImage ? (
@@ -227,7 +227,7 @@ export function GalleryPicker({
       />
       <div
         className={cn(
-          "grid grid-cols-3 gap-2 rounded-xl sm:grid-cols-4",
+          "grid grid-cols-3 gap-2 rounded-card sm:grid-cols-4",
           dragging && "ring-2 ring-primary"
         )}
       >

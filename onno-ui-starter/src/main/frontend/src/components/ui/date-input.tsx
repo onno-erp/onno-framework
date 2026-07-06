@@ -25,7 +25,7 @@ const segmentCls =
 const calendarBtnCls =
   "ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled=true]:opacity-50";
 const popoverCls =
-  "z-50 rounded-xl border bg-popover p-0 text-popover-foreground shadow-lg outline-none data-[entering]:animate-in data-[exiting]:animate-out data-[entering]:fade-in-0 data-[exiting]:fade-out-0 data-[entering]:zoom-in-95 data-[exiting]:zoom-out-95";
+  "z-50 rounded-card border bg-popover p-0 text-popover-foreground shadow-lg outline-none data-[entering]:animate-in data-[exiting]:animate-out data-[entering]:fade-in-0 data-[exiting]:fade-out-0 data-[entering]:zoom-in-95 data-[exiting]:zoom-out-95";
 
 interface DateInputProps<T extends DateValue>
   extends Omit<AriaDatePickerProps<T>, "children"> {

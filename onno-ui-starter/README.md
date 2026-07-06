@@ -38,12 +38,37 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onno.ui.path` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the client uses it as its React Router `basename` and deep-link prefix; the bare root redirects here. Set to `/` to mount at the web root. |
 | `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
 | `onno.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
-| `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. |
+| `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. Each becomes a CSS custom property (`--{key}`) on the document root, so it overrides any design token the UI reads — including the [shape tokens](#shape-tokens) that reshape every button, control and card app-wide. |
 | `onno.ui.messages.*` | empty map | Overrides for the framework's own chrome strings (see [Localizing the chrome](#localizing-the-chrome)). Each key (e.g. `login.title`, `action.new`) replaces the English default. Quote the dotted keys in YAML. |
 | `onno.ui.update-check.enabled` | `true` | Poll onno-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
 | `onno.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
 | `onno.ui.update-check.interval` | `24h` | Cadence after the first check (floored at 60s). |
 | `onno.ui.update-check.initial-delay` | `1m` | Delay before the first check. |
+
+### Shape tokens
+
+Corner rounding is unified behind two CSS custom properties, so the whole UI reshapes from config
+rather than per-component classes:
+
+| Token | Drives | Default |
+|-------|--------|---------|
+| `--radius-control` | every interactive control — buttons, inputs, selects, filter chips, toggles | `9999px` (pill) |
+| `--radius-card` | surfaces — cards, the list toolbar island, popovers, menus, dialogs | `0.9rem` |
+
+Override either via `onno.ui.theme` (the key `radius-control` maps to `--radius-control`). Every
+button and control across every page reads the same token, so one line restyles the app:
+
+```yaml
+onno:
+  ui:
+    theme:
+      "radius-control": "0.5rem"   # square-ish controls instead of the default pill
+      "radius-card": "0.75rem"
+```
+
+Avatars and status pills stay fully round independently of these (so squaring the controls never
+squares a face-pile or an enum pill). This covers the React surfaces (lists, forms, detail action
+buttons, dialogs); the server-rendered DivKit detail cards/tables carry their own corner radius.
 
 ### Update-available notice
 
@@ -155,6 +180,7 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 |--------|------|-------|
 | GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
 | GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`_date`). |
+| GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
 
 - **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
   needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
@@ -167,11 +193,34 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 - **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
   and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
   `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
-- **Legacy offset.** Passing `?offset=N` switches to the old `LIMIT/OFFSET` mode with the
-  `{ total, offset, rows }` envelope, kept for back-compat. New clients omit `offset`.
+- **Offset mode.** Passing `?offset=N` switches to `LIMIT/OFFSET` with the `{ total, offset, rows }`
+  envelope. The grid uses this for **paged** lists (numbered pages need a total and jump-to-page,
+  which a cursor can't give); **infinite** lists send `cursor` instead.
 
-The register **report surface** is likewise fed window-by-window, but still offset-paged (newest-first,
-server-sorted):
+**Feed mode — infinite scroll vs numbered pages.** The grid renders one of two ways, chosen per
+entity and defaulted globally:
+
+- **`INFINITE`** (default) — cursor-scrolls the keyset stream above: loads a window, then more as you
+  scroll, virtualized so the DOM stays small; header shows a cheap `?count=estimate` (or the loaded
+  count). The natural fit for large, append-heavy lists.
+- **`PAGED`** — numbered offset pages with a Prev/Next pager and an exact total. Best for small or
+  well-filtered lists where jump-to-page and a precise count matter more than depth performance.
+
+Author it on the view (`list.feed(FeedMode.PAGED)`, `list.pageSize(25)`) or set the app-wide default
+with `onno.ui.list.default-feed` (`infinite` | `paged`) and `onno.ui.list.page-size`. A register's
+report surface is always infinite (its movement log is depth-scrolled).
+
+**Grouping — backend `GROUP BY` with lazy expansion.** Declare `list.groupable("status", "date", …)`
+and the toolbar gains a "Group by ▾" picker (None = the flat list). Picking a column swaps the flat
+table for collapsible group headers fetched from `/groups` (one per value; a date column offers a
+day/month/year granularity and buckets by period); each header shows the group's row count and any
+`list.aggregate(field, Agg.SUM|AVG|MIN|MAX)` subtotals. Expanding a header lazily loads that group's
+rows through the **same** feed — the server hands each group the exact filter to replay — so grouping
+never double-counts and honours the active search/filters/sort. Group values that resolve to a
+ref/enum show their label (and enum colour); a null group is shown but not expandable.
+
+The register **report surface** is likewise fed window-by-window (newest-first, server-sorted); its
+feed still exposes the offset envelope, and the grid cursor-scrolls it as an infinite list:
 
 | Method | Path | Notes |
 |--------|------|-------|
@@ -505,12 +554,59 @@ resolved **live**, so renames and deletes stay correct on their own.
   can't read is stripped to plain text (no smuggling a link to a hidden record). On **read**, a
   mention the *viewer* can't read degrades to plain text instead of a clickable 403; one they can read
   resolves to its current display + avatar. ([`MentionResolver`](src/main/java/su/onno/ui/comments/MentionResolver.java) batches this per thread.)
-- **Notifications (additive).** Each readable mention in a freshly posted comment publishes an
-  [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java) — **no
-  consumers** ship with the framework. Wire delivery (in-app, the cross-node event bus, `onno-mail-starter`)
-  later by registering a Spring `@EventListener`, exactly as you would for `DocumentPostedEvent`.
+- **Notifications.** Each readable mention in a freshly posted comment publishes an
+  [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java). The
+  notifications feature (below) consumes it out of the box to notify the mentioned user; you can add
+  further delivery (`onno-mail-starter`, etc.) by registering your own Spring `@EventListener`.
 - **Config.** `onno.comments.mentions.enabled` (default true) gates the whole feature;
   `onno.comments.mentions.suggestion-limit` / `…per-entity-limit` cap the typeahead.
+
+### Notifications — `/api/notifications`
+
+A **per-user notification center**: a top-right bell with an unread badge that opens a timeline drawer
+of updates concerning the signed-in user. Like comments and presence it is framework infrastructure —
+rows live in the framework-owned `onno_notifications` table, never in a modelled entity — and it rides
+the same live plumbing: a new notification pushes over a `notification` SSE event routed to the
+recipient's open streams, relayed across nodes by the `ClusterEventBus`. The bell hides itself when the
+feature is disabled.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. |
+| POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
+| POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
+
+**Producing notifications.** Any bean can raise one through the public API — this is the extension
+point:
+
+```java
+notificationService.notify(NotificationRequest.to(recipientId)   // target's identity recordId
+        .type("approval")
+        .title("Your purchase was approved")
+        .body("PO-1042 · €1,240")
+        .link("documents/purchase_orders/" + id)   // opens this route on click
+        .actor(currentUser)                        // who triggered it
+        .build());
+```
+
+Add a new source by calling that from a Spring `@EventListener` (on `DocumentPostedEvent`, a domain
+event, anything). Two producers ship built in, each independently gated:
+
+- **Mentions** (`onno.notifications.mentions.enabled`, default true) — a comment `@`-mention of a user
+  notifies that user.
+- **Assignment** (`onno.notifications.assignments.enabled`, default true) — annotate a catalog/document
+  `Ref<>` attribute that points at the identity catalog with **`@AssigneeField`**; setting or changing
+  it notifies the assignee.
+
+  ```java
+  @AssigneeField
+  @Attribute private Ref<Employee> assignedTo;   // assigning notifies the employee
+  ```
+
+**Config.** `onno.notifications.enabled=false` is the global kill switch (drops the endpoint, table,
+producers, and bell). `onno.notifications.page-size` (default 30) sizes each timeline window;
+`onno.notifications.retention-days` (default 90; `0` disables) prunes **read** notifications after that
+many days — unread ones are kept indefinitely.
 
 ### Presence — `/api/presence`
 
