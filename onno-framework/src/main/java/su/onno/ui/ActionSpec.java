@@ -75,12 +75,13 @@ public final class ActionSpec {
      *
      * <p>{@code icon}/{@code label} are the fixed values (and the fallback). {@code logo} is an
      * optional image URL/path shown in place of the lucide {@code icon} — a brand mark ("Connect
-     * with X"), rendered on page-action and list/row/toolbar buttons. {@code iconFn},
+     * with X"), rendered on page-action and list/row/toolbar buttons. {@code color} is an optional
+     * presentation hint for compact menu swatches such as status choices. {@code iconFn},
      * {@code labelFn}, {@code visibleFn} and {@code enabledFn} are the optional per-row overrides
      * for a {@link ActionScope#ROW} action — any that are non-null are evaluated against each
      * {@link ActionRow} when the list renders.</p>
      */
-    public record Action(String key, String label, String icon, String logo, ActionScope scope,
+    public record Action(String key, String label, String icon, String logo, String color, ActionScope scope,
                          String menu,
                          String navigateUrl, Function<ActionContext, ActionResult> handler,
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
@@ -107,6 +108,7 @@ public final class ActionSpec {
         private String label;
         private String icon = "";
         private String logo = "";
+        private String color = "";
         private String menu = "";
         private ActionScope scope = ActionScope.ROW;
         private String navigateUrl;
@@ -139,6 +141,12 @@ public final class ActionSpec {
          */
         public ActionBuilder logo(String logo) {
             this.logo = logo;
+            return this;
+        }
+
+        /** Optional CSS color hint for compact action renderers, especially row-menu status swatches. */
+        public ActionBuilder color(String color) {
+            this.color = color;
             return this;
         }
 
@@ -226,7 +234,7 @@ public final class ActionSpec {
         }
 
         Action build() {
-            return new Action(key, label != null ? label : key, icon, logo, scope, menu, navigateUrl, handler,
+            return new Action(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
                     iconFn, labelFn, visibleFn, enabledFn, form, roles);
         }
     }

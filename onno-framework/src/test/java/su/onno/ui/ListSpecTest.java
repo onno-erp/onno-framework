@@ -71,6 +71,28 @@ class ListSpecTest {
     }
 
     @Test
+    void optionsFilterCanBeMadeMultiple() {
+        ListSpec spec = new ListSpec();
+        spec.filter("city").options("Madrid", "Paris").multiple();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.MULTI_OPTIONS);
+        assertThat(f.options()).extracting(ListSpec.Option::value, ListSpec.Option::label)
+                .containsExactly(tuple("Madrid", "Madrid"), tuple("Paris", "Paris"));
+    }
+
+    @Test
+    void multiOptionsFilterCanBeMadeSingleAgain() {
+        ListSpec spec = new ListSpec();
+        spec.filter("city").multiOptions("Madrid", "Paris").single();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.OPTIONS);
+        assertThat(f.options()).extracting(ListSpec.Option::value, ListSpec.Option::label)
+                .containsExactly(tuple("Madrid", "Madrid"), tuple("Paris", "Paris"));
+    }
+
+    @Test
     void containsFilterIsTypeaheadWithNoOptions() {
         ListSpec spec = new ListSpec();
         spec.filter("doctorName").label("Doctor").contains();
@@ -131,6 +153,36 @@ class ListSpecTest {
 
         assertThat(spec.feedMode()).isEqualTo(ListSpec.FeedMode.PAGED);
         assertThat(spec.pageSize()).isEqualTo(25);
+    }
+
+    @Test
+    void noCustomRendererByDefault() {
+        assertThat(new ListSpec().customSpec()).isNull();
+    }
+
+    @Test
+    void customRendererCarriesTypeLabelAndDefaultView() {
+        ListSpec spec = new ListSpec();
+        spec.custom("bookTiles").label("Shelf").defaultView();
+
+        ListSpec.CustomSpec c = spec.customSpec();
+        assertThat(c).isNotNull();
+        assertThat(c.type()).isEqualTo("bookTiles");
+        assertThat(c.label()).isEqualTo("Shelf");
+        assertThat(c.isDefaultView()).isTrue();
+    }
+
+    @Test
+    void repeatedCustomCallsAccumulateOnOneSpec() {
+        ListSpec spec = new ListSpec();
+        spec.custom("tiles").label("Tiles");
+        // A later call replaces the type but keeps the same spec (mirrors map()).
+        spec.custom("cards");
+
+        ListSpec.CustomSpec c = spec.customSpec();
+        assertThat(c.type()).isEqualTo("cards");
+        assertThat(c.label()).isEqualTo("Tiles");
+        assertThat(c.isDefaultView()).isFalse();
     }
 
     @Test

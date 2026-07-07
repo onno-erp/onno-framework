@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -32,6 +32,7 @@ import {
   ContextMenuSub,
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
+import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-bridge";
 import { api } from "@/lib/api";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
@@ -71,6 +72,8 @@ export type ListAction = {
   icon: string;
   /** Image URL/path shown instead of the lucide icon — e.g. a brand logo for "Connect with X". */
   logo?: string;
+  /** Optional CSS color swatch for compact renderers such as row-menu status choices. */
+  color?: string;
   scope: "toolbar" | "row";
   /**
    * Context-menu placement (from ActionSpec.menu("…")): the row action renders inside the row's
@@ -135,6 +138,29 @@ export type ListFilterControl = {
   type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange";
   options: FilterOption[];
 };
+/**
+ * A custom list-body renderer (from {@code ListSpec.custom(type)}): the widget-registry key the
+ * island resolves the component from, an optional toolbar-toggle {@code label} (else the
+ * {@code list.customView} message), and whether the list opens on the custom view. An unregistered
+ * type degrades to the default grid — the toggle simply doesn't appear.
+ */
+export type ListCustomConfig = { type: string; label?: string; defaultView?: boolean };
+/**
+ * The props a custom list-body renderer receives (registered via {@code registerListRenderer} from
+ * {@code @onno/widget-sdk}, or {@code registerWidget} host-side). The framework keeps the toolbar
+ * (search, filters, sort, group-by) and the feed (infinite/paged, live refresh) — the renderer only
+ * draws the rows it's handed and opens a record through the callback.
+ */
+export type ListRendererProps = {
+  /** The rows of the current window (all loaded rows in infinite mode; the page in paged mode). */
+  rows: EntityRecord[];
+  /** The list's descriptor slice: entity route, title, resolved columns (labels/widgets/formats), write access. */
+  list: { kind: string; name: string; title: string; columns: ListColumn[]; canWrite: boolean };
+  /** Open a record's detail pane (no-op for rows without an id, e.g. register rows). */
+  open: (row: EntityRecord) => void;
+  /** The record's {@code onno://} detail route, or null when it has none. */
+  openUrl: (row: EntityRecord) => string | null;
+};
 /** A column the list can be grouped by; `date` columns bucket by a chosen day/month/year granularity. */
 export type GroupableColumn = { columnName: string; label: string; date: boolean };
 /** A per-group subtotal: an aggregate `fn` over `columnName`, shown with `format` and headed `label`. */
@@ -159,6 +185,8 @@ export type ListDescriptor = {
   filters?: ListFilterControl[];
   /** When set, the toolbar offers a Table ⇄ Map toggle that plots the rows as markers. */
   map?: ListMapConfig;
+  /** When set (and the type is registered), the toolbar offers a Table ⇄ custom-view toggle. */
+  custom?: ListCustomConfig;
   /**
    * How the grid feeds rows. "infinite" (default) cursor-scrolls a keyset stream — it loads a
    * window, then more as you scroll, and never counts an exact total. "paged" shows discrete
@@ -196,6 +224,9 @@ function rowDeleteUrl(rowUrl: string): string {
 }
 function rowShareableUrl(rowUrl: string): string {
   return window.location.origin + withBasePath("/" + rowUrl.slice("onno://".length));
+}
+function rowOpenUrl(kind: string, name: string, id: string): string {
+  return `onno://${kind}/${name}/${id}`;
 }
 
 /** Whether keyboard input currently belongs to an editable control (so shortcuts stay native). */
@@ -420,7 +451,7 @@ function OptionsFacet({
     </button>
   );
 
-  // Phones/tablets: a bottom sheet of 44px check rows instead of a small anchored popover.
+  // Compact layouts: 44px option rows in a framed overlay instead of a small anchored popover.
   if (touch) {
     return (
       <>
@@ -472,7 +503,8 @@ function OptionsFacet({
                   >
                     <span
                       className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                        "flex size-5 shrink-0 items-center justify-center border transition-colors",
+                        multi ? "rounded-[5px]" : "rounded-full",
                         on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                       )}
                     >
@@ -532,7 +564,8 @@ function OptionsFacet({
               >
                 <span
                   className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                    "flex size-4 shrink-0 items-center justify-center border transition-colors",
+                    multi ? "rounded-[4px]" : "rounded-full",
                     on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                   )}
                 >
@@ -1148,19 +1181,33 @@ export function EntityListWidget({
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; id: string; url: string; row: EntityRecord } | null>(null);
   // Two-step batch delete: first click arms ("sure?"), second click runs.
   const [armedDelete, setArmedDelete] = useState(false);
-  // Table vs map view (only offered when the list declares a map config). The map fetches its own
-  // rows, so the grid's search/filters/sort are hidden while it's shown.
-  const [view, setView] = useState<"table" | "map">(() => {
-    if (urlSynced && list.map) {
+  // Table vs map vs custom view (each alternative only offered when the list declares it). The map
+  // fetches its own rows, so the grid's search/filters/sort are hidden while it's shown; a custom
+  // renderer shares the grid's feed, so the toolbar stays live.
+  const [view, setView] = useState<"table" | "map" | "custom">(() => {
+    if (urlSynced && (list.map || list.custom)) {
       const v = initialParams.get("view");
-      if (v === "map") return "map";
+      if (v === "map" && list.map) return "map";
+      if (v === "custom" && list.custom) return "custom";
       if (v === "table") return "table";
     }
+    if (list.custom?.defaultView) return "custom";
     return list.map?.defaultView ? "map" : "table";
   });
   const mapMode = !!list.map && view === "map";
-  // Grouped view replaces the flat table (never shown together with the map).
-  const grouped = !!groupBy && !mapMode;
+  // The custom body renderer, resolved live from the widget registry: a plugin registering after
+  // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
+  // list degrades to the default grid rather than failing (no toggle, no blank body).
+  const registryVersion = useSyncExternalStore(subscribeRegistry, getRegistryVersion);
+  const customType = list.custom?.type ?? "";
+  const CustomRenderer = useMemo(
+    () => (customType ? (resolveWidget(customType) as ComponentType<ListRendererProps> | undefined) : undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [customType, registryVersion]
+  );
+  const customMode = view === "custom" && !!CustomRenderer;
+  // Grouped view replaces the flat table (never shown together with the map or a custom body).
+  const grouped = !!groupBy && !mapMode && !customMode;
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
   // so they aren't clickable. Also gates the single-row live patch (registers have no row identity).
   const openable = kind === "catalogs" || kind === "documents";
@@ -1253,7 +1300,9 @@ export function EntityListWidget({
       params.set("sort", sort.column);
       params.set("dir", sort.descending ? "desc" : "asc");
     }
-    if (mapMode !== !!list.map?.defaultView) params.set("view", mapMode ? "map" : "table");
+    const defaultViewName = list.custom?.defaultView ? "custom" : list.map?.defaultView ? "map" : "table";
+    const currentViewName = mapMode ? "map" : customMode ? "custom" : "table";
+    if (currentViewName !== defaultViewName) params.set("view", currentViewName);
     for (const f of filters) {
       const st = filterStateRef.current[f.key];
       if (!st) continue;
@@ -1276,7 +1325,7 @@ export function EntityListWidget({
       qs ? `${window.location.pathname}?${qs}` : window.location.pathname
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlSynced, filterSig, debounced, sort.column, sort.descending, mapMode]);
+  }, [urlSynced, filterSig, debounced, sort.column, sort.descending, mapMode, customMode]);
 
   // How many filters currently constrain the query — drives the "Clear all" affordance on the
   // filter bar. A filter counts as active only when it actually narrows rows (a picked option, some
@@ -1303,6 +1352,7 @@ export function EntityListWidget({
   // below, so only the header-row controls (view toggle, search, actions, New) count here.
   const controlsWidthEstimate =
     (list.map ? 150 : 0) +
+    (list.custom && CustomRenderer ? 150 : 0) +
     (list.searchable ? 220 : 0) +
     toolbarActions.length * 100 +
     (list.newUrl ? 90 : 0);
@@ -1561,9 +1611,10 @@ export function EntityListWidget({
       window.removeEventListener("resize", measure);
       ro.disconnect();
     };
-    // grouped/mapMode: the observed body remounts when those views swap back to the table —
-    // re-run so the observer isn't left holding the unmounted element (see the viewport effect).
-  }, [surfaceMode, grouped, mapMode]);
+    // grouped/mapMode/customMode: the observed body remounts when those views swap back to the
+    // table — re-run so the observer isn't left holding the unmounted element (see the viewport
+    // effect).
+  }, [surfaceMode, grouped, mapMode, customMode]);
 
   // Keep the virtual-window viewport height in sync with the body's client height. Keyed on the
   // view toggles too: the grouped/map views unmount the table body, and unmount delivers a final
@@ -1581,7 +1632,7 @@ export function EntityListWidget({
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [surfaceMode, grouped, mapMode]);
+  }, [surfaceMode, grouped, mapMode, customMode]);
 
   // Body scroll: drive the virtual window, and (infinite) fetch the next window as the end nears.
   const onScroll = useCallback(() => {
@@ -1834,6 +1885,24 @@ export function EntityListWidget({
   const padTop = startIdx * ROW_H;
   const padBottom = Math.max(0, (loadedRows.length - endIdx) * ROW_H);
 
+  // The custom renderer's contract (see ListRendererProps): a stable descriptor slice plus
+  // ref-stable open callbacks, so a memoized renderer isn't re-rendered by unrelated island state.
+  const rendererList = useMemo(
+    () => ({ kind, name, title: list.title, columns, canWrite }),
+    [kind, name, list.title, columns, canWrite]
+  );
+  const rendererOpenUrl = useCallback(
+    (row: EntityRecord) => (openable && row._id != null ? `onno://${kind}/${name}/${row._id}` : null),
+    [openable, kind, name]
+  );
+  const rendererOpen = useCallback(
+    (row: EntityRecord) => {
+      const url = openable && row._id != null ? `onno://${kind}/${name}/${row._id}` : null;
+      if (url) dispatchAction(url);
+    },
+    [openable, kind, name]
+  );
+
   // Cycle a column through three states on repeated clicks: ascending → descending → off
   // (off clears the sort entirely, so the list falls back to the server's default order).
   const toggleSort = (col: string) => {
@@ -2003,6 +2072,9 @@ export function EntityListWidget({
     ? (() => {
         const batch = selected.size > 1 && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
+        const openBatch = () => {
+          for (const id of ids) dispatchAction(rowOpenUrl(kind, name, id));
+        };
         // Navigation actions are single-record by nature — batch mode offers server actions only.
         const eligible = (a: ListAction) => !batch || a.server;
         const flatCustom = rowActions.filter((a) => !a.menu).filter(eligible);
@@ -2032,7 +2104,13 @@ export function EntityListWidget({
               }}
             >
               {a.logo ? (
-                <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+                <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 rounded-full object-cover" />
+              ) : a.color ? (
+                <span
+                  aria-hidden="true"
+                  className="size-4 shrink-0 rounded-full border border-white/25 shadow-sm"
+                  style={{ backgroundColor: a.color }}
+                />
               ) : (
                 <DynamicLucide name={(!batch && st?.icon) || a.icon || "zap"} size={16} />
               )}
@@ -2042,7 +2120,7 @@ export function EntityListWidget({
         };
         // Built-ins: batch = label + delete; single = open/edit/dup/copyLink/delete — minus the
         // write items (edit, dup, delete) when the viewer can't write the entity.
-        const itemCount = (batch ? (canWrite ? 2 : 1) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
+        const itemCount = (batch ? (canWrite ? 3 : 2) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
             open
@@ -2054,7 +2132,18 @@ export function EntityListWidget({
             estimatedHeight={itemCount * 38 + 24}
           >
             {batch ? (
-              <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
+              <>
+                <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
+                <ContextMenuItem
+                  onSelect={() => {
+                    openBatch();
+                    close();
+                  }}
+                >
+                  <ExternalLink className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("action.open")} {ids.length}</span>
+                </ContextMenuItem>
+              </>
             ) : (
               <>
                 <ContextMenuItem
@@ -2163,6 +2252,38 @@ export function EntityListWidget({
       })()
     : null;
 
+  // Pager footer — paged mode only, when there's more than one page (infinite mode scrolls for
+  // more; the toolbar already shows the count). Shared by the table card and a custom body.
+  const pagerEl =
+    paged && total != null && total > pageSize ? (
+      <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5 text-xs text-muted-foreground">
+        <span className="tabular-nums">{t("list.pageRange", { from: rangeFrom, to: rangeTo, total })}</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={page <= 0}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={t("list.prev")}
+          >
+            <ChevronLeft className="size-4" />
+            {compact ? null : t("list.prev")}
+          </button>
+          <span className="px-1.5 tabular-nums">{t("list.pageOf", { page: page + 1, pages: pageCount })}</span>
+          <button
+            type="button"
+            disabled={page >= pageCount - 1}
+            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={t("list.next")}
+          >
+            {compact ? null : t("list.next")}
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
@@ -2205,8 +2326,10 @@ export function EntityListWidget({
           ) : null}
         </div>
 
-        {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it */}
-        {!mapMode && groupable.length ? (
+        {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
+            Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
+            grouped table, which the custom renderer replaces). */}
+        {!mapMode && !customMode && groupable.length ? (
           <GroupByFacet
             groupable={groupable}
             groupBy={groupBy}
@@ -2325,13 +2448,25 @@ export function EntityListWidget({
               />
             </div>
           ) : null}
-          {list.map ? (
+          {list.map || (list.custom && CustomRenderer) ? (
+            // Table plus whichever alternate bodies the list declares. The custom option only
+            // appears once its type is registered — an unknown renderer degrades to the plain grid.
             <Segmented
-              value={view}
+              value={customMode ? "custom" : view === "custom" ? "table" : view}
               onChange={setView}
               options={[
                 { value: "table", icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
-                { value: "map", icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") },
+                ...(list.map
+                  ? [{ value: "map" as const, icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") }]
+                  : []),
+                ...(list.custom && CustomRenderer
+                  ? [{
+                      value: "custom" as const,
+                      icon: LayoutGrid,
+                      label: compact ? undefined : list.custom.label || t("list.customView"),
+                      ariaLabel: list.custom.label || t("list.customView"),
+                    }]
+                  : []),
               ]}
             />
           ) : null}
@@ -2385,6 +2520,41 @@ export function EntityListWidget({
         // register — narrow the kind for the map view, which pages from /api/list/{kind}/{name}.
         <div className={cn(surfaceMode && "min-h-0 flex-1")}>
           <ListMapView kind={kind as "catalogs" | "documents"} name={name} config={list.map!} fill={surfaceMode} />
+        </div>
+      ) : customMode && CustomRenderer ? (
+        // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps
+        // the toolbar (search, filters, sort) and the feed — the same scroller drives infinite
+        // load-more, and paged mode keeps the pager below. No card chrome: the renderer owns its
+        // own look.
+        <div className={cn("flex flex-col", surfaceMode && "min-h-0 flex-1")}>
+          <div
+            ref={scrollRef}
+            onScroll={onScroll}
+            className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
+            style={surfaceMode ? undefined : { maxHeight: maxBodyH }}
+          >
+            {pageRows == null ? (
+              <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                {t("loading.generic")}
+              </div>
+            ) : loadedRows.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                {debounced ? t("empty.noMatches") : t("empty.noRecords")}
+              </div>
+            ) : (
+              <CustomRenderer rows={loadedRows} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl} />
+            )}
+            {feedMode === "infinite" && loadingMore ? (
+              <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                {t("list.loadingMore")}
+              </div>
+            ) : null}
+          </div>
+          {pagerEl ? (
+            <div className="mt-3 shrink-0 overflow-hidden rounded-card border border-border">{pagerEl}</div>
+          ) : null}
         </div>
       ) : grouped ? (
         // Grouped view: collapsible GROUP BY headers with subtotals; a group's rows lazily load
@@ -2620,36 +2790,7 @@ export function EntityListWidget({
             ) : null}
           </div>
         </div>
-        {/* pager footer — paged mode only, when there's more than one page (infinite mode scrolls
-            for more; the toolbar already shows the count). */}
-        {paged && total != null && total > pageSize ? (
-          <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5 text-xs text-muted-foreground">
-            <span className="tabular-nums">{t("list.pageRange", { from: rangeFrom, to: rangeTo, total })}</span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                disabled={page <= 0}
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={t("list.prev")}
-              >
-                <ChevronLeft className="size-4" />
-                {compact ? null : t("list.prev")}
-              </button>
-              <span className="px-1.5 tabular-nums">{t("list.pageOf", { page: page + 1, pages: pageCount })}</span>
-              <button
-                type="button"
-                disabled={page >= pageCount - 1}
-                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-                aria-label={t("list.next")}
-              >
-                {compact ? null : t("list.next")}
-                <ChevronRight className="size-4" />
-              </button>
-            </div>
-          </div>
-        ) : null}
+        {pagerEl}
       </div>
       )}
       {rowMenuEl}

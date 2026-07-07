@@ -362,11 +362,14 @@ icon button — actions sharing a label group together in declaration order. The
 ```java
 for (OrderStatus st : OrderStatus.values()) {
     a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
-     .menu("Change status").label(labelOf(st))
+     .menu("Change status").label(labelOf(st)).color(colorOf(st))
      .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
      .handler(ctx -> setStatus(ctx.id(), st));
 }
 ```
+
+`color("#059669")` gives context-menu entries a compact swatch, useful for enum/status submenus.
+`logo(url)` is also honored there, so an "Assign" submenu can show employee photos.
 
 Rows also support **batch selection**: ⌘/Ctrl-click toggles a row, Shift-click selects the range
 from the last toggled row, Esc (or the toolbar's "N selected ✕" chip) clears. With the list
@@ -579,6 +582,50 @@ Contributors extending the bundled SPA register built-ins directly, the same cal
 import { registerWidget } from "@/lib/widget-bridge";
 registerWidget("heatmap", HeatmapWidget); // server: b.widget("Load").type("heatmap").document(Shift.class)
 ```
+
+### Custom list renderers (tiles / cards / gallery)
+
+An entity's list can delegate its **body** to a plugin-registered component while the framework
+keeps everything else: the search bar, declarative filters, sorting, the feed (infinite scroll or
+pages, with the pager), live SSE refresh and the toolbar all still work and drive exactly the rows
+the renderer receives. Declare it from the entity's `list(ListSpec)`:
+
+```java
+@Override public void list(ListSpec list) {
+    list.columns("description", "author", "price");   // still the data contract
+    list.custom("bookTiles").label("Shelf");          // Table ⇄ Shelf toggle in the toolbar
+    // or: list.custom("bookTiles").defaultView();    // open on the tiles, like map()
+}
+```
+
+Register the renderer the same way as a dashboard widget — same registry, list-shaped props:
+
+```tsx
+import { registerListRenderer, type ListRendererProps } from "@onno/widget-sdk";
+
+function BookTiles({ rows, list, open }: ListRendererProps) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+      {rows.map((r) => (
+        <button key={String(r._id)} onClick={() => open(r)}>{String(r._description)}</button>
+      ))}
+    </div>
+  );
+}
+registerListRenderer("bookTiles", BookTiles);
+```
+
+The component receives `rows` (the current window — everything loaded so far in infinite mode, the
+active page in paged mode), `list` (the descriptor slice: `kind`, `name`, `title`, resolved
+`columns` with labels/widgets/formats, `canWrite`), and `open(row)` / `openUrl(row)` to open a
+record's detail pane. A type with **no registered renderer degrades to the default grid** — the
+toggle simply doesn't appear (same philosophy as a `map()` whose geo fields don't resolve), so a
+missing/broken plugin never blanks the list. The chosen view persists in the URL (`?view=…`) like
+the map toggle; the toggle's label falls back to the `list.customView` message ("Cards") when no
+`.label(...)` is authored. The bookstore example ships one end to end: `BookView` declares
+`list.custom("bookTiles").label("Shelf")` and `example/src/main/widgets/BookTiles.tsx` renders the
+shelf. The same styling gotcha as widgets applies: compile happens outside the SPA's Tailwind
+build, so inline styles for layout, theme variables for color.
 
 ## Maps
 

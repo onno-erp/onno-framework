@@ -202,12 +202,17 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order) / `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    order); `.options(...).multiple()` is the configurable form of the same multi-select behavior
+    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
     `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
-    (open on the map).
+    (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
+    widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
+    `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
+    `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
+    refresh, and an unregistered type degrades to the default grid (no toggle).
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
@@ -223,7 +228,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
     `menu("Change status")` moves a ROW action off the inline row buttons into the row's
     **right-click context menu**, under a submenu with that label (same-label actions group; one
-    action per enum value is the idiom). The list also supports **batch selection** (⌘/Ctrl-click
+    action per enum value is the idiom). `color("#…")` renders a compact swatch for menu entries
+    such as status choices; `logo(url)` renders there too, useful for assignee avatars. The list
+    also supports **batch selection** (⌘/Ctrl-click
     toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
     list being engaged): right-clicking the selection runs any server row action over every
     selected id — as ONE request via `POST /api/actions/{kind}/{name}/{key}/batch` (`{ids,inputs}`,

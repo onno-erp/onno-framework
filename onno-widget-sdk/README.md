@@ -25,6 +25,12 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 ```
 
 - `registerWidget(type, Component)` — register (or override) the renderer for a widget type.
+- `registerListRenderer(type, Component)` — register the **body renderer for a custom list view**:
+  the component an entity's server-side `list.custom("type")` resolves. Same registry as
+  `registerWidget`, list-shaped props (`ListRendererProps`): `rows` (the current window, fed by the
+  framework-owned search/filters/sort/pagination), `list` (the descriptor — `kind`, `name`, `title`,
+  resolved `columns`, `canWrite`), and `open(row)` / `openUrl(row)` to open a record's detail pane.
+  An unregistered type degrades to the default grid.
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
 - `api` — a read-only REST client (`listCatalog`, `getCatalogItem`, `listDocuments`, `getDocument`,

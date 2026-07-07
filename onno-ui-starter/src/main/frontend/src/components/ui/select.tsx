@@ -3,7 +3,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
-import { useTouchLayout } from "@/components/ui/facet-sheet";
+import { useFacetOverlay } from "@/components/ui/facet-sheet";
 
 const SelectOpenContext = React.createContext<{
   drawerOpen: boolean;
@@ -11,7 +11,8 @@ const SelectOpenContext = React.createContext<{
 }>({ drawerOpen: false, setOpen: () => {} });
 
 const Select = ({ open: openProp, defaultOpen, onOpenChange, ...props }: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) => {
-  const touchLayout = useTouchLayout();
+  const overlay = useFacetOverlay();
+  const framedOverlay = overlay !== "popover";
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false);
   const requestedOpen = openProp ?? uncontrolledOpen;
   const [mountedOpen, setMountedOpen] = React.useState(requestedOpen);
@@ -19,7 +20,7 @@ const Select = ({ open: openProp, defaultOpen, onOpenChange, ...props }: React.C
   const closeTimer = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    if (!touchLayout) {
+    if (!framedOverlay) {
       setMountedOpen(requestedOpen);
       setDrawerOpen(requestedOpen);
       return;
@@ -40,7 +41,7 @@ const Select = ({ open: openProp, defaultOpen, onOpenChange, ...props }: React.C
       if (closeTimer.current) window.clearTimeout(closeTimer.current);
       closeTimer.current = null;
     };
-  }, [requestedOpen, touchLayout]);
+  }, [requestedOpen, framedOverlay]);
 
   const setOpen = React.useCallback(
     (next: boolean) => {
@@ -52,7 +53,7 @@ const Select = ({ open: openProp, defaultOpen, onOpenChange, ...props }: React.C
 
   return (
     <SelectOpenContext.Provider value={{ drawerOpen, setOpen }}>
-      <SelectPrimitive.Root open={touchLayout ? mountedOpen : requestedOpen} onOpenChange={setOpen} {...props} />
+      <SelectPrimitive.Root open={framedOverlay ? mountedOpen : requestedOpen} onOpenChange={setOpen} {...props} />
     </SelectOpenContext.Provider>
   );
 };
@@ -111,9 +112,9 @@ const SelectContent = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => {
-  const touchLayout = useTouchLayout();
+  const overlay = useFacetOverlay();
   const { drawerOpen, setOpen } = React.useContext(SelectOpenContext);
-  if (touchLayout) {
+  if (overlay === "sheet") {
     return (
       <Drawer.Root open={drawerOpen} onOpenChange={setOpen} direction="bottom" closeThreshold={0.32}>
         <Drawer.Portal>
@@ -139,6 +140,33 @@ const SelectContent = React.forwardRef<
           </Drawer.Content>
         </Drawer.Portal>
       </Drawer.Root>
+    );
+  }
+  if (overlay === "modal") {
+    return (
+      <SelectPrimitive.Portal>
+        <button
+          type="button"
+          aria-label="Close"
+          className="fixed inset-0 z-50 bg-black/50"
+          onClick={() => setOpen(false)}
+        />
+        <SelectPrimitive.Content
+          ref={ref}
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 max-h-[82dvh] w-[min(28rem,calc(100vw-3rem))] min-w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none",
+            className
+          )}
+          position="item-aligned"
+          {...props}
+        >
+          <SelectScrollUpButton />
+          <SelectPrimitive.Viewport className="max-h-[calc(82dvh-2rem)] p-2">
+            {children}
+          </SelectPrimitive.Viewport>
+          <SelectScrollDownButton />
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
     );
   }
   return (

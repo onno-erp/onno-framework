@@ -29,6 +29,7 @@ public final class ListSpec {
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
     private MapSpec map;
+    private CustomSpec custom;
     private FeedMode feedMode;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
@@ -92,7 +93,8 @@ public final class ListSpec {
      * column/sort field names). Unlike a toolbar {@link InputSpec input} — which feeds action
      * handlers — a filter drives the list query itself: its value narrows the rows the grid shows.
      * Returns a {@link FilterBuilder}; pick the control with {@link FilterBuilder#options} (a SELECT
-     * matched for equality), {@link FilterBuilder#multiOptions} (a multi-select matched as
+     * matched for equality), {@link FilterBuilder#multiple} or {@link FilterBuilder#multiOptions}
+     * (a multi-select matched as
      * {@code field IN (…)}), {@link FilterBuilder#contains}/{@link FilterBuilder#startsWith} (a
      * field-scoped typeahead for high-cardinality fields, matched case-insensitively as
      * {@code LIKE}), or {@link FilterBuilder#dateRange} (from/to pickers, a {@code field >= from AND
@@ -112,6 +114,7 @@ public final class ListSpec {
      *
      * <pre>
      * list.filter("season").options("2024", "2025", "2026");        // SELECT -> season = value
+     * list.filter("city").options("Madrid", "Paris").multiple();     // multi-select -> city IN (…)
      * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%
      * list.filter("role").multiOptions("Хирург", "Терапевт");        // multi-select -> role IN (…)
      * list.filter("checkIn").dateRange();                           // from/to pickers -> checkIn range
@@ -150,6 +153,34 @@ public final class ListSpec {
             map = new MapSpec();
         }
         return map;
+    }
+
+    /**
+     * Delegate the list's <em>body</em> to a custom renderer registered in the UI's widget registry
+     * (a consumer plugin's {@code registerListRenderer("type", Component)} via
+     * {@code @onno/widget-sdk}) — tiles, cards, a gallery, whatever the component draws. The
+     * framework keeps owning the chrome: search, declarative filters, sorting, the feed
+     * (infinite/paged), live refresh and the toolbar all still work and drive the rows the renderer
+     * receives. Returns a {@link CustomSpec}; optionally set the toggle {@link CustomSpec#label} and
+     * {@link CustomSpec#defaultView} to open on the custom view (a Table ⇄ custom toggle appears in
+     * the toolbar, like {@link #map()}).
+     *
+     * <p>Calling {@code custom(type)} again replaces the type but keeps the same spec (so chained
+     * calls accumulate, mirroring {@link #map()}). A type with no registered renderer on the client
+     * degrades to the default grid rather than failing the list — same philosophy as a {@code map()}
+     * whose geo fields don't resolve.</p>
+     *
+     * <pre>
+     * list.custom("bookTiles");                              // Table ⇄ custom toggle
+     * list.custom("bookTiles").label("Shelf").defaultView(); // open on the tiles, labelled "Shelf"
+     * </pre>
+     */
+    public CustomSpec custom(String type) {
+        if (custom == null) {
+            custom = new CustomSpec();
+        }
+        custom.type = type;
+        return custom;
     }
 
     /**
@@ -254,6 +285,42 @@ public final class ListSpec {
     /** The map view spec, or null when {@link #map()} was never called (no map view). */
     public MapSpec mapSpec() {
         return map;
+    }
+
+    /** The custom-renderer spec, or null when {@link #custom} was never called (default grid only). */
+    public CustomSpec customSpec() {
+        return custom;
+    }
+
+    /**
+     * A custom list-body renderer: the widget-registry {@link #type} the client resolves the
+     * component from, an optional toolbar-toggle {@link #label} (else the UI's
+     * {@code list.customView} message), and whether the list opens on the custom view.
+     */
+    public static final class CustomSpec {
+        private String type;
+        private String label;
+        private boolean defaultView = false;
+
+        CustomSpec() {}
+
+        /** The toolbar-toggle label for the custom view (defaults to the {@code list.customView} message). */
+        public CustomSpec label(String label) {
+            this.label = label;
+            return this;
+        }
+
+        /** Open the list on the custom view rather than the table. */
+        public CustomSpec defaultView() {
+            this.defaultView = true;
+            return this;
+        }
+
+        public String type() { return type; }
+
+        public String label() { return label; }
+
+        public boolean isDefaultView() { return defaultView; }
     }
 
     /**
@@ -384,8 +451,8 @@ public final class ListSpec {
     }
 
     /**
-     * Fluent builder for one filter; {@link #options}/{@link #multiOptions}/{@link #contains}/
-     * {@link #startsWith}/{@link #dateRange} pick the control type.
+     * Fluent builder for one filter; {@link #options}/{@link #multiple}/{@link #multiOptions}/
+     * {@link #contains}/{@link #startsWith}/{@link #dateRange} pick the control type.
      */
     public static final class FilterBuilder {
         private final String field;
@@ -424,6 +491,22 @@ public final class ListSpec {
         public FilterBuilder options(Map<String, String> valueToLabel) {
             this.type = FilterType.OPTIONS;
             this.options = pairs(valueToLabel);
+            return this;
+        }
+
+        /**
+         * Make the current options control multi-select, matched as {@code field IN (…)} over the
+         * checked values. Useful when options are declared first and multiplicity is a later choice:
+         * {@code list.filter("city").options("Madrid", "Paris").multiple()}.
+         */
+        public FilterBuilder multiple() {
+            this.type = FilterType.MULTI_OPTIONS;
+            return this;
+        }
+
+        /** Make the current options control single-select again (the default for {@link #options}). */
+        public FilterBuilder single() {
+            this.type = FilterType.OPTIONS;
             return this;
         }
 

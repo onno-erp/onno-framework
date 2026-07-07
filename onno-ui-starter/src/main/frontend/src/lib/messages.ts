@@ -106,6 +106,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.sortBy": "Sort by {column}",
   "list.tableView": "Table",
   "list.mapView": "Map",
+  "list.customView": "Cards",
   "list.pageRange": "{from}–{to} of {total}",
   "list.pageOf": "Page {page} of {pages}",
   "list.prev": "Prev",

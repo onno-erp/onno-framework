@@ -19,6 +19,12 @@ export function tint(userId: string): string {
   return `hsl(${Math.abs(hash) % 360} 55% 45%)`;
 }
 
+/** Deterministic Notionists avatar used when a user/person has no uploaded photo. */
+export function notionistsAvatar(seed: string | null | undefined): string {
+  const safeSeed = encodeURIComponent((seed || "unknown").trim() || "unknown");
+  return `https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c8e6c9,f4d1b6&seed=${safeSeed}`;
+}
+
 /**
  * A horizontal stack of collaborator avatars — deterministic per-user colour, initials, and a `+N`
  * overflow chip. Renders nothing when the list is empty. Shared by every ambient-presence surface (the
@@ -59,7 +65,7 @@ export function PresenceAvatars({
             <Tooltip key={v.userId}>
               <TooltipTrigger asChild>
                 <Avatar style={dim} className="border border-border">
-                  {v.avatarUrl ? <AvatarImage src={v.avatarUrl} alt={v.displayName} /> : null}
+                  <AvatarImage src={v.avatarUrl || notionistsAvatar(v.userId || v.displayName)} alt={v.displayName} />
                   <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
                     {initials(v.displayName)}
                   </AvatarFallback>

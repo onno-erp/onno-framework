@@ -10,7 +10,8 @@ import java.util.List;
 public record ResolvedListView(String title, List<Column> columns,
                                boolean searchable, String sortColumn, boolean sortDescending,
                                List<Filter> filters, MapView mapView,
-                               String feedMode, int pageSize, Grouping grouping) {
+                               String feedMode, int pageSize, Grouping grouping,
+                               CustomView customView) {
 
     public ResolvedListView {
         filters = filters == null ? List.of() : List.copyOf(filters);
@@ -19,6 +20,15 @@ public record ResolvedListView(String title, List<Column> columns,
         feedMode = (feedMode == null || feedMode.isBlank()) ? "infinite" : feedMode;
         pageSize = pageSize <= 0 ? 50 : pageSize;
         grouping = grouping == null ? Grouping.none() : grouping;
+    }
+
+    /** Back-compat: a view with no custom body renderer. */
+    public ResolvedListView(String title, List<Column> columns,
+                            boolean searchable, String sortColumn, boolean sortDescending,
+                            List<Filter> filters, MapView mapView,
+                            String feedMode, int pageSize, Grouping grouping) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView,
+                feedMode, pageSize, grouping, null);
     }
 
     /** Back-compat: a non-searchable, default-sorted view. */
@@ -103,6 +113,19 @@ public record ResolvedListView(String title, List<Column> columns,
             lngField = lngField == null ? "" : lngField;
             geoJsonField = geoJsonField == null ? "" : geoJsonField;
             labelField = labelField == null ? "" : labelField;
+        }
+    }
+
+    /**
+     * A custom list-body renderer (see {@code ListSpec.custom}): the widget-registry {@code type}
+     * the client resolves the component from, the toolbar-toggle {@code label} (blank = the UI's
+     * {@code list.customView} message), and whether the list opens on the custom view. The type is
+     * a registry key, not a column — resolution (and degradation to the default grid when nothing
+     * is registered under it) happens client-side, where the registry lives.
+     */
+    public record CustomView(String type, String label, boolean defaultView) {
+        public CustomView {
+            label = label == null ? "" : label;
         }
     }
 

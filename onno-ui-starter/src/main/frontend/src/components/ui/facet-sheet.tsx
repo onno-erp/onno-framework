@@ -3,30 +3,42 @@ import { X } from "lucide-react";
 import { Drawer } from "vaul";
 
 /**
- * Touch-layout primitives shared by every faceted control (list filter bar, dashboard time range):
- * a media-query hook that says "this is a phone/tablet", and the bottom-sheet shell those controls
- * render instead of an anchored popover a thumb can't comfortably reach.
+ * Responsive overlay primitives shared by every faceted control (list filter bar, dashboard time
+ * range): phones get a bottom sheet, tablets get a centered modal, and laptop/desktop widths keep
+ * anchored popovers/dropdowns.
  */
 
-// Small screens OR any coarse (finger) pointer — phones and tablets both.
-const TOUCH_QUERY = "(max-width: 767px), (pointer: coarse)";
-function subscribeTouch(cb: () => void) {
+export type FacetOverlay = "sheet" | "modal" | "popover";
+
+const MOBILE_QUERY = "(max-width: 767px)";
+const TABLET_QUERY = "(min-width: 768px) and (max-width: 1023px)";
+const OVERLAY_QUERIES = [MOBILE_QUERY, TABLET_QUERY];
+
+function subscribeOverlay(cb: () => void) {
   if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const mq = window.matchMedia(TOUCH_QUERY);
-  mq.addEventListener("change", cb);
-  return () => mq.removeEventListener("change", cb);
+  const mqs = OVERLAY_QUERIES.map((query) => window.matchMedia(query));
+  mqs.forEach((mq) => mq.addEventListener("change", cb));
+  return () => mqs.forEach((mq) => mq.removeEventListener("change", cb));
 }
+
+function overlaySnapshot(): FacetOverlay {
+  if (typeof window === "undefined" || !window.matchMedia) return "popover";
+  if (window.matchMedia(MOBILE_QUERY).matches) return "sheet";
+  if (window.matchMedia(TABLET_QUERY).matches) return "modal";
+  return "popover";
+}
+
+export function useFacetOverlay(): FacetOverlay {
+  return useSyncExternalStore(subscribeOverlay, overlaySnapshot, () => "popover");
+}
+
 export function useTouchLayout(): boolean {
-  return useSyncExternalStore(
-    subscribeTouch,
-    () => (typeof window !== "undefined" && window.matchMedia ? window.matchMedia(TOUCH_QUERY).matches : false),
-    () => false
-  );
+  return useFacetOverlay() !== "popover";
 }
 
 /**
- * The bottom sheet every facet shares on touch layouts. Vaul owns the drag/momentum behavior; this
- * wrapper keeps the visual structure common across filters, date pickers, and mobile selectors.
+ * The framed overlay every facet shares on compact layouts. Vaul owns the phone sheet's
+ * drag/momentum behavior; tablet gets the same content in a centered modal.
  */
 export function FacetSheet({
   label,
@@ -39,6 +51,7 @@ export function FacetSheet({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const overlay = useFacetOverlay();
   const onOpenChange = (open: boolean) => {
     if (!open) onClose();
   };
@@ -54,6 +67,28 @@ export function FacetSheet({
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
   }, [onClose]);
+  if (overlay === "modal") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
+        <button type="button" aria-label="Close" className="absolute inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative flex max-h-[82dvh] w-full max-w-xl flex-col overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none">
+          <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
+            <span className="text-sm font-medium">{label}</span>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+              className="grid size-8 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/10"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          {footer ? <div className="flex shrink-0 gap-2 border-t px-4 py-3">{footer}</div> : null}
+        </div>
+      </div>
+    );
+  }
   return (
     <Drawer.Root open onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
       <Drawer.Portal>
