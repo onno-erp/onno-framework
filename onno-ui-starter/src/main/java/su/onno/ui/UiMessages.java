@@ -140,6 +140,8 @@ public final class UiMessages {
         d.put("list.sortBy", "Sort by {column}");
         d.put("list.tableView", "Table");
         d.put("list.mapView", "Map");
+        // Fallback toggle label for a custom list renderer (ListSpec.custom) without a .label(...).
+        d.put("list.customView", "Cards");
         d.put("list.pageRange", "{from}–{to} of {total}");
         d.put("list.pageOf", "Page {page} of {pages}");
         d.put("list.prev", "Prev");

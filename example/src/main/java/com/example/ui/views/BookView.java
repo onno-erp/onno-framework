@@ -31,6 +31,9 @@ public class BookView implements EntityView {
         // name, ISBN anchors at the start (scan the prefix off a barcode).
         list.filter("author").label("Author").contains();
         list.filter("isbn").label("ISBN").startsWith();
+        // A Table ⇄ Shelf toggle: the "bookTiles" renderer (src/main/widgets/BookTiles.tsx) draws
+        // the same searched/filtered/sorted rows as cover tiles.
+        list.custom("bookTiles").label("Shelf");
     }
 
     @Override

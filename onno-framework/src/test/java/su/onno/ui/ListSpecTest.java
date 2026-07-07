@@ -134,6 +134,36 @@ class ListSpecTest {
     }
 
     @Test
+    void noCustomRendererByDefault() {
+        assertThat(new ListSpec().customSpec()).isNull();
+    }
+
+    @Test
+    void customRendererCarriesTypeLabelAndDefaultView() {
+        ListSpec spec = new ListSpec();
+        spec.custom("bookTiles").label("Shelf").defaultView();
+
+        ListSpec.CustomSpec c = spec.customSpec();
+        assertThat(c).isNotNull();
+        assertThat(c.type()).isEqualTo("bookTiles");
+        assertThat(c.label()).isEqualTo("Shelf");
+        assertThat(c.isDefaultView()).isTrue();
+    }
+
+    @Test
+    void repeatedCustomCallsAccumulateOnOneSpec() {
+        ListSpec spec = new ListSpec();
+        spec.custom("tiles").label("Tiles");
+        // A later call replaces the type but keeps the same spec (mirrors map()).
+        spec.custom("cards");
+
+        ListSpec.CustomSpec c = spec.customSpec();
+        assertThat(c.type()).isEqualTo("cards");
+        assertThat(c.label()).isEqualTo("Tiles");
+        assertThat(c.isDefaultView()).isFalse();
+    }
+
+    @Test
     void noGroupingByDefault() {
         ListSpec spec = new ListSpec();
         assertThat(spec.groupable()).isEmpty();

@@ -1,7 +1,15 @@
 import type { ComponentType } from "react";
-import type { DashboardWidgetMeta, OnnoHost, OnnoReadApi } from "./types";
+import type { DashboardWidgetMeta, ListRendererProps, OnnoHost, OnnoReadApi } from "./types";
 
-export type { DashboardWidgetMeta, EntityRecord, OnnoReadApi, OnnoHost } from "./types";
+export type {
+  DashboardWidgetMeta,
+  EntityRecord,
+  ListRendererColumn,
+  ListRendererDescriptor,
+  ListRendererProps,
+  OnnoReadApi,
+  OnnoHost,
+} from "./types";
 
 /**
  * `@onno/widget-sdk` — write a custom widget for the onno UI as a normal React component, then
@@ -62,6 +70,32 @@ export const registerWidget: (
   widgetType: string,
   component: ComponentType<{ widget: DashboardWidgetMeta }>
 ) => void = host.registerWidget;
+
+/**
+ * Register the body renderer for a custom <em>list</em> view — the component an entity's
+ * {@code ListSpec.custom("type")} resolves. Same registry as {@link registerWidget}, but the
+ * component receives the list-renderer contract ({@link ListRendererProps}: the current window of
+ * rows, the list descriptor, and an open-record callback) instead of a dashboard-widget descriptor.
+ * The framework keeps the toolbar and the data feed; the component only draws the rows.
+ *
+ * @example
+ *   import { registerListRenderer, type ListRendererProps } from "@onno/widget-sdk";
+ *
+ *   function BookTiles({ rows, open }: ListRendererProps) {
+ *     return <div className="grid grid-cols-4 gap-3">{rows.map((r) => (
+ *       <button key={String(r._id)} onClick={() => open(r)}>{String(r._description)}</button>
+ *     ))}</div>;
+ *   }
+ *   registerListRenderer("bookTiles", BookTiles);
+ *   // server: list.custom("bookTiles").label("Shelf")
+ */
+export const registerListRenderer = (
+  rendererType: string,
+  component: ComponentType<ListRendererProps>
+): void =>
+  // The host registry stores both prop shapes; the list island renders this entry with
+  // ListRendererProps (dashboards never resolve a type an EntityView declared for its list).
+  host.registerWidget(rendererType, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
 
 /** `htm` bound to the host's `React.createElement` — JSX-like markup with no build step, if wanted. */
 export const html = host.html;

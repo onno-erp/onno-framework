@@ -56,11 +56,40 @@ export function registerWidget(
   // Re-publish so any host already on screen picks up the newly registered renderer.
   mounts = [...mounts];
   emit();
+  registryVersion++;
+  for (const l of registryListeners) l();
 }
 
 /** The widget types with a registered renderer (built-ins + app-registered). */
 export function registeredWidgetTypes(): string[] {
   return Object.keys(REGISTRY);
+}
+
+/**
+ * Look up the component registered under a type — the same registry {@link registerWidget} feeds.
+ * Used by the entity list to resolve a {@code ListSpec.custom(type)} body renderer (whose props are
+ * the list-renderer contract, not {@code {widget}} — the registry stores both shapes; the emitting
+ * site knows which one it renders). Undefined when nothing is registered under the type.
+ */
+export function resolveWidget(widgetType: string): ComponentType<never> | undefined {
+  return REGISTRY[widgetType] as ComponentType<never> | undefined;
+}
+
+// A separate version store for registry *lookups* (vs the mounts store below, which tracks live
+// custom elements): consumers re-resolve when a plugin registers late, without re-rendering on
+// every mount/unmount of unrelated widgets.
+let registryVersion = 0;
+const registryListeners = new Set<() => void>();
+
+/** useSyncExternalStore subscribe for {@link getRegistryVersion}. */
+export function subscribeRegistry(listener: () => void): () => void {
+  registryListeners.add(listener);
+  return () => registryListeners.delete(listener);
+}
+
+/** Bumped on every {@link registerWidget}; a changed value means lookups may resolve differently. */
+export function getRegistryVersion(): number {
+  return registryVersion;
 }
 
 type Mount = { id: number; el: HTMLElement; widget: DashboardWidgetMeta };

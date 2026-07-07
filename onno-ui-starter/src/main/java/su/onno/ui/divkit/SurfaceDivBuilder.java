@@ -149,6 +149,17 @@ public final class SurfaceDivBuilder {
             map.put("defaultView", mv.defaultView());
             descriptor.put("map", map);
         }
+        // Optional custom body renderer: a Table ⇄ custom toggle over the same toolbar + feed. The
+        // island resolves the type in its widget registry (registerListRenderer); an unregistered
+        // type degrades to the default grid (see ResolvedListView.CustomView).
+        if (view.customView() != null) {
+            ResolvedListView.CustomView cv = view.customView();
+            Map<String, Object> custom = new LinkedHashMap<>();
+            custom.put("type", cv.type());
+            custom.put("label", cv.label());
+            custom.put("defaultView", cv.defaultView());
+            descriptor.put("custom", custom);
+        }
         return descriptor;
     }
 

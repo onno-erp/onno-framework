@@ -150,6 +150,16 @@ public class UiViewResolver {
 
         ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);
 
+        // Custom body renderer: pass the registry type through as authored (a blank type is
+        // dropped). Unlike the map's geo fields, there is nothing to validate server-side — the
+        // widget registry lives on the client, which degrades an unregistered type to the grid.
+        ListSpec.CustomSpec customSpec = spec.customSpec();
+        ResolvedListView.CustomView customView =
+                customSpec == null || customSpec.type() == null || customSpec.type().isBlank()
+                        ? null
+                        : new ResolvedListView.CustomView(
+                                customSpec.type(), customSpec.label(), customSpec.isDefaultView());
+
         // Feed mode + page size: the authored value wins, else the global default. Carried to the
         // renderer as the lowercase token the grid keys off ("infinite" / "paged").
         ListSpec.FeedMode feed = spec.feedMode() != null ? spec.feedMode() : defaultFeed;
@@ -179,7 +189,7 @@ public class UiViewResolver {
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,
-                feed.name().toLowerCase(java.util.Locale.ROOT), pageSize, grouping);
+                feed.name().toLowerCase(java.util.Locale.ROOT), pageSize, grouping, customView);
     }
 
     /**

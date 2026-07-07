@@ -207,7 +207,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
     `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
-    (open on the map).
+    (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
+    widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
+    `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
+    `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
+    refresh, and an unregistered type degrades to the default grid (no toggle).
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. `form(f→…)` makes the click open a **modal input
