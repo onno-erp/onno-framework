@@ -439,6 +439,11 @@ b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
  .config("metric", "sum").config("metricField", "gross").config("currency", "EUR");
 ```
 
+`width("1/4"|"1/3"|"1/2"|"2/3"|"3/4"|"full")` sets the widget's share of a layout row; widgets flow
+left-to-right until a row fills. `rowBreak()` forces the widget to start a fresh row even when the
+previous one still has room — use it to keep a section from being pulled up beside leftovers of the
+row above (no effect on the single-column mobile layout).
+
 Each `count`/`metric` card resolves a server-side aggregate (one SQL query). The dashboard renderer
 resolves them **concurrently** and de-duplicates identical `(entity, metric, field, filter)` queries,
 so a wide dashboard isn't N sequential round-trips. The fan-out is bounded by
