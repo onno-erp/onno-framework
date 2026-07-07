@@ -388,13 +388,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       )
     : [];
 
-  // A field spans the full row unless hinted narrower (.width("half") / "1/2"), letting short
-  // fields (dates, amounts, refs) sit side by side on wide screens.
-  const isHalf = (f: Field) =>
-    f.kind === "attr" && /^(half|1\/2|50%?)$/i.test((f.attr.widthHint ?? "").trim());
-
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full max-w-5xl">
       <div className="mb-5">
         <div className="flex items-center gap-2.5">
           <h1 className="text-xl font-semibold text-foreground">{form.title}</h1>
@@ -412,21 +407,22 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       {fieldGroups.map((g, gi) => (
         <div
           key={g.title || "__default"}
-          className={cn("rounded-card border border-border bg-card p-5", gi > 0 && "mt-4")}
+          className={cn("overflow-hidden rounded-card border border-border bg-card", gi > 0 && "mt-4")}
         >
           {g.title ? (
-            <h2 className="mb-4 text-sm font-semibold text-foreground">{g.title}</h2>
+            <div className="border-b border-border bg-muted/25 px-4 py-2.5">
+              <h2 className="text-sm font-semibold text-foreground">{g.title}</h2>
+            </div>
           ) : null}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="divide-y divide-border">
             {g.fields.map((f) => (
-              <div key={f.key} className={cn(!isHalf(f) && "sm:col-span-2")}>
-                <FormFieldRow
-                  field={f}
-                  value={data[f.key]}
-                  error={errors[f.key]}
-                  onChange={(v) => set(f.key, v)}
-                />
-              </div>
+              <FormFieldRow
+                key={f.key}
+                field={f}
+                value={data[f.key]}
+                error={errors[f.key]}
+                onChange={(v) => set(f.key, v)}
+              />
             ))}
           </div>
         </div>
@@ -624,50 +620,37 @@ function FormFieldRow({
       />
     );
 
-  // Booleans: a settings-style switch (label left, toggle right) when hinted with .widget("switch"),
-  // otherwise an inline checkbox that owns its label.
-  if (field.kind === "attr" && /^(boolean|Boolean)$/.test(field.attr.javaType)) {
-    if (/^(switch|toggle)$/i.test(field.attr.widget ?? "")) {
-      return (
-        <div>
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={field.key}>{field.label}</Label>
-              <HintIcon text={hint} size={13} />
-            </div>
-            <Switch id={field.key} checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
-          </div>
-          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
-        </div>
-      );
-    }
-    return (
-      <div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id={field.key}
-            checked={!!value}
-            onCheckedChange={(v) => onChange(v === true)}
-          />
-          <Label htmlFor={field.key}>{field.label}</Label>
-          <HintIcon text={hint} size={13} />
-        </div>
-        {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
-      </div>
-    );
-  }
+  const booleanControl =
+    field.kind === "attr" && /^(boolean|Boolean)$/.test(field.attr.javaType) ? (
+      /^(switch|toggle)$/i.test(field.attr.widget ?? "") ? (
+        <Switch checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+      ) : (
+        <Checkbox checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
+      )
+    ) : null;
 
   return (
-    <div className="grid gap-1.5">
-      <div className="flex items-center gap-1.5">
+    <div
+      className={cn(
+        "grid grid-cols-[minmax(6.5rem,30%)_minmax(0,1fr)]",
+        invalid && "bg-destructive/5"
+      )}
+    >
+      <div className="flex items-center gap-1.5 border-r border-border bg-muted/20 px-3 py-3 sm:px-4">
         <Label htmlFor={field.key}>
           {field.label}
           {required ? <span className="ml-1 text-destructive">*</span> : null}
         </Label>
         <HintIcon text={hint} size={13} />
       </div>
-      {control}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <div className="min-w-0 px-4 py-2.5">
+        {booleanControl ? (
+          <div className="flex min-h-10 items-center">{booleanControl}</div>
+        ) : (
+          control
+        )}
+        {error ? <p className="mt-1.5 text-xs text-destructive">{error}</p> : null}
+      </div>
     </div>
   );
 }
