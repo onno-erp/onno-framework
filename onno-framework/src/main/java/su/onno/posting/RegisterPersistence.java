@@ -470,13 +470,29 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         for (AttributeDescriptor dim : descriptor.dimensions()) {
             Field field = findField(descriptor.javaClass(), dim.fieldName());
             field.setAccessible(true);
-            field.set(record, rs.getObject(dim.columnName(), field.getType()));
+            if (dim.isRef()) {
+                // A Ref dimension is stored as a bare UUID column; JDBC can't materialize a Ref
+                // itself (#207), so rebuild it against the field's declared target type.
+                String raw = rs.getString(dim.columnName());
+                field.set(record, raw == null ? null : Ref.of(refTargetClass(field), UUID.fromString(raw)));
+            } else {
+                field.set(record, rs.getObject(dim.columnName(), field.getType()));
+            }
         }
         for (AttributeDescriptor res : descriptor.resources()) {
             Field field = findField(descriptor.javaClass(), res.fieldName());
             field.setAccessible(true);
             field.set(record, rs.getObject(res.columnName(), BigDecimal.class));
         }
+    }
+
+    /** The {@code T} of a {@code Ref<T>} field, or {@code Object.class} for a raw/wildcard Ref. */
+    private static Class<?> refTargetClass(Field field) {
+        if (field.getGenericType() instanceof java.lang.reflect.ParameterizedType pt
+                && pt.getActualTypeArguments()[0] instanceof Class<?> target) {
+            return target;
+        }
+        return Object.class;
     }
 
     // --- Shared SQL fragments (one definition for all register virtual tables) ---
