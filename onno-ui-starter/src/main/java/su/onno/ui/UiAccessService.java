@@ -252,7 +252,14 @@ public class UiAccessService {
         return m.invoke(target);
     }
 
-    private boolean hasAnyRole(Principal principal, List<String> requiredRoles) {
+    /**
+     * Whether the caller holds any of {@code requiredRoles} ({@code ADMIN} always passes). Same
+     * semantics as the per-entity checks; also the gate for an action's declared
+     * {@code ActionSpec .roles(...)} (#227). Note this stays deny-by-default: an empty
+     * {@code requiredRoles} matches nobody but the superuser, so callers with an optional role
+     * list must skip the check when the list is unset rather than pass an empty one.
+     */
+    public boolean hasAnyRole(Principal principal, List<String> requiredRoles) {
         // Don't gate on principal != null: roles() resolves authorities from the SecurityContext
         // when the injected principal carries none (or is absent). Deny-by-default still applies —
         // an unauthenticated caller simply resolves to no roles.

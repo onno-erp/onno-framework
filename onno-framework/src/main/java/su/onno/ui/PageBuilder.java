@@ -90,8 +90,10 @@ public final class PageBuilder {
      * });
      * </pre>
      *
-     * <p>A button's server handler runs only for an authenticated user; because a page action has
-     * no entity to gate on, the handler enforces its own authorization via {@code ctx.user()}.</p>
+     * <p>A button's server handler runs only for an authenticated user. Because a page action has
+     * no entity to gate on, declare {@code .roles("MANAGER")} to restrict who may run (and see) it;
+     * without roles, any authenticated user may run it and the handler enforces its own finer
+     * authorization via {@code ctx.user()}.</p>
      */
     public PageBuilder actions(String heading, Consumer<ActionSpec> configurer) {
         ActionSpec spec = new ActionSpec();
@@ -111,6 +113,9 @@ public final class PageBuilder {
             m.put("server", a.isServer());
             if (!a.isServer()) {
                 m.put("url", a.navigateUrl());
+            }
+            if (!a.roles().isEmpty()) {
+                m.put("roles", a.roles());
             }
             buttons.add(m);
         }
