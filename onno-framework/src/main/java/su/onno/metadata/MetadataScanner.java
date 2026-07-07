@@ -42,41 +42,6 @@ public class MetadataScanner {
         return sb.toString();
     }
 
-    @SuppressWarnings("removal")
-    public List<DashboardWidgetDescriptor> scanDashboardWidgets(Class<?> clazz) {
-        DashboardWidget[] widgets = clazz.getAnnotationsByType(DashboardWidget.class);
-        if (widgets.length == 0) return List.of();
-
-        String entityType;
-        String entityName;
-        if (clazz.isAnnotationPresent(Document.class)) {
-            entityType = "document";
-            entityName = clazz.getAnnotation(Document.class).name();
-        } else if (clazz.isAnnotationPresent(Catalog.class)) {
-            entityType = "catalog";
-            entityName = clazz.getAnnotation(Catalog.class).name();
-        } else if (clazz.isAnnotationPresent(AccumulationRegister.class)) {
-            entityType = "register";
-            entityName = clazz.getAnnotation(AccumulationRegister.class).name();
-        } else {
-            return List.of();
-        }
-
-        List<DashboardWidgetDescriptor> result = new ArrayList<>();
-        for (DashboardWidget w : widgets) {
-            java.util.Map<String, String> extra = new java.util.LinkedHashMap<>();
-            for (String kv : w.extraConfig()) {
-                int eq = kv.indexOf('=');
-                if (eq > 0) extra.put(kv.substring(0, eq), kv.substring(eq + 1));
-            }
-            result.add(new DashboardWidgetDescriptor(
-                    w.title(), w.type(), w.order(), w.width(),
-                    entityType, entityName, w.maxItems(),
-                    w.dateField(), w.titleField(), extra, w.hint()));
-        }
-        return result;
-    }
-
     public CatalogDescriptor scan(Class<?> clazz) {
         Catalog catalog = clazz.getAnnotation(Catalog.class);
         if (catalog == null) {
@@ -264,7 +229,6 @@ public class MetadataScanner {
         return new ConstantDescriptor(logicalName, clazz, field.getType(), field.getName());
     }
 
-    @SuppressWarnings("removal")
     private List<AttributeDescriptor> scanDimensions(Class<?> clazz, Class<?> stopClass) {
         List<AttributeDescriptor> result = new ArrayList<>();
         Class<?> current = clazz;
@@ -281,17 +245,10 @@ public class MetadataScanner {
                 Class<?> javaType = field.getType();
                 boolean isRef = Ref.class.isAssignableFrom(javaType);
 
-                UiHint hint = field.getAnnotation(UiHint.class);
                 result.add(new AttributeDescriptor(
                         fieldName, displayName, columnName, javaType, 255, false, isRef,
                         isRef ? extractRefTargetName(field) : null, 0, 0,
-                        hint == null || hint.visibleInList(),
-                        hint == null || hint.visibleInForm(),
-                        hint == null || hint.visibleInDetail(),
-                        hint == null ? 0 : hint.order(),
-                        hint == null ? "" : hint.group(),
-                        hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget(),
+                        true, true, true, 0, "", "", "",
                         AttributeDescriptor.Constraints.NONE,
                         false));
             }
@@ -301,7 +258,6 @@ public class MetadataScanner {
         return result;
     }
 
-    @SuppressWarnings("removal")
     private List<AttributeDescriptor> scanResources(Class<?> clazz, Class<?> stopClass) {
         List<AttributeDescriptor> result = new ArrayList<>();
         Class<?> current = clazz;
@@ -316,17 +272,10 @@ public class MetadataScanner {
                         ? humanize(fieldName) : res.displayName();
                 String columnName = naming.column(res.name().isEmpty() ? fieldName : res.name());
 
-                UiHint hint = field.getAnnotation(UiHint.class);
                 result.add(new AttributeDescriptor(
                         fieldName, displayName, columnName, BigDecimal.class, 0, false, false,
                         null, res.precision(), res.scale(),
-                        hint == null || hint.visibleInList(),
-                        hint == null || hint.visibleInForm(),
-                        hint == null || hint.visibleInDetail(),
-                        hint == null ? 0 : hint.order(),
-                        hint == null ? "" : hint.group(),
-                        hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget(),
+                        true, true, true, 0, "", "", "",
                         AttributeDescriptor.Constraints.NONE,
                         false));
             }
@@ -336,7 +285,6 @@ public class MetadataScanner {
         return result;
     }
 
-    @SuppressWarnings("removal")
     private List<AttributeDescriptor> scanAttributes(Class<?> clazz, Class<?> stopClass) {
         List<AttributeDescriptor> result = new ArrayList<>();
         Class<?> current = clazz;
@@ -357,7 +305,6 @@ public class MetadataScanner {
                 Class<?> javaType = field.getType();
                 boolean isRef = Ref.class.isAssignableFrom(javaType);
 
-                UiHint hint = field.getAnnotation(UiHint.class);
                 result.add(new AttributeDescriptor(
                         fieldName,
                         displayName,
@@ -369,13 +316,13 @@ public class MetadataScanner {
                         isRef ? extractRefTargetName(field) : null,
                         attr.precision(),
                         attr.scale(),
-                        hint == null || hint.visibleInList(),
-                        hint == null || hint.visibleInForm(),
-                        hint == null || hint.visibleInDetail(),
-                        hint == null ? 0 : hint.order(),
-                        hint == null ? "" : hint.group(),
-                        hint == null ? "" : hint.width(),
-                        hint == null ? "" : hint.widget(),
+                        true,
+                        true,
+                        true,
+                        0,
+                        "",
+                        "",
+                        "",
                         new AttributeDescriptor.Constraints(
                                 attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
                         attr.secret(),

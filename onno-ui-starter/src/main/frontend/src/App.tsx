@@ -9,7 +9,6 @@ import { MessagesProvider, useMessages } from "@/providers/messages-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { TimeRangeProvider } from "@/providers/time-range-provider";
 import { LoginView } from "@/views/login";
-import { PortfolioPage } from "@/views/portfolio";
 import { DivKitView } from "@/views/divkit-view";
 import { WidgetPortals } from "@/lib/widget-bridge";
 import { FormPortals } from "@/lib/form-bridge";
@@ -114,7 +113,6 @@ export default function App() {
   return (
     <BrowserRouter basename={BASE_PATH}>
       <Routes>
-        <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/login" element={<WorkspaceProviders><LoginView /></WorkspaceProviders>} />
         <Route path="*" element={<WorkspaceProviders><ProtectedApp /></WorkspaceProviders>} />
       </Routes>

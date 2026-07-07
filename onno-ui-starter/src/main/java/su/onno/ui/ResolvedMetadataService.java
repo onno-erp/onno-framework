@@ -307,8 +307,7 @@ public class ResolvedMetadataService {
             // Tell the UI to render a write-only password control and a "set / not set"
             // indicator instead of the value (which the read API never returns).
             map.put("secret", a.secret());
-            // Layout hints win when set; otherwise fall back to descriptor (which
-            // reflects @UiHint on the field, or scanner default if absent).
+            // Layout hints win when set; otherwise fall back to scanner defaults.
             map.put("visibleInList", pick(hint == null ? null : hint.visibleInList(), a.visibleInList()));
             map.put("visibleInForm", pick(hint == null ? null : hint.visibleInForm(), a.visibleInForm()));
             map.put("visibleInDetail", pick(hint == null ? null : hint.visibleInDetail(), a.visibleInDetail()));

@@ -147,16 +147,22 @@ public record ResolvedListView(String title, List<Column> columns,
      * and the {@code label} the control renders. The two are identical for a plain-string filter; a
      * value→label split lets a filter over a code/English/enum-mirror column show a localized choice.
      * {@code color} (blank when none) carries an {@code @EnumLabel(color=…)} hex so the control can
-     * tint the choice like the entity's status pills.
+     * tint the choice like the entity's status pills; {@code avatarUrl} lets reference choices carry
+     * target profile photos.
      */
-    public record Option(String value, String label, String color) {
+    public record Option(String value, String label, String color, String avatarUrl) {
         public Option {
             label = label == null ? value : label;
             color = color == null ? "" : color;
+            avatarUrl = avatarUrl == null ? "" : avatarUrl;
         }
 
         public Option(String value, String label) {
-            this(value, label, "");
+            this(value, label, "", "");
+        }
+
+        public Option(String value, String label, String color) {
+            this(value, label, color, "");
         }
     }
 

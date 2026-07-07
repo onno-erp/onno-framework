@@ -7,17 +7,14 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.model.CatalogObject;
 import su.onno.numbering.NumberGenerator;
 import su.onno.security.SecretCipher;
-import su.onno.security.SecretRedactor;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
 import org.jdbi.v3.core.Jdbi;
-import org.jdbi.v3.core.statement.Update;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -59,7 +56,7 @@ public class CatalogCommandService {
     }
 
     public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
 
@@ -80,7 +77,7 @@ public class CatalogCommandService {
             entity.setParent(parseUuid(body.get("parent")));
             lifecycle.applyBody(entity, desc.attributes(), body, errors);
             Map<String, Object> before = lifecycle.snapshot(entity, desc.attributes());
-            if (bake(entity, true, errors)) {
+            if (EntityWriteSupport.bake(lifecycle, entity, true, errors)) {
                 lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
                 body.put("code", entity.getCode());
                 body.put("description", entity.getDescription());
@@ -116,7 +113,7 @@ public class CatalogCommandService {
             SqlBind.nullable(update, "_parent", parseUuid(body.get("parent")));
 
             for (AttributeDescriptor attr : desc.attributes()) {
-                bindAttribute(update, attr, body.get(attr.fieldName()));
+                EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
             }
             update.execute();
         });
@@ -129,7 +126,7 @@ public class CatalogCommandService {
 
     public Map<String, Object> update(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
                                        Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
 
@@ -151,7 +148,7 @@ public class CatalogCommandService {
             String descriptionBefore = entity.getDescription();
             boolean folderBefore = entity.isFolder();
             UUID parentBefore = entity.getParent();
-            if (bake(entity, false, errors)) {
+            if (EntityWriteSupport.bake(lifecycle, entity, false, errors)) {
                 lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
                 if (!Objects.equals(entity.getCode(), codeBefore)) body.put("code", entity.getCode());
                 if (!Objects.equals(entity.getDescription(), descriptionBefore)) body.put("description", entity.getDescription());
@@ -168,7 +165,8 @@ public class CatalogCommandService {
         if (body.containsKey("parent")) setClauses.add("_parent = :_parent");
 
         for (AttributeDescriptor attr : desc.attributes()) {
-            if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+            if (body.containsKey(attr.fieldName())
+                    && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
                 setClauses.add(attr.columnName() + " = :" + attr.columnName());
             }
         }
@@ -195,8 +193,9 @@ public class CatalogCommandService {
             }
 
             for (AttributeDescriptor attr : desc.attributes()) {
-                if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
-                    bindAttribute(update, attr, body.get(attr.fieldName()));
+                if (body.containsKey(attr.fieldName())
+                        && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                    EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
                 }
             }
             return update.execute();
@@ -213,7 +212,7 @@ public class CatalogCommandService {
     }
 
     public void delete(CatalogDescriptor desc, UUID id, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         // Capture the natural key before the soft-delete so listeners can target the resource.
         String code = jdbi.withHandle(h ->
@@ -235,66 +234,6 @@ public class CatalogCommandService {
     private static String naturalKey(Map<String, Object> row) {
         Object code = row.get("_code");
         return code == null ? null : code.toString();
-    }
-
-    private void bindAttribute(Update update, AttributeDescriptor attr, Object value) {
-        // Coerce to the column's Java type, then bind null-safely so a null ref/enum/numeric/date
-        // binds as a typed (unspecified) null PostgreSQL can infer rather than varchar. (#163)
-        SqlBind.nullable(update, attr.columnName(), coerceAttribute(attr, value));
-    }
-
-    /** The value to store for an attribute: its column's Java type, or {@code null}/empty → null. */
-    private Object coerceAttribute(AttributeDescriptor attr, Object value) {
-        if (value == null || "".equals(value)) {
-            return null;
-        }
-        if (attr.secret()) {
-            // Write-only secret: store the value encrypted. A "set" sentinel (echoed from a
-            // GET) carries no real value — on create there's nothing to keep, so store null.
-            // On update the caller is filtered out earlier by leaveSecretUnchanged.
-            return SecretRedactor.SET.equals(value) ? null : secretCipher.encrypt(value.toString());
-        }
-        if (attr.isRef() || attr.javaType().isEnum()) {
-            return value instanceof UUID u ? u : UUID.fromString(value.toString());
-        }
-        if (attr.javaType() == BigDecimal.class) {
-            return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
-        }
-        // Date/datetime columns arrive as JSON strings (JSON has no temporal type). Parse them so
-        // JDBI binds a typed value PostgreSQL accepts instead of a varchar it rejects. (#163)
-        Object temporal = TemporalValues.coerce(attr.javaType(), value);
-        if (temporal != null) {
-            return temporal;
-        }
-        return value;
-    }
-
-    /**
-     * A secret attribute whose incoming value is the read-side "set" sentinel means "leave it
-     * as it is" — the client round-tripped a GET it never saw the real value of. Such columns
-     * are dropped from the UPDATE so the stored ciphertext is preserved.
-     */
-    private boolean leaveSecretUnchanged(AttributeDescriptor attr, Object value) {
-        return attr.secret() && SecretRedactor.SET.equals(value);
-    }
-
-    /**
-     * Run {@code onFilling}/{@code beforeWrite} and collect business rules. A hook or rule that
-     * throws on otherwise-valid input is a genuine failure and propagates; when other validation
-     * errors are already pending it is suppressed, since those explain the broken state and would
-     * otherwise be masked by a {@code 500}.
-     */
-    private boolean bake(Object entity, boolean isNew, ValidationErrors errors) {
-        try {
-            lifecycle.runHooks(entity, isNew);
-            lifecycle.collectRules(entity, errors);
-            return true;
-        } catch (RuntimeException failed) {
-            if (errors.isEmpty()) {
-                throw failed;
-            }
-            return false;
-        }
     }
 
     /** Reconstruct the stored catalog item so the write lifecycle runs on its real state. */
@@ -349,12 +288,6 @@ public class CatalogCommandService {
 
     private int parseInt(Object value) {
         return value instanceof Number n ? n.intValue() : Integer.parseInt(value.toString());
-    }
-
-    private void requireWritable() {
-        if (properties.isReadOnly()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
-        }
     }
 
     private String resolveCode(CatalogDescriptor desc, Map<String, Object> body) {

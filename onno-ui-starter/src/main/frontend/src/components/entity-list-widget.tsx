@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { FacetSheet, SheetClearButton, SheetDoneButton, useTouchLayout } from "@/components/ui/facet-sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RangeCalendar } from "@/components/ui/calendar";
 import { DatePicker } from "@/components/date-picker";
 import { HintIcon } from "@/components/ui/hint-icon";
@@ -128,9 +129,9 @@ export type ListInput = {
  * eq/in/like/prefix/ge/le params, and several filters narrow the list jointly (AND).
  */
 /** One choice of a (multi-)options filter: {@code value} is matched on the column, {@code label} is
- *  shown, {@code color} (an @EnumLabel hex, when the field is an enumeration) tints the choice like
- *  the entity's status pills. */
-export type FilterOption = { value: string; label: string; color?: string };
+ *  shown, {@code color} (an @EnumLabel hex) tints enum choices, and {@code avatarUrl} shows a
+ *  profile image for reference-backed choices such as assignees. */
+export type FilterOption = { value: string; label: string; color?: string; avatarUrl?: string };
 export type ListFilterControl = {
   key: string;
   label: string;
@@ -353,6 +354,13 @@ const facetTriggerCls = (active: boolean) =>
 // Options-facet lists longer than this get a search row; shorter ones stay a plain scan.
 const FACET_SEARCH_THRESHOLD = 8;
 
+function optionInitials(name: string | undefined): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return (name.trim().slice(0, 2) || "?").toUpperCase();
+}
+
 /** A thin vertical rule between a facet's label and its selected-value badges. */
 function FacetDivider() {
   return <span aria-hidden="true" className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />;
@@ -384,6 +392,60 @@ function FacetTip({ hint, children }: { hint: string; children: ReactNode }) {
         <TooltipContent side="bottom">{hint}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
+  );
+}
+
+function FacetOptionRow({
+  option,
+  selected,
+  multi,
+  touch,
+  onSelect,
+}: {
+  option: FilterOption;
+  selected: boolean;
+  multi: boolean;
+  touch?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      key={option.value}
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full cursor-pointer items-center text-left transition-colors",
+        touch
+          ? "min-h-11 gap-3 rounded-field px-3 py-2 text-[15px] active:bg-accent"
+          : "gap-2 rounded-field px-2 py-1.5 text-sm hover:bg-accent"
+      )}
+    >
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-center border transition-colors",
+          touch ? "size-5" : "size-4",
+          multi ? (touch ? "rounded-[5px]" : "rounded-[4px]") : "rounded-full",
+          selected ? "border-primary bg-primary text-primary-foreground" : "border-input"
+        )}
+      >
+        {selected ? <Check className={touch ? "size-3.5" : "size-3"} /> : null}
+      </span>
+      {option.avatarUrl ? (
+        <Avatar className={cn("shrink-0", touch ? "size-7" : "size-6")}>
+          <AvatarImage src={option.avatarUrl} alt="" />
+          <AvatarFallback className={touch ? "text-[11px]" : "text-[10px]"}>
+            {optionInitials(option.label)}
+          </AvatarFallback>
+        </Avatar>
+      ) : option.color ? (
+        <span
+          aria-hidden="true"
+          className={cn("shrink-0 rounded-full", touch ? "size-2.5" : "size-2")}
+          style={{ backgroundColor: option.color }}
+        />
+      ) : null}
+      <span className="truncate">{option.label}</span>
+    </button>
   );
 }
 
@@ -495,30 +557,14 @@ function OptionsFacet({
               {visible.map((o) => {
                 const on = selected.includes(o.value);
                 return (
-                  <button
+                  <FacetOptionRow
                     key={o.value}
-                    type="button"
-                    onClick={() => toggle(o.value)}
-                    className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-5 shrink-0 items-center justify-center border transition-colors",
-                        multi ? "rounded-[5px]" : "rounded-full",
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                      )}
-                    >
-                      {on ? <Check className="size-3.5" /> : null}
-                    </span>
-                    {o.color ? (
-                      <span
-                        aria-hidden="true"
-                        className="size-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: o.color }}
-                      />
-                    ) : null}
-                    <span className="truncate">{o.label}</span>
-                  </button>
+                    option={o}
+                    selected={on}
+                    multi={multi}
+                    touch
+                    onSelect={() => toggle(o.value)}
+                  />
                 );
               })}
             </div>
@@ -556,30 +602,13 @@ function OptionsFacet({
           {visible.map((o) => {
             const on = selected.includes(o.value);
             return (
-              <button
+              <FacetOptionRow
                 key={o.value}
-                type="button"
-                onClick={() => toggle(o.value)}
-                className="flex w-full cursor-pointer items-center gap-2 rounded-field px-2 py-1.5 text-left text-sm hover:bg-accent"
-              >
-                <span
-                  className={cn(
-                    "flex size-4 shrink-0 items-center justify-center border transition-colors",
-                    multi ? "rounded-[4px]" : "rounded-full",
-                    on ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                  )}
-                >
-                  {on ? <Check className="size-3" /> : null}
-                </span>
-                {o.color ? (
-                  <span
-                    aria-hidden="true"
-                    className="size-2 shrink-0 rounded-full"
-                    style={{ backgroundColor: o.color }}
-                  />
-                ) : null}
-                <span className="truncate">{o.label}</span>
-              </button>
+                option={o}
+                selected={on}
+                multi={multi}
+                onSelect={() => toggle(o.value)}
+              />
             );
           })}
         </div>
@@ -2118,9 +2147,9 @@ export function EntityListWidget({
             </ContextMenuItem>
           );
         };
-        // Built-ins: batch = label + open + delete; single = open/dup/copyLink/delete — minus the
-        // write items (dup, delete) when the viewer can't write the entity.
-        const itemCount = (batch ? (canWrite ? 3 : 2) : canWrite ? 4 : 2) + flatCustom.length + submenus.length;
+        // Built-ins: batch = label + open + delete; single = open/edit/dup/copyLink/delete — minus
+        // the write items (edit, dup, delete) when the viewer can't write the entity.
+        const itemCount = (batch ? (canWrite ? 3 : 2) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
             open
@@ -2156,19 +2185,29 @@ export function EntityListWidget({
                   <span>{t("action.open")}</span>
                   <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
                 </ContextMenuItem>
-                {/* Open IS edit now — the record surface is the editable form — so the write
-                    items are just Duplicate (and Delete below). */}
                 {canWrite ? (
-                  <ContextMenuItem
-                    onSelect={() => {
-                      dispatchAction(rowMenu.url + "/duplicate");
-                      close();
-                    }}
-                  >
-                    <Copy className="text-muted-foreground" aria-hidden="true" />
-                    <span>{t("action.duplicate")}</span>
-                    <ContextMenuShortcut>{shortcutLabel({ key: "d", mod: true, shift: true })}</ContextMenuShortcut>
-                  </ContextMenuItem>
+                  <>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        dispatchAction(rowMenu.url + "/edit");
+                        close();
+                      }}
+                    >
+                      <Pencil className="text-muted-foreground" aria-hidden="true" />
+                      <span>{t("action.edit")}</span>
+                      <ContextMenuShortcut>{shortcutLabel({ key: "e", mod: true })}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        dispatchAction(rowMenu.url + "/duplicate");
+                        close();
+                      }}
+                    >
+                      <Copy className="text-muted-foreground" aria-hidden="true" />
+                      <span>{t("action.duplicate")}</span>
+                      <ContextMenuShortcut>{shortcutLabel({ key: "d", mod: true, shift: true })}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                  </>
                 ) : null}
               </>
             )}

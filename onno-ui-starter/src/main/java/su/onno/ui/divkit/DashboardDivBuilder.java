@@ -1,6 +1,6 @@
 package su.onno.ui.divkit;
 
-import su.onno.metadata.DashboardWidgetDescriptor;
+import su.onno.metadata.PageWidgetDescriptor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,15 +19,15 @@ public final class DashboardDivBuilder {
     private DashboardDivBuilder() {}
 
     public static Map<String, Object> build(String title, String greeting,
-                                            List<DashboardWidgetDescriptor> widgets, int columns,
-                                            Function<DashboardWidgetDescriptor, String> values,
-                                            Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
+                                            List<PageWidgetDescriptor> widgets, int columns,
+                                            Function<PageWidgetDescriptor, String> values,
+                                            Function<PageWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // Desktop folds the shared time-range picker into the header's title row (same as
         // PageDivBuilder); mobile keeps it as its own full-width row.
-        DashboardWidgetDescriptor timeRange = columns > 1 ? PageDivBuilder.timeRangeWidget(widgets) : null;
-        List<DashboardWidgetDescriptor> grid = timeRange == null
+        PageWidgetDescriptor timeRange = columns > 1 ? PageDivBuilder.timeRangeWidget(widgets) : null;
+        List<PageWidgetDescriptor> grid = timeRange == null
                 ? widgets
                 : widgets.stream().filter(w -> w != timeRange).toList();
         // The time-range picker is entity-less and writes nothing — write access is moot.

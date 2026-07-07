@@ -343,15 +343,32 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // rows and bucketing client-side (no aggregate endpoint exists for them).
   const isRegister = widget.entityType === "register";
   const isDocument = widget.entityType === "document";
-  const windowField = widget.dateField || "_date";
+  const windowField = widget.dateField || (isRegister ? "_period" : "_date");
+
+  // The absolute window, resolved once per range change: resolveRange anchors a relative range to
+  // "now", so resolving inline every render would shift the fetch params and never let them settle.
+  const windowRange = useMemo(() => resolveRange(range), [range]);
+  const registerTurnoverRange = useMemo(
+    () =>
+      windowRange.from === -Infinity && windowRange.to === Infinity
+        ? undefined
+        : {
+            from: toLocalIso(windowRange.from === -Infinity ? Date.parse("1970-01-01T00:00:00") : windowRange.from),
+            to: toLocalIso(windowRange.to === Infinity ? Date.parse("2999-12-31T23:59:59") : windowRange.to),
+          },
+    [windowRange]
+  );
 
   // Register rows path. Buckets replace the row fetch for catalog/document, so hand useWidgetRows
   // an entityType it ignores — the hook must still be called (rules of hooks), just never fetch.
   const rowsWidget = useMemo(() => (isRegister ? widget : { ...widget, entityType: "" }), [isRegister, widget]);
-  const items = useWidgetRows(rowsWidget);
+  const items = useWidgetRows(rowsWidget, registerTurnoverRange);
   // The shared range windows the rows by the document's date BEFORE bucketing — so it applies to
   // every chart (a status pie filters to in-range orders too), not just time series.
-  const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
+  const ranged = useMemo(
+    () => (isRegister ? items : filterWindow(items, windowField, range)),
+    [isRegister, items, windowField, range]
+  );
 
   // Granularity auto-follows the data actually inside the window (see the span effect below), so a
   // range change re-applies it and the user can still override until the next change.
@@ -379,10 +396,6 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
   // Matches what the data pipeline computes for itself (a combo is never round).
   const round = !config.combo && (effKind === "donut" || effKind === "pie");
-
-  // The absolute window, resolved once per range change: resolveRange anchors a relative range to
-  // "now", so resolving inline every render would shift the fetch params and never let them settle.
-  const windowRange = useMemo(() => resolveRange(range), [range]);
 
   // The aggregate request for a catalog/document chart (null for a register — no fetch). Everything
   // the old row pipeline did client-side — filter, window, group, series-split, measure — travels as

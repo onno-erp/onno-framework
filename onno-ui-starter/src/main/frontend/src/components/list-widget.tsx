@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
 import { toSnakeCase } from "@/lib/utils";
+import { useWidgetLiveVersion } from "@/lib/widget-data";
 import {
   formatAmount,
   pickField,
@@ -27,9 +27,10 @@ const DEFAULT_SECONDARY = ["client_display", "primary_client_display", "property
 const DEFAULT_AMOUNT = ["total", "total_gross", "amount", "_sum"];
 
 export function ListWidget({ widget }: ListWidgetProps) {
-  const [items, setItems] = useState<EntityRecord[]>([]);
   const navigate = useNavigate();
   const cfg = widget.extraConfig ?? {};
+  const [items, setItems] = useState<EntityRecord[]>([]);
+  const liveVersion = useWidgetLiveVersion(widget);
 
   // Authored field config (FR-2/6/7) — falls back to the built-in conventions.
   const titleTemplate = cfg.titleTemplate;
@@ -79,14 +80,23 @@ export function ListWidget({ widget }: ListWidgetProps) {
 
   useEffect(() => {
     const name = toSnakeCase(widget.entityName);
-    // config("filter", …) scopes the list server-side (e.g. drop DRAFT/CANCELED bookings).
-    const filter = cfg.filter || undefined;
-    if (widget.entityType === "document") {
-      api.listDocuments(name, undefined, undefined, filter).then(setItems);
-    } else if (widget.entityType === "catalog") {
-      api.listCatalog(name, filter).then(setItems);
+    const kind = `${widget.entityType}s`;
+    if (kind !== "documents" && kind !== "catalogs") {
+      setItems([]);
+      return;
     }
-  }, [widget, cfg.filter]);
+    const params = new URLSearchParams();
+    params.set("limit", String(Math.max(widget.maxItems || 8, 8)));
+    if (widget.entityType === "document") {
+      params.set("sort", dateField);
+      params.set("dir", "desc");
+    }
+    if (cfg.filter) params.set("filter", cfg.filter);
+    fetch(`/api/list/${kind}/${name}?${params.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { rows?: EntityRecord[] }) => setItems(data.rows ?? []))
+      .catch(() => setItems([]));
+  }, [widget, cfg.filter, dateField, liveVersion]);
 
   const rows = useMemo(() => {
     // Most-recent first when the entity is dated; otherwise as served.

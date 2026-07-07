@@ -178,8 +178,8 @@ UI is authored as Spring beans on the *view* side, never as annotations on domai
   (`spec.map().lat("latitude").lng("longitude")`). The full per-method list is in
   [reference/cheatsheet.md](reference/cheatsheet.md).
 
-Do **not** add `@UiHint`, `@UiSection`, or `@DashboardWidget` to new code — they are deprecated.
-The widget DSL and `config(key,value)` reference are in
+Do not put UI placement or field-display hints on domain annotations; author them with
+`Layout`, `Page`, and `EntityView` beans. The widget DSL and `config(key,value)` reference are in
 [onno-ui-starter/README.md](https://github.com/onno-erp/onno-framework/blob/main/onno-ui-starter/README.md).
 
 ## Make the first pass production-grade — don't ship the scaffold
@@ -195,7 +195,8 @@ formatting. Close that gap in the same pass you model the business, not "later":
   - enum values → `@Enumeration(title="…")` for the type label and `@EnumLabel("…")` on each constant
     (the constant stays an ASCII Java identifier; the label is what users see);
   - list-filter dropdowns → `filter(f).options(Map<value,label>)` (query matches the value, UI shows
-    the label) — don't expose raw stored values;
+    the label) — don't expose raw stored values; for assignees/people use
+    `ListSpec.Option.withAvatar(value,label,url)` so the filter and action menus reuse profile photos;
   - field + **system-column** labels (`code`/`description`/`number`/`date`/`posted`) → field-hint
     `.label("…")` (the only path that relabels the built-in columns);
   - shell strings (buttons, login, tabs, toasts, empty states) → `onno.ui.messages.*` overrides in

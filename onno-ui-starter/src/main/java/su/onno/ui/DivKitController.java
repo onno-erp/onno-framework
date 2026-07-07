@@ -3,7 +3,7 @@ package su.onno.ui;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
-import su.onno.metadata.DashboardWidgetDescriptor;
+import su.onno.metadata.PageWidgetDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.model.AccumulationType;
 import su.onno.ui.divkit.DashboardDivBuilder;
@@ -272,7 +272,7 @@ public class DivKitController implements DisposableBean {
             page.compose(pb);
             content = renderPage(pb, "/", columns, p, principal, active.id(), defaultTitle, greeting);
         } else {
-            List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
+            List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                     .toList();
             // No authored "/" page and no (readable) widgets means the app has no dashboard.
@@ -280,7 +280,7 @@ public class DivKitController implements DisposableBean {
             // back" / "Nothing here yet" card — the client lands the user on the first real
             // nav item (see #shell "home"), and this is only the surface for an app that
             // exposes nothing at all.
-            Map<DashboardWidgetDescriptor, String> values = resolveWidgetValues(widgets);
+            Map<PageWidgetDescriptor, String> values = resolveWidgetValues(widgets);
             content = widgets.isEmpty()
                     ? DashboardDivBuilder.empty()
                     : DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns,
@@ -402,14 +402,14 @@ public class DivKitController implements DisposableBean {
     /** Render a composed page (header + access-filtered widget grid + freeform components). */
     private Map<String, Object> renderPage(PageBuilder pb, String route, int columns, Palette p, Principal principal,
                                            String profileId, String defaultTitle, String defaultSubtitle) {
-        List<DashboardWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
+        List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
                 .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
                 .toList();
         List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
         String title = pb.title() != null ? pb.title() : defaultTitle;
         String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
-        Map<DashboardWidgetDescriptor, String> values = resolveWidgetValues(widgets);
+        Map<PageWidgetDescriptor, String> values = resolveWidgetValues(widgets);
         return PageDivBuilder.build(title, subtitle, widgets, components, columns,
                 w -> values.getOrDefault(w, "—"), widgetWrite(principal), p);
     }
@@ -419,7 +419,7 @@ public class DivKitController implements DisposableBean {
      * {@code canWrite} so interactive widgets (kanban drag, calendar reschedule) disable their
      * mutations for read-only viewers. Entity-less widgets (the time-range picker) write nothing.
      */
-    private java.util.function.Function<DashboardWidgetDescriptor, Boolean> widgetWrite(Principal principal) {
+    private java.util.function.Function<PageWidgetDescriptor, Boolean> widgetWrite(Principal principal) {
         return w -> w.entityType() == null || w.entityName() == null
                 || access.canWrite(principal, w.entityType(), w.entityName());
     }
@@ -604,12 +604,11 @@ public class DivKitController implements DisposableBean {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        // The record surface IS the object form (1C-style): writers edit in place and Save stays
-        // on the page; readers get the same form disabled. The REST endpoints enforce write
-        // access regardless, and the onno.ui.read-only kill switch locks the form for everyone.
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
+                    "onno://catalogs/" + name + "/" + id + "/edit", "primary"));
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://catalogs/" + name + "/" + id + "/duplicate", "menu"));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
@@ -622,17 +621,8 @@ public class DivKitController implements DisposableBean {
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> row = catalogQuery.get(desc, id);
-        // Title the surface with the record's own identity (description, else code) — there is
-        // no separate read-only detail card left to carry it.
-        String label = str(row.get("_description"));
-        if (label.isBlank()) {
-            label = str(row.get("_code"));
-        }
-        if (label.isBlank()) {
-            label = str(meta.get("name"));
-        }
-        Map<String, Object> content = entityFormBody("catalogs", name, id, label,
-                messages.get("action.save"), meta, row, false, !canWrite, actions);
+        Map<String, Object> content = SurfaceDivBuilder.catalogDetail(meta, row,
+                relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -650,13 +640,23 @@ public class DivKitController implements DisposableBean {
                 meta, catalogQuery.newDraft(desc));
     }
 
-    /**
-     * Back-compat alias: the record surface is the editable form now, so {@code /edit} serves
-     * the same combined surface. Old deep links and client routes keep working.
-     */
     @GetMapping("/catalogs/{name}/{id}/edit")
-    public Map<String, Object> catalogEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        return catalogDetail(name, id, null, null, principal);
+    public Map<String, Object> catalogEdit(@PathVariable String name, @PathVariable UUID id,
+                                           @RequestParam(required = false) String profile,
+                                           Principal principal) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireWrite(principal, desc);
+        if (uiProperties.isReadOnly()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
+        }
+        requireView(desc.javaClass(), activeProfile(principal, profile).id());
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
+        Map<String, Object> row = catalogQuery.get(desc, id);
+        String label = str(row.get("_description"));
+        if (label.isBlank()) label = str(row.get("_code"));
+        if (label.isBlank()) label = str(meta.get("name"));
+        return DivCard.of("onno-content", entityFormBody("catalogs", name, id, label,
+                messages.get("action.save"), meta, row, false, false, List.of()));
     }
 
     @GetMapping("/catalogs/{name}/{id}/duplicate")
@@ -689,27 +689,29 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
+                                              @RequestParam(required = false) String profile,
                                               @RequestParam(required = false) String theme,
                                               Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, null).id());
-        // The record surface IS the object form (1C-style): writers edit in place and Save stays
-        // on the page; readers get the same form disabled. The REST endpoints enforce write
-        // access regardless, and the onno.ui.read-only kill switch locks the form for everyone.
+        requireView(desc.javaClass(), activeProfile(principal, profile).id());
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> row = documentQuery.get(desc, id);
-        // The form owns Save and Post/Re-post (Post = save-then-post, 1C-style), so the header
-        // only carries Unpost (once posted) plus Duplicate/Delete and the custom DETAIL actions.
-        // Placement (primary button / overflow ⋯ menu / hidden) comes from the resolved
-        // metadata's "actions" map, which a view can override per action.
         boolean postable = Boolean.TRUE.equals(meta.get("postable"));
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         @SuppressWarnings("unchecked")
         Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        if (canWrite) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
+                    "onno://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
+        }
+        if (canWrite && postable && !posted) {
+            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check", messages.get("action.post"), "primary",
+                    "onno://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
+        }
         if (canWrite && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
                     "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
@@ -726,9 +728,8 @@ public class DivKitController implements DisposableBean {
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> content = entityFormBody("documents", name, id,
-                str(meta.get("name")) + " " + str(row.get("_number")),
-                messages.get("action.save"), meta, row, false, !canWrite, actions);
+        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row,
+                relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -746,13 +747,21 @@ public class DivKitController implements DisposableBean {
                 meta, documentQuery.newDraft(desc));
     }
 
-    /**
-     * Back-compat alias: the record surface is the editable form now, so {@code /edit} serves
-     * the same combined surface. Old deep links and client routes keep working.
-     */
     @GetMapping("/documents/{name}/{id}/edit")
-    public Map<String, Object> documentEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        return documentDetail(name, id, null, principal);
+    public Map<String, Object> documentEdit(@PathVariable String name, @PathVariable UUID id,
+                                            @RequestParam(required = false) String profile,
+                                            Principal principal) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireWrite(principal, desc);
+        if (uiProperties.isReadOnly()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
+        }
+        requireView(desc.javaClass(), activeProfile(principal, profile).id());
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
+        Map<String, Object> row = documentQuery.get(desc, id);
+        return DivCard.of("onno-content", entityFormBody("documents", name, id,
+                str(meta.get("name")) + " " + str(row.get("_number")),
+                messages.get("action.save"), meta, row, false, false, List.of()));
     }
 
     @GetMapping("/documents/{name}/{id}/duplicate")
@@ -1010,10 +1019,10 @@ public class DivKitController implements DisposableBean {
      * KPI cards costs one batch of parallel aggregates instead of N sequential ones. Non-card widgets
      * (chart/list/…) carry no value and are skipped (they fetch their own data client-side).
      */
-    private Map<DashboardWidgetDescriptor, String> resolveWidgetValues(List<DashboardWidgetDescriptor> widgets) {
+    private Map<PageWidgetDescriptor, String> resolveWidgetValues(List<PageWidgetDescriptor> widgets) {
         // Group the value-bearing tiles by their resolution key so duplicates query once.
-        Map<String, List<DashboardWidgetDescriptor>> byKey = new LinkedHashMap<>();
-        for (DashboardWidgetDescriptor w : widgets) {
+        Map<String, List<PageWidgetDescriptor>> byKey = new LinkedHashMap<>();
+        for (PageWidgetDescriptor w : widgets) {
             if (w.widgetType() == null || VALUE_CARD_TYPES.contains(w.widgetType())) {
                 byKey.computeIfAbsent(valueKey(w), k -> new ArrayList<>()).add(w);
             }
@@ -1029,7 +1038,7 @@ public class DivKitController implements DisposableBean {
             byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.get(0))));
         } else {
             List<Future<?>> futures = new ArrayList<>(byKey.size());
-            for (Map.Entry<String, List<DashboardWidgetDescriptor>> e : byKey.entrySet()) {
+            for (Map.Entry<String, List<PageWidgetDescriptor>> e : byKey.entrySet()) {
                 futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().get(0)))));
             }
             for (Future<?> f : futures) {
@@ -1043,10 +1052,10 @@ public class DivKitController implements DisposableBean {
                 }
             }
         }
-        Map<DashboardWidgetDescriptor, String> out = new IdentityHashMap<>();
+        Map<PageWidgetDescriptor, String> out = new IdentityHashMap<>();
         byKey.forEach((key, ws) -> {
             String v = resolved.getOrDefault(key, "—");
-            for (DashboardWidgetDescriptor w : ws) {
+            for (PageWidgetDescriptor w : ws) {
                 out.put(w, v);
             }
         });
@@ -1054,15 +1063,15 @@ public class DivKitController implements DisposableBean {
     }
 
     /** The de-dup key for a tile's resolved value: same key ⇒ same query ⇒ resolved once. */
-    private static String valueKey(DashboardWidgetDescriptor w) {
+    private static String valueKey(PageWidgetDescriptor w) {
         Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
-        return String.join(" ",
+        return String.join("",
                 String.valueOf(w.entityType()), String.valueOf(w.entityName()),
                 cfg.getOrDefault("metric", "count"),
                 String.valueOf(cfg.get("metricField")), String.valueOf(cfg.get("filter")));
     }
 
-    private String widgetValue(DashboardWidgetDescriptor w) {
+    private String widgetValue(PageWidgetDescriptor w) {
         Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
         String metric = cfg.getOrDefault("metric", "count");
         String field = cfg.get("metricField");

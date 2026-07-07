@@ -79,7 +79,8 @@ public final class SurfaceDivBuilder {
             filter.put("column", f.columnName());
             filter.put("type", f.type());
             // Each option travels as {value,label}: the client renders label, sends value to the
-            // query (so a code/enum-mirror column can show a localized choice). See ListSpec.Option.
+            // query (so a code/enum-mirror column can show a localized choice). Optional color and
+            // avatarUrl carry richer enum/ref presentation without changing the filter predicate.
             List<Map<String, Object>> options = new ArrayList<>();
             for (ResolvedListView.Option o : f.options()) {
                 Map<String, Object> opt = new LinkedHashMap<>();
@@ -88,6 +89,9 @@ public final class SurfaceDivBuilder {
                 // @EnumLabel(color=…) hex, so the control tints the choice like the status pills.
                 if (!o.color().isBlank()) {
                     opt.put("color", o.color());
+                }
+                if (!o.avatarUrl().isBlank()) {
+                    opt.put("avatarUrl", o.avatarUrl());
                 }
                 options.add(opt);
             }

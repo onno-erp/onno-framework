@@ -5,6 +5,7 @@ import { toSnakeCase } from "@/lib/utils";
 import { toNumber } from "@/lib/format";
 import { resolveRange, type TimeRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
+import type { UiEvent } from "@/lib/types";
 
 /**
  * Shared data plumbing for the dashboard data widgets (chart, stat, sparkline, gauge): one place
@@ -19,17 +20,52 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 // the author scopes it, so we ask for an unbounded range.
 const ALL_TIME_FROM = "1970-01-01T00:00:00";
 const ALL_TIME_TO = "2999-12-31T23:59:59";
+const LIVE_REFRESH_MS = 1000;
 
 export type GroupByDate = "minute" | "hour" | "day" | "week" | "month";
 export type Metric = "count" | "sum";
+
+function eventMatchesWidget(event: UiEvent, widget: DashboardWidgetMeta): boolean {
+  if (!event || event.type === "ready") return false;
+  if (event.entityType === "presence" || event.entityType === "comment" || event.entityType === "notification") {
+    return false;
+  }
+  if (event.entityType === "register") {
+    return widget.entityType === "register" && (!event.entityName || event.entityName === "*" || event.entityName === widget.entityName);
+  }
+  return event.entityType === widget.entityType && event.entityName === widget.entityName;
+}
+
+export function useWidgetLiveVersion(widget: DashboardWidgetMeta): number {
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let timer: number | undefined;
+    const onData = (e: Event) => {
+      const event = (e as CustomEvent<UiEvent>).detail;
+      if (!eventMatchesWidget(event, widget)) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setVersion((v) => v + 1), LIVE_REFRESH_MS);
+    };
+    window.addEventListener("onno:dataevent", onData);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("onno:dataevent", onData);
+    };
+  }, [widget]);
+  return version;
+}
 
 /**
  * Fetch the rows backing a row-shaped widget (calendar, kanban, map, list — and the register-backed
  * data widgets): a document/catalog list, or a register's server-side turnover. The catalog/document
  * data widgets skip this and fetch pre-aggregated buckets instead ({@link useWidgetBuckets}).
  */
-export function useWidgetRows(widget: DashboardWidgetMeta): EntityRecord[] {
+export function useWidgetRows(
+  widget: DashboardWidgetMeta,
+  turnoverRange?: { from: string; to: string }
+): EntityRecord[] {
   const [items, setItems] = useState<EntityRecord[]>([]);
+  const liveVersion = useWidgetLiveVersion(widget);
   useEffect(() => {
     let alive = true;
     const name = toSnakeCase(widget.entityName);
@@ -40,12 +76,13 @@ export function useWidgetRows(widget: DashboardWidgetMeta): EntityRecord[] {
     const fail = () => alive && setItems([]);
     if (widget.entityType === "document") api.listDocuments(name, undefined, undefined, filter).then(set).catch(fail);
     else if (widget.entityType === "catalog") api.listCatalog(name, filter).then(set).catch(fail);
-    else if (widget.entityType === "register") api.getTurnover(name, ALL_TIME_FROM, ALL_TIME_TO).then(set).catch(fail);
+    else if (widget.entityType === "register")
+      api.getTurnover(name, turnoverRange?.from ?? ALL_TIME_FROM, turnoverRange?.to ?? ALL_TIME_TO).then(set).catch(fail);
     else fail();
     return () => {
       alive = false;
     };
-  }, [widget]);
+  }, [widget, turnoverRange?.from, turnoverRange?.to, liveVersion]);
   return items;
 }
 
@@ -377,6 +414,7 @@ export function useWidgetBuckets(
   params: Record<string, string> | null
 ): AggregateBuckets | null {
   const [resp, setResp] = useState<AggregateBuckets | null>(null);
+  const liveVersion = useWidgetLiveVersion(widget);
   // Key the effect on the serialized params: callers rebuild the map per render, but only a content
   // change should refetch. The effect re-parses the key so it depends on nothing else.
   const key = params ? JSON.stringify(params) : null;
@@ -391,7 +429,7 @@ export function useWidgetBuckets(
     return () => {
       alive = false;
     };
-  }, [widget, key]);
+  }, [widget, key, liveVersion]);
   return resp;
 }
 

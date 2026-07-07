@@ -74,8 +74,8 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 ### `@AccessControl` (RBAC; deny-by-default, `ADMIN` always allowed)
 `readRoles=String[]{}`, `writeRoles=String[]{}` (falls back to `readRoles` if empty).
 
-### Deprecated — do NOT add to new code
-`@UiHint`, `@UiSection`, `@DashboardWidget`. UI is authored via `Layout`/`Page`/`EntityView` beans.
+### UI authoring
+UI is authored via `Layout`/`Page`/`EntityView` beans, not domain annotations.
 
 ## Base classes & types (package `su.onno.model`, `su.onno.types`)
 
@@ -200,9 +200,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
     (per-group subtotal on each header),
     `filter(field)` →
-    `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
+    `options/multiOptions(String...)` (value shown verbatim), `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order); `.options(...).multiple()` is the configurable form of the same multi-select behavior
+    order), or `options/multiOptions(Collection<ListSpec.Option>)` when choices need richer display
+    such as `ListSpec.Option.withAvatar(employeeId, name, avatarUrl)`; `.options(...).multiple()` is
+    the configurable form of the same multi-select behavior
     as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer

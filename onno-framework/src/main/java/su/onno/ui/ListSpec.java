@@ -431,11 +431,22 @@ public final class ListSpec {
      * {@code value} matched against the field by the query, and the {@code label} the UI renders for
      * it. When a filter is declared with the plain {@code String...} overloads the two are identical
      * (the value is shown verbatim); the {@code Map<String,String>} overloads carry a value→label
-     * split so a filter over a code/English/enum-mirror column can show a localized choice.
+     * split so a filter over a code/English/enum-mirror column can show a localized choice. An
+     * optional {@code avatarUrl} lets a reference-backed filter reuse profile photos from its target
+     * catalog (for example, employee assignees).
      */
-    public record Option(String value, String label) {
+    public record Option(String value, String label, String avatarUrl) {
         public Option {
             label = label == null ? value : label;
+            avatarUrl = avatarUrl == null ? "" : avatarUrl;
+        }
+
+        public Option(String value, String label) {
+            this(value, label, "");
+        }
+
+        public static Option withAvatar(String value, String label, String avatarUrl) {
+            return new Option(value, label, avatarUrl);
         }
     }
 
@@ -494,6 +505,13 @@ public final class ListSpec {
             return this;
         }
 
+        /** A SELECT filter with fully authored choices, including optional per-option avatars. */
+        public FilterBuilder options(java.util.Collection<Option> options) {
+            this.type = FilterType.OPTIONS;
+            this.options = copy(options);
+            return this;
+        }
+
         /**
          * Make the current options control multi-select, matched as {@code field IN (…)} over the
          * checked values. Useful when options are declared first and multiplicity is a later choice:
@@ -531,6 +549,13 @@ public final class ListSpec {
         public FilterBuilder multiOptions(Map<String, String> valueToLabel) {
             this.type = FilterType.MULTI_OPTIONS;
             this.options = pairs(valueToLabel);
+            return this;
+        }
+
+        /** A multi-select filter with fully authored choices, including optional per-option avatars. */
+        public FilterBuilder multiOptions(java.util.Collection<Option> options) {
+            this.type = FilterType.MULTI_OPTIONS;
+            this.options = copy(options);
             return this;
         }
 
@@ -574,6 +599,10 @@ public final class ListSpec {
             List<Option> opts = new ArrayList<>(valueToLabel.size());
             valueToLabel.forEach((value, label) -> opts.add(new Option(value, label)));
             return opts;
+        }
+
+        private static List<Option> copy(java.util.Collection<Option> options) {
+            return options == null ? List.of() : List.copyOf(options);
         }
     }
 }

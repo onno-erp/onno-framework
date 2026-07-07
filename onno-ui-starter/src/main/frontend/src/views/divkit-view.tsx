@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
-import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
+import { Copy, ExternalLink, Link2, Pencil, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   createGlobalVariablesController,
@@ -307,14 +307,20 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   // Without this, every heartbeat/join would refetch the open detail pane (and the home dashboard),
   // remounting the bar, which re-enters and emits another ping — an endless refetch/flicker loop.
   if (event.entityType === "presence") return false;
-  // Home shows counts/charts over many entities — refresh on any data change.
-  if (pathname === "/" || pathname === "") return true;
+  // Home/dashboard widgets subscribe to the shared data-event fan-out and refresh their own
+  // datasets. Remounting the whole page on every change resets charts and controls under load.
+  if (pathname === "/" || pathname === "") return false;
 
   const seg = pathname.split("/").filter(Boolean); // ["documents","bills",...]
   const kind = seg[0]; // catalogs | documents | registers
   const name = seg[1];
   if (!kind || !name) return false;
   const ename = event.entityName ?? "";
+
+  // Create/edit/duplicate forms are user-owned state. Live events should refresh lists,
+  // dashboards, and read-only detail, but never remount a form while someone is working in it:
+  // that closes open dropdowns, resets scroll, and can discard in-flight UI state.
+  if (seg.length >= 3 && (seg[2] === "new" || seg[3] === "edit" || seg[3] === "duplicate")) return false;
 
   // A 2-segment catalog/document/register path is a list surface — now the self-refreshing
   // onno-list island (it reloads its own window via the "onno:dataevent" fan-out), so the DivKit
@@ -324,10 +330,14 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (seg.length === 2 && (kind === "catalogs" || kind === "documents" || kind === "registers")) return false;
 
   if (kind === "documents") {
-    return event.entityType === "document" && toSnake(ename) === name;
+    if (event.entityType !== "document" || toSnake(ename) !== name) return false;
+    // A detail pane should only remount for its own record, not for every write to the same
+    // document type under load. List islands refresh themselves from the raw data-event above.
+    return seg.length === 3 && event.id === seg[2];
   }
   if (kind === "catalogs") {
-    return event.entityType === "catalog" && toSnake(ename) === name;
+    if (event.entityType !== "catalog" || toSnake(ename) !== name) return false;
+    return seg.length === 3 && event.id === seg[2];
   }
   return false;
 }
@@ -776,7 +786,7 @@ export function DivKitView() {
       const path = "/" + rest;
       // On the desktop islands layout, a record opens in its own island to the right;
       // elsewhere (single content pane) it just navigates.
-      if (shell?.navStyle === "sidebar" && isRecordDetail(path)) {
+      if (shell?.navStyle === "sidebar" && recordBasePath(path)) {
         openDetailRight(path);
       } else {
         openPath(path);
@@ -871,13 +881,12 @@ export function DivKitView() {
         },
       },
       {
-        // The record surface is the editable form now, so "Edit" just opens the record.
         key: "e",
         mod: true,
         run: () => {
           if (rowMenuOpenRef.current || confirmOpenRef.current) return;
           const url = hoveredRowUrl();
-          if (url && hoveredRowWritable()) onCustomAction({ url });
+          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/edit` });
         },
       },
       {
@@ -1441,10 +1450,14 @@ export function DivKitView() {
             run: () => onCustomAction({ url: rowMenu.url }),
             shortcut: shortcutLabel({ key: "Enter", mod: true }),
           },
-          // Open IS edit now — the record surface is the editable form — so the menu keeps
-          // just Open plus the write-gated Duplicate.
           ...(rowMenu.writable
             ? [
+                {
+                  label: t("action.edit"),
+                  icon: Pencil,
+                  run: () => onCustomAction({ url: rowMenu.url + "/edit" }),
+                  shortcut: shortcutLabel({ key: "e", mod: true }),
+                },
                 {
                   label: t("action.duplicate"),
                   icon: Copy,

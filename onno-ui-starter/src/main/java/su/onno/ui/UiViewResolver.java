@@ -249,7 +249,7 @@ public class UiViewResolver {
         List<Map<String, Object>> enumValues = cm.enumValues();
         if (!selectControl || enumValues.isEmpty()) {
             return f.options().stream()
-                    .map(o -> new ResolvedListView.Option(o.value(), o.label()))
+                    .map(o -> new ResolvedListView.Option(o.value(), o.label(), "", o.avatarUrl()))
                     .toList();
         }
         if (f.options().isEmpty()) {
@@ -265,7 +265,7 @@ public class UiViewResolver {
                     .findFirst().orElse(null);
             // An option that isn't a known constant passes through untranslated (e.g. an id).
             return match == null
-                    ? new ResolvedListView.Option(o.value(), o.label())
+                    ? new ResolvedListView.Option(o.value(), o.label(), "", o.avatarUrl())
                     : new ResolvedListView.Option(str(match.get("id")), o.label(), str(match.get("color")));
         }).toList();
     }

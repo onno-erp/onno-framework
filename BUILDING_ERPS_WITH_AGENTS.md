@@ -314,11 +314,7 @@ public class CustomerView implements EntityView {   // not generic — name the 
 }
 ```
 
-Avoid adding these deprecated annotations to new code:
-
-- `@UiHint`
-- `@UiSection`
-- `@DashboardWidget`
+Keep UI configuration in `Layout`, `Page`, and `EntityView` beans rather than on domain classes.
 
 ## Posting And Rules
 

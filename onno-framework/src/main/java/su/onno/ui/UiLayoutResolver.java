@@ -83,25 +83,16 @@ public class UiLayoutResolver {
         return result;
     }
 
-    /**
-     * Resolve widget configs to dashboard descriptors.
-     * If the layout has explicit widgets, use those; otherwise fall back to annotation-based.
-     */
-    public List<DashboardWidgetDescriptor> resolveWidgets(UiLayout layout) {
+    /** Resolve widget configs to page-widget descriptors. */
+    public List<PageWidgetDescriptor> resolveWidgets(UiLayout layout) {
         return resolveWidgets(layout.widgets());
     }
 
-    public List<DashboardWidgetDescriptor> resolveWidgets(UiLayout.Profile profile) {
+    public List<PageWidgetDescriptor> resolveWidgets(UiLayout.Profile profile) {
         return resolveWidgets(profile.widgets());
     }
 
-    private List<DashboardWidgetDescriptor> resolveWidgets(List<UiLayoutBuilder.WidgetConfig> widgets) {
-        if (widgets.isEmpty()) {
-            // Fall back to annotation-based widgets from registry
-            return registry.allDashboardWidgets().stream()
-                    .sorted(java.util.Comparator.comparingInt(DashboardWidgetDescriptor::order))
-                    .toList();
-        }
+    private List<PageWidgetDescriptor> resolveWidgets(List<UiLayoutBuilder.WidgetConfig> widgets) {
         return resolveWidgetConfigs(widgets);
     }
 
@@ -110,8 +101,8 @@ public class UiLayoutResolver {
      * descriptors. Unlike {@link #resolveWidgets}, an empty list yields an empty
      * result — no annotation fallback — so a page renders exactly what it composes.
      */
-    public List<DashboardWidgetDescriptor> resolveWidgetConfigs(List<UiLayoutBuilder.WidgetConfig> widgets) {
-        List<DashboardWidgetDescriptor> result = new ArrayList<>();
+    public List<PageWidgetDescriptor> resolveWidgetConfigs(List<UiLayoutBuilder.WidgetConfig> widgets) {
+        List<PageWidgetDescriptor> result = new ArrayList<>();
         for (UiLayoutBuilder.WidgetConfig wc : widgets) {
             // An entity-less widget (e.g. a shared time-range picker) is kept as-is; only a widget
             // that *declares* an entity but can't be resolved is dropped.
@@ -121,7 +112,7 @@ public class UiLayoutResolver {
                 if (entityName == null) continue;
             }
 
-            result.add(new DashboardWidgetDescriptor(
+            result.add(new PageWidgetDescriptor(
                     wc.title(), wc.type(), wc.order(), wc.width(),
                     wc.entityType(), entityName, wc.maxItems(),
                     wc.dateField(), wc.titleField(),

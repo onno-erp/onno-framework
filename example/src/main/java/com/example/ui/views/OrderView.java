@@ -15,6 +15,7 @@ import su.onno.types.Ref;
 
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -59,6 +60,7 @@ public class OrderView implements EntityView {
         // Last 7 days / This month presets) and a note typeahead. They narrow the same query the
         // grouping and search run over.
         list.filter("status").label("Status").multiOptions();
+        list.filter("assignedTo").label("Assignee").multiOptions(employeeFilterOptions());
         list.filter("date").label("Order date").dateRange();
         list.filter("note").label("Note").contains();
     }
@@ -141,9 +143,7 @@ public class OrderView implements EntityView {
             if (employee.getId() == null) {
                 continue;
             }
-            String label = employee.getDescription() == null || employee.getDescription().isBlank()
-                    ? employee.getCode()
-                    : employee.getDescription();
+            String label = employeeLabel(employee);
             UUID employeeId = employee.getId();
             a.action("assign-" + employeeId).scope(ActionScope.ROW)
                     .menu("Assign").icon("user-round").logo(employee.getAvatarUrl()).label(label)
@@ -174,6 +174,20 @@ public class OrderView implements EntityView {
             orders.save(o);
             return ActionResult.refresh("Assigned to " + label);
         }).orElseGet(() -> ActionResult.message("Order not found"));
+    }
+
+    private List<ListSpec.Option> employeeFilterOptions() {
+        return employees.findAllActive().stream()
+                .filter(employee -> employee.getId() != null)
+                .map(employee -> ListSpec.Option.withAvatar(
+                        employee.getId().toString(), employeeLabel(employee), employee.getAvatarUrl()))
+                .toList();
+    }
+
+    private static String employeeLabel(Employee employee) {
+        return employee.getDescription() == null || employee.getDescription().isBlank()
+                ? employee.getCode()
+                : employee.getDescription();
     }
 
     /** The @EnumLabel display value ("New", "Confirmed", …) for a submenu entry. */

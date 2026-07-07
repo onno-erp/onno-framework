@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { api, ApiError, type NotificationView } from "@/lib/api";
 import type { UiEvent } from "@/lib/types";
-import notificationSoundUrl from "@/assets/notification.m4a";
 
 /**
  * The per-user notification store: one client-wide timeline of updates concerning the signed-in user,
@@ -107,18 +106,29 @@ export function loadMoreNotifications(): Promise<void> {
     .catch(() => {});
 }
 
-// One shared element, reused across chimes; created lazily so the module can load where Audio
-// doesn't exist (SSR, tests). play() rejects until the user's first gesture (autoplay policy) —
-// those early notifications stay silent rather than erroring.
-let chime: HTMLAudioElement | null = null;
+let audioContext: AudioContext | null = null;
 function playChime() {
-  if (typeof Audio === "undefined") return;
-  if (!chime) {
-    chime = new Audio(notificationSoundUrl);
-    chime.volume = 0.5;
+  const AudioContextCtor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) return;
+  try {
+    audioContext ??= new AudioContextCtor();
+    const now = audioContext.currentTime;
+    const gain = audioContext.createGain();
+    const tone = audioContext.createOscillator();
+    tone.type = "sine";
+    tone.frequency.setValueAtTime(880, now);
+    tone.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    tone.connect(gain).connect(audioContext.destination);
+    tone.start(now);
+    tone.stop(now + 0.2);
+  } catch {
+    // Browsers can block audio until the first user gesture; silent is fine.
   }
-  chime.currentTime = 0;
-  chime.play().catch(() => {});
 }
 
 function applyEvent(ev: UiEvent | undefined) {

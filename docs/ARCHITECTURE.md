@@ -118,8 +118,8 @@ entities but isn't deletion-scoped (no `…AndDeletionMarkFalse` predicate, no `
 tombstones (a `Ref`-resolution or restore/admin lookup) declares it with
 `@su.onno.repository.IncludesDeleted` to opt out.
 
-Deprecated, do not add to new code: `@UiHint`, `@UiSection`, `@DashboardWidget` (UI is authored as
-beans instead).
+UI is authored with `Layout`, `Page`, and `EntityView` beans. Domain annotations do not carry UI
+placement or field-display hints.
 
 ## Persistence & schema migration
 

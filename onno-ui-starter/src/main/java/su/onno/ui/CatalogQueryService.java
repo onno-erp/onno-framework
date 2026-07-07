@@ -4,7 +4,6 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.query.Cursor;
 import su.onno.query.Keyset;
-import su.onno.security.SecretRedactor;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -76,7 +75,8 @@ public class CatalogQueryService {
      * simply no filter.
      */
     public List<Map<String, Object>> list(CatalogDescriptor desc, String filter) {
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, columnNames(desc));
+        EntitySurfaceDescriptor surface = surface(desc);
+        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames());
         String where = "_deletion_mark = false" + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")");
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
@@ -91,8 +91,7 @@ public class CatalogQueryService {
                     desc.logicalName(), MAX_LIST_ROWS);
             rows = rows.subList(0, MAX_LIST_ROWS);
         }
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -103,17 +102,17 @@ public class CatalogQueryService {
      * Capped at {@code limit}, so a 2000-row catalog never ships whole to the client.
      */
     public List<Map<String, Object>> search(CatalogDescriptor desc, String query, int limit) {
-        String where = "_deletion_mark = false" + searchClause(desc, query);
+        EntitySurfaceDescriptor surface = surface(desc);
+        String where = "_deletion_mark = false" + searchClause(surface, query);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                             " WHERE " + where +
                             " ORDER BY _description LIMIT :limit")
                     .bind("limit", limit);
-            bindSearch(q, query);
+            EntityQuerySupport.bindSearch(q, query);
             return q.mapToMap().list();
         });
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -141,21 +140,7 @@ public class CatalogQueryService {
      * narrowed by an optional safe {@code filter} predicate (see {@link WidgetFilter}).
      */
     public BigDecimal aggregate(CatalogDescriptor desc, String metric, String field, String filter) {
-        Set<String> columns = columnNames(desc);
-        String agg = WidgetAggregate.expression(metric, field, columns);
-        WidgetFilter.Result f = WidgetFilter.parse(filter, columns);
-
-        StringBuilder sql = new StringBuilder("SELECT ").append(agg)
-                .append(" FROM ").append(desc.tableName())
-                .append(" WHERE _deletion_mark = false");
-        if (!f.isEmpty()) {
-            sql.append(" AND ").append(f.sql());
-        }
-        return jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString());
-            f.bindings().forEach(query::bind);
-            return query.mapTo(BigDecimal.class).findOne().orElse(BigDecimal.ZERO);
-        });
+        return EntityQuerySupport.aggregate(jdbi, surface(desc), metric, field, filter);
     }
 
     /**
@@ -163,16 +148,7 @@ public class CatalogQueryService {
      * O(buckets) rows instead of the whole table (#199). See {@link WidgetBuckets}.
      */
     public Map<String, Object> aggregateBuckets(CatalogDescriptor desc, WidgetBuckets.Request request) {
-        Set<String> columns = new java.util.HashSet<>(columnNames(desc));
-        columns.addAll(WidgetBuckets.CATALOG_SYSTEM_COLUMNS);
-        return WidgetBuckets.run(jdbi, refResolver, desc.attributes(), desc.tableName(),
-                columns, request);
-    }
-
-    private static Set<String> columnNames(CatalogDescriptor desc) {
-        return desc.attributes().stream()
-                .map(a -> a.columnName().toLowerCase())
-                .collect(java.util.stream.Collectors.toSet());
+        return EntityQuerySupport.aggregateBuckets(jdbi, refResolver, surface(desc), request);
     }
 
     public List<Map<String, Object>> list(CatalogDescriptor desc, int offset, int limit) {
@@ -184,8 +160,7 @@ public class CatalogQueryService {
                         .mapToMap()
                         .list()
         );
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -200,23 +175,23 @@ public class CatalogQueryService {
                                            List<String> eq, List<String> in, List<String> like,
                                            List<String> prefix, List<String> ge, List<String> le,
                                            String widgetFilter) {
-        String orderBy = safeSort(desc, sortColumn, "_code");
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
-        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
+        EntitySurfaceDescriptor surface = surface(desc);
+        String orderBy = surface.safeSort(sortColumn);
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                     " WHERE " + where +
                     " ORDER BY " + orderBy + (descending ? " DESC" : " ASC") +
                     " LIMIT :limit OFFSET :offset")
                     .bind("limit", limit).bind("offset", Math.max(0, offset));
-            bindSearch(q, search);
+            EntityQuerySupport.bindSearch(q, search);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
             return q.mapToMap().list();
         });
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -233,13 +208,14 @@ public class CatalogQueryService {
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String widgetFilter) {
-        String col = safeSort(desc, sortColumn, "_code");
+        EntitySurfaceDescriptor surface = surface(desc);
+        String col = surface.safeSort(sortColumn);
         Cursor cursor = Cursor.decodeFor(cursorToken, col, descending);
-        Keyset.Plan plan = Keyset.plan(col, descending, !isNonNullableSort(desc, col), cursor);
+        Keyset.Plan plan = Keyset.plan(col, descending, !surface.isNonNullableSort(col), cursor);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
-        String where = "_deletion_mark = false" + searchClause(desc, search)
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        String where = "_deletion_mark = false" + searchClause(surface, search)
                 + filterClause(filter) + filterClause(wf) + plan.predicate();
         int lim = Keyset.clampLimit(limit);
 
@@ -249,7 +225,7 @@ public class CatalogQueryService {
                             " ORDER BY " + plan.orderBy() +
                             " LIMIT :limit")
                     .bind("limit", lim + 1); // one extra row tells us whether another window exists
-            bindSearch(q, search);
+            EntityQuerySupport.bindSearch(q, search);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
             if (plan.hasCursor()) {
@@ -267,8 +243,7 @@ public class CatalogQueryService {
         String nextCursor = (hasMore && !rows.isEmpty())
                 ? Cursor.from(col, descending, rows.get(rows.size() - 1)).encode()
                 : null;
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return new KeysetPage(rows, nextCursor, hasMore);
     }
 
@@ -278,14 +253,6 @@ public class CatalogQueryService {
      * generated) and any {@code required} attribute; {@code _description} and optional attributes use
      * the NULL-safe seek instead.
      */
-    private boolean isNonNullableSort(CatalogDescriptor desc, String column) {
-        if (column.equals("_code")) {
-            return true;
-        }
-        return desc.attributes().stream()
-                .anyMatch(a -> a.columnName().equals(column) && a.required());
-    }
-
     /**
      * A cheap live-row estimate for the scroll-height hint, or {@code null} when none is available.
      * Uses PostgreSQL planner statistics ({@code pg_class.reltuples}) so it never scans the table;
@@ -293,18 +260,7 @@ public class CatalogQueryService {
      * predicate). Callers wanting an exact figure use {@link #count} instead.
      */
     public Long estimateCount(CatalogDescriptor desc, boolean filtered) {
-        if (filtered) {
-            return null;
-        }
-        return jdbi.withHandle(h -> {
-            try {
-                return h.createQuery("SELECT reltuples::bigint FROM pg_class WHERE relname = :t")
-                        .bind("t", desc.tableName())
-                        .mapTo(Long.class).findOne().filter(n -> n >= 0).orElse(null);
-            } catch (RuntimeException e) {
-                return null; // not PostgreSQL (no pg_class) → no estimate
-            }
-        });
+        return EntityQuerySupport.estimateCount(jdbi, surface(desc), filtered);
     }
 
     /**
@@ -315,18 +271,7 @@ public class CatalogQueryService {
      * empty list.
      */
     public List<Map<String, Object>> rowsByIds(CatalogDescriptor desc, List<UUID> ids) {
-        if (ids == null || ids.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false AND _id IN (<ids>)")
-                        .bindList("ids", ids)
-                        .mapToMap()
-                        .list());
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
-        return rows;
+        return EntityQuerySupport.rowsByIds(jdbi, refResolver, surface(desc), ids);
     }
 
     /** Total live rows matching the search (+ declarative filters + widget filter) — for the virtual scroller. */
@@ -334,12 +279,13 @@ public class CatalogQueryService {
                       List<String> eq, List<String> in, List<String> like,
                       List<String> prefix, List<String> ge, List<String> le,
                       String widgetFilter) {
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columnNames(desc));
-        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
+        EntitySurfaceDescriptor surface = surface(desc);
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
-            bindSearch(q, search);
+            EntityQuerySupport.bindSearch(q, search);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
             return q.mapTo(Long.class).one();
@@ -357,16 +303,17 @@ public class CatalogQueryService {
                                          String search, List<String> eq, List<String> in, List<String> like,
                                          List<String> prefix, List<String> ge, List<String> le,
                                          String widgetFilter, List<ListGroups.Agg> aggregates) {
-        if (groupColumn == null || !sortableColumns(desc).contains(groupColumn)) {
+        EntitySurfaceDescriptor surface = surface(desc);
+        if (groupColumn == null || !surface.sortableColumns().contains(groupColumn)) {
             return new ListGroups.GroupResult(List.of(), false);
         }
-        Set<String> columns = columnNames(desc);
+        Set<String> columns = surface.columnNames();
         boolean date = isTemporalColumn(desc, groupColumn);
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, filterableColumns(desc));
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns);
-        String where = "_deletion_mark = false" + searchClause(desc, search) + filterClause(filter) + filterClause(wf);
+        String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
 
         // Aggregate select list: drop any the validator rejects (unknown fn/column) rather than fail.
         StringBuilder select = new StringBuilder(groupExpr).append(" AS ").append(groupColumn)
@@ -389,7 +336,7 @@ public class CatalogQueryService {
                 + " LIMIT :limit";
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery(sql).bind("limit", ListGroups.MAX_GROUPS + 1);
-            bindSearch(q, search);
+            EntityQuerySupport.bindSearch(q, search);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
             return q.mapToMap().list();
@@ -414,30 +361,17 @@ public class CatalogQueryService {
                 .anyMatch(a -> a.columnName().equalsIgnoreCase(column) && ListGroups.isTemporalType(a.javaType()));
     }
 
-    /** Lowercased attribute column names a declarative list filter may bind to (see {@link ListFilter}). */
-    private Set<String> filterableColumns(CatalogDescriptor desc) {
-        return desc.attributes().stream()
-                .map(a -> a.columnName().toLowerCase())
-                .collect(java.util.stream.Collectors.toSet());
-    }
-
     private static String filterClause(ListFilter.Result filter) {
-        return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
+        return EntityQuerySupport.filterClause(filter);
     }
 
     private static String filterClause(WidgetFilter.Result filter) {
-        return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
+        return EntityQuerySupport.filterClause(filter);
     }
 
     /** Column names that may be sorted on: the system columns + every attribute column. */
     public Set<String> sortableColumns(CatalogDescriptor desc) {
-        Set<String> cols = new java.util.LinkedHashSet<>(Set.of("_code", "_description"));
-        desc.attributes().forEach(a -> cols.add(a.columnName()));
-        return cols;
-    }
-
-    private String safeSort(CatalogDescriptor desc, String sortColumn, String fallback) {
-        return sortColumn != null && sortableColumns(desc).contains(sortColumn) ? sortColumn : fallback;
+        return surface(desc).sortableColumns();
     }
 
     /**
@@ -447,25 +381,12 @@ public class CatalogQueryService {
      * customer's name finds their orders), and each enum by its label/name. One bound {@code :search}
      * ({@code %term%}, lowercased) drives every term.
      */
-    private String searchClause(CatalogDescriptor desc, String search) {
-        if (search == null || search.isBlank()) return "";
-        List<String> ors = new ArrayList<>(List.of(likeVarchar("_code"), likeVarchar("_description")));
-        for (var a : desc.attributes()) {
-            if (a.secret()) continue;
-            String term = Searching.term(registry, a, search);
-            if (term != null) ors.add(term);
-        }
-        return " AND (" + String.join(" OR ", ors) + ")";
+    private String searchClause(EntitySurfaceDescriptor surface, String search) {
+        return EntityQuerySupport.searchClause(registry, surface, search);
     }
 
-    private static String likeVarchar(String column) {
-        return "LOWER(CAST(" + column + " AS VARCHAR)) LIKE :search";
-    }
-
-    private void bindSearch(org.jdbi.v3.core.statement.Query q, String search) {
-        if (search != null && !search.isBlank()) {
-            q.bind("search", "%" + search.toLowerCase() + "%");
-        }
+    private static EntitySurfaceDescriptor surface(CatalogDescriptor desc) {
+        return EntitySurfaceDescriptor.catalog(desc);
     }
 
     public List<Map<String, Object>> children(CatalogDescriptor desc, UUID parent) {
@@ -482,8 +403,7 @@ public class CatalogQueryService {
             if (parent != null) query.bind("parent", parent);
             return query.mapToMap().list();
         });
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -498,8 +418,7 @@ public class CatalogQueryService {
                         .mapToMap()
                         .list()
         );
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return buildTree(rows, null);
     }
 
@@ -520,8 +439,7 @@ public class CatalogQueryService {
                         .mapToMap()
                         .list()
         );
-        refResolver.resolveAttributes(rows, desc.attributes());
-        SecretRedactor.redact(rows, desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
         return rows;
     }
 
@@ -533,8 +451,7 @@ public class CatalogQueryService {
                         .findOne()
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
-        refResolver.resolveAttributes(List.of(row), desc.attributes());
-        SecretRedactor.redact(List.of(row), desc.attributes());
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), List.of(row));
         return row;
     }
 

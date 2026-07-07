@@ -265,7 +265,11 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
 
 function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string }) {
   const display = displayOf(item);
-  const avatarUrl = (item.avatar_url as string | undefined) ?? undefined;
+  const avatarUrl =
+    (item.avatar_url as string | undefined) ??
+    (item._avatar as string | undefined) ??
+    (item.avatarUrl as string | undefined) ??
+    undefined;
   const code = item._code as string | undefined;
   // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
   const sub = secondary ? item[secondary] : undefined;

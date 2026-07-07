@@ -5,8 +5,7 @@ package su.onno.ui;
  * inside a lambda passed to {@code SectionBuilder.catalog/document/register}.
  *
  * <p>Chain field-level setters; call {@link #field(String)} to switch to another
- * field on the same entity. Anything not set falls through to {@code @UiHint}
- * (deprecated) or the scanner default.</p>
+ * field on the same entity. Anything not set falls through to the scanner default.</p>
  */
 public class FieldHintBuilder {
 

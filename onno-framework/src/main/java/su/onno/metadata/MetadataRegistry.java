@@ -1,16 +1,12 @@
 package su.onno.metadata;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MetadataRegistry {
 
-    private final List<DashboardWidgetDescriptor> dashboardWidgets = new CopyOnWriteArrayList<>();
     private final Map<Class<?>, CatalogDescriptor> catalogs = new ConcurrentHashMap<>();
     private final Map<Class<?>, DocumentDescriptor> documents = new ConcurrentHashMap<>();
     private final Map<Class<?>, AccumulationRegisterDescriptor> registers = new ConcurrentHashMap<>();
@@ -116,13 +112,5 @@ public class MetadataRegistry {
 
     public Collection<ConstantDescriptor> allConstants() {
         return Collections.unmodifiableCollection(constants.values());
-    }
-
-    public void registerDashboardWidgets(List<DashboardWidgetDescriptor> widgets) {
-        dashboardWidgets.addAll(widgets);
-    }
-
-    public List<DashboardWidgetDescriptor> allDashboardWidgets() {
-        return Collections.unmodifiableList(dashboardWidgets);
     }
 }

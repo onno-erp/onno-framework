@@ -35,7 +35,7 @@ Implemented:
 - Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Kafka outbox relay (`onno-kafka-starter`), transactional mail (`onno-mail-starter`), PDF/print (`onno-print-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
-- UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration. The `@UiHint`, `@UiSection`, and `@DashboardWidget` annotations are deprecated; authored UI configuration overrides the annotations when both are present.
+- UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration.
 - Custom widgets: a consumer authors a React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and applies the `su.onno.widgets` Gradle plugin, which compiles it (managed Node + esbuild, React aliased to the host SPA) into an `onno-plugins/*.js` module served under `{onno.ui.path}/plugins/**` and auto-loaded at boot — a widget type the framework has no built-in for, with no frontend project to maintain.
 
 ## Design Direction
@@ -58,7 +58,7 @@ Good next slices:
 - Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
 - Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)
 - More generated test fixtures from business models
-- Tabular-section field hints in the authored UI DSL so `@UiHint` can be deleted entirely when custom row-field hints are needed
+- Tabular-section field hints in the authored UI DSL
 - A native (Flutter) client driven by the same DivKit contract the React SPA uses today
 
 Recently shipped (formerly on this list): role-aware deny-by-default authorization

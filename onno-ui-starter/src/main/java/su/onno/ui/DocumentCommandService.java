@@ -11,13 +11,11 @@ import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingPreview;
 import su.onno.posting.PostingService;
 import su.onno.security.SecretCipher;
-import su.onno.security.SecretRedactor;
 import su.onno.types.Ref;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
 import org.jdbi.v3.core.Jdbi;
-import org.jdbi.v3.core.statement.Update;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -77,7 +75,7 @@ public class DocumentCommandService {
     }
 
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
         UUID id = UUID.randomUUID();
@@ -99,7 +97,7 @@ public class DocumentCommandService {
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
             overlayTabularSections(doc, desc, body, errors);
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
-            if (bake(doc, true, errors)) {
+            if (EntityWriteSupport.bake(lifecycle, doc, true, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
                 body.put("number", doc.getNumber());
                 if (doc.getDate() != null) body.put("date", doc.getDate().toString());
@@ -133,7 +131,7 @@ public class DocumentCommandService {
                     .bind("_version", 0);
 
             for (AttributeDescriptor attr : desc.attributes()) {
-                bindAttribute(update, attr, body.get(attr.fieldName()));
+                EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
             }
             update.execute();
         });
@@ -148,7 +146,7 @@ public class DocumentCommandService {
 
     public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
                                        Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
 
@@ -167,7 +165,7 @@ public class DocumentCommandService {
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
             String numberBefore = doc.getNumber();
             LocalDateTime dateBefore = doc.getDate();
-            if (bake(doc, false, errors)) {
+            if (EntityWriteSupport.bake(lifecycle, doc, false, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
                 if (!Objects.equals(doc.getNumber(), numberBefore)) body.put("number", doc.getNumber());
                 if (doc.getDate() != null && !Objects.equals(doc.getDate(), dateBefore)) {
@@ -182,7 +180,8 @@ public class DocumentCommandService {
         if (body.containsKey("date")) setClauses.add("_date = :_date");
 
         for (AttributeDescriptor attr : desc.attributes()) {
-            if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+            if (body.containsKey(attr.fieldName())
+                    && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
                 setClauses.add(attr.columnName() + " = :" + attr.columnName());
             }
         }
@@ -204,8 +203,9 @@ public class DocumentCommandService {
                 }
 
                 for (AttributeDescriptor attr : desc.attributes()) {
-                    if (body.containsKey(attr.fieldName()) && !leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
-                        bindAttribute(update, attr, body.get(attr.fieldName()));
+                    if (body.containsKey(attr.fieldName())
+                            && !EntityWriteSupport.leaveSecretUnchanged(attr, body.get(attr.fieldName()))) {
+                        EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
                     }
                 }
                 return update.execute();
@@ -235,7 +235,7 @@ public class DocumentCommandService {
     }
 
     public Map<String, Object> post(DocumentDescriptor desc, UUID id, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         DocumentObject doc = loadDocumentObject(desc, id);
         // Re-posting (1C "Провести" on an already-posted document): reverse the existing
@@ -260,7 +260,7 @@ public class DocumentCommandService {
     }
 
     public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         DocumentObject doc = loadDocumentObject(desc, id);
         postingService.unpost(doc);
@@ -273,7 +273,7 @@ public class DocumentCommandService {
     }
 
     public void delete(DocumentDescriptor desc, UUID id, Principal principal) {
-        requireWritable();
+        EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
 
         // Unpost first if posted
@@ -302,25 +302,6 @@ public class DocumentCommandService {
         );
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, number));
-    }
-
-    /**
-     * Run {@code onFilling}/{@code beforeWrite} and collect business rules. A hook or rule that
-     * throws on otherwise-valid input is a genuine failure and propagates; when other validation
-     * errors are already pending it is suppressed, since those explain the broken state and would
-     * otherwise be masked by a {@code 500}.
-     */
-    private boolean bake(Object entity, boolean isNew, ValidationErrors errors) {
-        try {
-            lifecycle.runHooks(entity, isNew);
-            lifecycle.collectRules(entity, errors);
-            return true;
-        } catch (RuntimeException failed) {
-            if (errors.isEmpty()) {
-                throw failed;
-            }
-            return false;
-        }
     }
 
     /**
@@ -587,7 +568,7 @@ public class DocumentCommandService {
                             .bind("_line_number", ln);
 
                     for (AttributeDescriptor attr : ts.attributes()) {
-                        bindAttribute(update, attr, typedRow.get(attr.fieldName()));
+                        EntityWriteSupport.bindAttribute(update, attr, typedRow.get(attr.fieldName()), secretCipher);
                     }
                     update.execute();
                 });
@@ -596,59 +577,8 @@ public class DocumentCommandService {
         }
     }
 
-    /**
-     * Properly converts and binds an attribute value, handling Ref UUIDs and enums.
-     */
-    private void bindAttribute(Update update, AttributeDescriptor attr, Object value) {
-        // Coerce to the column's Java type, then bind null-safely so a null ref/enum/numeric/date
-        // binds as a typed (unspecified) null PostgreSQL can infer rather than varchar. (#163)
-        SqlBind.nullable(update, attr.columnName(), coerceAttribute(attr, value));
-    }
-
-    /** The value to store for an attribute: its column's Java type, or {@code null}/empty → null. */
-    private Object coerceAttribute(AttributeDescriptor attr, Object value) {
-        if (value == null || "".equals(value)) {
-            return null;
-        }
-        if (attr.secret()) {
-            // Write-only secret: store encrypted. A "set" sentinel echoed from a GET carries no
-            // real value (on create there's nothing to keep, so store null; on update such
-            // columns are dropped earlier by leaveSecretUnchanged).
-            return SecretRedactor.SET.equals(value) ? null : secretCipher.encrypt(value.toString());
-        }
-        if (attr.isRef() || attr.javaType().isEnum()) {
-            // Ref and enum columns are UUID in the DB
-            return value instanceof UUID u ? u : UUID.fromString(value.toString());
-        }
-        if (attr.javaType() == BigDecimal.class) {
-            return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
-        }
-        // Date/datetime columns arrive as JSON strings (JSON has no temporal type). Parse them so
-        // JDBI binds a typed value PostgreSQL accepts instead of a varchar it rejects. (#163)
-        Object temporal = TemporalValues.coerce(attr.javaType(), value);
-        if (temporal != null) {
-            return temporal;
-        }
-        return value;
-    }
-
-    /**
-     * A secret attribute whose incoming value is the read-side "set" sentinel means "leave it
-     * as it is" — the client round-tripped a GET it never saw the real value of. Such columns
-     * are dropped from the UPDATE so the stored ciphertext is preserved.
-     */
-    private boolean leaveSecretUnchanged(AttributeDescriptor attr, Object value) {
-        return attr.secret() && SecretRedactor.SET.equals(value);
-    }
-
     private int parseInt(Object value) {
         return value instanceof Number n ? n.intValue() : Integer.parseInt(value.toString());
-    }
-
-    private void requireWritable() {
-        if (properties.isReadOnly()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
-        }
     }
 
     private String resolveNumber(DocumentDescriptor desc, Map<String, Object> body) {

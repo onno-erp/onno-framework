@@ -1,6 +1,6 @@
 package su.onno.ui.divkit;
 
-import su.onno.metadata.DashboardWidgetDescriptor;
+import su.onno.metadata.PageWidgetDescriptor;
 
 import org.junit.jupiter.api.Test;
 
@@ -16,12 +16,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class WidgetsGridTest {
 
-    private static DashboardWidgetDescriptor widget(String title, String width, boolean rowBreak) {
-        return new DashboardWidgetDescriptor(title, "count", 0, width, null, null, 10,
+    private static PageWidgetDescriptor widget(String title, String width, boolean rowBreak) {
+        return new PageWidgetDescriptor(title, "count", 0, width, null, null, 10,
                 "", "", Map.of(), "", rowBreak);
     }
 
-    private static Map<String, Object> grid(List<DashboardWidgetDescriptor> widgets, int columns) {
+    private static Map<String, Object> grid(List<PageWidgetDescriptor> widgets, int columns) {
         return Widgets.grid(widgets, columns, w -> "0", w -> true, Palette.of("dark"));
     }
 

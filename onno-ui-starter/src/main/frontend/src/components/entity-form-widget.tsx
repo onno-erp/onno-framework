@@ -153,9 +153,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const isDuplicate = form.duplicate === true;
   const isEdit = id != null && !isDuplicate;
   const readOnly = form.readOnly === true;
-  // An edit form IS the record surface now, so its dirty key is the record path itself
-  // (dirty-forms normalizes the legacy "/edit" alias onto the same key).
-  const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? id : "new"}`;
+  const recordPath = isEdit && id ? `/${kind}/${name}/${id}` : null;
+  const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? `${id}/edit` : "new"}`;
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
   // description; both then list the visible-in-form attributes by their order hint.
@@ -361,11 +360,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       }
       clearFormDirty(formPath); // saved — nothing left for the discard guard to protect
       if (isEdit) {
-        // The form IS the record surface: Save stays on the page. Once the dirty flag is
-        // clear, the save's own SSE event refetches this island with the stored values
-        // (fresh code/number, posted state), so no navigation and no manual reload.
+        // Editing is a separate stage: after saving, return to the read-only detail surface.
         toast.success(t("toast.saved"));
-        setSaving(false);
+        if (recordPath) dispatchAction(`onno://${kind}/${name}/${id}`);
+        dispatchClose(formPath);
         return;
       }
       // A create that a ref picker is waiting on ("+ New" quick-create) hands the id back to
@@ -394,11 +392,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     // Cancel is an explicit discard — clear the dirty flag first so nothing asks "discard?".
     clearFormDirty(formPath);
     if (isEdit) {
-      // On the record surface Cancel reverts the unsaved edits in place (back to the stored
-      // values) instead of closing the pane — the tab's X already closes it.
-      setData(seedData());
-      setRowsBySection(seedRows());
-      setErrors({});
+      if (recordPath) dispatchAction(`onno://${kind}/${name}/${id}`);
+      dispatchClose(formPath);
       return;
     }
     // Cancelling a create also cancels any ref-picker quick-create waiting on it.

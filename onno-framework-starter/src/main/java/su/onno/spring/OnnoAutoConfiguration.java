@@ -427,15 +427,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
 
         for (Class<?> clazz : new CatalogScanner().scan(scanPackages)) {
             registry.registerCatalog(scanner.scan(clazz));
-            registry.registerDashboardWidgets(scanner.scanDashboardWidgets(clazz));
         }
         for (Class<?> clazz : new DocumentScanner().scan(scanPackages)) {
             registry.registerDocument(scanner.scanDocument(clazz));
-            registry.registerDashboardWidgets(scanner.scanDashboardWidgets(clazz));
         }
         for (Class<?> clazz : new AccumulationScanner().scan(scanPackages)) {
             registry.registerAccumulation(scanner.scanRegister(clazz));
-            registry.registerDashboardWidgets(scanner.scanDashboardWidgets(clazz));
         }
         for (Class<?> clazz : new EnumerationScanner().scan(scanPackages)) {
             registry.registerEnumeration(scanner.scanEnumeration(clazz));

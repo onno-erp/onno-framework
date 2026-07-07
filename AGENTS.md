@@ -151,8 +151,6 @@ When adding a starter, include:
 
 ### Known Non-Blocking Warnings
 
-- Deprecated annotation warnings for `@UiHint`, `@UiSection`, and `@DashboardWidget` are expected in old code.
-  Do not add these annotations to new code.
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
@@ -584,7 +582,7 @@ When a document affects another context, prefer emitting an event or writing to 
 
 Do not create premature microservices. Mark contexts first, then split when load, team ownership, or deployment needs justify it.
 
-Keep UI concerns out of domain classes. Sidebar placement belongs in `Layout` beans, dashboard widgets belong in `Page` beans, and per-field display hints belong in `EntityView` or `Layout` configuration. Do not add `@UiSection`, `@UiHint`, or `@DashboardWidget` to new code — they are deprecated.
+Keep UI concerns out of domain classes. Sidebar placement belongs in `Layout` beans, dashboard widgets belong in `Page` beans, and per-field display hints belong in `EntityView` or `Layout` configuration.
 
 ## Code Patterns
 

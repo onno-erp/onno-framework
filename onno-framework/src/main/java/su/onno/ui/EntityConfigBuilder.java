@@ -9,7 +9,7 @@ import java.util.Map;
  * Per-entity configuration scope passed to lambdas on
  * {@code SectionBuilder.catalog/document/register}.
  *
- * <p>Today this exposes only field-level hints (replacing {@code @UiHint}).
+ * <p>Today this exposes field-level hints plus related lists and row/detail actions.
  * Future entity-level UI knobs (default sort, list columns subset, form
  * grouping order, etc.) belong here too.</p>
  */

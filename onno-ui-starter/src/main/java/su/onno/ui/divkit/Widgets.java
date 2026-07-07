@@ -1,6 +1,6 @@
 package su.onno.ui.divkit;
 
-import su.onno.metadata.DashboardWidgetDescriptor;
+import su.onno.metadata.PageWidgetDescriptor;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,19 +36,19 @@ final class Widgets {
      * Build the widget area: a vertical stack of width-aware rows. {@code values}
      * resolves the preformatted big-number text for {@code count}/{@code metric} tiles.
      */
-    static Map<String, Object> grid(List<DashboardWidgetDescriptor> widgets, int columns,
-                                    Function<DashboardWidgetDescriptor, String> values,
-                                    Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
+    static Map<String, Object> grid(List<PageWidgetDescriptor> widgets, int columns,
+                                    Function<PageWidgetDescriptor, String> values,
+                                    Function<PageWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
         if (columns <= 1) {
-            for (DashboardWidgetDescriptor w : widgets) {
+            for (PageWidgetDescriptor w : widgets) {
                 rows.add(Div.matchWidth(block(w, values, canWrite, p)));
             }
         } else {
-            List<DashboardWidgetDescriptor> row = new ArrayList<>();
+            List<PageWidgetDescriptor> row = new ArrayList<>();
             double sum = 0;
-            for (DashboardWidgetDescriptor w : widgets) {
+            for (PageWidgetDescriptor w : widgets) {
                 double f = fraction(w.width());
                 // An authored rowBreak closes the open row unconditionally; otherwise a row closes
                 // when the next widget wouldn't fit.
@@ -78,11 +78,11 @@ final class Widgets {
 
     // A row of widgets sharing the main axis by their width fraction. Cells stretch to the row's
     // height (i.e. the tallest widget), so neighbouring cards bottom-align instead of ragging.
-    private static Map<String, Object> row(List<DashboardWidgetDescriptor> widgets,
-                                           Function<DashboardWidgetDescriptor, String> values,
-                                           Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
+    private static Map<String, Object> row(List<PageWidgetDescriptor> widgets,
+                                           Function<PageWidgetDescriptor, String> values,
+                                           Function<PageWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> cells = new ArrayList<>();
-        for (DashboardWidgetDescriptor w : widgets) {
+        for (PageWidgetDescriptor w : widgets) {
             Map<String, Object> cell = Div.weight(block(w, values, canWrite, p), fraction(w.width()));
             if (widgets.size() > 1) {
                 Div.matchHeight(cell);
@@ -95,9 +95,9 @@ final class Widgets {
         return row;
     }
 
-    private static Map<String, Object> block(DashboardWidgetDescriptor w,
-                                             Function<DashboardWidgetDescriptor, String> values,
-                                             Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
+    private static Map<String, Object> block(PageWidgetDescriptor w,
+                                             Function<PageWidgetDescriptor, String> values,
+                                             Function<PageWidgetDescriptor, Boolean> canWrite, Palette p) {
         // count/metric tiles are native cards; every other type — built-in or
         // app-registered — flows through the open onno-widget custom block.
         if (w.widgetType() == null || NATIVE_CARD_TYPES.contains(w.widgetType())) {
@@ -107,7 +107,7 @@ final class Widgets {
     }
 
     /** A {@code div-custom} block carrying the widget descriptor for the React renderer. */
-    static Map<String, Object> custom(DashboardWidgetDescriptor w, boolean canWrite) {
+    static Map<String, Object> custom(PageWidgetDescriptor w, boolean canWrite) {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("title", w.title());
         meta.put("widgetType", w.widgetType());
@@ -128,7 +128,7 @@ final class Widgets {
 
     // A KPI card: a big preformatted value (a record count, or a server-aggregated
     // sum/avg/…) above its title, clickable through to the entity's list surface.
-    private static Map<String, Object> valueCard(DashboardWidgetDescriptor w, String value, Palette p) {
+    private static Map<String, Object> valueCard(PageWidgetDescriptor w, String value, Palette p) {
         Map<String, Object> number = Div.color(Div.text(value, 30, "bold"), p.text());
         Map<String, Object> titleText = Div.color(Div.text(w.title(), 13, "regular"), p.muted());
         Map<String, Object> hintGlyph = Components.hint(w.hint(), p.muted(), 14);
@@ -150,7 +150,7 @@ final class Widgets {
     }
 
     // The list-surface route for a widget's entity, matching UiLayoutResolver's hrefs.
-    private static String hrefFor(DashboardWidgetDescriptor w) {
+    private static String hrefFor(PageWidgetDescriptor w) {
         if (w.entityType() == null || w.entityName() == null) {
             return null;
         }
