@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -2102,9 +2102,9 @@ export function EntityListWidget({
             </ContextMenuItem>
           );
         };
-        // Built-ins: batch = label + delete; single = open/edit/dup/copyLink/delete — minus the
-        // write items (edit, dup, delete) when the viewer can't write the entity.
-        const itemCount = (batch ? (canWrite ? 2 : 1) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
+        // Built-ins: batch = label + delete; single = open/dup/copyLink/delete — minus the
+        // write items (dup, delete) when the viewer can't write the entity.
+        const itemCount = (batch ? (canWrite ? 2 : 1) : canWrite ? 4 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
             open
@@ -2129,29 +2129,19 @@ export function EntityListWidget({
                   <span>{t("action.open")}</span>
                   <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
                 </ContextMenuItem>
+                {/* Open IS edit now — the record surface is the editable form — so the write
+                    items are just Duplicate (and Delete below). */}
                 {canWrite ? (
-                  <>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        dispatchAction(rowMenu.url + "/edit");
-                        close();
-                      }}
-                    >
-                      <Pencil className="text-muted-foreground" aria-hidden="true" />
-                      <span>{t("action.edit")}</span>
-                      <ContextMenuShortcut>{shortcutLabel({ key: "e", mod: true })}</ContextMenuShortcut>
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        dispatchAction(rowMenu.url + "/duplicate");
-                        close();
-                      }}
-                    >
-                      <Copy className="text-muted-foreground" aria-hidden="true" />
-                      <span>{t("action.duplicate")}</span>
-                      <ContextMenuShortcut>{shortcutLabel({ key: "d", mod: true, shift: true })}</ContextMenuShortcut>
-                    </ContextMenuItem>
-                  </>
+                  <ContextMenuItem
+                    onSelect={() => {
+                      dispatchAction(rowMenu.url + "/duplicate");
+                      close();
+                    }}
+                  >
+                    <Copy className="text-muted-foreground" aria-hidden="true" />
+                    <span>{t("action.duplicate")}</span>
+                    <ContextMenuShortcut>{shortcutLabel({ key: "d", mod: true, shift: true })}</ContextMenuShortcut>
+                  </ContextMenuItem>
                 ) : null}
               </>
             )}

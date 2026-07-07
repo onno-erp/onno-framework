@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * inside the app's Router/providers) portals the cluster into it.
  */
 
-type ActionItem = {
+export type ActionItem = {
   label: string;
   icon?: string;
   url: string;
@@ -135,7 +135,9 @@ async function runAsync(url: string, inputs?: Record<string, string>): Promise<v
   if (result?.navigate) fire(result.navigate);
 }
 
-function ActionsCluster({ items }: { items: ActionItem[] }) {
+// Exported so the combined record surface (EntityFormWidget) can render the same cluster
+// inline — the form is already React, so it needs no custom-element mount.
+export function ActionsCluster({ items }: { items: ActionItem[] }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
   // A form-declaring action waiting for its dialog input; submit runs it with the values.

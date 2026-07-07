@@ -249,8 +249,8 @@ data-bearing surfaces.
 | `GET /shell` | Nav + account chrome. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
-| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new`, `/catalogs/{name}/{id}/edit` | Catalog list, detail, create and edit forms. |
-| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new`, `/documents/{name}/{id}/edit` | Document list, detail, create and edit forms. |
+| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. `/{id}/edit` remains as a back-compat alias for `/{id}`. |
+| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new` | Document list, record surface and create form — same combined form; `/{id}/edit` is a back-compat alias. |
 | `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. |
 
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
@@ -270,9 +270,10 @@ data-bearing surfaces.
 
 Every list row (DivKit-rendered lists and the virtualized `EntityListWidget` alike) supports:
 
-- **Right-click** → a context menu with **Open**, **Edit**, **Duplicate**, **Copy link** and
-  **Delete**. **Copy link** puts the row's shareable deep link (`{origin}/{kind}/{name}/{id}`) on the
-  clipboard — paste it into a new tab to land straight on that record.
+- **Right-click** → a context menu with **Open**, **Duplicate**, **Copy link** and **Delete**
+  (Open lands on the editable record surface, so there is no separate Edit item). **Copy link**
+  puts the row's shareable deep link (`{origin}/{kind}/{name}/{id}`) on the clipboard — paste it
+  into a new tab to land straight on that record.
 - **Delete key** (macOS **fn+Backspace**, or the dedicated Del key) → deletes the row **under the
   pointer** — the one the hover highlight marks. Ignored while typing in a field or while a menu or
   dialog is open.
@@ -320,10 +321,11 @@ is served (no extra query — the row is already in hand) and shipped to the gri
 functions apply to `ROW` actions only — toolbar/detail buttons have no row context and use the fixed
 icon/label. A static row action (no functions) costs nothing: the list ships its rows untouched.
 
-A `DETAIL` action lands in the detail-header overflow (⋯) menu by default, but honors the same
-placement override the built-in `post`/`edit`/`delete` actions do — promote a key workflow action to
-a primary button (given the brand accent), keep it in the menu, or hide it, from the entity's
-`fields(...)`:
+A `DETAIL` action lands in the record surface's header overflow (⋯) menu by default (beside the
+form title), but honors the same placement override the built-in `unpost`/`duplicate`/`delete`
+actions do — promote a key workflow action to a primary button (given the brand accent), keep it in
+the menu, or hide it, from the entity's `fields(...)`. `f.action("post").hidden()` hides the form's
+built-in Post button:
 
 ```java
 public void fields(EntityConfigBuilder f) {

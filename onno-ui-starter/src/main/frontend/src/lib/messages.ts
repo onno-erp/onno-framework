@@ -189,6 +189,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Success toasts.
   "toast.posted": "Document posted",
   "toast.unposted": "Document unposted",
+  "toast.saved": "Saved",
 
   // Delete-confirmation dialogs.
   "confirm.delete.document.title": "Delete document?",
