@@ -30,16 +30,18 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | --- | --- | --- |
 | `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, query engine, number generation, secret cipher, background jobs. |
-| `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream. |
+| `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
-| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes and presence) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI and collaboration markers in sync across instances. |
+| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-mail-starter` | `su.onno` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
 | `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
+| `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
+| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, and a read-only data client that resolve to the host SPA at runtime. |
 | `example` | (not published) | A vacation-rentals ERP that exercises every concept; the canonical reference app. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
@@ -196,15 +198,17 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 
 | Area | Endpoints (served by) |
 | --- | --- |
-| Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`DELETE /{id}` (ui-starter) |
-| Documents | `GET /api/documents/{name}` (`?from=&to=`), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost` (ui-starter) |
+| Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}` (ui-starter) |
+| Documents | `GET /api/documents/{name}` (`?from=&to=`), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost` (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
-| List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — paged/sorted/filtered data for grids; `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — paged/sorted register data for the virtualized register surface (ui-starter) |
+| List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — **keyset-paginated** grid data by default: pass `?cursor=&limit=` and read back `{rows, nextCursor, hasMore}` (constant-time at any depth, no skip/dup on shifting data); `?count=exact\|estimate` adds a total. `?offset=` selects the legacy `{total, offset, rows}` mode. `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — register data for the virtualized register surface, same cursor envelope (`?offset=` selects the legacy page) and same declarative filter params (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's columns); movement rows carry a localized `_movement_type_display` + `_movement_type_color` (ui-starter) |
+| List grouping | `GET /api/list/{kind}/{name}/groups?groupBy=&granularity=&agg=fn,col&{q,filters}` — backend `GROUP BY`: `{groups: [{label, color?, count, values[], expand[]}], capped}`. One header per value (or per `day`/`month`/`year` bucket for a date column), each carrying an `expand` filter the grid replays on the list feed to load the group's rows. Same WHERE as the flat list; headers cap at 200 (ui-starter) |
 | Settings | `GET`/`PUT /api/settings` — `@Constant` values, ADMIN (ui-starter) |
-| Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions (ui-starter) |
+| Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions; an action declaring `.form(...)` first opens a modal input dialog client-side and POSTs the values as `inputs` (read via `ActionContext.input(key)`). `POST …/{key}/batch` runs the handler over `{ids:[…]}` in one request (≤500, returns `{ok, failed, total}`) — the list's batch selection. `POST /api/{catalogs|documents}/{name}/batch-delete` is the bulk counterpart of DELETE (ui-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}` — uploads ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
-| Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `DELETE /api/comments/{commentId}` — discussion threads, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
-| Mentions | `GET /api/mentions?q=` — cross-entity `@`-mention typeahead over readable catalogs/documents; comment bodies carry mentions as `@[Display](kind/name/id)` tokens resolved live, and each readable mention publishes `EntityMentionedEvent` (no consumers — additive via `@EventListener`) (ui-starter) |
+| Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
+| Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
+| Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new|/{id}/edit]`, `/api/divkit/registers/{name}` (ui-starter) |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by per-entity read access (#190) |
@@ -253,6 +257,15 @@ today and is intended to drive a native client later. The frontend lives in
 `onno-ui-starter/src/main/frontend` and is built by Gradle (`buildFrontend`, Node 20) into
 `static/ui/`. See [onno-ui-starter/README.md](../onno-ui-starter/README.md) for the full widget DSL
 and `config(key,value)` reference.
+
+**Custom widgets.** For a widget type the framework has no built-in for, a consumer app authors a
+React component in `src/main/widgets/*.tsx` and applies the `su.onno.widgets` Gradle plugin, which
+compiles it (managed Node + esbuild, React aliased to the host SPA) into `onno-plugins/<name>.js` on
+the classpath. The starter scans that location (`onno.ui.plugins.*`), serves the modules under
+`{onno.ui.path}/plugins/**`, and advertises them as `pluginScripts` from `GET /api/config`; the SPA
+dynamic-imports each at boot, where it self-registers via the `window.onno` host bridge. Authoring
+uses `@onno/widget-sdk` (bundled in the Gradle plugin — no npm needed). See the README's
+"Authoring a custom widget" section.
 
 ## Auth & RBAC
 

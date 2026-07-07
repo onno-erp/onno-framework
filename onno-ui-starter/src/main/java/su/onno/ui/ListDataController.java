@@ -17,11 +17,18 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Serves pages of list data to the virtualized list grid (the {@code onno-list} React island).
- * Returns the live total (for the scroll height) plus one window of rows — server-side sorted by
- * a validated column and filtered by a case-insensitive search — so a 10k-row entity never ships
- * whole to the client. The descriptor (columns, labels, sort, actions) comes from the DivKit list
- * surface; this endpoint is just the data feed.
+ * Serves pages of list data to the list grid. The default is <b>keyset (seek) pagination</b>: the
+ * client passes an opaque {@code cursor} (the {@code nextCursor} from the previous window) plus a
+ * {@code limit}, and the server seeks straight to the next window with an indexed comparison — so
+ * page 1 and page 10 000 cost the same, and rows are never skipped/duplicated when data shifts mid
+ * scroll. The envelope is {@code {rows, nextCursor, hasMore}}; a COUNT runs only when the client
+ * opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner figure), since the
+ * scroller needs {@code hasMore}, not a live total, to keep loading.
+ *
+ * <p><b>Legacy offset mode</b> is retained for back-compat: passing {@code ?offset=N} switches to
+ * {@code LIMIT/OFFSET} with the old {@code {total, offset, rows}} envelope. New clients omit
+ * {@code offset}. Both honour the same server-side sort, case-insensitive search, and column
+ * filters; the descriptor (columns, labels, sort, actions) comes from the DivKit list surface.
  */
 @RestController
 @RequestMapping("/api/list")
@@ -64,7 +71,6 @@ public class ListDataController {
             decorateRowActions(desc.javaClass(), picked);
             return page(picked.size(), 0, picked);
         }
-        int lim = clamp(limit);
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
         // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
         List<String> eq = multi(request, "eq");
@@ -73,9 +79,22 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = catalogQuery.page(desc, offset, lim, sort, descending(dir), q, eq, in, like, prefix, ge, le, filter);
-        decorateRowActions(desc.javaClass(), rows);
-        return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter), offset, rows);
+        // Legacy offset mode: served only when the client explicitly passes ?offset (the current
+        // grid still does). Everyone else gets keyset by default — see classdoc.
+        if (request.getParameter("offset") != null) {
+            List<Map<String, Object>> rows = catalogQuery.page(desc, offset, clamp(limit), sort,
+                    descending(dir), q, eq, in, like, prefix, ge, le, filter);
+            decorateRowActions(desc.javaClass(), rows);
+            return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter), offset, rows);
+        }
+        KeysetPage kp = catalogQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
+                descending(dir), q, eq, in, like, prefix, ge, le, filter);
+        decorateRowActions(desc.javaClass(), kp.rows());
+        boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
+        Long total = total(request.getParameter("count"), filtered,
+                () -> catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter),
+                () -> catalogQuery.estimateCount(desc, filtered));
+        return keysetEnvelope(kp, total);
     }
 
     @GetMapping("/documents/{name}")
@@ -99,7 +118,6 @@ public class ListDataController {
             decorateRowActions(desc.javaClass(), picked);
             return page(picked.size(), 0, picked);
         }
-        int lim = clamp(limit);
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
         List<String> eq = multi(request, "eq");
         List<String> in = multi(request, "in");
@@ -107,9 +125,92 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        List<Map<String, Object>> rows = documentQuery.page(desc, offset, lim, sort, descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
-        decorateRowActions(desc.javaClass(), rows);
-        return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter), offset, rows);
+        // Legacy offset mode: only when ?offset is explicitly present (see catalogPage).
+        if (request.getParameter("offset") != null) {
+            List<Map<String, Object>> rows = documentQuery.page(desc, offset, clamp(limit), sort,
+                    descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
+            decorateRowActions(desc.javaClass(), rows);
+            return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter), offset, rows);
+        }
+        KeysetPage kp = documentQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
+                descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
+        decorateRowActions(desc.javaClass(), kp.rows());
+        boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
+        Long total = total(request.getParameter("count"), filtered,
+                () -> documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter),
+                () -> documentQuery.estimateCount(desc, filtered));
+        return keysetEnvelope(kp, total);
+    }
+
+    /**
+     * Group a catalog list by a column: one collapsible header per distinct value (or per date
+     * bucket), with a row count + requested subtotals, over the same sort/search/filters as the flat
+     * list. The flat list ({@link #catalogPage}) loads a group's rows via the {@code expand} filter
+     * each header carries. Envelope: {@code {groups, capped}} — {@code capped} true when the group
+     * count hit {@link ListGroups#MAX_GROUPS}.
+     */
+    @GetMapping("/catalogs/{name}/groups")
+    public Map<String, Object> catalogGroups(@PathVariable String name,
+                                             @RequestParam String groupBy,
+                                             @RequestParam(required = false) String granularity,
+                                             @RequestParam(required = false) String q,
+                                             @RequestParam(required = false) String filter,
+                                             HttpServletRequest request,
+                                             Principal principal) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(principal, desc);
+        ListGroups.GroupResult result = catalogQuery.groups(desc, groupBy, granularity, q,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                filter, aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    /** Group a document list by a column — the document analogue of {@link #catalogGroups}. */
+    @GetMapping("/documents/{name}/groups")
+    public Map<String, Object> documentGroups(@PathVariable String name,
+                                              @RequestParam String groupBy,
+                                              @RequestParam(required = false) String granularity,
+                                              @RequestParam(required = false) String q,
+                                              @RequestParam(required = false) String from,
+                                              @RequestParam(required = false) String to,
+                                              @RequestParam(required = false) String filter,
+                                              HttpServletRequest request,
+                                              Principal principal) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(principal, desc);
+        ListGroups.GroupResult result = documentQuery.groups(desc, groupBy, granularity, q, from, to,
+                multi(request, "eq"), multi(request, "in"), multi(request, "like"),
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
+                filter, aggregates(request));
+        return groupsEnvelope(result);
+    }
+
+    private static Map<String, Object> groupsEnvelope(ListGroups.GroupResult result) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("groups", result.groups());
+        out.put("capped", result.capped());
+        return out;
+    }
+
+    /**
+     * The requested per-group subtotals: the repeated {@code agg} param, each a {@code "fn,column"}
+     * pair (e.g. {@code agg=sum,total}). Malformed tokens are skipped; the query service re-validates
+     * every fn/column, so an unknown one is dropped rather than 400ing the request.
+     */
+    private static List<ListGroups.Agg> aggregates(HttpServletRequest request) {
+        String[] raw = request.getParameterValues("agg");
+        if (raw == null || raw.length == 0) {
+            return List.of();
+        }
+        List<ListGroups.Agg> out = new java.util.ArrayList<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            int comma = value.indexOf(',');
+            if (comma <= 0 || comma == value.length() - 1) continue;
+            out.add(new ListGroups.Agg(value.substring(0, comma).trim(), value.substring(comma + 1).trim()));
+        }
+        return out;
     }
 
     /**
@@ -168,6 +269,48 @@ public class ListDataController {
         out.put("offset", offset);
         out.put("rows", rows);
         return out;
+    }
+
+    /**
+     * The keyset envelope: rows + the opaque {@code nextCursor} to fetch the next window and a
+     * {@code hasMore} flag. {@code total} is included only when the client opted into a count
+     * ({@code ?count=exact|estimate}); the default omits it, which is what makes the fast path fast.
+     */
+    private static Map<String, Object> keysetEnvelope(KeysetPage kp, Long total) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", kp.rows());
+        out.put("nextCursor", kp.nextCursor());
+        out.put("hasMore", kp.hasMore());
+        if (total != null) {
+            out.put("total", total);
+        }
+        return out;
+    }
+
+    /**
+     * Resolve the optional total for keyset mode: {@code exact} runs a COUNT, {@code estimate} uses
+     * cheap planner statistics (PostgreSQL; may be {@code null} → omitted), anything else (the
+     * default) skips counting entirely.
+     */
+    private static Long total(String countMode, boolean filtered,
+                              java.util.function.Supplier<Long> exact,
+                              java.util.function.Supplier<Long> estimate) {
+        if ("exact".equalsIgnoreCase(countMode)) {
+            return exact.get();
+        }
+        if ("estimate".equalsIgnoreCase(countMode)) {
+            return estimate.get();
+        }
+        return null;
+    }
+
+    /** Whether any search or column/widget filter is active — gates whether an estimate is meaningful. */
+    private static boolean isFiltered(String q, List<String> eq, List<String> in, List<String> like,
+                                      List<String> prefix, List<String> ge, List<String> le, String filter) {
+        return (q != null && !q.isBlank())
+                || !eq.isEmpty() || !in.isEmpty() || !like.isEmpty()
+                || !prefix.isEmpty() || !ge.isEmpty() || !le.isEmpty()
+                || (filter != null && !filter.isBlank());
     }
 
     private static boolean descending(String dir) {

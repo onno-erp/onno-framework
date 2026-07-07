@@ -18,21 +18,25 @@ final class NavIcons {
     static String forItem(String name, String type, String sectionIcon) {
         String n = name == null ? "" : name.toLowerCase();
 
+        // Compound names hit their most specific word first: "Book sales" is a sales
+        // report (chart), "Book stock" is inventory (package), "Stock receipt" is a
+        // receipt document — only a plain "Book" is the literal thing on a shelf.
         if (has(n, "dashboard", "overview", "home")) return "house";
         if (has(n, "propert", "apartment", "room", "unit", "listing")) return "building";
         if (has(n, "rental", "lease", "tenanc")) return "key";
         if (has(n, "bed", "occupan")) return "bed";
-        if (has(n, "book", "reservation", "stay", "schedule", "event", "shift")) return "calendar";
+        if (has(n, "booking", "reservation", "stay", "schedule", "event", "shift")) return "calendar";
         if (has(n, "client", "customer", "guest", "tenant", "contact")) return "users";
         if (has(n, "employee", "staff", "user", "people", "person", "team")) return "user";
         if (has(n, "supplier", "vendor", "shipment", "delivery")) return "truck";
-        if (has(n, "bill", "invoice")) return "receipt";
+        if (has(n, "bill", "invoice", "receipt")) return "receipt";
         if (has(n, "payment", "transaction", "payout")) return "wallet";
         if (has(n, "bank", "account", "balance", "cash")) return "banknote";
         if (has(n, "receivable", "payable", "ledger", "contract", "agreement", "document", "file")) return "file-text";
         if (has(n, "revenue", "sales", "report", "income", "stat", "analytic", "kpi", "metric")) return "chart-column";
         if (has(n, "countr", "region", "location", "address", "place")) return "map-pin";
         if (has(n, "product", "item", "good", "stock", "inventor", "warehouse")) return "package";
+        if (has(n, "book", "librar", "publication")) return "book-open";
         if (has(n, "setting", "config", "preference", "admin")) return "settings";
         if (has(n, "task", "todo", "ticket", "issue", "job", "order")) return "clipboard-list";
         if (has(n, "categor", "tag", "label", "type", "status")) return "tag";

@@ -21,6 +21,7 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import "./calendar-widget.css";
 
 interface CalendarWidgetProps {
@@ -104,7 +105,8 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
 
   const readOnly =
     String(widget.extraConfig?.readOnly ?? "").toLowerCase() === "true";
-  const editable = !readOnly && widget.entityType === "document";
+  // Authored readOnly wins; RBAC write access (server-stamped canWrite) also locks rescheduling.
+  const editable = !readOnly && widget.entityType === "document" && widget.canWrite !== false;
   const [range, setRange] = useState(() => {
     const now = new Date();
     return {
@@ -418,7 +420,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
             <HintIcon text={widget.hint} size={13} />
             {readOnly && (
               <span
-                className="inline-flex items-center gap-0.5 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                className="inline-flex items-center gap-0.5 rounded-control bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                 aria-label="Read only"
               >
                 <Lock className="h-2.5 w-2.5" /> read only
@@ -430,30 +432,15 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         <div className="flex items-center gap-2">
           {/* The month/week grid toggle is grid-only; the mobile agenda hides it. */}
           {!isMobile && (
-            <div className="flex rounded-md border border-border p-0.5">
-              <button
-                onClick={() => switchView("dayGridMonth")}
-                className={cn(
-                  "rounded-sm px-2 py-0.5 text-[11px] font-medium transition-colors",
-                  view === "dayGridMonth"
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Month
-              </button>
-              <button
-                onClick={() => switchView("timeGridWeek")}
-                className={cn(
-                  "rounded-sm px-2 py-0.5 text-[11px] font-medium transition-colors",
-                  view === "timeGridWeek"
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Week
-              </button>
-            </div>
+            <Segmented
+              size="sm"
+              value={view}
+              onChange={switchView}
+              options={[
+                { value: "dayGridMonth", label: "Month" },
+                { value: "timeGridWeek", label: "Week" },
+              ]}
+            />
           )}
           <Button variant="outline" size="sm" className="h-7 px-2" onClick={goToday}>
             Today

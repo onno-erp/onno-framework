@@ -51,8 +51,12 @@ function startStream(broadcast: boolean) {
       deliver(event);
       if (broadcast) channel?.postMessage(event);
     }, controller.signal)
-      .catch(() => {
-        // Stream ended or errored (e.g. session blip) — fall through to reconnect.
+      .catch((err: unknown) => {
+        // A 401 means the session lapsed — streamUiEvents already handed off to auth recovery
+        // (redirect/re-auth). Stop reconnecting so we don't re-open /api/events every few seconds
+        // and flood the console with 401s until then; a fresh mount after re-auth restarts the loop.
+        // Any other error (a dropped stream, a server restart) falls through to reconnect.
+        if ((err as { status?: number })?.status === 401) stopped = true;
       })
       .finally(() => {
         if (!stopped) retry = window.setTimeout(loop, RECONNECT_MS);

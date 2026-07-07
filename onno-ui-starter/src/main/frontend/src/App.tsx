@@ -1,10 +1,13 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { api } from "@/lib/api";
+import { loadPlugins } from "@/lib/plugin-loader";
 import { Toaster } from "sonner";
 import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
 import { MessagesProvider, useMessages } from "@/providers/messages-provider";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
+import { TimeRangeProvider } from "@/providers/time-range-provider";
 import { LoginView } from "@/views/login";
 import { PortfolioPage } from "@/views/portfolio";
 import { DivKitView } from "@/views/divkit-view";
@@ -19,7 +22,9 @@ import { ConstantsPortals } from "@/lib/constants-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
 import { NavPresencePortals } from "@/lib/nav-presence-bridge";
+import { NotificationIndicatorPortals } from "@/lib/notification-indicator-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
+import { NotificationCenter } from "@/components/notification-center";
 import { UpdateNotice } from "@/components/update-notice";
 import { BASE_PATH } from "@/lib/base-path";
 
@@ -27,6 +32,24 @@ function ProtectedApp() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const t = useMessages();
+
+  // Load consumer widget plugins once the authenticated shell mounts. Each plugin self-registers its
+  // widget types with window.onno.registerWidget; the DivKit content then renders div-custom widgets
+  // of those types. Fire-and-forget — registerWidget re-publishes, so late arrivals still render.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getConfig()
+      .then((cfg) => {
+        if (!cancelled) void loadPlugins(cfg?.pluginScripts);
+      })
+      .catch(() => {
+        // No config / offline — the built-in widgets still work; custom ones stay unregistered.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -44,8 +67,9 @@ function ProtectedApp() {
   // WidgetPortals lives alongside it so DivKit's div-custom blocks (charts,
   // calendars, kanban) render as React widgets within the app's providers.
   return (
-    <>
+    <TimeRangeProvider>
       <UpdateNotice />
+      <NotificationCenter />
       <DivKitView />
       <WidgetPortals />
       <FormPortals />
@@ -58,8 +82,9 @@ function ProtectedApp() {
       <ActionsBarPortals />
       <CommentsPortals />
       <NavPresencePortals />
+      <NotificationIndicatorPortals />
       <GeoPortals />
-    </>
+    </TimeRangeProvider>
   );
 }
 

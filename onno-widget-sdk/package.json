@@ -1,0 +1,26 @@
+{
+  "name": "@onno/widget-sdk",
+  "version": "0.1.0",
+  "description": "Author custom React widgets for the onno server-driven UI.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./react-shim": "./shims/react-shim.cjs",
+    "./jsx-runtime-shim": "./shims/jsx-runtime-shim.cjs"
+  },
+  "files": [
+    "src",
+    "shims"
+  ],
+  "peerDependencies": {
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "typescript": "~5.6.2"
+  }
+}

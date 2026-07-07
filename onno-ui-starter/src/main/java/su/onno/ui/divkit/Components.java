@@ -94,7 +94,7 @@ final class Components {
         Div.gap(btn, 6);
         Div.alignV(btn, "center");
         Div.pad(btn, 9, 13);
-        Div.corner(btn, 9);
+        Div.corner(btn, Radii.CONTROL);
         if (bg != null) {
             Div.background(btn, bg);
         }
@@ -139,6 +139,15 @@ final class Components {
     }
 
     static Map<String, Object> pageHeader(String title, String subtitle, Palette p) {
+        return pageHeader(title, subtitle, null, p);
+    }
+
+    /**
+     * The page header card. {@code trailing} (optional) is a block laid out on the title row's
+     * right edge — the dashboard's shared time-range picker rides there on desktop so the picker
+     * belongs to the header instead of floating in its own widget row.
+     */
+    static Map<String, Object> pageHeader(String title, String subtitle, Map<String, Object> trailing, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
         items.add(Div.color(Div.text(title, 22, "bold"), p.text()));
         if (subtitle != null && !subtitle.isBlank()) {
@@ -146,8 +155,27 @@ final class Components {
             Div.margins(sub, 2, 0, 0, 0);
             items.add(sub);
         }
-        Map<String, Object> header = Div.vertical(items);
-        Div.margins(header, 0, 0, 16, 0);
+        Map<String, Object> titles = Div.vertical(items);
+        Map<String, Object> header;
+        if (trailing == null) {
+            header = titles;
+        } else {
+            // Titles and the control split the row; the React widget right-aligns itself
+            // within its half, so the control hugs the header's right edge.
+            Div.weight(titles, 1);
+            Div.weight(trailing, 1);
+            header = Div.horizontal(List.of(titles, trailing));
+            Div.alignV(header, "center");
+            Div.gap(header, 12);
+        }
+        Div.matchWidth(header);
+        Div.background(header, p.surface());
+        Div.pad(header, 12, 16);
+        Div.corner(header, Radii.CARD);
+        Div.stroke(header, p.border(), 1);
+        // 4 + the root's 8dp item spacing = 12dp under the header — the same gutter the widget
+        // grid uses between rows, so the header doesn't sit visibly farther from the content.
+        Div.margins(header, 0, 0, 4, 0);
         return header;
     }
 
@@ -156,7 +184,7 @@ final class Components {
         Div.matchWidth(card);
         Div.background(card, p.surface());
         Div.pad(card, 16, 16);
-        Div.corner(card, 12);
+        Div.corner(card, Radii.CARD);
         Div.stroke(card, p.border(), 1);
         Div.gap(card, 8);
         return card;
@@ -357,7 +385,7 @@ final class Components {
         Map<String, Object> g = Div.gallery("horizontal", List.of(inner));
         Div.matchWidth(g);
         Div.background(g, p.surface());
-        Div.corner(g, 12);
+        Div.corner(g, Radii.CARD);
         Div.stroke(g, p.border(), 1);
         return g;
     }

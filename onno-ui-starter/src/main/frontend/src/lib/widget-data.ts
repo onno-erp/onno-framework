@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, startOfHour, startOfISOWeek, startOfMonth } from "date-fns";
 import { api } from "@/lib/api";
 import { toSnakeCase } from "@/lib/utils";
 import { toNumber } from "@/lib/format";
+import { resolveRange, type TimeRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 
 /**
@@ -17,7 +18,7 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 const ALL_TIME_FROM = "1970-01-01T00:00:00";
 const ALL_TIME_TO = "2999-12-31T23:59:59";
 
-export type GroupByDate = "day" | "week" | "month";
+export type GroupByDate = "minute" | "hour" | "day" | "week" | "month";
 export type Metric = "count" | "sum";
 
 /** Fetch the rows backing a widget: a document/catalog list, or a register's server-side turnover. */
@@ -64,8 +65,11 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
+      if (groupByDate === "minute") return format(d, "HH:mm");
+      // An hour bucket is labelled by its start ("20:00"), not the first row's minutes ("20:29").
+      if (groupByDate === "hour") return format(startOfHour(d), "HH:mm");
       if (groupByDate === "day") return format(d, "MMM d");
-      if (groupByDate === "week") return `Wk ${format(d, "II")}`;
+      if (groupByDate === "week") return format(startOfISOWeek(d), "MMM d");
       if (groupByDate === "month") return format(d, "MMM yyyy");
     } catch {
       // fall through
@@ -79,20 +83,32 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
 // A sortable key + display label for a bucket. Date buckets get a zero-padded key (yyyy-MM-dd,
 // yyyy-MM, ISO week-year) so chronological order is plain string order; everything else keys on
 // its own label and keeps insertion order.
-function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string } {
+// `iso` is the bucket's start date (yyyy-MM-dd) for a date bucket — used to map a drag-selected
+// region on a chart back to an absolute time range. Empty for non-date buckets (no zoom).
+function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; label: string; iso: string } {
   if (typeof value === "string" && groupByDate) {
     try {
       const d = parseISO(value);
-      if (groupByDate === "day") return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d") };
-      if (groupByDate === "week") return { key: format(d, "RRRR-'W'II"), label: `Wk ${format(d, "II")}` };
-      if (groupByDate === "month") return { key: format(d, "yyyy-MM"), label: format(d, "MMM yyyy") };
+      if (groupByDate === "minute")
+        return { key: format(d, "yyyy-MM-dd'T'HH:mm"), label: format(d, "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:mm") };
+      if (groupByDate === "hour")
+        return { key: format(d, "yyyy-MM-dd'T'HH"), label: format(startOfHour(d), "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:00") };
+      if (groupByDate === "day")
+        return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d"), iso: format(d, "yyyy-MM-dd") };
+      if (groupByDate === "week")
+        return { key: format(d, "RRRR-'W'II"), label: format(startOfISOWeek(d), "MMM d"), iso: format(startOfISOWeek(d), "yyyy-MM-dd") };
+      if (groupByDate === "month")
+        return { key: format(d, "yyyy-MM"), label: format(d, "MMM yyyy"), iso: format(startOfMonth(d), "yyyy-MM-dd") };
     } catch {
       // fall through
     }
   }
   const label = bucketLabel(value, undefined);
-  return { key: label, label };
+  return { key: label, label, iso: "" };
 }
+
+/** The bucket-start ISO date carried on each chart row, for drag-to-zoom (kept off the series keys). */
+export const ISO_KEY = "__iso";
 
 export interface SeriesSpec extends AggregateSpec {
   /** Field that defines the x-axis buckets. */
@@ -114,6 +130,122 @@ export interface SeriesData {
   total: number;
 }
 
+// ----- dual-axis (combo) charts -----------------------------------------------------------------
+
+export interface ComboMeasure {
+  metric: Metric;
+  metricField?: string;
+}
+
+export interface ComboData {
+  /** Wide rows for recharts: `{ label, primary, secondary }`, one per x bucket, x-ordered. */
+  rows: Array<Record<string, number | string>>;
+  totals: { primary: number; secondary: number };
+}
+
+/**
+ * Bucket rows once and compute TWO measures per bucket — a primary and a secondary — for a dual-axis
+ * (combo) chart. The two measures keep their own magnitudes (e.g. revenue vs order count) and the
+ * chart binds each to its own Y axis, so very different scales read cleanly side by side.
+ */
+export function buildCombo(
+  rows: EntityRecord[],
+  spec: { groupBy: string; groupByDate?: GroupByDate; primary: ComboMeasure; secondary: ComboMeasure }
+): ComboData {
+  const measure = (row: EntityRecord, m: ComboMeasure) =>
+    m.metric === "count" ? 1 : m.metricField ? toNumber(row[m.metricField]) ?? 0 : 0;
+
+  const buckets = new Map<string, { sortKey: string; label: string; iso: string; primary: number; secondary: number }>();
+  let primaryTotal = 0;
+  let secondaryTotal = 0;
+  for (const row of rows) {
+    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { sortKey: key, label, iso, primary: 0, secondary: 0 };
+      buckets.set(key, bucket);
+    }
+    const p = measure(row, spec.primary);
+    const s = measure(row, spec.secondary);
+    bucket.primary += p;
+    bucket.secondary += s;
+    primaryTotal += p;
+    secondaryTotal += s;
+  }
+
+  const ordered = [...buckets.values()];
+  if (spec.groupByDate) {
+    ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+  }
+  return {
+    rows: ordered.map((b) => ({ label: b.label, [ISO_KEY]: b.iso, primary: b.primary, secondary: b.secondary })),
+    totals: { primary: primaryTotal, secondary: secondaryTotal },
+  };
+}
+
+// ----- interactive control transforms (range window, value rescaling) ---------------------------
+
+/**
+ * Keep only the rows whose `dateField` falls inside the shared time window. The window — a relative
+ * "last N", an absolute from/to, or all-time — is resolved to absolute instants by {@link resolveRange},
+ * so this one filter serves every range shape, and it applies to any widget (a status pie filters to
+ * in-range rows too), not just time series. A row whose value isn't a parseable timestamp is kept, so
+ * a malformed date never silently drops it. Uses the client clock — fine for a relative window.
+ */
+export function filterWindow(rows: EntityRecord[], dateField: string, range: TimeRange): EntityRecord[] {
+  const { from, to } = resolveRange(range);
+  if (from === -Infinity && to === Infinity) return rows;
+  return rows.filter((r) => {
+    const v = r[dateField];
+    if (typeof v !== "string") return true;
+    const t = Date.parse(v);
+    return Number.isNaN(t) ? true : t >= from && t < to;
+  });
+}
+
+export type ScaleMode = "absolute" | "indexed" | "normalized";
+
+export const SCALE_LABELS: Record<ScaleMode, string> = {
+  absolute: "Absolute",
+  indexed: "Indexed",
+  normalized: "Normalized",
+};
+
+/**
+ * Rescale each series independently so series of very different magnitudes (e.g. revenue in RUB vs
+ * EUR) become comparable on one axis:
+ * - "indexed": each series rebased to 100 at its first non-zero bucket — relative movement over time.
+ * - "normalized": each series scaled so its own max = 100 — share of its own peak.
+ *
+ * "absolute" returns the data unchanged. A series that is entirely zero is left as-is. The grand
+ * total is meaningless once rescaled, so callers hide the header figure in those modes.
+ */
+export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
+  if (mode === "absolute" || data.rows.length === 0) return data;
+  const factor = new Map<string, number>();
+  for (const key of data.seriesKeys) {
+    let base = 0;
+    if (mode === "normalized") {
+      for (const row of data.rows) base = Math.max(base, Number(row[key]) || 0);
+    } else {
+      for (const row of data.rows) {
+        const v = Number(row[key]) || 0;
+        if (v !== 0) {
+          base = v;
+          break;
+        }
+      }
+    }
+    factor.set(key, base > 0 ? 100 / base : 1);
+  }
+  const rows = data.rows.map((row) => {
+    const out: Record<string, number | string> = { label: row.label, [ISO_KEY]: row[ISO_KEY] ?? "" };
+    for (const key of data.seriesKeys) out[key] = (Number(row[key]) || 0) * (factor.get(key) ?? 1);
+    return out;
+  });
+  return { rows, seriesKeys: data.seriesKeys, total: data.total };
+}
+
 /** The single-series sentinel key used when `seriesBy` is unset. */
 export const SINGLE_SERIES = "value";
 
@@ -124,15 +256,15 @@ export const SINGLE_SERIES = "value";
  */
 export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData {
   const maxSeries = spec.maxSeries ?? 8;
-  const buckets = new Map<string, { sortKey: string; label: string; series: Map<string, number> }>();
+  const buckets = new Map<string, { sortKey: string; label: string; iso: string; series: Map<string, number> }>();
   const seriesTotals = new Map<string, number>();
   let total = 0;
 
   for (const row of rows) {
-    const { key, label } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
     let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { sortKey: key, label, series: new Map() };
+      bucket = { sortKey: key, label, iso, series: new Map() };
       buckets.set(key, bucket);
     }
     const seriesKey = spec.seriesBy ? bucketLabel(row[spec.seriesBy]) : SINGLE_SERIES;
@@ -172,7 +304,7 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
   }
 
   const out = ordered.map((bucket) => {
-    const wide: Record<string, number | string> = { label: bucket.label };
+    const wide: Record<string, number | string> = { label: bucket.label, [ISO_KEY]: bucket.iso };
     for (const key of seriesKeys) wide[key] = bucket.series.get(key) ?? 0;
     return wide;
   });

@@ -8,7 +8,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@link Mentions} token syntax — {@code @[Display](kind/name/id)} — round-trips: what
+ * The {@link Mentions} token syntax — {@code @[Display](kind/name/id)} for mentions and
+ * {@code #[Display](kind/name/id)} for references — round-trips: what
  * {@link Mentions#token} writes, {@link Mentions#parse}/{@link Mentions#occurrences} read back, and
  * {@link Mentions#degrade} rewrites only the tokens a predicate selects, leaving surrounding prose and
  * the other tokens untouched.
@@ -30,9 +31,23 @@ class MentionsTest {
         List<Mentions.Occurrence> occ = Mentions.occurrences(token);
         assertThat(occ).singleElement().satisfies(o -> {
             assertThat(o.ref()).isEqualTo(ref);
+            assertThat(o.marker()).isEqualTo('@');
             assertThat(o.label()).isEqualTo("Acme Corp");
             assertThat(o.token()).isEqualTo(token);
         });
+    }
+
+    @Test
+    void referenceTokenAndMarkerSpecificParseRoundTrip() {
+        MentionRef ref = new MentionRef("documents", "sales_orders", invoice);
+        String token = Mentions.token('#', "SO-1", ref);
+
+        assertThat(token).isEqualTo("#[SO-1](documents/sales_orders/" + invoice + ")");
+        assertThat(Mentions.parse(token)).containsExactly(ref);
+        assertThat(Mentions.parse(token, '#')).containsExactly(ref);
+        assertThat(Mentions.parse(token, '@')).isEmpty();
+        assertThat(Mentions.occurrences(token)).singleElement()
+                .satisfies(o -> assertThat(o.marker()).isEqualTo('#'));
     }
 
     @Test

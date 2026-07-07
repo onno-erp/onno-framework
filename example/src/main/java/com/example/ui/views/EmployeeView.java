@@ -1,21 +1,13 @@
 package com.example.ui.views;
 
-import com.example.domain.catalogs.BookingStaff;
 import com.example.domain.catalogs.Employee;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
+import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 
-/**
- * Declares the Employee catalog as a visible surface and its field order. Shown in
- * the default back-office nav and reused by the cleaning persona's "Team" section.
- *
- * <p>Hosts the mirror of {@code BookingView}'s "Staff" panel: an "Assignments" related-list panel
- * over the same {@link BookingStaff} join catalog, scoped the other way — {@code via("employee")}
- * ties rows to this employee, {@code display("booking")} is the booking (a document) per row. One
- * join catalog, two inline rosters, no duplicated relationship (see #110).</p>
- */
+/** The employees catalog (ADMIN-only writes; see the catalog's @AccessControl). */
 @Component
 public class EmployeeView implements EntityView {
 
@@ -25,22 +17,24 @@ public class EmployeeView implements EntityView {
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("avatarUrl").order(-1).widget("avatar")
-                .field("fullName").order(0)
-                .field("role").order(1)
-                .field("department").order(2)
-                .field("hourlyRate").order(3)
-                .field("hiredOn").order(4)
-                .field("email").order(5)
-                .field("mobile").order(6)
-                .field("active").order(7)
-                .field("contractUrl").order(8).widget("file");
+    public void list(ListSpec list) {
+        list.columns("avatarUrl", "description", "email", "position")
+                .label("description", "Name")
+                .label("avatarUrl", "")
+                .sortBy("description", false);
+        // Role facet: an enum field with no authored options offers every declared value,
+        // labelled by its @EnumLabel.
+        list.filter("position").label("Role").multiOptions();
+    }
 
-        f.relatedList("assignments", BookingStaff.class)
-                .via("employee")       // Ref<Employee> that scopes join rows to this employee
-                .display("booking")    // Ref<Booking> (a document) shown / picked per row
-                .columns("booking", "role")
-                .label("Assignments");
+    @Override
+    public void fields(EntityConfigBuilder f) {
+        f.field("description").order(0).label("Name")
+            .field("email").order(1)
+            .field("position").order(2)
+            // The avatar widget marks this as the staff photo: the framework reads it for the
+            // signed-in person's shell account block and for comment-author avatars.
+            .field("avatarUrl").order(3).label("Photo").widget("avatar")
+                .hint("Link to a staff photo.");
     }
 }

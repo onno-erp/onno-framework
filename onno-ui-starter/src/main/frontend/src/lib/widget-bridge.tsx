@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import type { DashboardWidgetMeta } from "@/lib/types";
-import { ChartWidget } from "@/components/chart-widget";
+import { ChartWidget, TimeRangeWidget } from "@/components/chart-widget";
 import { CalendarWidget } from "@/components/calendar-widget";
 import { KanbanWidget } from "@/components/kanban-widget";
 import { ListWidget } from "@/components/list-widget";
@@ -29,6 +29,7 @@ import { MapWidget } from "@/components/map-widget";
  */
 const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> = {
   chart: ChartWidget,
+  timeRange: TimeRangeWidget,
   calendar: CalendarWidget,
   kanban: KanbanWidget,
   list: ListWidget,
@@ -143,7 +144,7 @@ export const WIDGET_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
 /** Placeholder for a widget type with no registered renderer (see {@link registerWidget}). */
 function UnknownWidget({ type, title }: { type: string; title: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+    <div className="rounded-control border border-dashed border-border p-4 text-xs text-muted-foreground">
       <div className="font-medium text-foreground">{title}</div>
       <div className="mt-1">
         No renderer registered for widget type <code className="font-mono">{type}</code>.

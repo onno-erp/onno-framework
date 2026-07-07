@@ -24,17 +24,39 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     // The SPA shell with onno.ui.path baked in — shared by the deep-link fallback resolver and the
     // root controller so both serve a shell that knows the app's mount prefix.
     private final SpaIndexHtml spaIndexHtml;
+    private final UiProperties uiProperties;
+    private final WidgetPluginScanner widgetPluginScanner;
 
     public UiAutoConfiguration(UiProperties uiProperties) {
+        this.uiProperties = uiProperties;
         this.spaIndexHtml = new SpaIndexHtml(uiProperties.getPath());
+        this.widgetPluginScanner = uiProperties.getPlugins().isEnabled()
+                ? new WidgetPluginScanner(uiProperties.getPlugins().getLocation())
+                : null;
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // Serve compiled widget plugins under {path}/plugins/** BEFORE the catch-all so a plugin
+        // module isn't swallowed by the SPA's index.html fallback. Registered first → higher precedence.
+        if (widgetPluginScanner != null) {
+            String base = "/".equals(uiProperties.getPath()) ? "" : uiProperties.getPath();
+            registry.addResourceHandler(base + "/plugins/**")
+                    .addResourceLocations(widgetPluginScanner.serveLocation())
+                    .resourceChain(true);
+        }
         registry.addResourceHandler("/**")
                 .addResourceLocations("classpath:/static/ui/")
                 .resourceChain(true)
                 .addResolver(new SpaResourceResolver(spaIndexHtml));
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "onno.ui.plugins", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
+    public WidgetPluginScanner widgetPluginScanner() {
+        return widgetPluginScanner != null ? widgetPluginScanner
+                : new WidgetPluginScanner(uiProperties.getPlugins().getLocation());
     }
 
     @Bean
@@ -74,8 +96,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public ActionController actionController(CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
                                              UiAccessService access,
-                                             UiActionResolver uiActionResolver) {
-        return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver);
+                                             UiActionResolver uiActionResolver,
+                                             UiProperties uiProperties) {
+        return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver,
+                uiProperties);
     }
 
     @Bean
@@ -87,8 +111,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     @Bean
     public ThemeController themeController(UiProperties properties, su.onno.ui.UiLayout uiLayout,
                                           UiMessages uiMessages,
-                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker) {
-        return new ThemeController(properties, uiLayout, uiMessages, updateChecker);
+                                          org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker,
+                                          org.springframework.beans.factory.ObjectProvider<WidgetPluginScanner> widgetPlugins) {
+        return new ThemeController(properties, uiLayout, uiMessages, updateChecker, widgetPlugins);
     }
 
     /**
@@ -109,10 +134,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsProvider> authMethods,
             org.springframework.beans.factory.ObjectProvider<su.onno.auth.spi.AuthMethodsContributor> contributors,
             UiMessages uiMessages,
-            su.onno.ui.LayoutSet layoutSet) {
+            su.onno.ui.LayoutSet layoutSet,
+            UiProperties properties) {
         // Branding is viewport-independent — take the desktop layout's, the same source DivKitController uses.
         su.onno.ui.BrandingConfig branding = layoutSet.forViewport(su.onno.ui.Viewport.DESKTOP).shell().branding();
-        return new LoginDivController(authMethods, contributors, uiMessages, branding);
+        return new LoginDivController(authMethods, contributors, uiMessages, branding, properties);
     }
 
     @Bean
@@ -127,8 +153,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access) {
-        return new UiEventController(publisher, access);
+    public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access,
+                                              CurrentUserResolver currentUserResolver) {
+        return new UiEventController(publisher, access, currentUserResolver);
     }
 
     /**
@@ -243,9 +270,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public GenericCatalogController genericCatalogController(CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
                                                               CatalogCommandService catalogCommandService,
-                                                              RelatedListReader relatedListReader) {
+                                                              RelatedListReader relatedListReader,
+                                                              UiMessages uiMessages) {
         return new GenericCatalogController(catalogQueryService, access, catalogCommandService,
-                relatedListReader);
+                relatedListReader, uiMessages);
     }
 
     @Bean
@@ -265,20 +293,23 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public RegisterListController registerListController(RegisterQueryService registerQueryService,
-                                                         UiAccessService access) {
-        return new RegisterListController(registerQueryService, access);
+                                                         UiAccessService access, UiMessages uiMessages) {
+        return new RegisterListController(registerQueryService, access, uiMessages);
     }
 
     @Bean
     public CurrentUserResolver currentUserResolver(su.onno.ui.UiLayout uiLayout,
-                                                   MetadataRegistry registry, Jdbi jdbi) {
-        return new CurrentUserResolver(uiLayout, registry, jdbi);
+                                                   MetadataRegistry registry,
+                                                   FieldHintResolver fieldHintResolver, Jdbi jdbi) {
+        return new CurrentUserResolver(uiLayout, registry, fieldHintResolver, jdbi);
     }
 
     @Bean
     public UiViewResolver uiViewResolver(ResolvedMetadataService resolvedMetadata,
-                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
-        return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList());
+                                         org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews,
+                                         UiProperties properties) {
+        return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList(),
+                properties.getList().getDefaultFeed(), properties.getList().getPageSize());
     }
 
     @Bean
@@ -303,10 +334,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              RelatedListReader relatedListReader,
                                              UiProperties uiProperties,
                                              UiMessages uiMessages,
-                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties) {
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties,
+                notificationProperties);
     }
 
 }

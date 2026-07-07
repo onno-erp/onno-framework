@@ -30,8 +30,8 @@ describe("buildSeries — single series", () => {
     expect(out.total).toBe(7);
     // categorical buckets keep insertion order
     expect(out.rows).toEqual([
-      { label: "open", value: 3 },
-      { label: "closed", value: 4 },
+      { label: "open", __iso: "", value: 3 },
+      { label: "closed", __iso: "", value: 4 },
     ]);
   });
 
@@ -67,8 +67,8 @@ describe("buildSeries — multi series", () => {
     // B (11) outranks A (8)
     expect(out.seriesKeys).toEqual(["B", "A"]);
     expect(out.rows).toEqual([
-      { label: "Jan 2024", B: 1, A: 5 },
-      { label: "Feb 2024", B: 10, A: 3 },
+      { label: "Jan 2024", __iso: "2024-01-01", B: 1, A: 5 },
+      { label: "Feb 2024", __iso: "2024-02-01", B: 10, A: 3 },
     ]);
     expect(out.total).toBe(19);
   });
@@ -83,7 +83,7 @@ describe("buildSeries — multi series", () => {
     const out = buildSeries(rows, { groupBy: "g", seriesBy: "k", metric: "sum", metricField: "n", maxSeries: 2 });
     // keep top (maxSeries-1)=1 → "a", everything else folds into "Other"
     expect(out.seriesKeys).toEqual(["a", "Other"]);
-    expect(out.rows).toEqual([{ label: "x", a: 100, Other: 65 }]);
+    expect(out.rows).toEqual([{ label: "x", __iso: "", a: 100, Other: 65 }]);
     expect(out.total).toBe(165);
   });
 });

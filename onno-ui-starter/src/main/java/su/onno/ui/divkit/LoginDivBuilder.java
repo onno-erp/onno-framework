@@ -46,12 +46,21 @@ public final class LoginDivBuilder {
         return login(methods, p, msg, null);
     }
 
+    /** Back-compat overload: no demo accounts. */
+    public static Map<String, Object> login(AuthMethods methods, Palette p, UiMessages msg, String step) {
+        return login(methods, p, msg, step, List.of());
+    }
+
     /**
      * Renders the login card for the requested {@code step}. {@code step} is only consulted when the
      * picker is in play (both a password and SSO are offered); {@code "password"} shows the
      * credentials step, anything else (including {@code null}) shows the picker.
+     *
+     * <p>{@code demoAccounts} (each a {@code {label, username, password}} map) surfaces one-tap sign-in
+     * shortcuts on the password step; empty renders a plain form.</p>
      */
-    public static Map<String, Object> login(AuthMethods methods, Palette p, UiMessages msg, String step) {
+    public static Map<String, Object> login(AuthMethods methods, Palette p, UiMessages msg, String step,
+                                             List<Map<String, Object>> demoAccounts) {
         boolean hasPassword = methods.passwordEnabled();
         boolean hasSso = !methods.providers().isEmpty();
         boolean picker = hasPassword && hasSso;
@@ -86,7 +95,11 @@ public final class LoginDivBuilder {
         // calls the auth context. DivKit can't read input values on a button tap, so this is the
         // only way to submit them.
         if (showPasswordForm) {
-            Map<String, Object> form = Div.custom("onno-login-form", Map.of());
+            // Pass any configured demo accounts to the React form as a custom prop; the widget renders
+            // them as one-tap sign-in buttons above the fields. Empty → a plain password form.
+            Map<String, Object> props = demoAccounts == null || demoAccounts.isEmpty()
+                    ? Map.of() : Map.of("demoAccounts", demoAccounts);
+            Map<String, Object> form = Div.custom("onno-login-form", props);
             Div.matchWidth(form);
             items.add(form);
         }
@@ -221,7 +234,7 @@ public final class LoginDivBuilder {
         Div.alignV(btn, "center");
         Div.gap(btn, 8);
         Div.pad(btn, 12, 14);
-        Div.corner(btn, 9);
+        Div.corner(btn, Radii.CONTROL);
         if (primary) {
             Div.background(btn, p.primary());
         } else {

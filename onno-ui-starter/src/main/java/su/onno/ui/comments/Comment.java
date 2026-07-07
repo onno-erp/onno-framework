@@ -24,6 +24,7 @@ public record Comment(
         String authorId,
         String authorName,
         String body,
+        UUID parentId,
         Instant createdAt,
         Instant editedAt) {
 }

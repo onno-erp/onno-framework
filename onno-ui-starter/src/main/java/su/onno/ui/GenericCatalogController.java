@@ -1,10 +1,12 @@
 package su.onno.ui;
 
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,32 +19,37 @@ public class GenericCatalogController {
     private final UiAccessService access;
     private final CatalogCommandService commands;
     private final RelatedListReader relatedLists;
+    private final UiMessages messages;
 
     public GenericCatalogController(CatalogQueryService query,
                                     UiAccessService access,
                                     CatalogCommandService commands,
-                                    RelatedListReader relatedLists) {
+                                    RelatedListReader relatedLists,
+                                    UiMessages messages) {
         this.query = query;
         this.access = access;
         this.commands = commands;
         this.relatedLists = relatedLists;
+        this.messages = messages;
     }
 
     @GetMapping("/{name}")
     public List<Map<String, Object>> list(@PathVariable String name,
                                           @RequestParam(required = false) String q,
                                           @RequestParam(required = false) Integer limit,
+                                          @RequestParam(required = false) String filter,
                                           Principal principal) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
         // A search query or an explicit limit switches to the capped server-side
         // typeahead (for ref pickers); without either, the full list is returned for
-        // back-compat with callers that page client-side.
+        // back-compat with callers that page client-side. `filter` is an authored
+        // WidgetFilter predicate so chart/list widgets scope their rows server-side.
         if (q != null || limit != null) {
             int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
             return query.search(desc, q, cap);
         }
-        return query.list(desc);
+        return query.list(desc, filter);
     }
 
     @GetMapping("/{name}/children")
@@ -90,6 +97,38 @@ public class GenericCatalogController {
         return commands.create(query.require(name), body, principal);
     }
 
+    /**
+     * Create a copy of record {@code id}: same description/attributes/parent, fresh identity (new
+     * id, next code). Secret attributes are not copied — reads are redacted, so a copy would store
+     * the sentinel; the clone starts with them unset. Runs through the normal create path
+     * (lifecycle hooks, validation, write access). Powers the list's clipboard paste (⌘C/⌘V).
+     */
+    @PostMapping("/{name}/{id}/duplicate")
+    public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+        CatalogDescriptor desc = query.require(name);
+        access.requireRead(principal, desc); // create() enforces write below
+        Map<String, Object> row = query.get(desc, id);
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (row.get("_description") != null) {
+            // Same-named copies are indistinguishable in pickers and lists — suffix the clone
+            // (localizable via onno.ui.messages "duplicate.copySuffix"; blank disables).
+            body.put("description", row.get("_description") + messages.get("duplicate.copySuffix"));
+        }
+        if (row.get("_parent") != null) {
+            body.put("parent", row.get("_parent"));
+        }
+        for (AttributeDescriptor attr : desc.attributes()) {
+            if (attr.secret()) {
+                continue;
+            }
+            Object v = row.get(attr.columnName());
+            if (v != null) {
+                body.put(attr.fieldName(), v);
+            }
+        }
+        return commands.create(desc, body, principal);
+    }
+
     @PutMapping("/{name}/{id}")
     public Map<String, Object> update(@PathVariable String name, @PathVariable UUID id,
                                       @RequestBody Map<String, Object> body,
@@ -100,5 +139,32 @@ public class GenericCatalogController {
     @DeleteMapping("/{name}/{id}")
     public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         commands.delete(query.require(name), id, principal);
+    }
+
+    /**
+     * Soft-delete a set of records in one request — the list's batch selection posts here instead
+     * of firing N single DELETEs. Per-id failures are recorded and the batch continues; returns
+     * {@code {ok, failed, total}}. Capped like the action batch (see ActionController.BATCH_LIMIT).
+     */
+    @PostMapping("/{name}/batch-delete")
+    public Map<String, Object> batchDelete(@PathVariable String name,
+                                           @RequestBody Map<String, Object> body, Principal principal) {
+        CatalogDescriptor desc = query.require(name);
+        List<UUID> ids = ActionController.idList(body);
+        int ok = 0;
+        List<String> failed = new java.util.ArrayList<>();
+        for (UUID rid : ids) {
+            try {
+                commands.delete(desc, rid, principal);
+                ok++;
+            } catch (RuntimeException e) {
+                failed.add(rid.toString());
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", ok);
+        out.put("failed", failed);
+        out.put("total", ids.size());
+        return out;
     }
 }

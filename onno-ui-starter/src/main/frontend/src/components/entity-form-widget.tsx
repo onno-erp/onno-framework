@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta } from "@/lib/types";
@@ -23,13 +23,16 @@ import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
 import { RelatedListPanel } from "@/components/related-list-panel";
+import { Textarea } from "@/components/ui/textarea";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
+import { cancelQuickCreate, consumeQuickCreate } from "@/lib/quick-create";
+import { clearFormDirty, markFormDirty } from "@/lib/dirty-forms";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
-// rounded-lg, text-sm/medium, with the same vertical/horizontal rhythm.
+// rounded-control, text-sm/medium, with the same vertical/horizontal rhythm.
 const actionBtn =
-  "inline-flex items-center gap-1.5 rounded-lg bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
+  "inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
 
 // The portable form descriptor the server emits as the onno-form custom component.
 export type FormDescriptor = {
@@ -168,6 +171,23 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     return out;
   }, [kind, meta]);
 
+  // Fields bucketed by their .group(...) hint, in first-appearance order. Ungrouped fields
+  // (and the system code/description) form the leading unlabeled card; each named group gets
+  // its own card with a heading — so a long form reads as sections, not one endless column.
+  const fieldGroups = useMemo<{ title: string; fields: Field[] }[]>(() => {
+    const order: string[] = [];
+    const byGroup = new Map<string, Field[]>();
+    for (const f of fields) {
+      const g = f.kind === "attr" ? (f.attr.group ?? "").trim() : "";
+      if (!byGroup.has(g)) {
+        byGroup.set(g, []);
+        order.push(g);
+      }
+      byGroup.get(g)!.push(f);
+    }
+    return order.map((g) => ({ title: g, fields: byGroup.get(g)! }));
+  }, [fields]);
+
   // Tabular sections (document child collections). The metadata already ships them and the
   // REST layer round-trips rows; this is the form's editable grid for each one.
   const sections = useMemo<TabularSectionMeta[]>(() => meta.tabularSections ?? [], [meta]);
@@ -224,6 +244,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const set = (key: string, value: unknown) => {
+    markFormDirty(formPath);
     setData((prev) => ({ ...prev, [key]: value }));
     // Clear a field's error as soon as the user edits it; it re-checks on the next save.
     setErrors((prev) => {
@@ -233,6 +254,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       return next;
     });
   };
+
+  // The dirty flag's lifetime is this instance's: save/cancel clear it explicitly, and unmount
+  // clears it too — a remounted island starts from the stored record again, so nothing is at risk.
+  useEffect(() => () => clearFormDirty(formPath), [formPath]);
 
   // Validate every attribute field against its constraints; returns key -> message.
   const validateAll = (): Record<string, string> => {
@@ -245,18 +270,24 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     return errs;
   };
 
-  const addRow = (section: string) =>
+  const addRow = (section: string) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({ ...prev, [section]: [...(prev[section] ?? []), {}] }));
-  const removeRow = (section: string, idx: number) =>
+  };
+  const removeRow = (section: string, idx: number) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({
       ...prev,
       [section]: (prev[section] ?? []).filter((_, i) => i !== idx),
     }));
-  const setCell = (section: string, idx: number, key: string, value: unknown) =>
+  };
+  const setCell = (section: string, idx: number, key: string, value: unknown) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({
       ...prev,
       [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
     }));
+  };
 
   const save = async (thenPost = false) => {
     // Instant client-side check first — don't round-trip a form we already know is invalid.
@@ -311,8 +342,12 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           // saved (unposted) record so the user lands somewhere actionable.
         }
       }
-      // Open the saved record and close the form pane (the list refreshes over SSE).
-      dispatchAction(`onno://${kind}/${name}/${savedId}`);
+      // A create that a ref picker is waiting on ("+ New" quick-create) hands the id back to
+      // the picker and closes quietly — the user stays on the form they were filling in.
+      // Otherwise open the saved record. Either way close the form pane (lists refresh over SSE).
+      const pickedUp = !isEdit && consumeQuickCreate(kind, name, savedId);
+      clearFormDirty(formPath); // saved — the close below must not trip the discard guard
+      if (!pickedUp) dispatchAction(`onno://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
       // A server-side validation 422 carries per-field messages — map them onto the inputs
@@ -331,24 +366,71 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   };
 
   const cancel = () => {
+    // Cancelling a create also cancels any ref-picker quick-create waiting on it. Cancel is an
+    // explicit discard — clear the dirty flag so the close doesn't ALSO ask "discard?".
+    clearFormDirty(formPath);
+    if (!isEdit) cancelQuickCreate(kind, name);
     if (isEdit) dispatchAction(`onno://${kind}/${name}/${id}`);
     dispatchClose(formPath);
   };
 
+  // Editing context under the title: the record's code/number + description, so the user
+  // always knows *which* supplier/order they're deep inside of. A posted document shows its
+  // status pill — re-posting an already-posted document is a different mental act than posting.
+  const subtitleParts = isEdit
+    ? [initial?._code, initial?._number, initial?._description].filter(
+        (v): v is string =>
+          typeof v === "string" &&
+          v.trim() !== "" &&
+          // The server-built title often already carries the number/name ("Edit Orders SO-42");
+          // only surface identity the title doesn't show.
+          !form.title.includes(v)
+      )
+    : [];
+
+  // A field spans the full row unless hinted narrower (.width("half") / "1/2"), letting short
+  // fields (dates, amounts, refs) sit side by side on wide screens.
+  const isHalf = (f: Field) =>
+    f.kind === "attr" && /^(half|1\/2|50%?)$/i.test((f.attr.widthHint ?? "").trim());
+
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <h1 className="mb-5 text-xl font-semibold text-foreground">{form.title}</h1>
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-        {fields.map((f) => (
-          <FormFieldRow
-            key={f.key}
-            field={f}
-            value={data[f.key]}
-            error={errors[f.key]}
-            onChange={(v) => set(f.key, v)}
-          />
-        ))}
+      <div className="mb-5">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-semibold text-foreground">{form.title}</h1>
+          {postable && wasPosted ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              <CircleCheck className="size-3" aria-hidden="true" />
+              {t("status.posted")}
+            </span>
+          ) : null}
+        </div>
+        {subtitleParts.length > 0 ? (
+          <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitleParts.join(" · ")}</p>
+        ) : null}
       </div>
+      {fieldGroups.map((g, gi) => (
+        <div
+          key={g.title || "__default"}
+          className={cn("rounded-card border border-border bg-card p-5", gi > 0 && "mt-4")}
+        >
+          {g.title ? (
+            <h2 className="mb-4 text-sm font-semibold text-foreground">{g.title}</h2>
+          ) : null}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {g.fields.map((f) => (
+              <div key={f.key} className={cn(!isHalf(f) && "sm:col-span-2")}>
+                <FormFieldRow
+                  field={f}
+                  value={data[f.key]}
+                  error={errors[f.key]}
+                  onChange={(v) => set(f.key, v)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
       {sections.map((ts) => (
         <TabularSectionEditor
           key={ts.name}
@@ -444,7 +526,7 @@ function TabularSectionEditor({
     isBoolCol(a) ? "shrink-0 basis-20" : "min-w-0 grow basis-44";
 
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-card p-4 sm:p-5">
+    <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
         <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
@@ -475,7 +557,7 @@ function TabularSectionEditor({
               {rows.map((row, idx) => (
                 <div
                   key={idx}
-                  className="group flex items-center gap-3 rounded-lg px-2 py-1 transition-colors hover:bg-muted/40"
+                  className="group flex items-center gap-3 rounded-control px-2 py-1 transition-colors hover:bg-muted/40"
                 >
                   {columns.map((attr) => (
                     <div
@@ -485,6 +567,7 @@ function TabularSectionEditor({
                       <AttrControl
                         attr={attr}
                         value={row[attr.fieldName]}
+                        compact
                         onChange={(v) => onCell(idx, attr.fieldName, v)}
                       />
                     </div>
@@ -494,7 +577,7 @@ function TabularSectionEditor({
                     onClick={() => onRemove(idx)}
                     aria-label={`Remove row ${idx + 1}`}
                     title="Remove row"
-                    className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                    className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>
@@ -595,12 +678,15 @@ function AttrControl({
   onChange,
   invalid,
   placeholder,
+  compact,
 }: {
   attr: AttributeMeta;
   value: unknown;
   onChange: (value: unknown) => void;
   invalid?: boolean;
   placeholder?: string;
+  /** Grid-cell rendering (tabular sections): keep multi-line controls to a single-row height. */
+  compact?: boolean;
 }) {
   const t = useMessages();
   const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
@@ -710,6 +796,24 @@ function AttrControl({
         value={(value as string) ?? ""}
         onChange={onChange}
         includeTime={attr.javaType === "LocalDateTime"}
+      />
+    );
+  }
+
+  // Multi-line text: explicit .widget("textarea"), or any String long enough (length > 1000,
+  // or unbounded) that a single-line input clearly wasn't meant — notes, addresses, comments.
+  const longText =
+    attr.javaType === "String" && !attr.widget && (attr.length <= 0 || attr.length > 1000);
+  if (/^(textarea|multiline)$/i.test(attr.widget ?? "") || longText) {
+    return (
+      <Textarea
+        rows={compact ? 1 : 4}
+        aria-invalid={invalid}
+        className={cn(invalidCls, compact && "min-h-9 resize-y")}
+        placeholder={placeholder || undefined}
+        maxLength={attr.length > 0 && attr.length <= MAX_VARCHAR ? attr.length : undefined}
+        value={(value as string) ?? ""}
+        onChange={(e) => onChange(e.target.value)}
       />
     );
   }

@@ -38,12 +38,37 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onno.ui.path` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the client uses it as its React Router `basename` and deep-link prefix; the bare root redirects here. Set to `/` to mount at the web root. |
 | `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
 | `onno.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
-| `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. |
+| `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. Each becomes a CSS custom property (`--{key}`) on the document root, so it overrides any design token the UI reads — including the [shape tokens](#shape-tokens) that reshape every button, control and card app-wide. |
 | `onno.ui.messages.*` | empty map | Overrides for the framework's own chrome strings (see [Localizing the chrome](#localizing-the-chrome)). Each key (e.g. `login.title`, `action.new`) replaces the English default. Quote the dotted keys in YAML. |
 | `onno.ui.update-check.enabled` | `true` | Poll onno-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
 | `onno.ui.update-check.url` | `https://cloud.onno.su/releases/v1/latest` | Release-announcement endpoint to poll. |
 | `onno.ui.update-check.interval` | `24h` | Cadence after the first check (floored at 60s). |
 | `onno.ui.update-check.initial-delay` | `1m` | Delay before the first check. |
+
+### Shape tokens
+
+Corner rounding is unified behind two CSS custom properties, so the whole UI reshapes from config
+rather than per-component classes:
+
+| Token | Drives | Default |
+|-------|--------|---------|
+| `--radius-control` | every interactive control — buttons, inputs, selects, filter chips, toggles | `9999px` (pill) |
+| `--radius-card` | surfaces — cards, the list toolbar island, popovers, menus, dialogs | `0.9rem` |
+
+Override either via `onno.ui.theme` (the key `radius-control` maps to `--radius-control`). Every
+button and control across every page reads the same token, so one line restyles the app:
+
+```yaml
+onno:
+  ui:
+    theme:
+      "radius-control": "0.5rem"   # square-ish controls instead of the default pill
+      "radius-card": "0.75rem"
+```
+
+Avatars and status pills stay fully round independently of these (so squaring the controls never
+squares a face-pile or an enum pill). This covers the React surfaces (lists, forms, detail action
+buttons, dialogs); the server-rendered DivKit detail cards/tables carry their own corner radius.
 
 ### Update-available notice
 
@@ -124,6 +149,8 @@ name returns `404`.
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
+| POST | `/{name}/{id}/duplicate` | Server-side copy: same description/attributes/parent, fresh id + code, description suffixed with `duplicate.copySuffix` (" (copy)" by default). Secret attributes start unset. Backs the list's ⌘C/⌘V. |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Sets the deletion mark (soft delete). |
 
 ### Documents — `/api/documents`
@@ -137,6 +164,8 @@ name returns `404`.
 | POST | `/{name}/{id}/post` | Run posting (writes register movements). |
 | POST | `/{name}/{id}/unpost` | Reverse posting. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
+| POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). |
 
 ### Registers — `/api/registers`
@@ -147,14 +176,66 @@ name returns `404`.
 | GET | `/{name}/balance?{dim}={value}...` | Current balances (query params are dimension filters). |
 | GET | `/{name}/turnover?from=&to=&{dim}=...` | Period turnover; `from` and `to` are required. |
 
-The register **report surface** doesn't load these whole — it's a virtualized `onno-list` island that
-pages its data (newest-first, server-sorted) from a dedicated feed, so a register packed with movements
-never ships its whole log to the client:
+The catalog/document **list grid** is fed window-by-window from a dedicated feed so a 100k-row entity
+never ships whole to the client. The default is **keyset (seek) pagination**: indexed, constant-time
+at any depth, and immune to the skip/duplicate that offset paging suffers when rows shift mid-scroll.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/list/registers/{name}/movements?offset=&limit=&sort=&dir=&from=&to=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?offset=&limit=&sort=&dir=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
+| GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`_date`). |
+| GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
+
+- **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
+  needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
+  total, or `?count=estimate` for a cheap PostgreSQL planner figure (omitted on H2 or when a
+  search/filter is active).
+- **Cursor is opaque and self-describing.** It encodes the sort column + direction + the last row's
+  `(sortValue, _id)`; a cursor replayed against a different sort is ignored (paging restarts) rather
+  than seeking to a wrong position. It is a position, not a credential — every value is bound, never
+  inlined.
+- **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
+  and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
+  `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
+- **Offset mode.** Passing `?offset=N` switches to `LIMIT/OFFSET` with the `{ total, offset, rows }`
+  envelope. The grid uses this for **paged** lists (numbered pages need a total and jump-to-page,
+  which a cursor can't give); **infinite** lists send `cursor` instead.
+
+**Feed mode — infinite scroll vs numbered pages.** The grid renders one of two ways, chosen per
+entity and defaulted globally:
+
+- **`INFINITE`** (default) — cursor-scrolls the keyset stream above: loads a window, then more as you
+  scroll, virtualized so the DOM stays small; header shows a cheap `?count=estimate` (or the loaded
+  count). The natural fit for large, append-heavy lists.
+- **`PAGED`** — numbered offset pages with a Prev/Next pager and an exact total. Best for small or
+  well-filtered lists where jump-to-page and a precise count matter more than depth performance.
+
+Author it on the view (`list.feed(FeedMode.PAGED)`, `list.pageSize(25)`) or set the app-wide default
+with `onno.ui.list.default-feed` (`infinite` | `paged`) and `onno.ui.list.page-size`. A register's
+report surface is always infinite (its movement log is depth-scrolled).
+
+**Grouping — backend `GROUP BY` with lazy expansion.** Declare `list.groupable("status", "date", …)`
+and the toolbar gains a "Group by ▾" picker (None = the flat list). Picking a column swaps the flat
+table for collapsible group headers fetched from `/groups` (one per value; a date column offers a
+day/month/year granularity and buckets by period); each header shows the group's row count and any
+`list.aggregate(field, Agg.SUM|AVG|MIN|MAX)` subtotals. Expanding a header lazily loads that group's
+rows through the **same** feed — the server hands each group the exact filter to replay — so grouping
+never double-counts and honours the active search/filters/sort. Group values that resolve to a
+ref/enum show their label (and enum colour); a null group is shown but not expandable.
+
+The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
+default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
+cursor is the next window's offset, treated as opaque by the client); passing `?offset=` explicitly
+keeps the legacy `{total, offset, rows}` page. Both feeds honor the grid's declarative filter params
+(`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's own columns) — the movements
+tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, and
+movement rows carry a localized `_movement_type_display` + `_movement_type_color` so the type renders
+as a colored status pill:
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=` | One window of current balances + the live total (BALANCE registers). |
 
 ### DivKit server-driven UI — `/api/divkit`
 
@@ -247,6 +328,71 @@ public void fields(EntityConfigBuilder f) {
 }
 ```
 
+### Action forms — collect input before the handler runs
+
+A server action may declare a **form**: clicking it opens a modal dialog with the declared fields
+(same builder DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`), and the handler
+receives the submitted values via `ActionContext.input(key)` — the "Cancel with a reason" idiom:
+
+```java
+a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.ROW)
+ .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA)
+             .placeholder("Why is this order cancelled?").required())
+ .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
+```
+
+Works on every scope and placement — row button, toolbar, detail header, the row context menu, and
+batch mode (the dialog collects once, then the values are sent with the action for every selected
+record). Form values are merged over the ambient toolbar-input values in the same
+`ActionContext.input(...)` namespace, so a key used by both is won by the form.
+
+### Row context menu, submenus & batch selection
+
+Right-clicking a list row opens a context menu with the built-ins (Open / Edit / Duplicate / Copy
+link / Delete, with their keyboard shortcuts) **plus the entity's custom ROW actions**. A row action
+placed with `.menu("…")` renders inside a **submenu** with that label instead of as an inline row
+icon button — actions sharing a label group together in declaration order. The per-row functions
+(`label(row -> …)`, `visibleWhen`, `enabledWhen`) still apply to menu entries:
+
+```java
+for (OrderStatus st : OrderStatus.values()) {
+    a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
+     .menu("Change status").label(labelOf(st))
+     .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
+     .handler(ctx -> setStatus(ctx.id(), st));
+}
+```
+
+Rows also support **batch selection**: ⌘/Ctrl-click toggles a row, Shift-click selects the range
+from the last toggled row, Esc (or the toolbar's "N selected ✕" chip) clears. With the list
+engaged (a selection active, or the cursor over a row), **⌘A** selects every loaded row and
+**⇧⌘↓ / ⇧⌘↑** extend the selection from the anchor to the bottom / top of the loaded set — an
+infinite feed selects the rows loaded so far, not the whole server-side result (⌘A toasts a hint
+when more rows exist). Batch operations run as **one request** against the batch endpoints
+(`POST /api/actions/{kind}/{name}/{key}/batch`, `POST /api/{kind}/{name}/batch-delete`), with a
+loading → summary toast — a 200-row batch isn't 200 round-trips and survives the tab closing
+mid-run. Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
+the last. Right-clicking a
+selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
+runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
+"Delete N". Navigation actions and per-row visibility overrides don't apply in batch mode — the
+handler decides per record.
+
+**⌘C / ⌘V on rows.** Copy (the selection, else the hovered row) writes two clipboard flavours:
+`text/plain` TSV of the visible columns exactly as rendered — pastes straight into a text file or
+a spreadsheet — and an app payload with the record ids. Paste on the same entity's list creates a
+**server-side copy** per id via `POST /{name}/{id}/duplicate` (fresh id + code/number, catalog
+descriptions suffixed " (copy)" — the `duplicate.copySuffix` message key — documents dated now and
+unposted, line items included, secret attributes left unset), capped at 50 records per paste. A
+focused input or an active text selection keeps the browser's native copy/paste. Pasting on a
+different entity's list, or without write access, does nothing. Note the payload carries ids, not
+a snapshot: pasting re-reads the record, so a copy made before an edit pastes the edited state.
+
+**Unsaved-changes guard.** A form tab (new / edit / duplicate) with typed-but-unsaved input asks
+"Discard changes?" before closing via the tab ✕ or Esc. Save and the form's own Cancel are
+explicit outcomes and close without asking; programmatic closes (post-save, post-delete) never
+prompt.
+
 ### New-record forms & ref pickers
 
 A **New** form seeds its inputs from a fresh instance of the entity, so a domain field initializer is
@@ -274,6 +420,26 @@ f.field("customer").refSecondary("phone");   // shows the customer's phone under
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
 
+The picker's pinned **"+ New"** row opens the target's full create form in a side pane; when that
+form saves, the new record's id is handed straight back to the picker — the field is set to the
+record the user just created (no detail navigation, no re-finding it in the list). Cancelling the
+form, or manually picking another option first, drops the hand-off.
+
+### Edit-form layout
+
+The generic edit form honors the `FieldHintBuilder` layout hints:
+
+- `.group("Heading")` — fields sharing a group render as their own card with that heading, in
+  first-appearance order; ungrouped fields (and `code`/`description`) form the leading unlabeled
+  card. Long forms read as sections instead of one endless column.
+- `.width("half")` (or `"1/2"`) — the field takes half a row on wide screens, so short fields
+  (dates, amounts, refs) sit side by side. Anything else spans the full row.
+- `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
+  unbounded) gets a textarea automatically even without the hint.
+
+An edit form's header also shows the record's identity (code/number · description) and, for a
+postable document, its Posted status pill.
+
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
@@ -286,6 +452,11 @@ a React component.
 b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
  .config("metric", "sum").config("metricField", "gross").config("currency", "EUR");
 ```
+
+`width("1/4"|"1/3"|"1/2"|"2/3"|"3/4"|"full")` sets the widget's share of a layout row; widgets flow
+left-to-right until a row fills. `rowBreak()` forces the widget to start a fresh row even when the
+previous one still has room — use it to keep a section from being pulled up beside leftovers of the
+row above (no effect on the single-column mobile layout).
 
 Each `count`/`metric` card resolves a server-side aggregate (one SQL query). The dashboard renderer
 resolves them **concurrently** and de-duplicates identical `(entity, metric, field, filter)` queries,
@@ -325,7 +496,8 @@ to `1` for the old sequential behaviour.
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
 | `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
 | `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. For `stat`/`sparkline` it picks the sparkline shape (`area` default, or `line`). |
-| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `day`/`week`/`month` for date buckets (date buckets are ordered chronologically). |
+| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `minute`/`hour`/`day`/`week`/`month` for date buckets (date buckets are ordered chronologically). On a chart the granularity auto-follows the shared time range — sub-day windows bucket by hour/minute — and stays overridable in the explore view. |
+| `presets`, `default` | timeRange | The shared picker's quick-picks and starting window. `presets` is a comma list of duration ids (`<n><unit>` where `s`/`m`/`h`/`d`/`w`/`M`/`y` are second…year — note `m`=minute, `M`=month — plus `all`), e.g. `15m,1h,24h,7d,30d,90d,1y,all`. `default` names one of them (e.g. `30d`). Omit both for the built-in ladder defaulting to the last 30 days; a user's saved selection always wins over `default`. |
 | `seriesBy` | chart | Field that splits the chart into one colored series per distinct value (multi-series `bar`/`line`/`area`). Ignored by `pie`/`donut`. Series rank by total; the tail beyond the palette folds into "Other". |
 | `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
 | `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |
@@ -341,15 +513,67 @@ to `1` for the old sequential behaviour.
 > A register-backed `metric`/`chart` sums a register **resource** over its turnover; `metricField`
 > must name a resource column, and `filter` may reference its **dimensions**.
 
-### Registering a custom widget (client)
+### Authoring a custom widget (consumer app — no frontend project)
+
+The framework renders a fixed set of widget types. To ship one it has no built-in for — an advanced
+filter, an unusual chart, an event log — write a React component in **your Java project** and apply
+the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fork.
+
+1. Apply the plugin:
+
+   ```kotlin
+   // build.gradle.kts
+   plugins { id("su.onno.widgets") }
+   ```
+
+2. Write the widget in `src/main/widgets/EventLog.tsx` using `@onno/widget-sdk` (types + hooks + a
+   read-only data client; the SDK is bundled in the Gradle plugin, so it resolves with no npm access):
+
+   ```tsx
+   import { registerWidget, useEffect, useState, api, type WidgetProps } from "@onno/widget-sdk";
+
+   function EventLog({ widget }: WidgetProps) {
+     const [rows, setRows] = useState<any[]>([]);
+     useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
+     return <ul className="text-sm text-foreground">{rows.map((r) =>
+       <li key={String(r.id)}>{String(r._date)} — {String(r._number)}</li>)}</ul>;
+   }
+   registerWidget("eventLog", EventLog);
+   ```
+
+3. Declare the widget server-side with a matching `type(...)` — its `.config(...)` values arrive as
+   `widget.extraConfig`:
+
+   ```java
+   b.widget("Recent activity").type("eventLog").document(Payment.class)
+       .config("amountField", "amount").config("currency", "EUR");
+   ```
+
+`./gradlew bootJar` compiles each `.tsx` (managed Node + esbuild, React aliased to the host SPA so
+the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
+The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises
+them as `pluginScripts` from `GET /api/config`; the SPA dynamic-imports each at boot and each
+self-registers. An unregistered `type(...)` renders a labelled placeholder rather than vanishing.
+
+Config: `onno.ui.plugins.enabled` (default true), `onno.ui.plugins.extra-urls` (load extra modules,
+e.g. from a CDN). Dev loop: `./gradlew compileWidgetsWatch` rebuilds on change. Plugin JS runs
+first-party in the app origin (full session) — author it as trusted code.
+
+**Styling gotcha:** widgets compile outside the SPA's Tailwind build, so Tailwind never scans your
+`.tsx` — a utility class only works if the host app already emits it. Common text/spacing utilities
+(`text-sm`, `mb-3`, `flex`, …) are safe; uncommon ones (`border-l`) and arbitrary values
+(`-left-[5px]`) are silently dropped. Use inline `style` for layout-critical rules, with the host's
+theme variables for color: `hsl(var(--primary))`, `hsl(var(--border))`.
+
+### Registering a widget from framework/SPA source
+
+Contributors extending the bundled SPA register built-ins directly, the same call the SDK proxies via
+`window.onno`:
 
 ```ts
 import { registerWidget } from "@/lib/widget-bridge";
 registerWidget("heatmap", HeatmapWidget); // server: b.widget("Load").type("heatmap").document(Shift.class)
 ```
-
-The server emits any non-native `type(...)` as an `onno-widget` descriptor; an unregistered type
-renders a labelled placeholder rather than vanishing.
 
 ## Maps
 
@@ -396,6 +620,15 @@ spec.map().field("location").defaultView();            // open on the map, not t
 Features in the widget and list views link back to the record; records with no geometry are skipped.
 A misconfigured map (a geo source that doesn't resolve) degrades to no map rather than failing the
 surface.
+
+Markers **cluster** automatically: nearby points collapse into brand-colored count badges that
+split apart as you zoom (clicking a badge zooms into it), so the map stays legible with thousands
+of records. On its own list route the map fills the same height the table would; embedded in a
+dashboard it keeps the widget's fixed height. The list map pulls rows in server-page batches up to
+4 000 records and says so in its count chip when the entity has more. Clicking a marker opens a
+popup card with the label, the record's code/number, and an Open action; overlapping markers show
+a list of every record at that spot. The chip/popup strings localize via the `map.*` keys in
+`onno.ui.messages`.
 
 ## Page action buttons
 
@@ -458,36 +691,88 @@ endpoints return **404** — the comment surface doesn't exist there.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries a `mentions` array — the live resolution of its body's mentions for the caller. |
-| POST | `/api/comments/{kind}/{name}/{id}` | Add a comment — body `{ "body": "…" }`. The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
+| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
+| POST | `/api/comments/{kind}/{name}/{id}` | Add a comment or reply — body `{ "body": "…", "parentId": "…" }` (`parentId` optional/null). The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
+| POST | `/api/comments/{commentId}/reactions` | Toggle the caller's reaction — body `{ "emoji": "👍" }`; returns the updated grouped reactions for that comment and live-syncs the thread. Supported quick reactions: `👍`, `❤️`, `🎉`, `👀`, `✅`. |
 | DELETE | `/api/comments/{commentId}` | Soft-delete (kept for audit). Author or `ADMIN` only. |
-| GET | `/api/mentions?q=` | `@`-mention typeahead: every catalog/document record the caller can read whose code/description/number matches `q`, ranked and capped. Returns `[{ kind, name, entity, id, display, avatarUrl }]`. |
+| GET | `/api/mentions?q=&kind=` | Mention/reference typeahead: every matching record the caller can read, ranked and capped. `kind=catalogs` powers `@`; `kind=documents` powers `#`; omit it to search both. Returns `[{ kind, name, entity, id, display, avatarUrl }]`. |
 
 Reading and posting are gated on **read** access to the owning entity (and on the entity's opt-in
 above) — if you can open the record and the entity supports comments, you can comment on it.
 `onno.comments.enabled=false` is the global kill switch (drops the endpoint, table, and panel
 everywhere); `onno.comments.max-length` caps body length (default 4000).
 
-#### Mentions — `@`-reference any readable entity
+The bundled comments panel renders the thread as a compact message scroller: current-user messages
+align to the end, other authors keep their avatar on the start side, replies nest under their parent,
+and reaction chips sit on the bubble edge.
 
-A comment body can **`@`-mention** any catalog or document the author can read — a customer, an
-invoice, or (since users are modelled as the identity catalog) a colleague. Mentions reuse the same
+#### Mentions and references — `@` people, `#` documents
+
+A comment body can **`@`-mention** readable catalog records (including colleagues when users are
+modelled as the identity catalog) and **`#`-reference** readable documents. Links reuse the same
 `Ref<T>` philosophy as the rest of the framework: only the identity is stored and display/avatar are
 resolved **live**, so renames and deletes stay correct on their own.
 
-- **Storage.** A mention is a token embedded in `Comment.body`: `@[Display](kind/name/id)`. The body
-  stays a single string — no `onno_comments` schema change — and the `Display` is only a snapshot for
-  fallback. ([`Mentions`](src/main/java/su/onno/ui/comments/Mentions.java) is the parser/serializer.)
+- **Storage.** A link is a token embedded in `Comment.body`: `@[Display](kind/name/id)` for mentions
+  and `#[Display](kind/name/id)` for references. The body stays a single string, and `Display` is
+  only a snapshot for fallback. ([`Mentions`](src/main/java/su/onno/ui/comments/Mentions.java) is the parser/serializer.)
 - **Access control.** Mentions inherit the per-entity read gate. On **POST**, a mention the *author*
   can't read is stripped to plain text (no smuggling a link to a hidden record). On **read**, a
   mention the *viewer* can't read degrades to plain text instead of a clickable 403; one they can read
   resolves to its current display + avatar. ([`MentionResolver`](src/main/java/su/onno/ui/comments/MentionResolver.java) batches this per thread.)
-- **Notifications (additive).** Each readable mention in a freshly posted comment publishes an
-  [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java) — **no
-  consumers** ship with the framework. Wire delivery (in-app, the cross-node event bus, `onno-mail-starter`)
-  later by registering a Spring `@EventListener`, exactly as you would for `DocumentPostedEvent`.
+- **Notifications.** Each readable `@` mention in a freshly posted comment publishes an
+  [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java). The
+  notifications feature (below) consumes it out of the box to notify the mentioned user; you can add
+  further delivery (`onno-mail-starter`, etc.) by registering your own Spring `@EventListener`.
 - **Config.** `onno.comments.mentions.enabled` (default true) gates the whole feature;
   `onno.comments.mentions.suggestion-limit` / `…per-entity-limit` cap the typeahead.
+
+### Notifications — `/api/notifications`
+
+A **per-user notification center**: a top-right bell with an unread badge that opens a timeline drawer
+of updates concerning the signed-in user. Like comments and presence it is framework infrastructure —
+rows live in the framework-owned `onno_notifications` table, never in a modelled entity — and it rides
+the same live plumbing: a new notification pushes over a `notification` SSE event routed to the
+recipient's open streams, relayed across nodes by the `ClusterEventBus`. The bell hides itself when the
+feature is disabled.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. |
+| POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
+| POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
+
+**Producing notifications.** Any bean can raise one through the public API — this is the extension
+point:
+
+```java
+notificationService.notify(NotificationRequest.to(recipientId)   // target's identity recordId
+        .type("approval")
+        .title("Your purchase was approved")
+        .body("PO-1042 · €1,240")
+        .link("documents/purchase_orders/" + id)   // opens this route on click
+        .actor(currentUser)                        // who triggered it
+        .build());
+```
+
+Add a new source by calling that from a Spring `@EventListener` (on `DocumentPostedEvent`, a domain
+event, anything). Two producers ship built in, each independently gated:
+
+- **Mentions** (`onno.notifications.mentions.enabled`, default true) — a comment `@`-mention of a user
+  notifies that user.
+- **Assignment** (`onno.notifications.assignments.enabled`, default true) — annotate a catalog/document
+  `Ref<>` attribute that points at the identity catalog with **`@AssigneeField`**; setting or changing
+  it notifies the assignee.
+
+  ```java
+  @AssigneeField
+  @Attribute private Ref<Employee> assignedTo;   // assigning notifies the employee
+  ```
+
+**Config.** `onno.notifications.enabled=false` is the global kill switch (drops the endpoint, table,
+producers, and bell). `onno.notifications.page-size` (default 30) sizes each timeline window;
+`onno.notifications.retention-days` (default 90; `0` disables) prunes **read** notifications after that
+many days — unread ones are kept indefinitely.
 
 ### Presence — `/api/presence`
 

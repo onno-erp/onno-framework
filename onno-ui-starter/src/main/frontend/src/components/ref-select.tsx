@@ -4,8 +4,15 @@ import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
 import type { EntityRecord } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FacetSheet, useTouchLayout } from "@/components/ui/facet-sheet";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useMessages } from "@/providers/messages-provider";
+import {
+  cancelQuickCreate,
+  claimQuickCreated,
+  QUICK_CREATED_EVENT,
+  requestQuickCreate,
+} from "@/lib/quick-create";
 
 interface RefSelectProps {
   /** The ref target's registered logical name (catalog or document). */
@@ -42,7 +49,6 @@ function displayOf(item: EntityRecord): string {
  * it's always reachable regardless of how many matches there are.
  */
 export function RefSelect({ targetName, refKind = "catalog", secondaryField, value, onChange }: RefSelectProps) {
-  const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
   const [open, setOpen] = useState(false);
@@ -50,6 +56,29 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
   const [items, setItems] = useState<EntityRecord[]>([]);
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const [loading, setLoading] = useState(false);
+  const touchLayout = useTouchLayout();
+  const kind = isDocument ? "documents" : "catalogs";
+
+  // "+ New" quick-create hand-off. The result arrives as module state + a window event (not a
+  // callback — this component can be remounted, or unmounted outright in single-pane layouts,
+  // while the create form is open). We claim it either live (event listener) or on mount after
+  // a remount; the claim is gated on our request token or, post-remount, on being an empty
+  // same-target picker (see quick-create.ts).
+  const requestTokenRef = useRef<number | null>(null);
+  const latest = useRef({ value, onChange });
+  latest.current = { value, onChange };
+  useEffect(() => {
+    const claim = () => {
+      const cur = latest.current;
+      const id = claimQuickCreated(kind, name, requestTokenRef.current, !cur.value);
+      // Claims are idempotent (the slot lives until its TTL so a remounted picker can re-claim
+      // a value the remount wiped) — only fire onChange when it actually changes the field.
+      if (id && id !== cur.value) cur.onChange(id);
+    };
+    claim(); // remount case: the result may already be waiting
+    window.addEventListener(QUICK_CREATED_EVENT, claim);
+    return () => window.removeEventListener(QUICK_CREATED_EVENT, claim);
+  }, [kind, name]);
 
   // Resolve the current value's label (it may not be in the result page).
   useEffect(() => {
@@ -85,6 +114,8 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
   }, [open, query, name, isDocument]);
 
   const pick = (item: EntityRecord) => {
+    // A manual pick supersedes any outstanding "+ New" hand-off.
+    cancelQuickCreate(kind, name);
     setSelected(item);
     onChange(item._id as string);
     setOpen(false);
@@ -92,64 +123,122 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
 
   const addNew = () => {
     setOpen(false);
-    // Open the target's full new-form (a side pane in the islands layout) so every
-    // required field is available; the user returns and picks the new record.
-    const kind = isDocument ? "documents" : "catalogs";
+    // Open the target's full new-form (a side pane in the islands layout) so every required
+    // field is available. Register the hand-off first: when that form saves, the new record's
+    // id lands straight in this field instead of the user re-finding it in the picker.
+    requestTokenRef.current = requestQuickCreate(kind, name);
     window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/new` }));
   };
+
+  const trigger = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="flex h-9 w-full items-center justify-between gap-2 rounded-control border border-input bg-muted px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      {selected ? <RefRow item={selected} /> : <span className="text-muted-foreground">Select {targetName}…</span>}
+      <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </button>
+  );
+
+  const content = (
+    <RefSelectOptions
+      targetName={targetName}
+      secondaryField={secondaryField}
+      value={value}
+      query={query}
+      onQueryChange={setQuery}
+      items={items}
+      loading={loading}
+      onPick={pick}
+      onAddNew={addNew}
+    />
+  );
+
+  if (touchLayout) {
+    return (
+      <>
+        {trigger}
+        {open ? (
+          <FacetSheet label={`Select ${targetName}`} onClose={() => setOpen(false)}>
+            {content}
+          </FacetSheet>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-muted px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {selected ? (
-            <RefRow item={selected} />
-          ) : (
-            <span className="text-muted-foreground">Select {targetName}…</span>
-          )}
-          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        </button>
+        {trigger}
       </PopoverTrigger>
       <PopoverContent
         align="start"
         className="w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
       >
-        {/* "+ New" pinned to the top so it's always reachable. */}
-        <button
-          type="button"
-          onClick={addNew}
-          className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-        >
-          <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
-          {t("ref.new", { name: targetName })}
-        </button>
-        <SearchBox value={query} onChange={setQuery} />
-        <div className="max-h-64 overflow-y-auto py-1">
-          {items.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {loading ? t("loading.searching") : t("empty.noMatches")}
-            </div>
-          ) : (
-            items.map((item) => (
-              <button
-                key={item._id as string}
-                type="button"
-                onClick={() => pick(item)}
-                className={cn(
-                  "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                  item._id === value && "bg-accent/60"
-                )}
-              >
-                <RefRow item={item} secondary={secondaryField} />
-              </button>
-            ))
-          )}
-        </div>
+        {content}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function RefSelectOptions({
+  targetName,
+  secondaryField,
+  value,
+  query,
+  onQueryChange,
+  items,
+  loading,
+  onPick,
+  onAddNew,
+}: {
+  targetName: string;
+  secondaryField?: string;
+  value?: string;
+  query: string;
+  onQueryChange: (value: string) => void;
+  items: EntityRecord[];
+  loading: boolean;
+  onPick: (item: EntityRecord) => void;
+  onAddNew: () => void;
+}) {
+  const t = useMessages();
+  return (
+    <>
+      {/* "+ New" pinned to the top so it's always reachable. */}
+      <button
+        type="button"
+        onClick={onAddNew}
+        className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
+        {t("ref.new", { name: targetName })}
+      </button>
+      <SearchBox value={query} onChange={onQueryChange} />
+      <div className="max-h-64 overflow-y-auto py-1 sm:max-h-64">
+        {items.length === 0 ? (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {loading ? t("loading.searching") : t("empty.noMatches")}
+          </div>
+        ) : (
+          items.map((item) => (
+            <button
+              key={item._id as string}
+              type="button"
+              onClick={() => onPick(item)}
+              className={cn(
+                "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                item._id === value && "bg-accent/60"
+              )}
+            >
+              <RefRow item={item} secondary={secondaryField} />
+            </button>
+          ))
+        )}
+      </div>
+    </>
   );
 }
 

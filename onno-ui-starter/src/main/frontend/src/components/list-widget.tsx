@@ -128,7 +128,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
                   <button
                     type="button"
                     onClick={() => open(row)}
-                    className="flex w-full items-center justify-between gap-3 py-2 text-left transition-colors hover:bg-accent/40 -mx-2 px-2 rounded-md"
+                    className="flex w-full items-center justify-between gap-3 rounded-card py-2 text-left transition-colors hover:bg-accent/40 -mx-2 px-2"
                   >
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-medium leading-tight">

@@ -56,6 +56,10 @@ dependencies {
     implementation(libs.spring.boot.autoconfigure)
     implementation(libs.spring.boot.starter.web)
     implementation(libs.jdbi3.core)
+    // @TransactionalEventListener (assignment notifications fire AFTER_COMMIT so the producer's
+    // read-back sees the committed row). Present at runtime via onno-framework-starter's data-jdbc,
+    // but that's an `implementation` dep so it isn't on this module's compile classpath.
+    implementation("org.springframework:spring-tx")
 
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)

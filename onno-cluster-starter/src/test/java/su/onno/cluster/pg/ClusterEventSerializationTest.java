@@ -68,6 +68,38 @@ class ClusterEventSerializationTest {
     }
 
     @Test
+    void roundTripsANotificationEvent() {
+        ClusterEvent event = ClusterEvent.notification("u-42", "n-1", "assignment",
+                "You were assigned SO-1", "the order body", "documents/orders/id-7", "Ada Lovelace")
+                .withOrigin("node-A");
+
+        String json = PostgresClusterEventBus.serialize(mapper, event, 7000);
+        ClusterEvent back = PostgresClusterEventBus.deserialize(mapper, json);
+
+        assertThat(back).isEqualTo(event);
+        assertThat(back).isInstanceOf(ClusterEvent.Notification.class);
+        assertThat(((ClusterEvent.Notification) back).title()).isEqualTo("You were assigned SO-1");
+        assertThat(((ClusterEvent.Notification) back).recipientId()).isEqualTo("u-42");
+    }
+
+    @Test
+    void dropsNotificationDisplayFieldsWhenOverTheCap() {
+        String hugeBody = "b".repeat(500);
+        ClusterEvent event = ClusterEvent.notification("u-42", "n-1", "mention",
+                "title", hugeBody, "documents/orders/id", "Ada").withOrigin("node-A");
+
+        // Cap large enough for the recipient/id envelope but not the 500-char body; the durable copy
+        // already exists, so the peer keeps only the routing fields and its browser refetches.
+        String json = PostgresClusterEventBus.serialize(mapper, event, 200);
+        ClusterEvent.Notification back = (ClusterEvent.Notification) PostgresClusterEventBus.deserialize(mapper, json);
+
+        assertThat(back.recipientId()).isEqualTo("u-42");
+        assertThat(back.notificationId()).isEqualTo("n-1");
+        assertThat(back.title()).isNull();
+        assertThat(back.body()).isNull();
+    }
+
+    @Test
     void neverThrowsAndReturnsNullWhenEvenCoarseEnvelopeOverflows() {
         ClusterEvent event = ClusterEvent.entityChanged("created", "catalog", "C", "id", "k").withOrigin("node-A");
 

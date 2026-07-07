@@ -34,7 +34,7 @@ class PresenceControllerTest {
     @Test
     void enterStampsIdentityRoutesToRegistryAndReturnsViewersAndYou() {
         access.canRead = true;
-        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
         registry.viewersFixture = List.of(Map.of("userId", "rec-2", "displayName", "Babbage"));
 
         Map<String, Object> response = controller.ping(
@@ -52,7 +52,7 @@ class PresenceControllerTest {
     @Test
     void fallsBackToUsernameWhenNoLinkedRecord() {
         access.canRead = true;
-        currentUser.user = new CurrentUser("admin", "admin", null, null);
+        currentUser.user = new CurrentUser("admin", "admin", null, null, null);
 
         Map<String, Object> response = controller.ping(
                 new PresenceController.PresenceRequest("/catalogs/Customers/" + id, "heartbeat"), principal);
@@ -86,7 +86,7 @@ class PresenceControllerTest {
     @Test
     void entityListRouteIsTrackedAndKeyedByItsPath() {
         access.canRead = true;
-        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
 
         controller.ping(new PresenceController.PresenceRequest("/catalogs/Materials", "enter"), principal);
 
@@ -99,7 +99,7 @@ class PresenceControllerTest {
     @Test
     void pageRouteIsTrackedForAnySignedInUserWithoutEntityAccess() {
         access.canRead = false; // not an entity route, so the read gate never applies
-        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
 
         controller.ping(new PresenceController.PresenceRequest("/dashboard", "enter"), principal);
 
@@ -123,7 +123,7 @@ class PresenceControllerTest {
     @Test
     void snapshotReturnsReadableRecordsAndYou() {
         access.canRead = true;
-        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
         Map<String, Object> rec = new HashMap<>();
         rec.put("kind", "catalogs");
         rec.put("name", "Properties");
@@ -166,10 +166,10 @@ class PresenceControllerTest {
     }
 
     static final class FakeUser extends CurrentUserResolver {
-        CurrentUser user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees");
+        CurrentUser user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
 
         FakeUser() {
-            super(null, null, null);
+            super(null, null, null, null);
         }
 
         @Override

@@ -1,135 +1,67 @@
 spring:
+  application:
+    name: onno-books
   output:
     ansi:
       enabled: always
   datasource:
-    url: jdbc:h2:file:./data/example;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:file:./data/bookstore;DB_CLOSE_DELAY=-1
     driver-class-name: org.h2.Driver
-  mail:
-    host: localhost
-    port: 1025
+    username: sa
 server:
   error:
     include-stacktrace: always
     include-message: always
 onno:
   ui:
-    # The built-in Settings page (the @Constant editor) is opt-in and off by default; this app
-    # composes its own SettingsPage at /settings, so turn the surface + admin nav entry on.
+    # The built-in @Constant editor / Settings page — on, so the single Store Name constant is
+    # editable in-app (the one knob this example ships under Settings).
     settings:
       enabled: true
+    # One-tap demo logins on the sign-in screen (demo-only: passwords reach the browser). Each button
+    # signs in as the matching in-memory user below, so an evaluator never types the email/password.
+    login:
+      demo-accounts:
+        - label: Sign in as Admin
+          username: admin@onnobooks.local
+          password: admin
+        - label: Sign in as Store manager
+          username: manager@onnobooks.local
+          password: manager
+  # Per-document discussion threads, opted into per view via EntityView.comments(). Used on Orders.
+  comments:
+    enabled: true
+  # The top-right notification center. On by default; shown here to make the two built-in producers
+  # explicit. Mentions fire when a staff member is @-mentioned in an order comment; assignments fire
+  # when an order's @AssigneeField (Order.assignedTo) is set to an employee.
+  notifications:
+    enabled: true
+    mentions:
+      enabled: true
+    assignments:
+      enabled: true
   auth:
-    # Authentication backend. Default is "in-memory" (the onno.auth.users below). Set to
-    # "oidc" for server-side OIDC login (Keycloak, Zitadel, …; keeps the session cookie, "Sign in"
-    # becomes a redirect to the IdP), or "resource-server" for stateless JWT bearer-token
-    # validation. See the commented spring.security.oauth2.* blocks at the bottom of this file.
+    # In-memory users (the default). Two roles: ADMIN (dashboard + staff management) and MANAGER
+    # (runs the shop). Usernames are the staff email addresses so a signed-in user links to their
+    # Employee row (see MainLayout.identity) — that's what lets the shell show their photo bottom-left
+    # and greet them by name. Change these passwords before any real use.
     mode: in-memory
-    # Session longevity for the cookie-based modes (in-memory, oidc). Defaults shown; tune as needed.
-    # The idle timeout slides on every request and overrides Spring's 30-minute default, so a
-    # parked-but-open tab keeps its session for a working day. remember-me (in-memory only) re-signs
-    # the user in from a persistent cookie after the session lapses — set a stable key in production.
     session:
       timeout: 8h
       remember-me:
         enabled: true
         validity: 14d
-        # Single-node dev: start with a built-in non-secret key when no key is set. In production (or
-        # any multi-node deployment) set a stable `key` instead — a blank key without this opt-in
-        # fails fast, since per-node keys break remember-me behind a load balancer.
+        # Single-node dev: start with a built-in non-secret key. Set a stable `key` in production.
         allow-ephemeral-key: true
-        # key: ${ONNO_REMEMBER_ME_KEY:}   # stable secret in prod / multi-node
     users:
-      - username: admin
+      - username: admin@onnobooks.local
         password: admin
         roles: [ADMIN]
-      - username: rentals
-        password: rentals
-        roles: [RENTALS]
-      - username: finance
-        password: finance
-        roles: [FINANCE]
-      - username: ana@rentals.local
-        password: cleaner
-        roles: [CLEANER]
-    # OIDC settings (used only by the oidc / resource-server modes). A "provider" preset fills the
-    # IdP-specific defaults — Keycloak roles come from realm_access.roles; Zitadel roles from the
-    # urn:zitadel:iam:org:project:roles claim (keyed by role name) — and everything is overridable.
-    # oidc:
-    #   provider: keycloak            # keycloak | zitadel | custom
-    #   registration-id: keycloak     # preset default; must match spring.security.oauth2.client.registration.*
-    #   principal-claim: preferred_username
-    #   roles:
-    #     prefix: "ROLE_"
-    #     # Keycloak ergonomics (ignored by other presets): also map a client's roles.
-    #     realm-roles: true
-    #     client-roles: false
-    #     client-id: rentals-app
-    #     # Or drive any IdP explicitly (provider: custom):
-    #     # sources:
-    #     #   - { claim: "urn:zitadel:iam:org:project:roles", shape: object-keys }
-    #     #   - { claim: "realm_access", shape: array }
-    #   # RP-initiated logout (oidc mode): GET this path to end both the app session and the IdP SSO
-    #   # session, then return to post-logout-redirect-uri. {baseUrl} = this app's origin, which must
-    #   # be registered under the IdP client's "Valid post logout redirect URIs" (e.g. .../*).
-    #   logout-path: /logout
-    #   post-logout-redirect-uri: "{baseUrl}"
-  mcp:
-    enabled: true
-  mail:
-    enabled: true
-    provider: smtp
-    default-from: "rentals@example.local"
-    use-outbox: true
-  print:
-    enabled: true
+      - username: manager@onnobooks.local
+        password: manager
+        roles: [MANAGER]
   media:
-    # Binary uploads (image/file widgets, POST /api/media) stream to disk here instead of being
-    # base64'd into a field. Kept next to the H2 file DB so uploads survive restarts in dev.
+    # Book-cover uploads (the image widget, POST /api/media) stream to disk here. Kept next to the
+    # H2 file DB so uploads survive restarts in dev.
     filesystem:
       directory: ./data/media
-    # max-file-size: 10MB
-    # allowed-content-types: [image/*, application/pdf]
-
-# --------------------------------------------------------------------------------------------
-# OIDC wiring. Uncomment ONE of the blocks below and set onno.auth.mode accordingly.
-# On the IdP client, register the redirect URI <app>/login/oauth2/code/{registrationId} and add
-# the app origin to the "Valid post logout redirect URIs" so RP-initiated logout can return here.
-#
-# Keycloak login (onno.auth.mode: oidc, onno.auth.oidc.provider: keycloak):
-# spring:
-#   security:
-#     oauth2:
-#       client:
-#         provider:
-#           keycloak:
-#             issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onno}
-#         registration:
-#           keycloak:
-#             client-id: ${KEYCLOAK_CLIENT_ID:rentals-app}
-#             client-secret: ${KEYCLOAK_CLIENT_SECRET:}
-#             authorization-grant-type: authorization_code
-#             scope: [openid, profile, email]
-#
-# Zitadel login (onno.auth.mode: oidc, onno.auth.oidc.provider: zitadel):
-# spring:
-#   security:
-#     oauth2:
-#       client:
-#         provider:
-#           zitadel:
-#             issuer-uri: ${ZITADEL_ISSUER:https://your-instance.zitadel.cloud}
-#         registration:
-#           zitadel:
-#             client-id: ${ZITADEL_CLIENT_ID:}
-#             client-secret: ${ZITADEL_CLIENT_SECRET:}
-#             authorization-grant-type: authorization_code
-#             scope: [openid, profile, email]
-#
-# Resource server (onno.auth.mode: resource-server) — stateless JWT bearer tokens:
-# spring:
-#   security:
-#     oauth2:
-#       resourceserver:
-#         jwt:
-#           issuer-uri: ${KEYCLOAK_ISSUER:http://localhost:8080/realms/onno}
-# --------------------------------------------------------------------------------------------

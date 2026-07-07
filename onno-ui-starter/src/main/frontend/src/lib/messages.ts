@@ -22,11 +22,21 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "login.method.password": "Sign in with password",
   "login.back": "Back",
   "login.none": "No interactive login is configured for this application.",
+  "login.orManual": "or sign in manually",
+  "login.orDemo": "or use a demo account",
   "login.username": "Username",
   "login.password": "Password",
   "login.submit": "Sign in",
   "login.submitting": "Signing in...",
   "login.invalid": "The username or password is not correct.",
+  // Sign-in error banner, keyed by the ?error=<code> the server redirects back with (e.g. a failed
+  // SSO/Telegram round-trip lands on /login?error=telegram). An unknown code falls back to generic.
+  // Keep in sync with UiMessages.DEFAULTS.
+  "login.error.telegram": "Telegram sign-in failed. Please try again.",
+  "login.error.access_denied": "This account isn't authorized to use this app.",
+  "login.error.session_expired": "Your session expired — please sign in again.",
+  "login.error.sso": "Single sign-on failed. Please try again.",
+  "login.error.generic": "Sign-in failed. Please try again.",
 
   // Action buttons / row-menu items.
   "action.new": "New",
@@ -65,6 +75,23 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "settings.title": "Settings",
   "settings.subtitle": "App-wide configuration.",
 
+  // Notification center (bell beside the profile + right slide-over). Mirror UiMessages.DEFAULTS.
+  "notifications.title": "Notifications",
+  "notifications.empty": "You're all caught up",
+  "notifications.markAllRead": "Mark all read",
+  "notifications.all": "All",
+  "notifications.unread": "Unread",
+  "notifications.typeAll": "All",
+  "notifications.typeMention": "Mentions",
+  "notifications.typeAssignment": "Assigned",
+  "notifications.typeReply": "Replies",
+  "notifications.today": "Today",
+  "notifications.thisWeek": "Earlier this week",
+  "notifications.older": "Older",
+  "notifications.tagMention": "Mention",
+  "notifications.tagAssignment": "Assignment",
+  "notifications.tagReply": "Reply",
+
   // App shell / account island.
   "shell.signedInAs": "Signed in as",
   "shell.theme": "Theme",
@@ -83,6 +110,71 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.pageOf": "Page {page} of {pages}",
   "list.prev": "Prev",
   "list.next": "Next",
+  "list.loadingMore": "Loading more…",
+  // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The selection
+  // count itself reuses "list.selected" below (shared with the multi-select filter badge).
+  "list.clearSelection": "Clear selection",
+  "batch.delete": "Delete {n}",
+  "batch.deleteConfirm": "Sure? Delete {n}",
+  "batch.running": "{label} — running on {n}…",
+  "batch.done": "{label}: {ok}/{n} done",
+  "batch.deleted": "Deleted {ok}/{n}",
+  // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
+  "clipboard.copied": "{count} copied",
+  "clipboard.pasted": "Pasted {ok}/{n}",
+  "clipboard.tooMany": "Paste limited to {max} records at a time",
+  // Appended to a duplicated catalog record's description (⌘V / POST …/duplicate); blank disables.
+  "duplicate.copySuffix": " (copy)",
+  // ⌘A in an infinite feed can only select what's loaded; hint when more rows exist server-side.
+  "list.selectedPartial": "Selected {count} loaded rows — more exist, scroll to load them",
+  // Closing a form with unsaved edits.
+  "confirm.discard.title": "Discard changes?",
+  "confirm.discard.message": "This form has unsaved changes. Close it and discard them?",
+  "action.discard": "Discard",
+  "list.groupBy": "Group by",
+  "list.groupNone": "None",
+  "list.groupByHint": "Group rows by a column",
+  "list.showMore": "Show more",
+  "list.groupsCapped": "Showing the first groups only — narrow with a filter to see the rest.",
+  "list.granDay": "Day",
+  "list.granMonth": "Month",
+  "list.granYear": "Year",
+  // Faceted filter bar: chip labels, date-range presets, clear-all.
+  "list.filters": "Filters",
+  "list.filterHint": "Filter by {label}",
+  "list.clear": "Clear",
+  "list.clearAll": "Clear all",
+  "list.done": "Done",
+  "list.selected": "{count} selected",
+  "list.dateToday": "Today",
+  "list.dateYesterday": "Yesterday",
+  "list.dateLast7": "Last 7 days",
+  "list.dateLast30": "Last 30 days",
+  "list.dateThisMonth": "This month",
+  "list.dateThisYear": "This year",
+
+  // List map view: the floating count chip and the marker popup.
+  "map.count": "{count} on the map",
+  "map.noRecords": "No records with a location.",
+  "map.showingFirst": "showing the first {shown} of {total}",
+  "map.recordsHere": "{count} records here",
+  "map.more": "+{count} more",
+
+  // Pane-level load failures (content-pane.tsx), shaped by HTTP status. "forbidden" is the
+  // access-denied surface a user sees opening an entity their role can't read; "notFound"
+  // covers a route with no view (or a stale link); "unauthorized" a dead session.
+  "error.forbidden.title": "No access",
+  "error.forbidden.body":
+    "Your role doesn't have permission to view this page. Ask an administrator if you think it should.",
+  "error.notFound.title": "Page not found",
+  "error.notFound.body": "This page doesn't exist, or it isn't available for your role.",
+  "error.unauthorized.title": "Signed out",
+  "error.unauthorized.body": "Your session has expired. Sign in again to continue.",
+  "error.generic.title": "Something went wrong",
+  "error.generic.body": "The page couldn't be loaded. This may be temporary — try again.",
+  "error.retry": "Try again",
+  "error.home": "Go to home",
+  "error.signIn": "Sign in",
 
   // Empty / loading states.
   "empty.noRecords": "No records",

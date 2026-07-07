@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ActionFormDialog, type ActionFormField } from "@/components/action-form-dialog";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,15 @@ import { cn } from "@/lib/utils";
  * inside the app's Router/providers) portals the cluster into it.
  */
 
-type ActionItem = { label: string; icon?: string; url: string; tone?: string; placement?: string };
+type ActionItem = {
+  label: string;
+  icon?: string;
+  url: string;
+  tone?: string;
+  placement?: string;
+  /** Form fields the action collects in a modal before it POSTs (ActionSpec.form). */
+  form?: ActionFormField[];
+};
 type Mount = { id: number; el: HTMLElement; items: ActionItem[] };
 
 let mounts: Mount[] = [];
@@ -108,7 +117,8 @@ function isAsync(url: string): boolean {
 }
 
 // Run a post/unpost/custom-action url and apply its result. Errors self-toast via the api layer.
-async function runAsync(url: string): Promise<void> {
+// `inputs` carries an action-form dialog's submitted values (custom actions only).
+async function runAsync(url: string, inputs?: Record<string, string>): Promise<void> {
   const r = url.replace("onno://", "");
   if (r.startsWith("post/") || r.startsWith("unpost/")) {
     const unpost = r.startsWith("unpost/");
@@ -119,7 +129,7 @@ async function runAsync(url: string): Promise<void> {
     return;
   }
   const [, kind, name, key, id] = r.split("/"); // [action, kind, name, key, id]
-  const result = await api.runAction(kind, name, key, id);
+  const result = await api.runAction(kind, name, key, id, inputs);
   if (result?.message) toast.success(result.message);
   if (result?.navigate) fire(result.navigate);
 }
@@ -127,10 +137,17 @@ async function runAsync(url: string): Promise<void> {
 function ActionsCluster({ items }: { items: ActionItem[] }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
+  // A form-declaring action waiting for its dialog input; submit runs it with the values.
+  const [formFor, setFormFor] = useState<ActionItem | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
 
-  const run = useCallback((it: ActionItem) => {
+  const run = useCallback((it: ActionItem, inputs?: Record<string, string>): Promise<void> | void => {
     if (!isAsync(it.url)) {
       fire(it.url);
+      return;
+    }
+    if (it.form?.length && !inputs) {
+      setFormFor(it);
       return;
     }
     setPending((s) => {
@@ -139,7 +156,7 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
       n.add(it.url);
       return n;
     });
-    runAsync(it.url)
+    return runAsync(it.url, inputs)
       .catch(() => {})
       .finally(() =>
         setPending((s) => {
@@ -166,7 +183,7 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             disabled={busy}
             onClick={() => run(a)}
             className={cn(
-              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               a.tone === "primary"
                 ? "bg-[hsl(var(--success))] text-[hsl(var(--success-foreground))] hover:bg-[hsl(var(--success))]/90"
                 : a.tone === "accent"
@@ -193,7 +210,7 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             <button
               type="button"
               aria-label="More actions"
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-secondary text-foreground transition-colors hover:bg-accent"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-control border border-border bg-secondary text-foreground transition-colors hover:bg-accent"
             >
               <Ellipsis className="size-4" aria-hidden="true" />
             </button>
@@ -215,7 +232,9 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
                     }
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent disabled:opacity-60",
+                    // rounded-field to match the context menu / select dropdowns (rounded-control
+                    // is a full pill and reads as a lozenge on a menu row).
+                    "flex w-full items-center gap-2 rounded-field px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent disabled:opacity-60",
                     it.tone === "danger" ? "text-destructive hover:text-destructive" : "text-foreground"
                   )}
                 >
@@ -230,6 +249,23 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
             })}
           </PopoverContent>
         </Popover>
+      ) : null}
+
+      {formFor ? (
+        <ActionFormDialog
+          title={formFor.label}
+          fields={formFor.form ?? []}
+          busy={formBusy}
+          onClose={() => setFormFor(null)}
+          onSubmit={(values) => {
+            setFormBusy(true);
+            void Promise.resolve(run(formFor, values)).finally(() => {
+              setFormBusy(false);
+              setFormFor(null);
+              setOpen(false);
+            });
+          }}
+        />
       ) : null}
     </div>
   );

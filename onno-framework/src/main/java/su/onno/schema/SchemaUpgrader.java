@@ -100,11 +100,13 @@ public class SchemaUpgrader {
         // Indexes are an idempotent overlay (CREATE INDEX IF NOT EXISTS) rather than part of
         // the diffed plan: they carry no data, so re-asserting them after the plan ran is
         // safe and converges existing databases on the same index set as fresh ones.
+        SchemaGenerator generator = new SchemaGenerator(registry);
         jdbi.useHandle(handle -> {
-            for (String sql : new SchemaGenerator(registry).generateIndexDDL()) {
+            for (String sql : generator.generateIndexDDL()) {
                 handle.execute(sql);
             }
         });
+        generator.applySearchIndexes(jdbi, dialect);
 
         if (!applied.isEmpty()) {
             log.info("Applied {} schema change(s):\n{}",

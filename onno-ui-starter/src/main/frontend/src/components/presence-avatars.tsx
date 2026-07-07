@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { PresenceViewer } from "@/lib/api";
 
@@ -25,7 +26,7 @@ export function tint(userId: string): string {
  */
 export function PresenceAvatars({
   viewers,
-  size = 24,
+  size = 28,
   max = MAX_AVATARS,
   overlap = false,
   label,
@@ -52,21 +53,33 @@ export function PresenceAvatars({
       role="status"
       aria-label={`${viewers.length} ${viewers.length === 1 ? "person" : "people"} viewing`}
     >
-      <div className={overlap ? "flex -space-x-1" : "flex gap-1"}>
-        {shown.map((v) => (
-          <Avatar key={v.userId} style={dim} title={v.displayName}>
-            {v.avatarUrl ? <AvatarImage src={v.avatarUrl} alt={v.displayName} /> : null}
-            <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
-              {initials(v.displayName)}
-            </AvatarFallback>
-          </Avatar>
-        ))}
-        {overflow > 0 && (
-          <Avatar style={dim} title={`+${overflow} more`}>
-            <AvatarFallback style={{ fontSize }}>+{overflow}</AvatarFallback>
-          </Avatar>
-        )}
-      </div>
+      <TooltipProvider delayDuration={150}>
+        <div className={overlap ? "flex -space-x-1" : "flex gap-1"}>
+          {shown.map((v) => (
+            <Tooltip key={v.userId}>
+              <TooltipTrigger asChild>
+                <Avatar style={dim} className="border border-border">
+                  {v.avatarUrl ? <AvatarImage src={v.avatarUrl} alt={v.displayName} /> : null}
+                  <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
+                    {initials(v.displayName)}
+                  </AvatarFallback>
+                </Avatar>
+              </TooltipTrigger>
+              <TooltipContent>{v.displayName}</TooltipContent>
+            </Tooltip>
+          ))}
+          {overflow > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Avatar style={dim} className="border border-border">
+                  <AvatarFallback style={{ fontSize }}>+{overflow}</AvatarFallback>
+                </Avatar>
+              </TooltipTrigger>
+              <TooltipContent>{`+${overflow} more`}</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </TooltipProvider>
       {label ? <span className="whitespace-nowrap">{label}</span> : null}
     </div>
   );

@@ -113,15 +113,20 @@ public class UiLayoutResolver {
     public List<DashboardWidgetDescriptor> resolveWidgetConfigs(List<UiLayoutBuilder.WidgetConfig> widgets) {
         List<DashboardWidgetDescriptor> result = new ArrayList<>();
         for (UiLayoutBuilder.WidgetConfig wc : widgets) {
-            String entityName = resolveEntityNameByClass(wc.entityType(), wc.entityClass());
-            if (entityName == null) continue;
+            // An entity-less widget (e.g. a shared time-range picker) is kept as-is; only a widget
+            // that *declares* an entity but can't be resolved is dropped.
+            String entityName = null;
+            if (wc.entityType() != null && wc.entityClass() != null) {
+                entityName = resolveEntityNameByClass(wc.entityType(), wc.entityClass());
+                if (entityName == null) continue;
+            }
 
             result.add(new DashboardWidgetDescriptor(
                     wc.title(), wc.type(), wc.order(), wc.width(),
                     wc.entityType(), entityName, wc.maxItems(),
                     wc.dateField(), wc.titleField(),
                     wc.extraConfig() == null ? Map.of() : wc.extraConfig(),
-                    wc.hint()
+                    wc.hint(), wc.rowBreak()
             ));
         }
         return result;
@@ -132,6 +137,7 @@ public class UiLayoutResolver {
     }
 
     private String resolveEntityNameByClass(String type, Class<?> clazz) {
+        if (type == null) return null;
         return switch (type) {
             case "catalog" -> registry.allCatalogs().stream()
                     .filter(c -> c.javaClass().equals(clazz))

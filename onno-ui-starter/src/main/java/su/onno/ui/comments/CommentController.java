@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -51,6 +52,7 @@ public class CommentController {
      * mistaking it for a row edit and refetching. Only the comments widget listens for it.
      */
     private static final String COMMENT_ENTITY_TYPE = "comment";
+    private static final Set<String> ALLOWED_REACTIONS = Set.of("👍", "❤️", "🎉", "👀", "✅");
 
     private final CommentService comments;
     private final UiAccessService access;
@@ -81,7 +83,10 @@ public class CommentController {
     }
 
     /** The request body for posting a comment. */
-    public record CommentRequest(String body) {}
+    public record CommentRequest(String body, UUID parentId) {}
+
+    /** The request body for toggling a reaction. */
+    public record ReactionRequest(String emoji) {}
 
     @GetMapping("/{kind}/{name}/{id}")
     public List<Map<String, Object>> list(@PathVariable String kind, @PathVariable String name,
@@ -96,12 +101,14 @@ public class CommentController {
         // then hand each comment just the ones in its body — a thread mentioning ten customers costs
         // one query, not ten.
         Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(thread, principal);
+        Map<UUID, List<CommentService.CommentReaction>> reactions = comments.reactionsFor(
+                thread.stream().map(Comment::id).toList(), reactionUserKey(me));
         return thread.stream()
                 // authorId is null for authors not linked to an identity record (e.g. the built-in
                 // admin user). avatars is an immutable map whose get(null) throws NPE, so guard the
                 // key — a null-author comment simply has no avatar.
                 .map(c -> toJson(c, me, admin, c.authorId() == null ? null : avatars.get(c.authorId()),
-                        mentionsFor(c.body(), resolved)))
+                        mentionsFor(c.body(), resolved), reactions.getOrDefault(c.id(), List.of())))
                 .toList();
     }
 
@@ -125,7 +132,18 @@ public class CommentController {
         if (mentionsEnabled()) {
             body = Mentions.degrade(body, ref -> !mentions.canRead(principal, ref));
         }
-        Comment saved = comments.add(kind, name, id, me.recordId(), me.displayName(), body);
+        UUID parentId = request == null ? null : request.parentId();
+        Comment parent = null;
+        if (parentId != null) {
+            parent = comments.find(parentId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                            "Reply target does not exist"));
+            if (parent.parentId() != null || !sameThread(parent, kind, name, id)) {
+                throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                        "Reply target is not in this thread");
+            }
+        }
+        Comment saved = comments.add(kind, name, id, me.recordId(), me.displayName(), body, parentId);
         // Live-sync the thread: announce the post on the same EntityChangedEvent stream the SSE
         // bridge fans to browsers, scoped to the target's (name, id) so only this thread's open
         // panels refetch. The insert has already committed (its own JDBI transaction), so a viewer
@@ -135,15 +153,39 @@ public class CommentController {
         if (mentionsEnabled()) {
             // Announce each surviving (author-readable) mention. No consumers ship with the framework;
             // delivery (in-app, cross-node bus, mail) is purely additive via an @EventListener.
-            for (MentionRef ref : Mentions.parse(saved.body())) {
+            for (MentionRef ref : Mentions.parse(saved.body(), '@')) {
                 ResolvedMention r = resolved.get(ref);
                 if (r != null && r.readable()) {
                     events.publishEvent(new EntityMentionedEvent(saved, ref, me));
                 }
             }
         }
+        if (parent != null) {
+            // Announce the reply — same additive-delivery contract as the mention event above; the
+            // built-in ReplyNotificationSource notifies the parent comment's author off this.
+            events.publishEvent(new CommentRepliedEvent(saved, parent, me));
+        }
         return toJson(saved, me, isAdmin(principal), authorAvatars.avatarFor(saved.authorId()),
-                mentionsFor(saved.body(), resolved));
+                mentionsFor(saved.body(), resolved), List.of());
+    }
+
+    @PostMapping("/{commentId}/reactions")
+    public List<Map<String, Object>> toggleReaction(@PathVariable UUID commentId,
+                                                    @RequestBody ReactionRequest request,
+                                                    Principal principal) {
+        Comment comment = comments.find(commentId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireRead(comment.entityType(), comment.entityName(), principal);
+        String emoji = request == null ? null : request.emoji();
+        if (!ALLOWED_REACTIONS.contains(emoji)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Unsupported reaction");
+        }
+        CurrentUser me = currentUser.resolve(principal);
+        comments.toggleReaction(commentId, reactionUserKey(me), emoji);
+        events.publishEvent(new EntityChangedEvent(
+                EntityChangedEvent.UPDATED, COMMENT_ENTITY_TYPE, comment.entityName(), comment.entityId(), null));
+        return reactionsJson(comments.reactionsFor(List.of(commentId), reactionUserKey(me))
+                .getOrDefault(commentId, List.of()));
     }
 
     @DeleteMapping("/{commentId}")
@@ -237,17 +279,44 @@ public class CommentController {
     }
 
     private static Map<String, Object> toJson(Comment c, CurrentUser me, boolean admin, String avatarUrl,
-                                              List<Map<String, Object>> mentions) {
+                                              List<Map<String, Object>> mentions,
+                                              List<CommentService.CommentReaction> reactions) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("id", c.id().toString());
         out.put("authorName", c.authorName());
         out.put("authorAvatarUrl", avatarUrl);
         out.put("body", c.body());
+        out.put("parentId", c.parentId() == null ? null : c.parentId().toString());
         out.put("mentions", mentions);
+        out.put("reactions", reactionsJson(reactions));
         out.put("createdAt", c.createdAt());
         out.put("editedAt", c.editedAt());
         out.put("mine", c.authorId() != null && c.authorId().equals(me.recordId()));
         out.put("canDelete", canDelete(c, me, admin));
         return out;
+    }
+
+    private static boolean sameThread(Comment comment, String kind, String name, UUID id) {
+        return comment.entityType().equals(kind) && comment.entityName().equals(name) && comment.entityId().equals(id);
+    }
+
+    private static List<Map<String, Object>> reactionsJson(List<CommentService.CommentReaction> reactions) {
+        return reactions.stream().map(r -> {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("emoji", r.emoji());
+            out.put("count", r.count());
+            out.put("mine", r.mine());
+            return out;
+        }).toList();
+    }
+
+    private static String reactionUserKey(CurrentUser user) {
+        if (user.recordId() != null && !user.recordId().isBlank()) {
+            return "record:" + user.recordId();
+        }
+        if (user.username() != null && !user.username().isBlank()) {
+            return "principal:" + user.username();
+        }
+        return "guest";
     }
 }

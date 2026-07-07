@@ -288,6 +288,12 @@ public final class Div {
         return node;
     }
 
+    /** Tracking for small-caps labels (dp, fractional allowed). */
+    public static Map<String, Object> letterSpacing(Map<String, Object> node, double dp) {
+        node.put("letter_spacing", dp);
+        return node;
+    }
+
     // ----- internals -----
 
     @SuppressWarnings("unchecked")

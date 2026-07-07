@@ -187,6 +187,7 @@ public class UiLayoutBuilder {
         private String dateField = "";
         private String titleField = "";
         private String hint = "";
+        private boolean rowBreak;
 
         WidgetBuilder(UiLayoutBuilder parent, String title) {
             this.parent = parent;
@@ -252,6 +253,18 @@ public class UiLayoutBuilder {
             return this;
         }
 
+        /**
+         * Start a new layout row with this widget, even if the previous row still has room — an
+         * explicit break in the width-fraction flow. Use it to keep a section's widgets from being
+         * pulled up into a half-filled row above (where the leftover space would stretch them past
+         * their declared width). No effect on the single-column (mobile) layout, which stacks
+         * everything anyway.
+         */
+        public WidgetBuilder rowBreak() {
+            this.rowBreak = true;
+            return this;
+        }
+
         /** Start a new widget. */
         public WidgetBuilder widget(String title) {
             return parent.widget(title);
@@ -264,7 +277,8 @@ public class UiLayoutBuilder {
 
         WidgetConfig build() {
             return new WidgetConfig(title, type, order, width, entityClass, entityType,
-                    maxItems, dateField, titleField, java.util.Map.copyOf(extraConfig), hint);
+                    maxItems, dateField, titleField, java.util.Map.copyOf(extraConfig), hint,
+                    rowBreak);
         }
     }
 
@@ -482,6 +496,7 @@ public class UiLayoutBuilder {
             String dateField,
             String titleField,
             java.util.Map<String, String> extraConfig,
-            String hint
+            String hint,
+            boolean rowBreak
     ) {}
 }

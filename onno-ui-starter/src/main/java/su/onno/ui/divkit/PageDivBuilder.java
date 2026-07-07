@@ -21,12 +21,22 @@ public final class PageDivBuilder {
     public static Map<String, Object> build(String title, String subtitle,
                                             List<DashboardWidgetDescriptor> widgets,
                                             List<PageComponent> components, int columns,
-                                            Function<DashboardWidgetDescriptor, String> values, Palette p) {
+                                            Function<DashboardWidgetDescriptor, String> values,
+                                            Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
-        items.add(Components.pageHeader(title, subtitle, p));
 
-        if (!widgets.isEmpty()) {
-            items.add(Widgets.grid(widgets, columns, values, p));
+        // On desktop the shared time-range picker folds into the header's title row instead of
+        // taking a widget row of its own; on mobile (one column) it keeps a full-width row.
+        DashboardWidgetDescriptor timeRange = columns > 1 ? timeRangeWidget(widgets) : null;
+        List<DashboardWidgetDescriptor> grid = timeRange == null
+                ? widgets
+                : widgets.stream().filter(w -> w != timeRange).toList();
+        // The time-range picker is entity-less and writes nothing — write access is moot.
+        items.add(Components.pageHeader(title, subtitle,
+                timeRange == null ? null : Widgets.custom(timeRange, true), p));
+
+        if (!grid.isEmpty()) {
+            items.add(Widgets.grid(grid, columns, values, canWrite, p));
         }
 
         for (PageComponent c : components) {
@@ -39,6 +49,14 @@ public final class PageDivBuilder {
         Div.matchWidth(root);
         Div.gap(root, 8);
         return root;
+    }
+
+    /** The first shared time-range picker among the page's widgets, or null. */
+    static DashboardWidgetDescriptor timeRangeWidget(List<DashboardWidgetDescriptor> widgets) {
+        return widgets.stream()
+                .filter(w -> "timeRange".equals(w.widgetType()))
+                .findFirst()
+                .orElse(null);
     }
 
     private static Map<String, Object> component(PageComponent c, Palette p) {

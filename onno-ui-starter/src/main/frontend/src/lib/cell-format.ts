@@ -34,6 +34,24 @@ export function applyFormat(raw: string, format?: string): string | null {
   return isNumberSpec(fmt) ? formatNumber(raw, fmt) : formatDate(raw, fmt);
 }
 
+// A machine timestamp: full ISO/JDBC date-time ("2026-07-05T00:58:48.232+00:00",
+// "2026-07-05 00:58:48.0"). Deliberately requires a time part — a bare "2026-07-05" date is
+// already readable, and business text that merely starts with digits must never be rewritten.
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/;
+
+/**
+ * The default rendering for a timestamp value in a column with no authored `.format(...)`: the
+ * user's locale, medium date + short time ("Jul 5, 2026, 12:58 AM"). Raw ISO with millis and a
+ * zone offset is machine output, not a display value — no list cell should ever show it. Returns
+ * null when the value isn't a full date-time, so the caller keeps the raw text.
+ */
+export function formatTimestampDefault(raw: string): string | null {
+  if (!TIMESTAMP.test(raw)) return null;
+  const d = parseISO(raw.includes("T") ? raw : raw.replace(" ", "T"));
+  if (!isValid(d)) return null;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(d);
+}
+
 function isNumberSpec(fmt: string): boolean {
   return NUMBER_KEYWORD.test(fmt) || /[#0]/.test(fmt);
 }

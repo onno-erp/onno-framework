@@ -30,9 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Verifies the dashboard widget {@code config("filter", …)} predicate ({@link WidgetFilter}) is
- * applied server-side by {@link DocumentQueryService#page} / {@link DocumentQueryService#count} —
- * the path that backs chart/list/calendar widgets (a stat tile already filters via
- * {@link DocumentQueryService#aggregate}).
+ * applied server-side by {@link DocumentQueryService#page} / {@link DocumentQueryService#count} and
+ * the un-paged {@link DocumentQueryService#list} — the path the chart/list widgets actually fetch
+ * from (a stat tile already filters via {@link DocumentQueryService#aggregate}). The un-paged list
+ * previously dropped the predicate, so a filtered chart silently summed every row.
  *
  * <p>Runs on a real PostgreSQL because the case it guards is Postgres-specific: a {@code VARCHAR}
  * column ({@code season}) compared to a quoted literal ({@code season = '2026'}). An unquoted
@@ -115,6 +116,23 @@ class DocumentWidgetFilterPostgresIT {
         long n = documentQuery.count(stayDesc, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null);
         assertThat(n).isEqualTo(5);
+    }
+
+    @Test
+    void list_appliesWidgetFilter() {
+        String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
+        List<Map<String, Object>> rows = documentQuery.list(stayDesc, null, null, filter);
+
+        assertThat(rows).hasSize(2);
+        assertThat(rows).allSatisfy(r -> {
+            assertThat(r.get("status")).isIn("CONFIRMED", "CHECKED_OUT");
+            assertThat(r.get("season")).isEqualTo("2026");
+        });
+    }
+
+    @Test
+    void list_noFilter_returnsEveryLiveRow() {
+        assertThat(documentQuery.list(stayDesc, null, null, null)).hasSize(5);
     }
 
     private void stay(String status, String season) {

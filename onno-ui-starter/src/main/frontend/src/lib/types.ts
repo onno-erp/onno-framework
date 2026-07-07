@@ -156,6 +156,9 @@ export interface AppConfig {
   messages?: Record<string, string>;
   // Present when the server-side update check is enabled; drives the "update available" notice.
   update?: UpdateInfo;
+  // Absolute URLs of consumer widget-plugin ESM modules to load at boot (from onno-plugins/ on the
+  // classpath, plus any onno.ui.plugins.extra-urls). Each self-registers via window.onno.registerWidget.
+  pluginScripts?: string[];
 }
 
 // The result of the server's framework-version check (see UpdateChecker / ReleaseController).
@@ -216,6 +219,17 @@ export interface UiEvent {
   kind?: string;
   /** Present only on a `presence` event: the current viewer set of the record. */
   viewers?: { userId: string; displayName: string; avatarUrl?: string }[];
+  // Present only on a `notification` event (see UiEventPublisher.publishNotification). `id` carries the
+  // stored notification's id. The store prepends the delta optimistically; a peer-node event trimmed to
+  // fit the cluster payload cap arrives without `title`, which the store treats as "refetch the feed".
+  notificationType?: string;
+  title?: string;
+  body?: string;
+  link?: string;
+  actorName?: string;
+  actorAvatar?: string;
+  createdAt?: string;
+  unread?: boolean;
 }
 
 export interface DashboardWidgetMeta {
@@ -231,6 +245,12 @@ export interface DashboardWidgetMeta {
   extraConfig: Record<string, string>;
   /** Optional help text (from .widget(...).hint(...)); surfaced as a hoverable "?" by the title. */
   hint?: string;
+  /**
+   * The viewer's write access on the widget's entity (server-stamped from RBAC). When false,
+   * interactive widgets disable their mutations — kanban drag, calendar reschedule. Absent (old
+   * server) means unknown; treat as writable so behavior doesn't regress, REST enforces anyway.
+   */
+  canWrite?: boolean;
 }
 
 export interface LayoutItem {
@@ -266,4 +286,11 @@ export interface ActionResult {
   message?: string | null;
   navigate?: string | null;
   refresh?: boolean;
+}
+
+/** The summary a batch endpoint returns (batch action run / batch delete): counts + failed ids. */
+export interface BatchResult {
+  ok: number;
+  failed: string[];
+  total: number;
 }

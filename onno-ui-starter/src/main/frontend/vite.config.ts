@@ -12,7 +12,13 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8080",
+      "/api": `http://localhost:${process.env.BACKEND_PORT || 8080}`,
+      // Backend-served assets that live outside /api: consumer branding (logo/favicon, see
+      // ThemeController) and compiled custom-widget plugins (UiAutoConfiguration's
+      // {ui.path}/plugins/** handler). Without these the dev shell loses the logo and
+      // dev-authored widgets 404.
+      "/branding": `http://localhost:${process.env.BACKEND_PORT || 8080}`,
+      "/ui/plugins": `http://localhost:${process.env.BACKEND_PORT || 8080}`,
     },
   },
   test: {

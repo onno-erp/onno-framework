@@ -16,6 +16,11 @@ export interface UseMapLibreOpts {
   interactive?: boolean;
   /** Override the built-in monochrome basemap with a style URL or full MapLibre style. */
   styleOverride?: string | StyleSpecification;
+  /**
+   * One-time setup right after the map object is created, before the first style loads — for
+   * handlers that must not miss first-render events (e.g. {@code styleimagemissing}).
+   */
+  onInit?: (map: MlMap) => void;
   /** (Re)add overlay sources + layers here; runs on initial load and after each theme swap. */
   onStyle?: (map: MlMap) => void;
   /** One-time setup after the map first loads (framing, click handlers). */
@@ -23,11 +28,13 @@ export interface UseMapLibreOpts {
 }
 
 export function useMapLibre(opts: UseMapLibreOpts) {
-  const { interactive = true, styleOverride, onStyle, onReady } = opts;
+  const { interactive = true, styleOverride, onInit, onStyle, onReady } = opts;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MlMap | null>(null);
   const dark = useIsDark();
   // Keep the latest callbacks without re-initializing the map.
+  const onInitRef = useRef(onInit);
+  onInitRef.current = onInit;
   const onStyleRef = useRef(onStyle);
   onStyleRef.current = onStyle;
   const onReadyRef = useRef(onReady);
@@ -52,6 +59,15 @@ export function useMapLibre(opts: UseMapLibreOpts) {
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     }
     mapRef.current = map;
+
+    // Dev-only escape hatch: reach live map instances from the console/tests.
+    if (import.meta.env.DEV) {
+      const w = window as unknown as { __onnoMaps?: MlMap[] };
+      w.__onnoMaps = [...(w.__onnoMaps ?? []).filter((m) => m !== map), map];
+    }
+
+    // Before the first style loads, so first-render events (styleimagemissing) aren't missed.
+    onInitRef.current?.(map);
 
     map.on("style.load", () => onStyleRef.current?.(map));
     map.once("load", () => onReadyRef.current?.(map));

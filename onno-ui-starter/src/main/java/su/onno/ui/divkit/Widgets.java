@@ -37,33 +37,36 @@ final class Widgets {
      * resolves the preformatted big-number text for {@code count}/{@code metric} tiles.
      */
     static Map<String, Object> grid(List<DashboardWidgetDescriptor> widgets, int columns,
-                                    Function<DashboardWidgetDescriptor, String> values, Palette p) {
+                                    Function<DashboardWidgetDescriptor, String> values,
+                                    Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> rows = new ArrayList<>();
 
         if (columns <= 1) {
             for (DashboardWidgetDescriptor w : widgets) {
-                rows.add(Div.matchWidth(block(w, values, p)));
+                rows.add(Div.matchWidth(block(w, values, canWrite, p)));
             }
         } else {
             List<DashboardWidgetDescriptor> row = new ArrayList<>();
             double sum = 0;
             for (DashboardWidgetDescriptor w : widgets) {
                 double f = fraction(w.width());
-                if (!row.isEmpty() && sum + f > 1.0001) {
-                    rows.add(row(row, values, p));
+                // An authored rowBreak closes the open row unconditionally; otherwise a row closes
+                // when the next widget wouldn't fit.
+                if (!row.isEmpty() && (w.rowBreak() || sum + f > 1.0001)) {
+                    rows.add(row(row, values, canWrite, p));
                     row = new ArrayList<>();
                     sum = 0;
                 }
                 row.add(w);
                 sum += f;
                 if (sum >= 0.999) {
-                    rows.add(row(row, values, p));
+                    rows.add(row(row, values, canWrite, p));
                     row = new ArrayList<>();
                     sum = 0;
                 }
             }
             if (!row.isEmpty()) {
-                rows.add(row(row, values, p));
+                rows.add(row(row, values, canWrite, p));
             }
         }
 
@@ -73,12 +76,18 @@ final class Widgets {
         return stack;
     }
 
-    // A row of widgets sharing the main axis by their width fraction.
+    // A row of widgets sharing the main axis by their width fraction. Cells stretch to the row's
+    // height (i.e. the tallest widget), so neighbouring cards bottom-align instead of ragging.
     private static Map<String, Object> row(List<DashboardWidgetDescriptor> widgets,
-                                           Function<DashboardWidgetDescriptor, String> values, Palette p) {
+                                           Function<DashboardWidgetDescriptor, String> values,
+                                           Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
         List<Map<String, Object>> cells = new ArrayList<>();
         for (DashboardWidgetDescriptor w : widgets) {
-            cells.add(Div.weight(block(w, values, p), fraction(w.width())));
+            Map<String, Object> cell = Div.weight(block(w, values, canWrite, p), fraction(w.width()));
+            if (widgets.size() > 1) {
+                Div.matchHeight(cell);
+            }
+            cells.add(cell);
         }
         Map<String, Object> row = Div.horizontal(cells);
         Div.matchWidth(row);
@@ -87,17 +96,18 @@ final class Widgets {
     }
 
     private static Map<String, Object> block(DashboardWidgetDescriptor w,
-                                             Function<DashboardWidgetDescriptor, String> values, Palette p) {
+                                             Function<DashboardWidgetDescriptor, String> values,
+                                             Function<DashboardWidgetDescriptor, Boolean> canWrite, Palette p) {
         // count/metric tiles are native cards; every other type — built-in or
         // app-registered — flows through the open onno-widget custom block.
         if (w.widgetType() == null || NATIVE_CARD_TYPES.contains(w.widgetType())) {
             return valueCard(w, values.apply(w), p);
         }
-        return custom(w);
+        return custom(w, !Boolean.FALSE.equals(canWrite.apply(w)));
     }
 
     /** A {@code div-custom} block carrying the widget descriptor for the React renderer. */
-    private static Map<String, Object> custom(DashboardWidgetDescriptor w) {
+    static Map<String, Object> custom(DashboardWidgetDescriptor w, boolean canWrite) {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("title", w.title());
         meta.put("widgetType", w.widgetType());
@@ -108,6 +118,9 @@ final class Widgets {
         meta.put("titleField", w.titleField());
         meta.put("extraConfig", w.extraConfig());
         meta.put("hint", w.hint() == null ? "" : w.hint());
+        // The caller's write access on the widget's entity — an interactive widget (kanban drag,
+        // calendar reschedule) disables its mutations for read-only viewers. REST enforces anyway.
+        meta.put("canWrite", canWrite);
         Map<String, Object> node = Div.custom("onno-widget", Map.of("widget", meta));
         Div.matchWidth(node);
         return node;

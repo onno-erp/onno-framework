@@ -1,11 +1,15 @@
 package su.onno.ui;
 
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
+import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.posting.PostingPreview;
 
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,16 +39,18 @@ public class GenericDocumentController {
                                           @RequestParam(required = false) String to,
                                           @RequestParam(required = false) String q,
                                           @RequestParam(required = false) Integer limit,
+                                          @RequestParam(required = false) String filter,
                                           Principal principal) {
         DocumentDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
         // A search query or explicit limit switches to the capped typeahead used by the
-        // document ref picker; otherwise it's the full (date-ranged) list.
+        // document ref picker; otherwise it's the full (date-ranged) list. `filter` is an
+        // authored WidgetFilter predicate so chart/list widgets scope their rows server-side.
         if (q != null || limit != null) {
             int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
             return query.search(desc, q, cap);
         }
-        return query.list(desc, from, to);
+        return query.list(desc, from, to, filter);
     }
 
     @GetMapping("/{name}/{id}")
@@ -75,6 +81,55 @@ public class GenericDocumentController {
         return commands.create(query.require(name), body, principal);
     }
 
+    /**
+     * Create a copy of document {@code id}: same attributes and line items, fresh identity (new
+     * id, next number), dated now, and — like any new document — unposted. Secret attributes are
+     * not copied (reads are redacted, so a copy would store the sentinel). Runs through the normal
+     * create path (lifecycle hooks, validation, write access). Powers the list's clipboard paste
+     * (⌘C/⌘V).
+     */
+    @PostMapping("/{name}/{id}/duplicate")
+    public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+        DocumentDescriptor desc = query.require(name);
+        access.requireRead(principal, desc); // create() enforces write below
+        Map<String, Object> row = query.get(desc, id);
+        Map<String, Object> body = new LinkedHashMap<>();
+        for (AttributeDescriptor attr : desc.attributes()) {
+            if (attr.secret()) {
+                continue;
+            }
+            Object v = row.get(attr.columnName());
+            if (v != null) {
+                body.put(attr.fieldName(), v);
+            }
+        }
+        // Line items ride under the section name as fieldName-keyed rows — the create() contract.
+        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+            if (!(row.get(ts.name()) instanceof List<?> rows)) {
+                continue;
+            }
+            List<Map<String, Object>> copies = new ArrayList<>();
+            for (Object o : rows) {
+                if (!(o instanceof Map<?, ?> m)) {
+                    continue;
+                }
+                Map<String, Object> copy = new LinkedHashMap<>();
+                for (AttributeDescriptor attr : ts.attributes()) {
+                    if (attr.secret()) {
+                        continue;
+                    }
+                    Object v = m.get(attr.columnName());
+                    if (v != null) {
+                        copy.put(attr.fieldName(), v);
+                    }
+                }
+                copies.add(copy);
+            }
+            body.put(ts.name(), copies);
+        }
+        return commands.create(desc, body, principal);
+    }
+
     @PutMapping("/{name}/{id}")
     public Map<String, Object> update(@PathVariable String name, @PathVariable UUID id,
                                       @RequestBody Map<String, Object> body,
@@ -100,5 +155,32 @@ public class GenericDocumentController {
     @DeleteMapping("/{name}/{id}")
     public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         commands.delete(query.require(name), id, principal);
+    }
+
+    /**
+     * Soft-delete a set of documents in one request (auto-unposting posted ones, like the single
+     * DELETE). Per-id failures are recorded and the batch continues; returns {@code {ok, failed,
+     * total}}. Capped like the action batch (see ActionController.BATCH_LIMIT).
+     */
+    @PostMapping("/{name}/batch-delete")
+    public Map<String, Object> batchDelete(@PathVariable String name,
+                                           @RequestBody Map<String, Object> body, Principal principal) {
+        DocumentDescriptor desc = query.require(name);
+        List<UUID> ids = ActionController.idList(body);
+        int ok = 0;
+        List<String> failed = new ArrayList<>();
+        for (UUID rid : ids) {
+            try {
+                commands.delete(desc, rid, principal);
+                ok++;
+            } catch (RuntimeException e) {
+                failed.add(rid.toString());
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", ok);
+        out.put("failed", failed);
+        out.put("total", ids.size());
+        return out;
     }
 }

@@ -1,5 +1,6 @@
-<svg width="150" height="28" viewBox="0 0 150 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="4" width="20" height="20" rx="6" fill="#3B82F6"/>
-  <path d="M8 14.5l3.2 3.2L16.8 11" stroke="#0D0D0D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="32" y="19" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="#EDEDED" letter-spacing="-0.3">Acme Rentals</text>
+<svg width="132" height="28" viewBox="0 0 132 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="4" width="20" height="20" rx="3" fill="#6366F1"/>
+  <path d="M7 8.5h7.5a2.5 2.5 0 0 1 2.5 2.5v8.5H9.5A2.5 2.5 0 0 1 7 17V8.5Z" fill="#fff" opacity="0.95"/>
+  <path d="M12 8.5v11" stroke="#6366F1" stroke-width="1.4"/>
+  <text x="30" y="19" font-family="-apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="700" fill="#F3F4F6">Onno Books</text>
 </svg>

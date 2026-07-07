@@ -26,6 +26,9 @@ public sealed interface ClusterEvent {
     /** {@link #kind()} tag for a {@link Presence} notice — a user entering/leaving a record's live view. */
     String KIND_PRESENCE = "presence";
 
+    /** {@link #kind()} tag for a {@link Notification} notice — a per-user notification to wake on a peer node. */
+    String KIND_NOTIFICATION = "notification";
+
     /** The payload-shape tag identifying which permitted variant this event is. */
     String kind();
 
@@ -55,6 +58,17 @@ public sealed interface ClusterEvent {
     static Presence presence(String action, String entityType, String entityName, String id,
                              String userId, String displayName, String avatarUrl) {
         return new Presence(null, action, entityType, entityName, id, userId, displayName, avatarUrl);
+    }
+
+    /**
+     * Build a {@link Notification} event with no {@link #originNodeId()} set — the publishing
+     * {@link ClusterEventBus} stamps that during {@link ClusterEventBus#publish}. Carries enough to
+     * paint the notification on the recipient's other-node browsers without a refetch; a receiver that
+     * gets only {@code recipientId} (its richer fields dropped to fit the payload cap) refetches instead.
+     */
+    static Notification notification(String recipientId, String notificationId, String type,
+                                     String title, String body, String link, String actorName) {
+        return new Notification(null, recipientId, notificationId, type, title, body, link, actorName);
     }
 
     /**
@@ -133,6 +147,44 @@ public sealed interface ClusterEvent {
         @Override
         public Presence withOrigin(String originNodeId) {
             return new Presence(originNodeId, action, entityType, entityName, id, userId, displayName, avatarUrl);
+        }
+    }
+
+    /**
+     * A per-user notification raised on one node whose recipient may be connected to another. Unlike
+     * {@link EntityChanged}/{@link Presence}, the durable copy already lives in the shared
+     * {@code onno_notifications} table, so the cross-node event exists only to <em>wake the recipient's
+     * live streams</em> on peer nodes: a receiver pushes it to any local SSE stream owned by
+     * {@code recipientId}. The richer fields ride along so a peer can paint the row without a refetch; if
+     * they were dropped to fit the payload cap only {@code recipientId} survives and the browser refetches.
+     *
+     * @param originNodeId   the publishing node's id, or {@code null} before a bus stamps it.
+     * @param recipientId    the target user's identity record id (or username for an unlinked login).
+     * @param notificationId the stored notification's id, so a receiver can de-duplicate against a refetch.
+     * @param type           the notification type tag ({@code mention}/{@code assignment}/…), or {@code null}.
+     * @param title          the short headline, or {@code null} when trimmed to fit the payload cap.
+     * @param body           the longer text, or {@code null} when absent or trimmed.
+     * @param link           the {@code kind/name/id} route the notification opens, or {@code null}.
+     * @param actorName      who triggered it, for display, or {@code null}.
+     */
+    record Notification(
+            String originNodeId,
+            String recipientId,
+            String notificationId,
+            String type,
+            String title,
+            String body,
+            String link,
+            String actorName) implements ClusterEvent {
+
+        @Override
+        public String kind() {
+            return KIND_NOTIFICATION;
+        }
+
+        @Override
+        public Notification withOrigin(String originNodeId) {
+            return new Notification(originNodeId, recipientId, notificationId, type, title, body, link, actorName);
         }
     }
 }

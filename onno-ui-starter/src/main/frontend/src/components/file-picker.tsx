@@ -1,6 +1,16 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { FileUp, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
+import {
+  Attachment,
+  AttachmentAction,
+  AttachmentActions,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentMedia,
+  AttachmentTitle,
+  AttachmentTrigger,
+} from "@/components/ui/attachment";
 import { uploadMedia } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +45,7 @@ export function FilePicker({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploadName, setUploadName] = useState<string | null>(null);
   const hasFile = typeof value === "string" && value.length > 0;
 
   const accept = async (file: File | undefined | null) => {
@@ -43,6 +54,7 @@ export function FilePicker({
       toast.error(`"${file.name}" is too large (max ${Math.round(MAX_BYTES / 1024 / 1024)} MB).`);
       return;
     }
+    setUploadName(file.name);
     setBusy(true);
     try {
       const stored = await uploadMedia(file);
@@ -51,6 +63,7 @@ export function FilePicker({
       toast.error(`Couldn't upload "${file.name}".`);
     } finally {
       setBusy(false);
+      setUploadName(null);
     }
   };
 
@@ -69,74 +82,88 @@ export function FilePicker({
           e.target.value = "";
         }}
       />
-      {hasFile ? (
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
-          <Paperclip className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <a
-            href={value}
-            target="_blank"
-            rel="noreferrer"
-            className="min-w-0 flex-1 truncate text-foreground hover:underline"
-            title={value}
-          >
-            {leafOf(value!)}
-          </a>
-          <button
+      <Attachment
+        state={busy ? "uploading" : "done"}
+        className={cn(
+          "bg-muted/30",
+          !hasFile && "min-h-20 border-dashed",
+          dragging && "border-primary bg-primary/10",
+          busy && "opacity-80"
+        )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          void accept(e.dataTransfer.files?.[0]);
+        }}
+      >
+        <AttachmentMedia>
+          {busy ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : hasFile ? (
+            <Paperclip aria-hidden="true" />
+          ) : (
+            <FileUp aria-hidden="true" />
+          )}
+        </AttachmentMedia>
+        <AttachmentContent>
+          <AttachmentTitle>
+            {hasFile ? leafOf(value!) : uploadName ?? "Choose a file"}
+          </AttachmentTitle>
+          <AttachmentDescription>
+            {busy
+              ? "Uploading"
+              : hasFile
+                ? "Open, replace, or remove attachment"
+                : "Drop a file here, or click to choose"}
+          </AttachmentDescription>
+        </AttachmentContent>
+        {hasFile ? (
+          <>
+            <AttachmentTrigger asChild>
+              <a
+                href={value}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${leafOf(value!)}`}
+                title={value}
+              />
+            </AttachmentTrigger>
+            <AttachmentActions>
+              <AttachmentAction
+                type="button"
+                onClick={openPicker}
+                disabled={busy}
+                aria-label="Replace file"
+              >
+                {busy ? <Loader2 className="animate-spin" /> : <Upload />}
+              </AttachmentAction>
+              <AttachmentAction
+                type="button"
+                onClick={() => onChange("")}
+                disabled={busy}
+                aria-label="Remove file"
+                className="hover:text-destructive"
+              >
+                <Trash2 aria-hidden="true" />
+              </AttachmentAction>
+            </AttachmentActions>
+          </>
+        ) : (
+          <AttachmentTrigger
             type="button"
             onClick={openPicker}
             disabled={busy}
-            aria-label="Replace file"
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => onChange("")}
-            disabled={busy}
-            aria-label="Remove file"
-            className="inline-flex items-center rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-50"
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={openPicker}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openPicker();
-            }
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            void accept(e.dataTransfer.files?.[0]);
-          }}
-          className={cn(
-            "flex h-20 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            dragging && "border-primary bg-primary/10 text-foreground",
-            busy && "pointer-events-none opacity-70"
-          )}
-        >
-          {busy ? (
-            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
-          ) : (
-            <FileUp className="size-5" aria-hidden="true" />
-          )}
-          <span className="text-xs">{busy ? "Uploading…" : "Drop a file here, or click to choose"}</span>
-        </div>
-      )}
+            aria-label="Choose file"
+          />
+        )}
+      </Attachment>
     </div>
   );
 }

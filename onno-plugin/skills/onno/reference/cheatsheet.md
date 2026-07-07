@@ -97,7 +97,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | --- | --- | --- |
 | `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
 | `AfterWriteHandler` | `afterWrite()` | After save. |
-| `OnFillingHandler` | `onFilling()` | When a new instance is filled (generic create path) — **seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). |
+| `OnFillingHandler` | `onFilling()` | **Seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). ⚠️ Runs on **every save of a new entity** (`isNew==true`), not just the blank-form pre-fill — the repository persist path calls it too (`OnnoBeforeConvertCallback`). So make it **idempotent / guard on null** (`if (getDate()==null) setDate(now)`); an unconditional `status = NEW` clobbers a status set by a seeder/import or chosen on the form. For a fixed default that should never be overwritten, prefer a Java field initializer over `onFilling`. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
@@ -172,33 +172,78 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
+  Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
+  a row closes when fractions sum to 1. Cells are weights, so a row that doesn't sum to 1 stretches
+  its widgets proportionally past their declared width — `rowBreak()` forces the widget to start a
+  fresh row instead of joining a half-filled one. Multi-widget rows render equal-height (cards
+  stretch to the tallest neighbour). Mobile stacks everything full-width.
   `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
   search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
   (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`.
+  A widget's `type(…)` may be a **custom widget** the framework has no built-in for: author it as a
+  React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
+  Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under
+  `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
+  Styling gotcha: widget `.tsx` is never scanned by the host's Tailwind build — a utility class works
+  only if the host SPA already emits it (common `text-sm`/`mb-3`/`flex` yes; `border-l` or arbitrary
+  `-left-[5px]` silently no CSS). Layout-critical rules go in inline `style`, theme colors via
+  `hsl(var(--primary))` / `hsl(var(--border))`.
 - `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `hide(...)`, `filter(field)` →
+    `column(field,label)`, `label(field,label)`, `hide(...)`, `feed(FeedMode.INFINITE|PAGED)`
+    (INFINITE = cursor/keyset scroll, the default; PAGED = numbered offset pages — else inherits
+    `onno.ui.list.default-feed`), `pageSize(n)` (rows per window/page; else `onno.ui.list.page-size`),
+    `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
+    day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
+    (per-group subtotal on each header),
+    `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order) / `contains` / `startsWith` / `dateRange`; `map()` → `MapSpec` adds a Table⇄Map toggle —
+    order) / `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    deterministic UUIDs, so the resolver translates its select options — author the constant name
+    (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
+    every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
     `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
     (open on the map).
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
-    `handler(ctx→ActionResult)` or `navigate(url)`. A **row** action may vary per row — `icon(row→String)`,
+    `handler(ctx→ActionResult)` or `navigate(url)`. `form(f→…)` makes the click open a **modal input
+    dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
+    submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
+    on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to
+    every selected row). A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
+    `menu("Change status")` moves a ROW action off the inline row buttons into the row's
+    **right-click context menu**, under a submenu with that label (same-label actions group; one
+    action per enum value is the idiom). The list also supports **batch selection** (⌘/Ctrl-click
+    toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
+    list being engaged): right-clicking the selection runs any server row action over every
+    selected id — as ONE request via `POST /api/actions/{kind}/{name}/{key}/batch` (`{ids,inputs}`,
+    ≤500, returns `{ok,failed,total}`) — plus a two-step "Delete N" via
+    `POST /api/{kind}/{name}/batch-delete`. **⌘C/⌘V**: copy puts the rows on the clipboard as TSV
+    (pasteable into text/spreadsheets) + an app payload; paste (≤50) on the same entity's list
+    creates server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity,
+    catalog description + " (copy)" [`duplicate.copySuffix`], documents unposted/dated now,
+    secrets unset). Forms with unsaved edits confirm "Discard changes?" before the tab closes.
   - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
-    name); `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
+    name); a **tabular-section column** is addressed with a section-scoped key
+    `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the
+    prefix is the `@TabularSection(name=…)`, and it scopes the hint so it can't collide with a
+    same-named top-level field; a **register's** resource columns format the same way via an
+    `EntityView` whose `entity()` is the register class (no served surface, just the hints);
+    `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
     `edit`/`delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
     on REST), #185; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
     related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
     `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
-  - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,
+  - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
+    card with that heading on the edit form), `width(String)` (`half`/`1/2` = half a row on wide
+    screens; else full), `widget(String)` (`switch`,
     `textarea`; media: `image`/`photo`/`avatar`/`images`/`gallery`/`photos`/`file` — streamed to
     `POST /api/media`, the attribute stores the returned URL; `map`/`geo`), `placeholder`, `format`
     (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
@@ -207,6 +252,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
     form/detail/list label — including the built-in system columns (`code`/`description`,
     `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
+    A `String` attribute with `length` > 1000 (or unbounded) renders as a textarea automatically.
+    A Ref picker's pinned "+ New" opens the target's create form in a side pane and, on save,
+    auto-selects the new record back into the field (cancel/manual pick drops the hand-off).
 
 An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
 that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the
@@ -215,11 +263,29 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 #69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
+## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
+
+- Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
+  Notifications row in the More menu on mobile — with unread badges and a dot on the More tab).
+  Persisted in the framework-owned `onno_notifications` table; delivered live over the
+  `notification` SSE event (routed by recipient, relayed cross-node over the `ClusterEventBus`).
+- Produce one from any bean: `notificationService.notify(NotificationRequest.to(recipientId).type("…")
+  .title("…").body("…").link("kind/name/id").actor(currentUser).build())`. `recipientId` is the
+  target's identity `recordId` (from `CurrentUserResolver`). This is the extension point — add a source
+  by calling it from an `@EventListener`.
+- Built-in, config-gated producers: **mentions** (`onno.notifications.mentions.enabled`) turn a comment
+  `@`-mention of a user into a notification; **assignment** (`onno.notifications.assignments.enabled`)
+  notifies the target of an `@AssigneeField`-annotated `Ref<>` when it's set/changed to a user.
+- `@AssigneeField` (on a catalog/document `Ref<>` attribute pointing at the identity catalog) — marks
+  the assignee; setting it fires the assignment producer. Notification hint only; no storage/UI effect.
+
 ## Events & outbox (packages `su.onno.events`, `su.onno.messaging`)
 
 - `EntityChangedEvent(changeType, entityType, entityName, UUID id, naturalKey)` — published on every
   write through controllers and `repository.save(...)`; drives `/api/events` SSE. Constants:
   changeType `created/updated/deleted/posted/unposted/changed`; entityType `catalog/document/register`.
+- `EntityMentionedEvent(comment, mention, actor)` — published per readable `@`-mention in a posted
+  comment; consumed by the notifications feature, and by any app `@EventListener` (mail, etc.).
 - `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; relayed by
   `onno-kafka-starter` as CloudEvents.
 

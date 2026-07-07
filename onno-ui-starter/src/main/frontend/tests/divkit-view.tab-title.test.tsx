@@ -46,6 +46,7 @@ vi.mock("@/views/content-pane", () => ({
 
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
+  setIconActivePath: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({

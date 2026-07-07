@@ -9,6 +9,9 @@ import { LoginFormPortals } from "@/lib/login-form-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 import { SsoIconPortals } from "@/lib/sso-icon-bridge";
 
+/** Sign-in error codes with a specific message; any other ?error value falls back to generic. */
+const KNOWN_LOGIN_ERRORS = new Set(["telegram", "access_denied", "session_expired", "sso"]);
+
 /**
  * The login screen is server-driven, like the rest of the app: the server emits a DivKit card
  * (GET /api/divkit/login) describing the available methods — a password sub-form (the
@@ -32,6 +35,14 @@ export function LoginView() {
   // The login mark: a configured logo (dark variant in dark mode), else the app name, else "onno".
   const logo = (resolved === "dark" && branding.logoUrlDark) || branding.logoUrl;
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/";
+
+  // An explicit sign-in error, carried back as ?error=<code> (e.g. a failed Telegram/SSO round-trip
+  // redirects to /login?error=telegram). Known codes get a specific message; anything else falls
+  // back to a generic one. All messages are overridable via onno.ui.messages.login.error.*.
+  const errorCode = new URLSearchParams(location.search).get("error");
+  const errorMessage = errorCode
+    ? t(KNOWN_LOGIN_ERRORS.has(errorCode) ? `login.error.${errorCode}` : "login.error.generic")
+    : null;
 
   const [card, setCard] = useState<ContentCard>(null);
   const [failed, setFailed] = useState(false);
@@ -94,7 +105,7 @@ export function LoginView() {
 
   return (
     <main className="flex min-h-screen bg-background">
-      <section className="hidden flex-1 border-r border-border bg-muted/30 px-12 py-10 md:flex md:flex-col md:justify-between">
+      <section className="hidden flex-1 flex-col justify-between px-12 py-10 md:flex">
         {logo ? (
           // Honor the configured logo size (px) the same way the DivKit shell does — a fixed
           // box with object-fit: contain stays uncropped; unset falls back to h-7 / intrinsic width.
@@ -118,8 +129,20 @@ export function LoginView() {
         <p className="text-xs text-muted-foreground">{t("login.footer")}</p>
       </section>
 
-      <section className="flex min-h-screen w-full items-center justify-center px-5 md:w-[440px]">
-        <div className="w-full max-w-sm">
+      {/* Only the right sign-in area is an island: a large rounded panel (shape token), bordered and
+          inset by the page gutter, no shadow — matching the shell's notification/panel islands. The
+          left hero stays flush on the page background. */}
+      <section className="flex w-full items-stretch p-3 md:w-[500px]">
+        <div className="flex w-full flex-col items-center justify-center rounded-card border border-border bg-card px-6 py-10">
+          <div className="w-full max-w-sm">
+          {errorMessage && (
+            <div
+              role="alert"
+              className="mb-4 rounded-control border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {errorMessage}
+            </div>
+          )}
           {failed ? (
             <p className="text-sm text-destructive">Couldn't load the sign-in screen. Try refreshing.</p>
           ) : card ? (
@@ -132,6 +155,7 @@ export function LoginView() {
           ) : (
             <p className="text-sm text-muted-foreground">Loading…</p>
           )}
+          </div>
         </div>
       </section>
 

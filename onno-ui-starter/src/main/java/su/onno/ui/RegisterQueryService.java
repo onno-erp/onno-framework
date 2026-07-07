@@ -71,23 +71,27 @@ public class RegisterQueryService {
 
     /**
      * One page of movements for the virtualized register island — server-side ordered by a validated
-     * column (default {@code _period} DESC) and windowed by {@code offset}/{@code limit}, so a packed
-     * register never ships its whole movement log. Refs are resolved like {@link #movements}.
+     * column (default {@code _period} DESC), narrowed by the grid's declarative filters (the same
+     * {@code eq}/{@code in}/{@code like}/{@code prefix}/{@code ge}/{@code le} grammar as
+     * {@link ListFilter} compiles for catalog/document lists) and windowed by
+     * {@code offset}/{@code limit}, so a packed register never ships its whole movement log.
+     * Refs are resolved like {@link #movements}.
      */
     public List<Map<String, Object>> movementsPage(AccumulationRegisterDescriptor desc, String from, String to,
+                                                   ListFilter.Result filters,
                                                    String sortColumn, boolean descending, int offset, int limit) {
         String orderBy = safeSort(desc, sortColumn, "_period", movementColumns(desc));
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
-        if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
-        if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
+        appendMovementWindow(sql, from, to);
+        appendFilters(sql, filters);
         sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC");
         sql.append(" LIMIT :limit OFFSET :offset");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
-            if (from != null) query.bind("from", from);
-            if (to != null) query.bind("to", to);
+            bindMovementWindow(query, from, to);
+            bindFilters(query, filters);
             query.bind("limit", Math.max(1, limit)).bind("offset", Math.max(0, offset));
             return query.mapToMap().list();
         });
@@ -95,18 +99,47 @@ public class RegisterQueryService {
         return rows;
     }
 
-    /** Total active movements in the (optional) period window — for the island's virtual scroller. */
-    public long movementsCount(AccumulationRegisterDescriptor desc, String from, String to) {
+    /** Total active movements matching the window + filters — for the island's virtual scroller. */
+    public long movementsCount(AccumulationRegisterDescriptor desc, String from, String to,
+                               ListFilter.Result filters) {
         StringBuilder sql = new StringBuilder(
                 "SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _active = true");
-        if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
-        if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
+        appendMovementWindow(sql, from, to);
+        appendFilters(sql, filters);
         return jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
-            if (from != null) query.bind("from", from);
-            if (to != null) query.bind("to", to);
+            bindMovementWindow(query, from, to);
+            bindFilters(query, filters);
             return query.mapTo(Long.class).one();
         });
+    }
+
+    /** The columns a movements filter may reference — for {@link ListFilter#parse}. */
+    public Set<String> movementFilterColumns(AccumulationRegisterDescriptor desc) {
+        return movementColumns(desc);
+    }
+
+    /** The columns a balance filter may reference — for {@link ListFilter#parse}. */
+    public Set<String> balanceFilterColumns(AccumulationRegisterDescriptor desc) {
+        return balanceColumns(desc);
+    }
+
+    private static void appendMovementWindow(StringBuilder sql, String from, String to) {
+        if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
+        if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
+    }
+
+    private static void bindMovementWindow(org.jdbi.v3.core.statement.Query query, String from, String to) {
+        if (from != null) query.bind("from", from);
+        if (to != null) query.bind("to", to);
+    }
+
+    private static void appendFilters(StringBuilder sql, ListFilter.Result filters) {
+        if (filters != null && !filters.isEmpty()) sql.append(" AND ").append(filters.sql());
+    }
+
+    private static void bindFilters(org.jdbi.v3.core.statement.Query query, ListFilter.Result filters) {
+        if (filters != null && !filters.isEmpty()) filters.bindings().forEach(query::bind);
     }
 
     /**
@@ -114,7 +147,7 @@ public class RegisterQueryService {
      * ordered by a validated column (default: the dimension tuple) and windowed by
      * {@code offset}/{@code limit}. BALANCE registers only.
      */
-    public List<Map<String, Object>> balancePage(AccumulationRegisterDescriptor desc,
+    public List<Map<String, Object>> balancePage(AccumulationRegisterDescriptor desc, ListFilter.Result filters,
                                                  String sortColumn, boolean descending, int offset, int limit) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -125,26 +158,33 @@ public class RegisterQueryService {
                 .collect(Collectors.joining(", "));
         String orderBy = safeSort(desc, sortColumn,
                 dimOrder.isEmpty() ? "1" : dimOrder, balanceColumns(desc));
-        String sql = "SELECT * FROM " + desc.totalsTableName()
-                + " ORDER BY " + orderBy + (descending ? " DESC" : " ASC")
-                + " LIMIT :limit OFFSET :offset";
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery(sql)
-                        .bind("limit", Math.max(1, limit)).bind("offset", Math.max(0, offset))
-                        .mapToMap().list());
+        StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
+        if (filters != null && !filters.isEmpty()) sql.append(" WHERE ").append(filters.sql());
+        sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC")
+                .append(" LIMIT :limit OFFSET :offset");
+        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
+            var query = h.createQuery(sql.toString());
+            bindFilters(query, filters);
+            query.bind("limit", Math.max(1, limit)).bind("offset", Math.max(0, offset));
+            return query.mapToMap().list();
+        });
         resolveAll(desc, rows);
         return rows;
     }
 
-    /** Total balance rows (distinct dimension combinations) — for the island's virtual scroller. */
-    public long balanceCount(AccumulationRegisterDescriptor desc) {
+    /** Balance rows (distinct dimension combinations) matching the filters — for the scroller. */
+    public long balanceCount(AccumulationRegisterDescriptor desc, ListFilter.Result filters) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
-        return jdbi.withHandle(h ->
-                h.createQuery("SELECT COUNT(*) FROM " + desc.totalsTableName())
-                        .mapTo(Long.class).one());
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM " + desc.totalsTableName());
+        if (filters != null && !filters.isEmpty()) sql.append(" WHERE ").append(filters.sql());
+        return jdbi.withHandle(h -> {
+            var query = h.createQuery(sql.toString());
+            bindFilters(query, filters);
+            return query.mapTo(Long.class).one();
+        });
     }
 
     /** Columns a movements list may be ordered by: the period/type system columns + dims + resources. */

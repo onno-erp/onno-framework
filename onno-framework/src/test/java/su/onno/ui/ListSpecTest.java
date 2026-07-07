@@ -115,4 +115,48 @@ class ListSpecTest {
     void noFiltersByDefault() {
         assertThat(new ListSpec().filters()).isEmpty();
     }
+
+    @Test
+    void feedModeAndPageSizeUnsetByDefault() {
+        ListSpec spec = new ListSpec();
+        // Unset → null / 0, so the resolver falls back to the global onno.ui.list.* defaults.
+        assertThat(spec.feedMode()).isNull();
+        assertThat(spec.pageSize()).isZero();
+    }
+
+    @Test
+    void feedModeAndPageSizeAreAuthored() {
+        ListSpec spec = new ListSpec();
+        spec.feed(ListSpec.FeedMode.PAGED).pageSize(25);
+
+        assertThat(spec.feedMode()).isEqualTo(ListSpec.FeedMode.PAGED);
+        assertThat(spec.pageSize()).isEqualTo(25);
+    }
+
+    @Test
+    void noGroupingByDefault() {
+        ListSpec spec = new ListSpec();
+        assertThat(spec.groupable()).isEmpty();
+        assertThat(spec.aggregates()).isEmpty();
+    }
+
+    @Test
+    void groupableColumnsKeepDeclarationOrder() {
+        ListSpec spec = new ListSpec();
+        spec.groupable("status", "assignedTo", "date");
+        assertThat(spec.groupable()).containsExactly("status", "assignedTo", "date");
+    }
+
+    @Test
+    void aggregatesCarryFieldFunctionAndLabel() {
+        ListSpec spec = new ListSpec();
+        spec.aggregate("total", ListSpec.Agg.SUM)
+                .aggregate("amount", ListSpec.Agg.AVG, "Average");
+
+        assertThat(spec.aggregates())
+                .extracting(ListSpec.Aggregate::field, ListSpec.Aggregate::fn, ListSpec.Aggregate::label)
+                .containsExactly(
+                        tuple("total", ListSpec.Agg.SUM, null),      // label defaults later (to the field label)
+                        tuple("amount", ListSpec.Agg.AVG, "Average"));
+    }
 }

@@ -130,16 +130,30 @@ public class UiActionResolver {
     public List<Map<String, Object>> inputDescriptors(Class<?> entity) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (InputField in : inputsForEntity(entity)) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("key", in.key());
-            m.put("label", in.label());
-            m.put("type", in.type().name().toLowerCase());
-            m.put("placeholder", in.placeholder());
-            m.put("options", in.options());
-            m.put("value", in.defaultValue());
-            out.add(m);
+            out.add(inputFieldMap(in));
         }
         return out;
+    }
+
+    /** One input field's descriptor map — shared by the toolbar inputs and an action's form fields. */
+    public static Map<String, Object> inputFieldMap(InputField in) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("key", in.key());
+        m.put("label", in.label());
+        m.put("type", in.type().name().toLowerCase());
+        m.put("placeholder", in.placeholder());
+        m.put("options", in.options());
+        m.put("value", in.defaultValue());
+        m.put("required", in.required());
+        return m;
+    }
+
+    /** An action's form-field descriptor maps ({@link ActionSpec.ActionBuilder#form}), empty when none. */
+    public static List<Map<String, Object>> formDescriptors(Action a) {
+        if (!a.hasForm()) {
+            return List.of();
+        }
+        return a.form().stream().map(UiActionResolver::inputFieldMap).toList();
     }
 
     /** Descriptor maps for actions in the given scopes — what the list/detail surfaces emit. */
@@ -157,9 +171,18 @@ public class UiActionResolver {
                 m.put("logo", a.logo());
             }
             m.put("scope", a.scope().name().toLowerCase());
+            if (a.menu() != null && !a.menu().isBlank()) {
+                // Context-menu placement: the client renders this row action inside the row's
+                // right-click menu, under a submenu with this label, instead of as an icon button.
+                m.put("menu", a.menu());
+            }
             m.put("server", a.isServer());
             if (!a.isServer()) {
                 m.put("url", a.navigateUrl());
+            }
+            if (a.hasForm()) {
+                // The click first opens a modal collecting these fields; values POST as inputs.
+                m.put("form", formDescriptors(a));
             }
             out.add(m);
         }
