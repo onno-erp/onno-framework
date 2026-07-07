@@ -96,8 +96,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public ActionController actionController(CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
                                              UiAccessService access,
-                                             UiActionResolver uiActionResolver) {
-        return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver);
+                                             UiActionResolver uiActionResolver,
+                                             UiProperties uiProperties) {
+        return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver,
+                uiProperties);
     }
 
     @Bean

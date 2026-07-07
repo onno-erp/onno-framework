@@ -35,19 +35,32 @@ public class ActionController {
     private final DocumentQueryService documentQuery;
     private final UiAccessService access;
     private final UiActionResolver actions;
+    private final UiProperties properties;
 
     public ActionController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                            UiAccessService access, UiActionResolver actions) {
+                            UiAccessService access, UiActionResolver actions, UiProperties properties) {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.access = access;
         this.actions = actions;
+        this.properties = properties;
+    }
+
+    /**
+     * Server-action handlers are writes by definition — honour {@code onno.ui.read-only} the same
+     * way the generic create/update/delete endpoints do (#227).
+     */
+    private void requireWritable() {
+        if (properties.isReadOnly()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
+        }
     }
 
     @PostMapping("/{kind}/{name}/{key}")
     public ActionResult run(@PathVariable String kind, @PathVariable String name, @PathVariable String key,
                             @RequestParam(required = false) UUID id,
                             @RequestBody(required = false) Map<String, Object> body, Principal principal) {
+        requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = actions.find(entity, key);
         if (action == null) {
@@ -76,6 +89,7 @@ public class ActionController {
     public Map<String, Object> runBatch(@PathVariable String kind, @PathVariable String name,
                                         @PathVariable String key,
                                         @RequestBody Map<String, Object> body, Principal principal) {
+        requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = actions.find(entity, key);
         if (action == null) {
