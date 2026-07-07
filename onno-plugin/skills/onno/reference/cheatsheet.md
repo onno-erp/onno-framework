@@ -58,7 +58,7 @@ Persisted as a reference table; each value gets a stable UUID. Annotate a consta
 `@EnumLabel("…")` to give it a human/localized display label (surfaced in `{col}_display`, the
 `enumValues[].label` metadata, and the dropdown) without renaming the constant; unlabelled constants
 display as their name. `@EnumLabel(value="…", color="#RRGGBB")` additionally paints the value as a
-colored status pill in list cells, the dropdown, and the detail view — the colour rides the read API
+colored status pill in list cells and the form dropdown — the colour rides the read API
 as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain text.
 
 ### `@Constant` (on a plain class with one value field)
@@ -243,9 +243,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     prefix is the `@TabularSection(name=…)`, and it scopes the hint so it can't collide with a
     same-named top-level field; a **register's** resource columns format the same way via an
     `EntityView` whose `entity()` is the register class (no served surface, just the hints);
-    `action(name)` → `ActionHintBuilder` places a **detail-header** action (`post`/`unpost`/
-    `edit`/`delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
-    on REST), #185; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
+    `action(name)` → `ActionHintBuilder` places a **record-header** action (`unpost`/`duplicate`/
+    `delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
+    on REST), #185 — the record surface is the editable form itself (no separate detail/edit
+    pages), so `post` is the form's built-in Post button (`.hidden()` hides it) and there is no
+    `edit` action anymore; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
     related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
     `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.

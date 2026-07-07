@@ -638,11 +638,11 @@ public final class SurfaceDivBuilder {
     }
 
     /**
-     * Append the comments thread panel to a built detail surface. The panel is an
+     * Append the comments thread panel to a built record surface. The panel is an
      * {@code onno-comments} {@code div-custom} carrying the entity's {@code (kind, name, id)} triple;
      * the React bridge loads and posts the thread itself from {@code /api/comments/...}. Returns the
      * same content map (its {@code items} replaced with an extended copy), so callers can chain it
-     * onto {@link #catalogDetail} / {@link #documentDetail} without those methods knowing about
+     * onto {@link #entityForm} (the combined record surface) without that method knowing about
      * comments. A no-op if the content has no {@code items} list (defensive).
      */
     @SuppressWarnings("unchecked")
@@ -728,7 +728,7 @@ public final class SurfaceDivBuilder {
      * in-button loading state, and routes the rest through the same {@code onno://} events.
      */
     private static Map<String, Object> actionCluster(List<HeaderAction> items) {
-        List<Map<String, Object>> list = new ArrayList<>();
+        List<Map<String, Object>> list = actionItems(items);
         // Reserve a (generous) width for the DivKit box: the React island is portaled in after
         // DivKit lays out, so wrap_content would measure it empty. Erring large avoids clipping —
         // the inline-flex host still hugs the real buttons inside the reserved space.
@@ -736,17 +736,6 @@ public final class SurfaceDivBuilder {
         boolean hasMenu = false;
         int width = 0;
         for (HeaderAction a : items) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("label", a.label());
-            m.put("icon", a.icon());
-            m.put("url", a.url());
-            m.put("tone", a.tone());
-            m.put("placement", a.placement());
-            if (a.form() != null && !a.form().isEmpty()) {
-                // The island opens a modal collecting these fields before it POSTs the action.
-                m.put("form", a.form());
-            }
-            list.add(m);
             if ("menu".equals(a.placement())) {
                 hasMenu = true;
             } else {
@@ -761,6 +750,30 @@ public final class SurfaceDivBuilder {
         Map<String, Object> node = Div.custom("onno-actions-menu", Map.of("items", list));
         Div.width(node, Math.max(40, width));
         return node;
+    }
+
+    /**
+     * {@link HeaderAction}s as the plain-JSON items the action-cluster island consumes
+     * ({@code label / icon / url / tone / placement} + optional {@code form}). Shared by the
+     * {@code onno-actions-menu} block and the entity-form descriptor's {@code actions} — the
+     * combined record surface renders the same cluster from the same shape.
+     */
+    public static List<Map<String, Object>> actionItems(List<HeaderAction> items) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (HeaderAction a : items) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("label", a.label());
+            m.put("icon", a.icon());
+            m.put("url", a.url());
+            m.put("tone", a.tone());
+            m.put("placement", a.placement());
+            if (a.form() != null && !a.form().isEmpty()) {
+                // The island opens a modal collecting these fields before it POSTs the action.
+                m.put("form", a.form());
+            }
+            list.add(m);
+        }
+        return list;
     }
 
     /** A definition-list card: field rows separated by hairline dividers. */

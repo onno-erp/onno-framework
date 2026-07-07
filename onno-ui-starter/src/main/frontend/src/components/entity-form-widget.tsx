@@ -28,6 +28,7 @@ import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
 import { cancelQuickCreate, consumeQuickCreate } from "@/lib/quick-create";
 import { clearFormDirty, markFormDirty } from "@/lib/dirty-forms";
+import { ActionsCluster, type ActionItem } from "@/lib/actions-menu-bridge";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-control, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -47,6 +48,16 @@ export type FormDescriptor = {
    * source's attributes/line items minus its identity (see DivKitController#duplicateDraft).
    */
   duplicate?: boolean;
+  /**
+   * The combined record surface rendered for a viewer without write access (or with
+   * onno.ui.read-only on): every control disables and the Save/Post footer disappears.
+   */
+  readOnly?: boolean;
+  /**
+   * Record-level header actions (unpost / duplicate / delete + custom DETAIL actions) — the
+   * same items the old detail header's onno-actions-menu cluster carried.
+   */
+  actions?: ActionItem[];
   meta: {
     name: string;
     autoNumber?: boolean;
@@ -58,6 +69,8 @@ export type FormDescriptor = {
     tabularSections?: TabularSectionMeta[];
     /** Inline related-list (junction) panels — on catalogs and documents alike. */
     relatedLists?: RelatedListMeta[];
+    /** Per-action placement overrides (f.action("post").inMenu()/hidden()) — "post" hides the Post button. */
+    actions?: Record<string, string>;
   };
   initial: EntityRecord | null;
 };
@@ -139,9 +152,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // A duplicate carries the source id (for pane routing/close) but still creates a new record.
   const isDuplicate = form.duplicate === true;
   const isEdit = id != null && !isDuplicate;
-  const formPath = `/${kind}/${name}/${
-    isDuplicate ? `${id}/duplicate` : isEdit ? `${id}/edit` : "new"
-  }`;
+  const readOnly = form.readOnly === true;
+  // An edit form IS the record surface now, so its dirty key is the record path itself
+  // (dirty-forms normalizes the legacy "/edit" alias onto the same key).
+  const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? id : "new"}`;
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
   // description; both then list the visible-in-form attributes by their order hint.
@@ -203,7 +217,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const postable = kind === "documents" && meta.postable === true;
   const wasPosted = Boolean(initial?._posted);
 
-  const [data, setData] = useState<EntityRecord>(() => {
+  // Seeders are plain functions so Cancel on the record surface can reset to the stored values.
+  const seedData = () => {
     const seed: EntityRecord = {};
     if (!initial) return seed;
     for (const f of fields) {
@@ -215,13 +230,14 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       if (initial[col] != null) seed[f.key] = initial[col];
     }
     return seed;
-  });
+  };
+  const [data, setData] = useState<EntityRecord>(seedData);
 
   // Rows per section, keyed by attribute fieldName. Loaded rows arrive keyed by column name
   // (with resolved *_display labels), so seed each cell from initial[section][columnName] —
   // the same column→field asymmetry the top-level fields handle above. All attributes are
   // seeded (not just the visible ones) so hidden columns survive the delete-and-reinsert.
-  const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(() => {
+  const seedRows = () => {
     const seed: Record<string, EntityRecord[]> = {};
     for (const ts of sections) {
       const raw = initial?.[ts.name];
@@ -237,7 +253,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         : [];
     }
     return seed;
-  });
+  };
+  const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(seedRows);
 
   const [saving, setSaving] = useState(false);
   // Inline validation messages, keyed by field key (attr fieldName / system "code"/"description").
@@ -342,11 +359,19 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           // saved (unposted) record so the user lands somewhere actionable.
         }
       }
+      clearFormDirty(formPath); // saved — nothing left for the discard guard to protect
+      if (isEdit) {
+        // The form IS the record surface: Save stays on the page. Once the dirty flag is
+        // clear, the save's own SSE event refetches this island with the stored values
+        // (fresh code/number, posted state), so no navigation and no manual reload.
+        toast.success(t("toast.saved"));
+        setSaving(false);
+        return;
+      }
       // A create that a ref picker is waiting on ("+ New" quick-create) hands the id back to
       // the picker and closes quietly — the user stays on the form they were filling in.
       // Otherwise open the saved record. Either way close the form pane (lists refresh over SSE).
-      const pickedUp = !isEdit && consumeQuickCreate(kind, name, savedId);
-      clearFormDirty(formPath); // saved — the close below must not trip the discard guard
+      const pickedUp = consumeQuickCreate(kind, name, savedId);
       if (!pickedUp) dispatchAction(`onno://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
@@ -366,11 +391,18 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   };
 
   const cancel = () => {
-    // Cancelling a create also cancels any ref-picker quick-create waiting on it. Cancel is an
-    // explicit discard — clear the dirty flag so the close doesn't ALSO ask "discard?".
+    // Cancel is an explicit discard — clear the dirty flag first so nothing asks "discard?".
     clearFormDirty(formPath);
-    if (!isEdit) cancelQuickCreate(kind, name);
-    if (isEdit) dispatchAction(`onno://${kind}/${name}/${id}`);
+    if (isEdit) {
+      // On the record surface Cancel reverts the unsaved edits in place (back to the stored
+      // values) instead of closing the pane — the tab's X already closes it.
+      setData(seedData());
+      setRowsBySection(seedRows());
+      setErrors({});
+      return;
+    }
+    // Cancelling a create also cancels any ref-picker quick-create waiting on it.
+    cancelQuickCreate(kind, name);
     dispatchClose(formPath);
   };
 
@@ -395,20 +427,26 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
 
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <div className="mb-5">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-xl font-semibold text-foreground">{form.title}</h1>
-          {postable && wasPosted ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-              <CircleCheck className="size-3" aria-hidden="true" />
-              {t("status.posted")}
-            </span>
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <h1 className="truncate text-xl font-semibold text-foreground">{form.title}</h1>
+            {postable && wasPosted ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/15 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                <CircleCheck className="size-3" aria-hidden="true" />
+                {t("status.posted")}
+              </span>
+            ) : null}
+          </div>
+          {subtitleParts.length > 0 ? (
+            <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitleParts.join(" · ")}</p>
           ) : null}
         </div>
-        {subtitleParts.length > 0 ? (
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{subtitleParts.join(" · ")}</p>
-        ) : null}
+        {/* Record-level actions (unpost / duplicate / delete / custom DETAIL actions) — the same
+            cluster the old read-only detail header rendered, now pinned beside the form title. */}
+        {form.actions?.length ? <ActionsCluster items={form.actions} /> : null}
       </div>
+      <fieldset disabled={readOnly} className="contents">
       {fieldGroups.map((g, gi) => (
         <div
           key={g.title || "__default"}
@@ -436,11 +474,13 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           key={ts.name}
           section={ts}
           rows={rowsBySection[ts.name] ?? []}
+          readOnly={readOnly}
           onAdd={() => addRow(ts.name)}
           onRemove={(idx) => removeRow(ts.name, idx)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
         />
       ))}
+      </fieldset>
       {/* Related-list panels read/write live join-catalog rows, so they're keyed to the saved
           record's id rather than to form state. On a create/duplicate form (no real id yet) the
           panel shows a "save first" hint. */}
@@ -450,45 +490,48 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           parentKind={kind}
           parentName={name}
           parentId={isEdit ? id : null}
+          readOnly={readOnly}
           meta={rl}
         />
       ))}
-      <div className="mt-5 flex justify-end gap-2">
-        <button
-          type="button"
-          className={cn(actionBtn, "text-muted-foreground hover:text-foreground")}
-          onClick={cancel}
-          disabled={saving}
-        >
-          <X className="size-4" aria-hidden="true" />
-          {t("action.cancel")}
-        </button>
-        <button
-          type="button"
-          // The form's primary affirmative action carries the brand (falls back to the neutral
-          // near-black --primary when unbranded). Cancel/secondary actions stay quiet.
-          className={cn(actionBtn, "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
-          onClick={() => save(false)}
-          disabled={saving}
-        >
-          <Check className="size-4" aria-hidden="true" />
-          {saving ? t("action.saving") : postable ? t("action.save") : form.submitLabel}
-        </button>
-        {postable ? (
+      {readOnly ? null : (
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            className={cn(
-              actionBtn,
-              "bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white"
-            )}
-            onClick={() => save(true)}
+            className={cn(actionBtn, "text-muted-foreground hover:text-foreground")}
+            onClick={cancel}
             disabled={saving}
           >
-            <CircleCheck className="size-4" aria-hidden="true" />
-            {wasPosted ? t("action.repost") : t("action.post")}
+            <X className="size-4" aria-hidden="true" />
+            {t("action.cancel")}
           </button>
-        ) : null}
-      </div>
+          <button
+            type="button"
+            // The form's primary affirmative action carries the brand (falls back to the neutral
+            // near-black --primary when unbranded). Cancel/secondary actions stay quiet.
+            className={cn(actionBtn, "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground")}
+            onClick={() => save(false)}
+            disabled={saving}
+          >
+            <Check className="size-4" aria-hidden="true" />
+            {saving ? t("action.saving") : postable ? t("action.save") : form.submitLabel}
+          </button>
+          {postable && meta.actions?.post !== "hidden" ? (
+            <button
+              type="button"
+              className={cn(
+                actionBtn,
+                "bg-emerald-600 text-white hover:bg-emerald-600/90 hover:text-white"
+              )}
+              onClick={() => save(true)}
+              disabled={saving}
+            >
+              <CircleCheck className="size-4" aria-hidden="true" />
+              {wasPosted ? t("action.repost") : t("action.post")}
+            </button>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -499,12 +542,15 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
 function TabularSectionEditor({
   section,
   rows,
+  readOnly,
   onAdd,
   onRemove,
   onCell,
 }: {
   section: TabularSectionMeta;
   rows: EntityRecord[];
+  /** Viewer without write access: cells disable via the enclosing fieldset; hide add/remove too. */
+  readOnly?: boolean;
   onAdd: () => void;
   onRemove: (idx: number) => void;
   onCell: (idx: number, key: string, value: unknown) => void;
@@ -529,10 +575,12 @@ function TabularSectionEditor({
     <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
-          <Plus className="size-4" aria-hidden="true" />
-          {t("action.addRow")}
-        </button>
+        {readOnly ? null : (
+          <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
+            <Plus className="size-4" aria-hidden="true" />
+            {t("action.addRow")}
+          </button>
+        )}
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
@@ -572,15 +620,19 @@ function TabularSectionEditor({
                       />
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => onRemove(idx)}
-                    aria-label={`Remove row ${idx + 1}`}
-                    title="Remove row"
-                    className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </button>
+                  {readOnly ? (
+                    <span className="w-8 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(idx)}
+                      aria-label={`Remove row ${idx + 1}`}
+                      title="Remove row"
+                      className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

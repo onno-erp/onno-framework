@@ -28,16 +28,19 @@ export function RelatedListPanel({
   parentName,
   parentId,
   meta,
+  readOnly: forceReadOnly,
 }: {
   parentKind: "catalogs" | "documents";
   parentName: string;
   parentId: string | null;
   meta: RelatedListMeta;
+  /** The host surface is read-only (viewer lacks write access) — lock the panel regardless of kind. */
+  readOnly?: boolean;
 }) {
   const t = useMessages();
   // Register-backed junctions have no generic write REST yet, so they render read-only — no Add
   // button, no per-row remove (see RelatedList / Junctions on the server).
-  const readOnly = meta.readOnly === true;
+  const readOnly = forceReadOnly === true || meta.readOnly === true;
 
   const title = useMemo(() => {
     if (meta.label && meta.label.trim()) return meta.label;

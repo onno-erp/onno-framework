@@ -604,20 +604,16 @@ public class DivKitController implements DisposableBean {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        // Only offer edit/delete to users who may write the catalog; the REST
-        // endpoints enforce it regardless.
-        boolean canWrite = access.canWrite(principal, desc);
-        // Catalogs keep Edit/Delete as inline (primary) buttons — no posting, no overflow.
+        // The record surface IS the object form (1C-style): writers edit in place and Save stays
+        // on the page; readers get the same form disabled. The REST endpoints enforce write
+        // access regardless, and the onno.ui.read-only kill switch locks the form for everyone.
+        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
-                    "onno://catalogs/" + name + "/" + id + "/edit", "primary"));
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://catalogs/" + name + "/" + id + "/duplicate", "menu"));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
-                    "onno://delete/catalogs/" + name + "/" + id, "primary"));
-        }
-        if (canWrite) {
+                    "onno://delete/catalogs/" + name + "/" + id, "menu"));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
             actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
                     resolvedMetadata.actionOverrides(desc.javaClass())));
@@ -625,10 +621,18 @@ public class DivKitController implements DisposableBean {
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
-        Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
-                meta, catalogQuery.get(desc, id),
-                relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
-                palette(theme), messages);
+        Map<String, Object> row = catalogQuery.get(desc, id);
+        // Title the surface with the record's own identity (description, else code) — there is
+        // no separate read-only detail card left to carry it.
+        String label = str(row.get("_description"));
+        if (label.isBlank()) {
+            label = str(row.get("_code"));
+        }
+        if (label.isBlank()) {
+            label = str(meta.get("name"));
+        }
+        Map<String, Object> content = entityFormBody("catalogs", name, id, label,
+                messages.get("action.save"), meta, row, false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -646,17 +650,13 @@ public class DivKitController implements DisposableBean {
                 meta, catalogQuery.newDraft(desc));
     }
 
+    /**
+     * Back-compat alias: the record surface is the editable form now, so {@code /edit} serves
+     * the same combined surface. Old deep links and client routes keep working.
+     */
     @GetMapping("/catalogs/{name}/{id}/edit")
     public Map<String, Object> catalogEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        CatalogDescriptor desc = catalogQuery.require(name);
-        access.requireWrite(principal, desc);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
-        Map<String, Object> row = catalogQuery.get(desc, id);
-        String label = str(row.get("_description"));
-        if (label.isBlank()) {
-            label = str(row.get("_code"));
-        }
-        return entityFormContent("catalogs", name, id, "Edit " + label, "Save", meta, row);
+        return catalogDetail(name, id, null, null, principal);
     }
 
     @GetMapping("/catalogs/{name}/{id}/duplicate")
@@ -694,49 +694,41 @@ public class DivKitController implements DisposableBean {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, null).id());
-        // Only offer edit/delete to users who may write the document; the REST
-        // endpoints enforce it regardless.
-        boolean canWrite = access.canWrite(principal, desc);
+        // The record surface IS the object form (1C-style): writers edit in place and Save stays
+        // on the page; readers get the same form disabled. The REST endpoints enforce write
+        // access regardless, and the onno.ui.read-only kill switch locks the form for everyone.
+        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> row = documentQuery.get(desc, id);
-        // Posting actions: only for writable, postable documents. Post is offered in both
-        // states (it re-posts when already posted, labelled accordingly); Unpost only once
-        // posted. Placement (primary button / overflow ⋯ menu / hidden) comes from the
-        // resolved metadata's "actions" map, which a view can override per action.
+        // The form owns Save and Post/Re-post (Post = save-then-post, 1C-style), so the header
+        // only carries Unpost (once posted) plus Duplicate/Delete and the custom DETAIL actions.
+        // Placement (primary button / overflow ⋯ menu / hidden) comes from the resolved
+        // metadata's "actions" map, which a view can override per action.
         boolean postable = Boolean.TRUE.equals(meta.get("postable"));
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         @SuppressWarnings("unchecked")
         Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
-        if (canWrite && postable) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check",
-                    messages.get(posted ? "action.repost" : "action.post"),
-                    "primary", "onno://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
-        }
         if (canWrite && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
                     "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
         }
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "normal",
-                    "onno://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://documents/" + name + "/" + id + "/duplicate", str(placement.getOrDefault("duplicate", "menu"))));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
-        }
-        if (canWrite) {
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183),
-            // the same override map the built-in post/edit/delete actions read above.
+            // the same override map the built-in unpost/duplicate/delete actions read above.
             actions.addAll(detailActions(desc.javaClass(), "documents", name, id,
                     resolvedMetadata.actionOverrides(desc.javaClass())));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> content = SurfaceDivBuilder.documentDetail(
-                meta, row, relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
-                palette(theme), messages);
+        Map<String, Object> content = entityFormBody("documents", name, id,
+                str(meta.get("name")) + " " + str(row.get("_number")),
+                messages.get("action.save"), meta, row, false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -754,14 +746,13 @@ public class DivKitController implements DisposableBean {
                 meta, documentQuery.newDraft(desc));
     }
 
+    /**
+     * Back-compat alias: the record surface is the editable form now, so {@code /edit} serves
+     * the same combined surface. Old deep links and client routes keep working.
+     */
     @GetMapping("/documents/{name}/{id}/edit")
     public Map<String, Object> documentEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        DocumentDescriptor desc = documentQuery.require(name);
-        access.requireWrite(principal, desc);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
-        Map<String, Object> row = documentQuery.get(desc, id);
-        return entityFormContent("documents", name, id, "Edit " + str(meta.get("name")) + " " + str(row.get("_number")),
-                "Save", meta, row);
+        return documentDetail(name, id, null, principal);
     }
 
     @GetMapping("/documents/{name}/{id}/duplicate")
@@ -940,6 +931,21 @@ public class DivKitController implements DisposableBean {
     private Map<String, Object> entityFormContent(String kind, String name, UUID id, String title,
                                                   String submitLabel, Map<String, Object> meta,
                                                   Map<String, Object> row, boolean duplicate) {
+        return DivCard.of("onno-content",
+                entityFormBody(kind, name, id, title, submitLabel, meta, row, duplicate, false, List.of()));
+    }
+
+    /**
+     * The bare {@code onno-form} content (no DivCard wrapper), so a caller can chain
+     * {@link SurfaceDivBuilder#withComments} onto it. {@code readOnly} renders the form disabled
+     * (a reader's view of the combined record surface); {@code actions} are the record-level
+     * header actions (unpost/duplicate/delete + custom DETAIL actions) the form renders as the
+     * same inline-buttons-plus-overflow cluster the old detail header used.
+     */
+    private Map<String, Object> entityFormBody(String kind, String name, UUID id, String title,
+                                               String submitLabel, Map<String, Object> meta,
+                                               Map<String, Object> row, boolean duplicate,
+                                               boolean readOnly, List<SurfaceDivBuilder.HeaderAction> actions) {
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("kind", kind);
         descriptor.put("name", name);
@@ -947,9 +953,13 @@ public class DivKitController implements DisposableBean {
         descriptor.put("title", title);
         descriptor.put("submitLabel", submitLabel);
         descriptor.put("duplicate", duplicate);
+        descriptor.put("readOnly", readOnly);
+        if (!actions.isEmpty()) {
+            descriptor.put("actions", SurfaceDivBuilder.actionItems(actions));
+        }
         descriptor.put("meta", meta);
         descriptor.put("initial", row);
-        return DivCard.of("onno-content", SurfaceDivBuilder.entityForm(descriptor));
+        return SurfaceDivBuilder.entityForm(descriptor);
     }
 
     /**

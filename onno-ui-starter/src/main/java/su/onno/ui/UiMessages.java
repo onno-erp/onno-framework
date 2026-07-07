@@ -225,6 +225,7 @@ public final class UiMessages {
         // Success toasts.
         d.put("toast.posted", "Document posted");
         d.put("toast.unposted", "Document unposted");
+        d.put("toast.saved", "Saved");
 
         // Delete-confirmation dialogs.
         d.put("confirm.delete.document.title", "Delete document?");

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
-import { Copy, ExternalLink, Link2, Pencil, Trash2, X, type LucideIcon } from "lucide-react";
+import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   createGlobalVariablesController,
@@ -473,7 +473,16 @@ export function DivKitView() {
       // Coalesce bursts (e.g. a post emits both "posted" and register "changed").
       const timers = refetchTimers.current;
       window.clearTimeout(timers.get(key));
-      timers.set(key, window.setTimeout(entry.run, 150));
+      timers.set(
+        key,
+        window.setTimeout(() => {
+          // The record surface is an editable form: a refetch remounts the island, which would
+          // wipe in-progress typing. Skip while dirty (checked at fire time — a save clears the
+          // flag before its own SSE event lands, so the post-save refresh still goes through).
+          if (isFormDirty(entry.path)) return;
+          entry.run();
+        }, 150)
+      );
     }
   }, []);
   useUiEvents(onUiEvent);
@@ -794,12 +803,13 @@ export function DivKitView() {
         },
       },
       {
+        // The record surface is the editable form now, so "Edit" just opens the record.
         key: "e",
         mod: true,
         run: () => {
           if (rowMenuOpenRef.current || confirmOpenRef.current) return;
           const url = hoveredRowUrl();
-          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/edit` });
+          if (url && hoveredRowWritable()) onCustomAction({ url });
         },
       },
       {
@@ -1363,14 +1373,10 @@ export function DivKitView() {
             run: () => onCustomAction({ url: rowMenu.url }),
             shortcut: shortcutLabel({ key: "Enter", mod: true }),
           },
+          // Open IS edit now — the record surface is the editable form — so the menu keeps
+          // just Open plus the write-gated Duplicate.
           ...(rowMenu.writable
             ? [
-                {
-                  label: t("action.edit"),
-                  icon: Pencil,
-                  run: () => onCustomAction({ url: rowMenu.url + "/edit" }),
-                  shortcut: shortcutLabel({ key: "e", mod: true }),
-                },
                 {
                   label: t("action.duplicate"),
                   icon: Copy,
