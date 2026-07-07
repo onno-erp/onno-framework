@@ -137,7 +137,7 @@ public final class ShellLayoutBuilder {
 
         List<Map<String, Object>> identityItems = new ArrayList<>();
         if (userName != null && !userName.isBlank()) {
-            Map<String, Object> caption = Div.text(msg.get("shell.signedInAs"), 10, "medium");
+            Map<String, Object> caption = Div.text(msg.get("shell.signedInAs"), 11, "medium");
             Div.color(caption, p.muted());
             Div.maxLines(caption, 1);
             identityItems.add(caption);
@@ -169,7 +169,7 @@ public final class ShellLayoutBuilder {
         // A leading avatar when the signed-in user's identity record has one; else the row
         // is just the name + actions, exactly as before.
         List<Map<String, Object>> rowCells = new ArrayList<>();
-        Map<String, Object> avatar = avatar(avatarUrl, 34);
+        Map<String, Object> avatar = avatar(avatarUrl, 34, p);
         if (avatar != null) {
             rowCells.add(avatar);
         }
@@ -197,7 +197,7 @@ public final class ShellLayoutBuilder {
         Div.gap(root, 8);
         Div.pad(root, 9, 10);
         Div.background(root, p.surface());
-        Div.corner(root, 12);
+        Div.corner(root, Radii.CARD);
         Div.stroke(root, p.border(), 1);
         return root;
     }
@@ -207,7 +207,7 @@ public final class ShellLayoutBuilder {
      * (so the caller degrades to the name-only identity, unchanged). {@code fill} scale crops
      * the image to the square, and the {@code 999} corner rounds it to a circle.
      */
-    private static Map<String, Object> avatar(String url, int size) {
+    private static Map<String, Object> avatar(String url, int size, Palette p) {
         if (url == null || url.isBlank()) {
             return null;
         }
@@ -216,6 +216,7 @@ public final class ShellLayoutBuilder {
         Div.width(img, size);
         Div.height(img, size);
         Div.corner(img, 999);
+        Div.stroke(img, p.border(), 1);
         return img;
     }
 
@@ -344,23 +345,33 @@ public final class ShellLayoutBuilder {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // A configured logo takes the header; otherwise fall back to the text brand.
+        // Left offset 10 lines the brand up with the section headers and row text below.
         if (logo != null && logo.present()) {
             Map<String, Object> brandLogo = logoImage(logo, 28);
-            Div.margins(brandLogo, 4, 8, 14, 8);
+            Div.margins(brandLogo, 6, 10, 14, 10);
             items.add(brandLogo);
         } else if (brand != null && !brand.isBlank()) {
             Map<String, Object> brandText = Div.text(brand, 16, "bold");
             Div.color(brandText, p.text());
-            Div.margins(brandText, 4, 8, 14, 8);
+            Div.margins(brandText, 6, 10, 14, 10);
             items.add(brandText);
         }
 
+        boolean anyLinks = false;
         for (NavSection section : nav) {
-            if (section.title() != null && !section.title().isBlank()) {
-                items.add(sidebarHeader(section.title(), section.icon(), p));
+            boolean titled = section.title() != null && !section.title().isBlank();
+            if (titled) {
+                items.add(sidebarHeader(section.title(), p));
             }
             for (NavItem item : section.items()) {
-                items.add(sidebarLink(item, p));
+                Map<String, Object> link = sidebarLink(item, p);
+                // A titleless group after other links (e.g. a trailing Settings) still needs
+                // the group breathing room a header would otherwise provide.
+                if (!titled && anyLinks && item == section.items().get(0)) {
+                    Div.margins(link, 14, 0, 0, 0);
+                }
+                items.add(link);
+                anyLinks = true;
             }
         }
         // Just the content (brand + links) on a surface fill. The host wraps this in
@@ -374,22 +385,20 @@ public final class ShellLayoutBuilder {
         return root;
     }
 
-    private static Map<String, Object> sidebarHeader(String title, String iconName, Palette p) {
-        Map<String, Object> header = Div.text(title.toUpperCase(), 11, "medium");
-        Div.color(header, p.muted());
+    /**
+     * A section label: quiet tracked small-caps, no icon. The rows below already carry
+     * per-item glyphs, so an icon here just repeated one of them (SUPPLIERS truck over a
+     * Supplier truck) — the type treatment alone separates groups with less noise.
+     */
+    private static Map<String, Object> sidebarHeader(String title, Palette p) {
+        Map<String, Object> header = Div.text(title.toUpperCase(), 10, "medium");
+        Div.color(header, p.faint());
+        Div.letterSpacing(header, 0.8);
         Div.maxLines(header, 1);
-
-        Map<String, Object> node;
-        Map<String, Object> glyph = icon(iconName, p.muted(), 14);
-        if (glyph != null) {
-            node = Div.horizontal(List.of(glyph, header));
-            Div.gap(node, 6);
-            Div.alignV(node, "center");
-        } else {
-            node = header;
-        }
-        Div.margins(node, 12, 8, 4, 8);
-        return node;
+        // Left margin matches the links' horizontal padding so headers and rows align;
+        // the tall top margin is what visually separates one group from the last.
+        Div.margins(header, 18, 8, 4, 10);
+        return header;
     }
 
     private static Map<String, Object> sidebarLink(NavItem item, Palette p) {
@@ -399,25 +408,53 @@ public final class ShellLayoutBuilder {
         Div.weight(label, 1);
         Div.matchWidth(label);
 
+        // Icon + label, like the mobile menu rows and bottom tabs — the icon stays muted,
+        // the label carries the active highlight. Degrades to label-only when unauthored.
+        List<Map<String, Object>> cells = new ArrayList<>();
+        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 16);
+        if (glyph != null) {
+            cells.add(glyph);
+        }
+        cells.add(label);
         // Ambient presence: a small reserved slot the React bridge fills with who's viewing this entity
         // (empty for non-entity routes or when nobody is here). The whole row is the nav action.
-        Map<String, Object> row = Div.horizontal(List.of(label, navPresence(item.path())));
+        cells.add(navPresence(item.path()));
+
+        Map<String, Object> row = Div.horizontal(cells);
         Div.matchWidth(row);
         Div.alignV(row, "center");
-        Div.gap(row, 6);
-        Div.pad(row, 9, 10);
+        Div.gap(row, 8);
+        Div.pad(row, 6, 10);
         Div.corner(row, 8);
         Div.background(row, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
         Div.action(row, "nav", item.url());
         return row;
     }
 
+    /**
+     * The glyph stacked under an {@code onno-notification-dot} custom block in an overlap
+     * container. The React bridge paints a small unread dot in the block's top-right corner
+     * when there are unread notifications (nothing otherwise, and nothing when the feature is
+     * disabled — the client store knows), so the server always emits it and layout never shifts.
+     */
+    private static Map<String, Object> withUnreadDot(Map<String, Object> glyph, int size) {
+        Map<String, Object> dot = Div.custom("onno-notification-dot", Map.of());
+        Div.width(dot, size);
+        Div.height(dot, size);
+        Map<String, Object> stack = Div.container("overlap", List.of(glyph, dot));
+        Div.width(stack, size);
+        Div.height(stack, size);
+        return stack;
+    }
+
     /** A fixed-size {@code onno-nav-presence} custom block — sized like {@link #icon} so the React island
      *  has a measured box to portal into, and so an empty slot never shifts the nav layout. */
     private static Map<String, Object> navPresence(String path) {
         Map<String, Object> node = Div.custom("onno-nav-presence", Map.of("path", path));
-        Div.width(node, 40);
-        Div.height(node, 18);
+        Div.width(node, 56);
+        // Matches the avatar size the bridge renders (PresenceAvatars size=20), so the
+        // slot never sets the row's height — the label line does.
+        Div.height(node, 20);
         return node;
     }
 
@@ -438,11 +475,13 @@ public final class ShellLayoutBuilder {
         List<Map<String, Object>> tabs = new ArrayList<>();
         int primary = Math.min(MAX_PRIMARY_TABS, items.size());
         for (NavItem item : items.subList(0, primary)) {
-            tabs.add(bottomTab(item, p, compact));
+            tabs.add(bottomTab(item, p, compact, false));
         }
         // Always offer "More" — it's the hub for the overflow destinations, the persona
-        // switcher, theme toggle, and sign-out (none of which fit on the bar itself).
-        tabs.add(bottomTab(new NavItem(msg.get("shell.more"), "onno://menu", "menu", "/menu"), p, compact));
+        // switcher, theme toggle, sign-out, and (on mobile) the notification center. It
+        // carries the unread-notifications dot so updates stay visible without a bell
+        // crowding the bar.
+        tabs.add(bottomTab(new NavItem(msg.get("shell.more"), "onno://menu", "menu", "/menu"), p, compact, true));
 
         // A floating island: rounded, bordered, elevated surface. The host pins it
         // near the bottom edge with margin (see divkit-view bottom_bar). When
@@ -464,7 +503,7 @@ public final class ShellLayoutBuilder {
         return bar;
     }
 
-    private static Map<String, Object> bottomTab(NavItem item, Palette p, boolean compact) {
+    private static Map<String, Object> bottomTab(NavItem item, Palette p, boolean compact, boolean unreadDot) {
         String color = activeColor(item.path(), p.primary(), p.muted());
         // On a phone the bar splits its width five ways, so the label is tight. At 10sp a
         // common single word like "Dashboard" overran the tab by a hair and the renderer
@@ -481,7 +520,7 @@ public final class ShellLayoutBuilder {
         List<Map<String, Object>> stack = new ArrayList<>();
         Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 20);
         if (glyph != null) {
-            stack.add(glyph);
+            stack.add(unreadDot ? withUnreadDot(glyph, 20) : glyph);
         }
         stack.add(label);
 
@@ -523,9 +562,16 @@ public final class ShellLayoutBuilder {
         return menu(brand, logo, nav, userName, null, profiles, activeProfileId, p, msg);
     }
 
+    /** Back-compat overload: no notifications row. */
     public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
                                            String avatarUrl, List<ProfileLink> profiles, String activeProfileId,
                                            Palette p, UiMessages msg) {
+        return menu(brand, logo, nav, userName, avatarUrl, profiles, activeProfileId, false, p, msg);
+    }
+
+    public static Map<String, Object> menu(String brand, Logo logo, List<NavSection> nav, String userName,
+                                           String avatarUrl, List<ProfileLink> profiles, String activeProfileId,
+                                           boolean notifications, Palette p, UiMessages msg) {
         List<Map<String, Object>> items = new ArrayList<>();
 
         // The menu header mirrors the sidebar: a configured logo, else the text brand.
@@ -538,6 +584,13 @@ public final class ShellLayoutBuilder {
             Div.color(title, p.text());
             Div.margins(title, 0, 0, 14, 0);
             items.add(title);
+        }
+
+        // On mobile the bell lives here, not floating over content: a grouped row that opens
+        // the notification panel, with the React-filled unread badge pinned right. Emitted
+        // only when the notifications feature is wired server-side.
+        if (notifications) {
+            items.add(menuGroup(List.of(notificationsRow(p, msg)), p));
         }
 
         for (NavSection section : nav) {
@@ -564,6 +617,36 @@ public final class ShellLayoutBuilder {
         return root;
     }
 
+    /**
+     * The mobile menu's "Notifications" row — shaped exactly like {@link #menuRow} (icon +
+     * label on a grouped card) so it reads as part of the hub, with an
+     * {@code onno-notification-badge} custom block the React bridge fills with the unread
+     * count. Tapping it raises {@code onno://notifications}, which the host maps to opening
+     * the notification panel.
+     */
+    private static Map<String, Object> notificationsRow(Palette p, UiMessages msg) {
+        List<Map<String, Object>> cells = new ArrayList<>();
+        cells.add(icon("bell", p.muted(), 18));
+
+        Map<String, Object> label = Div.color(Div.text(msg.get("notifications.title"), 15, "regular"), p.text());
+        Div.maxLines(label, 1);
+        Div.weight(label, 1); // take the remaining width so the badge pins right
+        cells.add(label);
+
+        Map<String, Object> badge = Div.custom("onno-notification-badge", Map.of());
+        Div.width(badge, 40);
+        Div.height(badge, 20);
+        cells.add(badge);
+
+        Map<String, Object> row = Div.horizontal(cells);
+        Div.gap(row, 12);
+        Div.alignV(row, "center");
+        Div.pad(row, 15, 14);
+        Div.matchWidth(row);
+        Div.action(row, "notifications", "onno://notifications");
+        return row;
+    }
+
     private static Map<String, Object> menuSectionHeader(String title, Palette p) {
         Map<String, Object> header = Div.text(title.toUpperCase(), 11, "medium");
         Div.color(header, p.muted());
@@ -585,7 +668,7 @@ public final class ShellLayoutBuilder {
         Map<String, Object> card = Div.vertical(withSeparators);
         Div.matchWidth(card);
         Div.background(card, p.surface());
-        Div.corner(card, 12);
+        Div.corner(card, Radii.CARD);
         Div.stroke(card, p.border(), 1);
         return card;
     }

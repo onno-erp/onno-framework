@@ -2,6 +2,7 @@ package su.onno.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -41,6 +42,18 @@ import java.util.function.Predicate;
  *
  * <p>The per-row functions apply to {@link ActionScope#ROW} actions only (toolbar/detail buttons
  * have no row context); on other scopes they're ignored in favour of the fixed icon/label.</p>
+ *
+ * <p>A server action may also declare a <b>form</b> — the click then opens a modal dialog that
+ * collects the declared fields before the handler runs; the values arrive as
+ * {@link ActionContext#input(String)}. The classic case: a "Cancel" action that asks for a
+ * reason:</p>
+ *
+ * <pre>
+ * a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.DETAIL)
+ *  .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA)
+ *              .placeholder("Why is this order cancelled?").required())
+ *  .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
+ * </pre>
  */
 public final class ActionSpec {
 
@@ -68,11 +81,18 @@ public final class ActionSpec {
      * {@link ActionRow} when the list renders.</p>
      */
     public record Action(String key, String label, String icon, String logo, ActionScope scope,
+                         String menu,
                          String navigateUrl, Function<ActionContext, ActionResult> handler,
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
-                         Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn) {
+                         Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
+                         List<InputSpec.InputField> form) {
         public boolean isServer() {
             return handler != null;
+        }
+
+        /** Whether clicking must first collect the declared form fields in a modal dialog. */
+        public boolean hasForm() {
+            return form != null && !form.isEmpty();
         }
 
         /** Whether any aspect of this action varies per row (so the list must resolve it per row). */
@@ -87,6 +107,7 @@ public final class ActionSpec {
         private String label;
         private String icon = "";
         private String logo = "";
+        private String menu = "";
         private ActionScope scope = ActionScope.ROW;
         private String navigateUrl;
         private Function<ActionContext, ActionResult> handler;
@@ -94,6 +115,7 @@ public final class ActionSpec {
         private Function<ActionRow, String> labelFn;
         private Predicate<ActionRow> visibleFn;
         private Predicate<ActionRow> enabledFn;
+        private List<InputSpec.InputField> form = List.of();
 
         ActionBuilder(String key) {
             this.key = key;
@@ -124,9 +146,36 @@ public final class ActionSpec {
             return this;
         }
 
+        /**
+         * Put this {@link ActionScope#ROW} action into the row's right-click context menu under a
+         * submenu with the given label, instead of rendering it as an inline row icon button.
+         * Actions sharing a label land in the same submenu, in declaration order — e.g. one
+         * action per status under {@code .menu("Change status")}. The per-row functions
+         * ({@code label(row -> …)}, {@code visibleWhen}, {@code enabledWhen}) still apply to the
+         * menu entries. Ignored on non-ROW scopes.
+         */
+        public ActionBuilder menu(String submenuLabel) {
+            this.menu = submenuLabel;
+            return this;
+        }
+
         /** Run arbitrary server logic when clicked. */
         public ActionBuilder handler(Function<ActionContext, ActionResult> handler) {
             this.handler = handler;
+            return this;
+        }
+
+        /**
+         * Collect input from the user before the {@link #handler} runs: clicking the button opens a
+         * modal dialog with the fields declared here (same builder as toolbar inputs — text,
+         * textarea, date, number, select; {@code .required()} gates submit). The submitted values
+         * reach the handler as {@link ActionContext#input(String)}. Server actions only —
+         * a navigation action has no handler to hand the values to.
+         */
+        public ActionBuilder form(Consumer<InputSpec> form) {
+            InputSpec spec = new InputSpec();
+            form.accept(spec);
+            this.form = spec.inputs();
             return this;
         }
 
@@ -164,8 +213,8 @@ public final class ActionSpec {
         }
 
         Action build() {
-            return new Action(key, label != null ? label : key, icon, logo, scope, navigateUrl, handler,
-                    iconFn, labelFn, visibleFn, enabledFn);
+            return new Action(key, label != null ? label : key, icon, logo, scope, menu, navigateUrl, handler,
+                    iconFn, labelFn, visibleFn, enabledFn, form);
         }
     }
 }

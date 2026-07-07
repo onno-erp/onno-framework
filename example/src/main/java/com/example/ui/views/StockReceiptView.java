@@ -22,7 +22,11 @@ public class StockReceiptView implements EntityView {
     @Override
     public void list(ListSpec list) {
         list.columns("number", "date", "supplier", "posted")
-                .sortBy("date", true);
+                .sortBy("date", true)
+                // Receiving log views: per-supplier or bucketed by day/month.
+                .groupable("supplier", "date");
+        list.filter("date").label("Received").dateRange();
+        list.filter("note").label("Note").contains();
     }
 
     @Override

@@ -23,7 +23,14 @@ public class BookView implements EntityView {
     public void list(ListSpec list) {
         list.columns("description", "author", "category", "price", "supplier")
                 .label("description", "Title")
-                .sortBy("description", false);
+                .sortBy("description", false)
+                // Shelf views: group by category or supplier, with the average price per group.
+                .groupable("category", "supplier")
+                .aggregate("price", ListSpec.Agg.AVG, "Avg price");
+        // Typeahead facets for the high-cardinality columns: author matches anywhere in the
+        // name, ISBN anchors at the start (scan the prefix off a barcode).
+        list.filter("author").label("Author").contains();
+        list.filter("isbn").label("ISBN").startsWith();
     }
 
     @Override

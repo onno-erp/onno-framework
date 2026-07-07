@@ -8,6 +8,7 @@ import {
   Draggable,
   type DropResult,
 } from "@hello-pangea/dnd";
+import { Lock } from "lucide-react";
 import { api } from "@/lib/api";
 import { toSnakeCase, cn } from "@/lib/utils";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
@@ -89,8 +90,12 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
   const titleField = widget.titleField || "_number";
   const columns = useMemo(() => defaultColumns(widget), [widget]);
   const draggable = columns.length > 0;
+  // RBAC: the server stamps canWrite=false when the viewer may not write the entity — cards
+  // stay clickable (open the record) but can't be dragged between columns. REST enforces anyway.
+  const canWrite = widget.canWrite !== false;
 
   const onDragEnd = async (result: DropResult) => {
+    if (!canWrite) return;
     const { destination, source, draggableId } = result;
     if (!destination) return;
 
@@ -150,6 +155,12 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
         <div className="flex items-center gap-1.5">
           <CardTitle className="text-[13px] font-medium">{widget.title}</CardTitle>
           <HintIcon text={widget.hint} size={13} />
+          {!canWrite ? (
+            // Mirrors the calendar's read-only chip: cards open records, dragging is off.
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+              <Lock className="h-2.5 w-2.5" /> read only
+            </span>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -166,7 +177,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                       ref={dropProvided.innerRef}
                       {...dropProvided.droppableProps}
                       className={cn(
-                        "flex w-72 shrink-0 flex-col gap-2 rounded-md p-2 transition-colors",
+                        "flex w-72 shrink-0 flex-col gap-2 rounded-control p-2 transition-colors",
                         "border-2 bg-muted/40",
                         dropSnapshot.isDraggingOver
                           ? "border-primary/40 bg-muted/70"
@@ -183,7 +194,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                       </div>
                       <div className="flex flex-col gap-1.5 min-h-[40px]">
                         {cards.length === 0 && !dropSnapshot.isDraggingOver && (
-                          <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground">
+                          <div className="rounded-control border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground">
                             No items
                           </div>
                         )}
@@ -208,7 +219,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                             }
                           };
                           return (
-                            <Draggable draggableId={id} index={index} key={id}>
+                            <Draggable draggableId={id} index={index} key={id} isDragDisabled={!canWrite}>
                               {(dragProvided, dragSnapshot) => (
                                 <div
                                   ref={dragProvided.innerRef}
@@ -222,9 +233,9 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                                     if (!dragSnapshot.isDragging) handleOpen();
                                   }}
                                   className={cn(
-                                    "group select-none rounded-md border bg-card text-card-foreground p-3 shadow-sm transition-shadow",
+                                    "group select-none rounded-card border bg-card text-card-foreground p-3 shadow-sm transition-shadow",
                                     "hover:shadow-md hover:border-foreground/20",
-                                    "cursor-grab active:cursor-grabbing",
+                                    canWrite ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                                     dragSnapshot.isDragging && "shadow-lg ring-1 ring-primary/30"
                                   )}
                                 >

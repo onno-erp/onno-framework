@@ -16,14 +16,11 @@ import type {
   RangeCalendarProps as AriaRangeCalendarProps,
   DateValue,
 } from "react-aria-components";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navBtnCls =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed";
-
-const selectCls =
-  "h-7 cursor-pointer rounded-md border border-input bg-muted px-1.5 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -61,6 +58,105 @@ interface CalendarHeaderProps {
   className?: string;
 }
 
+/**
+ * A styled month/year dropdown for the calendar header — replaces the native {@code <select>},
+ * whose OS-drawn popup clashed with the themed popover around it. Deliberately NOT a portalled
+ * (Radix) menu: the calendar usually lives inside a Popover, and a portalled child would count as
+ * an "outside interaction" and dismiss it. A plain absolutely-positioned listbox stays inside the
+ * popover's DOM, so clicks never bubble out; outside clicks are caught with a pointerdown listener.
+ */
+function HeaderDropdown({
+  ariaLabel,
+  value,
+  options,
+  onPick,
+}: {
+  ariaLabel: string;
+  value: string | number;
+  options: { value: number; label: string }[];
+  onPick: (v: number) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation(); // close only this dropdown, not the popover around the calendar
+        setOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+
+  // Open with the current value in view, not the top of a 130-year list.
+  React.useEffect(() => {
+    if (open) {
+      listRef.current
+        ?.querySelector('[data-on="true"]')
+        ?.scrollIntoView({ block: "center" });
+    }
+  }, [open]);
+
+  const current = options.find((o) => o.value === Number(value));
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        {current?.label ?? value}
+        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </button>
+      {open ? (
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label={ariaLabel}
+          className="absolute left-1/2 top-full z-10 mt-1 max-h-64 w-max min-w-32 -translate-x-1/2 overflow-y-auto rounded-card border bg-popover p-1 shadow-md"
+        >
+          {options.map((o) => {
+            const on = o.value === Number(value);
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                aria-selected={on}
+                data-on={on}
+                onClick={() => {
+                  onPick(o.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-field px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  on ? "font-medium text-foreground" : "text-foreground/80"
+                )}
+              >
+                {o.label}
+                {on ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // A calendar header with month + year dropdowns (plus prev/next arrows) so you can
 // jump straight to any month/year instead of clicking through one month at a time.
 // Reads the live calendar state via context (works for both single and range calendars)
@@ -75,8 +171,8 @@ function CalendarTopBar({ className }: CalendarHeaderProps) {
     const current = new Date().getFullYear();
     const min = Math.min(focused?.year ?? current, current - 120);
     const max = Math.max(focused?.year ?? current, current + 15);
-    const out: number[] = [];
-    for (let y = max; y >= min; y--) out.push(y);
+    const out: { value: number; label: string }[] = [];
+    for (let y = max; y >= min; y--) out.push({ value: y, label: String(y) });
     return out;
   }, [focused?.year]);
 
@@ -89,31 +185,19 @@ function CalendarTopBar({ className }: CalendarHeaderProps) {
       <AriaButton slot="previous" className={navBtnCls} aria-label="Previous">
         <ChevronLeft className="h-4 w-4" />
       </AriaButton>
-      <div className="flex flex-1 items-center justify-center gap-1.5">
-        <select
-          aria-label="Month"
-          className={selectCls}
+      <div className="flex flex-1 items-center justify-center gap-0.5">
+        <HeaderDropdown
+          ariaLabel="Month"
           value={focused?.month ?? 1}
-          onChange={(e) => go({ month: Number(e.target.value) })}
-        >
-          {MONTHS.map((m, i) => (
-            <option key={m} value={i + 1}>
-              {m}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Year"
-          className={selectCls}
+          options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+          onPick={(month) => go({ month })}
+        />
+        <HeaderDropdown
+          ariaLabel="Year"
           value={focused?.year ?? new Date().getFullYear()}
-          onChange={(e) => go({ year: Number(e.target.value) })}
-        >
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          options={years}
+          onPick={(year) => go({ year })}
+        />
       </div>
       <AriaButton slot="next" className={navBtnCls} aria-label="Next">
         <ChevronRight className="h-4 w-4" />
@@ -159,13 +243,18 @@ export interface RangeCalendarProps<T extends DateValue>
   extends Omit<AriaRangeCalendarProps<T>, "children"> {
   className?: string;
   numberOfMonths?: 1 | 2;
+  /** Finger-sized cells (44px targets) for touch layouts — the mobile/tablet date-range sheet. */
+  touch?: boolean;
 }
 
 export function RangeCalendar<T extends DateValue>({
   className,
   numberOfMonths = 2,
+  touch = false,
   ...props
 }: RangeCalendarProps<T>) {
+  // twMerge (via cn) lets the touch sizes win over the base h-9 w-9 text-sm.
+  const cellCls = touch ? cn(rangeCellCls, "h-11 w-11 text-[15px]") : rangeCellCls;
   return (
     <AriaRangeCalendar
       {...props}
@@ -173,7 +262,7 @@ export function RangeCalendar<T extends DateValue>({
       className={cn("select-none p-3", className)}
     >
       <CalendarTopBar />
-      <div className="flex gap-4">
+      <div className={cn("flex gap-4", touch && "justify-center")}>
         {Array.from({ length: numberOfMonths }, (_, i) => (
           <CalendarGrid key={i} offset={{ months: i }} className={gridCls}>
             <CalendarGridHeader>
@@ -184,7 +273,7 @@ export function RangeCalendar<T extends DateValue>({
               )}
             </CalendarGridHeader>
             <CalendarGridBody>
-              {(date) => <CalendarCell date={date} className={rangeCellCls} />}
+              {(date) => <CalendarCell date={date} className={cellCls} />}
             </CalendarGridBody>
           </CalendarGrid>
         ))}

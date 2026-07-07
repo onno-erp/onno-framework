@@ -234,7 +234,7 @@ public final class LoginDivBuilder {
         Div.alignV(btn, "center");
         Div.gap(btn, 8);
         Div.pad(btn, 12, 14);
-        Div.corner(btn, 9);
+        Div.corner(btn, Radii.CONTROL);
         if (primary) {
             Div.background(btn, p.primary());
         } else {

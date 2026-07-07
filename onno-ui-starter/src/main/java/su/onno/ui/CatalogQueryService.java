@@ -429,21 +429,26 @@ public class CatalogQueryService {
         return sortColumn != null && sortableColumns(desc).contains(sortColumn) ? sortColumn : fallback;
     }
 
-    /** The text columns searched: code, description + every String attribute. */
-    private List<String> searchColumns(CatalogDescriptor desc) {
-        List<String> cols = new ArrayList<>(List.of("_code", "_description"));
-        desc.attributes().stream()
-                .filter(a -> a.javaType() == String.class && !a.secret())
-                .forEach(a -> cols.add(a.columnName()));
-        return cols;
-    }
-
+    /**
+     * The free-text search predicate for {@code q}: matches the term against <em>every</em> non-secret
+     * column, not just strings — the system code/description, every scalar attribute (numbers and dates
+     * cast to text), each {@code Ref<>} by the <em>displayed</em> value of its target (so typing a
+     * customer's name finds their orders), and each enum by its label/name. One bound {@code :search}
+     * ({@code %term%}, lowercased) drives every term.
+     */
     private String searchClause(CatalogDescriptor desc, String search) {
         if (search == null || search.isBlank()) return "";
-        String ors = searchColumns(desc).stream()
-                .map(c -> "LOWER(CAST(" + c + " AS VARCHAR)) LIKE :search")
-                .collect(java.util.stream.Collectors.joining(" OR "));
-        return " AND (" + ors + ")";
+        List<String> ors = new ArrayList<>(List.of(likeVarchar("_code"), likeVarchar("_description")));
+        for (var a : desc.attributes()) {
+            if (a.secret()) continue;
+            String term = Searching.term(registry, a, search);
+            if (term != null) ors.add(term);
+        }
+        return " AND (" + String.join(" OR ", ors) + ")";
+    }
+
+    private static String likeVarchar(String column) {
+        return "LOWER(CAST(" + column + " AS VARCHAR)) LIKE :search";
     }
 
     private void bindSearch(org.jdbi.v3.core.statement.Query q, String search) {

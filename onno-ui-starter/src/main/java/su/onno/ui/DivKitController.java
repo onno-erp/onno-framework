@@ -14,6 +14,7 @@ import su.onno.ui.divkit.Palette;
 import su.onno.ui.divkit.ShellLayoutBuilder;
 import su.onno.ui.divkit.SurfaceDivBuilder;
 import su.onno.ui.comments.CommentProperties;
+import su.onno.ui.notifications.NotificationProperties;
 
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.ObjectProvider;
@@ -78,6 +79,9 @@ public class DivKitController implements DisposableBean {
     // Resolved per request (lazily): the comments module is wired after this controller, and is
     // absent entirely when onno.comments.enabled=false. getIfAvailable() yields null in that case.
     private final ObjectProvider<CommentProperties> commentProperties;
+    // Same lazy seam for notifications: absent when onno.notifications.enabled=false, in which
+    // case the mobile menu skips its Notifications row (the client bell hides itself off the 404).
+    private final ObjectProvider<NotificationProperties> notificationProperties;
     // Resolves a dashboard's count/metric tiles concurrently (one SQL aggregate each), so a wide
     // dashboard doesn't pay N sequential round-trips. Bounded by onno.ui.dashboard.widget-parallelism
     // to stay under the JDBC pool; null when parallelism == 1 (resolve inline on the request thread).
@@ -98,7 +102,8 @@ public class DivKitController implements DisposableBean {
                             RelatedListReader relatedLists,
                             UiProperties uiProperties,
                             UiMessages messages,
-                            ObjectProvider<CommentProperties> commentProperties) {
+                            ObjectProvider<CommentProperties> commentProperties,
+                            ObjectProvider<NotificationProperties> notificationProperties) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
@@ -118,6 +123,7 @@ public class DivKitController implements DisposableBean {
         this.uiProperties = uiProperties;
         this.messages = messages;
         this.commentProperties = commentProperties;
+        this.notificationProperties = notificationProperties;
         int parallelism = Math.max(1, uiProperties.getDashboard().getWidgetParallelism());
         this.widgetPool = parallelism == 1 ? null : Executors.newFixedThreadPool(parallelism, r -> {
             Thread t = new Thread(r, "onno-dashboard-widget");
@@ -137,6 +143,11 @@ public class DivKitController implements DisposableBean {
     private boolean commentsEnabled() {
         CommentProperties cp = commentProperties.getIfAvailable();
         return cp != null && cp.isEnabled();
+    }
+
+    /** Whether the notifications module is wired — decided per request (see the field). */
+    private boolean notificationsEnabled() {
+        return notificationProperties.getIfAvailable() != null;
     }
 
     // ----- chrome (fast, no entity data) -----
@@ -229,7 +240,8 @@ public class DivKitController implements DisposableBean {
         ShellLayoutBuilder.Logo logo = ShellLayoutBuilder.Logo.of(
                 branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
         Map<String, Object> content = ShellLayoutBuilder.menu(
-                brand, logo, nav, user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(), p, messages);
+                brand, logo, nav, user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(),
+                notificationsEnabled(), p, messages);
         Div.margins(content, 16, 16, 16, 16);
         return DivCard.of("onno-content", content);
     }
@@ -272,7 +284,7 @@ public class DivKitController implements DisposableBean {
             content = widgets.isEmpty()
                     ? DashboardDivBuilder.empty()
                     : DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns,
-                            w -> values.getOrDefault(w, "—"), p);
+                            w -> values.getOrDefault(w, "—"), widgetWrite(principal), p);
         }
         return DivCard.of("onno-content", content);
     }
@@ -366,7 +378,39 @@ public class DivKitController implements DisposableBean {
         String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
         Map<DashboardWidgetDescriptor, String> values = resolveWidgetValues(widgets);
         return PageDivBuilder.build(title, subtitle, widgets, components, columns,
-                w -> values.getOrDefault(w, "—"), p);
+                w -> values.getOrDefault(w, "—"), widgetWrite(principal), p);
+    }
+
+    /**
+     * Per-widget write access for the caller, stamped into each widget descriptor as
+     * {@code canWrite} so interactive widgets (kanban drag, calendar reschedule) disable their
+     * mutations for read-only viewers. Entity-less widgets (the time-range picker) write nothing.
+     */
+    private java.util.function.Function<DashboardWidgetDescriptor, Boolean> widgetWrite(Principal principal) {
+        return w -> w.entityType() == null || w.entityName() == null
+                || access.canWrite(principal, w.entityType(), w.entityName());
+    }
+
+    /**
+     * Detail/form metadata is principal-agnostic ({@link ResolvedMetadataService}); overlay the
+     * caller's write access onto its related-list panels so the client only offers add/remove
+     * where the junction catalog is actually writable. Register-backed panels arrive readOnly
+     * already; the generic REST layer enforces the junction's write roles regardless.
+     */
+    private Map<String, Object> withRelatedListAccess(Map<String, Object> meta, Principal principal) {
+        if (meta.get("relatedLists") instanceof List<?> panels) {
+            for (Object o : panels) {
+                if (o instanceof Map<?, ?> raw) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> panel = (Map<String, Object>) raw;
+                    if (!Boolean.TRUE.equals(panel.get("readOnly"))
+                            && !access.canWrite(principal, "catalog", str(panel.get("joinCatalog")))) {
+                        panel.put("readOnly", true);
+                    }
+                }
+            }
+        }
+        return meta;
     }
 
     /**
@@ -416,8 +460,9 @@ public class DivKitController implements DisposableBean {
             }
             ResolvedListView view = viewResolver.catalogList(cd, profileId);
             String name = toSnakeCase(cd.logicalName());
-            String newUrl = access.canWrite(principal, cd) ? "onno://catalogs/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl,
+            boolean canWrite = access.canWrite(principal, cd);
+            String newUrl = canWrite ? "onno://catalogs/" + name + "/new" : null;
+            return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
                     listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity));
         }
         DocumentDescriptor dd = documentQuery.forClass(entity);
@@ -427,8 +472,9 @@ public class DivKitController implements DisposableBean {
             }
             ResolvedListView view = viewResolver.documentList(dd, profileId);
             String name = toSnakeCase(dd.logicalName());
-            String newUrl = access.canWrite(principal, dd) ? "onno://documents/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl,
+            boolean canWrite = access.canWrite(principal, dd);
+            String newUrl = canWrite ? "onno://documents/" + name + "/new" : null;
+            return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
                     listActions(entity, "documents", name), actionResolver.inputDescriptors(entity));
         }
         return null;
@@ -490,7 +536,8 @@ public class DivKitController implements DisposableBean {
             // workflow action to a primary button — given the brand "accent" tone — via .primary().
             String place = placement.getOrDefault(a.key(), "menu");
             String tone = "primary".equals(place) ? "accent" : "normal";
-            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), tone, url, place));
+            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), tone, url, place,
+                    UiActionResolver.formDescriptors(a)));
         }
         return out;
     }
@@ -507,9 +554,10 @@ public class DivKitController implements DisposableBean {
         ResolvedListView view = viewResolver.catalogList(desc, profileId);
         // The list is now the virtualized onno-list island: we emit only its descriptor; it
         // pages the data itself from /api/list (so a 10k-row catalog never ships whole).
-        String newUrl = access.canWrite(principal, desc) ? "onno://catalogs/" + name + "/new" : null;
+        boolean canWrite = access.canWrite(principal, desc);
+        String newUrl = canWrite ? "onno://catalogs/" + name + "/new" : null;
         return DivCard.of("onno-content",
-                SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl,
+                SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "catalogs", name),
                         actionResolver.inputDescriptors(desc.javaClass())));
     }
@@ -542,7 +590,7 @@ public class DivKitController implements DisposableBean {
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(
                 meta, catalogQuery.get(desc, id),
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions,
@@ -557,7 +605,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> catalogNew(@PathVariable String name, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor.
         return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
@@ -568,7 +616,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> catalogEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> row = catalogQuery.get(desc, id);
         String label = str(row.get("_description"));
         if (label.isBlank()) {
@@ -581,7 +629,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> catalogDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeCatalog(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> draft = duplicateDraft(catalogQuery.get(desc, id), desc.attributes());
         return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
     }
@@ -597,9 +645,10 @@ public class DivKitController implements DisposableBean {
         requireView(desc.javaClass(), profileId);
         ResolvedListView view = viewResolver.documentList(desc, profileId);
         // Virtualized onno-list island — see catalogList. Date range is applied by the data feed.
-        String newUrl = access.canWrite(principal, desc) ? "onno://documents/" + name + "/new" : null;
+        boolean canWrite = access.canWrite(principal, desc);
+        String newUrl = canWrite ? "onno://documents/" + name + "/new" : null;
         return DivCard.of("onno-content",
-                SurfaceDivBuilder.listSurface(view, "documents", name, newUrl,
+                SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "documents", name),
                         actionResolver.inputDescriptors(desc.javaClass())));
     }
@@ -614,7 +663,7 @@ public class DivKitController implements DisposableBean {
         // Only offer edit/delete to users who may write the document; the REST
         // endpoints enforce it regardless.
         boolean canWrite = access.canWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> row = documentQuery.get(desc, id);
         // Posting actions: only for writable, postable documents. Post is offered in both
         // states (it re-posts when already posted, labelled accordingly); Unpost only once
@@ -664,7 +713,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> documentNew(@PathVariable String name, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor.
         return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
@@ -675,7 +724,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> documentEdit(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> row = documentQuery.get(desc, id);
         return entityFormContent("documents", name, id, "Edit " + str(meta.get("name")) + " " + str(row.get("_number")),
                 "Save", meta, row);
@@ -685,7 +734,7 @@ public class DivKitController implements DisposableBean {
     public Map<String, Object> documentDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        Map<String, Object> meta = resolvedMetadata.describeDocument(desc);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(desc, id), desc.attributes());
         return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
     }

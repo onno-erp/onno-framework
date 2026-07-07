@@ -77,6 +77,24 @@ export function presetById(presets: RangePreset[], id: string): RangePreset | un
   return presets.find((p) => p.id === id);
 }
 
+const UNIT_WORD: Record<TimeUnit, [string, string]> = {
+  s: ["second", "seconds"],
+  m: ["minute", "minutes"],
+  h: ["hour", "hours"],
+  d: ["day", "days"],
+  w: ["week", "weeks"],
+  M: ["month", "months"],
+  y: ["year", "years"],
+};
+
+/** A human label for a quick-pick: `30d` → "Last 30 days", `1h` → "Last hour", `all` → "All time". */
+export function presetLabel(preset: RangePreset): string {
+  if (preset.range.kind === "all") return "All time";
+  const { amount, unit } = preset.range;
+  const [one, many] = UNIT_WORD[unit];
+  return amount === 1 ? `Last ${one}` : `Last ${amount} ${many}`;
+}
+
 /** Whether two ranges denote the same window — used to light up the active preset button. */
 export function sameRange(a: TimeRange, b: TimeRange): boolean {
   if (a.kind !== b.kind) return false;

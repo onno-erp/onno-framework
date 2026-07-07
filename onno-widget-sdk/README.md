@@ -35,6 +35,19 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
   server-side `.config(key, value)` values.
 
+## Styling
+
+Widget modules are compiled by esbuild **outside** the host SPA's Tailwind build. Tailwind only
+generates CSS for class names it finds in the host's own sources, so a utility class in your widget
+works only if the host app happens to emit the same class — anything else (e.g. `border-l`,
+arbitrary values like `-left-[5px]`) is silently dropped, with no build error. Rules of thumb:
+
+- Common text/spacing utilities (`text-sm`, `text-muted-foreground`, `mb-3`, `flex`, …) are safe —
+  the host uses them everywhere.
+- For layout-critical or uncommon styles, use **inline `style`** instead of classes.
+- For theme colors in inline styles, use the host's HSL variables: `hsl(var(--primary))`,
+  `hsl(var(--border))`, `hsl(var(--muted-foreground))`, etc. — they follow light/dark mode.
+
 ## Example
 
 ```tsx

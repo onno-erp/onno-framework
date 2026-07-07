@@ -23,6 +23,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "login.back": "Back",
   "login.none": "No interactive login is configured for this application.",
   "login.orManual": "or sign in manually",
+  "login.orDemo": "or use a demo account",
   "login.username": "Username",
   "login.password": "Password",
   "login.submit": "Sign in",
@@ -83,11 +84,13 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "notifications.typeAll": "All",
   "notifications.typeMention": "Mentions",
   "notifications.typeAssignment": "Assigned",
+  "notifications.typeReply": "Replies",
   "notifications.today": "Today",
   "notifications.thisWeek": "Earlier this week",
   "notifications.older": "Older",
   "notifications.tagMention": "Mention",
   "notifications.tagAssignment": "Assignment",
+  "notifications.tagReply": "Reply",
 
   // App shell / account island.
   "shell.signedInAs": "Signed in as",
@@ -108,8 +111,19 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.prev": "Prev",
   "list.next": "Next",
   "list.loadingMore": "Loading more…",
+  // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The selection
+  // count itself reuses "list.selected" below (shared with the multi-select filter badge).
+  "list.clearSelection": "Clear selection",
+  "batch.delete": "Delete {n}",
+  "batch.deleteConfirm": "Sure? Delete {n}",
+  "batch.done": "{label}: {ok}/{n} done",
+  "batch.deleted": "Deleted {ok}/{n}",
+  // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
+  "clipboard.copied": "{count} copied",
+  "clipboard.pasted": "Pasted {ok}/{n}",
   "list.groupBy": "Group by",
   "list.groupNone": "None",
+  "list.groupByHint": "Group rows by a column",
   "list.showMore": "Show more",
   "list.groupsCapped": "Showing the first groups only — narrow with a filter to see the rest.",
   "list.granDay": "Day",
@@ -117,8 +131,10 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.granYear": "Year",
   // Faceted filter bar: chip labels, date-range presets, clear-all.
   "list.filters": "Filters",
+  "list.filterHint": "Filter by {label}",
   "list.clear": "Clear",
   "list.clearAll": "Clear all",
+  "list.done": "Done",
   "list.selected": "{count} selected",
   "list.dateToday": "Today",
   "list.dateYesterday": "Yesterday",
@@ -126,6 +142,29 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.dateLast30": "Last 30 days",
   "list.dateThisMonth": "This month",
   "list.dateThisYear": "This year",
+
+  // List map view: the floating count chip and the marker popup.
+  "map.count": "{count} on the map",
+  "map.noRecords": "No records with a location.",
+  "map.showingFirst": "showing the first {shown} of {total}",
+  "map.recordsHere": "{count} records here",
+  "map.more": "+{count} more",
+
+  // Pane-level load failures (content-pane.tsx), shaped by HTTP status. "forbidden" is the
+  // access-denied surface a user sees opening an entity their role can't read; "notFound"
+  // covers a route with no view (or a stale link); "unauthorized" a dead session.
+  "error.forbidden.title": "No access",
+  "error.forbidden.body":
+    "Your role doesn't have permission to view this page. Ask an administrator if you think it should.",
+  "error.notFound.title": "Page not found",
+  "error.notFound.body": "This page doesn't exist, or it isn't available for your role.",
+  "error.unauthorized.title": "Signed out",
+  "error.unauthorized.body": "Your session has expired. Sign in again to continue.",
+  "error.generic.title": "Something went wrong",
+  "error.generic.body": "The page couldn't be loaded. This may be temporary — try again.",
+  "error.retry": "Try again",
+  "error.home": "Go to home",
+  "error.signIn": "Sign in",
 
   // Empty / loading states.
   "empty.noRecords": "No records",

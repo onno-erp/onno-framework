@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   DEFAULT_PRESETS,
   FALLBACK_RANGE,
@@ -52,11 +52,24 @@ function load(): TimeRange | null {
   return null;
 }
 
+/** Two preset lists describe the same picker iff their id sequences match (a preset is its id). */
+function samePresetIds(a: RangePreset[], b: RangePreset[]): boolean {
+  return a.length === b.length && a.every((p, i) => p.id === b[i].id);
+}
+
 export function TimeRangeProvider({ children }: { children: ReactNode }) {
   // Whether the user has a persisted selection — gates whether a dashboard's default applies.
   const persisted = useRef<TimeRange | null>(load());
   const [range, setRange] = useState<TimeRange>(persisted.current ?? FALLBACK_RANGE);
   const [presets, setPresets] = useState<RangePreset[]>(DEFAULT_PRESETS);
+  // Mirror of `presets` so the callbacks below can read the current list without depending on it —
+  // their identities must stay stable across re-renders. The `timeRange` widget calls configure()
+  // from an effect keyed on `configure`; a presets-dependent identity re-armed that effect after its
+  // own setPresets, which re-called configure → an infinite render loop that pegged the dashboard
+  // and starved React's transition lane (react-router v7 navigations never committed — the mobile
+  // bottom bar highlighted taps but the page never changed).
+  const presetsRef = useRef(presets);
+  presetsRef.current = presets;
   // The "clear custom" / configured-default target, separate from the live selection.
   const defaultRange = useRef<TimeRange>(persisted.current ?? FALLBACK_RANGE);
 
@@ -68,13 +81,10 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     }
   }, [range]);
 
-  const setPreset = useCallback(
-    (id: string) => {
-      const p = presetById(presets, id);
-      if (p) setRange(p.range);
-    },
-    [presets]
-  );
+  const setPreset = useCallback((id: string) => {
+    const p = presetById(presetsRef.current, id);
+    if (p) setRange(p.range);
+  }, []);
 
   const setAbsolute = useCallback(
     (from?: string, to?: string) => setRange(from || to ? { kind: "absolute", from, to } : defaultRange.current),
@@ -83,8 +93,12 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
 
   const configure = useCallback(
     (opts: { presets?: RangePreset[]; defaultRangeId?: string }) => {
-      const list = opts.presets ?? presets;
-      if (opts.presets) setPresets(opts.presets);
+      const list = opts.presets ?? presetsRef.current;
+      if (opts.presets) {
+        // Keep the previous array when the ids match so React bails out instead of re-rendering
+        // every consumer with a fresh-but-identical list on each configure() call.
+        setPresets((prev) => (samePresetIds(prev, opts.presets!) ? prev : opts.presets!));
+      }
       if (opts.defaultRangeId) {
         const p = presetById(list, opts.defaultRangeId);
         if (p) {
@@ -93,14 +107,14 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [presets]
+    []
   );
 
-  return (
-    <TimeRangeContext.Provider value={{ range, presets, setRange, setPreset, setAbsolute, configure }}>
-      {children}
-    </TimeRangeContext.Provider>
+  const value = useMemo(
+    () => ({ range, presets, setRange, setPreset, setAbsolute, configure }),
+    [range, presets, setPreset, setAbsolute, configure]
   );
+  return <TimeRangeContext.Provider value={value}>{children}</TimeRangeContext.Provider>;
 }
 
 export const useTimeRange = (): TimeRangeContextValue => useContext(TimeRangeContext);

@@ -44,6 +44,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.notifications.enabled` | `Boolean` | `true` | Whether the notifications endpoint, its storage table, the built-in producers, and the shell's bell + timeline panel are wired at all. Turn it off to drop the feature entirely without touching the model. |
 | `onno.notifications.mentions.enabled` | `Boolean` | `true` | Whether comment `@`-mentions of a user raise a notification. |
 | `onno.notifications.page-size` | `Integer` | `30` | Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 30. |
+| `onno.notifications.replies.enabled` | `Boolean` | `true` | Whether replying to a user's comment raises a notification for that user. |
 | `onno.notifications.retention-days` | `Integer` | `90` | How many days a <em>read</em> notification is kept before the daily retention sweep deletes it. Unread notifications are never pruned. `0` disables pruning (keep read history forever). Defaults to 90. |
 | `onno.ui.dashboard.widget-parallelism` | `Integer` | `8` | Maximum number of widget aggregates resolved in parallel per dashboard render. Bounded so a wide dashboard can't exhaust the JDBC connection pool — keep it comfortably below the datasource's `maximum-pool-size`. `1` forces the old sequential behaviour. |
 | `onno.ui.enabled` | `Boolean` | `true` | Master switch for the UI starter. Also gated on a `MetadataRegistry` bean being present. |

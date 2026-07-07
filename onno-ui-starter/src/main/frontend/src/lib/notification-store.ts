@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { api, ApiError, type NotificationView } from "@/lib/api";
 import type { UiEvent } from "@/lib/types";
+import notificationSoundUrl from "@/assets/notification.m4a";
 
 /**
  * The per-user notification store: one client-wide timeline of updates concerning the signed-in user,
@@ -15,7 +16,7 @@ import type { UiEvent } from "@/lib/types";
 
 /** The panel's status tab (all vs unread only) and source filter (all types / one type). */
 export type StatusFilter = "all" | "unread";
-export type TypeFilter = "all" | "mention" | "assignment";
+export type TypeFilter = "all" | "mention" | "assignment" | "reply";
 
 type State = {
   items: NotificationView[];
@@ -30,6 +31,10 @@ type State = {
   // How many sidebar/topbar triggers are mounted, so the floating fallback trigger only shows when a
   // layout (mobile/topbar) provides none.
   triggerCount: number;
+  // The shell's nav style, reported by the host. The floating fallback bell only appears on the
+  // topbar layout — bottom-bar layouts (mobile/tablet) reach notifications via the More menu's
+  // row instead, so no floating chrome overlaps the content or the bar.
+  navStyle: "sidebar" | "topbar" | "bottom_bar" | "unknown";
 };
 
 let state: State = {
@@ -42,6 +47,7 @@ let state: State = {
   statusFilter: "all",
   typeFilter: "all",
   triggerCount: 0,
+  navStyle: "unknown",
 };
 let started = false;
 const listeners = new Set<() => void>();
@@ -101,15 +107,31 @@ export function loadMoreNotifications(): Promise<void> {
     .catch(() => {});
 }
 
+// One shared element, reused across chimes; created lazily so the module can load where Audio
+// doesn't exist (SSR, tests). play() rejects until the user's first gesture (autoplay policy) —
+// those early notifications stay silent rather than erroring.
+let chime: HTMLAudioElement | null = null;
+function playChime() {
+  if (typeof Audio === "undefined") return;
+  if (!chime) {
+    chime = new Audio(notificationSoundUrl);
+    chime.volume = 0.5;
+  }
+  chime.currentTime = 0;
+  chime.play().catch(() => {});
+}
+
 function applyEvent(ev: UiEvent | undefined) {
   if (!ev || ev.type !== "notification" || !ev.id) return;
   set({ available: true });
   // A trimmed peer-node delta (no title) can't be rendered from itself — refetch the head instead.
   if (!ev.title) {
     loadFirstPage();
+    playChime();
     return;
   }
   if (state.items.some((n) => n.id === ev.id)) return; // already have it (e.g. from a concurrent refetch)
+  playChime();
   const row: NotificationView = {
     id: ev.id,
     type: ev.notificationType ?? "info",
@@ -169,6 +191,11 @@ export function setStatusFilter(statusFilter: StatusFilter) {
 }
 export function setTypeFilter(typeFilter: TypeFilter) {
   set({ typeFilter });
+}
+
+/** The host reports the shell's nav style so the fallback bell knows whether to show. */
+export function setNotificationsNavStyle(navStyle: State["navStyle"]) {
+  if (state.navStyle !== navStyle) set({ navStyle });
 }
 
 /** A mounted sidebar/topbar trigger registers so the floating fallback hides itself. */

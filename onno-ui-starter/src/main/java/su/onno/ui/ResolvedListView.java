@@ -123,10 +123,17 @@ public record ResolvedListView(String title, List<Column> columns,
      * One choice of a (multi-)options filter: the {@code value} the query matches against the column,
      * and the {@code label} the control renders. The two are identical for a plain-string filter; a
      * value→label split lets a filter over a code/English/enum-mirror column show a localized choice.
+     * {@code color} (blank when none) carries an {@code @EnumLabel(color=…)} hex so the control can
+     * tint the choice like the entity's status pills.
      */
-    public record Option(String value, String label) {
+    public record Option(String value, String label, String color) {
         public Option {
             label = label == null ? value : label;
+            color = color == null ? "" : color;
+        }
+
+        public Option(String value, String label) {
+            this(value, label, "");
         }
     }
 

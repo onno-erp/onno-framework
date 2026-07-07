@@ -17,6 +17,7 @@ import { CONSTANTS_CUSTOM_COMPONENTS } from "@/lib/constants-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
 import { COMMENTS_CUSTOM_COMPONENTS } from "@/lib/comments-bridge";
 import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
+import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
 import { GEO_CUSTOM_COMPONENTS } from "@/lib/geo-bridge";
 
 // All div-custom blocks the content can host: dashboard widgets, the entity form, the login
@@ -37,6 +38,7 @@ const CUSTOM_COMPONENTS = new Map([
   ...ACTIONS_BAR_CUSTOM_COMPONENTS,
   ...COMMENTS_CUSTOM_COMPONENTS,
   ...NAV_PRESENCE_CUSTOM_COMPONENTS,
+  ...NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS,
   ...GEO_CUSTOM_COMPONENTS,
 ]);
 

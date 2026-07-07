@@ -132,7 +132,7 @@ export function ImagePicker({
             type="button"
             onClick={openPicker}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <Upload className="size-3.5" aria-hidden="true" />
             Replace
@@ -141,7 +141,7 @@ export function ImagePicker({
             type="button"
             onClick={() => onChange("")}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-50"
           >
             <Trash2 className="size-3.5" aria-hidden="true" />
             Remove
@@ -234,14 +234,14 @@ export function GalleryPicker({
         {urls.map((url, idx) => (
           <div
             key={idx}
-            className="group relative aspect-square overflow-hidden rounded-lg border border-border"
+            className="group relative aspect-square overflow-hidden rounded-card border border-border"
           >
             <img src={url} alt="" className="h-full w-full object-cover" />
             <button
               type="button"
               aria-label={`Remove image ${idx + 1}`}
               onClick={() => removeAt(idx)}
-              className="absolute right-1 top-1 grid size-6 place-items-center rounded-md bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
+              className="absolute right-1 top-1 grid size-6 place-items-center rounded-control bg-black/60 text-white opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             >
               <X className="size-3.5" aria-hidden="true" />
             </button>
@@ -250,7 +250,7 @@ export function GalleryPicker({
         {Array.from({ length: uploading }).map((_, i) => (
           <div
             key={`uploading-${i}`}
-            className="grid aspect-square place-items-center rounded-lg border border-dashed border-border bg-muted/30 text-muted-foreground"
+            className="grid aspect-square place-items-center rounded-control border border-dashed border-border bg-muted/30 text-muted-foreground"
           >
             <Loader2 className="size-5 animate-spin" aria-hidden="true" />
           </div>
@@ -259,7 +259,7 @@ export function GalleryPicker({
           type="button"
           onClick={() => inputRef.current?.click()}
           className={cn(
-            "flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60",
+            "flex aspect-square flex-col items-center justify-center gap-1 rounded-control border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:bg-muted/60",
             dragging && "border-primary bg-primary/10 text-foreground"
           )}
         >

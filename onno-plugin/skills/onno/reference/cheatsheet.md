@@ -172,6 +172,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
+  Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
+  a row closes when fractions sum to 1. Cells are weights, so a row that doesn't sum to 1 stretches
+  its widgets proportionally past their declared width — `rowBreak()` forces the widget to start a
+  fresh row instead of joining a half-filled one. Multi-widget rows render equal-height (cards
+  stretch to the tallest neighbour). Mobile stacks everything full-width.
   `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
   search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
   (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`.
@@ -179,6 +184,10 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
   Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under
   `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
+  Styling gotcha: widget `.tsx` is never scanned by the host's Tailwind build — a utility class works
+  only if the host SPA already emits it (common `text-sm`/`mb-3`/`flex` yes; `border-l` or arbitrary
+  `-left-[5px]` silently no CSS). Layout-critical rules go in inline `style`, theme colors via
+  `hsl(var(--primary))` / `hsl(var(--border))`.
 - `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
@@ -193,14 +202,30 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order) / `contains` / `startsWith` / `dateRange`; `map()` → `MapSpec` adds a Table⇄Map toggle —
+    order) / `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    deterministic UUIDs, so the resolver translates its select options — author the constant name
+    (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
+    every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
     `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
     (open on the map).
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
-    `handler(ctx→ActionResult)` or `navigate(url)`. A **row** action may vary per row — `icon(row→String)`,
+    `handler(ctx→ActionResult)` or `navigate(url)`. `form(f→…)` makes the click open a **modal input
+    dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
+    submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
+    on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to
+    every selected row). A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
+    `menu("Change status")` moves a ROW action off the inline row buttons into the row's
+    **right-click context menu**, under a submenu with that label (same-label actions group; one
+    action per enum value is the idiom). The list also supports **batch selection** (⌘/Ctrl-click
+    toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
+    list being engaged): right-clicking the selection runs any server row action over every
+    selected id, plus a two-step "Delete N". **⌘C/⌘V**: copy puts the rows on the clipboard as TSV
+    (pasteable into text/spreadsheets) + an app payload; paste on the same entity's list creates
+    server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity, documents
+    unposted/dated now, secrets unset).
   - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
     name); a **tabular-section column** is addressed with a section-scoped key
     `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the
@@ -213,7 +238,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
     `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
-  - `FieldHintBuilder`: `order(int)`, `group(String)`, `width(String)`, `widget(String)` (`switch`,
+  - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
+    card with that heading on the edit form), `width(String)` (`half`/`1/2` = half a row on wide
+    screens; else full), `widget(String)` (`switch`,
     `textarea`; media: `image`/`photo`/`avatar`/`images`/`gallery`/`photos`/`file` — streamed to
     `POST /api/media`, the attribute stores the returned URL; `map`/`geo`), `placeholder`, `format`
     (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
@@ -222,6 +249,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
     form/detail/list label — including the built-in system columns (`code`/`description`,
     `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.
+    A `String` attribute with `length` > 1000 (or unbounded) renders as a textarea automatically.
+    A Ref picker's pinned "+ New" opens the target's create form in a side pane and, on save,
+    auto-selects the new record back into the field (cancel/manual pick drops the hand-off).
 
 An entity surface is only served if it has an `EntityView` for the active profile (no view → `404`);
 that is necessary **but not sufficient** for the sidebar. **Nav is curated:** an entity shows in the
@@ -232,9 +262,10 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 
 ## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
 
-- Per-user timeline behind the top-right bell + `/api/notifications`. Persisted in the framework-owned
-  `onno_notifications` table; delivered live over the `notification` SSE event (routed by recipient,
-  relayed cross-node over the `ClusterEventBus`).
+- Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
+  Notifications row in the More menu on mobile — with unread badges and a dot on the More tab).
+  Persisted in the framework-owned `onno_notifications` table; delivered live over the
+  `notification` SSE event (routed by recipient, relayed cross-node over the `ClusterEventBus`).
 - Produce one from any bean: `notificationService.notify(NotificationRequest.to(recipientId).type("…")
   .title("…").body("…").link("kind/name/id").actor(currentUser).build())`. `recipientId` is the
   target's identity `recordId` (from `CurrentUserResolver`). This is the extension point — add a source

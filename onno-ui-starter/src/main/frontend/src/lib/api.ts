@@ -14,6 +14,8 @@ import type {
   ActionResult,
 } from "./types";
 
+import { toSnakeCase } from "./utils";
+
 const BASE = "/api";
 const CSRF_COOKIE = "XSRF-TOKEN";
 const CSRF_HEADER = "X-XSRF-TOKEN";
@@ -49,7 +51,11 @@ export async function streamUiEvents(
     },
   });
   if (!res.ok || !res.body) {
-    throw new Error(`${res.status} ${res.statusText}`);
+    // A 401 means the session lapsed. Hand off to the auth-recovery handler (same as fetchJson) and
+    // throw a typed error carrying the status, so the reconnect loop can stop instead of re-opening
+    // /api/events every few seconds forever (a 401 flood). Other failures still reconnect.
+    if (res.status === 401) onUnauthorized?.();
+    throw new ApiError(`${res.status} ${res.statusText}`, res.status);
   }
 
   const reader = res.body.getReader();
@@ -180,8 +186,8 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
 }
 
 /**
- * A resolved {@code @}-mention in a comment body (see MentionResolver). The body carries the mention
- * as a `@[Display](kind/name/id)` token; this is the live resolution for the current viewer — display
+ * A resolved {@code @} mention or {@code #} reference in a comment body (see MentionResolver). The body
+ * carries it as a `@[Display](kind/name/id)` or `#[Display](kind/name/id)` token; this is the live resolution for the current viewer — display
  * and avatar reflect the record now, and `readable` is false when the viewer can't open it (the chip
  * then degrades to plain text rather than a broken link).
  */
@@ -198,7 +204,7 @@ export interface CommentMention {
   readable: boolean;
 }
 
-/** A typeahead suggestion from `/api/mentions?q=` — one readable catalog/document record. */
+/** A typeahead suggestion from `/api/mentions?q=&kind=` — one readable catalog/document record. */
 export interface MentionSuggestion {
   kind: "catalogs" | "documents";
   name: string;
@@ -206,6 +212,28 @@ export interface MentionSuggestion {
   id: string;
   display: string;
   avatarUrl: string | null;
+  /** Secondary line for the picker: a person's email, a document's yyyy-MM-dd date. */
+  hint?: string | null;
+}
+
+/** One `(kind, name, id)` triple resolved to its live display — see `/api/mentions/resolve`. */
+export interface ResolvedMentionTarget {
+  kind: "catalogs" | "documents";
+  name: string;
+  entity: string | null;
+  id: string;
+  display: string | null;
+  avatarUrl: string | null;
+  readable: boolean;
+  /** True when the record belongs to the identity catalog — paste renders it as `@`, else `#`. */
+  person?: boolean;
+}
+
+/** A grouped reaction on a comment bubble. `mine` is true when the current viewer has selected it. */
+export interface CommentReaction {
+  emoji: string;
+  count: number;
+  mine: boolean;
 }
 
 /** One comment in an entity's discussion thread (see CommentController). */
@@ -215,8 +243,12 @@ export interface CommentView {
   /** The author's avatar image URL when their account links to a record with an avatar; else null. */
   authorAvatarUrl: string | null;
   body: string;
-  /** The mentions in `body`, resolved live for the current viewer (empty when none/disabled). */
+  /** Null for a top-level comment; set for replies. */
+  parentId: string | null;
+  /** The mentions/references in `body`, resolved live for the current viewer (empty when none/disabled). */
   mentions: CommentMention[];
+  /** Grouped reactions for this comment. */
+  reactions: CommentReaction[];
   /** ISO-8601 instant, zone-qualified ("…Z"); localize per viewer. `editedAt` is null until edited. */
   createdAt: string | null;
   editedAt: string | null;
@@ -317,6 +349,10 @@ export const api = {
   // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
   // server-side — lets a dashboard widget scope its rows, e.g. "status != 'DRAFT'".
   listCatalog: (name: string, filter?: string) => {
+    // Normalize the entity name (PascalCase → snake_case) so every caller — the built-in widgets
+    // (which pre-snake) and SDK-authored custom widgets (which pass the raw `entityName`) — hits the
+    // same URL and shares the in-flight GET dedup instead of double-fetching the same rows.
+    name = toSnakeCase(name);
     const params = new URLSearchParams();
     if (filter) params.set("filter", filter);
     const qs = params.toString();
@@ -341,6 +377,9 @@ export const api = {
     }),
   deleteCatalogItem: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/catalogs/${name}/${id}`, { method: "DELETE" }),
+  /** Server-side copy of a record: same attributes, fresh id/code. Backs the list's ⌘V paste. */
+  duplicateCatalogItem: (name: string, id: string) =>
+    fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}/duplicate`, { method: "POST" }),
   // Live rows of a related-list panel: the junction rows tied to record {id} (see RelatedListMeta).
   // The owner can be a catalog or a document, so the endpoint kind travels with the call.
   getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string) =>
@@ -350,6 +389,8 @@ export const api = {
   // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
   // server-side — lets a chart/list/calendar widget scope its rows, e.g. "status != 'DRAFT'".
   listDocuments: (name: string, from?: string, to?: string, filter?: string) => {
+    // See listCatalog: normalize so built-in and SDK custom widgets share one fetch.
+    name = toSnakeCase(name);
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -376,6 +417,9 @@ export const api = {
     }),
   deleteDocument: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/documents/${name}/${id}`, { method: "DELETE" }),
+  /** Server-side copy of a document (attributes + line items, unposted, dated now). Backs ⌘V paste. */
+  duplicateDocument: (name: string, id: string) =>
+    fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/duplicate`, { method: "POST" }),
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
   // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
   // input values (if any) ride along in the body and reach the handler via ActionContext.
@@ -401,17 +445,32 @@ export const api = {
   // from the session, never sent by the client.
   listComments: (kind: "catalogs" | "documents", name: string, id: string) =>
     fetchJson<CommentView[]>(`${BASE}/comments/${kind}/${name}/${id}`),
-  addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string) =>
+  addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string, parentId?: string | null) =>
     fetchJson<CommentView>(`${BASE}/comments/${kind}/${name}/${id}`, {
       method: "POST",
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, parentId: parentId ?? null }),
     }),
   deleteComment: (commentId: string) =>
     fetchJson<void>(`${BASE}/comments/${commentId}`, { method: "DELETE" }),
-  // Cross-entity typeahead for the @-mention picker: every readable catalog/document record
-  // matching q, ranked and capped server-side (see MentionController).
-  searchMentions: (q: string) =>
-    fetchJson<MentionSuggestion[]>(`${BASE}/mentions?q=${encodeURIComponent(q)}`),
+  toggleCommentReaction: (commentId: string, emoji: string) =>
+    fetchJson<CommentReaction[]>(`${BASE}/comments/${commentId}/reactions`, {
+      method: "POST",
+      body: JSON.stringify({ emoji }),
+    }),
+  // Cross-entity typeahead for the @ mention / # reference picker: matching readable records,
+  // ranked and capped server-side (see MentionController). `people` narrows to the identity
+  // catalog (falls back to all catalogs when the app has no Layout.identity link).
+  searchMentions: (q: string, kind?: "people" | "catalogs" | "documents") => {
+    const params = new URLSearchParams({ q });
+    if (kind) params.set("kind", kind);
+    return fetchJson<MentionSuggestion[]>(`${BASE}/mentions?${params.toString()}`);
+  },
+  // Resolve a pasted internal record URL to its live display so the compose box can swap the
+  // link for a mention. Unreadable/unknown records come back readable=false with no display.
+  resolveMention: (kind: "catalogs" | "documents", name: string, id: string) =>
+    fetchJson<ResolvedMentionTarget>(
+      `${BASE}/mentions/resolve?${new URLSearchParams({ kind, name, id }).toString()}`
+    ),
 
   // Per-user notifications (see NotificationController). One newest-first window; `unread` restricts to
   // unread rows, `cursor` (from a previous page's nextCursor) resumes. Marking read returns the fresh

@@ -404,21 +404,21 @@ public class DocumentQueryService {
         return cols;
     }
 
-    /** The text columns searched: number + every String attribute. */
-    private List<String> searchColumns(DocumentDescriptor desc) {
-        List<String> cols = new ArrayList<>(List.of("_number"));
-        desc.attributes().stream()
-                .filter(a -> a.javaType() == String.class && !a.secret())
-                .forEach(a -> cols.add(a.columnName()));
-        return cols;
-    }
-
+    /**
+     * The free-text search predicate for {@code q}: matches the term against <em>every</em> non-secret
+     * column, not just strings — the document number, every scalar attribute (numbers/dates cast to
+     * text), each {@code Ref<>} by the displayed value of its target (customer name, assignee), and each
+     * enum by its label/name. See {@link Searching}. One bound {@code :search} drives every text term.
+     */
     private String searchClause(DocumentDescriptor desc, String search) {
         if (search == null || search.isBlank()) return "";
-        String ors = searchColumns(desc).stream()
-                .map(c -> "LOWER(CAST(" + c + " AS VARCHAR)) LIKE :search")
-                .collect(Collectors.joining(" OR "));
-        return " AND (" + ors + ")";
+        List<String> ors = new ArrayList<>(List.of(Searching.likeVarchar("_number")));
+        for (var a : desc.attributes()) {
+            if (a.secret()) continue;
+            String term = Searching.term(registry, a, search);
+            if (term != null) ors.add(term);
+        }
+        return " AND (" + String.join(" OR ", ors) + ")";
     }
 
     private void bindSearch(org.jdbi.v3.core.statement.Query q, String search) {

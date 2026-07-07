@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Map as MapIcon, Plus, PlusCircle, Search, Table2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
+import { ActionFormDialog, type ActionFormField } from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { useViewersById } from "@/lib/presence-store";
@@ -15,14 +16,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { FacetSheet, SheetClearButton, SheetDoneButton, useTouchLayout } from "@/components/ui/facet-sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { RangeCalendar } from "@/components/ui/calendar";
 import { DatePicker } from "@/components/date-picker";
 import { HintIcon } from "@/components/ui/hint-icon";
+import { Segmented } from "@/components/ui/segmented";
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuSub,
+} from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { api } from "@/lib/api";
-import { cn, enumPillStyle } from "@/lib/utils";
-import { applyFormat, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
+import { shortcutLabel } from "@/lib/keybindings";
+import { withBasePath } from "@/lib/base-path";
+import { cn, copyToClipboard, enumPillStyle } from "@/lib/utils";
+import { applyFormat, formatTimestampDefault, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
 import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
@@ -58,10 +72,20 @@ export type ListAction = {
   /** Image URL/path shown instead of the lucide icon — e.g. a brand logo for "Connect with X". */
   logo?: string;
   scope: "toolbar" | "row";
+  /**
+   * Context-menu placement (from ActionSpec.menu("…")): the row action renders inside the row's
+   * right-click menu under a submenu with this label, instead of as an inline row icon button.
+   */
+  menu?: string;
   server: boolean;
   url?: string;
   kind: string;
   name: string;
+  /**
+   * Form fields a server action collects in a modal dialog before it runs (ActionSpec.form).
+   * The submitted values POST as the action's inputs, alongside the toolbar input values.
+   */
+  form?: ActionFormField[];
 };
 /**
  * Per-row override for a state-aware row action, computed server-side from the row's data and
@@ -83,10 +107,13 @@ export type RowActionState = {
 export type ListInput = {
   key: string;
   label: string;
-  type: "text" | "date" | "number" | "select";
+  /** "textarea" only ever arrives on action-form fields; a toolbar renders it as a text field. */
+  type: "text" | "textarea" | "date" | "number" | "select";
   placeholder: string;
   options: string[];
   value: string;
+  /** Gates an action-form dialog's submit; toolbar inputs ignore it (they're ambient values). */
+  required?: boolean;
 };
 /**
  * A declarative filter that drives the list query itself (unlike a {@link ListInput}, which feeds
@@ -97,8 +124,10 @@ export type ListInput = {
  * a {@code column >= from AND column <= to} range. The current value is sent to /api/list as
  * eq/in/like/prefix/ge/le params, and several filters narrow the list jointly (AND).
  */
-/** One choice of a (multi-)options filter: {@code value} is matched on the column, {@code label} is shown. */
-export type FilterOption = { value: string; label: string };
+/** One choice of a (multi-)options filter: {@code value} is matched on the column, {@code label} is
+ *  shown, {@code color} (an @EnumLabel hex, when the field is an enumeration) tints the choice like
+ *  the entity's status pills. */
+export type FilterOption = { value: string; label: string; color?: string };
 export type ListFilterControl = {
   key: string;
   label: string;
@@ -118,6 +147,13 @@ export type ListDescriptor = {
   searchable: boolean;
   sort: { column: string | null; descending: boolean };
   newUrl: string | null;
+  /**
+   * The viewer's write access on the entity (server-stamped from RBAC). When false the island
+   * hides its write affordances — row Edit/Duplicate/Delete, batch delete — and stamps rows
+   * data-onno-row-writable="0" so the shell's fallback row menu and shortcuts hide theirs too.
+   * Absent (old server) means unknown; treat as writable, REST enforces regardless.
+   */
+  canWrite?: boolean;
   actions?: ListAction[];
   inputs?: ListInput[];
   filters?: ListFilterControl[];
@@ -153,6 +189,38 @@ function dispatchAction(url: string) {
   window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
 }
 
+// Mirrors divkit-view's url helpers for the row context menu this island owns:
+// open url → delete-action url / route path / absolute shareable link.
+function rowDeleteUrl(rowUrl: string): string {
+  return "onno://delete/" + rowUrl.slice("onno://".length);
+}
+function rowShareableUrl(rowUrl: string): string {
+  return window.location.origin + withBasePath("/" + rowUrl.slice("onno://".length));
+}
+
+/** Whether keyboard input currently belongs to an editable control (so shortcuts stay native). */
+function isEditingTarget(): boolean {
+  const el = document.activeElement as HTMLElement | null;
+  return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+}
+
+/** The hovered row's id — only if the row belongs to THIS list (several can be mounted at once). */
+function hoveredRowId(kind: string, name: string): string | null {
+  const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
+  const url = el?.dataset.onnoRow;
+  if (!url || !url.startsWith(`onno://${kind}/${name}/`)) return null;
+  return url.slice(url.lastIndexOf("/") + 1);
+}
+
+/** Nearest ancestor that can scroll vertically — the DivKit page wrapper on route surfaces. */
+function nearestScrollAncestor(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if (o === "auto" || o === "scroll") return p;
+  }
+  return null;
+}
+
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
 function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string {
   if (col.columnName === "_posted") return t(row["_posted"] === true ? "status.posted" : "status.draft");
@@ -160,11 +228,15 @@ function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string 
   return v == null ? "" : String(v);
 }
 
-/** The displayed text: secret mask, image placeholder, or the value run through .format(...). */
+/**
+ * The displayed text: secret mask, image placeholder, or the value run through .format(...).
+ * A full date-time with no authored format falls back to the locale default — a raw
+ * "2026-07-05T00:58:48.232+00:00" is machine output, never a display value.
+ */
 function displayCellValue(raw: string, col: ListColumn): string {
   if (raw === "__SECRET_SET__") return "•••• set";
   if (raw.startsWith("data:")) return "🖼 Image"; // a non-image column keeps the placeholder
-  return applyFormat(raw, col.format) ?? raw;
+  return applyFormat(raw, col.format) ?? formatTimestampDefault(raw) ?? raw;
 }
 
 /** One list cell: an image thumbnail for image/avatar columns, otherwise formatted text. */
@@ -211,7 +283,7 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
     return (
       <span className="flex min-w-0">
         <span
-          className="truncate rounded-full px-2 py-0.5 text-xs font-medium"
+          className="truncate rounded-control px-2 py-0.5 text-xs font-medium"
           style={pill}
         >
           {displayCellValue(raw, col)}
@@ -247,17 +319,40 @@ const facetTriggerCls = (active: boolean) =>
       : "border-dashed border-input bg-transparent text-muted-foreground hover:border-solid hover:border-input hover:bg-accent hover:text-foreground"
   );
 
+// Options-facet lists longer than this get a search row; shorter ones stay a plain scan.
+const FACET_SEARCH_THRESHOLD = 8;
+
 /** A thin vertical rule between a facet's label and its selected-value badges. */
 function FacetDivider() {
   return <span aria-hidden="true" className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />;
 }
 
-/** A selected value rendered inside a facet trigger. */
-function FacetValueBadge({ children }: { children: ReactNode }) {
+/** A selected value rendered inside a facet trigger; an enum option's color tints it like the pills. */
+function FacetValueBadge({ color, children }: { color?: string; children: ReactNode }) {
+  const pill = enumPillStyle(color);
   return (
-    <Badge variant="secondary" className="rounded-sm border-transparent bg-accent px-1 font-normal text-foreground">
+    <Badge
+      variant="secondary"
+      className="rounded-control border-transparent bg-accent px-1 font-normal text-foreground"
+      style={pill ?? undefined}
+    >
       {children}
     </Badge>
+  );
+}
+
+/**
+ * Hover hint for a facet chip. Wraps the chip's PopoverTrigger (Radix slots compose onto the same
+ * button), replacing the native {@code title} attribute so every chip explains itself the same way.
+ */
+function FacetTip({ hint, children }: { hint: string; children: ReactNode }) {
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent side="bottom">{hint}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -282,44 +377,158 @@ function OptionsFacet({
 }) {
   const t = useMessages();
   const [open, setOpen] = useState(false);
-  const labelOf = (value: string) => options.find((o) => o.value === value)?.label ?? value;
+  const touch = useTouchLayout();
+  const optionOf = (value: string) => options.find((o) => o.value === value);
   const active = selected.length > 0;
+  // A long option list gets a search row (label match, case-insensitive); short lists stay a
+  // plain scan — an input over 4 statuses is noise. Query resets on close so reopening shows all.
+  const [query, setQuery] = useState("");
+  const searchable = options.length > FACET_SEARCH_THRESHOLD;
+  const q = query.trim().toLowerCase();
+  const visible = searchable && q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+  const close = (next: boolean) => {
+    setOpen(next);
+    if (!next) setQuery("");
+  };
   const toggle = (value: string) => {
     if (multi) {
       onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
     } else {
       onChange(selected.includes(value) ? [] : [value]);
-      setOpen(false);
+      close(false);
     }
   };
+
+  const trigger = (
+    <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
+      <ListFilter className="size-3.5 shrink-0 opacity-60" />
+      <span className="whitespace-nowrap">{label}</span>
+      {active ? (
+        <>
+          <FacetDivider />
+          {selected.length <= 2 ? (
+            selected.map((v) => (
+              <FacetValueBadge key={v} color={optionOf(v)?.color}>
+                {optionOf(v)?.label ?? v}
+              </FacetValueBadge>
+            ))
+          ) : (
+            <FacetValueBadge>{t("list.selected", { count: selected.length })}</FacetValueBadge>
+          )}
+        </>
+      ) : null}
+    </button>
+  );
+
+  // Phones/tablets: a bottom sheet of 44px check rows instead of a small anchored popover.
+  if (touch) {
+    return (
+      <>
+        {trigger}
+        {open ? (
+          <FacetSheet
+            label={label}
+            onClose={() => close(false)}
+            footer={
+              <>
+                <SheetClearButton
+                  onClick={() => {
+                    onChange([]);
+                    close(false);
+                  }}
+                >
+                  {t("list.clear")}
+                </SheetClearButton>
+                <SheetDoneButton onClick={() => close(false)}>{t("list.done")}</SheetDoneButton>
+              </>
+            }
+          >
+            <div className="px-2 py-2">
+              {searchable ? (
+                <div className="mx-1 mb-1.5 flex items-center gap-2 rounded-field bg-muted px-3">
+                  <Search className="size-4 shrink-0 opacity-50" />
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder={t("list.search")}
+                    className="h-10 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+                  />
+                </div>
+              ) : null}
+              {searchable && visible.length === 0 ? (
+                <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                  {t("empty.noMatches")}
+                </div>
+              ) : null}
+              {visible.map((o) => {
+                const on = selected.includes(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => toggle(o.value)}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                      )}
+                    >
+                      {on ? <Check className="size-3.5" /> : null}
+                    </span>
+                    {o.color ? (
+                      <span
+                        aria-hidden="true"
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: o.color }}
+                      />
+                    ) : null}
+                    <span className="truncate">{o.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </FacetSheet>
+        ) : null}
+      </>
+    );
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button type="button" className={facetTriggerCls(active)} title={label}>
-          <PlusCircle className="size-3.5 shrink-0 opacity-60" />
-          <span className="whitespace-nowrap">{label}</span>
-          {active ? (
-            <>
-              <FacetDivider />
-              {selected.length <= 2 ? (
-                selected.map((v) => <FacetValueBadge key={v}>{labelOf(v)}</FacetValueBadge>)
-              ) : (
-                <FacetValueBadge>{t("list.selected", { count: selected.length })}</FacetValueBadge>
-              )}
-            </>
-          ) : null}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 p-1">
+    <Popover open={open} onOpenChange={close}>
+      <FacetTip hint={t("list.filterHint", { label })}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </FacetTip>
+      <PopoverContent align="start" className="w-64 p-1">
+        {searchable ? (
+          <div className="mb-1 flex items-center gap-2 border-b border-border px-2 pb-1.5 pt-1">
+            <Search className="size-3.5 shrink-0 opacity-50" />
+            <input
+              type="text"
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("list.search")}
+              className="h-6 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        ) : null}
         <div className="max-h-72 overflow-y-auto">
-          {options.map((o) => {
+          {searchable && visible.length === 0 ? (
+            <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+              {t("empty.noMatches")}
+            </div>
+          ) : null}
+          {visible.map((o) => {
             const on = selected.includes(o.value);
             return (
               <button
                 key={o.value}
                 type="button"
                 onClick={() => toggle(o.value)}
-                className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent"
+                className="flex w-full cursor-pointer items-center gap-2 rounded-field px-2 py-1.5 text-left text-sm hover:bg-accent"
               >
                 <span
                   className={cn(
@@ -329,6 +538,13 @@ function OptionsFacet({
                 >
                   {on ? <Check className="size-3" /> : null}
                 </span>
+                {o.color ? (
+                  <span
+                    aria-hidden="true"
+                    className="size-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: o.color }}
+                  />
+                ) : null}
                 <span className="truncate">{o.label}</span>
               </button>
             );
@@ -340,7 +556,7 @@ function OptionsFacet({
             <button
               type="button"
               onClick={() => onChange([])}
-              className="w-full rounded px-2 py-1.5 text-center text-xs text-muted-foreground hover:bg-accent"
+              className="w-full rounded-field px-2 py-1.5 text-center text-xs text-muted-foreground hover:bg-accent"
             >
               {t("list.clear")}
             </button>
@@ -352,10 +568,10 @@ function OptionsFacet({
 }
 
 /**
- * A field-scoped typeahead facet: a debounced text input styled to sit in the filter bar. Keystrokes
- * update the box immediately but only commit (and re-query) after a short pause, so a contains/
- * starts-with filter over a high-cardinality column doesn't refetch on every character. The label is
- * the placeholder (no separate inline label), and a clear ✕ appears once there's text.
+ * A field-scoped text-match facet: the same chip grammar as the other facets (an inline filled input
+ * here used to read as a second search box). The chip opens a popover holding the debounced input —
+ * keystrokes commit (and re-query) after a short pause, so a contains/starts-with filter over a
+ * high-cardinality column doesn't refetch on every character; Enter commits at once and closes.
  */
 function TextFacet({
   label,
@@ -366,36 +582,127 @@ function TextFacet({
   value: string;
   onCommit: (next: string) => void;
 }) {
+  const t = useMessages();
+  const [open, setOpen] = useState(false);
   const [text, setText] = useState(value);
   // Keep the input in sync if the committed value is reset externally (e.g. a clear-all).
   useEffect(() => setText(value), [value]);
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const id = window.setTimeout(() => {
       if (text !== value) onCommit(text);
     }, 300);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
-  return (
-    <div className="relative shrink-0">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-      <Input
-        value={text}
-        placeholder={label}
-        onChange={(e) => setText(e.target.value)}
-        className="h-8 w-40 rounded-control pl-8 pr-7 text-xs"
-      />
-      {text ? (
-        <button
-          type="button"
-          onClick={() => setText("")}
-          className="absolute right-1.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground"
-          aria-label="Clear"
-        >
-          <X className="size-3.5" />
-        </button>
+  const active = !!value;
+  const touch = useTouchLayout();
+
+  const trigger = (
+    <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
+      <Search className="size-3.5 shrink-0 opacity-60" />
+      <span className="whitespace-nowrap">{label}</span>
+      {active ? (
+        <>
+          <FacetDivider />
+          <FacetValueBadge>
+            <span className="max-w-28 truncate">{value}</span>
+          </FacetValueBadge>
+        </>
       ) : null}
-    </div>
+    </button>
+  );
+
+  // Phones/tablets: a bottom sheet with a full-width input and Clear/Done — a popover input
+  // under the software keyboard is unusable.
+  if (touch) {
+    return (
+      <>
+        {trigger}
+        {open ? (
+          <FacetSheet
+            label={label}
+            onClose={() => setOpen(false)}
+            footer={
+              <>
+                <SheetClearButton
+                  onClick={() => {
+                    setText("");
+                    onCommit("");
+                    setOpen(false);
+                  }}
+                >
+                  {t("list.clear")}
+                </SheetClearButton>
+                <SheetDoneButton
+                  onClick={() => {
+                    onCommit(text);
+                    setOpen(false);
+                  }}
+                >
+                  {t("list.done")}
+                </SheetDoneButton>
+              </>
+            }
+          >
+            <div className="relative px-4 py-3">
+              <Search className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                autoFocus
+                value={text}
+                placeholder={label}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onCommit(text);
+                    setOpen(false);
+                  }
+                }}
+                className="h-11 rounded-field pl-10 text-[15px]"
+              />
+            </div>
+          </FacetSheet>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <FacetTip hint={t("list.filterHint", { label })}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </FacetTip>
+      <PopoverContent align="start" className="w-64 p-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            autoFocus
+            value={text}
+            placeholder={label}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onCommit(text);
+                setOpen(false);
+              }
+            }}
+            className="h-8 rounded-field pl-8 text-xs"
+          />
+        </div>
+        {active ? (
+          <button
+            type="button"
+            onClick={() => {
+              setText("");
+              onCommit("");
+              setOpen(false);
+            }}
+            className="mt-1 w-full rounded-field px-2 py-1.5 text-center text-xs text-muted-foreground hover:bg-accent"
+          >
+            {t("list.clear")}
+          </button>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -409,6 +716,9 @@ function fmtDay(iso: string): string {
     return iso;
   }
 }
+
+// (FacetSheet, SheetClearButton, SheetDoneButton, useTouchLayout live in ui/facet-sheet — the
+// dashboard's TimeRangeFacet shares the same touch shell.)
 
 /**
  * A date-range facet: one chip that opens a popover with quick presets (Today, Last 7 days, This
@@ -450,22 +760,84 @@ function DateRangeFacet({
     { label: t("list.dateThisMonth"), start: startOfMonth(now), end: now },
     { label: t("list.dateThisYear"), start: startOfYear(now), end: now },
   ];
+  const touch = useTouchLayout();
+
+  const trigger = (
+    <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
+      <CalendarDays className="size-3.5 shrink-0 opacity-60" />
+      <span className="whitespace-nowrap">{label}</span>
+      {active ? (
+        <>
+          <FacetDivider />
+          <FacetValueBadge>
+            {fmtDay(from)} – {fmtDay(to)}
+          </FacetValueBadge>
+        </>
+      ) : null}
+    </button>
+  );
+
+  // Phones/tablets: a bottom sheet — preset chips, one finger-sized month, a sticky
+  // Clear/Done footer — instead of an anchored two-month popover a thumb can't use.
+  if (touch) {
+    return (
+      <>
+        {trigger}
+        {open ? (
+          <FacetSheet
+            label={label}
+            onClose={() => setOpen(false)}
+            footer={
+              <>
+                <SheetClearButton
+                  onClick={() => {
+                    onChange({ from: "", to: "" });
+                    setOpen(false);
+                  }}
+                >
+                  {t("list.clear")}
+                </SheetClearButton>
+                <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
+              </>
+            }
+          >
+            <div className="grid grid-cols-3 gap-2 px-4 pt-3">
+              {presets.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => {
+                    setRange(p.start, p.end);
+                    setOpen(false);
+                  }}
+                  className="h-9 rounded-field border border-input px-2 text-xs font-medium text-foreground transition-colors active:bg-accent"
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-center">
+              <RangeCalendar
+                aria-label={label}
+                value={range}
+                numberOfMonths={1}
+                touch
+                onChange={(v) => {
+                  if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
+                }}
+              />
+            </div>
+          </FacetSheet>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button type="button" className={facetTriggerCls(active)} title={label}>
-          <CalendarDays className="size-3.5 shrink-0 opacity-60" />
-          <span className="whitespace-nowrap">{label}</span>
-          {active ? (
-            <>
-              <FacetDivider />
-              <FacetValueBadge>
-                {fmtDay(from)} – {fmtDay(to)}
-              </FacetValueBadge>
-            </>
-          ) : null}
-        </button>
-      </PopoverTrigger>
+      <FacetTip hint={t("list.filterHint", { label })}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </FacetTip>
       <PopoverContent align="start" className="w-auto p-0">
         <div className="flex flex-col sm:flex-row">
           <div className="flex flex-row gap-1 border-b p-2 sm:flex-col sm:border-b-0 sm:border-r">
@@ -477,7 +849,7 @@ function DateRangeFacet({
                   setRange(p.start, p.end);
                   setOpen(false);
                 }}
-                className="whitespace-nowrap rounded px-2.5 py-1.5 text-left text-xs text-foreground hover:bg-accent"
+                className="whitespace-nowrap rounded-field px-2.5 py-1.5 text-left text-xs text-foreground hover:bg-accent"
               >
                 {p.label}
               </button>
@@ -499,7 +871,7 @@ function DateRangeFacet({
                     onChange({ from: "", to: "" });
                     setOpen(false);
                   }}
-                  className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-field px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   {t("list.clear")}
                 </button>
@@ -512,12 +884,188 @@ function DateRangeFacet({
   );
 }
 
+/**
+ * The group-by control as a facet chip — the same pill grammar as the filters (dashed prompt when
+ * off, accent-tinted with the picked column shown as a badge when on) instead of an inline labelled
+ * {@code <Select>}, so the whole bar speaks one visual language. The popover lists the groupable
+ * columns radio-style; picking a date column keeps the popover open and reveals a Day/Month/Year
+ * granularity segment.
+ */
+function GroupByFacet({
+  groupable,
+  groupBy,
+  onGroupBy,
+  granularity,
+  onGranularity,
+}: {
+  groupable: GroupableColumn[];
+  groupBy: string;
+  onGroupBy: (v: string) => void;
+  granularity: string;
+  onGranularity: (v: string) => void;
+}) {
+  const t = useMessages();
+  const [open, setOpen] = useState(false);
+  const col = groupable.find((g) => g.columnName === groupBy);
+  const granLabels: Record<string, string> = {
+    day: t("list.granDay"),
+    month: t("list.granMonth"),
+    year: t("list.granYear"),
+  };
+  const touch = useTouchLayout();
+  const choose = (v: string) => {
+    onGroupBy(v);
+    // A date column stays open so the granularity segment (revealed below) is one click away.
+    if (!groupable.find((g) => g.columnName === v)?.date) setOpen(false);
+  };
+
+  const trigger = (
+    <button type="button" className={facetTriggerCls(!!groupBy)} onClick={touch ? () => setOpen(true) : undefined}>
+      <Rows3 className="size-3.5 shrink-0 opacity-60" />
+      <span className="whitespace-nowrap">{t("list.groupBy")}</span>
+      {col ? (
+        <>
+          <FacetDivider />
+          <FacetValueBadge>{col.label}</FacetValueBadge>
+          {col.date && granLabels[granularity] ? (
+            <FacetValueBadge>{granLabels[granularity]}</FacetValueBadge>
+          ) : null}
+        </>
+      ) : null}
+    </button>
+  );
+
+  // Phones/tablets: a bottom sheet of 44px radio rows; a date column reveals a large
+  // Day/Month/Year segment above the Done footer.
+  if (touch) {
+    return (
+      <>
+        {trigger}
+        {open ? (
+          <FacetSheet
+            label={t("list.groupBy")}
+            onClose={() => setOpen(false)}
+            footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
+          >
+            <div className="px-2 py-2">
+              {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
+                const on = (groupBy || "") === g.columnName;
+                return (
+                  <button
+                    key={g.columnName || "__none"}
+                    type="button"
+                    onClick={() => choose(g.columnName)}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                      )}
+                    >
+                      {on ? <Check className="size-3.5" /> : null}
+                    </span>
+                    <span className="truncate">{g.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {col?.date ? (
+              <div className="flex items-center gap-2 border-t px-4 py-3">
+                {(["day", "month", "year"] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => onGranularity(g)}
+                    className={cn(
+                      "h-10 flex-1 rounded-control text-sm font-medium transition-colors",
+                      granularity === g
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground active:bg-accent/60"
+                    )}
+                  >
+                    {granLabels[g]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </FacetSheet>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <FacetTip hint={t("list.groupByHint")}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </FacetTip>
+      <PopoverContent align="start" className="w-64 p-1">
+        <div className="max-h-72 overflow-y-auto">
+          {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
+            const on = (groupBy || "") === g.columnName;
+            return (
+              <button
+                key={g.columnName || "__none"}
+                type="button"
+                onClick={() => choose(g.columnName)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-field px-2 py-1.5 text-left text-sm hover:bg-accent"
+              >
+                <span
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                    on ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                  )}
+                >
+                  {on ? <Check className="size-3" /> : null}
+                </span>
+                <span className="truncate">{g.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {col?.date ? (
+          <>
+            <div className="my-1 h-px bg-border" />
+            <div className="flex items-center gap-1 p-1">
+              {(["day", "month", "year"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => onGranularity(g)}
+                  className={cn(
+                    "flex-1 rounded-control px-2 py-1 text-xs font-medium transition-colors",
+                    granularity === g
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                  )}
+                >
+                  {granLabels[g]}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // A window bigger than one page cannot exceed the server's list ceiling.
 const MAX_WINDOW = 500;
 // Extra rows rendered above/below the viewport in infinite mode, so a fast scroll never flashes blank.
 const OVERSCAN = 8;
 
-export function EntityListWidget({ list }: { list: ListDescriptor }) {
+export function EntityListWidget({
+  list,
+  headerExtra,
+}: {
+  list: ListDescriptor;
+  // Host-provided control rendered in the control island right after the title — the register
+  // surface parks its Balance/Movements toggle here so the view switch lives with the list's own
+  // controls instead of floating above the card.
+  headerExtra?: ReactNode;
+}) {
   const { kind, name, columns, pageSize } = list;
   // Feed mode: "infinite" cursor-scrolls a keyset stream (the default); "paged" shows numbered
   // offset pages. The two drive different server engines (cursor vs offset) — see loadInitial.
@@ -590,6 +1138,16 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const groupCol = groupable.find((g) => g.columnName === groupBy);
   // Keys of in-flight server actions (`key` for toolbar, `key:id` for a row) → spinner + disabled.
   const [pending, setPending] = useState<Set<string>>(new Set());
+  // Batch selection: row ids picked with ⌘/Ctrl-click (toggle) and Shift-click (range from the
+  // anchor). Plain click keeps its open-the-record meaning; with a selection active it clears the
+  // selection instead. Esc or the toolbar ✕ clears too.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const selAnchorRef = useRef<number | null>(null);
+  // The row right-click menu this island owns (built-ins + custom actions + batch ops). The
+  // native event is preventDefault-ed so divkit-view's DOM-sniffing fallback menu stays quiet.
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; id: string; url: string; row: EntityRecord } | null>(null);
+  // Two-step batch delete: first click arms ("sure?"), second click runs.
+  const [armedDelete, setArmedDelete] = useState(false);
   // Table vs map view (only offered when the list declares a map config). The map fetches its own
   // rows, so the grid's search/filters/sort are hidden while it's shown.
   const [view, setView] = useState<"table" | "map">(() => {
@@ -606,6 +1164,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
   // so they aren't clickable. Also gates the single-row live patch (registers have no row identity).
   const openable = kind === "catalogs" || kind === "documents";
+  // RBAC write access (see ListDescriptor.canWrite): gates the row menu's Edit/Duplicate/Delete
+  // and batch delete. Absent flag (old server) stays permissive; REST enforces regardless.
+  const canWrite = list.canWrite !== false;
   // Where windows are fetched from: a register points the island at its own feed; others use the
   // standard /api/list/{kind}/{name} route.
   const feedBase = list.feed ?? `/api/list/${kind}/${name}`;
@@ -616,6 +1177,22 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   const allActions = list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
   const rowActions = allActions.filter((a) => a.scope === "row");
+  // Only actions without a .menu("…") placement render as inline row icon buttons; the rest live in
+  // the row's right-click menu (grouped under their submenu label, in declaration order).
+  const rowButtonActions = rowActions.filter((a) => !a.menu);
+  const rowSubmenus = useMemo(() => {
+    const order: string[] = [];
+    const byMenu = new Map<string, ListAction[]>();
+    for (const a of rowActions) {
+      if (!a.menu) continue;
+      if (!byMenu.has(a.menu)) {
+        byMenu.set(a.menu, []);
+        order.push(a.menu);
+      }
+      byMenu.get(a.menu)!.push(a);
+    }
+    return order.map((label) => ({ label, actions: byMenu.get(label)! }));
+  }, [rowActions]);
   const toolbarInputs = list.inputs ?? [];
   // Stable reference so the fetch/reset effects don't churn when there are no filters.
   const filters = useMemo(() => list.filters ?? [], [list.filters]);
@@ -745,7 +1322,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
   // table's overall min-width (below) keeps the columns readable — when the card is narrower
   // than that, the table scrolls horizontally instead of cramming the columns.
   const DATA_COL_MIN = 150;
-  const ACTION_COL_W = rowActions.length ? rowActions.length * 36 + 8 : 0;
+  const ACTION_COL_W = rowButtonActions.length ? rowButtonActions.length * 36 + 8 : 0;
   const template =
     columns
       .map((c) => {
@@ -915,9 +1492,15 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     return () => ro.disconnect();
   }, []);
 
-  // Route surface: fill the space from the island's top to the window bottom, so the list body
-  // scrolls internally and the page (DivKit container) never scrolls. The root then carries its own
-  // padding, so the gap under the card matches the top/left gap.
+  // Route surface: fill the space from the island's top to the bottom of the page scroller, so the
+  // list body scrolls internally and the page (DivKit container) never scrolls. The root then
+  // carries its own padding, so the gap under the card matches the top/left gap.
+  //
+  // The limit is the enclosing scroller's content box, NOT window.innerHeight: the shell keeps
+  // padding below the scroller, so sizing to the window overshoots by that padding and leaves the
+  // page a few px of scroll play (the whole card wiggles and the gaps look uneven). The offset is
+  // computed in the scroller's content coordinates (scroll-invariant), so the height converges to
+  // exactly zero page scroll even if measured while the page is scrolled.
   //
   // We must measure our top live, not just once: the workspace tab bar, the sidebar and web-font
   // loading all shift it *after* mount, and the DivKit wrappers around us are `overflow: clip` and
@@ -933,7 +1516,13 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     if (!el) return;
     const measure = () => {
       const top = el.getBoundingClientRect().top;
-      setSurfaceH(Math.max(240, Math.floor(window.innerHeight - top)));
+      const sc = nearestScrollAncestor(el);
+      if (sc) {
+        const offsetInContent = top - sc.getBoundingClientRect().top - sc.clientTop + sc.scrollTop;
+        setSurfaceH(Math.max(240, Math.floor(sc.clientHeight - offsetInContent)));
+      } else {
+        setSurfaceH(Math.max(240, Math.floor(window.innerHeight - top)));
+      }
     };
     measure();
     const raf = requestAnimationFrame(measure); // re-measure once layout has settled
@@ -949,15 +1538,20 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     };
   }, [surfaceMode, stacked]);
 
-  // Embedded mode only: cap the scroll body at the space to the window bottom (leaving room for the
-  // pager footer) so a big in-page list scrolls internally rather than stretching the host page.
+  // Embedded mode only: cap the scroll body at the space to the visible bottom of the enclosing
+  // scroller (leaving room for the pager footer) so a big in-page list scrolls internally rather
+  // than stretching the host page.
   useLayoutEffect(() => {
     if (surfaceMode) return;
     const measure = () => {
       const el = scrollRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top;
-      setMaxBodyH(Math.max(160, Math.floor(window.innerHeight - top - 72)));
+      const sc = nearestScrollAncestor(el);
+      const bottom = sc
+        ? sc.getBoundingClientRect().top + sc.clientTop + sc.clientHeight
+        : window.innerHeight;
+      setMaxBodyH(Math.max(160, Math.floor(bottom - top - 72)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -967,18 +1561,27 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       window.removeEventListener("resize", measure);
       ro.disconnect();
     };
-  }, [surfaceMode]);
+    // grouped/mapMode: the observed body remounts when those views swap back to the table —
+    // re-run so the observer isn't left holding the unmounted element (see the viewport effect).
+  }, [surfaceMode, grouped, mapMode]);
 
-  // Keep the virtual-window viewport height in sync with the body's client height.
+  // Keep the virtual-window viewport height in sync with the body's client height. Keyed on the
+  // view toggles too: the grouped/map views unmount the table body, and unmount delivers a final
+  // 0-height resize for the old element — without re-running here on swap-back, viewportH stays 0
+  // and the virtual window renders only OVERSCAN rows ("list cuts off at the 8th row" after
+  // grouping and ungrouping), with the rest left as blank padding.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const apply = () => setViewportH(el.clientHeight);
     apply();
+    // The remounted body starts unscrolled — resync the window offset (the state may still hold
+    // the pre-swap scroll position, which would blank the first rows).
+    setScrollTop(el.scrollTop);
     const ro = new ResizeObserver(apply);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [surfaceMode]);
+  }, [surfaceMode, grouped, mapMode]);
 
   // Body scroll: drive the virtual window, and (infinite) fetch the next window as the end nears.
   const onScroll = useCallback(() => {
@@ -1001,14 +1604,25 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     loadInitial(true);
   }, [loadInitial]);
 
+  // An action-form dialog waiting for input: the clicked form-declaring action plus its target —
+  // one row id, a batch of ids, or neither (toolbar). Submitting runs the action with the values.
+  const [formPrompt, setFormPrompt] = useState<{ action: ListAction; id?: string; ids?: string[] } | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
+
   // Run a custom action button. A navigation action just routes (filling {id} for a row); a
   // server action POSTs to /api/actions and applies the ActionResult — toast, navigate, refresh.
-  // While the (possibly slow/async) handler runs, the button shows a spinner and is disabled, so
-  // there's feedback and no double-submit. (api.runAction is CSRF-aware and toasts failures.)
+  // An action declaring a form first opens the modal dialog to collect its fields (formInputs
+  // arrive on the second, submitting call). While the (possibly slow/async) handler runs, the
+  // button shows a spinner and is disabled, so there's feedback and no double-submit.
+  // (api.runAction is CSRF-aware and toasts failures.)
   const runAction = useCallback(
-    (action: ListAction, id?: string) => {
+    (action: ListAction, id?: string, formInputs?: Record<string, string>): Promise<void> | void => {
       if (!action.server) {
         if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
+        return;
+      }
+      if (action.form?.length && !formInputs) {
+        setFormPrompt({ action, id });
         return;
       }
       const k = id ? `${action.key}:${id}` : action.key;
@@ -1018,8 +1632,8 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         n.add(k);
         return n;
       });
-      api
-        .runAction(action.kind, action.name, action.key, id, inputValuesRef.current)
+      return api
+        .runAction(action.kind, action.name, action.key, id, { ...inputValuesRef.current, ...formInputs })
         .then((result) => {
           if (result?.message) toast.success(result.message);
           if (result?.navigate) dispatchAction(result.navigate);
@@ -1036,6 +1650,113 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         );
     },
     [reload]
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelected(new Set());
+    selAnchorRef.current = null;
+  }, []);
+
+  // A changed query invalidates the selection's row set — indices shift, rows drop out.
+  useEffect(() => {
+    clearSelection();
+  }, [kind, name, debounced, filterSig, sort.column, sort.descending, clearSelection]);
+
+  // Esc clears the selection. Captured + consumed: the shell's own Esc handler closes the
+  // focused tab (and only yields to an already-defaultPrevented event), so clearing a selection
+  // must swallow the key or Esc would clear AND close the surface in one press.
+  useEffect(() => {
+    if (selected.size === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      clearSelection();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [selected.size, clearSelection]);
+
+  // One batch runs at a time. A ref (not the pending set) is the re-entrancy guard: a setState
+  // updater's side effects aren't guaranteed to run synchronously (React only eager-evaluates the
+  // first queued update), so "did I just add the key?" can't be derived from setPending. The
+  // pending key still drives the disabled state of the menu items.
+  const batchBusyRef = useRef(false);
+
+  // Run a custom server action over every selected row, sequentially (one POST at a time — the
+  // handlers are arbitrary business logic; hammering them concurrently invites deadlocks). Per-id
+  // failures self-toast via the api layer; a summary toast closes the run. Per-result navigate is
+  // deliberately ignored — a batch can't open N panes.
+  const runBatchAction = useCallback(
+    async (action: ListAction, ids: string[], formInputs?: Record<string, string>) => {
+      if (action.form?.length && !formInputs) {
+        // Collect the form once up front; the submitted values apply to every selected row.
+        setFormPrompt({ action, ids });
+        return;
+      }
+      if (batchBusyRef.current) return;
+      batchBusyRef.current = true;
+      const k = `batch:${action.key}`;
+      setPending((s) => new Set(s).add(k));
+      let ok = 0;
+      try {
+        for (const id of ids) {
+          try {
+            await api.runAction(action.kind, action.name, action.key, id, {
+              ...inputValuesRef.current,
+              ...formInputs,
+            });
+            ok++;
+          } catch {
+            // already toasted by the api layer
+          }
+        }
+      } finally {
+        batchBusyRef.current = false;
+        setPending((s) => {
+          const n = new Set(s);
+          n.delete(k);
+          return n;
+        });
+      }
+      (ok === ids.length ? toast.success : toast.error)(
+        t("batch.done", { label: action.label, ok, n: ids.length })
+      );
+      clearSelection();
+      reload();
+    },
+    [reload, clearSelection, t]
+  );
+
+  const runBatchDelete = useCallback(
+    async (ids: string[]) => {
+      if (batchBusyRef.current) return;
+      batchBusyRef.current = true;
+      const k = "batch:__delete";
+      setPending((s) => new Set(s).add(k));
+      let ok = 0;
+      try {
+        for (const id of ids) {
+          try {
+            if (kind === "documents") await api.deleteDocument(name, id);
+            else await api.deleteCatalogItem(name, id);
+            ok++;
+          } catch {
+            // already toasted by the api layer
+          }
+        }
+      } finally {
+        batchBusyRef.current = false;
+        setPending((s) => {
+          const n = new Set(s);
+          n.delete(k);
+          return n;
+        });
+      }
+      (ok === ids.length ? toast.success : toast.error)(t("batch.deleted", { ok, n: ids.length }));
+      clearSelection();
+      reload();
+    },
+    [kind, name, reload, clearSelection, t]
   );
 
   // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
@@ -1126,6 +1847,312 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
     });
   };
 
+  // ⌘C / ⌘V on rows. Copy writes two clipboard flavours from the native `copy` event: text/plain
+  // TSV of the visible columns (pastes into a text file or spreadsheet as-is) and an app payload
+  // (custom MIME with the record ids). Paste reads the payload back and creates a server-side
+  // duplicate per id — so records copy within (or across tabs of) the app. Native behaviour wins
+  // wherever it makes sense: an editable field focused or a real text selection active.
+  useEffect(() => {
+    const textSelected = () => {
+      const sel = window.getSelection();
+      return !!sel && !sel.isCollapsed && !!sel.toString().trim();
+    };
+    const onCopy = (e: ClipboardEvent) => {
+      if (e.defaultPrevented || !e.clipboardData || !openable) return;
+      if (isEditingTarget() || textSelected()) return;
+      // The selection, else the hovered row — and only a row of THIS list.
+      let rows: EntityRecord[];
+      if (selected.size) {
+        rows = loadedRows.filter((r) => r._id != null && selected.has(String(r._id)));
+      } else {
+        const id = hoveredRowId(kind, name);
+        const row = id ? loadedRows.find((r) => String(r._id) === id) : undefined;
+        if (!row) return;
+        rows = [row];
+      }
+      if (!rows.length) return;
+      e.preventDefault();
+      const tsv = rows
+        .map((r) => columns.map((c) => displayCellValue(rawCellValue(r, c, t), c)).join("\t"))
+        .join("\n");
+      e.clipboardData.setData("text/plain", tsv);
+      e.clipboardData.setData(
+        "application/x-onno-rows",
+        JSON.stringify({ kind, name, ids: rows.map((r) => String(r._id)) })
+      );
+      toast.success(t("clipboard.copied", { count: rows.length }));
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (e.defaultPrevented || !e.clipboardData || !openable) return;
+      if (isEditingTarget()) return;
+      const raw = e.clipboardData.getData("application/x-onno-rows");
+      if (!raw) return;
+      let payload: { kind?: string; name?: string; ids?: string[] };
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      // Only the matching list consumes the paste (several lists can be mounted at once).
+      if (payload.kind !== kind || payload.name !== name || !Array.isArray(payload.ids) || !payload.ids.length) return;
+      if (!list.newUrl) return; // read-only for this user — no pasting copies
+      e.preventDefault();
+      const ids = payload.ids;
+      void (async () => {
+        if (batchBusyRef.current) return;
+        batchBusyRef.current = true;
+        let ok = 0;
+        try {
+          for (const id of ids) {
+            try {
+              if (kind === "documents") await api.duplicateDocument(name, id);
+              else await api.duplicateCatalogItem(name, id);
+              ok++;
+            } catch {
+              // already toasted by the api layer
+            }
+          }
+        } finally {
+          batchBusyRef.current = false;
+        }
+        (ok === ids.length ? toast.success : toast.error)(t("clipboard.pasted", { ok, n: ids.length }));
+        reload();
+      })();
+    };
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, [kind, name, openable, selected, loadedRows, columns, list.newUrl, reload, t]);
+
+  // Keyboard selection: ⌘A selects every loaded row; ⇧⌘↓ / ⇧⌘↑ extend the selection from the
+  // anchor to the bottom / top of the loaded set (an infinite feed selects what's loaded — ids of
+  // unloaded rows aren't known). Gated on this list being "engaged" — it already has a selection,
+  // or the cursor is over one of its rows — so a page-level ⌘A isn't hijacked when no list is
+  // being worked with, and two mounted lists can't both grab it (defaultPrevented wins).
+  useEffect(() => {
+    if (!openable) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || isEditingTarget()) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const isSelectAll = !e.shiftKey && (e.key === "a" || e.key === "A");
+      const isExtend = e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp");
+      if (!isSelectAll && !isExtend) return;
+      const hoverId = hoveredRowId(kind, name);
+      if (selected.size === 0 && hoverId == null) return; // not engaged with this list
+      const idsBetween = (from: number, to: number) => {
+        const out: string[] = [];
+        for (let i = Math.max(0, from); i <= Math.min(loadedRows.length - 1, to); i++) {
+          const r = loadedRows[i];
+          if (r?._id != null) out.push(String(r._id));
+        }
+        return out;
+      };
+      if (isSelectAll) {
+        e.preventDefault();
+        setSelected(new Set(idsBetween(0, loadedRows.length - 1)));
+        selAnchorRef.current = 0;
+        return;
+      }
+      e.preventDefault();
+      // The pivot the range grows from: the click anchor, else the hovered row, else the
+      // selection's nearest edge in the direction of travel.
+      let pivot: number | null = selAnchorRef.current;
+      if (pivot == null && hoverId != null) {
+        const i = loadedRows.findIndex((r) => String(r._id) === hoverId);
+        pivot = i >= 0 ? i : null;
+      }
+      if (pivot == null) {
+        const idxs: number[] = [];
+        loadedRows.forEach((r, i) => {
+          if (r._id != null && selected.has(String(r._id))) idxs.push(i);
+        });
+        if (!idxs.length) return;
+        pivot = e.key === "ArrowDown" ? idxs[0] : idxs[idxs.length - 1];
+      }
+      const range =
+        e.key === "ArrowDown" ? idsBetween(pivot, loadedRows.length - 1) : idsBetween(0, pivot);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of range) next.add(id);
+        return next;
+      });
+      if (selAnchorRef.current == null) selAnchorRef.current = pivot;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openable, kind, name, selected, loadedRows]);
+
+  // The row right-click menu: built-ins (Open/Edit/Duplicate/Copy link/Delete) plus the entity's
+  // custom row actions — flat ones as top-level items, .menu("…")-grouped ones as submenus. With a
+  // multi-row selection (and the click landing on a selected row) it switches to batch mode:
+  // server actions run over every selected id, and Delete becomes a two-step "Delete N".
+  const rowMenuEl = rowMenu
+    ? (() => {
+        const batch = selected.size > 1 && selected.has(rowMenu.id);
+        const ids = batch ? [...selected] : [rowMenu.id];
+        // Navigation actions are single-record by nature — batch mode offers server actions only.
+        const eligible = (a: ListAction) => !batch || a.server;
+        const flatCustom = rowActions.filter((a) => !a.menu).filter(eligible);
+        const submenus = rowSubmenus
+          .map((g) => ({ label: g.label, actions: g.actions.filter(eligible) }))
+          .filter((g) => g.actions.length);
+        const close = () => {
+          setRowMenu(null);
+          setArmedDelete(false);
+        };
+        const actionItem = (a: ListAction) => {
+          // Per-row overrides only make sense against the one clicked row; a batch shows the
+          // static descriptor (each row's own visibility is the handler's business).
+          const st = batch
+            ? undefined
+            : (rowMenu.row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+          if (!batch && st?.visible === false) return null;
+          const disabled = (!batch && st?.enabled === false) || pending.has(`batch:${a.key}`);
+          return (
+            <ContextMenuItem
+              key={a.key}
+              disabled={disabled}
+              onSelect={() => {
+                if (batch) void runBatchAction(a, ids);
+                else runAction(a, rowMenu.id);
+                close();
+              }}
+            >
+              {a.logo ? (
+                <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+              ) : (
+                <DynamicLucide name={(!batch && st?.icon) || a.icon || "zap"} size={16} />
+              )}
+              <span>{(!batch && st?.label) || a.label}</span>
+            </ContextMenuItem>
+          );
+        };
+        // Built-ins: batch = label + delete; single = open/edit/dup/copyLink/delete — minus the
+        // write items (edit, dup, delete) when the viewer can't write the entity.
+        const itemCount = (batch ? (canWrite ? 2 : 1) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
+        return (
+          <ContextMenuContent
+            open
+            position={{ x: rowMenu.x, y: rowMenu.y }}
+            onOpenChange={(o) => {
+              if (!o) close();
+            }}
+            width={216}
+            estimatedHeight={itemCount * 38 + 24}
+          >
+            {batch ? (
+              <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
+            ) : (
+              <>
+                <ContextMenuItem
+                  onSelect={() => {
+                    dispatchAction(rowMenu.url);
+                    close();
+                  }}
+                >
+                  <ExternalLink className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("action.open")}</span>
+                  <ContextMenuShortcut>{shortcutLabel({ key: "Enter", mod: true })}</ContextMenuShortcut>
+                </ContextMenuItem>
+                {canWrite ? (
+                  <>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        dispatchAction(rowMenu.url + "/edit");
+                        close();
+                      }}
+                    >
+                      <Pencil className="text-muted-foreground" aria-hidden="true" />
+                      <span>{t("action.edit")}</span>
+                      <ContextMenuShortcut>{shortcutLabel({ key: "e", mod: true })}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      onSelect={() => {
+                        dispatchAction(rowMenu.url + "/duplicate");
+                        close();
+                      }}
+                    >
+                      <Copy className="text-muted-foreground" aria-hidden="true" />
+                      <span>{t("action.duplicate")}</span>
+                      <ContextMenuShortcut>{shortcutLabel({ key: "d", mod: true, shift: true })}</ContextMenuShortcut>
+                    </ContextMenuItem>
+                  </>
+                ) : null}
+              </>
+            )}
+            {flatCustom.length || submenus.length ? <ContextMenuSeparator /> : null}
+            {flatCustom.map(actionItem)}
+            {submenus.map((g) => (
+              <ContextMenuSub key={g.label} label={<span>{g.label}</span>} width={200}>
+                {g.actions.map(actionItem)}
+              </ContextMenuSub>
+            ))}
+            {!batch ? (
+              <>
+                <ContextMenuSeparator />
+                <ContextMenuItem
+                  onSelect={() => {
+                    void copyToClipboard(rowShareableUrl(rowMenu.url)).then((ok) =>
+                      ok ? toast.success("Link copied") : toast.error("Couldn't copy link")
+                    );
+                    close();
+                  }}
+                >
+                  <Link2 className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("action.copyLink")}</span>
+                  <ContextMenuShortcut>{shortcutLabel({ key: "c", mod: true, shift: true })}</ContextMenuShortcut>
+                </ContextMenuItem>
+              </>
+            ) : null}
+            {canWrite ? (
+              <>
+                <ContextMenuSeparator />
+                {batch ? (
+                  <ContextMenuItem
+                    variant="destructive"
+                    disabled={pending.has("batch:__delete")}
+                    onClick={(e) => {
+                      // Two-step: the first click arms (label flips to the confirm wording and the
+                      // menu stays open), the second runs. preventDefault keeps onSelect from firing.
+                      e.preventDefault();
+                      if (!armedDelete) {
+                        setArmedDelete(true);
+                        return;
+                      }
+                      void runBatchDelete(ids);
+                      close();
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    <span>
+                      {armedDelete
+                        ? t("batch.deleteConfirm", { n: ids.length })
+                        : t("batch.delete", { n: ids.length })}
+                    </span>
+                  </ContextMenuItem>
+                ) : (
+                  <ContextMenuItem
+                    variant="destructive"
+                    onSelect={() => {
+                      dispatchAction(rowDeleteUrl(rowMenu.url));
+                      close();
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    <span>{t("action.delete")}</span>
+                    <ContextMenuShortcut>{shortcutLabel({ key: "Delete" })}</ContextMenuShortcut>
+                  </ContextMenuItem>
+                )}
+              </>
+            ) : null}
+          </ContextMenuContent>
+        );
+      })()
+    : null;
+
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
@@ -1144,62 +2171,39 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
       {/* Control island — a single floating bar that replaces the old title/search/actions row AND
           the separate filter bar. Title + row count lead; search, group-by and the filter facets fill
           the middle; the view toggle, custom actions and New pin right. It wraps (flex-wrap) when
-          narrow; `shrink-0` keeps the card below flexing to fill the surface. */}
-      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-card border border-border/70 bg-muted/30 px-2.5 py-2">
-        {/* title + row count */}
-        <div className="mr-1 flex min-w-0 items-baseline gap-2">
+          narrow; `shrink-0` keeps it from being squeezed by a tall card below. */}
+      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-card border border-border/70 bg-card px-2.5 py-2">
+        {/* title + host control + row count. The host-provided control (e.g. the register's
+            Balance/Movements toggle) sits between the fixed title and the count, so a changing
+            count (or the "…" while it loads) never shifts the control the user is clicking. */}
+        <div className="mr-1 flex min-w-0 items-center gap-2">
           <h1 className="truncate text-base font-semibold text-foreground">{list.title}</h1>
+          {headerExtra}
           <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
           </span>
+          {selected.size ? (
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="inline-flex h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded-control bg-primary/10 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
+              title={t("list.clearSelection")}
+            >
+              {t("list.selected", { count: selected.size })}
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
 
-        {/* search */}
-        {!mapMode && list.searchable ? (
-          <div className={cn("relative", stacked ? "min-w-[9rem] flex-1" : "")}>
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("list.search")}
-              className={cn("h-8 rounded-control pl-8 text-xs", stacked ? "w-full" : "w-44 sm:w-52")}
-            />
-          </div>
-        ) : null}
-
-        {/* group-by (+ granularity for a date column) */}
+        {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it */}
         {!mapMode && groupable.length ? (
-          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="whitespace-nowrap">{t("list.groupBy")}</span>
-            <Select
-              value={groupBy || SELECT_NONE}
-              onValueChange={(val) => setGroupBy(val === SELECT_NONE ? "" : val)}
-            >
-              <SelectTrigger className="h-8 w-32 rounded-control text-xs">
-                <SelectValue placeholder={t("list.groupNone")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SELECT_NONE}>{t("list.groupNone")}</SelectItem>
-                {groupable.map((g) => (
-                  <SelectItem key={g.columnName} value={g.columnName}>
-                    {g.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {groupCol?.date ? (
-              <Select value={granularity} onValueChange={setGranularity}>
-                <SelectTrigger className="h-8 w-24 rounded-control text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="day">{t("list.granDay")}</SelectItem>
-                  <SelectItem value="month">{t("list.granMonth")}</SelectItem>
-                  <SelectItem value="year">{t("list.granYear")}</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : null}
-          </label>
+          <GroupByFacet
+            groupable={groupable}
+            groupBy={groupBy}
+            onGroupBy={setGroupBy}
+            granularity={granularity}
+            onGranularity={setGranularity}
+          />
         ) : null}
 
         {/* filter facets */}
@@ -1256,7 +2260,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     setInputValues((v) => ({ ...v, [inp.key]: val === SELECT_NONE ? "" : val }))
                   }
                 >
-                  <SelectTrigger className="h-8 w-36 text-xs">
+                  <SelectTrigger className="h-8 w-36 rounded-field text-xs">
                     <SelectValue placeholder={inp.placeholder || inp.label} />
                   </SelectTrigger>
                   <SelectContent>
@@ -1297,39 +2301,29 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           </button>
         ) : null}
 
-        {/* right cluster — view toggle, custom actions, New */}
+        {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {list.map ? (
-            <div className="inline-flex h-8 shrink-0 items-center rounded-control border border-input bg-background/60 p-0.5">
-              <button
-                type="button"
-                onClick={() => setView("table")}
-                className={cn(
-                  "inline-flex h-7 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium",
-                  view === "table" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-                title={t("list.tableView")}
-                aria-label={t("list.tableView")}
-                aria-pressed={view === "table"}
-              >
-                <Table2 className="size-4" />
-                {compact ? null : t("list.tableView")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("map")}
-                className={cn(
-                  "inline-flex h-7 items-center gap-1.5 rounded-control px-2.5 text-xs font-medium",
-                  view === "map" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-                title={t("list.mapView")}
-                aria-label={t("list.mapView")}
-                aria-pressed={view === "map"}
-              >
-                <MapIcon className="size-4" />
-                {compact ? null : t("list.mapView")}
-              </button>
+          {/* search — right-aligned, leading the action cluster */}
+          {!mapMode && list.searchable ? (
+            <div className={cn("relative", stacked ? "min-w-[9rem] flex-1" : "")}>
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("list.search")}
+                className={cn("h-8 rounded-field pl-8 text-xs", stacked ? "w-full" : "w-44 sm:w-52")}
+              />
             </div>
+          ) : null}
+          {list.map ? (
+            <Segmented
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "table", icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
+                { value: "map", icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") },
+              ]}
+            />
           ) : null}
           {toolbarActions.map((a) => {
             const busy = pending.has(a.key);
@@ -1380,7 +2374,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         // Only catalog/document lists ever declare a map config, so mapMode is never true for a
         // register — narrow the kind for the map view, which pages from /api/list/{kind}/{name}.
         <div className={cn(surfaceMode && "min-h-0 flex-1")}>
-          <ListMapView kind={kind as "catalogs" | "documents"} name={name} config={list.map!} />
+          <ListMapView kind={kind as "catalogs" | "documents"} name={name} config={list.map!} fill={surfaceMode} />
         </div>
       ) : grouped ? (
         // Grouped view: collapsible GROUP BY headers with subtotals; a group's rows lazily load
@@ -1399,17 +2393,20 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
           paramsBase={groupParamsBase}
           pageSize={pageSize}
           openable={openable}
+          canWrite={canWrite}
           surfaceMode={surfaceMode}
           scrollCap={maxBodyH}
         />
       ) : (
       /* table card — one scroller for both axes; the header sticks to the top (so it scrolls
          horizontally in lock-step with the rows) and the inner min-width drives horizontal
-         scroll when the card is narrower than the columns need. On a route surface the card flexes
-         to fill the island's remaining height so only its body scrolls; embedded, it caps at maxBodyH. */
+         scroll when the card is narrower than the columns need. On a route surface the card sizes
+         to its rows and only shrinks (min-h-0, no grow) when they overflow the island's remaining
+         height — a short list ends at its last row instead of dragging an empty card to the window
+         bottom; embedded, it caps at maxBodyH. */
       <div className={cn(
         "flex flex-col overflow-hidden rounded-card border border-border bg-card",
-        surfaceMode && "min-h-0 flex-1"
+        surfaceMode && "min-h-0"
       )}>
         {/* the body scroller — the only thing that scrolls. Header sticks to its top; the inner
             min-width drives horizontal scroll when the card is narrower than the columns need. */}
@@ -1453,7 +2450,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                   </div>
                 );
               })}
-              {rowActions.length ? <span aria-hidden="true" /> : null}
+              {rowButtonActions.length ? <span aria-hidden="true" /> : null}
             </div>
 
             {/* body — the virtual window in infinite mode (spacers stand in for off-screen rows);
@@ -1473,7 +2470,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                   {columns.map((c) => (
                     <span key={c.columnName} className="h-3.5 w-2/3 rounded bg-muted/60" />
                   ))}
-                  {rowActions.length ? <span aria-hidden="true" /> : null}
+                  {rowButtonActions.length ? <span aria-hidden="true" /> : null}
                 </div>
               ))
             ) : (
@@ -1482,8 +2479,10 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
               <div style={{ paddingTop: padTop, paddingBottom: padBottom }}>
                 {visibleRows.map((row, i) => {
                   const absIdx = startIdx + i;
+                  const rowId = openable && row._id != null ? String(row._id) : null;
                   const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
                   const rowViewers = openable ? viewersById.get(String(row._id)) : undefined;
+                  const isSelected = rowId != null && selected.has(rowId);
                   return (
                     // Key by absolute row index: register (balance) rows have no _id, so an id-based
                     // key collides to the same value for every row and React mis-reconciles into
@@ -1492,14 +2491,64 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                     <div
                       key={absIdx}
                       data-onno-row={url}
-                      onClick={() => url && dispatchAction(url)}
+                      // "0" tells the shell's fallback row menu / shortcuts to hide write actions;
+                      // omitted when writable so rows from older servers keep the full menu.
+                      data-onno-row-writable={canWrite ? undefined : "0"}
+                      // Shift-click extends the selection — suppress the browser's text-range drag.
+                      onMouseDown={(e) => {
+                        if (e.shiftKey && rowId) e.preventDefault();
+                      }}
+                      onClick={(e) => {
+                        // ⌘/Ctrl toggles a row in and out; Shift selects the range from the last
+                        // toggled row. Plain click opens the record — or, mid-selection, just
+                        // drops the selection (so a stray click can't navigate away from it).
+                        if (rowId && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                          e.preventDefault();
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (e.shiftKey && selAnchorRef.current != null) {
+                              const lo = Math.min(selAnchorRef.current, absIdx);
+                              const hi = Math.max(selAnchorRef.current, absIdx);
+                              for (let j = lo; j <= hi; j++) {
+                                const r = loadedRows[j];
+                                if (r?._id != null) next.add(String(r._id));
+                              }
+                            } else {
+                              if (next.has(rowId)) next.delete(rowId);
+                              else next.add(rowId);
+                              selAnchorRef.current = absIdx;
+                            }
+                            return next;
+                          });
+                          if (selAnchorRef.current == null) selAnchorRef.current = absIdx;
+                          return;
+                        }
+                        if (selected.size) {
+                          clearSelection();
+                          return;
+                        }
+                        if (url) dispatchAction(url);
+                      }}
+                      onContextMenu={(e) => {
+                        if (!url || !rowId) return; // register rows: keep the browser menu
+                        // Yield to an active text selection, like the global row menu does.
+                        const sel = window.getSelection();
+                        if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+                        // preventDefault also marks the native event, so divkit-view's
+                        // DOM-sniffing fallback menu skips this row.
+                        e.preventDefault();
+                        if (selected.size && !selected.has(rowId)) clearSelection();
+                        setArmedDelete(false);
+                        setRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
+                      }}
                       className={cn(
                         // Hover highlight is owned by the [data-onno-row]:hover rule in index.css.
                         // Register rows aren't clickable (no detail route), so no pointer cursor.
                         "relative grid items-center gap-3 border-b border-border/50 text-sm",
                         url && "cursor-pointer",
                         leftPad,
-                        absIdx % 2 === 1 && "bg-muted/20"
+                        absIdx % 2 === 1 && !isSelected && "bg-muted/20",
+                        isSelected && "bg-primary/10"
                       )}
                       style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                     >
@@ -1511,9 +2560,9 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                           <PresenceAvatars viewers={rowViewers} size={16} max={3} overlap />
                         </div>
                       ) : null}
-                      {rowActions.length ? (
+                      {rowButtonActions.length ? (
                         <div className="flex items-center justify-end gap-1">
-                          {rowActions.map((a) => {
+                          {rowButtonActions.map((a) => {
                             // State-aware row actions: the server attaches a per-row override
                             // (icon/label/visible/enabled) under `_actions`, computed from the row's data.
                             const st = (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
@@ -1531,7 +2580,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                                   e.stopPropagation();
                                   runAction(a, String(row._id));
                                 }}
-                                className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                                className="inline-flex size-7 items-center justify-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                 title={label}
                                 aria-label={label}
                               >
@@ -1571,7 +2620,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                 type="button"
                 disabled={page <= 0}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={t("list.prev")}
               >
                 <ChevronLeft className="size-4" />
@@ -1582,7 +2631,7 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
                 type="button"
                 disabled={page >= pageCount - 1}
                 onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                className="inline-flex h-8 items-center gap-1 rounded-md border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={t("list.next")}
               >
                 {compact ? null : t("list.next")}
@@ -1593,6 +2642,26 @@ export function EntityListWidget({ list }: { list: ListDescriptor }) {
         ) : null}
       </div>
       )}
+      {rowMenuEl}
+      {formPrompt ? (
+        <ActionFormDialog
+          title={formPrompt.action.label}
+          fields={formPrompt.action.form ?? []}
+          busy={formBusy}
+          onClose={() => setFormPrompt(null)}
+          onSubmit={(values) => {
+            setFormBusy(true);
+            const done = () => {
+              setFormBusy(false);
+              setFormPrompt(null);
+            };
+            const p = formPrompt.ids
+              ? runBatchAction(formPrompt.action, formPrompt.ids, values)
+              : Promise.resolve(runAction(formPrompt.action, formPrompt.id, values));
+            void Promise.resolve(p).finally(done);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -94,7 +94,7 @@ function navIdentity(path: string): { kind: string; name: string } {
 function NavPresenceIndicator({ path }: { path: string }) {
   const { kind, name } = navIdentity(path);
   const viewers = useEntityViewers(kind, name);
-  return <PresenceAvatars viewers={viewers} size={14} max={3} overlap className="h-full w-full justify-end" />;
+  return <PresenceAvatars viewers={viewers} size={20} max={3} overlap className="h-full w-full justify-end" />;
 }
 
 /** Portals each mounted `onno-nav-presence` element to its nav indicator. Mount once, inside providers. */

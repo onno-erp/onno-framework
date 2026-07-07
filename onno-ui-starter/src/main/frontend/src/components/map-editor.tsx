@@ -329,7 +329,7 @@ export function MapEditor({
               onClick={() => pick(tl.id)}
               aria-pressed={on}
               className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium transition-colors",
+                "inline-flex h-8 items-center gap-1.5 rounded-control border px-2.5 text-sm font-medium transition-colors",
                 on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-muted text-foreground hover:bg-accent"
               )}
             >
@@ -343,28 +343,28 @@ export function MapEditor({
           type="button"
           onClick={() => finishDraft(false)}
           disabled={!draft}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
+          className="inline-flex h-8 items-center gap-1.5 rounded-control border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
         >
           <Check className="size-4" /> Finish
         </button>
         <button
           type="button"
           onClick={undo}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          className="inline-flex h-8 items-center gap-1.5 rounded-control border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
           <Undo2 className="size-4" /> Undo
         </button>
         <button
           type="button"
           onClick={clear}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          className="inline-flex h-8 items-center gap-1.5 rounded-control border border-input bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
           <Trash2 className="size-4" /> Clear
         </button>
       </div>
       <div
         ref={containerRef}
-        className="w-full overflow-hidden rounded-lg border border-border"
+        className="w-full overflow-hidden rounded-card border border-border"
         style={{ height, minHeight: height }}
       />
       <p className="text-xs text-muted-foreground">

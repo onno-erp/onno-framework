@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { format, parseISO, startOfISOWeek, startOfMonth } from "date-fns";
+import { format, parseISO, startOfHour, startOfISOWeek, startOfMonth } from "date-fns";
 import { api } from "@/lib/api";
 import { toSnakeCase } from "@/lib/utils";
 import { toNumber } from "@/lib/format";
@@ -66,7 +66,8 @@ export function bucketLabel(value: unknown, groupByDate?: GroupByDate): string {
     try {
       const d = parseISO(value);
       if (groupByDate === "minute") return format(d, "HH:mm");
-      if (groupByDate === "hour") return format(d, "HH:mm");
+      // An hour bucket is labelled by its start ("20:00"), not the first row's minutes ("20:29").
+      if (groupByDate === "hour") return format(startOfHour(d), "HH:mm");
       if (groupByDate === "day") return format(d, "MMM d");
       if (groupByDate === "week") return format(startOfISOWeek(d), "MMM d");
       if (groupByDate === "month") return format(d, "MMM yyyy");
@@ -91,7 +92,7 @@ function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; la
       if (groupByDate === "minute")
         return { key: format(d, "yyyy-MM-dd'T'HH:mm"), label: format(d, "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:mm") };
       if (groupByDate === "hour")
-        return { key: format(d, "yyyy-MM-dd'T'HH"), label: format(d, "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:00") };
+        return { key: format(d, "yyyy-MM-dd'T'HH"), label: format(startOfHour(d), "HH:mm"), iso: format(d, "yyyy-MM-dd'T'HH:00") };
       if (groupByDate === "day")
         return { key: format(d, "yyyy-MM-dd"), label: format(d, "MMM d"), iso: format(d, "yyyy-MM-dd") };
       if (groupByDate === "week")

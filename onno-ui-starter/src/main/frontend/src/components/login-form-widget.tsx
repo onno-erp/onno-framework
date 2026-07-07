@@ -55,27 +55,6 @@ export function LoginFormWidget({ demoAccounts = [] }: { demoAccounts?: DemoAcco
     // and adding px-2 on top made the password "Sign in" button narrower than the full-width DivKit
     // SSO buttons. Sharing the single card inset keeps every button the same width.
     <div className="space-y-4 pointer-events-auto">
-      {demoAccounts.length > 0 && (
-        <div className="space-y-2">
-          {demoAccounts.map((account) => (
-            <Button
-              key={account.username}
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={submitting}
-              onClick={() => void signIn(account.username, account.password)}
-            >
-              {account.label}
-            </Button>
-          ))}
-          <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            {t("login.orManual")}
-            <span className="h-px flex-1 bg-border" />
-          </div>
-        </div>
-      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="username">{t("login.username")}</Label>
@@ -101,6 +80,27 @@ export function LoginFormWidget({ demoAccounts = [] }: { demoAccounts?: DemoAcco
           {submitting ? t("login.submitting") : t("login.submit")}
         </Button>
       </form>
+      {demoAccounts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 pb-1 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            {t("login.orDemo")}
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          {demoAccounts.map((account) => (
+            <Button
+              key={account.username}
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={submitting}
+              onClick={() => void signIn(account.username, account.password)}
+            >
+              {account.label}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * every signed-in user gets a top-right bell with an unread badge and a timeline of updates concerning
  * them, stored in the framework-owned {@code onno_notifications} table rather than in any app entity.
  *
- * <p>The two built-in producers each have their own toggle; an app adds further sources simply by
+ * <p>The built-in producers each have their own toggle; an app adds further sources simply by
  * registering a Spring {@code @EventListener} that calls {@link NotificationService#notify}.
  */
 @ConfigurationProperties(prefix = "onno.notifications")
@@ -38,6 +38,9 @@ public class NotificationProperties {
 
     /** Built-in record-assignment producer ({@code onno.notifications.assignments.*}). */
     private final Assignments assignments = new Assignments();
+
+    /** Built-in comment-reply producer ({@code onno.notifications.replies.*}). */
+    private final Replies replies = new Replies();
 
     public boolean isEnabled() {
         return enabled;
@@ -71,6 +74,10 @@ public class NotificationProperties {
         return assignments;
     }
 
+    public Replies getReplies() {
+        return replies;
+    }
+
     /**
      * The mention producer: turns each readable {@code @}-mention of a user in a freshly posted comment
      * (an {@link su.onno.ui.comments.EntityMentionedEvent}) into a notification for the mentioned person.
@@ -78,6 +85,26 @@ public class NotificationProperties {
     public static class Mentions {
 
         /** Whether comment {@code @}-mentions of a user raise a notification. */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+    }
+
+    /**
+     * The reply producer: when a comment replies to another comment (a
+     * {@link su.onno.ui.comments.CommentRepliedEvent}), the parent comment's author is notified.
+     * Self-replies notify nobody, and a reply that also {@code @}-mentions the parent's author only
+     * raises the mention notification, never both.
+     */
+    public static class Replies {
+
+        /** Whether replying to a user's comment raises a notification for that user. */
         private boolean enabled = true;
 
         public boolean isEnabled() {

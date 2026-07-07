@@ -15,7 +15,7 @@ export interface DashboardWidgetMeta {
   order: number;
   /** Grid width hint, e.g. {@code "half"} / {@code "full"}. */
   width: string;
-  /** Bound entity kind: {@code "catalogs"} or {@code "documents"}. */
+  /** Bound entity kind (singular): {@code "catalog"} or {@code "document"}. */
   entityType: string;
   /** Bound entity display name, e.g. {@code "Invoices"} (from {@code .document(...)}/{@code .catalog(...)}). */
   entityName: string;

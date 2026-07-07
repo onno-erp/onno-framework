@@ -7,6 +7,8 @@ package su.onno.ui;
 public enum InputType {
     /** A free-text field. */
     TEXT,
+    /** A multi-line free-text field (action-form dialogs; a toolbar renders it as a single-line field). */
+    TEXTAREA,
     /** A date picker (value is an ISO {@code yyyy-MM-dd} string). */
     DATE,
     /** A numeric field (value is the number as a string). */

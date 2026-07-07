@@ -49,21 +49,25 @@ public class OrderView implements EntityView {
                 // with the order total summed per group.
                 .groupable("status", "assignedTo", "date")
                 .aggregate("total", ListSpec.Agg.SUM, "Total");
-        // Faceted filter bar: a date-range facet (with Today / Last 7 days / This month presets) and
-        // a note typeahead. They narrow the same query the grouping and search run over.
+        // Faceted filter bar: a status multi-select (no options authored — an enum field offers
+        // every declared value, labelled like the colored pills), a date-range facet (with Today /
+        // Last 7 days / This month presets) and a note typeahead. They narrow the same query the
+        // grouping and search run over.
+        list.filter("status").label("Status").multiOptions();
         list.filter("date").label("Order date").dateRange();
         list.filter("note").label("Note").contains();
     }
 
     @Override
     public void fields(EntityConfigBuilder f) {
-        f.field("customer").order(0)
+        // Short paired fields sit side by side on the edit form (width "half").
+        f.field("customer").order(0).width("half")
                 .hint("Who's buying. Required.")
-            .field("status").order(1)
+            .field("status").order(1).width("half")
                 .hint("Lifecycle. Default «New»; advance it with the → button on the list.")
-            .field("assignedTo").order(2)
+            .field("assignedTo").order(2).width("half")
                 .hint("The bookseller handling this order.")
-            .field("date").order(3).format("dd-MM-yyyy")
+            .field("date").order(3).width("half").format("dd-MM-yyyy")
             .field("total").order(4).hideInForm().format("currency:USD")
                 .hint("Auto-computed from the line amounts. Read-only.")
             .field("open").order(5).hideInForm().hideInList().hideInDetail()
@@ -83,8 +87,9 @@ public class OrderView implements EntityView {
 
     @Override
     public void actions(ActionSpec a) {
-        // ROW: advance to the next lifecycle status, with a dynamic "→ <next>" label.
-        a.action("advance").scope(ActionScope.ROW).icon("chevron-right")
+        // ROW: advance to the next lifecycle status, with a dynamic "→ <next>" label. The static
+        // label is the fallback where no single row is in hand (e.g. the batch context menu).
+        a.action("advance").scope(ActionScope.ROW).icon("chevron-right").label("Advance")
                 .label(row -> {
                     OrderStatus st = row.enumValue("status", OrderStatus.class);
                     return "→ " + (st == null ? OrderStatus.CONFIRMED.name() : next(st).name());
@@ -95,19 +100,34 @@ public class OrderView implements EntityView {
                 })
                 .handler(ctx -> advance(ctx.id()));
 
-        // ROW: cancel (unless terminal).
+        // ROW: cancel (unless terminal). The .form(...) makes the click open a modal asking for a
+        // reason first — the handler reads it via ctx.input("reason") (the action-form feature).
         a.action("cancel").scope(ActionScope.ROW).icon("ban").label("Cancel")
                 .visibleWhen(row -> {
                     OrderStatus st = row.enumValue("status", OrderStatus.class);
                     return st != OrderStatus.CANCELLED && st != OrderStatus.COMPLETED;
                 })
-                .handler(ctx -> cancel(ctx.id()));
+                .form(f -> f.input("reason").label("Reason").type(su.onno.ui.InputType.TEXTAREA)
+                        .placeholder("Why is this order cancelled?").required())
+                .handler(ctx -> cancel(ctx.id(), ctx.input("reason")));
 
         // DETAIL: the same two as fixed-label header buttons.
         a.action("advanceTop").scope(ActionScope.DETAIL).icon("chevron-right").label("Advance")
                 .handler(ctx -> advance(ctx.id()));
         a.action("cancelTop").scope(ActionScope.DETAIL).icon("ban").label("Cancel order")
-                .handler(ctx -> cancel(ctx.id()));
+                .form(f -> f.input("reason").label("Reason").type(su.onno.ui.InputType.TEXTAREA)
+                        .placeholder("Why is this order cancelled?").required())
+                .handler(ctx -> cancel(ctx.id(), ctx.input("reason")));
+
+        // CONTEXT MENU: a "Change status" submenu on the row's right-click menu — one entry per
+        // status (.menu(...) keeps them out of the inline row buttons). The current status is
+        // hidden per row; with a multi-row selection the entries run over every selected order.
+        for (OrderStatus st : OrderStatus.values()) {
+            a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
+                    .menu("Change status").icon("circle-dot").label(labelOf(st))
+                    .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
+                    .handler(ctx -> setStatus(ctx.id(), st));
+        }
     }
 
     private ActionResult advance(UUID id) {
@@ -119,9 +139,33 @@ public class OrderView implements EntityView {
         }).orElseGet(() -> ActionResult.message("Order not found"));
     }
 
-    private ActionResult cancel(UUID id) {
+    private ActionResult setStatus(UUID id, OrderStatus to) {
+        return orders.findById(id).map(o -> {
+            o.setStatus(to);
+            orders.save(o);
+            return ActionResult.refresh("Status → " + to.name());
+        }).orElseGet(() -> ActionResult.message("Order not found"));
+    }
+
+    /** The @EnumLabel display value ("New", "Confirmed", …) for a submenu entry. */
+    private static String labelOf(OrderStatus st) {
+        return switch (st) {
+            case NEW -> "New";
+            case CONFIRMED -> "Confirmed";
+            case SHIPPED -> "Shipped";
+            case COMPLETED -> "Completed";
+            case CANCELLED -> "Cancelled";
+        };
+    }
+
+    private ActionResult cancel(UUID id, String reason) {
         return orders.findById(id).map(o -> {
             o.setStatus(OrderStatus.CANCELLED);
+            // Keep the reason on the record: appended to the order's note so it shows on the detail.
+            if (reason != null && !reason.isBlank()) {
+                String note = o.getNote();
+                o.setNote((note == null || note.isBlank() ? "" : note + "\n") + "Cancelled: " + reason);
+            }
             orders.save(o);
             return ActionResult.refresh("Order cancelled");
         }).orElseGet(() -> ActionResult.message("Order not found"));

@@ -46,8 +46,46 @@ class CommentServiceTest {
         assertThat(thread.get(0).id()).isEqualTo(first.id());
         assertThat(thread.get(0).authorId()).isEqualTo(alice);
         assertThat(thread.get(1).authorId()).isNull();
+        assertThat(thread.get(0).parentId()).isNull();
         assertThat(thread.get(0).createdAt()).isNotNull();
         assertThat(thread.get(0).editedAt()).isNull();
+    }
+
+    @Test
+    void repliesRoundTripWithParentId() {
+        Comment parent = service.add("catalogs", "Properties", property, alice, "Alice", "First");
+        Comment reply = service.add("catalogs", "Properties", property, null, "Guest", "Second", parent.id());
+
+        List<Comment> thread = service.list("catalogs", "Properties", property);
+
+        assertThat(thread).extracting(Comment::id).containsExactly(parent.id(), reply.id());
+        assertThat(thread.get(1).parentId()).isEqualTo(parent.id());
+        assertThat(service.find(reply.id())).get().extracting(Comment::parentId).isEqualTo(parent.id());
+    }
+
+    @Test
+    void togglesAndGroupsReactionsPerViewer() {
+        Comment comment = service.add("catalogs", "Properties", property, alice, "Alice", "First");
+        String bob = "principal:bob";
+
+        assertThat(service.toggleReaction(comment.id(), "record:" + alice, "👍")).isTrue();
+        assertThat(service.toggleReaction(comment.id(), bob, "👍")).isTrue();
+        assertThat(service.toggleReaction(comment.id(), bob, "🎉")).isTrue();
+
+        List<CommentService.CommentReaction> reactions = service.reactionsFor(List.of(comment.id()), bob)
+                .get(comment.id());
+
+        assertThat(reactions).extracting(CommentService.CommentReaction::emoji).containsExactly("👍", "🎉");
+        assertThat(reactions.get(0).count()).isEqualTo(2);
+        assertThat(reactions.get(0).mine()).isTrue();
+        assertThat(reactions.get(1).count()).isEqualTo(1);
+        assertThat(reactions.get(1).mine()).isTrue();
+
+        assertThat(service.toggleReaction(comment.id(), bob, "👍")).isFalse();
+        reactions = service.reactionsFor(List.of(comment.id()), bob).get(comment.id());
+        assertThat(reactions).extracting(CommentService.CommentReaction::emoji).containsExactly("👍", "🎉");
+        assertThat(reactions.get(0).count()).isEqualTo(1);
+        assertThat(reactions.get(0).mine()).isFalse();
     }
 
     @Test

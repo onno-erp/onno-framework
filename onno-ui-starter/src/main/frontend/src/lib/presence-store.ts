@@ -98,6 +98,8 @@ function applyEvent(ev: UiEvent | undefined) {
 
 const RESYNC_MS = 20_000;
 
+let resyncTimer: number | undefined;
+
 /** (Re)load the authoritative snapshot into the store. */
 function loadSnapshot(): Promise<void> {
   return api
@@ -109,7 +111,16 @@ function loadSnapshot(): Promise<void> {
       byId = m;
       emit();
     })
-    .catch(() => {
+    .catch((err: unknown) => {
+      // Session lapsed: getPresenceSnapshot already handed off to auth recovery (redirect/re-auth).
+      // Stop the periodic re-sync — this interval is module-global and outlives the app unmount, so
+      // left running it would re-hit /api/presence every 20s forever and flood the console with 401s.
+      // A fresh startPresence() after re-auth restarts it. Other errors (offline blip) keep polling.
+      if ((err as { status?: number })?.status === 401) {
+        if (resyncTimer) window.clearInterval(resyncTimer);
+        resyncTimer = undefined;
+        started = false;
+      }
       /* offline / not yet authed — live deltas will still populate the store */
     });
 }
@@ -124,7 +135,7 @@ export function startPresence() {
   // session, was backgrounded, or had an SSE hiccup) wouldn't see another session until it next moved.
   // Re-seed from the authoritative snapshot on a slow timer and whenever the tab regains focus, so every
   // session — including your own other tabs — converges without waiting for a move.
-  window.setInterval(loadSnapshot, RESYNC_MS);
+  resyncTimer = window.setInterval(loadSnapshot, RESYNC_MS);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") loadSnapshot();
   });
@@ -158,17 +169,19 @@ export function useViewersById(): Map<string, PresenceViewer[]> {
   return out;
 }
 
-/** The distinct people viewing any record of one entity (your own marker hidden on the route this tab is
- *  on, so your other sessions still show). For the sidebar. */
+/** The distinct OTHER people viewing any record of one entity — for the sidebar. Unlike the record
+ *  selectors, this hides your own marker on every route, not just the one this tab is on: the nav is
+ *  about where collaborators are, and your own face trailing your other panes/tabs down the rail is
+ *  pure noise (you know where you are). */
 export function useEntityViewers(kind: string, name: string): PresenceViewer[] {
   const map = useSyncExternalStore(subscribe, getSnapshot);
   const want = toSnake(name);
   const seen = new Set<string>();
   const out: PresenceViewer[] = [];
-  for (const [id, entry] of map) {
+  for (const [, entry] of map) {
     if (entry.kind !== kind || toSnake(entry.name) !== want) continue;
     for (const v of entry.viewers) {
-      if (visible(id, v) && !seen.has(v.userId)) {
+      if (v.userId !== you && !seen.has(v.userId)) {
         seen.add(v.userId);
         out.push(v);
       }

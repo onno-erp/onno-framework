@@ -1,5 +1,8 @@
 package su.onno.ui;
 
+import su.onno.annotations.EnumLabel;
+import su.onno.repository.EnumerationPersistence;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -14,8 +17,9 @@ import java.util.UUID;
  * <p>It wraps the resolved row the list already computed (the same shape the grid renders), so no
  * extra query runs: raw attribute values plus the resolved {@code _display} strings refs and enums
  * carry. Read a field with {@link #text(String)} (the human/display value — for an enum this is the
- * constant name), {@link #enumValue(String, Class)} (typed back to your enum), or {@link
- * #get(String)} (the raw stored value). All lookups are case-insensitive.</p>
+ * {@code @EnumLabel} value when labelled, else the constant name), {@link #enumValue(String, Class)}
+ * (typed back to your enum), or {@link #get(String)} (the raw stored value). All lookups are
+ * case-insensitive.</p>
  *
  * <pre>
  * a.action("toggle").scope(ActionScope.ROW)
@@ -75,17 +79,61 @@ public final class ActionRow {
     }
 
     /**
-     * {@code column} resolved back to a constant of {@code enumType} (matched on the enum's name, the
-     * value {@link #text(String)} returns for an enum column), or {@code null} if empty/unmatched.
+     * {@code column} resolved back to a constant of {@code enumType}, or {@code null} if
+     * empty/unmatched. The raw stored value (the constant's deterministic UUID) is matched first —
+     * the reliable path, independent of labelling. The display string is only a fallback, matched
+     * against the constant name (exact then case-insensitive) and the {@code @EnumLabel} value —
+     * for a labelled enum the {@code {column}_display} carries the label ("Completed"), not the
+     * constant name ("COMPLETED"), which is why a plain {@code Enum.valueOf} isn't enough.
      */
     public <E extends Enum<E>> E enumValue(String column, Class<E> enumType) {
+        // 1) Raw UUID — how an enum value is actually stored (see EnumerationPersistence).
+        Object raw = get(column);
+        UUID id = null;
+        if (raw instanceof UUID u) {
+            id = u;
+        } else if (raw != null) {
+            try {
+                id = UUID.fromString(raw.toString());
+            } catch (IllegalArgumentException ignored) {
+                // not a UUID — fall through to the text paths
+            }
+        }
+        if (id != null) {
+            for (E constant : enumType.getEnumConstants()) {
+                if (EnumerationPersistence.resolveId(enumType, constant).equals(id)) {
+                    return constant;
+                }
+            }
+        }
+        // 2) Display text: constant name (exact, then case-insensitive), then the @EnumLabel value.
         String name = text(column);
         if (name.isEmpty()) {
             return null;
         }
         try {
             return Enum.valueOf(enumType, name);
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException ignored) {
+            // keep matching below
+        }
+        for (E constant : enumType.getEnumConstants()) {
+            if (constant.name().equalsIgnoreCase(name)) {
+                return constant;
+            }
+        }
+        for (E constant : enumType.getEnumConstants()) {
+            EnumLabel label = labelOf(enumType, constant);
+            if (label != null && label.value().equalsIgnoreCase(name)) {
+                return constant;
+            }
+        }
+        return null;
+    }
+
+    private static <E extends Enum<E>> EnumLabel labelOf(Class<E> enumType, E constant) {
+        try {
+            return enumType.getField(constant.name()).getAnnotation(EnumLabel.class);
+        } catch (NoSuchFieldException e) {
             return null;
         }
     }

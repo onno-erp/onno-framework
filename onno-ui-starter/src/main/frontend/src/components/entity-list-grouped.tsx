@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
@@ -45,6 +45,7 @@ export function GroupedList({
   paramsBase,
   pageSize,
   openable,
+  canWrite,
   surfaceMode,
   scrollCap,
 }: {
@@ -61,6 +62,8 @@ export function GroupedList({
   paramsBase: string;
   pageSize: number;
   openable: boolean;
+  /** Viewer's RBAC write access — stamped onto rows so the shell's fallback row menu hides write actions. */
+  canWrite: boolean;
   surfaceMode: boolean;
   scrollCap: number;
 }) {
@@ -152,8 +155,10 @@ export function GroupedList({
   return (
     <div
       className={cn(
+        // On a route surface the card sizes to its groups and only shrinks (min-h-0, no grow)
+        // when they overflow — a short list ends at its last row, not the window bottom.
         "flex flex-col overflow-hidden rounded-card border border-border bg-card",
-        surfaceMode && "min-h-0 flex-1"
+        surfaceMode && "min-h-0"
       )}
     >
       <div
@@ -188,15 +193,26 @@ export function GroupedList({
               const expandable = g.expand.length > 0;
               const pill = enumPillStyle(g.color);
               return (
-                <Fragment key={i}>
+                // Each group is its own block so the sticky band's containing block ends with the
+                // group — the band un-sticks (gets pushed out by the next band) when its rows
+                // scroll past, instead of every band piling up at the sticky offset forever.
+                <div key={i}>
                   {/* group header band */}
                   <button
                     type="button"
                     onClick={() => toggle(i, g)}
                     disabled={!expandable}
                     className={cn(
-                      "flex w-full items-center gap-2 border-b border-border/60 bg-muted/40 px-4 py-2 text-left text-sm hover:bg-muted/70 disabled:cursor-default disabled:hover:bg-muted/40",
-                      "sticky top-[41px] z-[9]"
+                      // The band sticks below the column header, so rows scroll underneath it — its
+                      // background must be opaque or they show through. color-mix bakes the old
+                      // muted/40 (and /70 hover) tints over the card color into solid colors.
+                      "flex w-full items-center gap-2 border-b border-border/60 px-4 py-2 text-left text-sm",
+                      "bg-[color-mix(in_srgb,hsl(var(--muted))_40%,hsl(var(--card)))]",
+                      "hover:bg-[color-mix(in_srgb,hsl(var(--muted))_70%,hsl(var(--card)))]",
+                      "disabled:cursor-default disabled:hover:bg-[color-mix(in_srgb,hsl(var(--muted))_40%,hsl(var(--card)))]",
+                      // 1px under the 37px column header (which sits above at z-10), so no slit of
+                      // scrolling row pixels shows between the two sticky layers.
+                      "sticky top-[36px] z-[9]"
                     )}
                     style={{ minHeight: ROW_H }}
                   >
@@ -210,7 +226,7 @@ export function GroupedList({
                       <span className="size-4 shrink-0" />
                     )}
                     {pill && g.label ? (
-                      <span className="truncate rounded-full px-2 py-0.5 text-xs font-medium" style={pill}>
+                      <span className="truncate rounded-control px-2 py-0.5 text-xs font-medium" style={pill}>
                         {g.label}
                       </span>
                     ) : (
@@ -244,6 +260,8 @@ export function GroupedList({
                       <div
                         key={ri}
                         data-onno-row={url}
+                        // "0" hides write actions in the shell's fallback row menu / shortcuts.
+                        data-onno-row-writable={canWrite ? undefined : "0"}
                         onClick={() => url && dispatchAction(url)}
                         className={cn(
                           "grid items-center gap-3 border-b border-border/50 text-sm",
@@ -275,7 +293,7 @@ export function GroupedList({
                       {t("list.showMore")}
                     </button>
                   ) : null}
-                </Fragment>
+                </div>
               );
             })
           )}

@@ -149,6 +149,7 @@ name returns `404`.
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
+| POST | `/{name}/{id}/duplicate` | Server-side copy: same description/attributes/parent, fresh id + code. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | DELETE | `/{name}/{id}` | Sets the deletion mark (soft delete). |
 
 ### Documents — `/api/documents`
@@ -162,6 +163,7 @@ name returns `404`.
 | POST | `/{name}/{id}/post` | Run posting (writes register movements). |
 | POST | `/{name}/{id}/unpost` | Reverse posting. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
+| POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). |
 
 ### Registers — `/api/registers`
@@ -219,13 +221,19 @@ rows through the **same** feed — the server hands each group the exact filter 
 never double-counts and honours the active search/filters/sort. Group values that resolve to a
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
 
-The register **report surface** is likewise fed window-by-window (newest-first, server-sorted); its
-feed still exposes the offset envelope, and the grid cursor-scrolls it as an infinite list:
+The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
+default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
+cursor is the next window's offset, treated as opaque by the client); passing `?offset=` explicitly
+keeps the legacy `{total, offset, rows}` page. Both feeds honor the grid's declarative filter params
+(`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's own columns) — the movements
+tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, and
+movement rows carry a localized `_movement_type_display` + `_movement_type_color` so the type renders
+as a colored status pill:
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/list/registers/{name}/movements?offset=&limit=&sort=&dir=&from=&to=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?offset=&limit=&sort=&dir=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=` | One window of current balances + the live total (BALANCE registers). |
 
 ### DivKit server-driven UI — `/api/divkit`
 
@@ -318,6 +326,59 @@ public void fields(EntityConfigBuilder f) {
 }
 ```
 
+### Action forms — collect input before the handler runs
+
+A server action may declare a **form**: clicking it opens a modal dialog with the declared fields
+(same builder DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`), and the handler
+receives the submitted values via `ActionContext.input(key)` — the "Cancel with a reason" idiom:
+
+```java
+a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.ROW)
+ .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA)
+             .placeholder("Why is this order cancelled?").required())
+ .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
+```
+
+Works on every scope and placement — row button, toolbar, detail header, the row context menu, and
+batch mode (the dialog collects once, then the values are sent with the action for every selected
+record). Form values are merged over the ambient toolbar-input values in the same
+`ActionContext.input(...)` namespace, so a key used by both is won by the form.
+
+### Row context menu, submenus & batch selection
+
+Right-clicking a list row opens a context menu with the built-ins (Open / Edit / Duplicate / Copy
+link / Delete, with their keyboard shortcuts) **plus the entity's custom ROW actions**. A row action
+placed with `.menu("…")` renders inside a **submenu** with that label instead of as an inline row
+icon button — actions sharing a label group together in declaration order. The per-row functions
+(`label(row -> …)`, `visibleWhen`, `enabledWhen`) still apply to menu entries:
+
+```java
+for (OrderStatus st : OrderStatus.values()) {
+    a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
+     .menu("Change status").label(labelOf(st))
+     .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
+     .handler(ctx -> setStatus(ctx.id(), st));
+}
+```
+
+Rows also support **batch selection**: ⌘/Ctrl-click toggles a row, Shift-click selects the range
+from the last toggled row, Esc (or the toolbar's "N selected ✕" chip) clears. With the list
+engaged (a selection active, or the cursor over a row), **⌘A** selects every loaded row and
+**⇧⌘↓ / ⇧⌘↑** extend the selection from the anchor to the bottom / top of the loaded set — an
+infinite feed selects the rows loaded so far, not the whole server-side result. Right-clicking a
+selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
+runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
+"Delete N". Navigation actions and per-row visibility overrides don't apply in batch mode — the
+handler decides per record.
+
+**⌘C / ⌘V on rows.** Copy (the selection, else the hovered row) writes two clipboard flavours:
+`text/plain` TSV of the visible columns exactly as rendered — pastes straight into a text file or
+a spreadsheet — and an app payload with the record ids. Paste on the same entity's list creates a
+**server-side copy** per id via `POST /{name}/{id}/duplicate` (fresh id + code/number, documents
+dated now and unposted, line items included, secret attributes left unset). A focused input or an
+active text selection keeps the browser's native copy/paste. Pasting on a different entity's list,
+or without write access, does nothing.
+
 ### New-record forms & ref pickers
 
 A **New** form seeds its inputs from a fresh instance of the entity, so a domain field initializer is
@@ -344,6 +405,26 @@ f.field("customer").refSecondary("phone");   // shows the customer's phone under
 
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
+
+The picker's pinned **"+ New"** row opens the target's full create form in a side pane; when that
+form saves, the new record's id is handed straight back to the picker — the field is set to the
+record the user just created (no detail navigation, no re-finding it in the list). Cancelling the
+form, or manually picking another option first, drops the hand-off.
+
+### Edit-form layout
+
+The generic edit form honors the `FieldHintBuilder` layout hints:
+
+- `.group("Heading")` — fields sharing a group render as their own card with that heading, in
+  first-appearance order; ungrouped fields (and `code`/`description`) form the leading unlabeled
+  card. Long forms read as sections instead of one endless column.
+- `.width("half")` (or `"1/2"`) — the field takes half a row on wide screens, so short fields
+  (dates, amounts, refs) sit side by side. Anything else spans the full row.
+- `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
+  unbounded) gets a textarea automatically even without the hint.
+
+An edit form's header also shows the record's identity (code/number · description) and, for a
+postable document, its Posted status pill.
 
 ## Dashboard widgets
 
@@ -459,6 +540,12 @@ Config: `onno.ui.plugins.enabled` (default true), `onno.ui.plugins.extra-urls` (
 e.g. from a CDN). Dev loop: `./gradlew compileWidgetsWatch` rebuilds on change. Plugin JS runs
 first-party in the app origin (full session) — author it as trusted code.
 
+**Styling gotcha:** widgets compile outside the SPA's Tailwind build, so Tailwind never scans your
+`.tsx` — a utility class only works if the host app already emits it. Common text/spacing utilities
+(`text-sm`, `mb-3`, `flex`, …) are safe; uncommon ones (`border-l`) and arbitrary values
+(`-left-[5px]`) are silently dropped. Use inline `style` for layout-critical rules, with the host's
+theme variables for color: `hsl(var(--primary))`, `hsl(var(--border))`.
+
 ### Registering a widget from framework/SPA source
 
 Contributors extending the bundled SPA register built-ins directly, the same call the SDK proxies via
@@ -514,6 +601,15 @@ spec.map().field("location").defaultView();            // open on the map, not t
 Features in the widget and list views link back to the record; records with no geometry are skipped.
 A misconfigured map (a geo source that doesn't resolve) degrades to no map rather than failing the
 surface.
+
+Markers **cluster** automatically: nearby points collapse into brand-colored count badges that
+split apart as you zoom (clicking a badge zooms into it), so the map stays legible with thousands
+of records. On its own list route the map fills the same height the table would; embedded in a
+dashboard it keeps the widget's fixed height. The list map pulls rows in server-page batches up to
+4 000 records and says so in its count chip when the entity has more. Clicking a marker opens a
+popup card with the label, the record's code/number, and an Open action; overlapping markers show
+a list of every record at that spot. The chip/popup strings localize via the `map.*` keys in
+`onno.ui.messages`.
 
 ## Page action buttons
 
@@ -576,31 +672,36 @@ endpoints return **404** — the comment surface doesn't exist there.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries a `mentions` array — the live resolution of its body's mentions for the caller. |
-| POST | `/api/comments/{kind}/{name}/{id}` | Add a comment — body `{ "body": "…" }`. The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
+| GET | `/api/comments/{kind}/{name}/{id}` | The thread for one record, oldest first. `{kind}` is `catalogs`/`documents`. `404` if the entity hasn't opted into comments. Each comment carries `parentId` (null for top-level), `mentions` (live mention/reference resolution), and grouped `reactions` (`{ emoji, count, mine }`). |
+| POST | `/api/comments/{kind}/{name}/{id}` | Add a comment or reply — body `{ "body": "…", "parentId": "…" }` (`parentId` optional/null). The author is stamped from the session ([CurrentUserResolver](src/main/java/su/onno/ui/CurrentUserResolver.java)); the client never asserts identity. |
+| POST | `/api/comments/{commentId}/reactions` | Toggle the caller's reaction — body `{ "emoji": "👍" }`; returns the updated grouped reactions for that comment and live-syncs the thread. Supported quick reactions: `👍`, `❤️`, `🎉`, `👀`, `✅`. |
 | DELETE | `/api/comments/{commentId}` | Soft-delete (kept for audit). Author or `ADMIN` only. |
-| GET | `/api/mentions?q=` | `@`-mention typeahead: every catalog/document record the caller can read whose code/description/number matches `q`, ranked and capped. Returns `[{ kind, name, entity, id, display, avatarUrl }]`. |
+| GET | `/api/mentions?q=&kind=` | Mention/reference typeahead: every matching record the caller can read, ranked and capped. `kind=catalogs` powers `@`; `kind=documents` powers `#`; omit it to search both. Returns `[{ kind, name, entity, id, display, avatarUrl }]`. |
 
 Reading and posting are gated on **read** access to the owning entity (and on the entity's opt-in
 above) — if you can open the record and the entity supports comments, you can comment on it.
 `onno.comments.enabled=false` is the global kill switch (drops the endpoint, table, and panel
 everywhere); `onno.comments.max-length` caps body length (default 4000).
 
-#### Mentions — `@`-reference any readable entity
+The bundled comments panel renders the thread as a compact message scroller: current-user messages
+align to the end, other authors keep their avatar on the start side, replies nest under their parent,
+and reaction chips sit on the bubble edge.
 
-A comment body can **`@`-mention** any catalog or document the author can read — a customer, an
-invoice, or (since users are modelled as the identity catalog) a colleague. Mentions reuse the same
+#### Mentions and references — `@` people, `#` documents
+
+A comment body can **`@`-mention** readable catalog records (including colleagues when users are
+modelled as the identity catalog) and **`#`-reference** readable documents. Links reuse the same
 `Ref<T>` philosophy as the rest of the framework: only the identity is stored and display/avatar are
 resolved **live**, so renames and deletes stay correct on their own.
 
-- **Storage.** A mention is a token embedded in `Comment.body`: `@[Display](kind/name/id)`. The body
-  stays a single string — no `onno_comments` schema change — and the `Display` is only a snapshot for
-  fallback. ([`Mentions`](src/main/java/su/onno/ui/comments/Mentions.java) is the parser/serializer.)
+- **Storage.** A link is a token embedded in `Comment.body`: `@[Display](kind/name/id)` for mentions
+  and `#[Display](kind/name/id)` for references. The body stays a single string, and `Display` is
+  only a snapshot for fallback. ([`Mentions`](src/main/java/su/onno/ui/comments/Mentions.java) is the parser/serializer.)
 - **Access control.** Mentions inherit the per-entity read gate. On **POST**, a mention the *author*
   can't read is stripped to plain text (no smuggling a link to a hidden record). On **read**, a
   mention the *viewer* can't read degrades to plain text instead of a clickable 403; one they can read
   resolves to its current display + avatar. ([`MentionResolver`](src/main/java/su/onno/ui/comments/MentionResolver.java) batches this per thread.)
-- **Notifications.** Each readable mention in a freshly posted comment publishes an
+- **Notifications.** Each readable `@` mention in a freshly posted comment publishes an
   [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java). The
   notifications feature (below) consumes it out of the box to notify the mentioned user; you can add
   further delivery (`onno-mail-starter`, etc.) by registering your own Spring `@EventListener`.

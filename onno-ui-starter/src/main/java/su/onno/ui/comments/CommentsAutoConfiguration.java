@@ -49,8 +49,10 @@ public class CommentsAutoConfiguration {
     @Bean
     public MentionController mentionController(MetadataRegistry registry, CatalogQueryService catalogQuery,
                                               DocumentQueryService documentQuery, UiAccessService access,
-                                              CommentProperties properties) {
-        return new MentionController(registry, catalogQuery, documentQuery, access, properties);
+                                              CommentProperties properties, su.onno.ui.UiLayout uiLayout,
+                                              MentionResolver mentionResolver) {
+        return new MentionController(registry, catalogQuery, documentQuery, access, properties, uiLayout,
+                mentionResolver);
     }
 
     @Bean

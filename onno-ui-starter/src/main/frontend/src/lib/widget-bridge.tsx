@@ -144,7 +144,7 @@ export const WIDGET_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
 /** Placeholder for a widget type with no registered renderer (see {@link registerWidget}). */
 function UnknownWidget({ type, title }: { type: string; title: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground">
+    <div className="rounded-control border border-dashed border-border p-4 text-xs text-muted-foreground">
       <div className="font-medium text-foreground">{title}</div>
       <div className="mt-1">
         No renderer registered for widget type <code className="font-mono">{type}</code>.

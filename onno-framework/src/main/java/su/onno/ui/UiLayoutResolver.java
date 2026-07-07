@@ -126,7 +126,7 @@ public class UiLayoutResolver {
                     wc.entityType(), entityName, wc.maxItems(),
                     wc.dateField(), wc.titleField(),
                     wc.extraConfig() == null ? Map.of() : wc.extraConfig(),
-                    wc.hint()
+                    wc.hint(), wc.rowBreak()
             ));
         }
         return result;

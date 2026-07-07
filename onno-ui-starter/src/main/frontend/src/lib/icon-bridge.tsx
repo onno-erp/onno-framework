@@ -1,6 +1,5 @@
 import { Suspense, lazy, useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
-import { useLocation } from "react-router-dom";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { Circle } from "lucide-react";
 
@@ -96,6 +95,23 @@ type Mount = {
 let mounts: Mount[] = [];
 const listeners = new Set<() => void>();
 let seq = 0;
+
+// The nav's active path — the SAME value divkit-view writes into DivKit's active_path
+// variable (the focused island's active tab), NOT the raw URL. Labels/backgrounds bind
+// to that variable server-side; if icons resolved active from useLocation instead, the
+// two could disagree (e.g. Esc-closing the last tab clears the variable but resets the
+// URL to "/", leaving the Dashboard glyph lit while its label went idle).
+let activeNavPath: string | null = null;
+
+/** Publish the nav-active path; call wherever the active_path DivKit variable is set. */
+export function setIconActivePath(path: string | null) {
+  if (activeNavPath === path) return;
+  activeNavPath = path;
+  emit();
+}
+function getActivePath(): string | null {
+  return activeNavPath;
+}
 
 function emit() {
   for (const l of listeners) l();
@@ -212,16 +228,17 @@ export const ICON_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
 
 /**
  * Portals every live {@code <onno-icon>} to its lucide icon. Mount once, high in the
- * tree (inside the Router — it reads the current route to resolve active-state color).
+ * tree. Active-state color resolves against {@link setIconActivePath}'s value so the
+ * glyph and its DivKit-bound label always agree.
  */
 export function IconPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
-  const { pathname } = useLocation();
+  const active = useSyncExternalStore(subscribe, getActivePath);
   return (
     <>
       {list.map((m) => {
         const color =
-          m.activeColor && m.activePath != null && pathname === m.activePath ? m.activeColor : m.color;
+          m.activeColor && m.activePath != null && active === m.activePath ? m.activeColor : m.color;
         return createPortal(
           <DynamicLucide name={m.name} color={color} size={m.size} />,
           m.el,

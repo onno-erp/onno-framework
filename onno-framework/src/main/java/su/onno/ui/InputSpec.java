@@ -34,9 +34,9 @@ public final class InputSpec {
         return builders.stream().map(InputBuilder::build).toList();
     }
 
-    /** A resolved toolbar input field. */
+    /** A resolved toolbar (or action-form) input field. */
     public record InputField(String key, String label, InputType type, String placeholder,
-                             List<String> options, String defaultValue) {
+                             List<String> options, String defaultValue, boolean required) {
     }
 
     /** Fluent builder for one input; setters may be called in any order. */
@@ -47,6 +47,7 @@ public final class InputSpec {
         private String placeholder = "";
         private List<String> options = List.of();
         private String defaultValue = "";
+        private boolean required;
 
         InputBuilder(String key) {
             this.key = key;
@@ -79,8 +80,19 @@ public final class InputSpec {
             return this;
         }
 
+        /**
+         * Require a non-blank value before an action-form dialog submits (see
+         * {@link ActionSpec.ActionBuilder#form}). Toolbar inputs ignore it — they're ambient values,
+         * not a gated form.
+         */
+        public InputBuilder required() {
+            this.required = true;
+            return this;
+        }
+
         InputField build() {
-            return new InputField(key, label != null ? label : key, type, placeholder, options, defaultValue);
+            return new InputField(key, label != null ? label : key, type, placeholder, options,
+                    defaultValue, required);
         }
     }
 }

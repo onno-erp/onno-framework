@@ -87,7 +87,7 @@ export function GeoPicker({
     <div className="grid gap-2">
       <div
         ref={containerRef}
-        className="h-60 w-full overflow-hidden rounded-lg border border-border"
+        className="h-60 w-full overflow-hidden rounded-card border border-border"
         style={{ minHeight: 240 }}
       />
       <div className="grid grid-cols-2 gap-3">

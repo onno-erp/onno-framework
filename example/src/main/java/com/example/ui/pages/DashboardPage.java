@@ -67,7 +67,7 @@ public class DashboardPage implements Page {
                 .hint("Where orders sit in the lifecycle.");
 
         // Posted-order revenue over time. The window comes from the shared time picker above, and the
-        // bucket size (day/week/month) auto-follows it; the maximize icon opens the explore view.
+        // bucket size (day/week/month) auto-follows it.
         b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
                 .config("groupBy", "_date").config("groupByDate", "day")

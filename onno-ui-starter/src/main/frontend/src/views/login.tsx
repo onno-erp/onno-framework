@@ -105,7 +105,7 @@ export function LoginView() {
 
   return (
     <main className="flex min-h-screen bg-background">
-      <section className="hidden flex-1 border-r border-border bg-muted/30 px-12 py-10 md:flex md:flex-col md:justify-between">
+      <section className="hidden flex-1 flex-col justify-between px-12 py-10 md:flex">
         {logo ? (
           // Honor the configured logo size (px) the same way the DivKit shell does — a fixed
           // box with object-fit: contain stays uncropped; unset falls back to h-7 / intrinsic width.
@@ -129,12 +129,16 @@ export function LoginView() {
         <p className="text-xs text-muted-foreground">{t("login.footer")}</p>
       </section>
 
-      <section className="flex min-h-screen w-full items-center justify-center px-5 md:w-[440px]">
-        <div className="w-full max-w-sm">
+      {/* Only the right sign-in area is an island: a large rounded panel (shape token), bordered and
+          inset by the page gutter, no shadow — matching the shell's notification/panel islands. The
+          left hero stays flush on the page background. */}
+      <section className="flex w-full items-stretch p-3 md:w-[500px]">
+        <div className="flex w-full flex-col items-center justify-center rounded-card border border-border bg-card px-6 py-10">
+          <div className="w-full max-w-sm">
           {errorMessage && (
             <div
               role="alert"
-              className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              className="mb-4 rounded-control border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
               {errorMessage}
             </div>
@@ -151,6 +155,7 @@ export function LoginView() {
           ) : (
             <p className="text-sm text-muted-foreground">Loading…</p>
           )}
+          </div>
         </div>
       </section>
 

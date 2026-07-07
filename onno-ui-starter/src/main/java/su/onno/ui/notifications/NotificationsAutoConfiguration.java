@@ -24,8 +24,9 @@ import org.springframework.context.annotation.Bean;
  * same layering the comments feature uses. Storage is the framework-owned {@code onno_notifications}
  * table the store creates on startup; there is no app metadata to model.
  *
- * <p>The built-in producers ({@link MentionNotificationSource}, {@link AssignmentNotificationSource})
- * are each gated by their own sub-flag so an app can keep the panel while turning a source off.
+ * <p>The built-in producers ({@link MentionNotificationSource}, {@link AssignmentNotificationSource},
+ * {@link ReplyNotificationSource}) are each gated by their own sub-flag so an app can keep the panel
+ * while turning a source off.
  */
 @AutoConfiguration(after = UiAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -68,5 +69,12 @@ public class NotificationsAutoConfiguration {
                                                                     su.onno.ui.UiLayout uiLayout,
                                                                     MetadataRegistry registry, Jdbi jdbi) {
         return new AssignmentNotificationSource(notificationService, uiLayout, registry, jdbi);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "onno.notifications.replies", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public ReplyNotificationSource replyNotificationSource(NotificationService notificationService) {
+        return new ReplyNotificationSource(notificationService);
     }
 }

@@ -19,11 +19,11 @@ import { cn } from "@/lib/utils";
 import { Calendar, RangeCalendar } from "@/components/ui/calendar";
 
 const inputCls =
-  "flex h-10 w-full items-center gap-1 rounded-lg border border-input bg-muted px-3 py-1 text-sm shadow-sm transition-all hover:border-ring/40 data-[focus-within=true]:border-ring data-[focus-within=true]:ring-2 data-[focus-within=true]:ring-ring/40 data-[disabled=true]:opacity-50";
+  "flex h-10 w-full items-center gap-1 rounded-field border border-input bg-muted px-3 py-1 text-sm shadow-sm transition-all hover:border-ring/40 data-[focus-within=true]:border-ring data-[focus-within=true]:ring-2 data-[focus-within=true]:ring-ring/40 data-[disabled=true]:opacity-50";
 const segmentCls =
-  "shrink-0 whitespace-nowrap rounded-sm px-0.5 py-0 tabular-nums caret-transparent outline-none data-[focused=true]:bg-accent data-[focused=true]:text-accent-foreground data-[type=literal]:px-0 data-[placeholder=true]:text-muted-foreground data-[disabled=true]:opacity-50";
+  "shrink-0 whitespace-nowrap rounded-field px-0.5 py-0 tabular-nums caret-transparent outline-none data-[focused=true]:bg-accent data-[focused=true]:text-accent-foreground data-[type=literal]:px-0 data-[placeholder=true]:text-muted-foreground data-[disabled=true]:opacity-50";
 const calendarBtnCls =
-  "ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled=true]:opacity-50";
+  "ml-auto inline-flex h-7 w-7 items-center justify-center rounded-field text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled=true]:opacity-50";
 const popoverCls =
   "z-50 rounded-card border bg-popover p-0 text-popover-foreground shadow-lg outline-none data-[entering]:animate-in data-[exiting]:animate-out data-[entering]:fade-in-0 data-[exiting]:fade-out-0 data-[entering]:zoom-in-95 data-[exiting]:zoom-out-95";
 

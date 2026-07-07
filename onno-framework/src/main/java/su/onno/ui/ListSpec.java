@@ -105,6 +105,11 @@ public final class ListSpec {
      * text) contributes no constraint, and a filter on a field the entity no longer has degrades to
      * "no constraint" rather than failing the list.</p>
      *
+     * <p>An {@code @Enumeration}-typed field persists as deterministic UUIDs, so the UI resolver
+     * translates a select filter's options for it: author each option as the constant name
+     * ({@code "SHIPPED"}) or its {@code @EnumLabel} text, or author <em>no</em> options
+     * ({@code .multiOptions()}) to offer every declared value, labelled like the entity's pills.</p>
+     *
      * <pre>
      * list.filter("season").options("2024", "2025", "2026");        // SELECT -> season = value
      * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%

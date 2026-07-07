@@ -84,6 +84,37 @@ public class UiAccessService {
     }
 
     /**
+     * Write-access counterpart of {@link #canRead(Principal, String, String)}: resolves the entity
+     * by kind + name (route segment or display name, normalized the same way) and checks the caller
+     * against its effective write roles — write roles fall back to read roles when unset, the same
+     * rule the descriptor overloads apply. Used to stamp {@code canWrite} into UI descriptors so
+     * the client can hide write affordances (row Edit/Delete, kanban drag, related-list add) that
+     * the REST layer would reject anyway.
+     */
+    public boolean canWrite(Principal principal, String type, String name) {
+        Set<String> roles = roles(principal);
+        String normalized = normalizeName(name);
+        return switch (type) {
+            case "catalog" -> registry.allCatalogs().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> hasAnyRole(roles, effectiveWriteRoles(d.readRoles(), d.writeRoles())))
+                    .orElse(false);
+            case "document" -> registry.allDocuments().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> hasAnyRole(roles, effectiveWriteRoles(d.readRoles(), d.writeRoles())))
+                    .orElse(false);
+            case "register" -> registry.allRegisters().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> hasAnyRole(roles, effectiveWriteRoles(d.readRoles(), d.writeRoles())))
+                    .orElse(false);
+            default -> false;
+        };
+    }
+
+    /**
      * Read-access check against a <em>pre-resolved</em> role set, for callers that capture the
      * subscriber's authorities up front and evaluate access off the request thread. The live SSE
      * stream ({@link UiEventPublisher}) fans events from the event-publishing / cluster-relay thread,

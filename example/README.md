@@ -20,7 +20,7 @@ It is deliberately **small and end-to-end** — one coherent domain, the core st
 | People | `Customer`, `Supplier`, `Employee` (`Position` enum). Employees double as the login identity directory. |
 | Settings | one `@Constant` (store name), editable on the built-in Settings page. |
 | Dashboard | admin-only home page — KPI tiles, an orders-by-status pie, revenue over time, recent orders. |
-| Comments | a per-order discussion thread for the team. |
+| Comments | a per-order message thread with replies, reactions, `@` mentions, and `#` document references. |
 
 ## Two roles, two UI profiles
 

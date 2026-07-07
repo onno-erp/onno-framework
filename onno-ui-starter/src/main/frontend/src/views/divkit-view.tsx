@@ -19,16 +19,30 @@ import { cn, copyToClipboard } from "@/lib/utils";
 import { stripBasePath, withBasePath } from "@/lib/base-path";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
-import { ICON_CUSTOM_COMPONENTS } from "@/lib/icon-bridge";
+import { ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
 import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
+import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
 import { startPresence } from "@/lib/presence-store";
 import { TabPresence } from "@/components/presence-surfaces";
 import { usePanePresence } from "@/lib/presence-store";
 import { NotificationTrigger } from "@/components/notification-center";
+import {
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+} from "@/components/ui/context-menu";
+import { openPanel as openNotificationPanel, setNotificationsNavStyle } from "@/lib/notification-store";
+import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "@/lib/keybindings";
 import "@divkitframework/divkit/dist/client.css";
 
-// The shell nav/account cards render lucide icons and the ambient sidebar presence dots as React islands.
-const NAV_CARD_CUSTOM_COMPONENTS = new Map([...ICON_CUSTOM_COMPONENTS, ...NAV_PRESENCE_CUSTOM_COMPONENTS]);
+// The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
+// unread-notification dot on the bottom bar's More tab as React islands.
+const NAV_CARD_CUSTOM_COMPONENTS = new Map([
+  ...ICON_CUSTOM_COMPONENTS,
+  ...NAV_PRESENCE_CUSTOM_COMPONENTS,
+  ...NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS,
+]);
 
 /**
  * The authenticated app, rendered as DivKit cards: the chrome (/shell — top bar +
@@ -311,7 +325,7 @@ export function DivKitView() {
   // (the self-dot no longer blinks on rapid pane churn).
   usePanePresence((workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0])?.activePath ?? "");
   // Right-click menu for a list row: screen position + the row's onno:// open url.
-  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string } | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
   // Right-click menu for a workspace tab: screen position + the tab's route path.
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   // The in-app confirmation modal (delete, etc.); null when closed.
@@ -343,10 +357,13 @@ export function DivKitView() {
 
   // The nav highlight follows the focused island's active tab (not the raw URL), so
   // it clears when that island is emptied and tracks focus between islands — all
-  // without re-fetching the shell.
+  // without re-fetching the shell. The icon bridge gets the same value, so glyphs and
+  // labels can't disagree about which item is active.
   useEffect(() => {
     const focused = workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0];
-    activePathVar.setValue(focused?.activePath ?? "");
+    const path = focused?.activePath ?? "";
+    activePathVar.setValue(path);
+    setIconActivePath(path);
   }, [workspace]);
 
   // Mirror the URL into the focused island: ensure it has a tab for the route and
@@ -465,6 +482,12 @@ export function DivKitView() {
     startPresence();
   }, []);
 
+  // Tell the notification store which nav style the shell uses, so its floating fallback bell
+  // only appears on the topbar layout (bottom-bar layouts route through the More menu instead).
+  useEffect(() => {
+    setNotificationsNavStyle(shell?.navStyle ?? "unknown");
+  }, [shell?.navStyle]);
+
   useEffect(() => {
     const timers = refetchTimers.current;
     return () => {
@@ -487,9 +510,13 @@ export function DivKitView() {
         });
         return { ...ws, panes, focused: focused.id };
       });
-      if (path !== location.pathname) navigate(path);
+      // Always navigate — never guard on location.pathname. The nav card's action handler is captured
+      // once by the DivKit renderer, so a stale `location.pathname` (the landing route "/") would make
+      // the guard `path !== location.pathname` wrongly skip navigating to the home page (Dashboard),
+      // leaving it unreachable from the nav. React Router no-ops a navigate to the current location.
+      navigate(path);
     },
-    [location.pathname, navigate]
+    [navigate]
   );
 
   // Open a record beside the focused island, master-detail style — but cap auto-opened
@@ -576,6 +603,11 @@ export function DivKitView() {
       }
       if (rest === "theme/toggle") {
         setTheme(resolvedTheme === "dark" ? "light" : "dark");
+        return;
+      }
+      if (rest === "notifications") {
+        // The mobile menu's Notifications row — opens the client-owned panel, no route change.
+        openNotificationPanel();
         return;
       }
       if (rest.startsWith("download/")) {
@@ -683,11 +715,38 @@ export function DivKitView() {
     [navigate, location.pathname, logout, setTheme, resolvedTheme, openPath, openDetailRight, closePath, shell?.navStyle, t]
   );
 
+  // A stable dispatcher over the latest onCustomAction. The DivKit wrapper tears down and
+  // re-renders its whole Svelte card whenever any prop identity changes (its effect deps on the
+  // props object), so the shell cards must receive a handler whose identity never changes — the
+  // ref indirection keeps the behaviour of the freshest closure without the churn.
+  const onCustomActionRef = useRef(onCustomAction);
+  onCustomActionRef.current = onCustomAction;
+  const onShellAction = useCallback((action: ContentAction) => onCustomActionRef.current(action), []);
+  const hoveredRowUrl = useCallback(() => {
+    const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
+    return el?.dataset.onnoRow;
+  }, []);
+  // Whether the hovered row's entity is writable by the viewer. Rows stamp
+  // data-onno-row-writable="0" when the server said canWrite=false (see ListDescriptor.canWrite);
+  // absent means writable (older servers, DivKit-native rows) so behavior doesn't regress.
+  const hoveredRowWritable = useCallback(() => {
+    const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
+    return el?.dataset.onnoRowWritable !== "0";
+  }, []);
+  const noActiveTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    return !selection || selection.isCollapsed || !selection.toString().trim();
+  }, []);
+
   // Right-click on a list row (stamped with data-onno-row by the DivKit "row" extension)
   // opens a small Open / Edit menu. One window-level listener serves every island; any
   // left-click / Esc / resize dismisses it.
   useEffect(() => {
     const onCtx = (e: MouseEvent) => {
+      // The onno-list island owns its rows' menu (custom actions, submenus, batch ops) and
+      // preventDefaults the event — this DOM-sniffing fallback serves the remaining DivKit-native
+      // and grouped rows.
+      if (e.defaultPrevented) return;
       // Yield to an active text selection: if the user highlighted a value and right-clicks,
       // let the browser's native Copy menu through instead of hijacking it with the row menu.
       const selection = window.getSelection();
@@ -697,7 +756,8 @@ export function DivKitView() {
       if (!url) return;
       e.preventDefault();
       setTabMenu(null);
-      setRowMenu({ x: e.clientX, y: e.clientY, url });
+      // writable mirrors hoveredRowWritable: "0" = the server denied write on this entity.
+      setRowMenu({ x: e.clientX, y: e.clientY, url, writable: el?.dataset.onnoRowWritable !== "0" });
     };
     const close = () => {
       setRowMenu(null);
@@ -718,35 +778,58 @@ export function DivKitView() {
     };
   }, []);
 
-  // Delete key (macOS fn+Backspace, or the dedicated Del key) deletes the list row under the
-  // pointer — the same row the hover highlight marks and the right-click menu targets. Routes
-  // through the shared delete/ flow (confirm modal + REST), so it's guarded, not destructive.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Delete" || e.metaKey || e.ctrlKey || e.altKey) return;
-      // Don't hijack the key while typing in a field or while a menu/modal owns it.
-      if (rowMenuOpenRef.current || confirmOpenRef.current) return;
-      const ae = document.activeElement as HTMLElement | null;
-      if (
-        ae &&
-        (ae.tagName === "INPUT" ||
-          ae.tagName === "TEXTAREA" ||
-          ae.tagName === "SELECT" ||
-          ae.isContentEditable)
-      ) {
-        return;
-      }
-      // The row the pointer is over (CSS :hover already highlights it). No persistent selection
-      // state to drift out of sync with the virtualized list.
-      const el = document.querySelector("[data-onno-row]:hover") as HTMLElement | null;
-      const url = el?.dataset.onnoRow;
-      if (!url) return;
-      e.preventDefault();
-      onCustomAction({ url: rowDeleteUrl(url) });
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCustomAction]);
+  const rowKeybindings = useMemo(
+    () => [
+      {
+        key: "Enter",
+        mod: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url) onCustomAction({ url });
+        },
+      },
+      {
+        key: "e",
+        mod: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/edit` });
+        },
+      },
+      {
+        key: "d",
+        mod: true,
+        shift: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/duplicate` });
+        },
+      },
+      {
+        key: "c",
+        mod: true,
+        shift: true,
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current || !noActiveTextSelection()) return;
+          const url = hoveredRowUrl();
+          if (url) copyLink(rowOpenPath(url));
+        },
+      },
+      {
+        key: "Delete",
+        run: () => {
+          if (rowMenuOpenRef.current || confirmOpenRef.current) return;
+          const url = hoveredRowUrl();
+          if (url && hoveredRowWritable()) onCustomAction({ url: rowDeleteUrl(url) });
+        },
+      },
+    ],
+    [copyLink, hoveredRowUrl, hoveredRowWritable, noActiveTextSelection, onCustomAction]
+  );
+  useGlobalKeybindings(rowKeybindings);
 
   // The React form widgets (onno-form) and ref picker live outside DivKit's action flow,
   // so they reach the host through window events: "onno:action" routes an onno:// url
@@ -1056,6 +1139,7 @@ export function DivKitView() {
       if (e.defaultPrevented) return;
       if (e.key !== "Escape" || viewport !== "desktop") return;
       if (dragRef.current || dragState) return;
+      if (isInteractiveLayerOpen()) return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) {
         return;
@@ -1161,19 +1245,26 @@ export function DivKitView() {
   const activeTabText = brand.primary ?? "hsl(var(--accent-foreground))";
   const navStyle: NavStyle = shell?.navStyle ?? "topbar";
 
-  const shellCard = (json: DivKitProps["json"], idPrefix: string) => (
-    <DivKit
-      id={`${idPrefix}:${resolvedTheme}:${viewport}`}
-      json={json}
-      theme={resolvedTheme}
-      globalVariablesController={navVars}
-      onCustomAction={onCustomAction as NonNullable<DivKitProps["onCustomAction"]>}
-      customComponents={NAV_CARD_CUSTOM_COMPONENTS}
-    />
+  // Memoized so the element identity only changes when the card actually needs a re-render
+  // (new shell JSON / theme / viewport). The DivKit wrapper destroys and re-creates its Svelte
+  // instance on every prop-object change, so handing it a fresh element per DivKitView render
+  // rebuilt the whole nav card dozens of times per second under render churn.
+  const shellCard = useCallback(
+    (json: DivKitProps["json"], idPrefix: string) => (
+      <DivKit
+        id={`${idPrefix}:${resolvedTheme}:${viewport}`}
+        json={json}
+        theme={resolvedTheme}
+        globalVariablesController={navVars}
+        onCustomAction={onShellAction as NonNullable<DivKitProps["onCustomAction"]>}
+        customComponents={NAV_CARD_CUSTOM_COMPONENTS}
+      />
+    ),
+    [resolvedTheme, viewport, onShellAction]
   );
 
-  const navEl = shell ? shellCard(shell.nav, "nav") : null;
-  const accountEl = shell ? shellCard(shell.account, "account") : null;
+  const navEl = useMemo(() => (shell ? shellCard(shell.nav, "nav") : null), [shell, shellCard]);
+  const accountEl = useMemo(() => (shell ? shellCard(shell.account, "account") : null), [shell, shellCard]);
 
   // A single content surface for the non-desktop layouts (no islands/tabs there).
   // Driven by the focused pane's activePath — which openPath() updates synchronously in
@@ -1196,63 +1287,95 @@ export function DivKitView() {
     />
   );
 
-  // A small right-click context menu, positioned at (x, y) and clamped to stay on-screen.
-  // Shared by the list-row menu and the workspace-tab menu so they look and behave alike.
-  type MenuItem = { label: string; icon: LucideIcon; run: () => void; danger?: boolean; divider?: boolean };
+  // Shared by the list-row menu and workspace-tab menu so right-click affordances look and behave
+  // alike. The row shortcuts operate on the same hovered row this menu targets.
+  type MenuItem = {
+    label: string;
+    icon: LucideIcon;
+    run: () => void;
+    danger?: boolean;
+    divider?: boolean;
+    shortcut?: string;
+  };
   const contextMenu = (pos: { x: number; y: number }, items: MenuItem[], close: () => void) => (
-    <div
-      className="fixed z-50 min-w-44 overflow-hidden rounded-card border py-1 shadow-lg"
-      style={{
-        left: Math.min(pos.x, window.innerWidth - 184),
-        top: Math.min(pos.y, window.innerHeight - 168),
-        background: surfaceBg,
-        borderColor,
+    <ContextMenuContent
+      open
+      position={pos}
+      onOpenChange={(open) => {
+        if (!open) close();
       }}
-      onClick={(e) => e.stopPropagation()}
+      width={216}
+      estimatedHeight={items.length * 38 + 24}
+      style={{ background: surfaceBg, borderColor }}
     >
-      {items.map(({ label, icon: Icon, run, danger, divider }) => (
-        <Fragment key={label}>
-          {divider ? <div className="my-1 border-t" style={{ borderColor }} /> : null}
-          <button
-            type="button"
-            className={cn(
-              "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted",
-              danger ? "text-red-600" : "text-foreground"
-            )}
-            onClick={() => {
+      {items.map(({ label, icon: Icon, run, danger, divider, shortcut }) => (
+        <div key={label}>
+          {divider ? <ContextMenuSeparator style={{ backgroundColor: borderColor }} /> : null}
+          <ContextMenuItem
+            variant={danger ? "destructive" : "default"}
+            onSelect={() => {
               run();
               close();
             }}
           >
-            <Icon
-              className={cn("size-4", danger ? "text-red-600" : "text-muted-foreground")}
-              aria-hidden="true"
-            />
-            {label}
-          </button>
-        </Fragment>
+            <Icon className={cn(danger ? "text-destructive" : "text-muted-foreground")} aria-hidden="true" />
+            <span>{label}</span>
+            {shortcut ? <ContextMenuShortcut>{shortcut}</ContextMenuShortcut> : null}
+          </ContextMenuItem>
+        </div>
       ))}
-    </div>
+    </ContextMenuContent>
   );
 
-  // The row right-click menu, rendered once per layout.
+  // The row right-click menu, rendered once per layout. Write actions (Edit/Duplicate/Delete)
+  // drop out when the row's entity isn't writable by the viewer (data-onno-row-writable="0").
   const rowMenuEl = rowMenu
     ? contextMenu(
         rowMenu,
         [
-          { label: t("action.open"), icon: ExternalLink, run: () => onCustomAction({ url: rowMenu.url }) },
-          { label: t("action.edit"), icon: Pencil, run: () => onCustomAction({ url: rowMenu.url + "/edit" }) },
-          { label: t("action.duplicate"), icon: Copy, run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }) },
-          { label: t("action.copyLink"), icon: Link2, run: () => copyLink(rowOpenPath(rowMenu.url)), divider: true },
+          {
+            label: t("action.open"),
+            icon: ExternalLink,
+            run: () => onCustomAction({ url: rowMenu.url }),
+            shortcut: shortcutLabel({ key: "Enter", mod: true }),
+          },
+          ...(rowMenu.writable
+            ? [
+                {
+                  label: t("action.edit"),
+                  icon: Pencil,
+                  run: () => onCustomAction({ url: rowMenu.url + "/edit" }),
+                  shortcut: shortcutLabel({ key: "e", mod: true }),
+                },
+                {
+                  label: t("action.duplicate"),
+                  icon: Copy,
+                  run: () => onCustomAction({ url: rowMenu.url + "/duplicate" }),
+                  shortcut: shortcutLabel({ key: "d", mod: true, shift: true }),
+                },
+              ]
+            : []),
+          {
+            label: t("action.copyLink"),
+            icon: Link2,
+            run: () => copyLink(rowOpenPath(rowMenu.url)),
+            divider: rowMenu.writable,
+            shortcut: shortcutLabel({ key: "c", mod: true, shift: true }),
+          },
           // delete/{kind}/{name}/{id} — routes through the same confirm + REST flow as the
           // detail header's delete (handled in onCustomAction).
-          {
-            label: t("action.delete"),
-            icon: Trash2,
-            run: () => onCustomAction({ url: rowDeleteUrl(rowMenu.url) }),
-            danger: true,
-            divider: true,
-          },
+          ...(rowMenu.writable
+            ? [
+                {
+                  label: t("action.delete"),
+                  icon: Trash2,
+                  run: () => onCustomAction({ url: rowDeleteUrl(rowMenu.url) }),
+                  danger: true,
+                  divider: true,
+                  shortcut: shortcutLabel({ key: "Delete" }),
+                },
+              ]
+            : []),
         ],
         () => setRowMenu(null)
       )
@@ -1288,7 +1411,7 @@ export function DivKitView() {
         <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
-            className="rounded-lg border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            className="rounded-control border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
             style={{ borderColor }}
             onClick={() => setConfirm(null)}
           >
@@ -1298,7 +1421,7 @@ export function DivKitView() {
             type="button"
             autoFocus
             className={cn(
-              "rounded-lg px-3.5 py-2 text-sm font-medium text-white transition-colors",
+              "rounded-control px-3.5 py-2 text-sm font-medium text-white transition-colors",
               confirm.danger ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:opacity-90"
             )}
             onClick={() => {
@@ -1320,7 +1443,9 @@ export function DivKitView() {
     const isDropInto = dropTarget?.paneId === pane.id && dropTarget.mode === "into";
     const isDropRight = dropTarget?.paneId === pane.id && dropTarget.mode === "right";
     const isDropLeft = dropTarget?.paneId === pane.id && dropTarget.mode === "left";
+    const hasTabs = pane.tabs.length > 0;
     const focused = pane.id === workspace.focused;
+    const showFocusedChrome = focused && hasTabs;
 
     // While a tab is dragged over this strip, lay the tabs out in their would-be
     // order so the row visibly shifts to open a gap: the dragged tab (if it's ours)
@@ -1344,7 +1469,7 @@ export function DivKitView() {
     return (
       <section
         className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-card border transition-colors"
-        style={{ background: surfaceBg, borderColor: focused ? focusBorder : borderColor }}
+        style={{ background: surfaceBg, borderColor: showFocusedChrome ? focusBorder : borderColor }}
         onMouseDownCapture={() => {
           if (!focused) setWorkspace((ws) => ({ ...ws, focused: pane.id }));
         }}
@@ -1398,7 +1523,7 @@ export function DivKitView() {
               return (
                 <div
                   key="ghost"
-                  className="flex h-8 max-w-56 shrink-0 items-center rounded-lg px-3 text-sm text-muted-foreground"
+                  className="flex h-8 max-w-56 shrink-0 items-center rounded-field px-3 text-sm text-muted-foreground"
                   style={{ background: `${accent}14`, border: `1px dashed ${focusBorder}` }}
                 >
                   <span className="truncate">{slot.title}</span>
@@ -1429,7 +1554,7 @@ export function DivKitView() {
                   setTabMenu({ x: e.clientX, y: e.clientY, path: tab.path });
                 }}
                 className={cn(
-                  "group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-lg pl-1 text-sm transition-colors active:cursor-grabbing",
+                  "group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-field pl-1 text-sm transition-colors active:cursor-grabbing",
                   active
                     ? "text-foreground"
                     : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
@@ -1449,7 +1574,7 @@ export function DivKitView() {
                 <button
                   type="button"
                   aria-label={`Close ${label}`}
-                  className="mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-60 hover:bg-muted hover:opacity-100"
+                  className="mr-1 grid size-5 shrink-0 place-items-center rounded-md opacity-60 transition hover:bg-foreground/10 hover:opacity-100"
                   onClick={(event) => {
                     event.stopPropagation();
                     closeTab(pane.id, tab.path);
@@ -1461,11 +1586,11 @@ export function DivKitView() {
             );
           })}
           {/* Collaborator avatars for the focused pane's record — pinned right of the tabs. */}
-          {focused && (
+          {showFocusedChrome && pane.activePath ? (
             <div className="ml-auto flex shrink-0 items-center pl-2 pr-1">
               <TabPresence path={pane.activePath} />
             </div>
-          )}
+          ) : null}
         </div>
         {/* Presence for the focused pane is driven once at the top of DivKitView (a single stable hook),
             not per-pane — see usePanePresence(focused pane's activePath) there. */}
@@ -1566,7 +1691,7 @@ export function DivKitView() {
           >
             {navEl}
           </div>
-          <NotificationTrigger />
+          <NotificationTrigger style={{ background: surfaceBg, borderColor }} />
           {accountEl}
         </aside>
         <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-3 pr-3">
@@ -1584,7 +1709,7 @@ export function DivKitView() {
                   onPointerDown={(e) => startResize(i, e)}
                   className="group mx-0.5 flex w-2 shrink-0 cursor-col-resize items-center justify-center"
                 >
-                  <div className="h-10 w-1 rounded-full bg-border transition-colors group-hover:bg-blue-500" />
+                  <div className="h-10 w-1 rounded-control bg-border transition-colors group-hover:bg-blue-500" />
                 </div>
               ) : null}
             </div>

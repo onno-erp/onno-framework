@@ -22,6 +22,9 @@ public class EmployeeView implements EntityView {
                 .label("description", "Name")
                 .label("avatarUrl", "")
                 .sortBy("description", false);
+        // Role facet: an enum field with no authored options offers every declared value,
+        // labelled by its @EnumLabel.
+        list.filter("position").label("Role").multiOptions();
     }
 
     @Override

@@ -245,6 +245,12 @@ export interface DashboardWidgetMeta {
   extraConfig: Record<string, string>;
   /** Optional help text (from .widget(...).hint(...)); surfaced as a hoverable "?" by the title. */
   hint?: string;
+  /**
+   * The viewer's write access on the widget's entity (server-stamped from RBAC). When false,
+   * interactive widgets disable their mutations — kanban drag, calendar reschedule. Absent (old
+   * server) means unknown; treat as writable so behavior doesn't regress, REST enforces anyway.
+   */
+  canWrite?: boolean;
 }
 
 export interface LayoutItem {

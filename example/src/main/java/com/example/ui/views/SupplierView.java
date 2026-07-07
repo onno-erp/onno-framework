@@ -25,9 +25,10 @@ public class SupplierView implements EntityView {
 
     @Override
     public void fields(EntityConfigBuilder f) {
+        // Contact details get their own card on the edit form, side by side on wide screens.
         f.field("description").order(0).label("Name")
-            .field("email").order(1)
-            .field("phone").order(2)
+            .field("email").order(1).group("Contact").width("half")
+            .field("phone").order(2).group("Contact").width("half")
             .field("note").order(3).widget("textarea");
     }
 }

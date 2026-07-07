@@ -1,10 +1,12 @@
 package su.onno.ui;
 
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -90,6 +92,36 @@ public class GenericCatalogController {
     public Map<String, Object> create(@PathVariable String name, @RequestBody Map<String, Object> body,
                                       Principal principal) {
         return commands.create(query.require(name), body, principal);
+    }
+
+    /**
+     * Create a copy of record {@code id}: same description/attributes/parent, fresh identity (new
+     * id, next code). Secret attributes are not copied — reads are redacted, so a copy would store
+     * the sentinel; the clone starts with them unset. Runs through the normal create path
+     * (lifecycle hooks, validation, write access). Powers the list's clipboard paste (⌘C/⌘V).
+     */
+    @PostMapping("/{name}/{id}/duplicate")
+    public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+        CatalogDescriptor desc = query.require(name);
+        access.requireRead(principal, desc); // create() enforces write below
+        Map<String, Object> row = query.get(desc, id);
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (row.get("_description") != null) {
+            body.put("description", row.get("_description"));
+        }
+        if (row.get("_parent") != null) {
+            body.put("parent", row.get("_parent"));
+        }
+        for (AttributeDescriptor attr : desc.attributes()) {
+            if (attr.secret()) {
+                continue;
+            }
+            Object v = row.get(attr.columnName());
+            if (v != null) {
+                body.put(attr.fieldName(), v);
+            }
+        }
+        return commands.create(desc, body, principal);
     }
 
     @PutMapping("/{name}/{id}")

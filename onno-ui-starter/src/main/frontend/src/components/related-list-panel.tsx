@@ -170,7 +170,7 @@ export function RelatedListPanel({
                 return (
                   <div
                     key={rowId}
-                    className="group flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/40"
+                    className="group flex items-center gap-3 rounded-control px-2 py-1.5 transition-colors hover:bg-muted/40"
                   >
                     {meta.columns.map((col) => (
                       <div
@@ -193,7 +193,7 @@ export function RelatedListPanel({
                         disabled={busy}
                         aria-label="Remove row"
                         title="Remove"
-                        className="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
+                        className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                       </button>

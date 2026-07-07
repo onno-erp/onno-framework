@@ -370,10 +370,13 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     /** A deterministic notionists-neutral avatar per staff name (DiceBear), so every employee has a
      *  photo and the signed-in person's shows in the shell's account block without shipping image
-     *  files. */
+     *  files. The backgroundColor list is a pastel palette DiceBear picks from per seed, so each
+     *  person gets their own colour instead of the shared default grey. */
     private static String avatarUrl(String name) {
         String seed = URLEncoder.encode(name, StandardCharsets.UTF_8);
-        return "https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50&seed=" + seed;
+        return "https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50"
+                + "&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c8e6c9,f4d1b6"
+                + "&seed=" + seed;
     }
 
     private Ref<Book> book(String title, String author, String isbn,

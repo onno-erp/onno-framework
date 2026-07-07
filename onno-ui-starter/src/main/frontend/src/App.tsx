@@ -22,6 +22,7 @@ import { ConstantsPortals } from "@/lib/constants-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
 import { NavPresencePortals } from "@/lib/nav-presence-bridge";
+import { NotificationIndicatorPortals } from "@/lib/notification-indicator-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
 import { NotificationCenter } from "@/components/notification-center";
 import { UpdateNotice } from "@/components/update-notice";
@@ -81,6 +82,7 @@ function ProtectedApp() {
       <ActionsBarPortals />
       <CommentsPortals />
       <NavPresencePortals />
+      <NotificationIndicatorPortals />
       <GeoPortals />
     </TimeRangeProvider>
   );

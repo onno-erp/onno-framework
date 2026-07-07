@@ -290,8 +290,8 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public RegisterListController registerListController(RegisterQueryService registerQueryService,
-                                                         UiAccessService access) {
-        return new RegisterListController(registerQueryService, access);
+                                                         UiAccessService access, UiMessages uiMessages) {
+        return new RegisterListController(registerQueryService, access, uiMessages);
     }
 
     @Bean
@@ -331,10 +331,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              RelatedListReader relatedListReader,
                                              UiProperties uiProperties,
                                              UiMessages uiMessages,
-                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties) {
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties,
+                notificationProperties);
     }
 
 }

@@ -50,7 +50,7 @@ class MentionNotificationSourceTest {
     private EntityMentionedEvent mentionOf(String kind, String name, UUID id, CurrentUser by) {
         Comment comment = new Comment(UUID.randomUUID(), "documents", "Orders", UUID.randomUUID(),
                 by.recordId(), by.displayName(), "hey @[x](" + kind + "/" + name + "/" + id + ")",
-                Instant.now(), null);
+                null, Instant.now(), null);
         return new EntityMentionedEvent(comment, new MentionRef(kind, name, id), by);
     }
 

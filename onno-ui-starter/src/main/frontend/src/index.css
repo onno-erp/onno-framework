@@ -25,11 +25,14 @@
     --ring: 0 0% 9%;
     --radius: 0.5rem;
     /* Shape tokens — the single source of truth for corner rounding, so the whole UI reshapes from
-       config. Override via onno.ui.theme (e.g. onno.ui.theme.radius-control: 0.5rem to switch pill
-       controls back to rounded rectangles). --radius-control drives every interactive control
-       (buttons, inputs, selects, filter chips); --radius-card drives surfaces (cards, the toolbar
-       island, popovers, menus, dialogs). Avatars and status pills stay fully round independently. */
+       config. Override via onno.ui.theme (e.g. onno.ui.theme.radius-field: 0.75rem). Three tiers, by
+       element size/role:
+         --radius-control : compact buttons, chips, filter facets, badges — full pill.
+         --radius-field   : inputs, textareas, selects, search, tabs, segmented toggles — moderate.
+         --radius-card    : cards, the toolbar island, popovers, menus, dialogs, list/comment rows.
+       Avatars and status pills stay fully round independently. */
     --radius-control: 9999px;
+    --radius-field: 0.625rem;
     --radius-card: 0.9rem;
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
@@ -207,12 +210,35 @@ onno-login-form {
   pointer-events: auto;
 }
 
+/* Dashboard rows equalize heights: the DivKit cell stretches to the row's tallest widget, and this
+   chain passes that height down so the island's root card absorbs it — neighbouring cards then
+   share a bottom edge instead of ragging. Content-height contexts (mobile stack, page header slot)
+   are unaffected: there 100% of an auto box is just the content height. */
+onno-widget {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+onno-widget > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* DivKit wraps every block in an overflow:clip box. The login password form is full-width (its
    inputs share the card inset with the SSO buttons), so each input sits flush to that clip edge and
    its focus ring — an outset box-shadow drawn a few px beyond the field — gets cut off (notably along
    the top). Lift the clip on the form's own wrapper so the ring paints fully on all four sides; the
    login card's own padding (Div.pad in LoginDivBuilder) keeps it within the card's clip. */
 .onno-surface :has(> onno-login-form) {
+  overflow: visible !important;
+}
+
+/* Same clip problem, bigger overhang: the comments panel's typeahead and insert menus are absolutely
+   positioned dropdowns that extend past the panel's bottom edge, and the panel is usually the last
+   block on a detail page — so every DivKit clip box up the chain would cut the menu off. Lift the
+   clip on the whole ancestor chain of the comments block; these wrappers are layout plumbing, not
+   designed clipping surfaces. */
+.onno-surface :has(onno-comments) {
   overflow: visible !important;
 }
 
@@ -260,9 +286,9 @@ onno-icon {
   background: hsl(var(--popover));
   color: hsl(var(--popover-foreground));
   border: 1px solid hsl(var(--border));
-  border-radius: 10px;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
-  padding: 10px 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08), 0 10px 32px rgb(0 0 0 / 0.16);
+  padding: 12px 14px;
 }
 /* The little triangle that points at the marker must match the popup background per side. */
 .maplibregl-popup-anchor-top .maplibregl-popup-tip { border-bottom-color: hsl(var(--popover)); }

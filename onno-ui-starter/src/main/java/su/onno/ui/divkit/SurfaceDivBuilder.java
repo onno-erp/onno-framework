@@ -29,9 +29,10 @@ public final class SurfaceDivBuilder {
      * pages from {@code /api/list/...} and virtualizes them, so a 10k-row entity never ships whole.
      */
     public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
-                                                  String newUrl, List<Map<String, Object>> actions,
+                                                  String newUrl, boolean canWrite,
+                                                  List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs) {
-        Map<String, Object> descriptor = listDescriptor(view, kind, name, newUrl, actions, inputs);
+        Map<String, Object> descriptor = listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs);
         Map<String, Object> custom = Div.custom("onno-list", Map.of("list", descriptor));
         Div.matchWidth(custom);
         Map<String, Object> root = Div.vertical(List.of(custom));
@@ -46,7 +47,8 @@ public final class SurfaceDivBuilder {
      * as an {@code onno-list} {@code div-custom} block (see {@code PageBuilder.list}).
      */
     public static Map<String, Object> listDescriptor(ResolvedListView view, String kind, String name,
-                                                     String newUrl, List<Map<String, Object>> actions,
+                                                     String newUrl, boolean canWrite,
+                                                     List<Map<String, Object>> actions,
                                                      List<Map<String, Object>> inputs) {
         List<Map<String, Object>> columns = new ArrayList<>();
         for (ResolvedListView.Column c : view.columns()) {
@@ -83,6 +85,10 @@ public final class SurfaceDivBuilder {
                 Map<String, Object> opt = new LinkedHashMap<>();
                 opt.put("value", o.value());
                 opt.put("label", o.label());
+                // @EnumLabel(color=…) hex, so the control tints the choice like the status pills.
+                if (!o.color().isBlank()) {
+                    opt.put("color", o.color());
+                }
                 options.add(opt);
             }
             filter.put("options", options);
@@ -98,6 +104,9 @@ public final class SurfaceDivBuilder {
         descriptor.put("sort", sort);
         descriptor.put("filters", filters);
         descriptor.put("newUrl", newUrl);
+        // The caller's write access on the entity, so the island hides its write affordances (row
+        // Edit/Duplicate/Delete, batch delete) for read-only viewers. REST enforces regardless.
+        descriptor.put("canWrite", canWrite);
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
         // How the grid feeds rows: "infinite" (cursor/keyset scroll — the default) or "paged"
@@ -246,7 +255,14 @@ public final class SurfaceDivBuilder {
      * {@code "primary"} (inline button) or {@code "menu"} (overflow ⋯). {@code icon}
      * is a kebab-case lucide name. A null {@code url} drops the action.
      */
-    public record HeaderAction(String icon, String label, String tone, String url, String placement) {}
+    /** {@code form} (may be empty): an action-form dialog's field descriptors — the client collects
+     *  them in a modal before POSTing the action (see {@code ActionSpec.ActionBuilder#form}). */
+    public record HeaderAction(String icon, String label, String tone, String url, String placement,
+                               List<Map<String, Object>> form) {
+        public HeaderAction(String icon, String label, String tone, String url, String placement) {
+            this(icon, label, tone, url, placement, List.of());
+        }
+    }
 
     /** Back-compat overload for surfaces with no related-list panels (e.g. unit tests). */
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
@@ -466,12 +482,13 @@ public final class SurfaceDivBuilder {
         if (isBalance) {
             views.add(registerView("balance", msg.get("register.balanceTab"),
                     registerListDescriptor(title, name, "/api/list/registers/" + name + "/balance",
-                            balanceColumns(dimensions, resources), firstColumnName(dimensions), false)));
+                            balanceColumns(dimensions, resources), List.of(),
+                            firstColumnName(dimensions), false)));
         }
         views.add(registerView("movements", msg.get("register.movementsTab"),
                 registerListDescriptor(title, name, "/api/list/registers/" + name + "/movements",
                         movementColumns(dimensions, resources, msg, str(meta.get("periodFormat"))),
-                        "_period", true)));
+                        movementFilters(msg), "_period", true)));
 
         Map<String, Object> register = new LinkedHashMap<>();
         register.put("views", views);
@@ -492,9 +509,10 @@ public final class SurfaceDivBuilder {
         return v;
     }
 
-    /** A register {@code onno-list} descriptor: no search/filters/New, fed by an explicit feed URL. */
+    /** A register {@code onno-list} descriptor: no search/New, fed by an explicit feed URL. */
     private static Map<String, Object> registerListDescriptor(String title, String name, String feed,
                                                               List<Map<String, Object>> columns,
+                                                              List<Map<String, Object>> filters,
                                                               String sortColumn, boolean sortDescending) {
         Map<String, Object> sort = new LinkedHashMap<>();
         sort.put("column", sortColumn);
@@ -506,8 +524,10 @@ public final class SurfaceDivBuilder {
         d.put("columns", columns);
         d.put("searchable", false);
         d.put("sort", sort);
-        d.put("filters", List.of());
+        d.put("filters", filters);
         d.put("newUrl", null);
+        // Register movement/balance views are read-only report surfaces — never offer row writes.
+        d.put("canWrite", false);
         d.put("actions", List.of());
         d.put("inputs", List.of());
         // A register's movement log / balance is append-heavy and depth-scrolled — cursor-stream it.
@@ -518,13 +538,48 @@ public final class SurfaceDivBuilder {
         return d;
     }
 
+    /**
+     * The movements tab's built-in filter facets: a {@code _period} date range and a
+     * {@code _movement_type} Receipt/Expense choice. Both compile server-side through
+     * {@link su.onno.ui.ListFilter} like any authored list filter (ge/le on the period, eq on the
+     * type), so the register no longer forces scrolling the whole log to find a window of activity.
+     */
+    private static List<Map<String, Object>> movementFilters(UiMessages msg) {
+        List<Map<String, Object>> filters = new ArrayList<>();
+        filters.add(filterControl("period", msg.get("register.period"), "_period", "dateRange", List.of()));
+        filters.add(filterControl("type", msg.get("register.type"), "_movement_type", "options", List.of(
+                filterOption("RECEIPT", msg.get("register.receipt")),
+                filterOption("EXPENSE", msg.get("register.expense")))));
+        return filters;
+    }
+
+    /** One declarative filter control in the list-descriptor shape the grid expects. */
+    private static Map<String, Object> filterControl(String key, String label, String column,
+                                                     String type, List<Map<String, Object>> options) {
+        Map<String, Object> f = new LinkedHashMap<>();
+        f.put("key", key);
+        f.put("label", label);
+        f.put("column", column);
+        f.put("type", type);
+        f.put("options", options);
+        return f;
+    }
+
+    private static Map<String, Object> filterOption(String value, String label) {
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("value", value);
+        o.put("label", label);
+        return o;
+    }
+
     private static List<Map<String, Object>> movementColumns(List<Map<String, Object>> dimensions,
                                                              List<Map<String, Object>> resources,
                                                              UiMessages msg, String periodFormat) {
         List<Map<String, Object>> cols = new ArrayList<>();
         // The movement timestamp honors a display format authored on the register's view
         // (field("period").format("dd-MM-yyyy HH:mm")) — the register analogue of a document's
-        // _date column. Blank/absent leaves the raw timestamp.
+        // _date column. Blank/absent falls back to the grid's locale-default date-time rendering
+        // (see formatTimestampDefault in cell-format.ts), never the raw ISO string.
         cols.add(column("_period", msg.get("register.period"), null, periodFormat));
         cols.add(column("_movement_type", msg.get("register.type"), null, null));
         for (Map<String, Object> d : dimensions) cols.add(columnFromMeta(d));
@@ -676,6 +731,10 @@ public final class SurfaceDivBuilder {
             m.put("url", a.url());
             m.put("tone", a.tone());
             m.put("placement", a.placement());
+            if (a.form() != null && !a.form().isEmpty()) {
+                // The island opens a modal collecting these fields before it POSTs the action.
+                m.put("form", a.form());
+            }
             list.add(m);
             if ("menu".equals(a.placement())) {
                 hasMenu = true;
@@ -706,7 +765,7 @@ public final class SurfaceDivBuilder {
         Div.matchWidth(card);
         Div.background(card, p.surface());
         Div.pad(card, 4, 16);
-        Div.corner(card, 12);
+        Div.corner(card, Radii.CARD);
         Div.stroke(card, p.border(), 1);
         return card;
     }

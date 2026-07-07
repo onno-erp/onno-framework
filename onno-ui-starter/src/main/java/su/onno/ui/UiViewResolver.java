@@ -143,11 +143,9 @@ public class UiViewResolver {
             if (cm == null) {
                 continue;
             }
-            List<ResolvedListView.Option> options = f.options().stream()
-                    .map(o -> new ResolvedListView.Option(o.value(), o.label()))
-                    .toList();
             filters.add(new ResolvedListView.Filter(
-                    f.field(), f.label(), cm.columnName(), filterType(f.type()), options));
+                    f.field(), f.label(), cm.columnName(), filterType(f.type()),
+                    filterOptions(f, cm)));
         }
 
         ResolvedListView.MapView mapView = resolveMap(spec.mapSpec(), available);
@@ -227,16 +225,55 @@ public class UiViewResolver {
         };
     }
 
+    /**
+     * The option list a select/multi-select filter offers. For a plain column the authored options
+     * pass through as-is. An {@code @Enumeration}-typed field needs translation: its constants
+     * persist as deterministic UUIDs, so an option whose value is the constant name (or its
+     * {@code @EnumLabel} text) would match nothing — each is mapped to the stored id, keeping the
+     * authored label. Authoring <em>no</em> options on an enum field is the shorthand for "offer
+     * every declared value", labelled like the entity's status pills.
+     */
+    private static List<ResolvedListView.Option> filterOptions(ListSpec.Filter f, ColumnMeta cm) {
+        boolean selectControl = f.type() == ListSpec.FilterType.OPTIONS
+                || f.type() == ListSpec.FilterType.MULTI_OPTIONS;
+        List<Map<String, Object>> enumValues = cm.enumValues();
+        if (!selectControl || enumValues.isEmpty()) {
+            return f.options().stream()
+                    .map(o -> new ResolvedListView.Option(o.value(), o.label()))
+                    .toList();
+        }
+        if (f.options().isEmpty()) {
+            return enumValues.stream()
+                    .map(v -> new ResolvedListView.Option(
+                            str(v.get("id")), str(v.get("label")), str(v.get("color"))))
+                    .toList();
+        }
+        return f.options().stream().map(o -> {
+            Map<String, Object> match = enumValues.stream()
+                    .filter(v -> o.value().equals(str(v.get("name")))
+                            || o.value().equalsIgnoreCase(str(v.get("label"))))
+                    .findFirst().orElse(null);
+            // An option that isn't a known constant passes through untranslated (e.g. an id).
+            return match == null
+                    ? new ResolvedListView.Option(o.value(), o.label())
+                    : new ResolvedListView.Option(str(match.get("id")), o.label(), str(match.get("color")));
+        }).toList();
+    }
+
     private record ColumnMeta(String label, String columnName, boolean visibleInList, int order,
-                              String width, String widget, String format, String hint, String javaType) {
+                              String width, String widget, String format, String hint, String javaType,
+                              List<Map<String, Object>> enumValues) {
+        @SuppressWarnings("unchecked")
         static ColumnMeta of(Map<String, Object> m) {
             Object order = m.get("order");
+            Object enumValues = m.get("enumValues");
             return new ColumnMeta(
                     str(m.get("displayName")), str(m.get("columnName")),
                     Boolean.TRUE.equals(m.get("visibleInList")),
                     order == null ? 0 : ((Number) order).intValue(),
                     str(m.get("widthHint")), str(m.get("widget")), str(m.get("format")),
-                    str(m.get("hint")), str(m.get("javaType")));
+                    str(m.get("hint")), str(m.get("javaType")),
+                    enumValues instanceof List<?> l ? (List<Map<String, Object>>) l : List.of());
         }
 
         /**

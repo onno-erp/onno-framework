@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { AtSign, Bell, CheckCheck, Inbox, UserPlus, X } from "lucide-react";
+import { AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { initials, tint } from "@/components/presence-avatars";
+import { Segmented } from "@/components/ui/segmented";
 import { useMessages } from "@/providers/messages-provider";
 import { cn } from "@/lib/utils";
 import type { NotificationView } from "@/lib/api";
@@ -35,6 +36,8 @@ function typeIcon(type: string) {
       return AtSign;
     case "assignment":
       return UserPlus;
+    case "reply":
+      return Reply;
     default:
       return Bell;
   }
@@ -80,15 +83,14 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
       ? t("notifications.tagMention")
       : item.type === "assignment"
       ? t("notifications.tagAssignment")
+      : item.type === "reply"
+      ? t("notifications.tagReply")
       : null;
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className={cn(
-        "group relative flex w-full items-start gap-3.5 rounded-card px-3 py-3 text-left transition-colors hover:bg-muted/60",
-        item.unread && "bg-primary/[0.04]"
-      )}
+      className="group relative flex w-full items-start gap-3.5 rounded-card px-3 py-3 text-left transition-colors hover:bg-muted/60"
     >
       {item.actorName ? (
         <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
@@ -107,23 +109,24 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
           <span className={cn("text-sm leading-snug text-foreground", item.unread ? "font-semibold" : "font-medium")}>
             {item.title}
           </span>
-          <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground/70">
-            {timeAgo(item.createdAt)}
+          {/* Unread marker rides in the flow next to the timestamp — absolutely positioning it at
+              the card corner overlapped the timestamp text. Unread emphasis = dot + semibold
+              title; no row tint, so color still means "action/brand", not "new". */}
+          <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
+            <span className="text-[11px] tabular-nums text-muted-foreground/70">{timeAgo(item.createdAt)}</span>
+            {item.unread ? <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden /> : null}
           </span>
         </span>
         {item.body ? (
           <span className="mt-1 line-clamp-2 block text-[13px] leading-relaxed text-muted-foreground">{item.body}</span>
         ) : null}
         {typeLabel ? (
-          <span className="mt-2 inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="mt-2 inline-flex items-center gap-1 rounded-control bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <Icon className="h-2.5 w-2.5" />
             {typeLabel}
           </span>
         ) : null}
       </span>
-      {item.unread ? (
-        <span className="absolute right-3 top-3.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-hidden />
-      ) : null}
     </button>
   );
 }
@@ -131,27 +134,11 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
 /** The All / Unread segmented control. */
 function StatusTabs({ value }: { value: StatusFilter }) {
   const t = useMessages();
-  const opts: [StatusFilter, string][] = [
-    ["all", t("notifications.all")],
-    ["unread", t("notifications.unread")],
+  const opts: { value: StatusFilter; label: string }[] = [
+    { value: "all", label: t("notifications.all") },
+    { value: "unread", label: t("notifications.unread") },
   ];
-  return (
-    <div className="inline-flex rounded-control bg-muted p-0.5">
-      {opts.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          onClick={() => setStatusFilter(key)}
-          className={cn(
-            "rounded-control px-3 py-1 text-xs font-medium transition-colors",
-            value === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
+  return <Segmented value={value} options={opts} onChange={setStatusFilter} />;
 }
 
 /** The source (type) filter pills. */
@@ -160,6 +147,7 @@ function TypePills({ value }: { value: TypeFilter }) {
   const opts: [TypeFilter, string][] = [
     ["all", t("notifications.typeAll")],
     ["mention", t("notifications.typeMention")],
+    ["reply", t("notifications.typeReply")],
     ["assignment", t("notifications.typeAssignment")],
   ];
   return (
@@ -183,8 +171,13 @@ function TypePills({ value }: { value: TypeFilter }) {
   );
 }
 
-/** The sidebar trigger — a nav-style row that sits beside the profile and opens the panel. */
-export function NotificationTrigger() {
+/**
+ * The sidebar trigger — a row shaped like the account island below it (same surface, border, and
+ * radius, passed in by the host so consumer branding wins) that opens the panel. Text and icon
+ * sizes mirror the DivKit nav rows (14 regular label, muted 16 glyph) so the whole rail reads as
+ * one column of chrome.
+ */
+export function NotificationTrigger({ style }: { style?: React.CSSProperties }) {
   const t = useMessages();
   const { unreadCount, available, panelOpen } = useNotifications();
 
@@ -196,14 +189,16 @@ export function NotificationTrigger() {
       type="button"
       onClick={openPanel}
       aria-label={t("notifications.title")}
+      style={style}
+      // Hover/open tint is an ::after overlay, not a brightness filter — a filter brightens
+      // the border along with the background, which made the border vanish on hover.
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-card border px-3 py-2.5 text-sm font-medium transition-colors",
-        panelOpen
-          ? "border-border bg-muted text-foreground"
-          : "border-border/60 bg-background/40 text-muted-foreground hover:bg-muted hover:text-foreground"
+        "relative flex w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-card border px-3 py-2.5 text-sm text-foreground",
+        "after:pointer-events-none after:absolute after:inset-0 after:bg-foreground/[0.04] after:opacity-0 after:transition-opacity",
+        panelOpen ? "after:opacity-100" : "hover:after:opacity-100"
       )}
     >
-      <Bell className="h-4 w-4 shrink-0" />
+      <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="flex-1 text-left">{t("notifications.title")}</span>
       {unreadCount > 0 ? (
         <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
@@ -221,7 +216,7 @@ export function NotificationTrigger() {
 export function NotificationCenter() {
   const t = useMessages();
   const store = useNotifications();
-  const { panelOpen, available, unreadCount, hasMore, statusFilter, typeFilter, triggerCount } = store;
+  const { panelOpen, available, unreadCount, hasMore, statusFilter, typeFilter, triggerCount, navStyle } = store;
 
   useEffect(() => {
     startNotifications();
@@ -259,13 +254,16 @@ export function NotificationCenter() {
 
   return (
     <>
-      {/* Floating fallback trigger — only when no sidebar/topbar trigger is mounted. */}
-      {triggerCount === 0 ? (
+      {/* Floating fallback trigger — only for the topbar layout, which mounts no sidebar trigger:
+          a compact top-right button. Bottom-bar layouts (mobile/tablet) reach notifications via
+          the More menu's row (with the unread dot on the More tab), so nothing floats over the
+          content or the bar there. */}
+      {triggerCount === 0 && navStyle === "topbar" ? (
         <button
           type="button"
           onClick={openPanel}
           aria-label={t("notifications.title")}
-          className="fixed right-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-background/80 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-muted hover:text-foreground"
+          className="fixed right-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-muted hover:text-foreground"
         >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 ? (
@@ -290,10 +288,23 @@ export function NotificationCenter() {
       {/* Slide-over panel */}
       <aside
         role="dialog"
+        // Only advertise the modal role while open: the panel is position:fixed at all times, so
+        // isInteractiveLayerOpen() (which treats fixed nodes as visible) would otherwise always see
+        // it and permanently swallow the page-close Escape. Gated on panelOpen, it lets the
+        // divkit-view Esc handler bail only when the panel is actually up.
+        aria-modal={panelOpen ? "true" : undefined}
         aria-label={t("notifications.title")}
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-[420px] max-w-full flex-col border-l border-border bg-background shadow-2xl transition-transform duration-300 ease-out",
-          panelOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+          // A floating island on every viewport: inset from the edges with a gap, rounded + bordered.
+          // On phones max-w keeps the same island shape at nearly full width.
+          "fixed right-3 top-3 bottom-3 z-50 flex w-[400px] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-border bg-background shadow-2xl ease-out",
+          // Mobile: fade + gentle scale in place — no slide, the island just appears over the scrim.
+          "transition-[opacity,transform] duration-200",
+          panelOpen ? "opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95",
+          // Desktop/tablet: the slide-over — fully past the right edge (100% + the island's 0.75rem
+          // gap) so it never peeks when closed; opacity/scale pinned so only the slide animates.
+          "sm:scale-100 sm:opacity-100 sm:transition-transform sm:duration-300",
+          panelOpen ? "sm:translate-x-0" : "sm:translate-x-[calc(100%+0.75rem)]"
         )}
       >
         {/* Header */}
@@ -301,7 +312,7 @@ export function NotificationCenter() {
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-foreground">{t("notifications.title")}</h2>
             {unreadCount > 0 ? (
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              <span className="rounded-control bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
                 {unreadCount}
               </span>
             ) : null}
@@ -311,7 +322,7 @@ export function NotificationCenter() {
               <button
                 type="button"
                 onClick={() => void markAllNotificationsRead()}
-                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex items-center gap-1.5 rounded-control px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
                 {t("notifications.markAllRead")}
@@ -321,7 +332,7 @@ export function NotificationCenter() {
               type="button"
               onClick={closePanel}
               aria-label={t("action.cancel")}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
             </button>
