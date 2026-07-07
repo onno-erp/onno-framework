@@ -49,6 +49,7 @@ vi.mock("@/views/content-pane", () => ({
 
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
+  setIconActivePath: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
@@ -100,7 +101,8 @@ describe("DivKitView copy link", () => {
     const tab = await screen.findByTitle("Products");
     fireEvent.contextMenu(tab, { clientX: 100, clientY: 100 });
 
-    const copy = await screen.findByRole("button", { name: "Copy link" });
+    // Menu entries are proper menu items (role="menuitem") since the shared context-menu component.
+    const copy = await screen.findByRole("menuitem", { name: "Copy link" });
     fireEvent.click(copy);
 
     await waitFor(() =>
@@ -109,6 +111,6 @@ describe("DivKitView copy link", () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Link copied"));
 
     // The menu closes after the action.
-    expect(screen.queryByRole("button", { name: "Copy link" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Copy link" })).not.toBeInTheDocument();
   });
 });

@@ -45,10 +45,22 @@ export function isInteractiveLayerOpen(): boolean {
   ).some(isVisibleElement);
 }
 
+/**
+ * Whether the pressed key is the bound one — layout-independently for Latin letters. On a
+ * non-Latin layout (Cyrillic, Greek, …) {@code event.key} is the layout character ("с" for the C
+ * key), which would kill every ⌘-letter shortcut; the physical {@code event.code}
+ * ("KeyC") doesn't change with layout, so a single-letter binding accepts either. Named keys
+ * (Enter, Escape, arrows, Delete) are layout-independent already and match by key alone.
+ */
+export function matchesKey(event: KeyboardEvent, key: string): boolean {
+  if (event.key.toLowerCase() === key.toLowerCase()) return true;
+  return /^[a-z]$/i.test(key) && event.code === `Key${key.toUpperCase()}`;
+}
+
 function matches(event: KeyboardEvent, binding: Keybinding): boolean {
   if (binding.enabled === false) return false;
   if (!binding.allowInEditable && isEditableTarget(event.target)) return false;
-  if (event.key.toLowerCase() !== binding.key.toLowerCase()) return false;
+  if (!matchesKey(event, binding.key)) return false;
 
   const wantsMod = binding.mod === true;
   const modPressed = event.metaKey || event.ctrlKey;

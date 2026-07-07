@@ -268,9 +268,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public GenericCatalogController genericCatalogController(CatalogQueryService catalogQueryService,
                                                               UiAccessService access,
                                                               CatalogCommandService catalogCommandService,
-                                                              RelatedListReader relatedListReader) {
+                                                              RelatedListReader relatedListReader,
+                                                              UiMessages uiMessages) {
         return new GenericCatalogController(catalogQueryService, access, catalogCommandService,
-                relatedListReader);
+                relatedListReader, uiMessages);
     }
 
     @Bean

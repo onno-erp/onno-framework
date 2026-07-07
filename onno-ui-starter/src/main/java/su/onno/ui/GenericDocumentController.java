@@ -156,4 +156,31 @@ public class GenericDocumentController {
     public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         commands.delete(query.require(name), id, principal);
     }
+
+    /**
+     * Soft-delete a set of documents in one request (auto-unposting posted ones, like the single
+     * DELETE). Per-id failures are recorded and the batch continues; returns {@code {ok, failed,
+     * total}}. Capped like the action batch (see ActionController.BATCH_LIMIT).
+     */
+    @PostMapping("/{name}/batch-delete")
+    public Map<String, Object> batchDelete(@PathVariable String name,
+                                           @RequestBody Map<String, Object> body, Principal principal) {
+        DocumentDescriptor desc = query.require(name);
+        List<UUID> ids = ActionController.idList(body);
+        int ok = 0;
+        List<String> failed = new ArrayList<>();
+        for (UUID rid : ids) {
+            try {
+                commands.delete(desc, rid, principal);
+                ok++;
+            } catch (RuntimeException e) {
+                failed.add(rid.toString());
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", ok);
+        out.put("failed", failed);
+        out.put("total", ids.size());
+        return out;
+    }
 }

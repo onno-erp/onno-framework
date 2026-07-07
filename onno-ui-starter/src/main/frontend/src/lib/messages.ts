@@ -116,11 +116,21 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.clearSelection": "Clear selection",
   "batch.delete": "Delete {n}",
   "batch.deleteConfirm": "Sure? Delete {n}",
+  "batch.running": "{label} — running on {n}…",
   "batch.done": "{label}: {ok}/{n} done",
   "batch.deleted": "Deleted {ok}/{n}",
   // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
   "clipboard.copied": "{count} copied",
   "clipboard.pasted": "Pasted {ok}/{n}",
+  "clipboard.tooMany": "Paste limited to {max} records at a time",
+  // Appended to a duplicated catalog record's description (⌘V / POST …/duplicate); blank disables.
+  "duplicate.copySuffix": " (copy)",
+  // ⌘A in an infinite feed can only select what's loaded; hint when more rows exist server-side.
+  "list.selectedPartial": "Selected {count} loaded rows — more exist, scroll to load them",
+  // Closing a form with unsaved edits.
+  "confirm.discard.title": "Discard changes?",
+  "confirm.discard.message": "This form has unsaved changes. Close it and discard them?",
+  "action.discard": "Discard",
   "list.groupBy": "Group by",
   "list.groupNone": "None",
   "list.groupByHint": "Group rows by a column",

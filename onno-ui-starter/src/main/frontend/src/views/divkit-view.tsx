@@ -17,6 +17,7 @@ import { useUiEvents } from "@/hooks/use-ui-events";
 import type { UiEvent } from "@/lib/types";
 import { cn, copyToClipboard } from "@/lib/utils";
 import { stripBasePath, withBasePath } from "@/lib/base-path";
+import { clearFormDirty, isFormDirty } from "@/lib/dirty-forms";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
 import { ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
@@ -572,6 +573,9 @@ export function DivKitView() {
   // focus to what remains in that island and follows it with the URL.
   const closePath = useCallback(
     (path: string) => {
+      // Programmatic close (post-save, post-delete): the initiator owns the data outcome, so any
+      // dirty flag is stale by definition — drop it rather than asking to discard.
+      clearFormDirty(path);
       const ws = wsRef.current;
       if (!ws.panes.some((p) => p.tabs.some((t) => t.path === path))) return;
       const next = detachTab(ws, path);
@@ -877,8 +881,27 @@ export function DivKitView() {
     [location.pathname, navigate]
   );
 
+  // Self-reference so the discard-confirm can re-enter the (by then flag-cleared) close without
+  // capturing a stale callback identity.
+  const closeTabRef = useRef<((paneId: string, path: string) => void) | null>(null);
   const closeTab = useCallback(
     (paneId: string, path: string) => {
+      // A form tab with unsaved edits doesn't close silently — confirm the discard first (the
+      // form marks/clears its flag; save and Cancel clear it before they close, so only a stray
+      // X / Esc / middle-click lands here). Confirming re-enters with the flag cleared.
+      if (isFormDirty(path)) {
+        setConfirm({
+          title: t("confirm.discard.title"),
+          message: t("confirm.discard.message"),
+          confirmLabel: t("action.discard"),
+          danger: true,
+          onConfirm: () => {
+            clearFormDirty(path);
+            closeTabRef.current?.(paneId, path);
+          },
+        });
+        return;
+      }
       const ws = wsRef.current;
       const pane = ws.panes.find((p) => p.id === paneId);
       if (!pane) return;
@@ -904,8 +927,9 @@ export function DivKitView() {
         }
       }
     },
-    [location.pathname, navigate]
+    [location.pathname, navigate, t]
   );
+  closeTabRef.current = closeTab;
 
   // ----- drag a tab between / out of islands -----
 

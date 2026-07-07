@@ -48,6 +48,7 @@ vi.mock("@/views/content-pane", () => ({
 
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
+  setIconActivePath: vi.fn(),
 }));
 
 describe("DivKitView tab dragging", () => {

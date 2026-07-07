@@ -19,15 +19,18 @@ public class GenericCatalogController {
     private final UiAccessService access;
     private final CatalogCommandService commands;
     private final RelatedListReader relatedLists;
+    private final UiMessages messages;
 
     public GenericCatalogController(CatalogQueryService query,
                                     UiAccessService access,
                                     CatalogCommandService commands,
-                                    RelatedListReader relatedLists) {
+                                    RelatedListReader relatedLists,
+                                    UiMessages messages) {
         this.query = query;
         this.access = access;
         this.commands = commands;
         this.relatedLists = relatedLists;
+        this.messages = messages;
     }
 
     @GetMapping("/{name}")
@@ -107,7 +110,9 @@ public class GenericCatalogController {
         Map<String, Object> row = query.get(desc, id);
         Map<String, Object> body = new LinkedHashMap<>();
         if (row.get("_description") != null) {
-            body.put("description", row.get("_description"));
+            // Same-named copies are indistinguishable in pickers and lists — suffix the clone
+            // (localizable via onno.ui.messages "duplicate.copySuffix"; blank disables).
+            body.put("description", row.get("_description") + messages.get("duplicate.copySuffix"));
         }
         if (row.get("_parent") != null) {
             body.put("parent", row.get("_parent"));
@@ -134,5 +139,32 @@ public class GenericCatalogController {
     @DeleteMapping("/{name}/{id}")
     public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         commands.delete(query.require(name), id, principal);
+    }
+
+    /**
+     * Soft-delete a set of records in one request — the list's batch selection posts here instead
+     * of firing N single DELETEs. Per-id failures are recorded and the batch continues; returns
+     * {@code {ok, failed, total}}. Capped like the action batch (see ActionController.BATCH_LIMIT).
+     */
+    @PostMapping("/{name}/batch-delete")
+    public Map<String, Object> batchDelete(@PathVariable String name,
+                                           @RequestBody Map<String, Object> body, Principal principal) {
+        CatalogDescriptor desc = query.require(name);
+        List<UUID> ids = ActionController.idList(body);
+        int ok = 0;
+        List<String> failed = new java.util.ArrayList<>();
+        for (UUID rid : ids) {
+            try {
+                commands.delete(desc, rid, principal);
+                ok++;
+            } catch (RuntimeException e) {
+                failed.add(rid.toString());
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", ok);
+        out.put("failed", failed);
+        out.put("total", ids.size());
+        return out;
     }
 }

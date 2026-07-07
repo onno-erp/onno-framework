@@ -12,6 +12,7 @@ import type {
   UiEvent,
   SettingMeta,
   ActionResult,
+  BatchResult,
 } from "./types";
 
 import { toSnakeCase } from "./utils";
@@ -39,6 +40,13 @@ function readCsrfToken(): string | null {
   return decodeURIComponent(match.slice(CSRF_COOKIE.length + 1));
 }
 
+/**
+ * Open the shared SSE stream and feed every parsed {@link UiEvent} to {@code onEvent} until the
+ * signal aborts. Rejects with a status-carrying {@link ApiError} on a non-OK response — including
+ * 401 (which additionally triggers the auth-recovery handler) — and with the underlying error on
+ * network failure; the caller's reconnect loop is expected to inspect the status and stop on 401
+ * rather than hammer the endpoint.
+ */
 export async function streamUiEvents(
   onEvent: (event: UiEvent) => void,
   signal: AbortSignal
@@ -428,6 +436,22 @@ export const api = {
       `${BASE}/actions/${kind}/${name}/${key}${id ? `?id=${encodeURIComponent(id)}` : ""}`,
       { method: "POST", body: JSON.stringify({ inputs: inputs ?? {} }) }
     ),
+  /**
+   * Run a server action over many records in ONE request (the list's batch selection). The server
+   * invokes the handler per id sequentially and returns {ok, failed[], total} — per-id failures
+   * don't abort the batch. Capped server-side at 500 ids.
+   */
+  runActionBatch: (kind: string, name: string, key: string, ids: string[], inputs?: Record<string, string>) =>
+    fetchJson<BatchResult>(`${BASE}/actions/${kind}/${name}/${key}/batch`, {
+      method: "POST",
+      body: JSON.stringify({ ids, inputs: inputs ?? {} }),
+    }),
+  /** Soft-delete many records in one request; same {ok, failed[], total} contract as runActionBatch. */
+  batchDelete: (kind: "catalogs" | "documents", name: string, ids: string[]) =>
+    fetchJson<BatchResult>(`${BASE}/${kind}/${name}/batch-delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
   // Page-level action button (PageBuilder.actions): POSTs to the server handler resolved by
   // re-composing the page at {route}, and returns its ActionResult. The page's profile rides
   // along so the same page variant resolves; data writes refresh embedded lists over SSE.

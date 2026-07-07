@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { api } from "@/lib/api";
-import { shortcutLabel } from "@/lib/keybindings";
+import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
 import { cn, copyToClipboard, enumPillStyle } from "@/lib/utils";
 import { applyFormat, formatTimestampDefault, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
@@ -1664,11 +1664,14 @@ export function EntityListWidget({
 
   // Esc clears the selection. Captured + consumed: the shell's own Esc handler closes the
   // focused tab (and only yields to an already-defaultPrevented event), so clearing a selection
-  // must swallow the key or Esc would clear AND close the surface in one press.
+  // must swallow the key or Esc would clear AND close the surface in one press. An open
+  // menu/dialog/drawer is a higher layer — it takes this press (and consumes it itself); the
+  // selection clears on the next one. Cascade: layer → selection → tab.
   useEffect(() => {
     if (selected.size === 0) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (isInteractiveLayerOpen()) return;
       e.preventDefault();
       clearSelection();
     };
@@ -1682,10 +1685,10 @@ export function EntityListWidget({
   // pending key still drives the disabled state of the menu items.
   const batchBusyRef = useRef(false);
 
-  // Run a custom server action over every selected row, sequentially (one POST at a time — the
-  // handlers are arbitrary business logic; hammering them concurrently invites deadlocks). Per-id
-  // failures self-toast via the api layer; a summary toast closes the run. Per-result navigate is
-  // deliberately ignored — a batch can't open N panes.
+  // Run a custom server action over every selected row — ONE request: the server's batch endpoint
+  // invokes the handler per id and returns {ok, failed, total}, so a 200-row batch isn't 200 HTTP
+  // round-trips, survives the tab closing mid-run, and gets a single loading→summary toast here.
+  // Per-result navigate doesn't apply — a batch can't open N panes.
   const runBatchAction = useCallback(
     async (action: ListAction, ids: string[], formInputs?: Record<string, string>) => {
       if (action.form?.length && !formInputs) {
@@ -1697,19 +1700,21 @@ export function EntityListWidget({
       batchBusyRef.current = true;
       const k = `batch:${action.key}`;
       setPending((s) => new Set(s).add(k));
-      let ok = 0;
+      const toastId = toast.loading(t("batch.running", { label: action.label, n: ids.length }));
       try {
-        for (const id of ids) {
-          try {
-            await api.runAction(action.kind, action.name, action.key, id, {
-              ...inputValuesRef.current,
-              ...formInputs,
-            });
-            ok++;
-          } catch {
-            // already toasted by the api layer
-          }
-        }
+        const r = await api.runActionBatch(action.kind, action.name, action.key, ids, {
+          ...inputValuesRef.current,
+          ...formInputs,
+        });
+        (r.ok === r.total ? toast.success : toast.error)(
+          t("batch.done", { label: action.label, ok: r.ok, n: r.total }),
+          { id: toastId }
+        );
+        clearSelection();
+        reload();
+      } catch {
+        // the api layer already toasted the failure — just retire the loading toast
+        toast.dismiss(toastId);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -1718,11 +1723,6 @@ export function EntityListWidget({
           return n;
         });
       }
-      (ok === ids.length ? toast.success : toast.error)(
-        t("batch.done", { label: action.label, ok, n: ids.length })
-      );
-      clearSelection();
-      reload();
     },
     [reload, clearSelection, t]
   );
@@ -1733,17 +1733,17 @@ export function EntityListWidget({
       batchBusyRef.current = true;
       const k = "batch:__delete";
       setPending((s) => new Set(s).add(k));
-      let ok = 0;
+      const toastId = toast.loading(t("batch.running", { label: t("action.delete"), n: ids.length }));
       try {
-        for (const id of ids) {
-          try {
-            if (kind === "documents") await api.deleteDocument(name, id);
-            else await api.deleteCatalogItem(name, id);
-            ok++;
-          } catch {
-            // already toasted by the api layer
-          }
-        }
+        const r = await api.batchDelete(kind as "catalogs" | "documents", name, ids);
+        (r.ok === r.total ? toast.success : toast.error)(
+          t("batch.deleted", { ok: r.ok, n: r.total }),
+          { id: toastId }
+        );
+        clearSelection();
+        reload();
+      } catch {
+        toast.dismiss(toastId);
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -1752,9 +1752,6 @@ export function EntityListWidget({
           return n;
         });
       }
-      (ok === ids.length ? toast.success : toast.error)(t("batch.deleted", { ok, n: ids.length }));
-      clearSelection();
-      reload();
     },
     [kind, name, reload, clearSelection, t]
   );
@@ -1897,6 +1894,12 @@ export function EntityListWidget({
       if (payload.kind !== kind || payload.name !== name || !Array.isArray(payload.ids) || !payload.ids.length) return;
       if (!list.newUrl) return; // read-only for this user — no pasting copies
       e.preventDefault();
+      // Each pasted id is a full server-side create; cap the fan-out a single ⌘V can trigger.
+      const PASTE_LIMIT = 50;
+      if (payload.ids.length > PASTE_LIMIT) {
+        toast.error(t("clipboard.tooMany", { max: PASTE_LIMIT }));
+        return;
+      }
       const ids = payload.ids;
       void (async () => {
         if (batchBusyRef.current) return;
@@ -1937,7 +1940,8 @@ export function EntityListWidget({
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isEditingTarget()) return;
       if (!(e.metaKey || e.ctrlKey)) return;
-      const isSelectAll = !e.shiftKey && (e.key === "a" || e.key === "A");
+      // matchesKey: layout-independent — ⌘A stays the physical A key on a Cyrillic layout too.
+      const isSelectAll = !e.shiftKey && matchesKey(e, "a");
       const isExtend = e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp");
       if (!isSelectAll && !isExtend) return;
       const hoverId = hoveredRowId(kind, name);
@@ -1952,8 +1956,14 @@ export function EntityListWidget({
       };
       if (isSelectAll) {
         e.preventDefault();
-        setSelected(new Set(idsBetween(0, loadedRows.length - 1)));
+        const all = idsBetween(0, loadedRows.length - 1);
+        setSelected(new Set(all));
         selAnchorRef.current = 0;
+        // An infinite feed can only select what's loaded — say so when more rows exist, or
+        // "50 selected" quietly reads as "everything".
+        if (total != null && total > all.length) {
+          toast.info(t("list.selectedPartial", { count: all.length, total }));
+        }
         return;
       }
       e.preventDefault();
@@ -1983,7 +1993,7 @@ export function EntityListWidget({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openable, kind, name, selected, loadedRows]);
+  }, [openable, kind, name, selected, loadedRows, total, t]);
 
   // The row right-click menu: built-ins (Open/Edit/Duplicate/Copy link/Delete) plus the entity's
   // custom row actions — flat ones as top-level items, .menu("…")-grouped ones as submenus. With a
@@ -2655,6 +2665,8 @@ export function EntityListWidget({
               setFormBusy(false);
               setFormPrompt(null);
             };
+            // Both runners resolve (never reject): failures are toasted inside them by the api
+            // layer / summary logic, so .finally is the whole contract — close the dialog either way.
             const p = formPrompt.ids
               ? runBatchAction(formPrompt.action, formPrompt.ids, values)
               : Promise.resolve(runAction(formPrompt.action, formPrompt.id, values));

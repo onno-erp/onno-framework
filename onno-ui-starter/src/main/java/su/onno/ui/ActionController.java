@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -58,6 +60,68 @@ public class ActionController {
                 principal != null ? principal.getName() : null, inputValues(body));
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
+    }
+
+    /** How many records one batch call may target — a UI batch, not a data-migration channel. */
+    static final int BATCH_LIMIT = 500;
+
+    /**
+     * Run a server action over a set of records in one request — the list's batch selection posts
+     * here instead of firing N single calls. The handler is invoked per id, sequentially, in the
+     * request's transaction-per-invocation semantics (identical to N single calls, minus the HTTP
+     * round-trips); a failing id is recorded and the batch continues. Returns {@code {ok, failed,
+     * total}} so the client can toast a summary. Capped at {@link #BATCH_LIMIT} ids.
+     */
+    @PostMapping("/{kind}/{name}/{key}/batch")
+    public Map<String, Object> runBatch(@PathVariable String kind, @PathVariable String name,
+                                        @PathVariable String key,
+                                        @RequestBody Map<String, Object> body, Principal principal) {
+        Class<?> entity = resolveAndAuthorize(kind, name, principal);
+        Action action = actions.find(entity, key);
+        if (action == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
+        }
+        if (!action.isServer()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action is navigation-only: " + key);
+        }
+        List<UUID> ids = idList(body);
+        Map<String, String> inputs = inputValues(body);
+        String user = principal != null ? principal.getName() : null;
+        int ok = 0;
+        List<String> failed = new ArrayList<>();
+        for (UUID id : ids) {
+            try {
+                action.handler().apply(new ActionContext(kind, name, id, user, inputs));
+                ok++;
+            } catch (RuntimeException e) {
+                failed.add(id.toString());
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", ok);
+        out.put("failed", failed);
+        out.put("total", ids.size());
+        return out;
+    }
+
+    /** Parse and bound the {@code {"ids": [...]}} list of a batch request. */
+    static List<UUID> idList(Map<String, Object> body) {
+        if (body == null || !(body.get("ids") instanceof List<?> raw) || raw.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "ids required");
+        }
+        if (raw.size() > BATCH_LIMIT) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Batch limited to " + BATCH_LIMIT + " ids");
+        }
+        List<UUID> ids = new ArrayList<>(raw.size());
+        for (Object o : raw) {
+            try {
+                ids.add(UUID.fromString(String.valueOf(o)));
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bad id: " + o);
+            }
+        }
+        return ids;
     }
 
     /** Pull the toolbar input values out of the request body ({@code {"inputs": {key: value}}}). */

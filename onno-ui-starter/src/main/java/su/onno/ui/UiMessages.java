@@ -150,11 +150,21 @@ public final class UiMessages {
         d.put("list.clearSelection", "Clear selection");
         d.put("batch.delete", "Delete {n}");
         d.put("batch.deleteConfirm", "Sure? Delete {n}");
+        d.put("batch.running", "{label} — running on {n}…");
         d.put("batch.done", "{label}: {ok}/{n} done");
         d.put("batch.deleted", "Deleted {ok}/{n}");
         // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
         d.put("clipboard.copied", "{count} copied");
         d.put("clipboard.pasted", "Pasted {ok}/{n}");
+        d.put("clipboard.tooMany", "Paste limited to {max} records at a time");
+        // Appended to a duplicated catalog record's description (⌘V / POST …/duplicate); blank disables.
+        d.put("duplicate.copySuffix", " (copy)");
+        // ⌘A in an infinite feed can only select what's loaded; hint when more rows exist server-side.
+        d.put("list.selectedPartial", "Selected {count} loaded rows — more exist, scroll to load them");
+        // Closing a form with unsaved edits.
+        d.put("confirm.discard.title", "Discard changes?");
+        d.put("confirm.discard.message", "This form has unsaved changes. Close it and discard them?");
+        d.put("action.discard", "Discard");
         d.put("list.groupBy", "Group by");
         d.put("list.groupNone", "None");
         d.put("list.groupByHint", "Group rows by a column");

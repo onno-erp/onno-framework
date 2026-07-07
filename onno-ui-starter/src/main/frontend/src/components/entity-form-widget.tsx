@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta } from "@/lib/types";
@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
 import { cancelQuickCreate, consumeQuickCreate } from "@/lib/quick-create";
+import { clearFormDirty, markFormDirty } from "@/lib/dirty-forms";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-control, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -243,6 +244,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const set = (key: string, value: unknown) => {
+    markFormDirty(formPath);
     setData((prev) => ({ ...prev, [key]: value }));
     // Clear a field's error as soon as the user edits it; it re-checks on the next save.
     setErrors((prev) => {
@@ -252,6 +254,10 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       return next;
     });
   };
+
+  // The dirty flag's lifetime is this instance's: save/cancel clear it explicitly, and unmount
+  // clears it too — a remounted island starts from the stored record again, so nothing is at risk.
+  useEffect(() => () => clearFormDirty(formPath), [formPath]);
 
   // Validate every attribute field against its constraints; returns key -> message.
   const validateAll = (): Record<string, string> => {
@@ -264,18 +270,24 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     return errs;
   };
 
-  const addRow = (section: string) =>
+  const addRow = (section: string) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({ ...prev, [section]: [...(prev[section] ?? []), {}] }));
-  const removeRow = (section: string, idx: number) =>
+  };
+  const removeRow = (section: string, idx: number) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({
       ...prev,
       [section]: (prev[section] ?? []).filter((_, i) => i !== idx),
     }));
-  const setCell = (section: string, idx: number, key: string, value: unknown) =>
+  };
+  const setCell = (section: string, idx: number, key: string, value: unknown) => {
+    markFormDirty(formPath);
     setRowsBySection((prev) => ({
       ...prev,
       [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
     }));
+  };
 
   const save = async (thenPost = false) => {
     // Instant client-side check first — don't round-trip a form we already know is invalid.
@@ -334,6 +346,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       // the picker and closes quietly — the user stays on the form they were filling in.
       // Otherwise open the saved record. Either way close the form pane (lists refresh over SSE).
       const pickedUp = !isEdit && consumeQuickCreate(kind, name, savedId);
+      clearFormDirty(formPath); // saved — the close below must not trip the discard guard
       if (!pickedUp) dispatchAction(`onno://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
@@ -353,7 +366,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   };
 
   const cancel = () => {
-    // Cancelling a create also cancels any ref-picker quick-create waiting on it.
+    // Cancelling a create also cancels any ref-picker quick-create waiting on it. Cancel is an
+    // explicit discard — clear the dirty flag so the close doesn't ALSO ask "discard?".
+    clearFormDirty(formPath);
     if (!isEdit) cancelQuickCreate(kind, name);
     if (isEdit) dispatchAction(`onno://${kind}/${name}/${id}`);
     dispatchClose(formPath);

@@ -222,10 +222,13 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     action per enum value is the idiom). The list also supports **batch selection** (⌘/Ctrl-click
     toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
     list being engaged): right-clicking the selection runs any server row action over every
-    selected id, plus a two-step "Delete N". **⌘C/⌘V**: copy puts the rows on the clipboard as TSV
-    (pasteable into text/spreadsheets) + an app payload; paste on the same entity's list creates
-    server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity, documents
-    unposted/dated now, secrets unset).
+    selected id — as ONE request via `POST /api/actions/{kind}/{name}/{key}/batch` (`{ids,inputs}`,
+    ≤500, returns `{ok,failed,total}`) — plus a two-step "Delete N" via
+    `POST /api/{kind}/{name}/batch-delete`. **⌘C/⌘V**: copy puts the rows on the clipboard as TSV
+    (pasteable into text/spreadsheets) + an app payload; paste (≤50) on the same entity's list
+    creates server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity,
+    catalog description + " (copy)" [`duplicate.copySuffix`], documents unposted/dated now,
+    secrets unset). Forms with unsaved edits confirm "Discard changes?" before the tab closes.
   - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
     name); a **tabular-section column** is addressed with a section-scoped key
     `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the

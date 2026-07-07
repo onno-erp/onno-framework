@@ -123,15 +123,19 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     React.useEffect(() => {
       if (!open) return;
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") close();
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        // Consume the key (capture phase): an open menu is the topmost Esc layer — without this,
+        // one press would also clear a row selection and/or close the workspace tab beneath it.
+        e.preventDefault();
+        close();
       };
       window.addEventListener("click", close);
       window.addEventListener("resize", close);
-      window.addEventListener("keydown", onKey);
+      window.addEventListener("keydown", onKey, true);
       return () => {
         window.removeEventListener("click", close);
         window.removeEventListener("resize", close);
-        window.removeEventListener("keydown", onKey);
+        window.removeEventListener("keydown", onKey, true);
       };
     }, [close, open]);
 

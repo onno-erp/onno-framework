@@ -149,7 +149,8 @@ name returns `404`.
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
-| POST | `/{name}/{id}/duplicate` | Server-side copy: same description/attributes/parent, fresh id + code. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
+| POST | `/{name}/{id}/duplicate` | Server-side copy: same description/attributes/parent, fresh id + code, description suffixed with `duplicate.copySuffix` (" (copy)" by default). Secret attributes start unset. Backs the list's ⌘C/⌘V. |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Sets the deletion mark (soft delete). |
 
 ### Documents — `/api/documents`
@@ -164,6 +165,7 @@ name returns `404`.
 | POST | `/{name}/{id}/unpost` | Reverse posting. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
+| POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). |
 
 ### Registers — `/api/registers`
@@ -365,7 +367,12 @@ Rows also support **batch selection**: ⌘/Ctrl-click toggles a row, Shift-click
 from the last toggled row, Esc (or the toolbar's "N selected ✕" chip) clears. With the list
 engaged (a selection active, or the cursor over a row), **⌘A** selects every loaded row and
 **⇧⌘↓ / ⇧⌘↑** extend the selection from the anchor to the bottom / top of the loaded set — an
-infinite feed selects the rows loaded so far, not the whole server-side result. Right-clicking a
+infinite feed selects the rows loaded so far, not the whole server-side result (⌘A toasts a hint
+when more rows exist). Batch operations run as **one request** against the batch endpoints
+(`POST /api/actions/{kind}/{name}/{key}/batch`, `POST /api/{kind}/{name}/batch-delete`), with a
+loading → summary toast — a 200-row batch isn't 200 round-trips and survives the tab closing
+mid-run. Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
+the last. Right-clicking a
 selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
 runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
 "Delete N". Navigation actions and per-row visibility overrides don't apply in batch mode — the
@@ -374,10 +381,17 @@ handler decides per record.
 **⌘C / ⌘V on rows.** Copy (the selection, else the hovered row) writes two clipboard flavours:
 `text/plain` TSV of the visible columns exactly as rendered — pastes straight into a text file or
 a spreadsheet — and an app payload with the record ids. Paste on the same entity's list creates a
-**server-side copy** per id via `POST /{name}/{id}/duplicate` (fresh id + code/number, documents
-dated now and unposted, line items included, secret attributes left unset). A focused input or an
-active text selection keeps the browser's native copy/paste. Pasting on a different entity's list,
-or without write access, does nothing.
+**server-side copy** per id via `POST /{name}/{id}/duplicate` (fresh id + code/number, catalog
+descriptions suffixed " (copy)" — the `duplicate.copySuffix` message key — documents dated now and
+unposted, line items included, secret attributes left unset), capped at 50 records per paste. A
+focused input or an active text selection keeps the browser's native copy/paste. Pasting on a
+different entity's list, or without write access, does nothing. Note the payload carries ids, not
+a snapshot: pasting re-reads the record, so a copy made before an edit pastes the edited state.
+
+**Unsaved-changes guard.** A form tab (new / edit / duplicate) with typed-but-unsaved input asks
+"Discard changes?" before closing via the tab ✕ or Esc. Save and the form's own Cancel are
+explicit outcomes and close without asking; programmatic closes (post-save, post-delete) never
+prompt.
 
 ### New-record forms & ref pickers
 

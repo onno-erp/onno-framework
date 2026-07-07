@@ -287,3 +287,10 @@ export interface ActionResult {
   navigate?: string | null;
   refresh?: boolean;
 }
+
+/** The summary a batch endpoint returns (batch action run / batch delete): counts + failed ids. */
+export interface BatchResult {
+  ok: number;
+  failed: string[];
+  total: number;
+}

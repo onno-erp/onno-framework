@@ -17,7 +17,7 @@ function presenceDelta(detail: Record<string, unknown>) {
 }
 
 describe("presence store", () => {
-  it("seeds from the snapshot, applies live deltas, includes self, and aggregates by entity", async () => {
+  it("seeds from the snapshot, applies live deltas, and aggregates by entity (self excluded)", async () => {
     getPresenceSnapshot.mockResolvedValue({
       you: "me",
       records: [
@@ -43,9 +43,10 @@ describe("presence store", () => {
       presenceDelta({ kind: "catalogs", entityName: "properties", id: "r2", viewers: [{ userId: "u3", displayName: "Bob" }] })
     );
 
-    // Sidebar aggregation unions the distinct viewers (including you) across every property record.
+    // Sidebar aggregation unions the distinct OTHER viewers across every property record — self is
+    // excluded (your own presence isn't news; showing it just made the sidebar dot blink).
     const entity = renderHook(() => useEntityViewers("catalogs", "properties"));
-    await waitFor(() => expect(entity.result.current.map((v) => v.userId).sort()).toEqual(["me", "u2", "u3"]));
+    await waitFor(() => expect(entity.result.current.map((v) => v.userId).sort()).toEqual(["u2", "u3"]));
 
     // The by-id map (list rows) carries both records, self included.
     const byId = renderHook(() => useViewersById());
