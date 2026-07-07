@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { LoginFormWidget, type DemoAccount } from "@/components/login-form-widget";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-login-form} to the React
@@ -108,7 +109,13 @@ export function LoginFormPortals() {
   return (
     <>
       {list.map((m) =>
-        createPortal(<LoginFormWidget demoAccounts={m.demoAccounts} />, m.el, String(m.id)),
+        createPortal(
+          <IslandErrorBoundary label="login form">
+            <LoginFormWidget demoAccounts={m.demoAccounts} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id),
+        ),
       )}
     </>
   );

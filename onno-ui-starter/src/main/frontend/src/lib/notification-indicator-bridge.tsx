@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useNotifications } from "@/lib/notification-store";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's unread-notification indicator blocks to the live notification store — the
@@ -101,7 +102,13 @@ export function NotificationIndicatorPortals() {
   return (
     <>
       {live.map((m) =>
-        createPortal(m.kind === "dot" ? <UnreadDot /> : <UnreadBadge />, m.el, String(m.id))
+        createPortal(
+          <IslandErrorBoundary label="notification indicator">
+            {m.kind === "dot" ? <UnreadDot /> : <UnreadBadge />}
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
       )}
     </>
   );

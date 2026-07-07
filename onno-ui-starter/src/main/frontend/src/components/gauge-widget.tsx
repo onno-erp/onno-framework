@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { PolarAngleAxis, RadialBar, RadialBarChart, ResponsiveContainer } from "recharts";
 import { formatCompact, toNumber } from "@/lib/format";
 import { resolveColor } from "@/lib/chart-colors";
-import { aggregate, useWidgetRows, type Metric } from "@/lib/widget-data";
+import { aggregate, useWidgetBuckets, useWidgetRows, type Metric } from "@/lib/widget-data";
 import type { DashboardWidgetMeta } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
@@ -15,13 +15,29 @@ import { HintIcon } from "@/components/ui/hint-icon";
  */
 export function GaugeWidget({ widget }: { widget: DashboardWidgetMeta }) {
   const cfg = widget.extraConfig ?? {};
-  const items = useWidgetRows(widget);
+  // Catalog/document gauges fetch one server-computed grand-total bucket (#199 — a blank groupBy);
+  // registers keep aggregating rows client-side, so hand useWidgetRows an entityType it ignores on
+  // the bucket path (the hook must still be called).
+  const isRegister = widget.entityType === "register";
+  const rowsWidget = useMemo(() => (isRegister ? widget : { ...widget, entityType: "" }), [isRegister, widget]);
+  const items = useWidgetRows(rowsWidget);
 
   const metric = (cfg.metric as Metric) ?? "count";
   const color = resolveColor(cfg.colors);
+  const params = useMemo(() => {
+    if (isRegister) return null;
+    const p: Record<string, string> = { metric };
+    if (cfg.metricField) p.field = cfg.metricField;
+    if (cfg.filter) p.filter = cfg.filter;
+    return p;
+  }, [isRegister, metric, cfg.metricField, cfg.filter]);
+  const resp = useWidgetBuckets(widget, params);
   const value = useMemo(
-    () => aggregate(items, { metric, metricField: cfg.metricField }),
-    [items, metric, cfg.metricField]
+    () =>
+      isRegister
+        ? aggregate(items, { metric, metricField: cfg.metricField })
+        : resp?.buckets[0]?.value ?? 0,
+    [isRegister, items, resp, metric, cfg.metricField]
   );
   const target = toNumber(cfg.target ?? "");
   const hasTarget = target != null && target > 0;

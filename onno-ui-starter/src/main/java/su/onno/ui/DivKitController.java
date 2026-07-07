@@ -325,7 +325,10 @@ public class DivKitController implements DisposableBean {
      * {@link PageBuilder#actions}. The button posts the page {@code route} and action {@code key};
      * we re-resolve and re-compose the page (compose is a pure spec build, like the GET render),
      * find the handler by key, and return its {@link ActionResult}. Page actions have no entity to
-     * gate on, so we require an authenticated user and leave finer authorization to the handler.
+     * gate on, so we require an authenticated user, honour the action's declared
+     * {@code .roles(...)} (#227), and leave finer authorization to the handler. Server handlers
+     * are writes by definition, so {@code onno.ui.read-only} blocks them the same way it blocks
+     * the generic mutation endpoints.
      */
     @PostMapping("/page-action")
     public ActionResult pageAction(@RequestParam String route, @RequestParam String key,
@@ -335,6 +338,9 @@ public class DivKitController implements DisposableBean {
                                    Principal principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in to run this action");
+        }
+        if (uiProperties.isReadOnly()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
         }
         Viewport vp = Viewport.parse(viewport);
         UiLayout.Profile active = activeProfile(principal, profile);
@@ -351,9 +357,36 @@ public class DivKitController implements DisposableBean {
         if (!action.isServer()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action is navigation-only: " + key);
         }
+        if (!action.roles().isEmpty() && !access.hasAnyRole(principal, action.roles())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
+        }
         ActionContext ctx = new ActionContext("page", route, null, principal.getName(), inputValues(body));
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
+    }
+
+    /**
+     * Drop page-action buttons whose declared {@code .roles(...)} the caller lacks (#227) — the
+     * POST endpoint rejects them anyway; hiding keeps the page honest about what the user can do.
+     * The {@code roles} key itself is stripped from the rendered descriptors: it is a server-side
+     * gate, not client data.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> visibleActionButtons(Object buttons, Principal principal) {
+        if (!(buttons instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object o : list) {
+            if (!(o instanceof Map<?, ?> button)) continue;
+            Object roles = button.get("roles");
+            if (roles instanceof List<?> required && !required.isEmpty()
+                    && !access.hasAnyRole(principal, (List<String>) required)) {
+                continue;
+            }
+            Map<String, Object> copy = new LinkedHashMap<>((Map<String, Object>) button);
+            copy.remove("roles");
+            out.add(copy);
+        }
+        return out;
     }
 
     /** Pull the action input values out of the request body ({@code {"inputs": {key: value}}}). */
@@ -433,6 +466,7 @@ public class DivKitController implements DisposableBean {
                 }
             } else if (c.kind() == PageComponent.Kind.ACTIONS) {
                 Map<String, Object> payload = new LinkedHashMap<>(c.payload());
+                payload.put("buttons", visibleActionButtons(payload.get("buttons"), principal));
                 payload.put("route", route);
                 if (profileId != null && !profileId.isBlank()) {
                     payload.put("profile", profileId);

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PageActionsBar, type PageActionButton } from "@/components/page-actions-bar";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-actions} to the React
@@ -129,7 +130,9 @@ export function ActionsBarPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <PageActionsBar heading={m.heading} route={m.route} profile={m.profile} buttons={m.buttons} />,
+          <IslandErrorBoundary label={m.heading || "actions"}>
+            <PageActionsBar heading={m.heading} route={m.route} profile={m.profile} buttons={m.buttons} />
+          </IslandErrorBoundary>,
           m.el,
           String(m.id)
         )

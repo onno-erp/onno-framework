@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks of type {@code onno-sso-icon} to a provider brand logo on
@@ -197,7 +198,9 @@ export function SsoIconPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <SsoIcon src={m.src} color={m.color} size={m.size} monochrome={m.monochrome} />,
+          <IslandErrorBoundary label="SSO icon">
+            <SsoIcon src={m.src} color={m.color} size={m.size} monochrome={m.monochrome} />
+          </IslandErrorBoundary>,
           m.el,
           String(m.id)
         )

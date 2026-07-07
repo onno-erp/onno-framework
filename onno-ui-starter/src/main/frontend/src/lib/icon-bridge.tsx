@@ -2,6 +2,7 @@ import { Suspense, lazy, useSyncExternalStore, type ComponentType } from "react"
 import { createPortal } from "react-dom";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { Circle } from "lucide-react";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks of type {@code onno-icon} to lucide icons,
@@ -240,7 +241,9 @@ export function IconPortals() {
         const color =
           m.activeColor && m.activePath != null && active === m.activePath ? m.activeColor : m.color;
         return createPortal(
-          <DynamicLucide name={m.name} color={color} size={m.size} />,
+          <IslandErrorBoundary label={`icon ${m.name}`}>
+            <DynamicLucide name={m.name} color={color} size={m.size} />
+          </IslandErrorBoundary>,
           m.el,
           String(m.id)
         );

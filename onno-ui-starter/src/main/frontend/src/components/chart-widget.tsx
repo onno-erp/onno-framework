@@ -26,6 +26,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { format } from "date-fns";
 import { formatCompact, formatNumber, toNumber } from "@/lib/format";
 import { resolveColors } from "@/lib/chart-colors";
 import { Segmented } from "@/components/ui/segmented";
@@ -33,18 +34,22 @@ import {
   applyScale,
   buildCombo,
   buildSeries,
+  comboFromBuckets,
   filterWindow,
   ISO_KEY,
   SCALE_LABELS,
+  seriesFromBuckets,
   SINGLE_SERIES,
+  useWidgetBuckets,
   useWidgetRows,
+  type AggregateBuckets,
   type ComboData,
   type GroupByDate,
   type Metric,
   type ScaleMode,
   type SeriesData,
 } from "@/lib/widget-data";
-import { presetsFromConfig } from "@/lib/time-range";
+import { presetsFromConfig, resolveRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { useTimeRange } from "@/providers/time-range-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,15 +164,16 @@ function readControls(widget: DashboardWidgetMeta, base: ChartConfig): ControlsS
 }
 
 /**
- * The shared chart data pipeline used by both the dashboard card and the explore view: window the
- * rows (done by the caller), bucket into a series (or a dual-axis combo), and rescale. Centralizing
- * it keeps the card and the explore view showing exactly the same numbers.
+ * The register (rows) half of the chart data pipeline: window the rows (done by the caller),
+ * bucket into a series (or a dual-axis combo), and rescale. Catalog/document charts build the
+ * same shapes from server buckets instead — see {@link chartDataFromBuckets}. Both the dashboard
+ * card and the explore view go through whichever half matches, so they show identical numbers.
  */
 function buildChartData(
   config: ChartConfig,
   rows: EntityRecord[],
   opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode }
-): { data: SeriesData; comboData: ComboData | null; round: boolean } {
+): { data: SeriesData; comboData: ComboData | null } {
   if (config.combo) {
     return {
       data: { rows: [], seriesKeys: [SINGLE_SERIES], total: 0 },
@@ -177,7 +183,6 @@ function buildChartData(
         primary: { metric: config.metric, metricField: config.metricField },
         secondary: { metric: config.secondaryMetric, metricField: config.secondaryField },
       }),
-      round: false,
     };
   }
   const round = opts.kind === "donut" || opts.kind === "pie";
@@ -188,7 +193,35 @@ function buildChartData(
     metric: config.metric,
     metricField: config.metricField,
   });
-  return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null, round };
+  return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null };
+}
+
+/**
+ * The catalog/document half of the chart data pipeline (#199): shape the server's pre-aggregated
+ * buckets into the same {@link SeriesData}/{@link ComboData} the row half builds, then rescale.
+ * The grouping/series/measure already happened in SQL, so this is pure shaping — no re-bucketing.
+ */
+function chartDataFromBuckets(
+  config: ChartConfig,
+  resp: AggregateBuckets | null,
+  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode }
+): { data: SeriesData; comboData: ComboData | null } {
+  const buckets = resp ?? { buckets: [], truncated: false };
+  if (config.combo) {
+    return {
+      data: { rows: [], seriesKeys: [SINGLE_SERIES], total: 0 },
+      comboData: comboFromBuckets(buckets, { groupByDate: opts.granularity }),
+    };
+  }
+  const round = opts.kind === "donut" || opts.kind === "pie";
+  const built = seriesFromBuckets(buckets, {
+    groupBy: config.groupBy,
+    groupByDate: opts.granularity,
+    seriesBy: round ? undefined : opts.seriesBy,
+    metric: config.metric,
+    metricField: config.metricField,
+  });
+  return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null };
 }
 
 interface DragProps {
@@ -279,6 +312,14 @@ function granularityForSpan(days: number): GroupByDate {
   return "minute";
 }
 
+// Existing dashboards author config("groupBy", "status_display") because the old row path read the
+// ref-resolved display column off each row. The aggregate endpoint groups by the REAL column and
+// resolves labels itself, so the suffix is stripped from the request only (configs stay authored as-is).
+const stripDisplay = (column: string) => column.replace(/_display$/, "");
+
+/** Epoch millis → the ISO local-datetime the aggregate endpoint's window expects ("2026-01-01T00:00:00"). */
+const toLocalIso = (ms: number) => format(new Date(ms), "yyyy-MM-dd'T'HH:mm:ss");
+
 /** The span (in days) covered by a chart's rows on its date field — for sizing "all"-range buckets. */
 function dataSpanDays(rows: EntityRecord[], dateField: string): number {
   let min = Infinity;
@@ -298,18 +339,23 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const config = useMemo(() => readConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
   const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
-  const items = useWidgetRows(widget);
+  // Catalog/document charts fetch pre-aggregated buckets (#199); registers keep fetching turnover
+  // rows and bucketing client-side (no aggregate endpoint exists for them).
+  const isRegister = widget.entityType === "register";
+  const isDocument = widget.entityType === "document";
+  const windowField = widget.dateField || "_date";
+
+  // Register rows path. Buckets replace the row fetch for catalog/document, so hand useWidgetRows
+  // an entityType it ignores — the hook must still be called (rules of hooks), just never fetch.
+  const rowsWidget = useMemo(() => (isRegister ? widget : { ...widget, entityType: "" }), [isRegister, widget]);
+  const items = useWidgetRows(rowsWidget);
   // The shared range windows the rows by the document's date BEFORE bucketing — so it applies to
   // every chart (a status pie filters to in-range orders too), not just time series.
-  const windowField = widget.dateField || "_date";
   const ranged = useMemo(() => filterWindow(items, windowField, range), [items, windowField, range]);
 
-  // Granularity auto-follows the data actually inside the window (not the nominal range length), so a
+  // Granularity auto-follows the data actually inside the window (see the span effect below), so a
   // range change re-applies it and the user can still override until the next change.
-  const spanDays = useMemo(() => dataSpanDays(ranged, windowField), [ranged, windowField]);
-  const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
-  const [granularity, setGranularity] = useState<GroupByDate>(autoGran);
-  useEffect(() => setGranularity(autoGran), [autoGran]);
+  const [granularity, setGranularity] = useState<GroupByDate>(config.groupByDate ?? "day");
 
   // Local control state, seeded from the authored config; applied only when its control is enabled.
   const [kind, setKind] = useState<ChartKind>(config.kind);
@@ -331,13 +377,68 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const effGranularity = config.groupByDate != null ? granularity : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
+  // Matches what the data pipeline computes for itself (a combo is never round).
+  const round = !config.combo && (effKind === "donut" || effKind === "pie");
+
+  // The absolute window, resolved once per range change: resolveRange anchors a relative range to
+  // "now", so resolving inline every render would shift the fetch params and never let them settle.
+  const windowRange = useMemo(() => resolveRange(range), [range]);
+
+  // The aggregate request for a catalog/document chart (null for a register — no fetch). Everything
+  // the old row pipeline did client-side — filter, window, group, series-split, measure — travels as
+  // query params and comes back as ready buckets. A control change lands here, so it refetches.
+  const aggParams = useMemo(() => {
+    if (isRegister) return null;
+    const p: Record<string, string> = { metric: config.metric };
+    if (config.metricField) p.field = config.metricField;
+    if (config.combo) {
+      p.metric2 = config.secondaryMetric;
+      if (config.secondaryField) p.field2 = config.secondaryField;
+    }
+    // Catalogs have no _date system column (documents do), so the "_date" defaults degrade instead
+    // of failing the query: an un-grouped catalog chart takes the endpoint's single grand-total
+    // bucket, and the window/span ride only on an author-named date field.
+    const groupBy = stripDisplay(config.groupBy);
+    if (isDocument || groupBy !== "_date") {
+      p.groupBy = groupBy;
+      if (effGranularity) p.groupByDate = effGranularity;
+    }
+    // Pies/donuts don't series-split; a combo's second dimension is its second measure.
+    const split = round || config.combo ? undefined : effSeriesBy;
+    if (split) p.seriesBy = stripDisplay(split);
+    const filter = widget.extraConfig?.filter;
+    if (filter) p.filter = filter;
+    if (isDocument || windowField !== "_date") {
+      // Send the date field even for an unbounded window — the auto-granularity needs `span` back.
+      p.dateField = windowField;
+      if (windowRange.from !== -Infinity) p.from = toLocalIso(windowRange.from);
+      if (windowRange.to !== Infinity) p.to = toLocalIso(windowRange.to);
+    }
+    return p;
+  }, [isRegister, isDocument, config, round, effGranularity, effSeriesBy, widget, windowField, windowRange]);
+  const bucketResp = useWidgetBuckets(widget, aggParams);
+
+  // Granularity auto-follows the span of the data actually inside the window (not the nominal range
+  // length): the register path measures its rows, the bucket path reads the response's `span`. A
+  // granularity change is itself a fetch param, so the first response at the seeded size may correct
+  // itself with one follow-up fetch — expected, and it converges.
+  const spanDays = useMemo(() => {
+    if (isRegister) return dataSpanDays(ranged, windowField);
+    const span = bucketResp?.span;
+    return span ? (Date.parse(span.max) - Date.parse(span.min)) / 86_400_000 + 1 : 1;
+  }, [isRegister, ranged, windowField, bucketResp]);
+  const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
+  useEffect(() => setGranularity(autoGran), [autoGran]);
 
   const fmts = useChartFormatters(config);
   const { fmt, fmtAxis } = fmts;
 
-  const { data, comboData, round } = useMemo(
-    () => buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
-    [config, ranged, effGranularity, effKind, effSeriesBy, effScale]
+  const { data, comboData } = useMemo(
+    () =>
+      isRegister
+        ? buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale })
+        : chartDataFromBuckets(config, bucketResp, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
+    [isRegister, config, ranged, bucketResp, effGranularity, effKind, effSeriesBy, effScale]
   );
 
   const colors = useMemo(

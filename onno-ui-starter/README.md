@@ -36,7 +36,7 @@ controller, and a static-resource handler that serves the bundled frontend from
 |-----|---------|---------|
 | `onno.ui.enabled` | `true` | Master switch. Also gated on a `MetadataRegistry` bean being present. |
 | `onno.ui.path` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the client uses it as its React Router `basename` and deep-link prefix; the bare root redirects here. Set to `/` to mount at the web root. |
-| `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE and post/unpost) returns `403 UI is in read-only mode`. |
+| `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE, post/unpost, and custom server/page actions) returns `403 UI is in read-only mode`. |
 | `onno.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
 | `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. Each becomes a CSS custom property (`--{key}`) on the document root, so it overrides any design token the UI reads — including the [shape tokens](#shape-tokens) that reshape every button, control and card app-wide. |
 | `onno.ui.messages.*` | empty map | Overrides for the framework's own chrome strings (see [Localizing the chrome](#localizing-the-chrome)). Each key (e.g. `login.title`, `action.new`) replaces the English default. Quote the dotted keys in YAML. |
@@ -185,6 +185,7 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 | GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
 | GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`_date`). |
 | GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
+| GET | `/api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` | The **widget aggregate** read behind `chart`/`stat`/`sparkline`/`gauge` (#199): a server-side `GROUP BY groupBy[, seriesBy]` (`groupByDate` = `minute`…`month` buckets a timestamp via `DATE_TRUNC`; `dateField`+`from`/`to` window the rows) returning `{ buckets: [{ key, label?, series?, seriesLabel?, value, value2? }], truncated, span? }` — O(buckets) instead of the whole table. Blank `groupBy` → one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/`Ref` buckets carry a resolved `label`; buckets cap at 1000 (`truncated: true`). |
 
 - **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
   needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
@@ -306,6 +307,10 @@ public void actions(ActionSpec a) {
      .handler(ctx -> { svc.toggle(ctx.id()); return ActionResult.refresh("Toggled"); });
 }
 ```
+
+Any action (entity or page) may declare `.roles("ACCOUNTANT", "MANAGER")` — the server then rejects
+callers holding none of them (`ADMIN` always passes). For an entity action this is a finer gate *on
+top of* the entity's write roles; unset means the entity's write access alone decides.
 
 Each function receives an `ActionRow` — a read-only view of the row the list already rendered
 (`id()`, `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, or
@@ -470,7 +475,7 @@ to `1` for the old sequential behaviour.
 |-------------|---------|-------|
 | `count` | KPI card — row count | Honours `filter`. |
 | `metric` | KPI card — aggregated value | `metric` = `sum`/`avg`/`min`/`max` over `metricField`; honours `filter`, `currency`/`format`. Works on `document`, `catalog`, or a register resource. |
-| `chart` | recharts bar/line/area/donut/**pie**, single- **or multi-series** | Source from `document`/`catalog` rows or a `register` (server-side turnover). `seriesBy` splits into colored series; `stacked` stacks them. |
+| `chart` | recharts bar/line/area/donut/**pie**, single- **or multi-series** | Source from a `document`/`catalog` (fetched **pre-aggregated** from `GET /api/list/{kind}/{name}/aggregate` — a server-side `GROUP BY`, O(buckets) over the wire, #199) or a `register` (server-side turnover). `seriesBy` splits into colored series; `stacked` stacks them. |
 | `stat` | KPI tile with trend | Headline aggregate + period-over-period delta + a sparkline of the series. |
 | `sparkline` | Compact KPI tile | Headline aggregate + an inline sparkline (no delta). |
 | `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
@@ -678,8 +683,14 @@ a list of every record at that spot. The chip/popup strings localize via the `ma
 
 `PageBuilder.actions(heading, spec)` adds a section of buttons to a page (the same `ActionSpec` an
 `EntityView.actions(...)` uses for list/row buttons). Each button either runs a **server handler**
-(`.handler(ctx -> ActionResult)` — POSTs to `/api/divkit/page-action`, runs for an authenticated
-user, self-authorizes via `ctx.user()`) or **navigates** (`.navigate("onno://...")`).
+(`.handler(ctx -> ActionResult)` — POSTs to `/api/divkit/page-action`) or **navigates**
+(`.navigate("onno://...")`).
+
+A server handler runs only for an authenticated user, and `onno.ui.read-only` blocks it like every
+other mutation. Because a page action has no entity to gate on, declare `.roles("MANAGER")` to
+restrict who may run it — the endpoint rejects other callers **and the button is hidden from the
+rendered page**; `ADMIN` always passes, like entity `@AccessControl`. Without `.roles(...)`, any
+authenticated user may run it and the handler self-authorizes via `ctx.user()`.
 
 ```java
 b.actions("Connected accounts", a ->

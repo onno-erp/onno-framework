@@ -85,7 +85,7 @@ public final class ActionSpec {
                          String navigateUrl, Function<ActionContext, ActionResult> handler,
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
                          Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
-                         List<InputSpec.InputField> form) {
+                         List<InputSpec.InputField> form, List<String> roles) {
         public boolean isServer() {
             return handler != null;
         }
@@ -116,6 +116,7 @@ public final class ActionSpec {
         private Predicate<ActionRow> visibleFn;
         private Predicate<ActionRow> enabledFn;
         private List<InputSpec.InputField> form = List.of();
+        private List<String> roles = List.of();
 
         ActionBuilder(String key) {
             this.key = key;
@@ -179,6 +180,18 @@ public final class ActionSpec {
             return this;
         }
 
+        /**
+         * Restrict this action to callers holding any of the given roles ({@code ADMIN} always
+         * passes, like entity {@code @AccessControl}). The server rejects a caller without a
+         * matching role, and page-action buttons the caller can't run are hidden from the rendered
+         * page. Unset (the default) means any caller the surface already admits — for an entity
+         * action that's the entity's write roles; for a page action, any authenticated user.
+         */
+        public ActionBuilder roles(String... roles) {
+            this.roles = List.of(roles);
+            return this;
+        }
+
         /** Route the client to {@code url} when clicked ({@code {id}} is filled with the record id). */
         public ActionBuilder navigate(String url) {
             this.navigateUrl = url;
@@ -214,7 +227,7 @@ public final class ActionSpec {
 
         Action build() {
             return new Action(key, label != null ? label : key, icon, logo, scope, menu, navigateUrl, handler,
-                    iconFn, labelFn, visibleFn, enabledFn, form);
+                    iconFn, labelFn, visibleFn, enabledFn, form, roles);
         }
     }
 }

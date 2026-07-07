@@ -214,7 +214,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     refresh, and an unregistered type degrades to the default grid (no toggle).
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
-    `handler(ctx→ActionResult)` or `navigate(url)`. `form(f→…)` makes the click open a **modal input
+    `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
+    action (`ADMIN` always passes; #227): on an entity action it's a finer gate on top of the
+    entity's write roles, on a page action (which has no entity to gate on) it's the only
+    authorization and the button is hidden from callers who lack it. Server actions honour
+    `onno.ui.read-only` (page actions too). `form(f→…)` makes the click open a **modal input
     dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
     submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
     on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to

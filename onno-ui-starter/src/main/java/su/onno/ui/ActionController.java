@@ -56,12 +56,13 @@ public class ActionController {
         }
     }
 
-    @PostMapping("/{kind}/{name}/{key}")
-    public ActionResult run(@PathVariable String kind, @PathVariable String name, @PathVariable String key,
-                            @RequestParam(required = false) UUID id,
-                            @RequestBody(required = false) Map<String, Object> body, Principal principal) {
-        requireWritable();
-        Class<?> entity = resolveAndAuthorize(kind, name, principal);
+    /**
+     * Resolve the entity's server action by key and check the caller may run it: it must exist,
+     * carry a handler, and — when the action declares {@code .roles(...)} — the caller must hold
+     * one of them (#227). Entity write access is already enforced by the caller via
+     * {@link #resolveAndAuthorize}; the role list is the finer, per-action gate on top.
+     */
+    private Action findRunnable(Class<?> entity, String key, Principal principal) {
         Action action = actions.find(entity, key);
         if (action == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
@@ -69,6 +70,19 @@ public class ActionController {
         if (!action.isServer()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action is navigation-only: " + key);
         }
+        if (!action.roles().isEmpty() && !access.hasAnyRole(principal, action.roles())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
+        }
+        return action;
+    }
+
+    @PostMapping("/{kind}/{name}/{key}")
+    public ActionResult run(@PathVariable String kind, @PathVariable String name, @PathVariable String key,
+                            @RequestParam(required = false) UUID id,
+                            @RequestBody(required = false) Map<String, Object> body, Principal principal) {
+        requireWritable();
+        Class<?> entity = resolveAndAuthorize(kind, name, principal);
+        Action action = findRunnable(entity, key, principal);
         ActionContext ctx = new ActionContext(kind, name, id,
                 principal != null ? principal.getName() : null, inputValues(body));
         ActionResult result = action.handler().apply(ctx);
@@ -91,13 +105,7 @@ public class ActionController {
                                         @RequestBody Map<String, Object> body, Principal principal) {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
-        Action action = actions.find(entity, key);
-        if (action == null) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
-        }
-        if (!action.isServer()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action is navigation-only: " + key);
-        }
+        Action action = findRunnable(entity, key, principal);
         List<UUID> ids = idList(body);
         Map<String, String> inputs = inputValues(body);
         String user = principal != null ? principal.getName() : null;

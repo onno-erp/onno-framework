@@ -4,11 +4,13 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.LinkedHashMap;
@@ -184,6 +186,39 @@ public class ListDataController {
                 multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
                 filter, aggregates(request));
         return groupsEnvelope(result);
+    }
+
+    /**
+     * Pre-aggregated buckets for a chart/stat/sparkline/gauge widget (#199): a server-side
+     * {@code GROUP BY groupBy[, seriesBy]} with an optional date-unit bucket and time window,
+     * returning O(buckets) rows instead of the entity's whole table. Blank {@code groupBy} yields
+     * one grand-total bucket (the gauge case). See {@link WidgetBuckets} for the envelope.
+     */
+    @GetMapping("/catalogs/{name}/aggregate")
+    public Map<String, Object> catalogAggregate(@PathVariable String name,
+                                                WidgetBuckets.Request request,
+                                                Principal principal) {
+        CatalogDescriptor desc = catalogQuery.require(name);
+        access.requireRead(principal, desc);
+        try {
+            return catalogQuery.aggregateBuckets(desc, request);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    /** The document analogue of {@link #catalogAggregate}. */
+    @GetMapping("/documents/{name}/aggregate")
+    public Map<String, Object> documentAggregate(@PathVariable String name,
+                                                 WidgetBuckets.Request request,
+                                                 Principal principal) {
+        DocumentDescriptor desc = documentQuery.require(name);
+        access.requireRead(principal, desc);
+        try {
+            return documentQuery.aggregateBuckets(desc, request);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     private static Map<String, Object> groupsEnvelope(ListGroups.GroupResult result) {

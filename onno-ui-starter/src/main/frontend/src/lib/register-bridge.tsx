@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { RegisterSurface, type RegisterDescriptor } from "@/components/register-surface";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-register} to the React
@@ -77,5 +78,17 @@ export const REGISTER_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
 /** Portals every live {@code <onno-register>} to its React surface. Mount once, inside the Router. */
 export function RegisterPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
-  return <>{list.map((m) => createPortal(<RegisterSurface register={m.register} />, m.el, String(m.id)))}</>;
+  return (
+    <>
+      {list.map((m) =>
+        createPortal(
+          <IslandErrorBoundary label={m.register.views?.[0]?.list?.title || "register"}>
+            <RegisterSurface register={m.register} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
+      )}
+    </>
+  );
 }

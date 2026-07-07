@@ -8,9 +8,11 @@ import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 
 /**
  * Shared data plumbing for the dashboard data widgets (chart, stat, sparkline, gauge): one place
- * that fetches a widget's rows and turns them into single-number aggregates or time-bucketed,
- * optionally multi-series datasets. Keeping it here means every widget buckets, sums and orders
- * identically, and the chart-specific React stays about rendering.
+ * that turns a widget's data into single-number aggregates or time-bucketed, optionally
+ * multi-series datasets. Catalog/document widgets fetch pre-aggregated buckets from the server
+ * (#199) and only shape them here; register widgets still fetch turnover rows and bucket in JS.
+ * Keeping it here means every widget buckets, sums and orders identically, and the chart-specific
+ * React stays about rendering.
  */
 
 // Turnover/balance need a period window; a register-backed widget sums across all of time unless
@@ -21,7 +23,11 @@ const ALL_TIME_TO = "2999-12-31T23:59:59";
 export type GroupByDate = "minute" | "hour" | "day" | "week" | "month";
 export type Metric = "count" | "sum";
 
-/** Fetch the rows backing a widget: a document/catalog list, or a register's server-side turnover. */
+/**
+ * Fetch the rows backing a row-shaped widget (calendar, kanban, map, list — and the register-backed
+ * data widgets): a document/catalog list, or a register's server-side turnover. The catalog/document
+ * data widgets skip this and fetch pre-aggregated buckets instead ({@link useWidgetBuckets}).
+ */
 export function useWidgetRows(widget: DashboardWidgetMeta): EntityRecord[] {
   const [items, setItems] = useState<EntityRecord[]>([]);
   useEffect(() => {
@@ -249,34 +255,22 @@ export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
 /** The single-series sentinel key used when `seriesBy` is unset. */
 export const SINGLE_SERIES = "value";
 
-/**
- * Bucket rows into an x-ordered, optionally multi-series dataset. With no `seriesBy` it yields one
- * `"value"` series; with `seriesBy` it splits each bucket by that field, ordering series by total
- * (largest first) and folding the long tail beyond `maxSeries` into "Other".
- */
-export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData {
-  const maxSeries = spec.maxSeries ?? 8;
-  const buckets = new Map<string, { sortKey: string; label: string; iso: string; series: Map<string, number> }>();
-  const seriesTotals = new Map<string, number>();
-  let total = 0;
+// One accumulating x bucket: its sort/display identity plus a per-series running sum.
+type BucketAcc = { sortKey: string; label: string; iso: string; series: Map<string, number> };
 
-  for (const row of rows) {
-    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
-    let bucket = buckets.get(key);
-    if (!bucket) {
-      bucket = { sortKey: key, label, iso, series: new Map() };
-      buckets.set(key, bucket);
-    }
-    const seriesKey = spec.seriesBy ? bucketLabel(row[spec.seriesBy]) : SINGLE_SERIES;
-    const inc =
-      spec.metric === "count" ? 1 : spec.metricField ? toNumber(row[spec.metricField]) ?? 0 : 0;
-    bucket.series.set(seriesKey, (bucket.series.get(seriesKey) ?? 0) + inc);
-    seriesTotals.set(seriesKey, (seriesTotals.get(seriesKey) ?? 0) + inc);
-    total += inc;
-  }
-
+// The shared tail of buildSeries/seriesFromBuckets: rank series by total (largest first), fold the
+// long tail beyond `maxSeries` into "Other", order date buckets chronologically, and emit the wide
+// recharts rows. Splitting it out keeps the row and server-bucket paths ordering identically.
+function assembleSeries(
+  buckets: Map<string, BucketAcc>,
+  seriesTotals: Map<string, number>,
+  total: number,
+  split: boolean,
+  maxSeries: number,
+  dateOrdered: boolean
+): SeriesData {
   let seriesKeys: string[];
-  if (!spec.seriesBy) {
+  if (!split) {
     seriesKeys = [SINGLE_SERIES];
   } else {
     const ranked = [...seriesTotals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
@@ -299,7 +293,7 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
   }
 
   const ordered = [...buckets.values()];
-  if (spec.groupByDate) {
+  if (dateOrdered) {
     ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
   }
 
@@ -310,4 +304,163 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
   });
 
   return { rows: out, seriesKeys, total };
+}
+
+/**
+ * Bucket rows into an x-ordered, optionally multi-series dataset. With no `seriesBy` it yields one
+ * `"value"` series; with `seriesBy` it splits each bucket by that field, ordering series by total
+ * (largest first) and folding the long tail beyond `maxSeries` into "Other". This is the register
+ * path; catalog/document widgets build the same shape from server buckets ({@link seriesFromBuckets}).
+ */
+export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData {
+  const maxSeries = spec.maxSeries ?? 8;
+  const buckets = new Map<string, BucketAcc>();
+  const seriesTotals = new Map<string, number>();
+  let total = 0;
+
+  for (const row of rows) {
+    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { sortKey: key, label, iso, series: new Map() };
+      buckets.set(key, bucket);
+    }
+    const seriesKey = spec.seriesBy ? bucketLabel(row[spec.seriesBy]) : SINGLE_SERIES;
+    const inc =
+      spec.metric === "count" ? 1 : spec.metricField ? toNumber(row[spec.metricField]) ?? 0 : 0;
+    bucket.series.set(seriesKey, (bucket.series.get(seriesKey) ?? 0) + inc);
+    seriesTotals.set(seriesKey, (seriesTotals.get(seriesKey) ?? 0) + inc);
+    total += inc;
+  }
+
+  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, !!spec.groupByDate);
+}
+
+// ----- server-aggregated buckets (#199) ---------------------------------------------------------
+
+/** One server-computed bucket from the grouped-aggregate endpoint (see WidgetBuckets). */
+export interface AggregateBucket {
+  /**
+   * The raw bucket value: an ISO local-datetime bucket start for date buckets, a UUID string for
+   * Ref buckets; absent when the request had no `groupBy` (the single grand-total bucket).
+   */
+  key?: unknown;
+  /** A server-resolved display label (enum values, Ref targets) — preferred over `key` when present. */
+  label?: string;
+  /** The raw `seriesBy` value; present only when the request series-split. */
+  series?: unknown;
+  /** The server-resolved display label for `series`, when it resolved one. */
+  seriesLabel?: string;
+  value: number;
+  /** The secondary (combo) measure; present only when the request had `metric2`. */
+  value2?: number;
+}
+
+/** The aggregate endpoint's envelope (see {@code api.aggregateWidget}). */
+export interface AggregateBuckets {
+  buckets: AggregateBucket[];
+  /** True when the server capped the result at its bucket limit and dropped the rest. */
+  truncated: boolean;
+  /** MIN/MAX of `dateField` over the same filtered+windowed set; present when `dateField` was sent. */
+  span?: { min: string; max: string };
+}
+
+/**
+ * Fetch a widget's server-aggregated buckets ({@code api.aggregateWidget}) — the catalog/document
+ * data widgets' path. `params` is the ready-to-send query map; pass null to not fetch at all (the
+ * register path, which still aggregates rows client-side). Refetches when the widget or the params'
+ * content changes; a failed fetch resolves to an empty response so the widget shows "no data"
+ * rather than another request's stale buckets.
+ */
+export function useWidgetBuckets(
+  widget: DashboardWidgetMeta,
+  params: Record<string, string> | null
+): AggregateBuckets | null {
+  const [resp, setResp] = useState<AggregateBuckets | null>(null);
+  // Key the effect on the serialized params: callers rebuild the map per render, but only a content
+  // change should refetch. The effect re-parses the key so it depends on nothing else.
+  const key = params ? JSON.stringify(params) : null;
+  useEffect(() => {
+    if (key == null) return;
+    let alive = true;
+    const kind = widget.entityType === "document" ? "documents" : "catalogs";
+    api
+      .aggregateWidget(kind, widget.entityName, JSON.parse(key) as Record<string, string>)
+      .then((r) => alive && setResp(r))
+      .catch(() => alive && setResp({ buckets: [], truncated: false }));
+    return () => {
+      alive = false;
+    };
+  }, [widget, key]);
+  return resp;
+}
+
+// The sort/display identity of one server bucket: date buckets go through bucketKey so they key,
+// label and zoom (`iso`) exactly like the row path; everything else prefers the server-resolved
+// label over the raw key (a UUID would label the axis otherwise).
+function serverBucketKey(b: AggregateBucket, groupByDate?: GroupByDate): { key: string; label: string; iso: string } {
+  if (groupByDate && typeof b.key === "string") return bucketKey(b.key, groupByDate);
+  const label = b.label ?? bucketLabel(b.key);
+  return { key: label, label, iso: "" };
+}
+
+/**
+ * Build the same {@link SeriesData} shape {@link buildSeries} produces, but from server-aggregated
+ * buckets instead of raw rows. The measure was applied server-side, so each bucket contributes its
+ * ready `value`; series split on the server's resolved label. Ranking, "Other" folding and ordering
+ * are shared with the row path ({@link assembleSeries}), so both render identically.
+ */
+export function seriesFromBuckets(resp: AggregateBuckets, spec: SeriesSpec): SeriesData {
+  const maxSeries = spec.maxSeries ?? 8;
+  const buckets = new Map<string, BucketAcc>();
+  const seriesTotals = new Map<string, number>();
+  let total = 0;
+
+  for (const b of resp.buckets) {
+    const { key, label, iso } = serverBucketKey(b, spec.groupByDate);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { sortKey: key, label, iso, series: new Map() };
+      buckets.set(key, bucket);
+    }
+    const seriesKey = spec.seriesBy ? b.seriesLabel ?? bucketLabel(b.series) : SINGLE_SERIES;
+    bucket.series.set(seriesKey, (bucket.series.get(seriesKey) ?? 0) + b.value);
+    seriesTotals.set(seriesKey, (seriesTotals.get(seriesKey) ?? 0) + b.value);
+    total += b.value;
+  }
+
+  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, !!spec.groupByDate);
+}
+
+/**
+ * The dual-axis analogue of {@link seriesFromBuckets}: shape server buckets into the {@link ComboData}
+ * {@link buildCombo} produces, mapping each bucket's `value` to the primary measure and `value2` to
+ * the secondary.
+ */
+export function comboFromBuckets(resp: AggregateBuckets, spec: { groupByDate?: GroupByDate }): ComboData {
+  const buckets = new Map<string, { sortKey: string; label: string; iso: string; primary: number; secondary: number }>();
+  let primaryTotal = 0;
+  let secondaryTotal = 0;
+  for (const b of resp.buckets) {
+    const { key, label, iso } = serverBucketKey(b, spec.groupByDate);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { sortKey: key, label, iso, primary: 0, secondary: 0 };
+      buckets.set(key, bucket);
+    }
+    const s = b.value2 ?? 0;
+    bucket.primary += b.value;
+    bucket.secondary += s;
+    primaryTotal += b.value;
+    secondaryTotal += s;
+  }
+
+  const ordered = [...buckets.values()];
+  if (spec.groupByDate) {
+    ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
+  }
+  return {
+    rows: ordered.map((b) => ({ label: b.label, [ISO_KEY]: b.iso, primary: b.primary, secondary: b.secondary })),
+    totals: { primary: primaryTotal, secondary: secondaryTotal },
+  };
 }
