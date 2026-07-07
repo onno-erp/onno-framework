@@ -267,6 +267,13 @@ dynamic-imports each at boot, where it self-registers via the `window.onno` host
 uses `@onno/widget-sdk` (bundled in the Gradle plugin — no npm needed). See the README's
 "Authoring a custom widget" section.
 
+The same registry also serves **custom list renderers**: an `EntityView` may declare
+`list.custom("type")` to delegate the list *body* (tiles/cards/gallery) to a component registered
+with `registerListRenderer(type, C)`, while the framework keeps the toolbar (search, filters,
+sorting), the feed (infinite/paged + pager), and live refresh — the component just receives the
+current window of rows, the list descriptor, and an open-record callback. An unregistered type
+degrades to the default grid. See the README's "Custom list renderers" section.
+
 ## Auth & RBAC
 
 `onno-auth-starter` contributes the `SecurityFilterChain` and picks a mode from `onno.auth.mode`:

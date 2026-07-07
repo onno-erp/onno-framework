@@ -29,6 +29,7 @@ public final class ListSpec {
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
     private MapSpec map;
+    private CustomSpec custom;
     private FeedMode feedMode;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
@@ -153,6 +154,34 @@ public final class ListSpec {
     }
 
     /**
+     * Delegate the list's <em>body</em> to a custom renderer registered in the UI's widget registry
+     * (a consumer plugin's {@code registerListRenderer("type", Component)} via
+     * {@code @onno/widget-sdk}) — tiles, cards, a gallery, whatever the component draws. The
+     * framework keeps owning the chrome: search, declarative filters, sorting, the feed
+     * (infinite/paged), live refresh and the toolbar all still work and drive the rows the renderer
+     * receives. Returns a {@link CustomSpec}; optionally set the toggle {@link CustomSpec#label} and
+     * {@link CustomSpec#defaultView} to open on the custom view (a Table ⇄ custom toggle appears in
+     * the toolbar, like {@link #map()}).
+     *
+     * <p>Calling {@code custom(type)} again replaces the type but keeps the same spec (so chained
+     * calls accumulate, mirroring {@link #map()}). A type with no registered renderer on the client
+     * degrades to the default grid rather than failing the list — same philosophy as a {@code map()}
+     * whose geo fields don't resolve.</p>
+     *
+     * <pre>
+     * list.custom("bookTiles");                              // Table ⇄ custom toggle
+     * list.custom("bookTiles").label("Shelf").defaultView(); // open on the tiles, labelled "Shelf"
+     * </pre>
+     */
+    public CustomSpec custom(String type) {
+        if (custom == null) {
+            custom = new CustomSpec();
+        }
+        custom.type = type;
+        return custom;
+    }
+
+    /**
      * How this list feeds rows to the grid: {@link FeedMode#INFINITE} streams a cursor-scrolled
      * (keyset) window that loads more as you scroll — fast at any depth, no total — or
      * {@link FeedMode#PAGED} shows discrete numbered pages with a Prev/Next pager and an exact
@@ -254,6 +283,42 @@ public final class ListSpec {
     /** The map view spec, or null when {@link #map()} was never called (no map view). */
     public MapSpec mapSpec() {
         return map;
+    }
+
+    /** The custom-renderer spec, or null when {@link #custom} was never called (default grid only). */
+    public CustomSpec customSpec() {
+        return custom;
+    }
+
+    /**
+     * A custom list-body renderer: the widget-registry {@link #type} the client resolves the
+     * component from, an optional toolbar-toggle {@link #label} (else the UI's
+     * {@code list.customView} message), and whether the list opens on the custom view.
+     */
+    public static final class CustomSpec {
+        private String type;
+        private String label;
+        private boolean defaultView = false;
+
+        CustomSpec() {}
+
+        /** The toolbar-toggle label for the custom view (defaults to the {@code list.customView} message). */
+        public CustomSpec label(String label) {
+            this.label = label;
+            return this;
+        }
+
+        /** Open the list on the custom view rather than the table. */
+        public CustomSpec defaultView() {
+            this.defaultView = true;
+            return this;
+        }
+
+        public String type() { return type; }
+
+        public String label() { return label; }
+
+        public boolean isDefaultView() { return defaultView; }
     }
 
     /**

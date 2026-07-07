@@ -51,6 +51,51 @@ export interface OnnoReadApi {
   getMovements(name: string, from?: string, to?: string): Promise<unknown>;
 }
 
+/** One resolved list column, as the entity's ListSpec/field hints produced it. */
+export interface ListRendererColumn {
+  /** The data column to read off each row (display/ref sidecars ride as {@code {col}_display} etc.). */
+  columnName: string;
+  /** The header label the table would have shown. */
+  label: string;
+  /** Authored width hint in px, or "" (size to content). */
+  width: string;
+  /** Display hint: "image"/"avatar" cells hold an image URL. */
+  widget?: string;
+  /** Display format: a date pattern ("dd-MM-yy") or number spec ("currency:EUR", "integer", …). */
+  format?: string;
+  /** Optional help text from the field hint. */
+  hint?: string;
+}
+
+/** The descriptor slice a custom list renderer receives alongside the rows. */
+export interface ListRendererDescriptor {
+  /** Entity kind: "catalogs" | "documents" | "registers". */
+  kind: string;
+  /** The entity's route name (snake_case of the display name). */
+  name: string;
+  /** The list's resolved title. */
+  title: string;
+  /** The resolved columns (labels, formats, widgets) — the data contract the server decorated. */
+  columns: ListRendererColumn[];
+  /** The viewer's write access on the entity (RBAC-stamped; REST enforces regardless). */
+  canWrite: boolean;
+}
+
+/**
+ * The props a custom list-body renderer receives (see {@code registerListRenderer}). The framework
+ * keeps the toolbar (search, filters, sort) and the feed (infinite scroll / pages, live refresh);
+ * the renderer only draws the current window of rows and opens records through the callback.
+ */
+export interface ListRendererProps {
+  /** The rows of the current window (all loaded rows in infinite mode; the page in paged mode). */
+  rows: EntityRecord[];
+  list: ListRendererDescriptor;
+  /** Open a record's detail pane (no-op for rows without an id). */
+  open: (row: EntityRecord) => void;
+  /** The record's {@code onno://} detail route, or null when it has none. */
+  openUrl: (row: EntityRecord) => string | null;
+}
+
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
   React: typeof import("react");
