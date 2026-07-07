@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { HintIcon } from "@/components/ui/hint-icon";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks of type {@code onno-hint} to a hoverable "?" help
@@ -124,7 +125,9 @@ export function HintPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <HintIcon text={m.text} color={m.color} size={m.size} />,
+          <IslandErrorBoundary label="hint">
+            <HintIcon text={m.text} color={m.color} size={m.size} />
+          </IslandErrorBoundary>,
           m.el,
           String(m.id)
         )

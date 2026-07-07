@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { GeoView } from "@/components/geo-view";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-geo} to the React {@link GeoView}.
@@ -80,7 +81,13 @@ export function GeoPortals() {
   return (
     <>
       {list.map((m) =>
-        createPortal(<GeoView value={m.geo.value} label={m.geo.label} />, m.el, String(m.id))
+        createPortal(
+          <IslandErrorBoundary label={m.geo.label || "map"}>
+            <GeoView value={m.geo.value} label={m.geo.label} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
       )}
     </>
   );

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PresenceAvatars } from "@/components/presence-avatars";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { useEntityViewers } from "@/lib/presence-store";
 
 /**
@@ -102,7 +103,15 @@ export function NavPresencePortals() {
   const live = useSyncExternalStore(subscribe, getSnapshot);
   return (
     <>
-      {live.map((m) => createPortal(<NavPresenceIndicator path={m.path} />, m.el, String(m.id)))}
+      {live.map((m) =>
+        createPortal(
+          <IslandErrorBoundary label="nav presence">
+            <NavPresenceIndicator path={m.path} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
+      )}
     </>
   );
 }

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { ConstantsEditor } from "@/components/constants-editor";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-constants} to the React
@@ -102,7 +103,13 @@ export function ConstantsPortals() {
   return (
     <>
       {list.map((m) =>
-        createPortal(<ConstantsEditor title={m.title} names={m.names ?? undefined} />, m.el, String(m.id))
+        createPortal(
+          <IslandErrorBoundary label={m.title || "constants"}>
+            <ConstantsEditor title={m.title} names={m.names ?? undefined} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
       )}
     </>
   );

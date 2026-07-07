@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { EntityListWidget, type ListDescriptor } from "@/components/entity-list-widget";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-list} to the React
@@ -77,5 +78,17 @@ export const LIST_CUSTOM_COMPONENTS = new Map<string, { element: string }>([
 /** Portals every live {@code <onno-list>} to its React grid. Mount once, inside the Router. */
 export function ListPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
-  return <>{list.map((m) => createPortal(<EntityListWidget list={m.list} />, m.el, String(m.id)))}</>;
+  return (
+    <>
+      {list.map((m) =>
+        createPortal(
+          <IslandErrorBoundary label={m.list.title || m.list.name}>
+            <EntityListWidget list={m.list} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
+      )}
+    </>
+  );
 }

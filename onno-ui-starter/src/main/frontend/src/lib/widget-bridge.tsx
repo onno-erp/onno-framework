@@ -1,6 +1,7 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import type { DashboardWidgetMeta } from "@/lib/types";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { ChartWidget, TimeRangeWidget } from "@/components/chart-widget";
 import { CalendarWidget } from "@/components/calendar-widget";
 import { KanbanWidget } from "@/components/kanban-widget";
@@ -167,7 +168,15 @@ export function WidgetPortals() {
           // missing registerWidget(...) is visible rather than a blank gap.
           <UnknownWidget type={m.widget.widgetType} title={m.widget.title} />
         );
-        return createPortal(node, m.el, String(m.id));
+        return createPortal(
+          // A throwing widget (registered renderers are app code) must not unwind the
+          // shared React root — degrade to a labelled placeholder instead.
+          <IslandErrorBoundary label={m.widget.title || m.widget.widgetType}>
+            {node}
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        );
       })}
     </>
   );

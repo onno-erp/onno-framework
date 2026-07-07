@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ActionFormDialog, type ActionFormField } from "@/components/action-form-dialog";
 import { DynamicLucide } from "@/lib/icon-bridge";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -274,5 +275,17 @@ function ActionsCluster({ items }: { items: ActionItem[] }) {
 /** Portals every live {@code <onno-actions-menu>} to its React cluster. Mount once, inside the Router. */
 export function ActionsMenuPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
-  return <>{list.map((m) => createPortal(<ActionsCluster items={m.items} />, m.el, String(m.id)))}</>;
+  return (
+    <>
+      {list.map((m) =>
+        createPortal(
+          <IslandErrorBoundary label="actions menu">
+            <ActionsCluster items={m.items} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
+      )}
+    </>
+  );
 }

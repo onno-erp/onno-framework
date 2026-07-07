@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { EntityFormWidget, type FormDescriptor } from "@/components/entity-form-widget";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-form} to the React
@@ -83,7 +84,15 @@ export function FormPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
   return (
     <>
-      {list.map((m) => createPortal(<EntityFormWidget form={m.form} />, m.el, String(m.id)))}
+      {list.map((m) =>
+        createPortal(
+          <IslandErrorBoundary label={m.form.title || m.form.name}>
+            <EntityFormWidget form={m.form} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
+      )}
     </>
   );
 }

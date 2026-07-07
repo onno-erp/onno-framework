@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { EntityCommentsWidget, type CommentTarget } from "@/components/entity-comments-widget";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-comments} to the React
@@ -82,7 +83,13 @@ export function CommentsPortals() {
   return (
     <>
       {live.map((m) =>
-        createPortal(<EntityCommentsWidget target={m.target} />, m.el, String(m.id))
+        createPortal(
+          <IslandErrorBoundary label={`${m.target.name} comments`}>
+            <EntityCommentsWidget target={m.target} />
+          </IslandErrorBoundary>,
+          m.el,
+          String(m.id)
+        )
       )}
     </>
   );
