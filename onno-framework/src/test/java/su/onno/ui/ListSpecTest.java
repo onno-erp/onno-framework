@@ -71,6 +71,28 @@ class ListSpecTest {
     }
 
     @Test
+    void optionsFilterCanBeMadeMultiple() {
+        ListSpec spec = new ListSpec();
+        spec.filter("city").options("Madrid", "Paris").multiple();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.MULTI_OPTIONS);
+        assertThat(f.options()).extracting(ListSpec.Option::value, ListSpec.Option::label)
+                .containsExactly(tuple("Madrid", "Madrid"), tuple("Paris", "Paris"));
+    }
+
+    @Test
+    void multiOptionsFilterCanBeMadeSingleAgain() {
+        ListSpec spec = new ListSpec();
+        spec.filter("city").multiOptions("Madrid", "Paris").single();
+
+        ListSpec.Filter f = spec.filters().get(0);
+        assertThat(f.type()).isEqualTo(ListSpec.FilterType.OPTIONS);
+        assertThat(f.options()).extracting(ListSpec.Option::value, ListSpec.Option::label)
+                .containsExactly(tuple("Madrid", "Madrid"), tuple("Paris", "Paris"));
+    }
+
+    @Test
     void containsFilterIsTypeaheadWithNoOptions() {
         ListSpec spec = new ListSpec();
         spec.filter("doctorName").label("Doctor").contains();

@@ -26,11 +26,11 @@ public class CustomerView implements EntityView {
                 .label("description", "Name")
                 .sortBy("description", false)
                 .groupable("city");
-        // A single-select city facet (the seeder's spread) and an email typeahead.
+        // A multi-select city facet (the seeder's spread) and an email typeahead.
         list.filter("city").label("City").options(
                 "New York", "Los Angeles", "Chicago", "Toronto", "London", "Paris", "Berlin",
                 "Madrid", "Rome", "Amsterdam", "Tokyo", "Singapore", "Dubai", "Mumbai",
-                "Sydney", "São Paulo", "Mexico City", "Cape Town");
+                "Sydney", "São Paulo", "Mexico City", "Cape Town").multiple();
         list.filter("email").label("Email").contains();
         // Plot each customer from its latitude/longitude; the marker popup shows the name.
         list.map().lat("latitude").lng("longitude").label("description");

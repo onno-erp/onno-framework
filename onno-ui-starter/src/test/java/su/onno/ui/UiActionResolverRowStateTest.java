@@ -28,6 +28,8 @@ class UiActionResolverRowStateTest {
                     .handler(ctx -> ActionResult.ok());
             a.action("ping").label("Ping").icon("activity").scope(ActionScope.ROW)
                     .handler(ctx -> ActionResult.ok());
+            a.action("status-done").label("Done").icon("circle-dot").color("#059669").logo("/people/ada.png")
+                    .scope(ActionScope.ROW).menu("Change status").handler(ctx -> ActionResult.ok());
         }
     }
 
@@ -77,5 +79,15 @@ class UiActionResolverRowStateTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> state = (Map<String, Object>) r.rowActionState(Status.class, Map.of()).get("boom");
         assertThat(state).containsEntry("visible", true).containsEntry("enabled", true);
+    }
+
+    @Test
+    void descriptors_includeMenuPresentationHints() {
+        List<Map<String, Object>> actions = resolver.descriptors(Status.class, java.util.Set.of(ActionScope.ROW));
+        assertThat(actions).anySatisfy(a -> assertThat(a)
+                .containsEntry("key", "status-done")
+                .containsEntry("menu", "Change status")
+                .containsEntry("color", "#059669")
+                .containsEntry("logo", "/people/ada.png"));
     }
 }

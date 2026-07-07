@@ -13,7 +13,7 @@ import type { UiEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { linkify } from "@/lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { tint } from "@/components/presence-avatars";
+import { notionistsAvatar, tint } from "@/components/presence-avatars";
 
 /** The entity a thread hangs off — the same triple the detail route uses. */
 export type CommentTarget = { kind: "catalogs" | "documents"; name: string; id: string };
@@ -510,9 +510,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
     <div key={c.id} className={cn(nested && "ml-10 border-l border-border pl-3")}>
       <div className="group flex gap-3 rounded-card px-2 py-2 -mx-2 transition-colors hover:bg-muted/40">
         <Avatar className="mt-0.5 size-7 shrink-0 border border-border">
-          {c.authorAvatarUrl ? (
-            <AvatarImage src={c.authorAvatarUrl} alt={c.authorName ?? ""} />
-          ) : null}
+          <AvatarImage src={c.authorAvatarUrl || notionistsAvatar(c.authorName)} alt={c.authorName ?? ""} />
           <AvatarFallback
             className="text-[11px] text-white"
             style={{ backgroundColor: tint(c.authorName ?? "") }}
@@ -707,7 +705,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
                     aria-selected={i === active}
                   >
                     <Avatar className="size-6 shrink-0 border border-border">
-                      {s.avatarUrl ? <AvatarImage src={s.avatarUrl} alt="" /> : null}
+                      <AvatarImage src={s.avatarUrl || notionistsAvatar(`${s.kind}/${s.name}/${s.id}`)} alt="" />
                       <AvatarFallback className="text-[10px]">{initials(s.display)}</AvatarFallback>
                     </Avatar>
                     <span className="min-w-0 flex-1 truncate font-medium text-foreground">{s.display}</span>

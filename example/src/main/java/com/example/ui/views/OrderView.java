@@ -1,7 +1,9 @@
 package com.example.ui.views;
 
+import com.example.domain.catalogs.Employee;
 import com.example.domain.documents.Order;
 import com.example.domain.enumerations.OrderStatus;
+import com.example.repositories.EmployeeRepository;
 import com.example.repositories.OrderRepository;
 import su.onno.ui.ActionResult;
 import su.onno.ui.ActionScope;
@@ -9,6 +11,7 @@ import su.onno.ui.ActionSpec;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
 import su.onno.ui.ListSpec;
+import su.onno.types.Ref;
 
 import org.springframework.stereotype.Component;
 
@@ -25,9 +28,11 @@ import java.util.UUID;
 public class OrderView implements EntityView {
 
     private final OrderRepository orders;
+    private final EmployeeRepository employees;
 
-    public OrderView(OrderRepository orders) {
+    public OrderView(OrderRepository orders, EmployeeRepository employees) {
         this.orders = orders;
+        this.employees = employees;
     }
 
     @Override
@@ -124,9 +129,25 @@ public class OrderView implements EntityView {
         // hidden per row; with a multi-row selection the entries run over every selected order.
         for (OrderStatus st : OrderStatus.values()) {
             a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
-                    .menu("Change status").icon("circle-dot").label(labelOf(st))
+                    .menu("Change status").icon("circle-dot").color(colorOf(st)).label(labelOf(st))
                     .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
                     .handler(ctx -> setStatus(ctx.id(), st));
+        }
+
+        // CONTEXT MENU: "Assign" shows the current active employees, using their avatar photo as
+        // the menu icon. The handler writes the same @AssigneeField used by the form, so assignment
+        // notifications still fire through the normal framework path.
+        for (Employee employee : employees.findAllActive()) {
+            if (employee.getId() == null) {
+                continue;
+            }
+            String label = employee.getDescription() == null || employee.getDescription().isBlank()
+                    ? employee.getCode()
+                    : employee.getDescription();
+            UUID employeeId = employee.getId();
+            a.action("assign-" + employeeId).scope(ActionScope.ROW)
+                    .menu("Assign").icon("user-round").logo(employee.getAvatarUrl()).label(label)
+                    .handler(ctx -> assign(ctx.id(), employeeId, label));
         }
     }
 
@@ -147,6 +168,14 @@ public class OrderView implements EntityView {
         }).orElseGet(() -> ActionResult.message("Order not found"));
     }
 
+    private ActionResult assign(UUID id, UUID employeeId, String label) {
+        return orders.findById(id).map(o -> {
+            o.setAssignedTo(Ref.of(Employee.class, employeeId));
+            orders.save(o);
+            return ActionResult.refresh("Assigned to " + label);
+        }).orElseGet(() -> ActionResult.message("Order not found"));
+    }
+
     /** The @EnumLabel display value ("New", "Confirmed", …) for a submenu entry. */
     private static String labelOf(OrderStatus st) {
         return switch (st) {
@@ -155,6 +184,17 @@ public class OrderView implements EntityView {
             case SHIPPED -> "Shipped";
             case COMPLETED -> "Completed";
             case CANCELLED -> "Cancelled";
+        };
+    }
+
+    /** Keep the context-menu swatches aligned with the @EnumLabel colors on OrderStatus. */
+    private static String colorOf(OrderStatus st) {
+        return switch (st) {
+            case NEW -> "#6B7280";
+            case CONFIRMED -> "#D97706";
+            case SHIPPED -> "#4F46E5";
+            case COMPLETED -> "#059669";
+            case CANCELLED -> "#DC2626";
         };
     }
 

@@ -72,6 +72,8 @@ export type ListAction = {
   icon: string;
   /** Image URL/path shown instead of the lucide icon — e.g. a brand logo for "Connect with X". */
   logo?: string;
+  /** Optional CSS color swatch for compact renderers such as row-menu status choices. */
+  color?: string;
   scope: "toolbar" | "row";
   /**
    * Context-menu placement (from ActionSpec.menu("…")): the row action renders inside the row's
@@ -222,6 +224,9 @@ function rowDeleteUrl(rowUrl: string): string {
 }
 function rowShareableUrl(rowUrl: string): string {
   return window.location.origin + withBasePath("/" + rowUrl.slice("onno://".length));
+}
+function rowOpenUrl(kind: string, name: string, id: string): string {
+  return `onno://${kind}/${name}/${id}`;
 }
 
 /** Whether keyboard input currently belongs to an editable control (so shortcuts stay native). */
@@ -446,7 +451,7 @@ function OptionsFacet({
     </button>
   );
 
-  // Phones/tablets: a bottom sheet of 44px check rows instead of a small anchored popover.
+  // Compact layouts: 44px option rows in a framed overlay instead of a small anchored popover.
   if (touch) {
     return (
       <>
@@ -498,7 +503,8 @@ function OptionsFacet({
                   >
                     <span
                       className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                        "flex size-5 shrink-0 items-center justify-center border transition-colors",
+                        multi ? "rounded-[5px]" : "rounded-full",
                         on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                       )}
                     >
@@ -558,7 +564,8 @@ function OptionsFacet({
               >
                 <span
                   className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+                    "flex size-4 shrink-0 items-center justify-center border transition-colors",
+                    multi ? "rounded-[4px]" : "rounded-full",
                     on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                   )}
                 >
@@ -2065,6 +2072,9 @@ export function EntityListWidget({
     ? (() => {
         const batch = selected.size > 1 && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
+        const openBatch = () => {
+          for (const id of ids) dispatchAction(rowOpenUrl(kind, name, id));
+        };
         // Navigation actions are single-record by nature — batch mode offers server actions only.
         const eligible = (a: ListAction) => !batch || a.server;
         const flatCustom = rowActions.filter((a) => !a.menu).filter(eligible);
@@ -2094,7 +2104,13 @@ export function EntityListWidget({
               }}
             >
               {a.logo ? (
-                <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 object-contain" />
+                <img src={a.logo} alt="" aria-hidden="true" className="size-4 shrink-0 rounded-full object-cover" />
+              ) : a.color ? (
+                <span
+                  aria-hidden="true"
+                  className="size-4 shrink-0 rounded-full border border-white/25 shadow-sm"
+                  style={{ backgroundColor: a.color }}
+                />
               ) : (
                 <DynamicLucide name={(!batch && st?.icon) || a.icon || "zap"} size={16} />
               )}
@@ -2102,9 +2118,9 @@ export function EntityListWidget({
             </ContextMenuItem>
           );
         };
-        // Built-ins: batch = label + delete; single = open/dup/copyLink/delete — minus the
+        // Built-ins: batch = label + open + delete; single = open/dup/copyLink/delete — minus the
         // write items (dup, delete) when the viewer can't write the entity.
-        const itemCount = (batch ? (canWrite ? 2 : 1) : canWrite ? 4 : 2) + flatCustom.length + submenus.length;
+        const itemCount = (batch ? (canWrite ? 3 : 2) : canWrite ? 4 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
             open
@@ -2116,7 +2132,18 @@ export function EntityListWidget({
             estimatedHeight={itemCount * 38 + 24}
           >
             {batch ? (
-              <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
+              <>
+                <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
+                <ContextMenuItem
+                  onSelect={() => {
+                    openBatch();
+                    close();
+                  }}
+                >
+                  <ExternalLink className="text-muted-foreground" aria-hidden="true" />
+                  <span>{t("action.open")} {ids.length}</span>
+                </ContextMenuItem>
+              </>
             ) : (
               <>
                 <ContextMenuItem

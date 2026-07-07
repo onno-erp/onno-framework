@@ -21,6 +21,11 @@ function price(row: EntityRecord): string | null {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(n);
 }
 
+function coverUrl(row: EntityRecord): string | null {
+  const v = row.cover_url ?? row.coverUrl;
+  return typeof v === "string" && v ? v : null;
+}
+
 function BookTiles({ rows, open }: ListRendererProps) {
   return (
     <div
@@ -31,7 +36,7 @@ function BookTiles({ rows, open }: ListRendererProps) {
       }}
     >
       {rows.map((row) => {
-        const cover = typeof row.coverUrl === "string" && row.coverUrl ? row.coverUrl : null;
+        const cover = coverUrl(row);
         return (
           <button
             key={String(row._id)}
@@ -52,8 +57,8 @@ function BookTiles({ rows, open }: ListRendererProps) {
                   style={{ height: "100%", width: "100%", objectFit: "cover" }}
                 />
               ) : (
-                <span className="text-muted-foreground" style={{ fontSize: 32 }} aria-hidden>
-                  📕
+                <span className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 700 }} aria-hidden>
+                  BOOK
                 </span>
               )}
             </div>

@@ -170,6 +170,9 @@ public class UiActionResolver {
             if (a.logo() != null && !a.logo().isBlank()) {
                 m.put("logo", a.logo());
             }
+            if (a.color() != null && !a.color().isBlank()) {
+                m.put("color", a.color());
+            }
             m.put("scope", a.scope().name().toLowerCase());
             if (a.menu() != null && !a.menu().isBlank()) {
                 // Context-menu placement: the client renders this row action inside the row's

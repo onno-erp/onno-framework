@@ -202,7 +202,8 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim) or `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for
-    order) / `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    order); `.options(...).multiple()` is the configurable form of the same multi-select behavior
+    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
@@ -227,7 +228,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
     `menu("Change status")` moves a ROW action off the inline row buttons into the row's
     **right-click context menu**, under a submenu with that label (same-label actions group; one
-    action per enum value is the idiom). The list also supports **batch selection** (⌘/Ctrl-click
+    action per enum value is the idiom). `color("#…")` renders a compact swatch for menu entries
+    such as status choices; `logo(url)` renders there too, useful for assignee avatars. The list
+    also supports **batch selection** (⌘/Ctrl-click
     toggle, Shift-click range, ⌘A = all loaded rows, ⇧⌘↓/⇧⌘↑ = extend to bottom/top, gated on the
     list being engaged): right-clicking the selection runs any server row action over every
     selected id — as ONE request via `POST /api/actions/{kind}/{name}/{key}/batch` (`{ids,inputs}`,

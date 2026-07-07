@@ -93,7 +93,8 @@ public final class ListSpec {
      * column/sort field names). Unlike a toolbar {@link InputSpec input} — which feeds action
      * handlers — a filter drives the list query itself: its value narrows the rows the grid shows.
      * Returns a {@link FilterBuilder}; pick the control with {@link FilterBuilder#options} (a SELECT
-     * matched for equality), {@link FilterBuilder#multiOptions} (a multi-select matched as
+     * matched for equality), {@link FilterBuilder#multiple} or {@link FilterBuilder#multiOptions}
+     * (a multi-select matched as
      * {@code field IN (…)}), {@link FilterBuilder#contains}/{@link FilterBuilder#startsWith} (a
      * field-scoped typeahead for high-cardinality fields, matched case-insensitively as
      * {@code LIKE}), or {@link FilterBuilder#dateRange} (from/to pickers, a {@code field >= from AND
@@ -113,6 +114,7 @@ public final class ListSpec {
      *
      * <pre>
      * list.filter("season").options("2024", "2025", "2026");        // SELECT -> season = value
+     * list.filter("city").options("Madrid", "Paris").multiple();     // multi-select -> city IN (…)
      * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%
      * list.filter("role").multiOptions("Хирург", "Терапевт");        // multi-select -> role IN (…)
      * list.filter("checkIn").dateRange();                           // from/to pickers -> checkIn range
@@ -449,8 +451,8 @@ public final class ListSpec {
     }
 
     /**
-     * Fluent builder for one filter; {@link #options}/{@link #multiOptions}/{@link #contains}/
-     * {@link #startsWith}/{@link #dateRange} pick the control type.
+     * Fluent builder for one filter; {@link #options}/{@link #multiple}/{@link #multiOptions}/
+     * {@link #contains}/{@link #startsWith}/{@link #dateRange} pick the control type.
      */
     public static final class FilterBuilder {
         private final String field;
@@ -489,6 +491,22 @@ public final class ListSpec {
         public FilterBuilder options(Map<String, String> valueToLabel) {
             this.type = FilterType.OPTIONS;
             this.options = pairs(valueToLabel);
+            return this;
+        }
+
+        /**
+         * Make the current options control multi-select, matched as {@code field IN (…)} over the
+         * checked values. Useful when options are declared first and multiplicity is a later choice:
+         * {@code list.filter("city").options("Madrid", "Paris").multiple()}.
+         */
+        public FilterBuilder multiple() {
+            this.type = FilterType.MULTI_OPTIONS;
+            return this;
+        }
+
+        /** Make the current options control single-select again (the default for {@link #options}). */
+        public FilterBuilder single() {
+            this.type = FilterType.OPTIONS;
             return this;
         }
 

@@ -364,11 +364,14 @@ icon button — actions sharing a label group together in declaration order. The
 ```java
 for (OrderStatus st : OrderStatus.values()) {
     a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)
-     .menu("Change status").label(labelOf(st))
+     .menu("Change status").label(labelOf(st)).color(colorOf(st))
      .visibleWhen(row -> row.enumValue("status", OrderStatus.class) != st)
      .handler(ctx -> setStatus(ctx.id(), st));
 }
 ```
+
+`color("#059669")` gives context-menu entries a compact swatch, useful for enum/status submenus.
+`logo(url)` is also honored there, so an "Assign" submenu can show employee photos.
 
 Rows also support **batch selection**: ⌘/Ctrl-click toggles a row, Shift-click selects the range
 from the last toggled row, Esc (or the toolbar's "N selected ✕" chip) clears. With the list
