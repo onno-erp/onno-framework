@@ -16,6 +16,8 @@ import type {
 } from "./types";
 
 import { toSnakeCase } from "./utils";
+// Type-only (erased at build time), so this doesn't create a runtime cycle with widget-data.
+import type { AggregateBuckets } from "./widget-data";
 
 const BASE = "/api";
 const CSRF_COOKIE = "XSRF-TOKEN";
@@ -428,6 +430,16 @@ export const api = {
   /** Server-side copy of a document (attributes + line items, unposted, dated now). Backs ⌘V paste. */
   duplicateDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/duplicate`, { method: "POST" }),
+  // Pre-aggregated buckets for a data widget (chart/stat/sparkline/gauge): a server-side GROUP BY
+  // returning O(buckets) rows instead of the entity's whole table (#199, see ListDataController).
+  // `params` is the ready-to-send query — metric/field, groupBy/groupByDate, seriesBy, filter,
+  // dateField/from/to — exactly as built by the widget (see useWidgetBuckets).
+  aggregateWidget: (kind: "catalogs" | "documents", name: string, params: Record<string, string>) => {
+    // See listCatalog: normalize so built-in and SDK custom widgets share one fetch.
+    name = toSnakeCase(name);
+    const qs = new URLSearchParams(params).toString();
+    return fetchJson<AggregateBuckets>(`${BASE}/list/${kind}/${name}/aggregate${qs ? "?" + qs : ""}`);
+  },
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
   // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
   // input values (if any) ride along in the body and reach the handler via ActionContext.

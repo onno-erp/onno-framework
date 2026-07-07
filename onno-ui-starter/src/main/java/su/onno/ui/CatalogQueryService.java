@@ -158,6 +158,17 @@ public class CatalogQueryService {
         });
     }
 
+    /**
+     * Grouped aggregate buckets for a chart/stat widget — a server-side {@code GROUP BY} returning
+     * O(buckets) rows instead of the whole table (#199). See {@link WidgetBuckets}.
+     */
+    public Map<String, Object> aggregateBuckets(CatalogDescriptor desc, WidgetBuckets.Request request) {
+        Set<String> columns = new java.util.HashSet<>(columnNames(desc));
+        columns.addAll(WidgetBuckets.CATALOG_SYSTEM_COLUMNS);
+        return WidgetBuckets.run(jdbi, refResolver, desc.attributes(), desc.tableName(),
+                columns, request);
+    }
+
     private static Set<String> columnNames(CatalogDescriptor desc) {
         return desc.attributes().stream()
                 .map(a -> a.columnName().toLowerCase())
