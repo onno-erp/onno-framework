@@ -193,6 +193,31 @@ function isRecordDetail(pathname: string): boolean {
   return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
 }
 
+function editBasePath(pathname: string): string | null {
+  const seg = pathname.split("/").filter(Boolean);
+  if (seg.length === 4 && (seg[0] === "documents" || seg[0] === "catalogs") && seg[3] === "edit") {
+    return `/${seg[0]}/${seg[1]}/${seg[2]}`;
+  }
+  return null;
+}
+
+function recordBasePath(pathname: string): string | null {
+  return editBasePath(pathname) ?? (isRecordDetail(pathname) ? pathname : null);
+}
+
+function sameRecordTab(a: string, b: string): boolean {
+  const ar = recordBasePath(a);
+  const br = recordBasePath(b);
+  return ar != null && ar === br;
+}
+
+function tabsWithRecordPath(tabs: WorkspaceTab[], path: string): WorkspaceTab[] {
+  if (!recordBasePath(path)) {
+    return tabs.some((t) => t.path === path) ? tabs : [...tabs, tabForPath(path)];
+  }
+  return [...tabs.filter((t) => !sameRecordTab(t.path, path)), tabForPath(path)];
+}
+
 // Turn a row's open url ("onno://{kind}/{name}/{id}") into the delete action url
 // ("onno://delete/{kind}/{name}/{id}") handled by onCustomAction.
 function rowDeleteUrl(rowUrl: string): string {
@@ -505,8 +530,10 @@ export function DivKitView() {
       setWorkspace((ws) => {
         const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
         const panes = ws.panes.map((p) => {
-          if (p.id !== focused.id) return p;
-          const tabs = p.tabs.some((t) => t.path === path) ? p.tabs : [...p.tabs, tabForPath(path)];
+          if (p.id !== focused.id) {
+            return recordBasePath(path) ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) } : p;
+          }
+          const tabs = tabsWithRecordPath(p.tabs, path);
           return { ...p, tabs, activePath: path };
         });
         return { ...ws, panes, focused: focused.id };
@@ -529,12 +556,20 @@ export function DivKitView() {
   const openDetailRight = useCallback(
     (path: string) => {
       setWorkspace((ws) => {
-        const holder = ws.panes.find((p) => p.tabs.some((t) => t.path === path));
+        const holder = ws.panes.find((p) =>
+          p.tabs.some((t) => t.path === path || sameRecordTab(t.path, path))
+        );
         if (holder) {
           return {
             ...ws,
             focused: holder.id,
-            panes: ws.panes.map((p) => (p.id === holder.id ? { ...p, activePath: path } : p)),
+            panes: ws.panes.map((p) =>
+              p.id === holder.id
+                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
+                : recordBasePath(path)
+                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
+                  : p
+            ),
           };
         }
         const idx = Math.max(0, ws.panes.findIndex((p) => p.id === ws.focused));
@@ -547,8 +582,10 @@ export function DivKitView() {
             focused: target.id,
             panes: ws.panes.map((p) =>
               p.id === target.id
-                ? { ...p, tabs: [...p.tabs, tabForPath(path)], activePath: path }
-                : p
+                ? { ...p, tabs: tabsWithRecordPath(p.tabs, path), activePath: path }
+                : recordBasePath(path)
+                  ? { ...p, tabs: p.tabs.filter((t) => !sameRecordTab(t.path, path)) }
+                  : p
             ),
           };
         }
@@ -577,6 +614,26 @@ export function DivKitView() {
       // dirty flag is stale by definition — drop it rather than asking to discard.
       clearFormDirty(path);
       const ws = wsRef.current;
+      const base = editBasePath(path);
+      const editPane = base
+        ? ws.panes.find((p) => p.tabs.some((t) => t.path === path))
+        : undefined;
+      if (base && editPane) {
+        setWorkspace((current) => ({
+          ...current,
+          focused: editPane.id,
+          panes: current.panes.map((p) => {
+            if (p.id !== editPane.id) return p;
+            return {
+              ...p,
+              tabs: tabsWithRecordPath(p.tabs, base),
+              activePath: base,
+            };
+          }),
+        }));
+        if (base !== location.pathname) navigate(base);
+        return;
+      }
       if (!ws.panes.some((p) => p.tabs.some((t) => t.path === path))) return;
       const next = detachTab(ws, path);
       setWorkspace(next);
@@ -716,7 +773,18 @@ export function DivKitView() {
         openPath(path);
       }
     },
-    [navigate, location.pathname, logout, setTheme, resolvedTheme, openPath, openDetailRight, closePath, shell?.navStyle, t]
+    [
+      navigate,
+      location.pathname,
+      logout,
+      setTheme,
+      resolvedTheme,
+      openPath,
+      openDetailRight,
+      closePath,
+      shell?.navStyle,
+      t,
+    ]
   );
 
   // A stable dispatcher over the latest onCustomAction. The DivKit wrapper tears down and
