@@ -28,6 +28,19 @@ public class UiProperties {
     private Map<String, String> theme = new LinkedHashMap<>();
 
     /**
+     * The chrome language: a built-in message bundle to base every chrome string on, so a deployment
+     * localizes the whole shell with one line instead of a full {@code onno.ui.messages} map. Resolution
+     * layers three levels, later wins: the English {@link UiMessages#DEFAULTS} → the {@code locale}
+     * bundle → any explicit {@link #getMessages() onno.ui.messages} per-key override.
+     * {@code "en"} (the default) uses the built-in English defaults with no bundle file. Other values
+     * load {@code classpath:/su/onno/ui/messages/messages-<locale>.properties} (a UTF-8 properties file);
+     * onno ships {@code ru}. An app can add its own locale — or override a shipped one — by putting
+     * {@code messages-<locale>.properties} on the classpath at {@code onno/messages/} (that location wins
+     * over the bundled file). A missing bundle is a no-op (falls back to the English defaults).
+     */
+    private String locale = "en";
+
+    /**
      * Overrides for the framework's own chrome strings — action buttons, confirmation dialogs, the
      * login screen, empty/loading states, and client-side validation messages. Keys come from
      * {@link UiMessages#DEFAULTS} (e.g. {@code login.title}, {@code action.new}); each value replaces
@@ -91,6 +104,14 @@ public class UiProperties {
 
     public void setTheme(Map<String, String> theme) {
         this.theme = theme;
+    }
+
+    public String getLocale() {
+        return locale;
+    }
+
+    public void setLocale(String locale) {
+        this.locale = locale;
     }
 
     public Map<String, String> getMessages() {
