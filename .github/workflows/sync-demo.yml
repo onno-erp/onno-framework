@@ -10,8 +10,9 @@ name: Sync demo (onno-demo)
 # demo == latest release with zero hand-maintenance (onno-demo becomes a generated mirror). For a
 # HEAD-tracking demo you would instead publish a -SNAPSHOT on main pushes and trigger on `push: main`.
 #
-# Requires the repo secret ONNO_DEMO_DEPLOY_KEY: the private half of a *write* deploy key on
-# onno-erp/onno-demo (the public half is added there). See the deploy note in the PR that added this.
+# Requires the repo secret ONNO_DEMO_TOKEN: a token with contents:write on onno-erp/onno-demo
+# (a fine-grained PAT scoped to that repo is ideal). Deploy keys are disabled org-wide, so this
+# pushes over HTTPS with the token instead of SSH.
 
 on:
   push:
@@ -46,15 +47,8 @@ jobs:
         with:
           path: framework
 
-      - name: Set up the onno-demo deploy key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.ONNO_DEMO_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
-
       - name: Check out onno-demo
-        run: git clone git@github.com:onno-erp/onno-demo.git demo
+        run: git clone "https://x-access-token:${{ secrets.ONNO_DEMO_TOKEN }}@github.com/onno-erp/onno-demo.git" demo
 
       - name: Mirror the example's domain + UI code into onno-demo
         run: |
