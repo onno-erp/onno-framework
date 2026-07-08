@@ -122,7 +122,17 @@ public class CatalogQueryService {
      * New form pre-fills declared defaults instead of opening blank (issue #181).
      */
     public Map<String, Object> newDraft(CatalogDescriptor desc) {
+        return newDraft(desc, Map.of());
+    }
+
+    /**
+     * As {@link #newDraft(CatalogDescriptor)}, but overlays caller-supplied initial values (from the
+     * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
+     * resolution — so a deep link like {@code …/new?field=value} pre-fills those fields.
+     */
+    public Map<String, Object> newDraft(CatalogDescriptor desc, Map<String, String> prefill) {
         Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), desc.attributes(), registry);
+        NewEntityDefaults.applyPrefill(row, desc.attributes(), prefill);
         refResolver.resolveAttributes(List.of(row), desc.attributes());
         return row;
     }

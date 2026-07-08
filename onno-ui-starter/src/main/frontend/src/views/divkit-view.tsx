@@ -145,11 +145,18 @@ function humanizeRouteToken(token: string): string {
     .join(" ");
 }
 
+// A path may carry a query (a prefilled New form: …/new?startsAt=…). Keep the full string as the
+// stored tab path (the surface fetch needs the query), but read route segments from the query-less
+// form so verb detection and title/identity aren't thrown off by the "?…" tail.
+function stripQuery(pathname: string): string {
+  return pathname.split("?")[0];
+}
+
 function tabForPath(pathname: string): WorkspaceTab {
   const path = pathname || "/";
-  if (path === "/") return { path, title: "Dashboard" };
+  if (stripQuery(path) === "/") return { path, title: "Dashboard" };
 
-  const [kind, name, detail, action] = path.split("/").filter(Boolean);
+  const [kind, name, detail, action] = stripQuery(path).split("/").filter(Boolean);
   const entity = name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page");
 
   if (detail === "new") return { path, title: `New ${entity}` };
@@ -170,7 +177,7 @@ function titleForPath(
   titles: Record<string, string> | undefined,
   t: Translate
 ): string {
-  const path = pathname || "/";
+  const path = stripQuery(pathname || "/");
   if (path === "/") return titles?.["/"] ?? t("nav.dashboard");
 
   const [kind, name, detail, action] = path.split("/").filter(Boolean);
@@ -189,12 +196,12 @@ function titleForPath(
 // (3 segments). These open in their own island beside the list, master-detail style;
 // 2-segment lists and 4-segment edit forms stay in the focused island.
 function isRecordDetail(pathname: string): boolean {
-  const seg = pathname.split("/").filter(Boolean);
+  const seg = stripQuery(pathname).split("/").filter(Boolean);
   return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
 }
 
 function editBasePath(pathname: string): string | null {
-  const seg = pathname.split("/").filter(Boolean);
+  const seg = stripQuery(pathname).split("/").filter(Boolean);
   if (seg.length === 4 && (seg[0] === "documents" || seg[0] === "catalogs") && seg[3] === "edit") {
     return `/${seg[0]}/${seg[1]}/${seg[2]}`;
   }
@@ -202,7 +209,7 @@ function editBasePath(pathname: string): string | null {
 }
 
 function recordBasePath(pathname: string): string | null {
-  return editBasePath(pathname) ?? (isRecordDetail(pathname) ? pathname : null);
+  return editBasePath(pathname) ?? (isRecordDetail(pathname) ? stripQuery(pathname) : null);
 }
 
 function sameRecordTab(a: string, b: string): boolean {

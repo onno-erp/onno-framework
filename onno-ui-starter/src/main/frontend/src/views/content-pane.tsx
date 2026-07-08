@@ -127,8 +127,12 @@ export function ContentPane({
 
   const endpoint = useMemo(() => {
     const isHome = path === "/" || path === "";
-    const base = isHome ? "/api/divkit/home" : `/api/divkit${path}`;
-    const qs = new URLSearchParams();
+    // A form path may carry its own query (e.g. …/new?startsAt=…&room=<id> for a prefilled New form).
+    // Split it off the pathname and merge into one query string so the fetch stays well-formed —
+    // appending "?viewport=…" to a path that already has "?" would produce a broken double-"?" URL.
+    const [pathname, search] = path.split("?");
+    const base = isHome ? "/api/divkit/home" : `/api/divkit${pathname}`;
+    const qs = new URLSearchParams(search ?? "");
     qs.set("viewport", viewport);
     qs.set("theme", theme);
     if (profile) qs.set("profile", profile);
