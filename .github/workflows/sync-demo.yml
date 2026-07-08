@@ -81,9 +81,13 @@ jobs:
         run: |
           git config user.name "onno-bot"
           git config user.email "bot@onno.su"
-          if git diff --quiet; then
+          # Stage everything first — added, modified, and deleted. (`commit -am` / `diff --quiet`
+          # only see already-tracked files, so a sync that adds new classes or widgets would be
+          # silently dropped.)
+          git add -A
+          if git diff --cached --quiet; then
             echo "onno-demo already in sync with ${{ steps.v.outputs.version }} — nothing to push."
             exit 0
           fi
-          git commit -am "chore: sync demo to onno ${{ steps.v.outputs.version }}"
+          git commit -m "chore: sync demo to onno ${{ steps.v.outputs.version }}"
           git push origin HEAD:main
