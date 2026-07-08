@@ -121,7 +121,17 @@ public class DocumentQueryService {
      * the New form pre-fills declared defaults instead of opening blank (issue #181).
      */
     public Map<String, Object> newDraft(DocumentDescriptor desc) {
+        return newDraft(desc, Map.of());
+    }
+
+    /**
+     * As {@link #newDraft(DocumentDescriptor)}, but overlays caller-supplied initial values (from the
+     * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
+     * resolution — so a deep link like {@code …/new?startsAt=…&room=<id>} pre-fills those fields.
+     */
+    public Map<String, Object> newDraft(DocumentDescriptor desc, Map<String, String> prefill) {
         Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), desc.attributes(), registry);
+        NewEntityDefaults.applyPrefill(row, desc.attributes(), prefill);
         refResolver.resolveAttributes(List.of(row), desc.attributes());
         return row;
     }

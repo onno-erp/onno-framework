@@ -64,11 +64,18 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new SpaIndexController(spaIndexHtml);
     }
 
-    /** The resolved chrome strings (English defaults + {@code onno.ui.messages} overrides). */
+    /**
+     * The resolved chrome strings, layered later-wins: English {@link UiMessages#DEFAULTS} → the
+     * {@code onno.ui.locale} bundle (e.g. the shipped {@code ru}) → explicit {@code onno.ui.messages}
+     * per-key overrides.
+     */
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public UiMessages uiMessages(UiProperties properties) {
-        return new UiMessages(properties.getMessages());
+        java.util.Map<String, String> merged =
+                new java.util.LinkedHashMap<>(UiMessageBundles.load(properties.getLocale()));
+        merged.putAll(properties.getMessages()); // explicit per-key overrides win over the locale bundle
+        return new UiMessages(merged);
     }
 
     @Bean

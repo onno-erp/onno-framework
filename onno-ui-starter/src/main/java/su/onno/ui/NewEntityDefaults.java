@@ -9,6 +9,7 @@ import su.onno.types.Ref;
 import java.lang.reflect.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,47 @@ final class NewEntityDefaults {
             }
         }
         return row;
+    }
+
+    /**
+     * Overlay caller-supplied initial values (from the New-form navigation query, e.g. a calendar
+     * widget deep-linking a dragged slot) onto a seed {@code row}. Applied <em>before</em> the caller
+     * runs ref/enum resolution, so an injected {@link Ref}/enum id resolves to a label exactly like a
+     * declared default. Keys are matched by attribute {@code fieldName} (what the write path and
+     * widgets use) and written under {@code columnName} (what the seed row / read side uses), in the
+     * same loose shape {@link #columnValues} emits: {@link Ref}/enum → id {@link UUID}, temporals kept
+     * as their ISO string, everything else the raw string. Unknown keys, secrets, and values that
+     * can't be coerced are skipped, never errored — a malformed deep link degrades to a blank field.
+     */
+    static void applyPrefill(Map<String, Object> row, List<AttributeDescriptor> attributes,
+                             Map<String, String> prefill) {
+        if (prefill == null || prefill.isEmpty()) {
+            return;
+        }
+        Map<String, AttributeDescriptor> byField = new HashMap<>();
+        for (AttributeDescriptor attr : attributes) {
+            byField.put(attr.fieldName(), attr);
+        }
+        for (Map.Entry<String, String> entry : prefill.entrySet()) {
+            AttributeDescriptor attr = byField.get(entry.getKey());
+            String value = entry.getValue();
+            if (attr == null || attr.secret() || value == null || value.isBlank()) {
+                continue;
+            }
+            Object coerced;
+            if (attr.isRef() || attr.javaType().isEnum()) {
+                try {
+                    coerced = UUID.fromString(value.trim());
+                } catch (IllegalArgumentException notAUuid) {
+                    continue;
+                }
+            } else {
+                // Temporals arrive as ISO strings (what columnValues emits and the write path parses);
+                // everything else is carried verbatim. No parse here — the form seeds from strings.
+                coerced = value;
+            }
+            row.put(attr.columnName(), coerced);
+        }
     }
 
     private static Object instantiate(Class<?> javaClass) {

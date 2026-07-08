@@ -739,14 +739,16 @@ public class DivKitController implements DisposableBean {
     }
 
     @GetMapping("/catalogs/{name}/new")
-    public Map<String, Object> catalogNew(@PathVariable String name, Principal principal) {
+    public Map<String, Object> catalogNew(@PathVariable String name,
+                                          @RequestParam Map<String, String> params, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
-        // (issue #181); blank for an entity with no usable no-arg constructor.
+        // (issue #181); blank for an entity with no usable no-arg constructor. Extra query params
+        // overlay onto that seed as initial field values.
         return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
-                meta, catalogQuery.newDraft(desc));
+                meta, catalogQuery.newDraft(desc, formPrefill(params)));
     }
 
     @GetMapping("/catalogs/{name}/{id}/edit")
@@ -853,14 +855,23 @@ public class DivKitController implements DisposableBean {
     }
 
     @GetMapping("/documents/{name}/new")
-    public Map<String, Object> documentNew(@PathVariable String name, Principal principal) {
+    public Map<String, Object> documentNew(@PathVariable String name,
+                                           @RequestParam Map<String, String> params, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
-        // (issue #181); blank for an entity with no usable no-arg constructor.
+        // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
+        // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
         return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
-                meta, documentQuery.newDraft(desc));
+                meta, documentQuery.newDraft(desc, formPrefill(params)));
+    }
+
+    /** Query params usable as New-form field prefills — the surface-control params are reserved, not fields. */
+    private static Map<String, String> formPrefill(Map<String, String> params) {
+        Map<String, String> prefill = new LinkedHashMap<>(params);
+        prefill.keySet().removeAll(Set.of("viewport", "theme", "profile"));
+        return prefill;
     }
 
     @GetMapping("/documents/{name}/{id}/edit")

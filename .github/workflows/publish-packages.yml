@@ -94,3 +94,14 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: ./gradlew publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
+
+      - name: Mirror the widgets Gradle plugin to the onno-cloud module registry
+        # The su.onno.widgets plugin lives in a pluginManagement includeBuild, so the root mirror
+        # step above never reaches it — publish its project explicitly. Consumers with custom widgets
+        # (e.g. tenant apps built by onno-cloud in a container with no local checkout) resolve
+        # `id("su.onno.widgets") version <v>` from here. Its publications aren't signed, so no key.
+        env:
+          ONNO_REGISTRY_URL: ${{ vars.ONNO_REGISTRY_URL || 'https://cloud.onno.su/modules' }}
+          ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
+          ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
+        run: ./gradlew :onno-widgets-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache

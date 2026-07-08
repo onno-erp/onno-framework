@@ -113,6 +113,11 @@ export type ContentAction = { url?: string };
  */
 function stretchTables(host: HTMLElement): void {
   host.querySelectorAll<HTMLElement>("*").forEach((el) => {
+    // Custom-widget islands (<onno-widget>) render their own React layout — a scheduler grid, a
+    // kanban board — not DivKit table markup. Their inner flex-columns are not table row-stacks, so
+    // stretching one to width:max-content/min-width:100% blows out the widget's layout. Never reach
+    // into a widget island; only DivKit-generated galleries are ours to touch.
+    if (el.closest("onno-widget")) return;
     const ov = getComputedStyle(el).overflowX;
     if (ov !== "auto" && ov !== "scroll") return; // the gallery scroller
     // The rows live in the flex-column with the most flex-row children (header + data
@@ -122,9 +127,13 @@ function stretchTables(host: HTMLElement): void {
     el.querySelectorAll<HTMLElement>("*").forEach((node) => {
       const cs = getComputedStyle(node);
       if (cs.display !== "flex" || cs.flexDirection !== "column") return;
-      const rowKids = [...node.children].filter(
-        (c) => getComputedStyle(c as HTMLElement).flexDirection === "row"
-      ).length;
+      // Count only genuine flex ROWS. `flex-direction` computes to "row" for ANY element (it's the
+      // initial value), so testing direction alone miscounts plain block children as rows and can
+      // mis-elect a block-heavy column as the row-stack — require display:flex too.
+      const rowKids = [...node.children].filter((c) => {
+        const ccs = getComputedStyle(c as HTMLElement);
+        return ccs.display === "flex" && ccs.flexDirection === "row";
+      }).length;
       if (rowKids > bestRows) {
         bestRows = rowKids;
         stack = node;
