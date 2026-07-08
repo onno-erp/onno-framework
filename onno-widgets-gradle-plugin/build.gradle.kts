@@ -59,3 +59,30 @@ gradlePlugin {
         }
     }
 }
+
+// Publish the plugin jar + its plugin-marker to the onno-cloud module registry, the same channel the
+// framework artifacts mirror to, so a containerized tenant build (Kaniko, no local checkout) can
+// resolve `id("su.onno.widgets")` by version instead of via a local includeBuild. This build is a
+// pluginManagement includeBuild, so the root's publishAllPublicationsToOnnoCloudRepository never
+// reaches it — CI invokes this project's task explicitly. Mirrors the registry repo defined in the
+// root build.gradle.kts; open-core artifacts are served anonymously on GET, publish is token-gated.
+publishing {
+    repositories {
+        maven {
+            name = "onnoCloud"
+            val registryUrl = providers.gradleProperty("onnoRegistryUrl")
+                .orElse(providers.environmentVariable("ONNO_REGISTRY_URL"))
+                .orElse("https://cloud.onno.su/modules").get()
+            setUrl(registryUrl)
+            isAllowInsecureProtocol = registryUrl.startsWith("http://")
+            credentials {
+                username = providers.gradleProperty("onnoRegistryUser")
+                    .orElse(providers.environmentVariable("ONNO_REGISTRY_USER"))
+                    .orElse("publisher").get()
+                password = providers.gradleProperty("onnoRegistryToken")
+                    .orElse(providers.environmentVariable("ONNO_REGISTRY_TOKEN"))
+                    .orElse("").get()
+            }
+        }
+    }
+}
