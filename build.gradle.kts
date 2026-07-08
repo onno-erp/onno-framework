@@ -72,6 +72,7 @@ val publishedModules = mapOf(
     "onno-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onno query and command services to AI agents.",
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
+    "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
     "onno-print-starter" to "PDF / printing starter for onno using Thymeleaf templates and Flying Saucer.",
     "onno-mail-starter" to "Email starter for onno: SMTP and HTTP dispatch with Thymeleaf-templated bodies.",
     "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
