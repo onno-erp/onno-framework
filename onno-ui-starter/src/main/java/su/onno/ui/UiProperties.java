@@ -37,6 +37,12 @@ public class UiProperties {
      * they bind as literal map keys (e.g. {@code "action.new": "Новый"} nested under
      * {@code onno.ui.messages}); in a properties file use bracket notation instead
      * ({@code onno.ui.messages[action.new]=Новый}).
+     *
+     * NOTE: the key set is fixed. Only keys present in {@link UiMessages#DEFAULTS} are ever read — an
+     * unknown key (a guessed {@code form.save} / {@code list.new}) is stored but never consumed, so it
+     * silently does nothing. The authoritative list lives in {@code UiMessages.DEFAULTS} (real keys are
+     * {@code action.save} — whose default is "Write" — {@code action.new}, {@code list.search}, …).
+     * Grep that class before writing a localization pass.
      */
     private Map<String, String> messages = new LinkedHashMap<>();
 

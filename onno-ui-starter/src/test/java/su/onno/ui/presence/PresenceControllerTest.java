@@ -110,6 +110,21 @@ class PresenceControllerTest {
     }
 
     @Test
+    void decodesPercentEncodedEntityNameSoTheReadGateMatches() {
+        access.canRead = true;
+        currentUser.user = new CurrentUser("alice", "Alice Adams", "rec-1", "Employees", null);
+        // The SPA posts the browser's percent-encoded route path; a non-ASCII entity name arrives
+        // encoded. Presence must decode it before the read gate + registry, or canRead never matches
+        // and every page 403s with "…: %D1%81…" (issue #245).
+        String encoded = java.net.URLEncoder.encode("Спектакли", java.nio.charset.StandardCharsets.UTF_8);
+
+        controller.ping(new PresenceController.PresenceRequest("/catalogs/" + encoded + "/" + id, "enter"), principal);
+
+        assertThat(access.lastName).isEqualTo("Спектакли");
+        assertThat(registry.lastCall.name()).isEqualTo("Спектакли");
+    }
+
+    @Test
     void forbidsAViewerWithoutReadAccessWith403() {
         access.canRead = false;
 
@@ -154,6 +169,7 @@ class PresenceControllerTest {
 
     static final class FakeAccess extends UiAccessService {
         boolean canRead = true;
+        String lastName; // the entity name the gate was asked about (to assert decoding)
 
         FakeAccess() {
             super(null);
@@ -161,6 +177,7 @@ class PresenceControllerTest {
 
         @Override
         public boolean canRead(Principal principal, String type, String name) {
+            lastName = name;
             return canRead;
         }
     }

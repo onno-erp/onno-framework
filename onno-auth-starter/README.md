@@ -52,14 +52,15 @@ to contribute nothing and wire your own security.
 |-----|---------|---------|
 | `onno.auth.enabled` | `true` | Master switch. When `false`, no `SecurityFilterChain` is contributed and the app wires its own. |
 | `onno.auth.mode` | `in-memory` | Backend: `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
-| `onno.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". |
+| `onno.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". **Setting this REPLACES the defaults — it does not append.** Repeat every default below (plus your additions) or the login screen 401s (dropped `/api/config`, `/api/auth/login`, …). |
 | `onno.auth.users[*].username` | — | In-memory account username. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onno.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
 | `onno.auth.session.timeout` | `8h` | Idle session timeout for the cookie modes (`in-memory`, `oidc`), applied to the servlet container and **overriding** Spring Boot's 30-minute default. Slides on every request. Ignored in `resource-server` (stateless). |
 | `onno.auth.session.remember-me.enabled` | `true` | In-memory only: issue a persistent remember-me cookie on login and re-authenticate from it after the session lapses. |
 | `onno.auth.session.remember-me.validity` | `14d` | How long the remember-me cookie stays valid. |
-| `onno.auth.session.remember-me.key` | — | Secret signing the remember-me cookie. **Set a stable value in production** so cookies survive restarts and can't be forged; when blank a random key is generated per run (a warning is logged). |
+| `onno.auth.session.remember-me.key` | — | Secret signing the remember-me cookie. **Set a stable value** so cookies survive restarts and can't be forged. When blank, startup **fails fast** unless `allow-ephemeral-key=true`. |
+| `onno.auth.session.remember-me.allow-ephemeral-key` | `false` | Dev escape hatch: when `true`, a blank `key` uses a built-in fixed (non-secret) dev key instead of failing startup. It is deliberately constant — not random — so remember-me cookies still survive restarts in dev. Never enable in production (the key is public). |
 
 Default `public-paths`:
 
@@ -67,15 +68,20 @@ Default `public-paths`:
 /error
 /api/theme
 /api/config
+/api/branding
 /api/auth/login
+/api/auth/me
+/api/auth/csrf
+/api/divkit/login
 /api/desktop/ready
 /api/desktop/manifest
 ```
 
-These are the only `/api/**` paths reachable unauthenticated: the login endpoint itself plus
-non-sensitive bootstrap endpoints (theme, config, and the desktop shell's readiness probe and window
-manifest). Everything else under `/api/**` is `authenticated()`; everything else (the SPA shell) is
-`permitAll()`.
+These are the `/api/**` paths reachable unauthenticated: the login endpoint plus non-sensitive
+bootstrap endpoints (theme, config, branding, current-auth-state, CSRF token, the DivKit login screen,
+and the desktop shell's readiness probe and window manifest). Everything else under `/api/**` is
+`authenticated()`; everything else (the SPA shell) is `permitAll()`. Remember: overriding
+`onno.auth.public-paths` **replaces** this whole list — repeat the entries you still need.
 
 ## How authentication works
 

@@ -30,6 +30,14 @@ controller, and a static-resource handler that serves the bundled frontend from
 > `src/main/frontend/dist` to `static/ui/`). `static/ui/` is not committed; build the module to
 > produce it.
 
+> **Static-asset gotcha.** Your own assets (a logo, a kiosk/TV page, fonts) must live under
+> `classpath:/static/ui/…`; they're served at the web root. Any request that does **not** resolve to a
+> real file there falls through to the SPA `index.html` — served as `text/html`, HTTP 200, **not** a
+> 404. So a file placed under a bare `static/` (not `static/ui/`), or a mistyped path, silently returns
+> the app shell (and won't render under `X-Content-Type-Options: nosniff`). `/api/**` routes and
+> `{onno.ui.path}/plugins/**` are exempt. If you need a path outside `static/ui/` or a specific
+> content-type, add a dedicated `@GetMapping` controller — it out-precedences the SPA fallback.
+
 ### Configuration keys
 
 | Key | Default | Purpose |

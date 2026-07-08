@@ -40,6 +40,18 @@ table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `contex
 | `email` | boolean | `false` | Email-format validator. |
 | `secret` | boolean | `false` | Encrypted at rest (needs `onno.security.secret-key`), masked as `__SECRET_SET__` on read. |
 
+**Supported attribute field types:** `String`, `int`/`Integer`, `long`/`Long`, `boolean`/`Boolean`,
+`double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, Java `enum`s
+(`@Enumeration`), and `Ref<T>`. **There is no `LocalTime`** (nor `Instant` / `OffsetDateTime` /
+`ZonedDateTime`) — schema generation throws `IllegalArgumentException` at startup for any other type.
+Model a time-of-day as a `LocalDateTime`, or a `String`/`int` if you only need the clock value.
+
+**Naming rule — entity/attribute `name` must be ASCII / URL-safe.** It becomes the REST route segment
+(`/api/catalogs/{name}`), the derived table name, and the access-check key; it is **not** validated, so
+a non-ASCII name (e.g. Cyrillic `@Catalog(name="Спектакли")`) compiles but bites at runtime — the SPA
+posts the browser's percent-encoded route path, which previously made presence/SSE access checks 403
+("not allowed to read catalog: %D1%81…"). Keep `name` ASCII and put the localized label in `title`.
+
 ### `@AccumulationRegister` (on a class extending `AccumulationRecord`)
 `name` (required), `title=""`, `tableName=""`, `type = AccumulationType.BALANCE|TURNOVER` (default
 `BALANCE`), `context=""`. Fields are `@Dimension` (grouping keys) and `@Resource` (numbers).
@@ -98,11 +110,18 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
 | `AfterWriteHandler` | `afterWrite()` | After save. |
 | `OnFillingHandler` | `onFilling()` | **Seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). ⚠️ Runs on **every save of a new entity** (`isNew==true`), not just the blank-form pre-fill — the repository persist path calls it too (`OnnoBeforeConvertCallback`). So make it **idempotent / guard on null** (`if (getDate()==null) setDate(now)`); an unconditional `status = NEW` clobbers a status set by a seeder/import or chosen on the form. For a fixed default that should never be overwritten, prefer a Java field initializer over `onFilling`. |
-| `BeforePostHandler` | `beforePost()` | Before posting (validation). |
+| `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
 | `BeforeDeleteHandler` | `beforeDelete()` | Before delete. |
-| `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post. |
+| `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post — **no Spring DI** (see below). |
+
+⚠️ **No Spring DI in any of these hooks.** They run on the domain object, which the framework creates
+by reflection (`new`), not as a Spring bean — so `@Autowired` fields are null in `beforeWrite`,
+`onFilling`, `beforePost`, `rules()`, `handlePosting`, `afterPost`, etc. Cross-entity work (e.g. a
+`rules()` conflict check that queries other documents) needs a static `ApplicationContext` bridge bean
+(a `@Component implements ApplicationContextAware` exposing a static accessor) or, for after-the-fact
+side effects, an `@EventListener` on the published event (`DocumentPostedEvent`, `EntityChangedEvent`).
 
 `BusinessRule` — `record(String name, String field, String message, BooleanSupplier condition)`.
 Constructors: `new BusinessRule(name, message, condition)` (cross-field) and
@@ -170,6 +189,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
 - `Layout` — `profile()` (persona or null=default), `viewport()`, `configure(LayoutSpec)`:
   `spec.section(name).icon(…).catalog(X.class).document(Y.class)`, `spec.shell().nav(NavStyle.SIDEBAR)`,
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
+  - Branding logo: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)`, plus `.logoWidth(px)` /
+    `.logoHeight(px)` (or `.logoSize(w, h)`). ⚠️ The sidebar wraps the logo in a **left-aligned**
+    (flex-start) box with fixed margins — there is no centering option, so a logo only looks centred if
+    `logoWidth` equals the sidebar content width. Size the image to fill it, or bake the padding into
+    the asset. Serve logo assets from `classpath:/static/ui/...` (see the static-asset note below).
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
   Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
@@ -184,10 +208,25 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
   Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under
   `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
-  Styling gotcha: widget `.tsx` is never scanned by the host's Tailwind build — a utility class works
-  only if the host SPA already emits it (common `text-sm`/`mb-3`/`flex` yes; `border-l` or arbitrary
-  `-left-[5px]` silently no CSS). Layout-critical rules go in inline `style`, theme colors via
-  `hsl(var(--primary))` / `hsl(var(--border))`.
+  - **Host UI primitives** (≥ host contract v2 / framework 1.5.0): `import { Segmented, Select, Button,
+    Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
+    lookalikes. Reach for these before hand-rolling.
+  - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
+    `onno-widgets.css` (utilities-only, preflight off, host tokens), injected at boot — so a widget's
+    own utility classes (incl. `border-l`, arbitrary `-left-[5px]`) get real CSS. Residual caveats:
+    only `src/main/widgets` is scanned (class names in imported helpers or built by string
+    concatenation aren't seen — keep them literal), and dynamic colors still want inline `style` with
+    `hsl(var(--primary))` / `hsl(var(--border))`.
+  - **Live updates:** the SDK `api` is read-only (no event subscription). A widget that must react to
+    others' writes opens `new EventSource("/api/events")` itself and listens per **named** event
+    (`created`/`updated`/`deleted`/`posted`/`unposted`/`changed`) — `onmessage` never fires (events are
+    named, not the default `message`), so use `addEventListener("updated", …)`.
+- **Static assets** (logos, kiosk/TV pages, fonts) must live under `classpath:/static/ui/…`; they're
+  served at the web root. Anything that does NOT resolve to a real file there falls through to the SPA
+  `index.html` (HTTP 200, `text/html`) — so a file under a bare `static/` (not `static/ui/`), or a
+  mistyped path, silently returns the app shell instead of a 404, and won't render under `nosniff`.
+  `/api/**` and `{onno.ui.path}/plugins/**` are exempt. For a custom path or content-type, add a
+  dedicated `@GetMapping` (a controller out-precedences the SPA fallback).
 - `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
   `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion

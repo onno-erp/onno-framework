@@ -37,6 +37,27 @@ keyset contract.
 
 Keys are **storage column names**, not Java field names. Framework columns are prefixed with `_`;
 attribute columns are the `snake_case` of the field name (or the explicit `@Attribute(name=...)`).
+Reading `description` (no underscore) or a camelCase `taxId` returns `undefined` — the read keys are:
+
+| Key | Applies to | Meaning |
+|-----|------------|---------|
+| `_id` | catalog, document, TS row | UUID primary key |
+| `_code` | catalog | natural key / slug |
+| `_number` | document | natural key / slug |
+| `_date` | document | timestamp |
+| `_posted` | document | posting flag |
+| `_description` | catalog | **the display name** (there is no `description` key) |
+| `_deletion_mark` | catalog, document | soft-delete flag |
+| `_is_folder`, `_parent` | hierarchical catalog | folder flag / parent UUID |
+| `_version` | catalog, document | optimistic-lock version |
+| `_parent_id`, `_line_number` | tabular-section row | back-reference to the document / 1-based ordinal |
+| `_period`, `_active` | register rows | period / active flag |
+| `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is stored as its UUID |
+| `<col>_display` | `Ref<>` & enum attrs | resolved human label |
+| `<col>_ref` | `Ref<>` attrs | `{ id, type, display, code?, avatarUrl? }` |
+| `<col>_code` | catalog-`Ref<>` attrs only | the target's code |
+| `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
+| `<col>_color` | enum attrs only | `@EnumLabel(color)` hex, for a status pill |
 
 ### Catalog row
 
@@ -52,7 +73,8 @@ attribute columns are the `snake_case` of the field name (or the explicit `@Attr
   "tax_id": "B12345678",      // attribute column (field `taxId`)
   "region": "a17c…",          // a Ref<> / enum attribute is stored as a UUID
   "region_display": "Madrid", // + resolved display (see "Reference & enum expansion")
-  "region_ref": { "id": "a17c…", "display": "Madrid", "code": "R-01", "avatarUrl": null }
+  "region_ref": { "id": "a17c…", "type": "catalog", "display": "Madrid", "code": "R-01", "avatarUrl": null },
+  "region_code": "R-01"       // catalog-ref only; + region_avatar when the target has one
 }
 ```
 
@@ -90,9 +112,14 @@ two sibling keys so the client need not make a second call:
 
 - `{column}_display` — a human-readable label (catalog description or code; for an enum, the value's
   `@EnumLabel`, falling back to the constant name when unlabelled).
-- `{column}_ref` — an object `{ "display", "code", "avatarUrl" }` (catalogs) for richer rendering.
-- `{column}_color` — for an enum value declaring `@EnumLabel(color="#…")`, its badge colour (a CSS
-  hex string), so the client can paint a status pill. Absent when the value has no colour.
+- `{column}_ref` — an object `{ id, type, display, code?, avatarUrl? }` for richer rendering (`type`
+  is `catalog`/`document`; `code`/`avatarUrl` present for catalog refs). Document refs get only
+  `_display` + `_ref`.
+- `{column}_code` — catalog refs only: the target's code.
+- `{column}_avatar` — catalog refs only: the target's `avatar_url`, when it has one.
+- `{column}_color` — for an **enum** value declaring `@EnumLabel(color="#…")`, its badge colour (a CSS
+  hex string), so the client can paint a status pill. Absent when the value has no colour. (Refs have
+  no `_color`.)
 
 The raw `{column}` value remains the UUID, so writers can round-trip it unchanged.
 
@@ -101,6 +128,33 @@ The raw `{column}` value remains the UUID, so writers can round-trip it unchange
 Columns from a `@Attribute(secret = true)` field are **write-only**. On read they are replaced in
 place with the sentinel string `__SECRET_SET__` when a value is stored, or `null` when empty — the
 ciphertext is never returned. Submitting the sentinel back on a write means "leave unchanged".
+
+## Writes (partial, camelCase)
+
+Writes are the mirror image of reads, and two things surprise people:
+
+- **Request bodies use camelCase `fieldName`, not the snake_case read columns.** You read
+  `tax_id` / `region_display`, but you write `{ "taxId": "…" }`. System fields are the logical names
+  too: catalog `code` / `description` / `folder` / `parent` / `version`; document `number` / `date` /
+  `version` (`_version` is also accepted). A `Ref<>`/enum is written as its bare UUID string.
+- **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
+  in the body — omitted fields keep their stored value, and an empty body is a no-op. So a
+  `PUT { "startsAt": "…" }` moves just that field and does **not** null the rest.
+
+```text
+POST /api/catalogs/{name}                 create (body = camelCase fields)
+PUT  /api/catalogs/{name}/{id}            partial update
+POST /api/documents/{name}                create
+PUT  /api/documents/{name}/{id}           partial update
+POST /api/documents/{name}/{id}/post      post (re-post first unposts, then posts)
+```
+
+Two more contracts worth knowing:
+
+- **Tabular sections replace, they don't merge.** Submitting a section (keyed by its section name)
+  deletes and re-inserts that whole section; a section absent from the body is left untouched.
+- **Lifecycle hooks re-run on every write.** `beforeWrite` runs on create *and* update (and
+  `onFilling` on create); `beforePost` runs on post. Don't assume they only fire once.
 
 ## Filtering & deletion
 
@@ -115,6 +169,11 @@ write — through the generic controllers **and** through `repository.save(...)`
 catalog code / document number, so a listener can revalidate a specific resource rather than
 everything. The same event drives the browser live-update SSE stream (`GET /api/events`). See
 [`su.onno.events.EntityChangedEvent`](../onno-framework/src/main/java/su/onno/events/EntityChangedEvent.java).
+
+If you consume `/api/events` with a browser `EventSource`, note the stream sends **named** events
+(the change type: `created` / `updated` / `deleted` / `posted` / `unposted` / `changed`, plus
+`ready` / `presence` / `notification`) — never the default unnamed `message`. So `EventSource.onmessage`
+fires for nothing; you must `addEventListener("updated", …)` (etc.) per event name you care about.
 
 ## Notes for a public read view
 

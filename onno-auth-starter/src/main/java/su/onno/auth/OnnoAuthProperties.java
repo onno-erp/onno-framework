@@ -46,6 +46,13 @@ public class OnnoAuthProperties {
      * Public API/config endpoints permitted without authentication so the login screen can
      * render and authenticate. The SPA shell itself (everything outside {@code /api/**}) is
      * public by default; only {@code /api/**} requires a session.
+     *
+     * NOTE: setting {@code onno.auth.public-paths} REPLACES this list — it does not append to it. If you
+     * set your own value to expose one extra path, repeat every default or you will silently drop
+     * {@code /api/config}, {@code /api/auth/login}, {@code /api/auth/me}, … and the login screen 401s.
+     * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
+     * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/divkit/login},
+     * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
      */
     private List<String> publicPaths = new ArrayList<>(List.of(
             "/error",

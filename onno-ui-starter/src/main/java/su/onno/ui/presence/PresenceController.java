@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -146,7 +148,7 @@ public class PresenceController {
         String norm = normalizePath(path);
         List<String> parts = new ArrayList<>();
         for (String s : norm.split("/")) {
-            if (!s.isBlank()) parts.add(s);
+            if (!s.isBlank()) parts.add(decodeSegment(s));
         }
         if (parts.size() >= 2 && ("catalogs".equals(parts.get(0)) || "documents".equals(parts.get(0)))) {
             String kind = parts.get(0);
@@ -157,6 +159,22 @@ public class PresenceController {
             return new RouteId(kind, name, norm, true);               // entity list — id is the path
         }
         return new RouteId("page", norm, norm, false);                // any other route is a page
+    }
+
+    /**
+     * Decode a percent-encoded route segment. The SPA posts the browser's <em>encoded</em> route path
+     * (a non-ASCII entity name arrives here as {@code %D1%81…}); the generic controllers get {@code {name}}
+     * as a Spring {@code @PathVariable}, which Spring already decodes, but this body-carried path is never
+     * decoded for us. Without decoding, the read gate's name match ({@link UiAccessService}) never hits and
+     * every page 403s with "not allowed to read …: %D1%81…" (issue #245). Malformed input is left as-is.
+     */
+    private static String decodeSegment(String seg) {
+        if (seg.indexOf('%') < 0) return seg;
+        try {
+            return URLDecoder.decode(seg, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformed) {
+            return seg;
+        }
     }
 
     private static String normalizePath(String path) {

@@ -86,6 +86,34 @@ function ViewSwitch() {
 }
 ```
 
+## Live updates
+
+A widget does **not** auto-refresh — it only re-renders on its own state changes. To react to writes
+from elsewhere (another user, another tab, the record form, another widget), open the shared SSE
+stream yourself. Two gotchas:
+
+- The SDK `api` is **read-only** — it has no event subscription. Open `new EventSource("/api/events")`.
+- The stream sends **named** events (the change type), never the default unnamed `message` — so
+  `EventSource.onmessage` fires for nothing. You must `addEventListener(name, …)` per type:
+  `created`, `updated`, `deleted`, `posted`, `unposted`, `changed` (plus `ready`, `presence`,
+  `notification`). Each event's `data` is JSON: `{ type, entityType, entityName, id, … }`.
+
+```tsx
+import { useEffect } from "@onno/widget-sdk";
+
+useEffect(() => {
+  const es = new EventSource("/api/events");
+  const onChange = (e: MessageEvent) => {
+    const ev = JSON.parse(e.data);
+    if (ev.entityName === "Reservations") refetch(); // filter to what you render
+  };
+  for (const name of ["created", "updated", "deleted", "posted", "unposted", "changed"]) {
+    es.addEventListener(name, onChange);
+  }
+  return () => es.close();
+}, []);
+```
+
 ## Example
 
 ```tsx
