@@ -58,8 +58,12 @@ dependencies {
     implementation(libs.jdbi3.core)
     // @TransactionalEventListener (assignment notifications fire AFTER_COMMIT so the producer's
     // read-back sees the committed row). Present at runtime via onno-framework-starter's data-jdbc,
-    // but that's an `implementation` dep so it isn't on this module's compile classpath.
-    implementation("org.springframework:spring-tx")
+    // but that's an `implementation` dep so it isn't on this module's compile classpath. Pin an
+    // explicit version (via the catalog) so the published POM carries one — a bare
+    // `org.springframework:spring-tx` resolves transitively at build time but publishes versionless,
+    // which the Maven Central Portal rejects ("Dependency version information is missing"; this broke
+    // the 1.4.4–1.5.1 releases).
+    implementation(libs.spring.tx)
 
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)
