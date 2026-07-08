@@ -89,17 +89,11 @@ public final class UiMessages {
         d.put("tab.edit", "Edit {entity}");
         d.put("tab.duplicate", "Duplicate {entity}");
 
-        // Navigation. The home/dashboard and settings nav items (and their open-tab chips) fall back
-        // to these when no authored Page sets a title; an app overrides them via onno.ui.messages for
-        // a localized shell.
+        // Navigation. The home/dashboard nav item (and its open-tab chip) falls back to this when no
+        // authored Page sets a title; an app overrides it via onno.ui.messages for a localized shell.
+        // (Settings has no built-in nav entry — an app authors a Page at "/settings" and links it with
+        // its own label via section(...).page("/settings", "…", "settings").)
         d.put("nav.dashboard", "Dashboard");
-        d.put("nav.settings", "Settings");
-
-        // Settings surface. The built-in Settings page (the @Constant editor, opt-in via
-        // onno.ui.settings.enabled) uses these for its title/subtitle when no authored "/settings"
-        // Page overrides them; its sidebar/tab label localizes via nav.settings.
-        d.put("settings.title", "Settings");
-        d.put("settings.subtitle", "App-wide configuration.");
 
         // Notification center (bell beside the profile + right slide-over). Mirror messages.ts DEFAULT_MESSAGES.
         d.put("notifications.title", "Notifications");

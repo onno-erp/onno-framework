@@ -96,6 +96,7 @@ public class UiLayoutBuilder {
         private String icon = "";
         private UiLayout.Placement placement = UiLayout.Placement.SIDEBAR;
         private final List<EntityRef> entities = new ArrayList<>();
+        private final List<UiLayout.PageRef> pages = new ArrayList<>();
 
         SectionBuilder(String name) {
             this.name = name;
@@ -169,8 +170,24 @@ public class UiLayoutBuilder {
             return this;
         }
 
+        /**
+         * Add a sidebar link to an authored {@link Page} at {@code route} (e.g. {@code "/ops"}). The
+         * framework serves any route with a registered {@code Page} bean; this makes one reachable
+         * from the nav so a custom dashboard or report sits beside the catalogs and documents.
+         */
+        public SectionBuilder page(String route, String label) {
+            return page(route, label, "");
+        }
+
+        /** Add a page link with an explicit nav icon (a lucide icon name). */
+        public SectionBuilder page(String route, String label, String icon) {
+            pages.add(new UiLayout.PageRef(route, label, icon));
+            return this;
+        }
+
         UiLayout.Section build() {
-            return new UiLayout.Section(name, order, icon, placement, List.copyOf(entities));
+            return new UiLayout.Section(name, order, icon, placement,
+                    List.copyOf(entities), List.copyOf(pages));
         }
     }
 

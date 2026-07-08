@@ -18,11 +18,20 @@ public final class PageBuilder {
 
     private String title;
     private String subtitle;
+    // Whether to render the page header (title/subtitle row). On by default; a bare page
+    // (e.g. a dashboard that leads with its own hero widget) suppresses it via bare().
+    private boolean header = true;
     // Hosts the widgets so we reuse the existing WidgetBuilder/WidgetConfig DSL.
     private final UiLayoutBuilder widgetHost = new UiLayoutBuilder();
     private final List<PageComponent> components = new ArrayList<>();
     // Server handlers for the page's action buttons, resolved by key when a button posts back.
     private final List<ActionSpec.Action> pageActions = new ArrayList<>();
+    // An optional right rail (aside). Blocks added here render in a narrow column beside the main
+    // content on desktop, and stacked below it on mobile. Lazily created on first aside(...) call.
+    private PageBuilder aside;
+    // Explicit multi-column layout bands. Each row splits into columns of any width; a column is a
+    // nested region (further rows/widgets/lists). Rendered after the widget grid and components.
+    private final List<PageRow> rows = new ArrayList<>();
 
     public PageBuilder title(String title) {
         this.title = title;
@@ -32,6 +41,22 @@ public final class PageBuilder {
     public PageBuilder subtitle(String subtitle) {
         this.subtitle = subtitle;
         return this;
+    }
+
+    /**
+     * Show or hide the page header — the title/subtitle row the framework renders above the
+     * content. On by default. Hide it for a page that supplies its own heading (a hero widget,
+     * a custom banner) or a chrome-less surface. {@code bare()} is the shorthand for {@code
+     * header(false)}.
+     */
+    public PageBuilder header(boolean show) {
+        this.header = show;
+        return this;
+    }
+
+    /** Drop the page header entirely — shorthand for {@code header(false)}. */
+    public PageBuilder bare() {
+        return header(false);
     }
 
     /** Add a dashboard widget; returns the widget builder for further config. */
@@ -130,6 +155,77 @@ public final class PageBuilder {
     }
 
     /**
+     * Compose a right rail beside the main content — a narrow side column for stats, filters, or a
+     * summary that sits next to a list rather than stacked above it. The rail takes the same block
+     * DSL as the page itself ({@code widget}, {@code text}, {@code constants}, {@code custom}), so
+     * you can drop stat tiles to the right of a list surface:
+     *
+     * <pre>
+     * b.list(Order.class);                                  // main
+     * b.aside(a -> {
+     *     a.widget("Open").type("count").document(Order.class).config("filter", "open = true");
+     *     a.widget("Revenue").type("metric").document(Order.class).config("metric", "sum")...;
+     * });
+     * </pre>
+     *
+     * <p>Desktop lays the rail out to the right of the main content (which flexes to fill the rest);
+     * mobile stacks it below. Repeated calls extend the same rail. Widgets in the rail always stack
+     * one-per-row (it is a narrow column). A nested {@code aside(...)} inside the rail is ignored.</p>
+     */
+    public PageBuilder aside(Consumer<PageBuilder> configurer) {
+        if (aside == null) {
+            aside = new PageBuilder();
+        }
+        configurer.accept(aside);
+        return this;
+    }
+
+    /**
+     * Add a multi-column layout band — the general layout primitive. Split the page into columns of
+     * any width and compose any block in each; nest further rows inside a column for arbitrary
+     * structure. Columns lay out side by side on desktop and stack on mobile.
+     *
+     * <pre>
+     * b.row(r -> {
+     *     r.col("2/3", c -> c.list(Order.class));            // main
+     *     r.col("1/3", c -> {                                 // side
+     *         c.widget("Open").type("count").document(Order.class).config("filter", "open = true");
+     *         c.widget("Revenue").type("metric").document(Order.class)
+     *          .config("metric", "sum").config("metricField", "total");
+     *     });
+     * });
+     * </pre>
+     *
+     * <p>Rows render after the page's own widget grid and freeform blocks, in the order added. A
+     * column is itself a full {@link PageBuilder}, so it takes every block method (and further
+     * {@code row(...)} calls).</p>
+     */
+    public PageBuilder row(Consumer<RowBuilder> configurer) {
+        RowBuilder rb = new RowBuilder();
+        configurer.accept(rb);
+        rows.add(new PageRow(rb.columns));
+        return this;
+    }
+
+    /** Builds one {@link PageRow}: a sequence of {@link #col} calls. See {@link #row(Consumer)}. */
+    public static final class RowBuilder {
+        private final List<PageColumn> columns = new ArrayList<>();
+
+        /** A column of the given {@code width} (fraction like {@code "2/3"}, {@code "<n>px"}, or {@code null}/{@code "full"} for an equal share). */
+        public RowBuilder col(String width, Consumer<PageBuilder> configurer) {
+            PageBuilder region = new PageBuilder();
+            configurer.accept(region);
+            columns.add(new PageColumn(width, region));
+            return this;
+        }
+
+        /** A column that takes an equal share of the row. */
+        public RowBuilder col(Consumer<PageBuilder> configurer) {
+            return col(null, configurer);
+        }
+    }
+
+    /**
      * Embed the full interactive list of a catalog/document — the same surface as its own route,
      * with the New button, custom action buttons, search/sort and rows that open a detail beside
      * the page. Lets a page (e.g. Settings) manage reference data inline. {@code entity} is the
@@ -148,6 +244,21 @@ public final class PageBuilder {
 
     public String subtitle() {
         return subtitle;
+    }
+
+    /** Whether the renderer should emit the header row (title/subtitle). */
+    public boolean showHeader() {
+        return header;
+    }
+
+    /** The right-rail sub-builder, or {@code null} if the page composed no {@code aside(...)}. */
+    public PageBuilder aside() {
+        return aside;
+    }
+
+    /** The explicit layout rows composed with {@code row(...)}, in declaration order. */
+    public List<PageRow> rows() {
+        return List.copyOf(rows);
     }
 
     public List<UiLayoutBuilder.WidgetConfig> widgets() {

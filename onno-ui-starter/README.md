@@ -45,7 +45,6 @@ controller, and a static-resource handler that serves the bundled frontend from
 | `onno.ui.enabled` | `true` | Master switch. Also gated on a `MetadataRegistry` bean being present. |
 | `onno.ui.path` | `/ui` | URL prefix the SPA is mounted under. Baked into the served `index.html` (and returned as `basePath` from `GET /api/config`) so the client uses it as its React Router `basename` and deep-link prefix; the bare root redirects here. Set to `/` to mount at the web root. |
 | `onno.ui.read-only` | `false` | When `true`, every mutating REST call (POST/PUT/DELETE, post/unpost, and custom server/page actions) returns `403 UI is in read-only mode`. |
-| `onno.ui.settings.enabled` | `false` | Opt-in switch for the built-in Settings page (the `@Constant` editor) and its auto-injected admin nav entry. Off by default; an app that wants app-wide settings turns it on (or authors its own `Page` at `/settings`). |
 | `onno.ui.theme.*` | empty map | Free-form theme key/value pairs, served verbatim from `GET /api/theme`. Each becomes a CSS custom property (`--{key}`) on the document root, so it overrides any design token the UI reads — including the [shape tokens](#shape-tokens) that reshape every button, control and card app-wide. |
 | `onno.ui.messages.*` | empty map | Overrides for the framework's own chrome strings (see [Localizing the chrome](#localizing-the-chrome)). Each key (e.g. `login.title`, `action.new`) replaces the English default. Quote the dotted keys in YAML. |
 | `onno.ui.update-check.enabled` | `true` | Poll onno-cloud for a newer framework release and show an "update available" notice. Fail-silent; set `false` to disable all outbound checks. |
@@ -107,10 +106,9 @@ name. A tab for an entity not placed in the nav falls back to the humanized rout
 The home/dashboard entry is the one nav/tab label that can also be chrome: it uses the authored `/`
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
 widget-grid dashboard with no authored page still localizes its sidebar item and tab via
-`onno.ui.messages`. The built-in **Settings** surface (opt-in via `onno.ui.settings.enabled`) is the
-same shape: its sidebar item and tab read `nav.settings`, and the default constant-editor page's
-heading reads `settings.title` / `settings.subtitle` — all overridable via `onno.ui.messages`, unless
-an authored `/settings` `Page` sets its own `title`/`subtitle`.
+`onno.ui.messages`. There is no built-in Settings surface: an app that wants one authors a `Page` at
+`/settings` (composing `b.constants(...)` for the `@Constant` editor) and links it with its own label
+via `section(...).page("/settings", "…", "settings")`.
 
 The resolved map (defaults + overrides) is the single label source for both layers: the server-side
 DivKit builders read it directly, and it rides along on `GET /api/config` as a `messages` object the
@@ -257,9 +255,10 @@ data-bearing surfaces.
 | `GET /shell` | Nav + account chrome. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
-| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. `/{id}/edit` remains as a back-compat alias for `/{id}`. |
-| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new` | Document list, record surface and create form — same combined form; `/{id}/edit` is a back-compat alias. |
-| `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. |
+| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. `/{id}/edit` remains as a back-compat alias for `/{id}`. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
+| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new` | Document list, record surface and create form — same combined form; `/{id}/edit` is a back-compat alias. An authored `Page` at `/documents/{name}` overrides the default list. |
+| `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. An authored `Page` at `/registers/{name}` overrides it with a curated report (register-backed widgets; `b.list(...)` embeds catalog/document lists, not a register's log). |
+| `GET /{*route}` | Catch-all page endpoint: any other route with a registered `Page` bean (a custom dashboard/report at `/ops`, `/reports`, …); `404` when no page is registered. |
 
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
@@ -457,6 +456,60 @@ The generic edit form honors the `FieldHintBuilder` layout hints:
 
 An edit form's header also shows the record's identity (code/number · description) and, for a
 postable document, its Posted status pill.
+
+## Pages — everything is a page
+
+A dashboard, the settings screen, and an entity's list are all the same thing: a **`Page`** at a
+route. The framework renders a sensible default for every surface; a registered `Page` bean at that
+route replaces it. So you get the good default in the 90% case and full control whenever you want it —
+no separate "dashboard" vs "list" vs "settings" machinery.
+
+```java
+@Component
+class SalesOpsPage implements Page {
+    public String route() { return "/ops"; }          // any route — a custom dashboard
+    public void compose(PageBuilder b) {
+        b.bare();                                       // drop the title/subtitle header row
+        b.widget("Open orders").type("count").document(Order.class).config("filter", "open = true");
+        b.list(Order.class);                            // the full interactive list, embedded
+    }
+}
+```
+
+- **Any route.** `route()` can be `/` (home), `/settings`, a default surface route
+  (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — the page **overrides** that
+  surface's default list/report), or an arbitrary path (`/ops`, `/reports`) served by the catch-all
+  endpoint.
+- **`profile()` / `viewport()`** scope a page to a persona or device; the most specific match wins,
+  exactly like `EntityView`.
+- **`bare()`** (or `header(false)`) drops the header row for a chrome-less surface; the browser tab
+  still reads the nav label.
+- **Compose freely.** `widget(...)`, `text`, `list(entity)` (full interactive list — New, search,
+  sort, click-to-open), `constants(...)`, `custom(...)`, and `actions(...)` in any order.
+- **Arbitrary layout.** `b.row(r -> { r.col(width, c -> …); … })` splits the page into columns of any
+  width, each holding any block — and a column is itself a full region, so rows nest for whatever
+  structure you want. Widths are fractions (`"2/3"`), fixed dp (`"300px"`), or `null`/`"full"` for an
+  equal share. Columns lay out side by side on desktop and stack on mobile.
+
+  ```java
+  b.row(kpis -> {                                        // a 3-column KPI band
+      kpis.col(c -> c.widget("Open").type("count").document(Order.class).config("filter", "open = true"));
+      kpis.col(c -> c.widget("Revenue").type("metric").document(Order.class)
+                     .config("metric", "sum").config("metricField", "total").config("currency", "USD"));
+      kpis.col(c -> c.widget("Total").type("count").document(Order.class));
+  });
+  b.row(body -> {                                         // a 2/3 + 1/3 body
+      body.col("2/3", main -> main.list(Order.class));
+      body.col("1/3", side -> side.widget("By status").type("chart").document(Order.class)
+                                  .config("kind", "pie").config("groupBy", "status_display").config("metric", "count"));
+  });
+  ```
+- **Right rail** (shortcut). `b.aside(a -> { … })` is the common two-column case — a narrow side
+  column beside the main content (stat tiles to the right of a `b.list(...)`); stacks below on mobile.
+  Equivalent to a `row` with a flexible main column and a fixed rail.
+- **Link it in the nav.** A custom route only appears in the sidebar once a `Layout` section lists
+  it: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
+  `.catalog(...)`/`.document(...)`.
 
 ## Dashboard widgets
 

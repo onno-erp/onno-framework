@@ -89,7 +89,20 @@ public class MainLayout implements Layout {
         layout.section("Reports")
                 .order(5)
                 .icon("chart-column")
-                .register(BookSales.class);
+                .register(BookSales.class)
+                // A sidebar link to an authored Page at a custom route — a second dashboard living
+                // beside the register report. See com.example.ui.pages.SalesOpsPage.
+                .page("/ops", "Sales Ops", "activity");
+
+        // Settings is just a page: there is no built-in Settings entry. This app authors one
+        // (com.example.ui.pages.SettingsPage at /settings, admin-profile) and links it here for
+        // admins only — the same page-link mechanism as Sales Ops above.
+        if (includeEmployees) {
+            layout.section("System")
+                    .order(6)
+                    .icon("settings")
+                    .page("/settings", "Settings", "settings");
+        }
 
         // Link a signed-in login to its Employee row by email, so the person can be greeted and shown
         // as a comment author. The lookup reads the row directly, bypassing @AccessControl, so it

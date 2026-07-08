@@ -57,7 +57,6 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.ui.plugins.extra-urls` | `List<String>` | — | Extra absolute plugin-module URLs to load in addition to the classpath ones — e.g. a CDN-hosted widget or one served by another app. Appended verbatim to `pluginScripts`. |
 | `onno.ui.plugins.location` | `String` | `classpath*:/onno-plugins/` | Classpath location holding the compiled plugin modules (`*.js`). The Gradle plugin emits here; change it only if you stage plugin bundles somewhere non-standard. Must be a `classpath:`/`classpath*:` location ending in `/`. |
 | `onno.ui.read-only` | `Boolean` | `false` | When true, every mutating REST call is rejected with `403 UI is in read-only mode`. |
-| `onno.ui.settings.enabled` | `Boolean` | `false` | Whether to surface the built-in Settings page and its admin nav entry. |
 | `onno.ui.theme` | `Map<String,String>` | — | Free-form theme key/values served verbatim from `GET /api/theme`. |
 | `onno.ui.update-check.enabled` | `Boolean` | `true` | Master switch. When false no outbound call is ever made and the notice never appears. |
 | `onno.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |

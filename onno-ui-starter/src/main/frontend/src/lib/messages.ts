@@ -64,16 +64,10 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "tab.edit": "Edit {entity}",
   "tab.duplicate": "Duplicate {entity}",
 
-  // Navigation. The home/dashboard and settings nav items (and their open-tab chips) fall back to
-  // these when no authored Page sets a title; overridable via onno.ui.messages for a localized shell.
+  // Navigation. The home/dashboard nav item (and its open-tab chip) falls back to this when no
+  // authored Page sets a title; overridable via onno.ui.messages for a localized shell. (Settings has
+  // no built-in entry — an app authors a Page at "/settings" and links it with its own label.)
   "nav.dashboard": "Dashboard",
-  "nav.settings": "Settings",
-
-  // Settings surface. The built-in Settings page (the @Constant editor) uses these for its
-  // title/subtitle when no authored "/settings" Page overrides them; its sidebar/tab label
-  // localizes via nav.settings.
-  "settings.title": "Settings",
-  "settings.subtitle": "App-wide configuration.",
 
   // Notification center (bell beside the profile + right slide-over). Mirror UiMessages.DEFAULTS.
   "notifications.title": "Notifications",

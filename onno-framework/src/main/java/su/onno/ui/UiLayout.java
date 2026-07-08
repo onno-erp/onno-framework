@@ -73,8 +73,33 @@ public record UiLayout(List<Section> sections,
             int order,
             String icon,
             Placement placement,
-            List<UiLayoutBuilder.EntityRef> entityRefs
-    ) {}
+            List<UiLayoutBuilder.EntityRef> entityRefs,
+            List<PageRef> pageRefs
+    ) {
+        public Section {
+            entityRefs = entityRefs == null ? List.of() : List.copyOf(entityRefs);
+            pageRefs = pageRefs == null ? List.of() : List.copyOf(pageRefs);
+        }
+
+        /** Back-compat: a section of entities with no authored-page links. */
+        public Section(String name, int order, String icon, Placement placement,
+                       List<UiLayoutBuilder.EntityRef> entityRefs) {
+            this(name, order, icon, placement, entityRefs, List.of());
+        }
+    }
+
+    /**
+     * A sidebar link to an authored {@link Page} at an arbitrary route — the nav peer of an entity
+     * reference. Unlike a catalog/document (whose route and label derive from metadata), a page link
+     * carries its own {@code route}, display {@code label}, and {@code icon}. Lets a Layout surface a
+     * custom dashboard or report page ({@code section("Reports").page("/ops", "Operations", "activity")}).
+     */
+    public record PageRef(String route, String label, String icon) {
+        public PageRef {
+            icon = icon == null ? "" : icon;
+            label = label == null ? "" : label;
+        }
+    }
 
     public record ResolvedSection(
             String name,

@@ -46,9 +46,6 @@ public class UiProperties {
      */
     private Map<String, String> messages = new LinkedHashMap<>();
 
-    /** App-settings page (the {@code @Constant} editor); opt-in via {@code onno.ui.settings.*}. */
-    private Settings settings = new Settings();
-
     /** Dashboard rendering tuning (how the home/Page widget grid resolves its KPI tiles). */
     private Dashboard dashboard = new Dashboard();
 
@@ -101,14 +98,6 @@ public class UiProperties {
         this.messages = messages;
     }
 
-    public Settings getSettings() {
-        return settings;
-    }
-
-    public void setSettings(Settings settings) {
-        this.settings = settings;
-    }
-
     public Dashboard getDashboard() {
         return dashboard;
     }
@@ -139,26 +128,6 @@ public class UiProperties {
 
     public void setPlugins(Plugins plugins) {
         this.plugins = plugins;
-    }
-
-    /**
-     * The built-in Settings page — the {@code @Constant} editor surfaced at {@code /settings} with
-     * an auto-injected admin nav entry. Opt-in: off by default so an app shows it only when it wants
-     * one (an app can still author its own {@code Page} at {@code "/settings"}, and drop individual
-     * constant toggles onto any page with {@code PageBuilder.constants(...)}, regardless of this flag).
-     */
-    public static class Settings {
-
-        /** Whether to surface the built-in Settings page and its admin nav entry. */
-        private boolean enabled = false;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
     }
 
     /**

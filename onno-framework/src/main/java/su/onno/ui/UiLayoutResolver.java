@@ -71,6 +71,13 @@ public class UiLayoutResolver {
                     items.add(new UiLayout.ResolvedItem(name, title, ref.type(), href, ref.javaClass(), ref.icon()));
                 }
             }
+            // Authored-page links follow the entities in declaration order. They carry no java class
+            // (they resolve to a Page bean by route, not to entity metadata); the route is used
+            // verbatim as the href so the client navigates onno://<route>.
+            for (UiLayout.PageRef page : section.pageRefs()) {
+                items.add(new UiLayout.ResolvedItem(
+                        page.label(), page.label(), "page", page.route(), null, page.icon()));
+            }
             result.add(new UiLayout.ResolvedSection(
                     section.name(),
                     section.order(),

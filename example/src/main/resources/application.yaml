@@ -14,10 +14,6 @@ server:
     include-message: always
 onno:
   ui:
-    # The built-in @Constant editor / Settings page — on, so the single Store Name constant is
-    # editable in-app (the one knob this example ships under Settings).
-    settings:
-      enabled: true
     # One-tap demo logins on the sign-in screen (demo-only: passwords reach the browser). Each button
     # signs in as the matching in-memory user below, so an evaluator never types the email/password.
     login:

@@ -189,12 +189,15 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
 - `Layout` — `profile()` (persona or null=default), `viewport()`, `configure(LayoutSpec)`:
   `spec.section(name).icon(…).catalog(X.class).document(Y.class)`, `spec.shell().nav(NavStyle.SIDEBAR)`,
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
+  `spec.section(name).page(route, label, icon)` adds a sidebar link to an authored `Page` at an
+  arbitrary route (the nav peer of `.catalog(...)`) — e.g. a custom dashboard `.page("/ops", "Sales Ops", "activity")`.
   - Branding logo: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)`, plus `.logoWidth(px)` /
     `.logoHeight(px)` (or `.logoSize(w, h)`). ⚠️ The sidebar wraps the logo in a **left-aligned**
     (flex-start) box with fixed margins — there is no centering option, so a logo only looks centred if
     `logoWidth` equals the sidebar content width. Size the image to fill it, or bake the padding into
     the asset. Serve logo assets from `classpath:/static/ui/...` (see the static-asset note below).
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
+  `b.bare()` / `b.header(false)` (drop the title/subtitle row),
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
   Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
   a row closes when fractions sum to 1. Cells are weights, so a row that doesn't sum to 1 stretches
@@ -203,7 +206,18 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   stretch to the tallest neighbour). Mobile stacks everything full-width.
   `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
   search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
-  (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`.
+  (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`,
+  `b.row(r -> r.col("2/3", c -> …).col("1/3", c -> …))` (arbitrary column layout — widths are
+  fractions / `"<n>px"` / null=equal; a column is a full region so rows nest; columns stack on
+  mobile), `b.aside(a -> …)` (shortcut for the common right-rail two-column case).
+  - **Everything is a page.** A `Page` is served at *any* route: `/` (home dashboard), `/settings`,
+    a default surface route (`/catalogs/{name}`, `/documents/{name}`, or `/registers/{name}` — an
+    authored page there **overrides** that surface's default list/report), or an arbitrary custom route (`/ops`, `/reports`,
+    via the `GET /api/divkit/{*route}` catch-all). The framework serves a sensible default at every
+    surface; a registered `Page` bean at that route replaces it. So dashboards, settings, and list
+    pages are one concept — a page — not three subsystems. `profile()`/`viewport()` pick the most
+    specific match (like `EntityView`). A custom route only shows in the nav once a `Layout` section
+    links it with `.page(route, label, icon)`.
   A widget's `type(…)` may be a **custom widget** the framework has no built-in for: author it as a
   React component in `src/main/widgets/*.tsx` (via `@onno/widget-sdk`) and apply the `su.onno.widgets`
   Gradle plugin — it compiles (Node + esbuild, React aliased to the host), serves under

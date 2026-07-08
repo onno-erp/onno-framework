@@ -62,6 +62,35 @@ class UiLayoutResolverTest {
         assertThat(hints).isEmpty();
     }
 
+    @Test
+    void resolve_emitsPageLinksAsPageItems() {
+        UiLayoutBuilder layout = new UiLayoutBuilder();
+        layout.section("Reports")
+                .catalog(TestProduct.class)
+                .page("/ops", "Sales Ops", "activity")
+                .page("/kpi", "KPIs");
+
+        var sections = resolver.resolve(buildLayout(layout));
+
+        assertThat(sections).hasSize(1);
+        var items = sections.get(0).items();
+        // The entity resolves first, then the two page links in declaration order.
+        assertThat(items).hasSize(3);
+        assertThat(items.get(0).type()).isEqualTo("catalog");
+
+        UiLayout.ResolvedItem ops = items.get(1);
+        assertThat(ops.type()).isEqualTo("page");
+        assertThat(ops.href()).isEqualTo("/ops");        // route used verbatim as the nav href
+        assertThat(ops.title()).isEqualTo("Sales Ops");
+        assertThat(ops.icon()).isEqualTo("activity");
+        assertThat(ops.javaClass()).isNull();            // a page link resolves by route, not metadata
+
+        UiLayout.ResolvedItem kpi = items.get(2);
+        assertThat(kpi.type()).isEqualTo("page");
+        assertThat(kpi.href()).isEqualTo("/kpi");
+        assertThat(kpi.icon()).isBlank();                // no explicit icon → left to the nav heuristic
+    }
+
     private static UiLayout buildLayout(UiLayoutBuilder builder) {
         return new UiLayout(builder.build(), builder.buildWidgets());
     }

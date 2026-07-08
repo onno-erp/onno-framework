@@ -1,0 +1,95 @@
+name: Sync demo (onno-demo)
+
+# Keeps the live demo (onno-erp/onno-demo → demo.cloud.onno.su) in step with the framework's in-tree
+# reference app (example/). The example is the source of truth; on every release we mirror its
+# domain + UI code into onno-demo and pin onno-demo to the just-released version. Pushing onno-demo
+# triggers its existing deploy (onno-cloud TenantBuildService), so the demo redeploys on the release.
+#
+# Why per-release (not per-commit): onno-demo builds against *published* su.onno:* artifacts, so it
+# can only use a feature once that feature is released. Tag → publish → sync → redeploy keeps the
+# demo == latest release with zero hand-maintenance (onno-demo becomes a generated mirror). For a
+# HEAD-tracking demo you would instead publish a -SNAPSHOT on main pushes and trigger on `push: main`.
+#
+# Requires the repo secret ONNO_DEMO_DEPLOY_KEY: the private half of a *write* deploy key on
+# onno-erp/onno-demo (the public half is added there). See the deploy note in the PR that added this.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to sync onno-demo to (without the leading v, e.g. 1.6.1)
+        required: true
+        type: string
+
+concurrency:
+  group: sync-demo
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        id: v
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out onno-framework (this release)
+        uses: actions/checkout@v5
+        with:
+          path: framework
+
+      - name: Set up the onno-demo deploy key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.ONNO_DEMO_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Check out onno-demo
+        run: git clone git@github.com:onno-erp/onno-demo.git demo
+
+      - name: Mirror the example's domain + UI code into onno-demo
+        run: |
+          # Domain + UI source (com.example): the code that drifts as features land. --delete so
+          # renamed/removed classes propagate. onno-demo keeps its own build files, application.yaml
+          # (cloud-tuned), and any src/main/widgets wiring — those are NOT overwritten here.
+          rsync -a --delete framework/example/src/main/java/ demo/src/main/java/
+          # Custom widgets (src/main/widgets/*.tsx) — compiled by the su.onno.widgets plugin, which
+          # onno-demo applies (see its build.gradle.kts / settings.gradle.kts). The plugin ships from
+          # onno >= 1.6.1, so widgets only build once onno-demo is on such a version (this sync pins it).
+          if [ -d framework/example/src/main/widgets ]; then
+            mkdir -p demo/src/main/widgets
+            rsync -a --delete framework/example/src/main/widgets/ demo/src/main/widgets/
+          else
+            rm -rf demo/src/main/widgets
+          fi
+          # Branding / served static assets (logos, favicon).
+          if [ -d framework/example/src/main/resources/static ]; then
+            mkdir -p demo/src/main/resources/static
+            rsync -a --delete framework/example/src/main/resources/static/ demo/src/main/resources/static/
+          fi
+
+      - name: Pin onno-demo to the released version
+        run: |
+          sed -i "s/^onnoCoreVersion=.*/onnoCoreVersion=${{ steps.v.outputs.version }}/" demo/gradle.properties
+          grep '^onnoCoreVersion=' demo/gradle.properties
+
+      - name: Commit & push (if anything changed)
+        working-directory: demo
+        run: |
+          git config user.name "onno-bot"
+          git config user.email "bot@onno.su"
+          if git diff --quiet; then
+            echo "onno-demo already in sync with ${{ steps.v.outputs.version }} — nothing to push."
+            exit 0
+          fi
+          git commit -am "chore: sync demo to onno ${{ steps.v.outputs.version }}"
+          git push origin HEAD:main

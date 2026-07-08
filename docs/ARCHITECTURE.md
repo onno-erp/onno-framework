@@ -210,7 +210,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
 | Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
-| DivKit UI | `GET /api/divkit/{shell,home,menu,account,settings}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new]`, `/api/divkit/registers/{name}` (ui-starter). `/{id}` is the combined record surface — the editable form (disabled for read-only viewers) with the record-level actions in its header; `/{id}/edit` is kept as a back-compat alias |
+| DivKit UI | `GET /api/divkit/{shell,home,menu,account}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new]`, `/api/divkit/registers/{name}` (ui-starter). `/{id}` is the combined record surface — the editable form (disabled for read-only viewers) with the record-level actions in its header; `/{id}/edit` is kept as a back-compat alias. `GET /api/divkit/{*route}` is the catch-all page endpoint: any route with a registered `Page` bean renders (a custom dashboard/report, **including `/settings`** — there is no built-in Settings surface), otherwise `404`. An authored `Page` at a default surface route (`/catalogs/{name}`, `/documents/{name}`, `/registers/{name}`) overrides that surface's default list/report |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by per-entity read access (#190) |
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (ui-starter) |
@@ -240,9 +240,19 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   back-office shell. **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
   sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
   catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions
-  auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS` groups; that was removed.)
+  auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS` groups; that was removed.) A
+  section can also link an authored `Page` at an arbitrary route with
+  `section(...).page(route, label, icon)` — the nav peer of a catalog/document entry.
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
-  chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`.
+  chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`,
+  and `bare()`/`header(false)` to drop the title row. A page is served at **any** route — the home
+  dashboard (`/`), settings (`/settings`), a **default surface route** (`/catalogs/{name}`,
+  `/documents/{name}`, or `/registers/{name}`, where an authored page *overrides* the default
+  list/report surface), or an
+  **arbitrary custom route** (`/ops`, `/reports`) reached through the catch-all page endpoint. So a
+  dashboard, the settings screen, and a list page are all just pages: the framework serves a sensible
+  default and any registered `Page` bean at that route replaces it. A custom route is surfaced in the
+  sidebar with `spec.section(...).page("/ops", "Sales Ops", "activity")`.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
   hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
   related lists, actions; `label` localizes a field's form/detail/list label, including the built-in

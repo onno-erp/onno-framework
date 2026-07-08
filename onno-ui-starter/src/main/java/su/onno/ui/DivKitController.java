@@ -254,7 +254,7 @@ public class DivKitController implements DisposableBean {
                                     @RequestParam(required = false) String theme,
                                     Principal principal) {
         Viewport vp = Viewport.parse(viewport);
-        int columns = vp == Viewport.MOBILE ? 1 : 2;
+        int columns = cols(vp);
         Palette p = palette(theme);
         UiLayout.Profile active = activeProfile(principal, profile);
         CurrentUserResolver.CurrentUser user = currentUserResolver.resolve(principal);
@@ -265,13 +265,8 @@ public class DivKitController implements DisposableBean {
         // An authored Page for "/" takes over the home surface; otherwise fall back
         // to the widget grid resolved from the layout/profile. A viewport-specific
         // page wins so the dashboard can differ per device.
-        Page page = pageResolver.resolve("/", active.id(), vp);
-        Map<String, Object> content;
-        if (page != null) {
-            PageBuilder pb = new PageBuilder();
-            page.compose(pb);
-            content = renderPage(pb, "/", columns, p, principal, active.id(), defaultTitle, greeting);
-        } else {
+        Map<String, Object> content = authoredPage("/", active, vp, columns, p, principal, defaultTitle, greeting);
+        if (content == null) {
             List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
                     .toList();
@@ -290,34 +285,31 @@ public class DivKitController implements DisposableBean {
     }
 
     /**
-     * The Settings surface — opt-in via {@code onno.ui.settings.enabled} (off by default). An app
-     * can author its own {@code Page} at route {@code "/settings"} to compose lists/widgets next to
-     * (or instead of) the constant editor, and that authored page renders regardless of the flag;
-     * the built-in default page (the constant editor) is gated on the flag. With neither, the route
-     * is {@code 404}.
+     * Any other route — settings (`/settings`), a custom dashboard, a report, a bespoke page —
+     * resolves to its authored {@link Page} here. This is the general page endpoint: the SPA fetches
+     * {@code /api/divkit{route}} for whatever path the user navigates to, and the more-specific
+     * mappings above (shell, home, the entity surfaces) win by pattern precedence; everything else
+     * lands here. Settings is not special — it is just a page you author at {@code "/settings"} and
+     * link in the nav with {@code section(...).page("/settings", …)}. No page registered for the
+     * route → a real {@code 404} (this is an {@code /api} path, so the SPA does not swallow it as an
+     * index.html fallthrough).
      */
-    @GetMapping("/settings")
-    public Map<String, Object> settings(@RequestParam(required = false) String profile,
-                                        @RequestParam(required = false) String viewport,
-                                        @RequestParam(required = false) String theme,
-                                        Principal principal) {
+    @GetMapping("/{*route}")
+    public Map<String, Object> page(@PathVariable String route,
+                                    @RequestParam(required = false) String profile,
+                                    @RequestParam(required = false) String viewport,
+                                    @RequestParam(required = false) String theme,
+                                    Principal principal) {
         Viewport vp = Viewport.parse(viewport);
-        int columns = vp == Viewport.MOBILE ? 1 : 2;
+        int columns = cols(vp);
         Palette p = palette(theme);
         UiLayout.Profile active = activeProfile(principal, profile);
-        Page page = pageResolver.resolve("/settings", active.id(), vp);
-        PageBuilder pb = new PageBuilder();
-        if (page != null) {
-            page.compose(pb);
-        } else if (uiProperties.getSettings().isEnabled()) {
-            pb.title(messages.get("settings.title")).subtitle(messages.get("settings.subtitle")).constants();
-        } else {
-            // Opt-in and not enabled, with no authored page → the surface doesn't exist.
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Settings page is not enabled");
+        Map<String, Object> content = authoredPage(route, active, vp, columns, p, principal,
+                humanizeRoute(route), "");
+        if (content == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No page for route: " + route);
         }
-        return DivCard.of("onno-content",
-                renderPage(pb, "/settings", columns, p, principal, active.id(),
-                        messages.get("settings.title"), messages.get("settings.subtitle")));
+        return DivCard.of("onno-content", content);
     }
 
     /**
@@ -399,19 +391,129 @@ public class DivKitController implements DisposableBean {
         return out;
     }
 
-    /** Render a composed page (header + access-filtered widget grid + freeform components). */
+    /**
+     * Resolve and render the authored {@link Page} for {@code route} under this profile/viewport, or
+     * {@code null} when no page is registered. The single entry every route surface goes through —
+     * the home dashboard, settings, an entity list override, and arbitrary custom routes all compose
+     * the same way, so a page is a page regardless of where it sits.
+     */
+    private Map<String, Object> authoredPage(String route, UiLayout.Profile active, Viewport vp, int columns,
+                                             Palette p, Principal principal, String defaultTitle, String defaultSubtitle) {
+        Page page = pageResolver.resolve(route, active.id(), vp);
+        if (page == null) {
+            return null;
+        }
+        PageBuilder pb = new PageBuilder();
+        page.compose(pb);
+        return renderPage(pb, route, columns, p, principal, active.id(), defaultTitle, defaultSubtitle);
+    }
+
+    /** Widget-grid columns for a viewport: one column on mobile, two elsewhere. */
+    private static int cols(Viewport vp) {
+        return vp == Viewport.MOBILE ? 1 : 2;
+    }
+
+    /**
+     * An authored {@link Page} at a default surface's route ({@code /catalogs|documents|registers/{name}})
+     * overrides that surface — the list/register "is a page" you can compose freely. Returns the wrapped
+     * page content, or {@code null} to fall through to the framework's default surface. The page owns its
+     * own access (embedded lists each enforce their RBAC), so it resolves before the entity read check.
+     */
+    private Map<String, Object> defaultSurfaceOverride(String route, UiLayout.Profile active, Viewport vp,
+                                                       String theme, Principal principal) {
+        Map<String, Object> authored = authoredPage(route, active, vp, cols(vp),
+                palette(theme), principal, humanizeRoute(route), "");
+        return authored == null ? null : DivCard.of("onno-content", authored);
+    }
+
+    /**
+     * Render a composed page: optional header + the main region + an optional right rail
+     * ({@code b.aside(...)}). Each region is a widget grid + freeform components + nested layout
+     * {@code row(...)}s of columns, resolved recursively so a page can compose an arbitrary column
+     * layout. Big-number widget values resolve across the whole region tree in one batch.
+     */
     private Map<String, Object> renderPage(PageBuilder pb, String route, int columns, Palette p, Principal principal,
                                            String profileId, String defaultTitle, String defaultSubtitle) {
-        List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
+        PageDivBuilder.Region main = resolveRegion(pb, columns, route, profileId, principal);
+        PageBuilder asidePb = pb.aside();
+        PageDivBuilder.Region aside = asidePb == null ? null : resolveRegion(asidePb, 1, route, profileId, principal);
+
+        String title = pb.title() != null ? pb.title() : defaultTitle;
+        String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
+
+        List<PageWidgetDescriptor> allWidgets = new ArrayList<>();
+        collectWidgets(main, allWidgets);
+        if (aside != null) {
+            collectWidgets(aside, allWidgets);
+        }
+        Map<PageWidgetDescriptor, String> values = resolveWidgetValues(allWidgets);
+        java.util.function.Function<PageWidgetDescriptor, String> valueFn = w -> values.getOrDefault(w, "—");
+
+        return PageDivBuilder.build(title, subtitle, pb.showHeader(), main, aside, columns > 1,
+                valueFn, widgetWrite(principal), p);
+    }
+
+    /**
+     * Resolve a page-builder region to a render {@link PageDivBuilder.Region}: its own widgets
+     * (access-filtered) at {@code gridColumns} wide, its expanded components, and each nested
+     * {@code row(...)}'s columns resolved recursively (nested columns grid one-wide).
+     */
+    private PageDivBuilder.Region resolveRegion(PageBuilder pb, int gridColumns, String route,
+                                                String profileId, Principal principal) {
+        List<PageWidgetDescriptor> widgets = resolvePageWidgets(pb, principal);
+        List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
+        List<PageDivBuilder.Row> rows = new ArrayList<>();
+        for (PageRow r : pb.rows()) {
+            List<PageDivBuilder.Column> cols = new ArrayList<>();
+            for (PageColumn c : r.columns()) {
+                cols.add(new PageDivBuilder.Column(c.width(),
+                        resolveRegion(c.region(), 1, route, profileId, principal)));
+            }
+            rows.add(new PageDivBuilder.Row(cols));
+        }
+        return new PageDivBuilder.Region(widgets, gridColumns, components, rows);
+    }
+
+    /** Flatten every widget descriptor in a region tree, for the one-pass big-number value resolve. */
+    private static void collectWidgets(PageDivBuilder.Region r, List<PageWidgetDescriptor> out) {
+        out.addAll(r.widgets());
+        for (PageDivBuilder.Row row : r.rows()) {
+            for (PageDivBuilder.Column c : row.columns()) {
+                collectWidgets(c.region(), out);
+            }
+        }
+    }
+
+    /** Resolve a builder's widget configs to descriptors, dropping any the caller can't read. */
+    private List<PageWidgetDescriptor> resolvePageWidgets(PageBuilder pb, Principal principal) {
+        return layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
                 .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
                 .toList();
-        List<PageComponent> components = expandComponents(pb.components(), route, profileId, principal);
-        String title = pb.title() != null ? pb.title() : defaultTitle;
-        String subtitle = pb.subtitle() != null ? pb.subtitle() : defaultSubtitle;
-        Map<PageWidgetDescriptor, String> values = resolveWidgetValues(widgets);
-        return PageDivBuilder.build(title, subtitle, widgets, components, columns,
-                w -> values.getOrDefault(w, "—"), widgetWrite(principal), p);
+    }
+
+    /** A route segment → a human-facing default page title ("/team-roster" → "Team Roster"). */
+    private static String humanizeRoute(String route) {
+        String s = route == null ? "" : route.replaceFirst("^/+", "").replaceFirst("/+$", "");
+        if (s.isBlank()) {
+            return "";
+        }
+        // The last segment names the page; underscores/hyphens become spaces, each word capitalized.
+        String last = s.substring(s.lastIndexOf('/') + 1).replace('_', ' ').replace('-', ' ').trim();
+        StringBuilder sb = new StringBuilder(last.length());
+        boolean cap = true;
+        for (char c : last.toCharArray()) {
+            if (c == ' ') {
+                cap = true;
+                sb.append(c);
+            } else if (cap) {
+                sb.append(Character.toUpperCase(c));
+                cap = false;
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -579,11 +681,18 @@ public class DivKitController implements DisposableBean {
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
                                            @RequestParam(required = false) String profile,
+                                           @RequestParam(required = false) String viewport,
                                            @RequestParam(required = false) String theme,
                                            Principal principal) {
+        UiLayout.Profile active = activeProfile(principal, profile);
+        Viewport vp = Viewport.parse(viewport);
+        Map<String, Object> override = defaultSurfaceOverride("/catalogs/" + name, active, vp, theme, principal);
+        if (override != null) {
+            return override;
+        }
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
-        String profileId = activeProfile(principal, profile).id();
+        String profileId = active.id();
         requireView(desc.javaClass(), profileId);
         ResolvedListView view = viewResolver.catalogList(desc, profileId);
         // The list is now the virtualized onno-list island: we emit only its descriptor; it
@@ -671,11 +780,18 @@ public class DivKitController implements DisposableBean {
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentList(@PathVariable String name,
                                             @RequestParam(required = false) String profile,
+                                            @RequestParam(required = false) String viewport,
                                             @RequestParam(required = false) String theme,
                                             Principal principal) {
+        UiLayout.Profile active = activeProfile(principal, profile);
+        Viewport vp = Viewport.parse(viewport);
+        Map<String, Object> override = defaultSurfaceOverride("/documents/" + name, active, vp, theme, principal);
+        if (override != null) {
+            return override;
+        }
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
-        String profileId = activeProfile(principal, profile).id();
+        String profileId = active.id();
         requireView(desc.javaClass(), profileId);
         ResolvedListView view = viewResolver.documentList(desc, profileId);
         // Virtualized onno-list island — see catalogList. Date range is applied by the data feed.
@@ -775,8 +891,17 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/registers/{name}")
     public Map<String, Object> registerReport(@PathVariable String name,
+                                              @RequestParam(required = false) String profile,
+                                              @RequestParam(required = false) String viewport,
                                               @RequestParam(required = false) String theme,
                                               Principal principal) {
+        UiLayout.Profile active = activeProfile(principal, profile);
+        Viewport vp = Viewport.parse(viewport);
+        // An authored Page at this register's route replaces the default report surface (see catalogList).
+        Map<String, Object> override = defaultSurfaceOverride("/registers/" + name, active, vp, theme, principal);
+        if (override != null) {
+            return override;
+        }
         AccumulationRegisterDescriptor desc = registerQuery.require(name);
         access.requireRead(principal, desc);
         // The register is now a virtualized onno-list island (movements, plus a Balance tab for
@@ -825,7 +950,9 @@ public class DivKitController implements DisposableBean {
                 continue;
             }
             List<ShellLayoutBuilder.NavItem> items = section.items().stream()
-                    .filter(item -> access.canRead(principal, item.type(), item.name()))
+                    // A page link has no per-entity read grant to check (it resolves to a Page bean by
+                    // route); its route handler enforces auth. Entity items keep the RBAC filter.
+                    .filter(item -> "page".equals(item.type()) || access.canRead(principal, item.type(), item.name()))
                     .filter(item -> isDeclared(item, profileId))
                     .map(item -> new ShellLayoutBuilder.NavItem(
                             // The display label is the title (falls back to name); the route
@@ -842,13 +969,10 @@ public class DivKitController implements DisposableBean {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), section.icon(), items));
             }
         }
-        // App-wide settings (the @Constant values) are opt-in (onno.ui.settings.enabled, off by
-        // default) and administrator-only, so the entry shows only when enabled and for admins; the
-        // /api/settings endpoints enforce the admin check regardless.
-        if (uiProperties.getSettings().isEnabled() && access.roles(principal).contains("ADMIN")) {
-            nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
-                    new ShellLayoutBuilder.NavItem(messages.get("nav.settings"), "onno://settings", "settings", "/settings"))));
-        }
+        // Settings is not special: there is no built-in Settings entry. An app that wants one authors
+        // a Page at "/settings" (composing PageBuilder.constants() for the @Constant editor) and links
+        // it like any other page — section(...).page("/settings", "Settings", "settings"), scoped to
+        // an admin profile if it should be admin-only. The /api/settings endpoints enforce ADMIN on write.
         return nav;
     }
 
@@ -907,6 +1031,12 @@ public class DivKitController implements DisposableBean {
      */
     private boolean isDeclared(UiLayout.ResolvedItem item, String profileId) {
         if ("register".equals(item.type())) {
+            return true;
+        }
+        // A page link resolves to a Page bean by route, not to an EntityView — it has no java class
+        // to gate on here. Its route either has a registered Page (renders) or 404s on navigation;
+        // either way the nav entry itself is authored, so honor it.
+        if ("page".equals(item.type())) {
             return true;
         }
         return viewResolver.hasView(item.javaClass(), profileId);
