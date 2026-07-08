@@ -4,6 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { initials, notionistsAvatar, tint } from "@/components/presence-avatars";
 import { Segmented } from "@/components/ui/segmented";
 import { useMessages } from "@/providers/messages-provider";
+import type { Translate } from "@/lib/messages";
 import { cn } from "@/lib/utils";
 import type { NotificationView } from "@/lib/api";
 import {
@@ -43,6 +44,25 @@ function typeIcon(type: string) {
   }
 }
 
+// The i18n key for a built-in type's tab/pill label; any other (custom) type is humanized from its
+// string. Keeps the tab set fully modular — a producer emitting a new type needs no client change,
+// and can still localize its label by defining `notifications.type.<type>` in onno.ui.messages.
+const KNOWN_TYPE_LABEL: Record<string, string> = {
+  mention: "notifications.typeMention",
+  reply: "notifications.typeReply",
+  assignment: "notifications.typeAssignment",
+};
+function humanizeType(type: string): string {
+  const s = type.replace(/[_-]+/g, " ").trim();
+  return s ? s[0].toUpperCase() + s.slice(1) : type;
+}
+function typeLabelOf(type: string, t: Translate): string {
+  if (KNOWN_TYPE_LABEL[type]) return t(KNOWN_TYPE_LABEL[type]);
+  const key = `notifications.type.${type}`;
+  const localized = t(key);
+  return localized === key ? humanizeType(type) : localized; // t() echoes the key when undefined
+}
+
 /** A short, locale-aware "5m / 3h / 2d ago" from an ISO timestamp. */
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
@@ -78,6 +98,8 @@ function bucketOf(iso: string): Bucket {
 function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n: NotificationView) => void }) {
   const t = useMessages();
   const Icon = typeIcon(item.type);
+  // Known types keep their curated (singular) tag label; a custom type shows a humanized pill so its
+  // category is still visible in the row.
   const typeLabel =
     item.type === "mention"
       ? t("notifications.tagMention")
@@ -85,7 +107,7 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
       ? t("notifications.tagAssignment")
       : item.type === "reply"
       ? t("notifications.tagReply")
-      : null;
+      : humanizeType(item.type);
   return (
     <button
       type="button"
@@ -141,17 +163,21 @@ function StatusTabs({ value }: { value: StatusFilter }) {
   return <Segmented value={value} options={opts} onChange={setStatusFilter} />;
 }
 
-/** The source (type) filter pills. */
-function TypePills({ value }: { value: TypeFilter }) {
+/**
+ * The source (type) filter pills — one per notification type the user actually has (server-reported,
+ * most-recent-first), plus a leading "All". Fully modular: the tabs follow the data, so a custom
+ * producer's type appears with no client change, and built-in tabs disappear when their source is off
+ * (no notifications of that type). Hidden entirely when there's ≤1 type — nothing to filter.
+ */
+function TypePills({ value, types }: { value: TypeFilter; types: string[] }) {
   const t = useMessages();
+  if (types.length <= 1) return null;
   const opts: [TypeFilter, string][] = [
     ["all", t("notifications.typeAll")],
-    ["mention", t("notifications.typeMention")],
-    ["reply", t("notifications.typeReply")],
-    ["assignment", t("notifications.typeAssignment")],
+    ...types.map((ty) => [ty, typeLabelOf(ty, t)] as [TypeFilter, string]),
   ];
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 overflow-x-auto">
       {opts.map(([key, label]) => (
         <button
           key={key}
@@ -216,7 +242,7 @@ export function NotificationTrigger({ style }: { style?: React.CSSProperties }) 
 export function NotificationCenter() {
   const t = useMessages();
   const store = useNotifications();
-  const { panelOpen, available, unreadCount, hasMore, statusFilter, typeFilter, triggerCount, navStyle } = store;
+  const { panelOpen, available, unreadCount, hasMore, statusFilter, typeFilter, types, triggerCount, navStyle } = store;
 
   useEffect(() => {
     startNotifications();
@@ -342,7 +368,7 @@ export function NotificationCenter() {
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-5 pb-3">
           <StatusTabs value={statusFilter} />
-          <TypePills value={typeFilter} />
+          <TypePills value={typeFilter} types={types} />
         </div>
 
         <div className="mx-5 border-t border-border" />

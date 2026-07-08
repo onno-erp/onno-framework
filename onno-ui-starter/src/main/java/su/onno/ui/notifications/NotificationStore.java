@@ -131,6 +131,20 @@ public class NotificationStore {
     }
 
     /**
+     * The distinct notification types this recipient actually has, most-recent-first. Drives the panel's
+     * filter tabs: a tab exists for a type only once the user has a notification of it, so the tab set is
+     * fully modular — a custom producer's type gets a tab with no config, and a disabled built-in source
+     * (its type no longer produced) drops out as its old notifications age out.
+     */
+    public List<String> distinctTypes(String recipientId) {
+        return jdbi.withHandle(h -> h.createQuery("SELECT _type FROM " + TABLE +
+                        " WHERE _recipient = :recipient GROUP BY _type ORDER BY MAX(_created_at) DESC")
+                .bind("recipient", recipientId)
+                .mapTo(String.class)
+                .list());
+    }
+
+    /**
      * Mark one notification read, but only if it belongs to {@code recipientId} (a user can't read
      * another's). Returns false when it doesn't exist, isn't theirs, or was already read.
      */

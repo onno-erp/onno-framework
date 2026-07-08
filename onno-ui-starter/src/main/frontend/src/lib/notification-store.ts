@@ -13,9 +13,11 @@ import type { UiEvent } from "@/lib/types";
  * seed request 404s and the store marks itself unavailable so the bell hides.
  */
 
-/** The panel's status tab (all vs unread only) and source filter (all types / one type). */
+/** The panel's status tab (all vs unread only) and source filter ("all", or any notification type). */
 export type StatusFilter = "all" | "unread";
-export type TypeFilter = "all" | "mention" | "assignment" | "reply";
+// A notification type string, or "all". Not a closed union — types are whatever producers emit, so the
+// panel's tabs are driven by the `types` the server reports (see below), not a hardcoded list.
+export type TypeFilter = string;
 
 type State = {
   items: NotificationView[];
@@ -23,6 +25,10 @@ type State = {
   nextCursor: string | null;
   hasMore: boolean;
   available: boolean;
+  // The distinct notification types the user has, most-recent-first — the panel renders one filter tab
+  // per type. Modular by construction: a custom producer's type shows a tab with no config, and a type
+  // nobody produces anymore drops out. Kept in sync from the feed + unioned with live deltas.
+  types: string[];
   // UI state shared between the sidebar trigger and the slide-over panel.
   panelOpen: boolean;
   statusFilter: StatusFilter;
@@ -42,6 +48,7 @@ let state: State = {
   nextCursor: null,
   hasMore: false,
   available: true,
+  types: [],
   panelOpen: false,
   statusFilter: "all",
   typeFilter: "all",
@@ -71,12 +78,16 @@ function loadFirstPage(): Promise<void> {
   return api
     .getNotifications()
     .then((page) => {
+      const types = page.types ?? [];
       set({
         items: page.items,
         unreadCount: page.unreadCount,
         nextCursor: page.nextCursor,
         hasMore: page.hasMore,
         available: true,
+        types,
+        // Drop back to "all" if the active tab's type no longer exists (e.g. its source was disabled).
+        typeFilter: state.typeFilter === "all" || types.includes(state.typeFilter) ? state.typeFilter : "all",
       });
     })
     .catch((e) => {
@@ -142,9 +153,10 @@ function applyEvent(ev: UiEvent | undefined) {
   }
   if (state.items.some((n) => n.id === ev.id)) return; // already have it (e.g. from a concurrent refetch)
   playChime();
+  const type = ev.notificationType ?? "info";
   const row: NotificationView = {
     id: ev.id,
-    type: ev.notificationType ?? "info",
+    type,
     title: ev.title,
     body: ev.body ?? null,
     link: ev.link ?? null,
@@ -154,7 +166,12 @@ function applyEvent(ev: UiEvent | undefined) {
     readAt: null,
     unread: true,
   };
-  set({ items: [row, ...state.items], unreadCount: state.unreadCount + 1 });
+  set({
+    items: [row, ...state.items],
+    unreadCount: state.unreadCount + 1,
+    // A brand-new type gets its tab immediately (prepended = most recent), no wait for a refetch.
+    types: state.types.includes(type) ? state.types : [type, ...state.types],
+  });
 }
 
 /** Mark one notification read (optimistically), reconciling the badge from the server's fresh total. */

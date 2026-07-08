@@ -110,6 +110,19 @@ class NotificationStoreTest {
     }
 
     @Test
+    void distinctTypesAreDeduplicatedAndRecipientScoped() {
+        insert(alice, "A1"); // type "mention"
+        store.insert(alice, "assignment", "A2", null, null, bob, "Bob", null);
+        insert(alice, "A3"); // "mention" again — must collapse to one
+        store.insert(bob, "reply", "B1", null, null, alice, "Alice", null);
+
+        // The panel's tab set: each type once, only this recipient's.
+        assertThat(store.distinctTypes(alice)).containsExactlyInAnyOrder("mention", "assignment");
+        assertThat(store.distinctTypes(bob)).containsExactly("reply");
+        assertThat(store.distinctTypes(UUID.randomUUID().toString())).isEmpty();
+    }
+
+    @Test
     void pruneRemovesOnlyReadRowsOlderThanTheCutoff() {
         Notification read = insert(alice, "old-read");
         insert(alice, "old-unread");

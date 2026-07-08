@@ -322,6 +322,8 @@ export interface NotificationPage {
   nextCursor: string | null;
   hasMore: boolean;
   unreadCount: number;
+  /** The distinct notification types this user has, most-recent-first — the panel's modular filter tabs. */
+  types: string[];
 }
 
 export class ApiError extends Error {

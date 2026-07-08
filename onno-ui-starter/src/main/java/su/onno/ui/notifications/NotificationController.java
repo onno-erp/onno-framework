@@ -57,6 +57,7 @@ public class NotificationController {
             out.put("nextCursor", null);
             out.put("hasMore", false);
             out.put("unreadCount", 0);
+            out.put("types", List.of());
             return out;
         }
         NotificationStore.Page page = notifications.list(recipient, unread, cursor);
@@ -64,6 +65,9 @@ public class NotificationController {
         out.put("nextCursor", page.nextCursor());
         out.put("hasMore", page.hasMore());
         out.put("unreadCount", notifications.unreadCount(recipient));
+        // The distinct types this user has (independent of the unread filter) — the panel renders one
+        // filter tab per type, so the tab set is modular with no config (see NotificationStore#distinctTypes).
+        out.put("types", notifications.types(recipient));
         return out;
     }
 

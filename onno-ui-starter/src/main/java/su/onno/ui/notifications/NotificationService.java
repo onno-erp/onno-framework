@@ -126,6 +126,11 @@ public class NotificationService {
         return store.unreadCount(recipientId);
     }
 
+    /** The distinct notification types this recipient has — drives the panel's modular filter tabs. */
+    public java.util.List<String> types(String recipientId) {
+        return store.distinctTypes(recipientId);
+    }
+
     public boolean markRead(UUID id, String recipientId) {
         return store.markRead(id, recipientId);
     }
