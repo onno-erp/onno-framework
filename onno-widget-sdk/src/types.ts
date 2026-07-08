@@ -96,6 +96,48 @@ export interface ListRendererProps {
   openUrl: (row: EntityRecord) => string | null;
 }
 
+/**
+ * The host's UI primitives, re-exposed to widgets so a custom widget renders the *real*
+ * design-system controls (Radix-backed Select/Popover, the app's Button/Segmented/Badge/…) instead
+ * of hand-rolled lookalikes. They carry the host's Tailwind classes — already emitted into the host
+ * stylesheet — so a widget reusing them sidesteps the class-emission gotcha (utilities the host
+ * doesn't itself emit produce no CSS when compiled outside the host build) and never drifts from the
+ * product's look.
+ *
+ * The props are the underlying components' own (Radix + the host's variants); typed loosely here
+ * because the SDK can't depend on the SPA package. In practice you pass the same props you'd pass a
+ * shadcn/Radix {@code Select}/{@code Popover}/{@code Button}.
+ *
+ * @example
+ *   import { ui } from "@onno/widget-sdk";
+ *   const { Select, SelectTrigger, SelectContent, SelectItem, Button, Segmented } = ui;
+ */
+export interface OnnoUi {
+  Button: import("react").ComponentType<any>;
+  Badge: import("react").ComponentType<any>;
+  Input: import("react").ComponentType<any>;
+  Label: import("react").ComponentType<any>;
+  Textarea: import("react").ComponentType<any>;
+  Checkbox: import("react").ComponentType<any>;
+  Switch: import("react").ComponentType<any>;
+  Segmented: import("react").ComponentType<any>;
+  DatePicker: import("react").ComponentType<any>;
+  Card: import("react").ComponentType<any>;
+  CardHeader: import("react").ComponentType<any>;
+  CardTitle: import("react").ComponentType<any>;
+  CardDescription: import("react").ComponentType<any>;
+  CardContent: import("react").ComponentType<any>;
+  Popover: import("react").ComponentType<any>;
+  PopoverTrigger: import("react").ComponentType<any>;
+  PopoverContent: import("react").ComponentType<any>;
+  Select: import("react").ComponentType<any>;
+  SelectContent: import("react").ComponentType<any>;
+  SelectGroup: import("react").ComponentType<any>;
+  SelectItem: import("react").ComponentType<any>;
+  SelectTrigger: import("react").ComponentType<any>;
+  SelectValue: import("react").ComponentType<any>;
+}
+
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
   React: typeof import("react");
@@ -106,5 +148,7 @@ export interface OnnoHost {
   ) => void;
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   api: OnnoReadApi;
+  /** The host's UI component primitives (see {@link OnnoUi}). Present from host contract v2. */
+  ui: OnnoUi;
   version: number;
 }

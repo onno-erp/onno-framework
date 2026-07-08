@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, CircleCheck, Plus, Trash2, X } from "lucide-react";
-import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta } from "@/lib/types";
+import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
 import { api, ApiError } from "@/lib/api";
 import { cn, enumPillStyle } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
 import { cancelQuickCreate, consumeQuickCreate } from "@/lib/quick-create";
-import { clearFormDirty, markFormDirty } from "@/lib/dirty-forms";
+import { clearFormDirty, isFormDirty, markFormDirty } from "@/lib/dirty-forms";
 import { ActionsCluster, type ActionItem } from "@/lib/actions-menu-bridge";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
@@ -84,6 +84,58 @@ function isNumeric(javaType: string): boolean {
   return ["BigDecimal", "Integer", "Long", "Double", "Float", "Short", "int", "long", "double"].includes(
     javaType
   );
+}
+
+// Seed the top-level field state from a loaded record. Secret fields are write-only — never seeded
+// (see the form's save path). Records arrive keyed by column name; the form keys by field name.
+// Module-scope + record-parameterised so a live SSE refetch can re-seed from a fresh record with the
+// exact same rules as the initial mount.
+function seedDataFrom(record: EntityRecord | null, fields: Field[]): EntityRecord {
+  const seed: EntityRecord = {};
+  if (!record) return seed;
+  for (const f of fields) {
+    if (f.kind === "attr" && f.attr.secret) continue;
+    const col = f.kind === "system" ? f.column : f.attr.columnName;
+    if (record[col] != null) seed[f.key] = record[col];
+  }
+  return seed;
+}
+
+// Seed the tabular-section rows from a loaded record (same column→field asymmetry as seedDataFrom).
+function seedRowsFrom(
+  record: EntityRecord | null,
+  sections: TabularSectionMeta[]
+): Record<string, EntityRecord[]> {
+  const seed: Record<string, EntityRecord[]> = {};
+  for (const ts of sections) {
+    const raw = record?.[ts.name];
+    seed[ts.name] = Array.isArray(raw)
+      ? (raw as EntityRecord[]).map((r) => {
+          const row: EntityRecord = {};
+          for (const attr of ts.attributes) {
+            if (attr.secret) continue; // write-only — see seedDataFrom
+            if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
+          }
+          return row;
+        })
+      : [];
+  }
+  return seed;
+}
+
+// Mirror of the server's snake-casing so an SSE event's entity name matches the form's route name.
+function toSnake(name: string): string {
+  return name.replace(/ /g, "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+// True when a live SSE event is an in-place change to *this* open record (same kind, name, and id).
+// Only updated/posted/unposted/changed count — create/delete/register/presence events don't apply to
+// an already-open record's fields. (Mirrors entity-list-widget's eventMatches, narrowed to one id.)
+function recordEventMatches(event: UiEvent, kind: string, name: string, id: string): boolean {
+  if (!event || event.entityName === "*" || event.id !== id) return false;
+  if (!["updated", "posted", "unposted", "changed"].includes(event.type)) return false;
+  const singular = kind === "catalogs" ? "catalog" : "document";
+  return event.entityType === singular && toSnake(event.entityName ?? "") === name;
 }
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -213,49 +265,28 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // 1C-style posting: a postable document offers Write (save, no posting) alongside
   // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
   // non-postable documents keep the single Save button.
-  const postable = kind === "documents" && meta.postable === true;
-  const wasPosted = Boolean(initial?._posted);
+  // The record the form is currently rendering. Starts from the server-provided `initial`; a live
+  // SSE change to this record (another user/tab/widget) re-seeds it in place (see the effect below),
+  // so the open form reflects external writes instead of going stale until reopened (#244).
+  const [record, setRecord] = useState<EntityRecord | null>(initial);
 
-  // Seeders are plain functions so Cancel on the record surface can reset to the stored values.
-  const seedData = () => {
-    const seed: EntityRecord = {};
-    if (!initial) return seed;
-    for (const f of fields) {
-      // Secret fields are write-only: never seed the control from the loaded value (the
-      // server only ever sends a "set" sentinel anyway). Leaving it blank means an unchanged
-      // save omits the field, so the stored secret is preserved.
-      if (f.kind === "attr" && f.attr.secret) continue;
-      const col = f.kind === "system" ? f.column : f.attr.columnName;
-      if (initial[col] != null) seed[f.key] = initial[col];
-    }
-    return seed;
-  };
-  const [data, setData] = useState<EntityRecord>(seedData);
+  const postable = kind === "documents" && meta.postable === true;
+  const wasPosted = Boolean(record?._posted);
+
+  const [data, setData] = useState<EntityRecord>(() => seedDataFrom(initial, fields));
 
   // Rows per section, keyed by attribute fieldName. Loaded rows arrive keyed by column name
-  // (with resolved *_display labels), so seed each cell from initial[section][columnName] —
-  // the same column→field asymmetry the top-level fields handle above. All attributes are
-  // seeded (not just the visible ones) so hidden columns survive the delete-and-reinsert.
-  const seedRows = () => {
-    const seed: Record<string, EntityRecord[]> = {};
-    for (const ts of sections) {
-      const raw = initial?.[ts.name];
-      seed[ts.name] = Array.isArray(raw)
-        ? (raw as EntityRecord[]).map((r) => {
-            const row: EntityRecord = {};
-            for (const attr of ts.attributes) {
-              if (attr.secret) continue; // write-only — see top-level seed
-              if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
-            }
-            return row;
-          })
-        : [];
-    }
-    return seed;
-  };
-  const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(seedRows);
+  // (with resolved *_display labels); seedRowsFrom handles the same column→field asymmetry the
+  // top-level fields do. All attributes are seeded (not just the visible ones) so hidden columns
+  // survive the delete-and-reinsert.
+  const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(() =>
+    seedRowsFrom(initial, sections)
+  );
 
   const [saving, setSaving] = useState(false);
+  // Set when the open record changed elsewhere while the user has unsaved edits: we don't clobber
+  // their input, we surface a non-destructive "record changed — reload?" banner instead (#244).
+  const [staleExternal, setStaleExternal] = useState(false);
   // Inline validation messages, keyed by field key (attr fieldName / system "code"/"description").
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -274,6 +305,51 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // The dirty flag's lifetime is this instance's: save/cancel clear it explicitly, and unmount
   // clears it too — a remounted island starts from the stored record again, so nothing is at risk.
   useEffect(() => () => clearFormDirty(formPath), [formPath]);
+
+  // Re-seed the whole form from a freshly loaded record — the live-refresh equivalent of the initial
+  // mount seed. Clears any pending errors, the stale banner, and the dirty flag (the on-screen values
+  // now equal the stored record). Used both for a silent in-place refresh and the banner's Reload.
+  const applyRecord = useCallback(
+    (fresh: EntityRecord) => {
+      setRecord(fresh);
+      setData(seedDataFrom(fresh, fields));
+      setRowsBySection(seedRowsFrom(fresh, sections));
+      setErrors({});
+      setStaleExternal(false);
+      clearFormDirty(formPath);
+    },
+    [fields, sections, formPath]
+  );
+
+  // Fetch the current record and re-seed. Read-only failures are swallowed — the form keeps showing
+  // what it had rather than blanking on a transient error.
+  const refetch = useCallback(async () => {
+    if (!isEdit || !id) return;
+    try {
+      const fresh =
+        kind === "documents" ? await api.getDocument(name, id) : await api.getCatalogItem(name, id);
+      applyRecord(fresh);
+    } catch {
+      /* leave the current values in place */
+    }
+  }, [isEdit, id, kind, name, applyRecord]);
+
+  // Live refresh (#244): divkit-view fans every SSE row change out as an "onno:dataevent" window
+  // event (one shared stream — see entity-list-widget). When *this* open record changes elsewhere,
+  // reflect it: with no unsaved edits, refetch and update the fields in place; with unsaved edits,
+  // don't clobber — raise a non-destructive banner offering a one-click reload. Create/duplicate
+  // forms have no id to reconcile, so they never subscribe.
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    const onData = (e: Event) => {
+      const event = (e as CustomEvent).detail as UiEvent;
+      if (!recordEventMatches(event, kind, name, id)) return;
+      if (isFormDirty(formPath)) setStaleExternal(true);
+      else void refetch();
+    };
+    window.addEventListener("onno:dataevent", onData);
+    return () => window.removeEventListener("onno:dataevent", onData);
+  }, [isEdit, id, kind, name, formPath, refetch]);
 
   // Validate every attribute field against its constraints; returns key -> message.
   const validateAll = (): Record<string, string> => {
@@ -405,7 +481,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // always knows *which* supplier/order they're deep inside of. A posted document shows its
   // status pill — re-posting an already-posted document is a different mental act than posting.
   const subtitleParts = isEdit
-    ? [initial?._code, initial?._number, initial?._description].filter(
+    ? [record?._code, record?._number, record?._description].filter(
         (v): v is string =>
           typeof v === "string" &&
           v.trim() !== "" &&
@@ -441,6 +517,24 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
             cluster the old read-only detail header rendered, now pinned beside the form title. */}
         {form.actions?.length ? <ActionsCluster items={form.actions} /> : null}
       </div>
+      {/* The record changed elsewhere while the user has unsaved edits — offer a non-destructive
+          reload rather than silently overwriting their input (#244). Reload re-seeds from the
+          stored record, discarding the in-progress edits the user chose to abandon. */}
+      {staleExternal ? (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-card border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm">
+          <span className="flex min-w-0 items-center gap-2 text-amber-800 dark:text-amber-300">
+            <RefreshCw className="size-4 shrink-0" aria-hidden="true" />
+            <span className="truncate">{t("form.staleChanged")}</span>
+          </span>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-control bg-amber-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-amber-600/90"
+            onClick={() => void refetch()}
+          >
+            {t("form.reload")}
+          </button>
+        </div>
+      ) : null}
       <fieldset disabled={readOnly} className="contents">
       {fieldGroups.map((g, gi) => (
         <div

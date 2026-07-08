@@ -36,6 +36,15 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - `api` — a read-only REST client (`listCatalog`, `getCatalogItem`, `listDocuments`, `getDocument`,
   `searchCatalog`, `searchDocument`, `getBalance`, `getTurnover`, `getMovements`). Same-origin,
   session + CSRF handled by the host. No writes.
+- **UI primitives** — the host's real design-system controls, so a widget matches the product instead
+  of shipping hand-rolled lookalikes. Import them **by name** (`import { DatePicker, Select, Button }
+  from "@onno/widget-sdk"`) or off the `ui` object (`ui.Select`). Curated subset — `Button`, `Badge`,
+  `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `Card`
+  (+ `CardHeader`/`CardTitle`/`CardDescription`/`CardContent`), `Popover`
+  (+ `PopoverTrigger`/`PopoverContent`), and `Select`
+  (+ `SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`/`SelectGroup`). They resolve to the
+  host's singletons at runtime (shared React instance, host-emitted classes). Requires host contract
+  v2+.
 - `html` — `htm` bound to the host `React.createElement`, for JSX-free markup.
 - `WidgetProps` — `{ widget: DashboardWidgetMeta }`, the props every widget receives. Read
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
@@ -43,16 +52,39 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 
 ## Styling
 
-Widget modules are compiled by esbuild **outside** the host SPA's Tailwind build. Tailwind only
-generates CSS for class names it finds in the host's own sources, so a utility class in your widget
-works only if the host app happens to emit the same class — anything else (e.g. `border-l`,
-arbitrary values like `-left-[5px]`) is silently dropped, with no build error. Rules of thumb:
+The `su.onno.widgets` Gradle plugin runs **Tailwind over your widget sources** and ships the result as
+`onno-widgets.css`, which the host injects at boot. So Tailwind utility classes in your widget's own
+markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`) the host never
+emits — now produce real CSS. The stylesheet is **utilities-only with preflight off** and carries the
+host's design tokens (`bg-primary`, `text-muted-foreground`, `rounded-card`/`rounded-field`/
+`rounded-control`, which resolve against the host's runtime CSS variables), so it matches the product
+and light/dark both work. No config on your side.
 
-- Common text/spacing utilities (`text-sm`, `text-muted-foreground`, `mb-3`, `flex`, …) are safe —
-  the host uses them everywhere.
-- For layout-critical or uncommon styles, use **inline `style`** instead of classes.
-- For theme colors in inline styles, use the host's HSL variables: `hsl(var(--primary))`,
-  `hsl(var(--border))`, `hsl(var(--muted-foreground))`, etc. — they follow light/dark mode.
+Two caveats remain:
+
+- **Only `src/main/widgets` is scanned.** Class names in files outside that dir, or built by string
+  concatenation at runtime (`` `text-${color}` ``), aren't seen by Tailwind — write class names as
+  literals, or use inline `style` for the truly dynamic bits.
+- **For dynamic colors**, inline `style` with the host's HSL variables still works:
+  `hsl(var(--primary))`, `hsl(var(--border))`, `hsl(var(--muted-foreground))` — they follow the theme.
+
+For interactive controls (dropdowns, toggles, buttons), prefer the host `ui` primitives over rolling
+your own — you get the exact product control, keyboard nav, mobile drawers and all:
+
+```tsx
+import { Segmented, useState } from "@onno/widget-sdk"; // named — or destructure from `ui`
+
+function ViewSwitch() {
+  const [view, setView] = useState("day");
+  return (
+    <Segmented
+      value={view}
+      onChange={setView}
+      options={[{ value: "day", label: "Day" }, { value: "week", label: "Week" }]}
+    />
+  );
+}
+```
 
 ## Example
 

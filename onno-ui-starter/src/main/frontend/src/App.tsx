@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
-import { loadPlugins } from "@/lib/plugin-loader";
+import { injectPluginStyles, loadPlugins } from "@/lib/plugin-loader";
 import { Toaster } from "sonner";
 import { ThemeProvider, useTheme } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
@@ -40,7 +40,11 @@ function ProtectedApp() {
     api
       .getConfig()
       .then((cfg) => {
-        if (!cancelled) void loadPlugins(cfg?.pluginScripts);
+        if (cancelled) return;
+        // Inject the widget stylesheet(s) first so a widget's own utility classes have CSS the moment
+        // its module renders, then load the modules.
+        injectPluginStyles(cfg?.pluginStyles);
+        void loadPlugins(cfg?.pluginScripts);
       })
       .catch(() => {
         // No config / offline — the built-in widgets still work; custom ones stay unregistered.

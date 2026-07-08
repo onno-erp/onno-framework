@@ -10,6 +10,24 @@ import { installPluginHost } from "./plugin-host";
  * A failing plugin (network error, throw at module scope) is logged and skipped; it never blocks the
  * others or the app. The widget host shows a labelled placeholder for any type left unregistered.
  */
+/**
+ * Inject a `<link rel="stylesheet">` for each widget stylesheet (`AppConfig.pluginStyles`, emitted by
+ * the Gradle plugin's Tailwind pass). Idempotent — a URL already linked is skipped, so a config
+ * refetch or HMR re-run doesn't stack duplicate links. Call before {@link loadPlugins} so the CSS is
+ * present by the time a widget module renders.
+ */
+export function injectPluginStyles(urls: string[] | undefined | null): void {
+  if (!urls || urls.length === 0) return;
+  for (const url of urls) {
+    if (document.querySelector(`link[data-onno-plugin-style="${CSS.escape(url)}"]`)) continue;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = url;
+    link.dataset.onnoPluginStyle = url;
+    document.head.appendChild(link);
+  }
+}
+
 export async function loadPlugins(urls: string[] | undefined | null): Promise<void> {
   // Make sure window.onno exists before any plugin module evaluates and reaches for it.
   installPluginHost();

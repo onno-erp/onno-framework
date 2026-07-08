@@ -1,4 +1,14 @@
-import { registerWidget, useEffect, useState, api, type WidgetProps, type EntityRecord } from "@onno/widget-sdk";
+import {
+  registerWidget,
+  useEffect,
+  useMemo,
+  useState,
+  api,
+  Segmented,
+  Badge,
+  type WidgetProps,
+  type EntityRecord,
+} from "@onno/widget-sdk";
 
 /**
  * A custom widget — the kind the framework has no built-in for. It renders the bound document's
@@ -6,8 +16,12 @@ import { registerWidget, useEffect, useState, api, type WidgetProps, type Entity
  * `.config(...)` on the widget declaration. This whole file is compiled by the `su.onno.widgets`
  * Gradle plugin into `onno-plugins/EventLog.js`, served by the app and loaded by the SPA at boot.
  *
- * Type + spacing mirror the built-in list widget (13px medium titles, 11px muted secondary,
- * 12px tabular amounts, "MMM d" dates) so the card reads as part of the same dashboard family.
+ * It also shows off two SDK features:
+ *   - **Host UI primitives** imported straight from the SDK: `Segmented` (the newest/oldest sort
+ *     toggle) and `Badge` (the amount pill) are the app's *real* controls, not lookalikes.
+ *   - **Tailwind in the widget build**: classes in this widget's own markup — including ones the host
+ *     never emits, like `border-l` and the arbitrary value `-left-[4.5px]` — now produce real CSS
+ *     (the Gradle plugin runs Tailwind over `src/main/widgets`). No more inline-style workarounds.
  *
  * Server side (example DashboardPage):
  *   b.widget("Recent activity").type("eventLog").document(Payment.class)
@@ -29,9 +43,12 @@ function toSnake(name: string): string {
   return name.replace(/([a-z])([A-Z])/g, "$1_$2").replace(/\s+/g, "_").toLowerCase();
 }
 
+type Order = "newest" | "oldest";
+
 function EventLog({ widget }: WidgetProps) {
-  const [rows, setRows] = useState<EntityRecord[]>([]);
+  const [all, setAll] = useState<EntityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [order, setOrder] = useState<Order>("newest");
 
   const cfg = widget.extraConfig ?? {};
   const dateField = cfg.dateField || "_date";
@@ -44,18 +61,21 @@ function EventLog({ widget }: WidgetProps) {
     let cancelled = false;
     api
       .listDocuments(widget.entityName)
-      .then((data) => {
-        if (cancelled) return;
-        const sorted = [...data].sort((a, b) =>
-          String(b[dateField] ?? "").localeCompare(String(a[dateField] ?? ""))
-        );
-        setRows(sorted.slice(0, max));
-      })
+      .then((data) => !cancelled && setAll(data))
       .catch((e) => !cancelled && setError(String(e?.message ?? e)));
     return () => {
       cancelled = true;
     };
-  }, [widget.entityName, dateField, max]);
+  }, [widget.entityName]);
+
+  // Sort by the date field in the chosen direction, then take the most recent `max`.
+  const rows = useMemo(() => {
+    const sorted = [...all].sort((a, b) => {
+      const cmp = String(a[dateField] ?? "").localeCompare(String(b[dateField] ?? ""));
+      return order === "newest" ? -cmp : cmp;
+    });
+    return sorted.slice(0, max);
+  }, [all, dateField, order, max]);
 
   const money = (v: unknown) => {
     if (v == null || v === "") return null;
@@ -84,40 +104,40 @@ function EventLog({ widget }: WidgetProps) {
 
   return (
     <div className="rounded-card border bg-card p-6 text-card-foreground">
-      <div className="mb-6 text-[13px] font-medium text-foreground">{widget.title}</div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="text-[13px] font-medium text-foreground">{widget.title}</div>
+        {/* Host primitive — the app's real segmented control, straight from the SDK. */}
+        <Segmented
+          value={order}
+          onChange={setOrder}
+          options={[
+            { value: "newest", label: "Newest" },
+            { value: "oldest", label: "Oldest" },
+          ]}
+        />
+      </div>
       {rows.length === 0 ? (
         <div className="text-xs text-muted-foreground">No activity yet.</div>
       ) : (
-        // Layout-critical styles are inline: widget .tsx is compiled by esbuild outside the host
-        // SPA's Tailwind build, so any utility class the host doesn't already emit (border-l,
-        // -left-[5px], …) silently produces no CSS. Theme colors come from the host's HSL vars.
-        <ol className="relative" style={{ marginLeft: 8, borderLeft: "1px solid hsl(var(--border))" }}>
+        // `border-l` + `border-border` come from the widget's own Tailwind pass — classes the host
+        // stylesheet doesn't itself emit, so before the build ran Tailwind these produced no CSS.
+        <ol className="relative ml-2 border-l border-border">
           {rows.map((r) => {
             const label = cfg.secondaryDisplay && r[cfg.secondaryDisplay] ? String(r[cfg.secondaryDisplay]) : null;
             const amount = amountField ? money(r[amountField]) : null;
             const date = fmtDay(r[dateField]);
             return (
-              <li key={String(r._id ?? r[titleField])} style={{ marginLeft: 16 }}>
+              <li key={String(r._id ?? r[titleField])} className="ml-4">
+                {/* The dot is dead-centred on the 1px rule via an arbitrary-value class (`-left-[4.5px]`)
+                    and parked level with the title line (`mt-3`) — both formerly-dropped utilities. */}
                 <span
-                  className="rounded-full"
-                  style={{
-                    position: "absolute",
-                    // Offsets resolve against the ol's padding box; the 1px border-left sits at
-                    // [-1, 0], so an 8px dot is dead-centred on it at -4.5 (center -0.5). marginTop
-                    // parks it level with the title line inside the row button's padding.
-                    left: -4.5,
-                    marginTop: 12,
-                    height: 8,
-                    width: 8,
-                    background: "hsl(var(--primary))",
-                  }}
+                  className="absolute -left-[4.5px] mt-3 size-2 rounded-full bg-primary"
                   aria-hidden
                 />
                 <button
                   type="button"
                   onClick={() => open(r)}
-                  className="-mx-2 flex w-full items-center justify-between gap-3 rounded-card px-2 py-2 text-left transition-colors hover:bg-accent/40"
-                  style={{ width: "calc(100% + 16px)" }}
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-card px-2 py-2 text-left transition-colors hover:bg-accent/40"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-medium leading-tight text-foreground">
@@ -125,8 +145,13 @@ function EventLog({ widget }: WidgetProps) {
                     </div>
                     {label ? <div className="truncate text-[11px] text-muted-foreground">{label}</div> : null}
                   </div>
-                  <div className="flex shrink-0 flex-col items-end">
-                    {amount ? <span className="text-[12px] font-medium tabular-nums text-foreground">{amount}</span> : null}
+                  <div className="flex shrink-0 flex-col items-end gap-0.5">
+                    {/* Host primitive — the app's real Badge, tabular-nums for aligned amounts. */}
+                    {amount ? (
+                      <Badge variant="secondary" className="tabular-nums font-medium">
+                        {amount}
+                      </Badge>
+                    ) : null}
                     {date ? <span className="text-[10px] tabular-nums text-muted-foreground">{date}</span> : null}
                   </div>
                 </button>

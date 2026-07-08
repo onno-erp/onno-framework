@@ -11,6 +11,16 @@ class WidgetPluginScannerTest {
         // src/test/resources/onno-plugins/TestWidget.js is on the test classpath.
         WidgetPluginScanner scanner = new WidgetPluginScanner("classpath*:/onno-plugins/");
         assertThat(scanner.scriptNames()).contains("TestWidget.js");
+        // Stylesheets are discovered separately — scriptNames stays JS-only.
+        assertThat(scanner.scriptNames()).doesNotContain("onno-widgets.css");
+    }
+
+    @Test
+    void discoversPluginStylesheetsOnTheClasspath() {
+        // src/test/resources/onno-plugins/onno-widgets.css is on the test classpath.
+        WidgetPluginScanner scanner = new WidgetPluginScanner("classpath*:/onno-plugins/");
+        assertThat(scanner.styleNames()).contains("onno-widgets.css");
+        assertThat(scanner.styleNames()).doesNotContain("TestWidget.js");
     }
 
     @Test

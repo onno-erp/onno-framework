@@ -238,6 +238,9 @@ public final class UiMessages {
         // Forms / ref pickers.
         d.put("form.saveError", "Couldn't save: {error}");
         d.put("form.select", "Select {name}…");
+        // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
+        d.put("form.staleChanged", "This record changed elsewhere.");
+        d.put("form.reload", "Reload");
         d.put("ref.new", "New {name}");
         d.put("relatedList.saveFirstManage", "Save this record first to manage {name}.");
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");

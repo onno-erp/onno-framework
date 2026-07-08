@@ -3,6 +3,25 @@ import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
 import { registerWidget } from "./widget-bridge";
 import { api } from "./api";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Segmented } from "@/components/ui/segmented";
+import { DatePicker } from "@/components/date-picker";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /**
  * The host globals a consumer's custom-widget plugin binds against at runtime.
@@ -15,6 +34,40 @@ import { api } from "./api";
  * runtime` shims resolve to these fields, so a plugin authored with normal `import ... from "react"`
  * + automatic JSX ships with zero React inside it.
  */
+/**
+ * The host's UI primitives, re-exposed so a custom widget renders the *real* design-system controls
+ * (Radix-backed Select/Popover, the app's Button/Segmented/Badge/…) instead of hand-rolled
+ * lookalikes. Because these are the host's own components — carrying the host's Tailwind classes,
+ * already emitted into the host stylesheet — a widget sidesteps the class-emission gotcha (utilities
+ * the host doesn't itself emit produce no CSS when a widget is compiled outside the host build) and
+ * never drifts from the product's look. Curated subset; grow it as widgets need more (issue #243).
+ */
+export interface OnnoUi {
+  Button: typeof Button;
+  Badge: typeof Badge;
+  Input: typeof Input;
+  Label: typeof Label;
+  Textarea: typeof Textarea;
+  Checkbox: typeof Checkbox;
+  Switch: typeof Switch;
+  Segmented: typeof Segmented;
+  DatePicker: typeof DatePicker;
+  Card: typeof Card;
+  CardHeader: typeof CardHeader;
+  CardTitle: typeof CardTitle;
+  CardDescription: typeof CardDescription;
+  CardContent: typeof CardContent;
+  Popover: typeof Popover;
+  PopoverTrigger: typeof PopoverTrigger;
+  PopoverContent: typeof PopoverContent;
+  Select: typeof Select;
+  SelectContent: typeof SelectContent;
+  SelectGroup: typeof SelectGroup;
+  SelectItem: typeof SelectItem;
+  SelectTrigger: typeof SelectTrigger;
+  SelectValue: typeof SelectValue;
+}
+
 export interface OnnoHost {
   /** The host's React — a plugin's components must use this exact instance (shared hooks/context). */
   React: typeof React;
@@ -26,6 +79,8 @@ export interface OnnoHost {
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   /** Read-only slice of the REST client — safe surface for first-party widgets. */
   api: OnnoReadApi;
+  /** The host's UI component primitives (see {@link OnnoUi}) — the real design-system controls. */
+  ui: OnnoUi;
   /** Host contract version; bump on a breaking change to this shape. */
   version: number;
 }
@@ -54,6 +109,34 @@ declare global {
   }
 }
 
+// The curated UI primitives handed to widgets. Same instances the host renders with, so a widget's
+// controls are the product's controls — see {@link OnnoUi}.
+const ui: OnnoUi = {
+  Button,
+  Badge,
+  Input,
+  Label,
+  Textarea,
+  Checkbox,
+  Switch,
+  Segmented,
+  DatePicker,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+};
+
 const readApi: OnnoReadApi = {
   listCatalog: api.listCatalog,
   searchCatalog: api.searchCatalog,
@@ -78,7 +161,9 @@ export function installPluginHost(): OnnoHost {
     registerWidget,
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
-    version: 1,
+    ui,
+    // v2: added `ui` (host UI primitives). Additive — existing widgets keep working.
+    version: 2,
   });
   window.onno = host;
   return host;

@@ -204,7 +204,10 @@ class WidgetsPlugin : Plugin<Project> {
                 "esbuild": "^0.24.0",
                 "typescript": "~5.6.2",
                 "@types/react": "^18.3.18",
-                "react": "^18.3.1"
+                "react": "^18.3.1",
+                "tailwindcss": "^3.4.17",
+                "postcss": "^8.4.49",
+                "tailwindcss-animate": "^1.0.7"
               }
             }
         """.trimIndent() + "\n"
@@ -214,10 +217,21 @@ class WidgetsPlugin : Plugin<Project> {
             // ESM module, with React + the automatic JSX runtime aliased to the host SPA (window.onno) so
             // the output ships with no React of its own. Resolution is rooted at this workspace so the
             // bundled @onno/widget-sdk resolves regardless of where the widget sources live.
-            import { build, context } from "esbuild";
-            import { readdirSync, existsSync, mkdirSync, rmSync } from "node:fs";
+            //
+            // It also runs Tailwind over the widget sources and emits <outDir>/onno-widgets.css, so
+            // utility classes in a widget's own markup produce real CSS (utilities the host doesn't
+            // itself emit are otherwise silently dropped — the widget compiles outside the host's
+            // Tailwind build). The stylesheet is utilities-only with preflight OFF (no global reset)
+            // and carries the host's design tokens (colors → hsl(var(--…)), the rounded-control/field/
+            // card radii), which resolve against the CSS variables the host defines at runtime — so a
+            // widget's classes match the product and never fight the host stylesheet.
+            import { build, context, transform } from "esbuild";
+            import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
             import { join, parse, dirname } from "node:path";
             import { fileURLToPath } from "node:url";
+            import postcss from "postcss";
+            import tailwindcss from "tailwindcss";
+            import tailwindcssAnimate from "tailwindcss-animate";
 
             const workDir = dirname(fileURLToPath(import.meta.url));
             const args = process.argv.slice(2);
@@ -256,14 +270,64 @@ class WidgetsPlugin : Plugin<Project> {
               },
             });
 
+            // Mirrors onno-ui-starter's tailwind.config.js theme so widget utilities resolve to the
+            // same tokens the host uses. Keep in sync with that file when the host theme changes.
+            const tailwindConfig = {
+              content: [join(srcDir, "**/*.{tsx,jsx,ts,js}")],
+              darkMode: ["class"],
+              // No preflight: the host already owns the global reset; a second one would fight it.
+              corePlugins: { preflight: false },
+              theme: {
+                extend: {
+                  colors: {
+                    border: "hsl(var(--border))",
+                    input: "hsl(var(--input))",
+                    ring: "hsl(var(--ring))",
+                    background: "hsl(var(--background))",
+                    foreground: "hsl(var(--foreground))",
+                    primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
+                    secondary: { DEFAULT: "hsl(var(--secondary))", foreground: "hsl(var(--secondary-foreground))" },
+                    destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
+                    muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
+                    accent: { DEFAULT: "hsl(var(--accent))", foreground: "hsl(var(--accent-foreground))" },
+                    popover: { DEFAULT: "hsl(var(--popover))", foreground: "hsl(var(--popover-foreground))" },
+                    card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
+                  },
+                  borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                    control: "var(--radius-control)",
+                    field: "var(--radius-field)",
+                    card: "var(--radius-card)",
+                  },
+                },
+              },
+              plugins: [tailwindcssAnimate],
+            };
+
+            async function emitCss() {
+              // Utilities only: base (preflight) and components come from the host's own stylesheet.
+              const result = await postcss([tailwindcss(tailwindConfig)]).process("@tailwind utilities;", {
+                from: undefined,
+              });
+              let css = result.css;
+              if (!watch) css = (await transform(css, { loader: "css", minify: true })).code;
+              writeFileSync(join(outDir, "onno-widgets.css"), css);
+              console.log("[onno-widgets] wrote onno-widgets.css (" + css.length + " bytes)");
+            }
+
             if (watch) {
               for (const f of entries) {
                 const ctx = await context(options(f));
                 await ctx.watch();
               }
+              // CSS is generated once on start (no live rescan on class edits in the dev loop).
+              await emitCss();
               console.log(`[onno-widgets] watching ${'$'}{entries.length} widget(s) in ${'$'}{srcDir}`);
             } else {
               await Promise.all(entries.map((f) => build(options(f))));
+              await emitCss();
               console.log(`[onno-widgets] compiled ${'$'}{entries.length} widget(s) -> ${'$'}{outDir}`);
             }
         """.trimIndent() + "\n"

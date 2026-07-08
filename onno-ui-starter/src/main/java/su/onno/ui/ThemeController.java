@@ -64,6 +64,12 @@ public class ThemeController {
         if (!pluginScripts.isEmpty()) {
             out.put("pluginScripts", pluginScripts);
         }
+        // Stylesheets the Gradle plugin emitted (Tailwind over the widget sources); the SPA injects a
+        // <link> for each before loading the modules, so a widget's own utility classes get real CSS.
+        List<String> pluginStyles = pluginStyles();
+        if (!pluginStyles.isEmpty()) {
+            out.put("pluginStyles", pluginStyles);
+        }
         return out;
     }
 
@@ -77,6 +83,18 @@ public class ThemeController {
             }
         }
         urls.addAll(properties.getPlugins().getExtraUrls());
+        return urls;
+    }
+
+    private List<String> pluginStyles() {
+        List<String> urls = new ArrayList<>();
+        WidgetPluginScanner scanner = widgetPlugins.getIfAvailable();
+        if (scanner != null) {
+            String base = "/".equals(properties.getPath()) ? "" : properties.getPath();
+            for (String name : scanner.styleNames()) {
+                urls.add(base + "/plugins/" + name);
+            }
+        }
         return urls;
     }
 

@@ -26,13 +26,18 @@ public class WidgetPluginScanner {
     private static final Logger log = LoggerFactory.getLogger(WidgetPluginScanner.class);
 
     private final List<String> scriptNames;
+    private final List<String> styleNames;
     private final String serveLocation;
 
     public WidgetPluginScanner(String location) {
         this.serveLocation = toServeLocation(location);
-        this.scriptNames = scan(location);
+        this.scriptNames = scan(location, "*.js");
+        // The Gradle plugin also emits onno-widgets.css (Tailwind over the widget sources); serve and
+        // advertise any stylesheet alongside the modules so the SPA can inject it (see ThemeController).
+        this.styleNames = scan(location, "*.css");
         if (!scriptNames.isEmpty()) {
-            log.info("Loaded {} custom widget plugin(s): {}", scriptNames.size(), scriptNames);
+            log.info("Loaded {} custom widget plugin(s): {}{}", scriptNames.size(), scriptNames,
+                    styleNames.isEmpty() ? "" : " + styles " + styleNames);
         }
     }
 
@@ -41,13 +46,18 @@ public class WidgetPluginScanner {
         return scriptNames;
     }
 
+    /** The discovered plugin stylesheet file names (e.g. {@code onno-widgets.css}), sorted, deduplicated. */
+    public List<String> styleNames() {
+        return styleNames;
+    }
+
     /** The single-classpath location the resource handler serves the modules from (trailing slash). */
     public String serveLocation() {
         return serveLocation;
     }
 
-    private static List<String> scan(String location) {
-        String pattern = (location.endsWith("/") ? location : location + "/") + "*.js";
+    private static List<String> scan(String location, String glob) {
+        String pattern = (location.endsWith("/") ? location : location + "/") + glob;
         try {
             Resource[] resources = new PathMatchingResourcePatternResolver().getResources(pattern);
             List<String> names = new ArrayList<>();

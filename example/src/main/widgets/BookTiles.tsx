@@ -1,4 +1,4 @@
-import { registerListRenderer, type EntityRecord, type ListRendererProps } from "@onno/widget-sdk";
+import { registerListRenderer, Badge, type EntityRecord, type ListRendererProps } from "@onno/widget-sdk";
 
 /**
  * A custom list-body renderer — the first consumer of `ListSpec.custom(...)`. The Books catalog
@@ -7,9 +7,10 @@ import { registerListRenderer, type EntityRecord, type ListRendererProps } from 
  * and fed by the framework-owned grid — through this component instead of the table.
  *
  * Compiled by the `su.onno.widgets` Gradle plugin into `onno-plugins/BookTiles.js` (like
- * EventLog.tsx), served by the app and loaded by the SPA at boot. Layout-critical styles are
- * inline: widget .tsx compiles outside the host SPA's Tailwind build, so utility classes the host
- * doesn't already emit would silently produce no CSS.
+ * EventLog.tsx), served by the app and loaded by the SPA at boot. The layout is plain Tailwind —
+ * including arbitrary values the host never emits (`grid-cols-[repeat(auto-fill,minmax(160px,1fr))]`,
+ * `aspect-[3/4]`) — because the Gradle plugin runs Tailwind over `src/main/widgets`, so the widget's
+ * own classes get real CSS. The price rides in the app's real `Badge`, imported from the SDK.
  */
 
 /** The price formatted like the table column would show it (BookView formats price as USD). */
@@ -28,49 +29,35 @@ function coverUrl(row: EntityRecord): string | null {
 
 function BookTiles({ rows, open }: ListRendererProps) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-        gap: 12,
-      }}
-    >
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
       {rows.map((row) => {
         const cover = coverUrl(row);
+        const p = price(row);
         return (
           <button
             key={String(row._id)}
             type="button"
             onClick={() => open(row)}
-            className="rounded-card border border-border bg-card text-left transition-colors hover:bg-accent/40"
-            style={{ overflow: "hidden", padding: 0 }}
+            className="overflow-hidden rounded-card border border-border bg-card p-0 text-left transition-colors hover:bg-accent/40"
           >
-            <div
-              className="bg-muted"
-              style={{ aspectRatio: "3 / 4", display: "flex", alignItems: "center", justifyContent: "center" }}
-            >
+            <div className="flex aspect-[3/4] items-center justify-center bg-muted">
               {cover ? (
-                <img
-                  src={cover}
-                  alt=""
-                  loading="lazy"
-                  style={{ height: "100%", width: "100%", objectFit: "cover" }}
-                />
+                <img src={cover} alt="" loading="lazy" className="size-full object-cover" />
               ) : (
-                <span className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 700 }} aria-hidden>
+                <span className="text-[12px] font-bold text-muted-foreground" aria-hidden>
                   BOOK
                 </span>
               )}
             </div>
-            <div style={{ padding: "8px 10px 10px" }}>
+            <div className="px-2.5 pb-2.5 pt-2">
               <div className="truncate text-[13px] font-medium text-foreground">
                 {String(row._description ?? "")}
               </div>
               <div className="truncate text-[11px] text-muted-foreground">{String(row.author ?? "")}</div>
-              {price(row) ? (
-                <div className="text-[12px] font-medium tabular-nums text-foreground" style={{ marginTop: 4 }}>
-                  {price(row)}
-                </div>
+              {p ? (
+                <Badge variant="secondary" className="mt-1.5 tabular-nums font-medium">
+                  {p}
+                </Badge>
               ) : null}
             </div>
           </button>

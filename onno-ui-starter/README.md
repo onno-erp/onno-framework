@@ -569,11 +569,29 @@ Config: `onno.ui.plugins.enabled` (default true), `onno.ui.plugins.extra-urls` (
 e.g. from a CDN). Dev loop: `./gradlew compileWidgetsWatch` rebuilds on change. Plugin JS runs
 first-party in the app origin (full session) — author it as trusted code.
 
-**Styling gotcha:** widgets compile outside the SPA's Tailwind build, so Tailwind never scans your
-`.tsx` — a utility class only works if the host app already emits it. Common text/spacing utilities
-(`text-sm`, `mb-3`, `flex`, …) are safe; uncommon ones (`border-l`) and arbitrary values
-(`-left-[5px]`) are silently dropped. Use inline `style` for layout-critical rules, with the host's
-theme variables for color: `hsl(var(--primary))`, `hsl(var(--border))`.
+**Styling:** the Gradle plugin runs **Tailwind over `src/main/widgets`** and emits `onno-widgets.css`
+(advertised as `pluginStyles` from `GET /api/config`, injected by the SPA at boot). So utility classes
+in your widget's own markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`)
+the host never emits — produce real CSS. It's utilities-only with **preflight off** and carries the
+host tokens (`bg-primary`, `rounded-card`, …), so it matches the product without fighting the host
+stylesheet. Caveats: only files under `src/main/widgets` are scanned (class names in imported helpers
+or built by string concatenation aren't seen — keep them literal), and dynamic colors still want
+inline `style` with `hsl(var(--primary))` / `hsl(var(--border))`.
+
+**UI primitives:** need a dropdown, date picker, toggle, or button? Import the host's real
+design-system controls straight from the SDK — they match the product exactly (keyboard nav, mobile
+drawers, theming) and carry host-emitted classes:
+
+```tsx
+import { Segmented, DatePicker, useState } from "@onno/widget-sdk"; // by name, or from the `ui` object
+// also Select, Button, Popover, Badge, Checkbox, Switch, Input, Card, …
+
+function ViewSwitch() {
+  const [view, setView] = useState("day");
+  return <Segmented value={view} onChange={setView}
+    options={[{ value: "day", label: "Day" }, { value: "week", label: "Week" }]} />;
+}
+```
 
 ### Registering a widget from framework/SPA source
 

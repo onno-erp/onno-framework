@@ -41,7 +41,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
-| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, and a read-only data client that resolve to the host SPA at runtime. |
+| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, and a read-only data client that resolve to the host SPA at runtime. |
 | `example` | (not published) | A vacation-rentals ERP that exercises every concept; the canonical reference app. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 

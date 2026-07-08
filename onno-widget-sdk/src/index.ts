@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { DashboardWidgetMeta, ListRendererProps, OnnoHost, OnnoReadApi } from "./types";
+import type { DashboardWidgetMeta, ListRendererProps, OnnoHost, OnnoReadApi, OnnoUi } from "./types";
 
 export type {
   DashboardWidgetMeta,
@@ -9,6 +9,7 @@ export type {
   ListRendererProps,
   OnnoReadApi,
   OnnoHost,
+  OnnoUi,
 } from "./types";
 
 /**
@@ -102,6 +103,64 @@ export const html = host.html;
 
 /** The read-only REST client (same-origin, session + CSRF handled by the host). */
 export const api: OnnoReadApi = host.api;
+
+/**
+ * The host's UI primitives — the *real* design-system controls (Radix-backed `Select`/`Popover`,
+ * the app's `Button`/`Segmented`/`Badge`/`Input`/…), so a widget matches the product instead of
+ * shipping hand-rolled lookalikes (and sidesteps the Tailwind class-emission gotcha, since these
+ * carry the host's own already-emitted classes). Requires host contract v2+.
+ *
+ * @example
+ *   import { ui, useState } from "@onno/widget-sdk";
+ *   const { Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Segmented } = ui;
+ *
+ *   function ViewSwitch() {
+ *     const [view, setView] = useState("day");
+ *     return (
+ *       <Segmented
+ *         value={view}
+ *         onChange={setView}
+ *         options={[{ value: "day", label: "Day" }, { value: "week", label: "Week" }]}
+ *       />
+ *     );
+ *   }
+ */
+export const ui: OnnoUi = host.ui;
+
+/**
+ * The host UI primitives as direct named exports, so a widget can
+ * `import { DatePicker, Select, Button } from "@onno/widget-sdk"` and drop them in like any
+ * component. Same instances as {@link ui} (they resolve to the host's singletons at runtime); this
+ * is purely the ergonomic import surface. Requires host contract v2+.
+ *
+ * @example
+ *   import { Segmented, DatePicker, Button } from "@onno/widget-sdk";
+ */
+export const {
+  Button,
+  Badge,
+  Input,
+  Label,
+  Textarea,
+  Checkbox,
+  Switch,
+  Segmented,
+  DatePicker,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} = ui;
 
 /** Props every registered widget receives. */
 export interface WidgetProps {

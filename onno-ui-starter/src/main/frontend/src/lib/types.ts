@@ -159,6 +159,9 @@ export interface AppConfig {
   // Absolute URLs of consumer widget-plugin ESM modules to load at boot (from onno-plugins/ on the
   // classpath, plus any onno.ui.plugins.extra-urls). Each self-registers via window.onno.registerWidget.
   pluginScripts?: string[];
+  // Absolute URLs of stylesheets the widget build emitted (Tailwind over the widget sources). The SPA
+  // injects a <link> for each before loading the modules, so a widget's own utility classes get CSS.
+  pluginStyles?: string[];
 }
 
 // The result of the server's framework-version check (see UpdateChecker / ReleaseController).

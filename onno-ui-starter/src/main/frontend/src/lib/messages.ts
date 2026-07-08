@@ -202,6 +202,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Forms / ref pickers.
   "form.saveError": "Couldn't save: {error}",
   "form.select": "Select {name}…",
+  // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
+  "form.staleChanged": "This record changed elsewhere.",
+  "form.reload": "Reload",
   "ref.new": "New {name}",
   "relatedList.saveFirstManage": "Save this record first to manage {name}.",
   "relatedList.saveFirstView": "Save this record first to see {name}.",

@@ -42,7 +42,7 @@ to future agents that may not have the full conversation context.
 | `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
 | `onno-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
 | `onno-widgets-gradle-plugin` | Gradle plugin (`su.onno.widgets`) that compiles consumer `src/main/widgets/*.tsx` into onno UI widget plugins; bundles `@onno/widget-sdk`. |
-| `onno-widget-sdk` | npm `@onno/widget-sdk` — the custom-widget authoring API (types, hooks, read-only data client) resolving to the host SPA at runtime. |
+| `onno-widget-sdk` | npm `@onno/widget-sdk` — the custom-widget authoring API (types, hooks, UI primitives, read-only data client) resolving to the host SPA at runtime. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
