@@ -12,6 +12,7 @@ import type {
   UiEvent,
   SettingMeta,
   ActionResult,
+  ActionInputs,
   BatchResult,
 } from "./types";
 
@@ -445,7 +446,7 @@ export const api = {
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
   // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
   // input values (if any) ride along in the body and reach the handler via ActionContext.
-  runAction: (kind: string, name: string, key: string, id?: string, inputs?: Record<string, string>) =>
+  runAction: (kind: string, name: string, key: string, id?: string, inputs?: ActionInputs) =>
     fetchJson<ActionResult>(
       `${BASE}/actions/${kind}/${name}/${key}${id ? `?id=${encodeURIComponent(id)}` : ""}`,
       { method: "POST", body: JSON.stringify({ inputs: inputs ?? {} }) }
@@ -455,7 +456,7 @@ export const api = {
    * invokes the handler per id sequentially and returns {ok, failed[], total} — per-id failures
    * don't abort the batch. Capped server-side at 500 ids.
    */
-  runActionBatch: (kind: string, name: string, key: string, ids: string[], inputs?: Record<string, string>) =>
+  runActionBatch: (kind: string, name: string, key: string, ids: string[], inputs?: ActionInputs) =>
     fetchJson<BatchResult>(`${BASE}/actions/${kind}/${name}/${key}/batch`, {
       method: "POST",
       body: JSON.stringify({ ids, inputs: inputs ?? {} }),
@@ -469,7 +470,7 @@ export const api = {
   // Page-level action button (PageBuilder.actions): POSTs to the server handler resolved by
   // re-composing the page at {route}, and returns its ActionResult. The page's profile rides
   // along so the same page variant resolves; data writes refresh embedded lists over SSE.
-  runPageAction: (route: string, key: string, profile?: string, inputs?: Record<string, string>) => {
+  runPageAction: (route: string, key: string, profile?: string, inputs?: ActionInputs) => {
     const params = new URLSearchParams({ route, key });
     if (profile) params.set("profile", profile);
     return fetchJson<ActionResult>(`${BASE}/divkit/page-action?${params.toString()}`, {

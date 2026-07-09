@@ -118,6 +118,21 @@ public class OrderView implements EntityView {
                         .placeholder("Why is this order cancelled?").required())
                 .handler(ctx -> cancel(ctx.id(), ctx.input("reason")));
 
+        // TOOLBAR: an action-form with a repeatable row group — collects N (book, quantity) lines in
+        // an add/remove grid, read back via ctx.inputRows(...) (issue #248). The "book" column and the
+        // "supplier" field are REFERENCE inputs: the same searchable ref picker an entity form uses,
+        // so a line links a real Book/Supplier record (value is its id). Demo-only: summarizes in a
+        // toast rather than writing data.
+        a.action("bulkReceive").scope(ActionScope.TOOLBAR).icon("package-plus").label("Quick receive")
+                .form(f -> {
+                    f.input("supplier").label("Supplier").reference(com.example.domain.catalogs.Supplier.class);
+                    f.input("note").label("Note").placeholder("optional");
+                    f.group("lines", g -> g.label("Lines").required()
+                            .column("book", c -> c.label("Book").reference(com.example.domain.catalogs.Book.class).required())
+                            .column("qty", c -> c.label("Qty").type(su.onno.ui.InputType.NUMBER).required()));
+                })
+                .handler(this::bulkReceive);
+
         // DETAIL: the same two as fixed-label header buttons.
         a.action("advanceTop").scope(ActionScope.DETAIL).icon("chevron-right").label("Advance")
                 .handler(ctx -> advance(ctx.id()));
@@ -149,6 +164,21 @@ public class OrderView implements EntityView {
                     .menu("Assign").icon("user-round").logo(employee.getAvatarUrl()).label(label)
                     .handler(ctx -> assign(ctx.id(), employeeId, label));
         }
+    }
+
+    private ActionResult bulkReceive(su.onno.ui.ActionContext ctx) {
+        var lines = ctx.inputRows("lines");
+        int total = lines.stream()
+                .map(r -> r.getOrDefault("qty", "0"))
+                .mapToInt(q -> {
+                    try {
+                        return Integer.parseInt(q.trim());
+                    } catch (NumberFormatException e) {
+                        return 0;
+                    }
+                })
+                .sum();
+        return ActionResult.message(lines.size() + " line(s), " + total + " item(s) received");
     }
 
     private ActionResult advance(UUID id) {

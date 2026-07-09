@@ -145,15 +145,44 @@ public class UiActionResolver {
         m.put("options", in.options());
         m.put("value", in.defaultValue());
         m.put("required", in.required());
+        if (in.reference() != null) {
+            // A REFERENCE field: the client renders the ref picker for this target entity.
+            m.put("reference", in.reference());
+            m.put("refKind", in.refKind());
+        }
         return m;
     }
 
-    /** An action's form-field descriptor maps ({@link ActionSpec.ActionBuilder#form}), empty when none. */
+    /**
+     * An action's form-item descriptor maps ({@link ActionSpec.ActionBuilder#form}), empty when none.
+     * Scalar fields come first (tagged {@code kind: "field"}), then the repeatable row groups
+     * ({@code kind: "group"}, carrying their {@code columns}); the client renders each accordingly.
+     */
     public static List<Map<String, Object>> formDescriptors(Action a) {
         if (!a.hasForm()) {
             return List.of();
         }
-        return a.form().stream().map(UiActionResolver::inputFieldMap).toList();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (InputField f : a.form()) {
+            Map<String, Object> m = inputFieldMap(f);
+            m.put("kind", "field");
+            out.add(m);
+        }
+        for (InputSpec.InputGroup g : a.formGroups()) {
+            out.add(groupFieldMap(g));
+        }
+        return out;
+    }
+
+    /** One row group's descriptor map — its columns are scalar input-field maps. */
+    static Map<String, Object> groupFieldMap(InputSpec.InputGroup g) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("kind", "group");
+        m.put("key", g.key());
+        m.put("label", g.label());
+        m.put("required", g.required());
+        m.put("columns", g.columns().stream().map(UiActionResolver::inputFieldMap).toList());
+        return m;
     }
 
     /** Descriptor maps for actions in the given scopes — what the list/detail surfaces emit. */

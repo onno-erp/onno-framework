@@ -175,7 +175,9 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
+        // z-[70] clears the action-form modal (z-[60]) so the picker floats above it, not behind;
+        // harmless in the entity form, which isn't a portal-stacked overlay.
+        className="z-[70] w-[var(--radix-popover-trigger-width)] overflow-hidden p-0"
       >
         {content}
       </PopoverContent>

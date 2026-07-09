@@ -278,7 +278,12 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
     submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
     on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to
-    every selected row). A **row** action may vary per row — `icon(row→String)`,
+    every selected row). A form field can be a **reference picker** of another entity via
+    `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
+    and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an
+    add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
+    with `ctx.inputRows(key)` → `List<Map<String,String>>` (`.required()` = at least one row).
+    Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
     `menu("Change status")` moves a ROW action off the inline row buttons into the row's

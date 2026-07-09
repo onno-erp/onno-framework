@@ -86,14 +86,15 @@ public final class ActionSpec {
                          String navigateUrl, Function<ActionContext, ActionResult> handler,
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
                          Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
-                         List<InputSpec.InputField> form, List<String> roles) {
+                         List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
+                         List<String> roles) {
         public boolean isServer() {
             return handler != null;
         }
 
-        /** Whether clicking must first collect the declared form fields in a modal dialog. */
+        /** Whether clicking must first collect the declared form fields (scalar or row group) in a modal dialog. */
         public boolean hasForm() {
-            return form != null && !form.isEmpty();
+            return (form != null && !form.isEmpty()) || (formGroups != null && !formGroups.isEmpty());
         }
 
         /** Whether any aspect of this action varies per row (so the list must resolve it per row). */
@@ -118,6 +119,7 @@ public final class ActionSpec {
         private Predicate<ActionRow> visibleFn;
         private Predicate<ActionRow> enabledFn;
         private List<InputSpec.InputField> form = List.of();
+        private List<InputSpec.InputGroup> formGroups = List.of();
         private List<String> roles = List.of();
 
         ActionBuilder(String key) {
@@ -177,14 +179,17 @@ public final class ActionSpec {
         /**
          * Collect input from the user before the {@link #handler} runs: clicking the button opens a
          * modal dialog with the fields declared here (same builder as toolbar inputs — text,
-         * textarea, date, number, select; {@code .required()} gates submit). The submitted values
-         * reach the handler as {@link ActionContext#input(String)}. Server actions only —
+         * textarea, date, number, select; {@code .required()} gates submit). The submitted scalar
+         * values reach the handler as {@link ActionContext#input(String)}. The form may also declare
+         * repeatable {@link InputSpec#group(String, Consumer) row groups} (a transient tabular grid),
+         * read back via {@link ActionContext#inputRows(String)}. Server actions only —
          * a navigation action has no handler to hand the values to.
          */
         public ActionBuilder form(Consumer<InputSpec> form) {
             InputSpec spec = new InputSpec();
             form.accept(spec);
             this.form = spec.inputs();
+            this.formGroups = spec.groups();
             return this;
         }
 
@@ -235,7 +240,7 @@ public final class ActionSpec {
 
         Action build() {
             return new Action(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
-                    iconFn, labelFn, visibleFn, enabledFn, form, roles);
+                    iconFn, labelFn, visibleFn, enabledFn, form, formGroups, roles);
         }
     }
 }

@@ -3,7 +3,11 @@ import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, Che
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
-import { ActionFormDialog, type ActionFormField } from "@/components/action-form-dialog";
+import {
+  ActionFormDialog,
+  type ActionFormItem,
+  type ActionFormValues,
+} from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { useViewersById } from "@/lib/presence-store";
@@ -39,6 +43,7 @@ import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybind
 import { withBasePath } from "@/lib/base-path";
 import { cn, copyToClipboard, enumPillStyle } from "@/lib/utils";
 import { applyFormat, formatTimestampDefault, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
+import { linkify } from "@/lib/linkify";
 import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
@@ -86,10 +91,11 @@ export type ListAction = {
   kind: string;
   name: string;
   /**
-   * Form fields a server action collects in a modal dialog before it runs (ActionSpec.form).
-   * The submitted values POST as the action's inputs, alongside the toolbar input values.
+   * Form items a server action collects in a modal dialog before it runs (ActionSpec.form) —
+   * scalar fields and/or repeatable row groups. The submitted values POST as the action's inputs,
+   * alongside the toolbar input values.
    */
-  form?: ActionFormField[];
+  form?: ActionFormItem[];
 };
 /**
  * Per-row override for a state-aware row action, computed server-side from the row's data and
@@ -323,7 +329,11 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
       </span>
     );
   }
-  return <span className="truncate text-foreground">{displayCellValue(raw, col)}</span>;
+  // Plain text — auto-linkify bare http(s) URLs into clickable links (same treatment comment bodies
+  // get), so a value like a chat/file URL is reachable straight from the cell. linkify's anchors
+  // stopPropagation, so opening a link doesn't also trigger the row's navigate-to-detail click.
+  const display = displayCellValue(raw, col);
+  return <span className="truncate text-foreground">{linkify(display)}</span>;
 }
 
 // Mirror of the server's snake-casing so an SSE event's entity name matches the route name.
@@ -1696,7 +1706,7 @@ export function EntityListWidget({
   // button shows a spinner and is disabled, so there's feedback and no double-submit.
   // (api.runAction is CSRF-aware and toasts failures.)
   const runAction = useCallback(
-    (action: ListAction, id?: string, formInputs?: Record<string, string>): Promise<void> | void => {
+    (action: ListAction, id?: string, formInputs?: ActionFormValues): Promise<void> | void => {
       if (!action.server) {
         if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
         return;
@@ -1770,7 +1780,7 @@ export function EntityListWidget({
   // round-trips, survives the tab closing mid-run, and gets a single loading→summary toast here.
   // Per-result navigate doesn't apply — a batch can't open N panes.
   const runBatchAction = useCallback(
-    async (action: ListAction, ids: string[], formInputs?: Record<string, string>) => {
+    async (action: ListAction, ids: string[], formInputs?: ActionFormValues) => {
       if (action.form?.length && !formInputs) {
         // Collect the form once up front; the submitted values apply to every selected row.
         setFormPrompt({ action, ids });

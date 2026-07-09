@@ -3,7 +3,11 @@ import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ActionFormDialog, type ActionFormField } from "@/components/action-form-dialog";
+import {
+  ActionFormDialog,
+  type ActionFormItem,
+  type ActionFormValues,
+} from "@/components/action-form-dialog";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { api } from "@/lib/api";
@@ -26,8 +30,8 @@ export type ActionItem = {
   url: string;
   tone?: string;
   placement?: string;
-  /** Form fields the action collects in a modal before it POSTs (ActionSpec.form). */
-  form?: ActionFormField[];
+  /** Form items the action collects in a modal before it POSTs (ActionSpec.form) — scalar fields and/or row groups. */
+  form?: ActionFormItem[];
 };
 type Mount = { id: number; el: HTMLElement; items: ActionItem[] };
 
@@ -119,7 +123,7 @@ function isAsync(url: string): boolean {
 
 // Run a post/unpost/custom-action url and apply its result. Errors self-toast via the api layer.
 // `inputs` carries an action-form dialog's submitted values (custom actions only).
-async function runAsync(url: string, inputs?: Record<string, string>): Promise<void> {
+async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
   const r = url.replace("onno://", "");
   if (r.startsWith("post/") || r.startsWith("unpost/")) {
     const unpost = r.startsWith("unpost/");
@@ -144,7 +148,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
   const [formFor, setFormFor] = useState<ActionItem | null>(null);
   const [formBusy, setFormBusy] = useState(false);
 
-  const run = useCallback((it: ActionItem, inputs?: Record<string, string>): Promise<void> | void => {
+  const run = useCallback((it: ActionItem, inputs?: ActionFormValues): Promise<void> | void => {
     if (!isAsync(it.url)) {
       fire(it.url);
       return;

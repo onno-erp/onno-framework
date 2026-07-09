@@ -14,5 +14,11 @@ public enum InputType {
     /** A numeric field (value is the number as a string). */
     NUMBER,
     /** A dropdown of author-supplied options. */
-    SELECT
+    SELECT,
+    /**
+     * A searchable picker of another catalog/document's records — the same ref widget an entity form
+     * uses. The value is the picked record's id (a UUID string); the target entity is declared with
+     * {@link InputSpec.InputBuilder#reference(Class)}. Action forms only.
+     */
+    REFERENCE
 }

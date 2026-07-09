@@ -83,8 +83,8 @@ public class ActionController {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
-        ActionContext ctx = new ActionContext(kind, name, id,
-                principal != null ? principal.getName() : null, inputValues(body));
+        ActionContext ctx = ActionContext.from(kind, name, id,
+                principal != null ? principal.getName() : null, body);
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -107,13 +107,15 @@ public class ActionController {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
         List<UUID> ids = idList(body);
-        Map<String, String> inputs = inputValues(body);
         String user = principal != null ? principal.getName() : null;
+        // Parse the shared inputs/rows once; each id runs with the same collected values.
+        ActionContext shared = ActionContext.from(kind, name, null, user, body);
         int ok = 0;
         List<String> failed = new ArrayList<>();
         for (UUID id : ids) {
             try {
-                action.handler().apply(new ActionContext(kind, name, id, user, inputs));
+                action.handler().apply(
+                        new ActionContext(kind, name, id, user, shared.inputs(), shared.rows()));
                 ok++;
             } catch (RuntimeException e) {
                 failed.add(id.toString());
@@ -144,16 +146,6 @@ public class ActionController {
             }
         }
         return ids;
-    }
-
-    /** Pull the toolbar input values out of the request body ({@code {"inputs": {key: value}}}). */
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> inputValues(Map<String, Object> body) {
-        Map<String, String> out = new LinkedHashMap<>();
-        if (body != null && body.get("inputs") instanceof Map<?, ?> raw) {
-            raw.forEach((k, v) -> out.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
-        }
-        return out;
     }
 
     private Class<?> resolveAndAuthorize(String kind, String name, Principal principal) {

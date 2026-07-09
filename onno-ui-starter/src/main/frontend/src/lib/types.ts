@@ -291,6 +291,13 @@ export interface ActionResult {
   refresh?: boolean;
 }
 
+/**
+ * The values an action posts as its {@code inputs}: a scalar field/toolbar input is a string; a
+ * repeatable row group (ActionSpec form group) is an array of {column → value} row objects, read
+ * back server-side via {@code ActionContext.inputRows(key)}.
+ */
+export type ActionInputs = Record<string, string | Record<string, string>[]>;
+
 /** The summary a batch endpoint returns (batch action run / batch delete): counts + failed ids. */
 export interface BatchResult {
   ok: number;

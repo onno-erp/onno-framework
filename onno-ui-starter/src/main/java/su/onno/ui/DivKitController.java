@@ -352,7 +352,7 @@ public class DivKitController implements DisposableBean {
         if (!action.roles().isEmpty() && !access.hasAnyRole(principal, action.roles())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
         }
-        ActionContext ctx = new ActionContext("page", route, null, principal.getName(), inputValues(body));
+        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body);
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -381,15 +381,6 @@ public class DivKitController implements DisposableBean {
         return out;
     }
 
-    /** Pull the action input values out of the request body ({@code {"inputs": {key: value}}}). */
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> inputValues(Map<String, Object> body) {
-        Map<String, String> out = new LinkedHashMap<>();
-        if (body != null && body.get("inputs") instanceof Map<?, ?> raw) {
-            raw.forEach((k, v) -> out.put(String.valueOf(k), v == null ? "" : String.valueOf(v)));
-        }
-        return out;
-    }
 
     /**
      * Resolve and render the authored {@link Page} for {@code route} under this profile/viewport, or

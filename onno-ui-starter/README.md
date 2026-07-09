@@ -360,6 +360,35 @@ batch mode (the dialog collects once, then the values are sent with the action f
 record). Form values are merged over the ambient toolbar-input values in the same
 `ActionContext.input(...)` namespace, so a key used by both is won by the form.
 
+**Reference inputs** — a field can be a searchable picker of another catalog/document's records
+(the same ref widget an entity form uses) with `.reference(Target.class)`; the submitted value is
+the picked record's id, read back with `ActionContext.input(key)`:
+
+```java
+a.action("reassign").label("Reassign").scope(ActionScope.ROW)
+ .form(f -> f.input("owner").label("New owner").reference(Employee.class).required())
+ .handler(ctx -> { service.reassign(ctx.id(), ctx.input("owner")); return ActionResult.refresh(); });
+```
+
+**Repeatable row groups** — a form can collect transient *tabular* input: `.group(key, g -> …)`
+declares an add/remove grid whose typed columns reuse the field DSL (including `.reference(...)`),
+mirroring a `@TabularSection` but as throwaway action input. `.required()` gates on at least one
+row; the handler reads them with `ActionContext.inputRows(key)` → `List<Map<String,String>>`:
+
+```java
+a.action("receive").label("Receive shipment").scope(ActionScope.TOOLBAR)
+ .form(f -> f.group("lines", g -> g.label("Lines").required()
+         .column("book", c -> c.label("Book").reference(Book.class).required())
+         .column("qty", c -> c.label("Qty").type(InputType.NUMBER).required())))
+ .handler(ctx -> {
+     for (var row : ctx.inputRows("lines")) receive(row.get("book"), row.get("qty"));
+     return ActionResult.refresh("Received");
+ });
+```
+
+Scalar fields render first in the modal, then the row groups. Groups are an action-form feature
+only — a list toolbar renders scalar inputs and ignores any declared group.
+
 ### Row context menu, submenus & batch selection
 
 Right-clicking a list row opens a context menu with the built-ins (Open / Edit / Duplicate / Copy
