@@ -13,7 +13,6 @@ import { HINT_CUSTOM_COMPONENTS } from "@/lib/hint-bridge";
 import { ACTIONS_MENU_CUSTOM_COMPONENTS } from "@/lib/actions-menu-bridge";
 import { LIST_CUSTOM_COMPONENTS } from "@/lib/list-bridge";
 import { REGISTER_CUSTOM_COMPONENTS } from "@/lib/register-bridge";
-import { CONSTANTS_CUSTOM_COMPONENTS } from "@/lib/constants-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
 import { COMMENTS_CUSTOM_COMPONENTS } from "@/lib/comments-bridge";
 import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
@@ -21,8 +20,8 @@ import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-ind
 import { GEO_CUSTOM_COMPONENTS } from "@/lib/geo-bridge";
 
 // All div-custom blocks the content can host: dashboard widgets, the entity form, the login
-// form, icons, help hints, the detail-header overflow menu, the virtualized list grid, the
-// settings editor, page-level action button sections, the detail-page comments thread, and the
+// form, icons, help hints, the detail-header overflow menu, the virtualized list grid,
+// page-level action button sections, the detail-page comments thread, and the
 // read-only map for a .widget("map") field.
 const CUSTOM_COMPONENTS = new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
@@ -34,7 +33,6 @@ const CUSTOM_COMPONENTS = new Map([
   ...ACTIONS_MENU_CUSTOM_COMPONENTS,
   ...LIST_CUSTOM_COMPONENTS,
   ...REGISTER_CUSTOM_COMPONENTS,
-  ...CONSTANTS_CUSTOM_COMPONENTS,
   ...ACTIONS_BAR_CUSTOM_COMPONENTS,
   ...COMMENTS_CUSTOM_COMPONENTS,
   ...NAV_PRESENCE_CUSTOM_COMPONENTS,

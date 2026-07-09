@@ -17,7 +17,6 @@ import { RegisterPortals } from "@/lib/register-bridge";
 import { IconPortals } from "@/lib/icon-bridge";
 import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
-import { ConstantsPortals } from "@/lib/constants-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
 import { CommentsPortals } from "@/lib/comments-bridge";
 import { NavPresencePortals } from "@/lib/nav-presence-bridge";
@@ -81,7 +80,6 @@ function ProtectedApp() {
       <IconPortals />
       <HintPortals />
       <ActionsMenuPortals />
-      <ConstantsPortals />
       <ActionsBarPortals />
       <CommentsPortals />
       <NavPresencePortals />

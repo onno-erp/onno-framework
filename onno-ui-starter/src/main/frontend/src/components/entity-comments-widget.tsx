@@ -569,7 +569,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   return (
     // pointer-events-auto: this widget is portaled into a DivKit div-custom whose container blocks
     // are rendered pointer-events:none; opt the panel back in so the textarea and Send button are
-    // focusable/clickable (matches entity-list-widget, page-actions-bar, constants-editor, login).
+    // focusable/clickable (matches entity-list-widget, page-actions-bar, setting-widget, login).
     <div className="pointer-events-auto mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2">
         <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
