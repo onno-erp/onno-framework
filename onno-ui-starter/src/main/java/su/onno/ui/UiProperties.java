@@ -71,6 +71,9 @@ public class UiProperties {
     /** Custom widget plugins — consumer-authored React widgets loaded into the SPA at boot. */
     private Plugins plugins = new Plugins();
 
+    /** Bulk-action tuning — how a multi-row selection runs its server action / delete over N records. */
+    private Batch batch = new Batch();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -151,6 +154,14 @@ public class UiProperties {
         this.plugins = plugins;
     }
 
+    public Batch getBatch() {
+        return batch;
+    }
+
+    public void setBatch(Batch batch) {
+        this.batch = batch;
+    }
+
     /**
      * Dashboard rendering tuning. A dashboard's {@code count}/{@code metric} tiles each resolve a
      * server-side aggregate (one SQL query per tile). The renderer resolves them concurrently and
@@ -172,6 +183,33 @@ public class UiProperties {
 
         public void setWidgetParallelism(int widgetParallelism) {
             this.widgetParallelism = widgetParallelism;
+        }
+    }
+
+    /**
+     * Bulk-action tuning. When a list's multi-row selection runs a server action or a delete, the
+     * request targets every selected id in one call and the server invokes the per-id handler over
+     * the set. Each id runs in its own transaction (continue-on-failure), so the set can be resolved
+     * concurrently.
+     */
+    public static class Batch {
+
+        /**
+         * Maximum number of records a bulk action resolves in parallel per request. Each id runs its
+         * own transaction on a worker thread, so keep this comfortably below the datasource's
+         * {@code maximum-pool-size} or the fan-out will starve the JDBC pool. {@code 1} forces the
+         * old sequential behaviour. Note that parallel document deletes reverse postings concurrently,
+         * which can contend on the same accumulation-register rows — lower this (or set {@code 1}) if
+         * you hit lock timeouts on heavily-shared registers.
+         */
+        private int parallelism = 4;
+
+        public int getParallelism() {
+            return parallelism;
+        }
+
+        public void setParallelism(int parallelism) {
+            this.parallelism = parallelism;
         }
     }
 

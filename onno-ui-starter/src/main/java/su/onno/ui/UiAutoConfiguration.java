@@ -102,13 +102,19 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public BatchRunner batchRunner(UiProperties uiProperties) {
+        return new BatchRunner(uiProperties.getBatch().getParallelism());
+    }
+
+    @Bean
     public ActionController actionController(CatalogQueryService catalogQueryService,
                                              DocumentQueryService documentQueryService,
                                              UiAccessService access,
                                              UiActionResolver uiActionResolver,
-                                             UiProperties uiProperties) {
+                                             UiProperties uiProperties,
+                                             BatchRunner batchRunner) {
         return new ActionController(catalogQueryService, documentQueryService, access, uiActionResolver,
-                uiProperties);
+                uiProperties, batchRunner);
     }
 
     @Bean
@@ -280,18 +286,20 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                                               UiAccessService access,
                                                               CatalogCommandService catalogCommandService,
                                                               RelatedListReader relatedListReader,
-                                                              UiMessages uiMessages) {
+                                                              UiMessages uiMessages,
+                                                              BatchRunner batchRunner) {
         return new GenericCatalogController(catalogQueryService, access, catalogCommandService,
-                relatedListReader, uiMessages);
+                relatedListReader, uiMessages, batchRunner);
     }
 
     @Bean
     public GenericDocumentController genericDocumentController(DocumentQueryService documentQueryService,
                                                                 UiAccessService access,
                                                                 DocumentCommandService documentCommandService,
-                                                                RelatedListReader relatedListReader) {
+                                                                RelatedListReader relatedListReader,
+                                                                BatchRunner batchRunner) {
         return new GenericDocumentController(documentQueryService, access, documentCommandService,
-                relatedListReader);
+                relatedListReader, batchRunner);
     }
 
     @Bean
