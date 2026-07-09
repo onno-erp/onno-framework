@@ -42,13 +42,16 @@ public class ListDataController {
     private final DocumentQueryService documentQuery;
     private final UiAccessService access;
     private final UiActionResolver actionResolver;
+    private final UiViewResolver viewResolver;
 
     public ListDataController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                              UiAccessService access, UiActionResolver actionResolver) {
+                              UiAccessService access, UiActionResolver actionResolver,
+                              UiViewResolver viewResolver) {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.access = access;
         this.actionResolver = actionResolver;
+        this.viewResolver = viewResolver;
     }
 
     @GetMapping("/catalogs/{name}")
@@ -251,18 +254,42 @@ public class ListDataController {
     /**
      * Attach per-row state for any state-aware row actions (see {@link ActionSpec}) under each row's
      * {@code _actions} key, so the grid can render a row's button with the right icon/label and
-     * honour its visibility/enabled. A no-op (rows untouched) when the entity has only static row
-     * actions — the common case — so existing lists pay nothing.
+     * honour its visibility/enabled — plus the row's conditional formatting tone (see
+     * {@link su.onno.ui.ListSpec#rowStyle}) under {@code _style}. A no-op (rows untouched) when the
+     * entity has neither — the common case — so existing lists pay nothing.
      */
     private void decorateRowActions(Class<?> entity, List<Map<String, Object>> rows) {
-        if (entity == null || !actionResolver.hasDynamicRowActions(entity)) {
+        if (entity == null) {
+            return;
+        }
+        boolean dynamicActions = actionResolver.hasDynamicRowActions(entity);
+        java.util.function.Function<ActionRow, ListSpec.RowStyle> style = viewResolver.rowStyle(entity);
+        if (!dynamicActions && style == null) {
             return;
         }
         for (Map<String, Object> row : rows) {
-            Map<String, Object> state = actionResolver.rowActionState(entity, row);
-            if (!state.isEmpty()) {
-                row.put("_actions", state);
+            if (dynamicActions) {
+                Map<String, Object> state = actionResolver.rowActionState(entity, row);
+                if (!state.isEmpty()) {
+                    row.put("_actions", state);
+                }
             }
+            if (style != null) {
+                ListSpec.RowStyle tone = rowTone(style, row);
+                if (tone != null) {
+                    row.put("_style", tone.name().toLowerCase(java.util.Locale.ROOT));
+                }
+            }
+        }
+    }
+
+    /** One row's tone; a throwing function reads as "no tone" so a bad predicate can't break the list. */
+    private static ListSpec.RowStyle rowTone(java.util.function.Function<ActionRow, ListSpec.RowStyle> style,
+                                             Map<String, Object> row) {
+        try {
+            return style.apply(new ActionRow(row));
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 

@@ -271,11 +271,18 @@ public final class SurfaceDivBuilder {
      * is a kebab-case lucide name. A null {@code url} drops the action.
      */
     /** {@code form} (may be empty): an action-form dialog's field descriptors — the client collects
-     *  them in a modal before POSTing the action (see {@code ActionSpec.ActionBuilder#form}). */
+     *  them in a modal before POSTing the action (see {@code ActionSpec.ActionBuilder#form}).
+     *  {@code disabled} renders the button greyed and inert — a custom DETAIL action whose
+     *  {@code enabledWhen} predicate failed against the loaded record (issue #255). */
     public record HeaderAction(String icon, String label, String tone, String url, String placement,
-                               List<Map<String, Object>> form) {
+                               List<Map<String, Object>> form, boolean disabled) {
         public HeaderAction(String icon, String label, String tone, String url, String placement) {
-            this(icon, label, tone, url, placement, List.of());
+            this(icon, label, tone, url, placement, List.of(), false);
+        }
+
+        public HeaderAction(String icon, String label, String tone, String url, String placement,
+                            List<Map<String, Object>> form) {
+            this(icon, label, tone, url, placement, form, false);
         }
     }
 
@@ -771,6 +778,10 @@ public final class SurfaceDivBuilder {
             m.put("url", a.url());
             m.put("tone", a.tone());
             m.put("placement", a.placement());
+            if (a.disabled()) {
+                // A per-record enabledWhen failed: render the button greyed and inert (#255).
+                m.put("disabled", true);
+            }
             if (a.form() != null && !a.form().isEmpty()) {
                 // The island opens a modal collecting these fields before it POSTs the action.
                 m.put("form", a.form());

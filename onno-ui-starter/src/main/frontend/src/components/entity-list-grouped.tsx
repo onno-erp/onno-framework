@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
-import { cn, enumPillStyle } from "@/lib/utils";
+import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
 import type { EntityRecord } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
@@ -267,7 +267,9 @@ export function GroupedList({
                           "grid items-center gap-3 border-b border-border/50 text-sm",
                           url && "cursor-pointer",
                           leftPad,
-                          ri % 2 === 1 && "bg-muted/20"
+                          // Conditional formatting (`_style`) replaces the zebra stripe when set.
+                          rowStyleClass(row._style),
+                          ri % 2 === 1 && !rowStyleClass(row._style) && "bg-muted/20"
                         )}
                         style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                       >

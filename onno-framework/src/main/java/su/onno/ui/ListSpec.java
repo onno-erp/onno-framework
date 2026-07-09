@@ -34,6 +34,7 @@ public final class ListSpec {
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
     private final List<Aggregate> aggregates = new ArrayList<>();
+    private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
 
     public ListSpec title(String title) {
         this.title = title;
@@ -249,6 +250,25 @@ public final class ListSpec {
         return this;
     }
 
+    /**
+     * Conditional row formatting: tint a row by its data. The function is evaluated per row on the
+     * server as the list feeds (same {@link ActionRow} accessor the state-aware
+     * {@link ActionSpec row actions} use) and returns the {@link RowStyle} to apply — or
+     * {@code null} for the default look. A function that throws is treated as {@code null} for
+     * that row, so one bad predicate can't break the list.
+     *
+     * <pre>
+     * // urgent orders read red, delivered ones green
+     * list.rowStyle(row -> row.bool("urgent") ? RowStyle.DANGER
+     *         : row.enumValue("status", Status.class) == Status.DELIVERED ? RowStyle.SUCCESS
+     *         : null);
+     * </pre>
+     */
+    public ListSpec rowStyle(java.util.function.Function<ActionRow, RowStyle> style) {
+        this.rowStyleFn = style;
+        return this;
+    }
+
     public String title() { return title; }
 
     public List<String> include() { return List.copyOf(include); }
@@ -276,6 +296,9 @@ public final class ListSpec {
 
     /** The declared per-group subtotals, in declaration order. */
     public List<Aggregate> aggregates() { return List.copyOf(aggregates); }
+
+    /** The conditional row-formatting function, or {@code null} when {@link #rowStyle} wasn't called. */
+    public java.util.function.Function<ActionRow, RowStyle> rowStyleFn() { return rowStyleFn; }
 
     /** The declared list filters, in declaration order. */
     public List<Filter> filters() {
@@ -408,6 +431,24 @@ public final class ListSpec {
 
     /** A per-group subtotal function (row count is always present and needs no declaration). */
     public enum Agg { SUM, AVG, MIN, MAX }
+
+    /**
+     * A conditional row tint (see {@link #rowStyle}): a semantic tone the client maps to its theme
+     * (a translucent background wash over the row), not a raw color — so the same view reads
+     * correctly in light and dark themes.
+     */
+    public enum RowStyle {
+        /** Red — urgent / overdue / failing rows. */
+        DANGER,
+        /** Amber — rows needing attention soon. */
+        WARNING,
+        /** Green — completed / healthy rows. */
+        SUCCESS,
+        /** Brand color — highlighted rows. */
+        ACCENT,
+        /** Faded — inactive / archived rows. */
+        MUTED
+    }
 
     /** A declared per-group subtotal: the aggregate {@code fn} over a numeric {@code field}. */
     public record Aggregate(String field, Agg fn, String label) {}

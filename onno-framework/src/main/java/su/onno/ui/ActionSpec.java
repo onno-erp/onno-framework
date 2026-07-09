@@ -40,8 +40,11 @@ import java.util.function.Predicate;
  *  .handler(ctx -> { service.toggle(ctx.id()); return ActionResult.refresh(); });
  * </pre>
  *
- * <p>The per-row functions apply to {@link ActionScope#ROW} actions only (toolbar/detail buttons
- * have no row context); on other scopes they're ignored in favour of the fixed icon/label.</p>
+ * <p>The per-record functions apply to {@link ActionScope#ROW} actions (evaluated against each row
+ * as the list renders) and to {@link ActionScope#DETAIL} actions (evaluated against the loaded
+ * record as the detail surface renders) — so one detail-header button can hide, relabel or disable
+ * itself by the record's state, mirroring the row button. On {@link ActionScope#TOOLBAR} they're
+ * ignored in favour of the fixed icon/label (a toolbar has no record context).</p>
  *
  * <p>A server action may also declare a <b>form</b> — the click then opens a modal dialog that
  * collects the declared fields before the handler runs; the values arrive as
@@ -77,9 +80,10 @@ public final class ActionSpec {
      * optional image URL/path shown in place of the lucide {@code icon} — a brand mark ("Connect
      * with X"), rendered on page-action and list/row/toolbar buttons. {@code color} is an optional
      * presentation hint for compact menu swatches such as status choices. {@code iconFn},
-     * {@code labelFn}, {@code visibleFn} and {@code enabledFn} are the optional per-row overrides
-     * for a {@link ActionScope#ROW} action — any that are non-null are evaluated against each
-     * {@link ActionRow} when the list renders.</p>
+     * {@code labelFn}, {@code visibleFn} and {@code enabledFn} are the optional per-record
+     * overrides for a {@link ActionScope#ROW} or {@link ActionScope#DETAIL} action — any that are
+     * non-null are evaluated against the {@link ActionRow} (a list row, or the loaded detail
+     * record) as the surface renders.</p>
      */
     public record Action(String key, String label, String icon, String logo, String color, ActionScope scope,
                          String menu,
@@ -212,27 +216,37 @@ public final class ActionSpec {
         }
 
         /**
-         * Pick the icon per row ({@link ActionScope#ROW} actions) — e.g. {@code play} vs {@code pause}
-         * by the row's state. Overrides the fixed {@link #icon(String)} on rows it resolves.
+         * Pick the icon per record ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions) —
+         * e.g. {@code play} vs {@code pause} by the record's state. Overrides the fixed
+         * {@link #icon(String)} on records it resolves.
          */
         public ActionBuilder icon(Function<ActionRow, String> icon) {
             this.iconFn = icon;
             return this;
         }
 
-        /** Pick the label per row ({@link ActionScope#ROW} actions). Overrides the fixed {@link #label(String)}. */
+        /**
+         * Pick the label per record ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
+         * Overrides the fixed {@link #label(String)}.
+         */
         public ActionBuilder label(Function<ActionRow, String> label) {
             this.labelFn = label;
             return this;
         }
 
-        /** Show this row action only on rows where the predicate holds ({@link ActionScope#ROW} actions). */
+        /**
+         * Show this action only on records where the predicate holds
+         * ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
+         */
         public ActionBuilder visibleWhen(Predicate<ActionRow> visible) {
             this.visibleFn = visible;
             return this;
         }
 
-        /** Enable this row action only on rows where the predicate holds — disabled (greyed) elsewhere. */
+        /**
+         * Enable this action only on records where the predicate holds — disabled (greyed)
+         * elsewhere ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
+         */
         public ActionBuilder enabledWhen(Predicate<ActionRow> enabled) {
             this.enabledFn = enabled;
             return this;

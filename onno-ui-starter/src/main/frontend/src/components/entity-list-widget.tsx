@@ -41,7 +41,7 @@ import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widg
 import { api } from "@/lib/api";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
-import { cn, copyToClipboard, enumPillStyle } from "@/lib/utils";
+import { cn, copyToClipboard, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat, formatTimestampDefault, isImageWidget, isAvatarWidget, looksLikeImageUrl } from "@/lib/cell-format";
 import { linkify } from "@/lib/linkify";
 import type { EntityRecord, UiEvent } from "@/lib/types";
@@ -2775,7 +2775,10 @@ export function EntityListWidget({
                         "relative grid items-center gap-3 border-b border-border/50 text-sm",
                         url && "cursor-pointer",
                         leftPad,
-                        absIdx % 2 === 1 && !isSelected && "bg-muted/20",
+                        // Conditional formatting (`_style`, from ListSpec.rowStyle) replaces the
+                        // zebra stripe on tinted rows; selection still wins over both.
+                        !isSelected && rowStyleClass(row._style),
+                        absIdx % 2 === 1 && !isSelected && !rowStyleClass(row._style) && "bg-muted/20",
                         isSelected && "bg-primary/10"
                       )}
                       style={{ minHeight: ROW_H, gridTemplateColumns: template }}

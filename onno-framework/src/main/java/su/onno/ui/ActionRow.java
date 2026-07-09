@@ -8,11 +8,12 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * A read-only view of one list row, handed to the per-row functions of a row {@link ActionSpec
- * action} ({@code .icon(...)}, {@code .label(...)}, {@code .visibleWhen(...)},
- * {@code .enabledWhen(...)}) so a single control can vary by that row's state — a {@code pause}
- * "Suspend" on a running record flipping to a {@code play} "Resume" when it's stopped, or a button
- * shown only on the rows it applies to.
+ * A read-only view of one record's resolved data — a list row, or the record a detail surface
+ * loaded — handed to the per-record functions of an {@link ActionSpec action}
+ * ({@code .icon(...)}, {@code .label(...)}, {@code .visibleWhen(...)}, {@code .enabledWhen(...)})
+ * and to a list's {@link ListSpec#rowStyle conditional row formatting}, so a single control can
+ * vary by that record's state — a {@code pause} "Suspend" on a running record flipping to a
+ * {@code play} "Resume" when it's stopped, or a button shown only on the rows it applies to.
  *
  * <p>It wraps the resolved row the list already computed (the same shape the grid renders), so no
  * extra query runs: raw attribute values plus the resolved {@code _display} strings refs and enums
@@ -66,6 +67,26 @@ public final class ActionRow {
             return v;
         }
         return data.get(column.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * The column read as a boolean: {@code true} for a {@code Boolean.TRUE}, the strings
+     * {@code "true"}/{@code "t"}/{@code "1"} (case-insensitive, how H2/Postgres booleans read back
+     * through the resolved row), or a non-zero number; {@code false} otherwise (including absent).
+     */
+    public boolean bool(String column) {
+        Object v = get(column);
+        if (v instanceof Boolean b) {
+            return b;
+        }
+        if (v instanceof Number n) {
+            return n.intValue() != 0;
+        }
+        if (v == null) {
+            return false;
+        }
+        String s = v.toString().trim();
+        return s.equalsIgnoreCase("true") || s.equalsIgnoreCase("t") || s.equals("1");
     }
 
     /**

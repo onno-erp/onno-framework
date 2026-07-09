@@ -230,6 +230,20 @@ rows through the **same** feed — the server hands each group the exact filter 
 never double-counts and honours the active search/filters/sort. Group values that resolve to a
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
 
+**Conditional row formatting.** `list.rowStyle(row -> …)` tints rows by their data: the function
+runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware
+row actions use) and returns a semantic `ListSpec.RowStyle` tone — `DANGER` (red), `WARNING`
+(amber), `SUCCESS` (green), `ACCENT` (brand), `MUTED` (faded) — or `null` for the default look. The
+tone ships under the row's `_style` and the grid renders it as a translucent theme-aware wash
+(selection and hover still read over it; it replaces the zebra stripe on tinted rows). Works in the
+flat grid and expanded groups alike; a function that throws is treated as `null` for that row:
+
+```java
+list.rowStyle(row -> row.bool("urgent") ? ListSpec.RowStyle.DANGER
+        : row.enumValue("status", Status.class) == Status.CANCELLED ? ListSpec.RowStyle.MUTED
+        : null);
+```
+
 The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
 default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
 cursor is the next window's offset, treated as opaque by the client); passing `?offset=` explicitly
@@ -320,13 +334,19 @@ Any action (entity or page) may declare `.roles("ACCOUNTANT", "MANAGER")` — th
 callers holding none of them (`ADMIN` always passes). For an entity action this is a finer gate *on
 top of* the entity's write roles; unset means the entity's write access alone decides.
 
-Each function receives an `ActionRow` — a read-only view of the row the list already rendered
-(`id()`, `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, or
-`get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list page
-is served (no extra query — the row is already in hand) and shipped to the grid under each row's
-`_actions`; the button falls back to the static `icon`/`label` when a function isn't set. Per-row
-functions apply to `ROW` actions only — toolbar/detail buttons have no row context and use the fixed
-icon/label. A static row action (no functions) costs nothing: the list ships its rows untouched.
+Each function receives an `ActionRow` — a read-only view of the record's resolved data (`id()`,
+`text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, `bool(col)`,
+or `get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list
+page is served (no extra query — the row is already in hand) and shipped to the grid under each
+row's `_actions`; the button falls back to the static `icon`/`label` when a function isn't set. A
+static row action (no functions) costs nothing: the list ships its rows untouched.
+
+The same per-record functions apply to **`DETAIL` actions**, evaluated against the loaded record as
+the record surface renders — so one header button can hide (`visibleWhen`), relabel (`label(fn)`),
+change icon or grey itself (`enabledWhen`) by the record's state, mirroring the row button. A
+"Next status" header button that disappears once the order is terminal, or swaps for a different
+form-opening action in one specific state, is two `DETAIL` actions with complementary
+`visibleWhen` predicates. `TOOLBAR` actions have no record context and keep the fixed icon/label.
 
 A `DETAIL` action lands in the record surface's header overflow (⋯) menu by default (beside the
 form title), but honors the same placement override the built-in `unpost`/`duplicate`/`delete`

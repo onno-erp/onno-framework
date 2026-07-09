@@ -30,6 +30,8 @@ export type ActionItem = {
   url: string;
   tone?: string;
   placement?: string;
+  /** The record's enabledWhen predicate failed — render greyed and inert (issue #255). */
+  disabled?: boolean;
   /** Form items the action collects in a modal before it POSTs (ActionSpec.form) — scalar fields and/or row groups. */
   form?: ActionFormItem[];
 };
@@ -187,7 +189,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
           <button
             key={a.url}
             type="button"
-            disabled={busy}
+            disabled={busy || a.disabled}
             onClick={() => run(a)}
             className={cn(
               "inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60",
@@ -229,7 +231,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
                 <button
                   key={it.url}
                   type="button"
-                  disabled={busy}
+                  disabled={busy || it.disabled}
                   onClick={() => {
                     if (isAsync(it.url)) {
                       run(it); // keep the menu open so the spinner is visible
