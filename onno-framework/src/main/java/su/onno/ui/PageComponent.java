@@ -26,7 +26,17 @@ public record PageComponent(Kind kind, String text, String customType, Map<Strin
 
     /** The full interactive list surface for a catalog/document, embedded in the page. */
     public static PageComponent list(Class<?> entity) {
-        return new PageComponent(Kind.LIST, null, null, Map.of(), entity);
+        return list(entity, Map.of());
+    }
+
+    /**
+     * An embedded list opened on a default view — {@code defaults} carries the preset
+     * {@code filter}/{@code groupBy}/{@code sort}/{@code sortDescending} the renderer stamps onto the
+     * list descriptor.
+     */
+    public static PageComponent list(Class<?> entity, Map<String, Object> defaults) {
+        return new PageComponent(Kind.LIST, null, null,
+                defaults == null ? Map.of() : Map.copyOf(defaults), entity);
     }
 
     /**

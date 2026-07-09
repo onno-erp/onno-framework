@@ -107,8 +107,8 @@ The home/dashboard entry is the one nav/tab label that can also be chrome: it us
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
 widget-grid dashboard with no authored page still localizes its sidebar item and tab via
 `onno.ui.messages`. There is no built-in Settings surface: an app that wants one authors a `Page` at
-`/settings` (composing `b.constants(...)` for the `@Constant` editor) and links it with its own label
-via `section(...).page("/settings", "…", "settings")`.
+`/settings` (edit `@Constant`s with the built-in `type("setting")` input widget) and links it with its
+own label via `section(...).page("/settings", "…", "settings")`.
 
 The resolved map (defaults + overrides) is the single label source for both layers: the server-side
 DivKit builders read it directly, and it rides along on `GET /api/config` as a `messages` object the
@@ -514,7 +514,7 @@ class SalesOpsPage implements Page {
 - **`bare()`** (or `header(false)`) drops the header row for a chrome-less surface; the browser tab
   still reads the nav label.
 - **Compose freely.** `widget(...)`, `text`, `list(entity)` (full interactive list — New, search,
-  sort, click-to-open), `constants(...)`, `custom(...)`, and `actions(...)` in any order.
+  sort, click-to-open), `custom(...)`, and `actions(...)` in any order.
 - **Arbitrary layout.** `b.row(r -> { r.col(width, c -> …); … })` splits the page into columns of any
   width, each holding any block — and a column is itself a full region, so rows nest for whatever
   structure you want. Widths are fractions (`"2/3"`), fixed dp (`"300px"`), or `null`/`"full"` for an

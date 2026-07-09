@@ -101,5 +101,14 @@ public class DashboardPage implements Page {
                 .config("secondaryDisplay", "customer_display")
                 .config("amountField", "total").config("currency", "USD")
                 .hint("A dev-authored widget — its renderer is a .tsx compiled by su.onno.widgets.");
+
+        // ---- Embedded list on a default view ----------------------------------------------------
+        // The full Orders board embedded in the page, but opened on a preset view: filtered to open
+        // orders, grouped by status, newest first. The base filter is a server-side constraint; the
+        // viewer can still regroup, resort, and add their own filters on top.
+        b.list(Order.class, v -> v
+                .filter("open = true")
+                .groupBy("status")
+                .sort("date", true));
     }
 }

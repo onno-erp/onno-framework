@@ -206,6 +206,74 @@ public final class PageBuilder {
         return this;
     }
 
+    /**
+     * Embed an entity list opened on a <b>default view</b> — a preset filter, grouping, and/or sort
+     * the list starts from (the viewer can still change them, and the filter is a base constraint on
+     * the feed). Reuses the same {@code col op value} filter grammar as dashboard widgets:
+     *
+     * <pre>
+     * b.list(Order.class, v -> v.filter("open = true")
+     *                           .groupBy("status_display")
+     *                           .sort("_date", true));   // newest first
+     * </pre>
+     */
+    public PageBuilder list(Class<?> entity, Consumer<ListDefaults> configurer) {
+        ListDefaults defaults = new ListDefaults();
+        configurer.accept(defaults);
+        components.add(PageComponent.list(entity, defaults.build()));
+        return this;
+    }
+
+    /**
+     * Preset view for an embedded {@link #list(Class, Consumer)} — a base filter, a group-by column,
+     * and a sort. Every part is optional; only what's set is applied.
+     */
+    public static final class ListDefaults {
+        private String filter;
+        private String groupBy;
+        private String sortColumn;
+        private boolean sortDescending;
+
+        /** A base filter constraint on the feed, in the {@code col op value} grammar (AND-chained). */
+        public ListDefaults filter(String filter) {
+            this.filter = filter;
+            return this;
+        }
+
+        /** Open the list grouped by this column (a column the list declares groupable). */
+        public ListDefaults groupBy(String column) {
+            this.groupBy = column;
+            return this;
+        }
+
+        /** Sort ascending by this column. */
+        public ListDefaults sort(String column) {
+            return sort(column, false);
+        }
+
+        /** Sort by this column, descending when {@code descending} is true. */
+        public ListDefaults sort(String column, boolean descending) {
+            this.sortColumn = column;
+            this.sortDescending = descending;
+            return this;
+        }
+
+        Map<String, Object> build() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            if (filter != null && !filter.isBlank()) {
+                m.put("filter", filter);
+            }
+            if (groupBy != null && !groupBy.isBlank()) {
+                m.put("groupBy", groupBy);
+            }
+            if (sortColumn != null && !sortColumn.isBlank()) {
+                m.put("sort", sortColumn);
+                m.put("sortDescending", sortDescending);
+            }
+            return m;
+        }
+    }
+
     // ----- build accessors (consumed by the renderer) -----
 
     public String title() {

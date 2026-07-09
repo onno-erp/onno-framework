@@ -555,6 +555,7 @@ public class DivKitController implements DisposableBean {
                     // Embedded in a page (which already applies content padding) the list drops its
                     // own horizontal gutter so its table aligns with the sibling cards, full width.
                     descriptor.put("embedded", true);
+                    applyListDefaults(descriptor, c.payload());
                     out.add(PageComponent.custom("onno-list", Map.of("list", descriptor)));
                 }
             } else if (c.kind() == PageComponent.Kind.ACTIONS) {
@@ -570,6 +571,32 @@ public class DivKitController implements DisposableBean {
             }
         }
         return out;
+    }
+
+    /**
+     * Stamp a {@code PageBuilder.list(entity, v -> …)} default view onto the list descriptor: a base
+     * {@code filter} (a server-side feed constraint), a {@code defaultGroupBy} column, and/or the
+     * initial {@code sort}. The viewer can still change grouping/sort; the base filter always applies.
+     */
+    private static void applyListDefaults(Map<String, Object> descriptor, Map<String, Object> defaults) {
+        if (defaults == null || defaults.isEmpty()) {
+            return;
+        }
+        Object filter = defaults.get("filter");
+        if (filter != null && !filter.toString().isBlank()) {
+            descriptor.put("baseFilter", filter.toString());
+        }
+        Object groupBy = defaults.get("groupBy");
+        if (groupBy != null && !groupBy.toString().isBlank()) {
+            descriptor.put("defaultGroupBy", groupBy.toString());
+        }
+        Object sortColumn = defaults.get("sort");
+        if (sortColumn != null && !sortColumn.toString().isBlank()) {
+            Map<String, Object> sort = new LinkedHashMap<>();
+            sort.put("column", sortColumn.toString());
+            sort.put("descending", Boolean.TRUE.equals(defaults.get("sortDescending")));
+            descriptor.put("sort", sort);
+        }
     }
 
     /**
@@ -972,9 +999,9 @@ public class DivKitController implements DisposableBean {
             }
         }
         // Settings is not special: there is no built-in Settings entry. An app that wants one authors
-        // a Page at "/settings" (composing PageBuilder.constants() for the @Constant editor) and links
-        // it like any other page — section(...).page("/settings", "Settings", "settings"), scoped to
-        // an admin profile if it should be admin-only. The /api/settings endpoints enforce ADMIN on write.
+        // a Page at "/settings" (e.g. a .widget(...).type("setting") input bound to a @Constant) and
+        // links it like any other page — section(...).page("/settings", "Settings", "settings"), scoped
+        // to an admin profile if it should be admin-only. The /api/settings endpoints enforce ADMIN on write.
         return nav;
     }
 
