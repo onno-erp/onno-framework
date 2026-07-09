@@ -202,6 +202,11 @@ export type ListDescriptor = {
   feedMode?: "infinite" | "paged";
   /** Columns offered in the "Group by ▾" picker; a `date` column buckets by day/month/year. */
   groupable?: GroupableColumn[];
+  // Default view presets from PageBuilder.list(entity, v -> …). `baseFilter` is a server-side feed
+  // constraint (col op value) always applied on top of the viewer's own filters; `defaultGroupBy`
+  // seeds the group-by column the list opens on. The initial sort rides on `sort` (above).
+  baseFilter?: string;
+  defaultGroupBy?: string;
   /** Per-group subtotals shown on each group header (and their display format). */
   aggregates?: ListAggregate[];
   pageSize: number;
@@ -1205,7 +1210,8 @@ export function EntityListWidget({
   // granularity. Picking a column swaps the flat table for the collapsible grouped view.
   const groupable = useMemo(() => list.groupable ?? [], [list.groupable]);
   const aggregates = useMemo(() => list.aggregates ?? [], [list.aggregates]);
-  const [groupBy, setGroupBy] = useState("");
+  // Opens on the descriptor's default group-by (PageBuilder.list default view), else flat ("").
+  const [groupBy, setGroupBy] = useState(list.defaultGroupBy ?? "");
   const [granularity, setGranularity] = useState("month");
   const groupCol = groupable.find((g) => g.columnName === groupBy);
   // Keys of in-flight server actions (`key` for toolbar, `key:id` for a row) → spinner + disabled.
@@ -1450,6 +1456,9 @@ export function EntityListWidget({
   // (offset/limit or cursor/limit) are added by the caller, since they differ per feed mode.
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
+    // A default-view base filter (PageBuilder.list) is a server-side constraint applied on top of the
+    // viewer's own filters/search — sent on every window fetch, grouped or flat.
+    if (list.baseFilter) params.set("filter", list.baseFilter);
     if (sort.column) {
       params.set("sort", sort.column);
       params.set("dir", sort.descending ? "desc" : "asc");
@@ -1475,7 +1484,7 @@ export function EntityListWidget({
     }
     return params;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sort.column, sort.descending, debounced, filters, filterSig]);
+  }, [list.baseFilter, sort.column, sort.descending, debounced, filters, filterSig]);
 
   // The shared query (sort + search + filters) the grouped view fetches groups/rows with, as a
   // string so its effects can depend on it.

@@ -205,7 +205,7 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
   fresh row instead of joining a half-filled one. Multi-widget rows render equal-height (cards
   stretch to the tallest neighbour). Mobile stacks everything full-width.
   `b.list(entity)` (embeds an entity's full interactive list surface — New button, custom actions,
-  search/sort), `b.constants()` / `b.constants(heading, names…)`, `b.actions(heading, ActionSpec)`
+  search/sort), `b.actions(heading, ActionSpec)`
   (a section of server-handled buttons, reusing the entity `ActionSpec` DSL), `b.custom(type, payload)`,
   `b.row(r -> r.col("2/3", c -> …).col("1/3", c -> …))` (arbitrary column layout — widths are
   fractions / `"<n>px"` / null=equal; a column is a full region so rows nest; columns stack on
