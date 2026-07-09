@@ -9,8 +9,8 @@ import {
   type ContentHandle,
   type Delta,
 } from "@/views/divkit-content";
-// Routes served as native React pages rather than server-driven DivKit surfaces. Settings is no
-// longer here — it's an ordinary DivKit Page now (see DivKitController.settings / PageBuilder.constants).
+// Routes served as native React pages rather than server-driven DivKit surfaces. Settings is not
+// here — it's an ordinary authored DivKit Page now (see DivKitController.settings).
 const REACT_PAGES: Record<string, () => JSX.Element> = {};
 
 // Catalog/document LIST surfaces (2 path segments) have a targeted delta endpoint
@@ -112,6 +112,7 @@ export function ContentPane({
   onAction,
   registry,
   skeletonBg,
+  onNotFound,
 }: {
   path: string;
   viewport: string;
@@ -120,6 +121,10 @@ export function ContentPane({
   onAction: (action: ContentAction) => void;
   registry: LiveRegistry;
   skeletonBg: string;
+  // Called when this surface's route resolves to 404 for the current user (e.g. a stale
+  // post-login `from`, or a deep link to a route this profile can't reach). The primary pane
+  // uses it to fall back to the shell's home instead of stranding the user on a 404.
+  onNotFound?: (path: string) => void;
 }) {
   const id = useId();
   const [content, setContent] = useState<{ key: string; json: unknown } | null>(null);
@@ -144,6 +149,8 @@ export function ContentPane({
   endpointRef.current = endpoint;
   const pathRef = useRef(path);
   pathRef.current = path;
+  const onNotFoundRef = useRef(onNotFound);
+  onNotFoundRef.current = onNotFound;
 
   // Apply a server-pushed change in place. List surfaces fetch a targeted delta (rows
   // div-patch + the count variable); other surfaces refetch and patch their whole
@@ -223,6 +230,12 @@ export function ContentPane({
       .catch((e: unknown) => {
         if (endpointRef.current !== ep) return;
         const pe = e as Partial<PaneError>;
+        // A 404 means this route doesn't exist for the current user; let the host redirect to
+        // home rather than leaving a dead surface. Access-denied (403) still shows its message.
+        if (pe?.status === 404 && onNotFoundRef.current) {
+          onNotFoundRef.current(pathRef.current);
+          return;
+        }
         setError({ status: typeof pe?.status === "number" ? pe.status : null, detail: pe?.detail ?? null });
       });
   }, []);

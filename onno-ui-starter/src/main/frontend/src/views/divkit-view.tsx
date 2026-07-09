@@ -501,6 +501,45 @@ export function DivKitView() {
     navigate(home, { replace: true });
   }, [shell, location.pathname, navigate]);
 
+  // When the focused surface 404s — a stale post-login `from`, a role switch, or a deep link to a
+  // route this profile can't reach — don't strand the user on a not-found card: drop the dead tab
+  // and land on the shell's home (the first real nav item). Guarded so it only acts on the *active*
+  // route and only when home is somewhere else, so it can't loop.
+  const pendingNotFoundRef = useRef<string | null>(null);
+  const landHome = useCallback((badPath: string, home: string) => {
+    setWorkspace((ws) => {
+      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      const panes = ws.panes.map((p) => {
+        if (p.id !== focused.id) return p;
+        const kept = p.tabs.filter((t) => t.path !== badPath);
+        const tabs = kept.some((t) => t.path === home) ? kept : [...kept, tabForPath(home)];
+        return { ...p, tabs, activePath: home };
+      });
+      return { ...ws, panes, focused: focused.id };
+    });
+    navigate(home, { replace: true });
+  }, [navigate]);
+  const handleContentNotFound = useCallback((badPath: string) => {
+    if (badPath !== location.pathname) return;
+    const home = shell?.home;
+    // Shell not loaded yet (a cold post-login 404 can beat it) — remember the dead route and let
+    // the effect below redirect once `home` arrives, so we never flash the not-found card.
+    if (!home) {
+      pendingNotFoundRef.current = badPath;
+      return;
+    }
+    if (home === badPath) return;
+    landHome(badPath, home);
+  }, [shell, location.pathname, landHome]);
+  useEffect(() => {
+    const bad = pendingNotFoundRef.current;
+    const home = shell?.home;
+    if (bad && home && home !== bad && bad === location.pathname) {
+      pendingNotFoundRef.current = null;
+      landHome(bad, home);
+    }
+  }, [shell, location.pathname, landHome]);
+
   // ----- live updates: one SSE stream fans out to every mounted island -----
 
   const liveRegistry = useRef<LiveRegistry>(new Map());
@@ -1402,6 +1441,7 @@ export function DivKitView() {
       onAction={onCustomAction}
       registry={liveRegistry.current}
       skeletonBg={skeletonBg}
+      onNotFound={handleContentNotFound}
     />
   );
 

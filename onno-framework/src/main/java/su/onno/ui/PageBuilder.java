@@ -71,36 +71,6 @@ public final class PageBuilder {
     }
 
     /**
-     * Add the app-settings editor — the {@code @Constant} values rendered as toggles/inputs and
-     * saved in place. A page (e.g. the Settings page) composes this alongside widgets and lists, so
-     * settings are just another page built from the framework's primitives.
-     */
-    public PageBuilder constants() {
-        return constants("", new String[0]);
-    }
-
-    /** Add the settings editor under an optional section heading. */
-    public PageBuilder constants(String heading) {
-        return constants(heading, new String[0]);
-    }
-
-    /**
-     * Add the settings editor under an optional section heading, restricted to the named
-     * {@code @Constant}s (by their {@code @Constant(name=...)} logical name). With no names the
-     * whole editor is shown; with names you can drop a single toggle (or a small group) onto any
-     * page — a dashboard, or a catalog page authored at that route — not just the Settings page.
-     */
-    public PageBuilder constants(String heading, String... names) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("title", heading == null ? "" : heading);
-        if (names != null && names.length > 0) {
-            payload.put("names", List.of(names));
-        }
-        components.add(PageComponent.custom("onno-constants", payload));
-        return this;
-    }
-
-    /**
      * Add a section of action buttons — each runs an обработка-style server handler (or routes the
      * client) when clicked. Reuses the same {@link ActionSpec} DSL as entity actions, but the
      * buttons live on the page itself rather than a list toolbar, so triggering backend logic is a

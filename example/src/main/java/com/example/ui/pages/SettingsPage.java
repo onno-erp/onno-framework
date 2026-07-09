@@ -1,20 +1,20 @@
 package com.example.ui.pages;
 
-import com.example.domain.catalogs.BookCategory;
 import su.onno.ui.Page;
 import su.onno.ui.PageBuilder;
 
 import org.springframework.stereotype.Component;
 
 /**
- * Settings is just a page. This authored {@code Page} at {@code /settings} replaces the framework's
- * built-in constant editor: it still edits the {@code @Constant} values ({@code b.constants(...)}),
- * but composes them alongside inline management of the Book Categories reference data — one surface
- * for "how the shop is configured", built from the same page primitives as any dashboard.
+ * Settings is just a page. This authored {@code Page} at {@code /settings} is an ordinary page that
+ * drops one {@code "setting"} input widget bound to the {@code Store Name} {@link
+ * com.example.domain.constants.StoreName @Constant}. The widget loads and saves through
+ * SettingsController ({@code /api/settings}, admin-only) — no bespoke editor, just a page with an
+ * input, built from the same primitives as any dashboard.
  *
- * <p>Pinned to the {@code admin} profile (like {@link DashboardPage}), so it is ADMIN-only — the same
- * gate the built-in Settings entry uses. Delete this bean and {@code /settings} falls back to the
- * plain constant editor (still enabled in {@code application.yaml}).</p>
+ * <p>Pinned to the {@code admin} profile (like {@link DashboardPage}), so it is ADMIN-only; a MANAGER
+ * resolves to the default profile, where this page does not exist. It reaches the sidebar via a
+ * {@code .page("/settings", ...)} nav item on {@link com.example.ui.layouts.AdminLayout}.</p>
  */
 @Component
 public class SettingsPage implements Page {
@@ -34,11 +34,10 @@ public class SettingsPage implements Page {
         b.title("Settings");
         b.subtitle("How Onno Books is configured");
 
-        // The @Constant editor — the single Store Name knob, saved in place.
-        b.constants("Store");
-
-        // Reference data managed inline: the same interactive Book Categories list as its own route,
-        // embedded here so an admin curates the taxonomy without leaving Settings.
-        b.list(BookCategory.class);
+        // The single Store Name knob, edited in place through a generic setting widget bound to the
+        // @Constant by its logical name. Add another .widget(...).type("setting") per constant.
+        b.widget("Store name").type("setting").width("1/2").order(0)
+                .config("constant", "Store Name")
+                .hint("The trading name of the shop, shown across the app.");
     }
 }

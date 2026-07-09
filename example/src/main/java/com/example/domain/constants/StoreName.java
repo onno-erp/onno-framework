@@ -7,10 +7,11 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * A single global setting — the trading name of the shop, editable on the built-in Settings page
- * (enabled in {@code application.yaml}). A {@code @Constant} is a plain class with one value field;
- * the framework stores the single row and serves the {@code @Constant} editor. This is the whole
- * demonstration of the constants/Settings surface — one obvious knob.
+ * A single global setting — the trading name of the shop, edited on the authored Settings page
+ * ({@link com.example.ui.pages.SettingsPage}) via a {@code type("setting")} input widget bound to
+ * this constant. A {@code @Constant} is a plain class with one value field; the framework stores the
+ * single row (read/written through {@code SettingsController}). This is the whole demonstration of
+ * the constants surface — one obvious knob.
  */
 @Constant(name = "Store Name")
 @Getter

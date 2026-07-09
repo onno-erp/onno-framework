@@ -207,7 +207,7 @@ export type ListDescriptor = {
   pageSize: number;
   // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
-  // with the page's other full-width components (constants editor, action sections).
+  // with the page's other full-width components (setting widgets, action sections).
   embedded?: boolean;
   // Override the data feed URL. Catalogs/documents page from /api/list/{kind}/{name}; a register
   // has no such route, so its descriptor points the island at /api/list/registers/{name}/movements
