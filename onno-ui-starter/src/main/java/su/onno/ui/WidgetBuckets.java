@@ -73,6 +73,10 @@ public final class WidgetBuckets {
             return dateField != null && !dateField.isBlank()
                     && ((from != null && !from.isBlank()) || (to != null && !to.isBlank()));
         }
+
+        public boolean dateBucketed() {
+            return grouped() && groupByDate != null && !groupByDate.isBlank();
+        }
     }
 
     /** The rendered statement plus its bound parameters (the widget filter's bindings included). */
@@ -163,6 +167,16 @@ public final class WidgetBuckets {
                     + "Group by a coarser column or date unit.", table, MAX_BUCKETS);
             rows = rows.subList(0, MAX_BUCKETS);
         }
+        // Zero-fill a date-bucketed axis (#246): a plain GROUP BY only emits periods that have
+        // rows, so empty days/weeks vanish and gaps read as missing rather than 0. Densify here
+        // in Java (generate_series isn't portable to H2) over the request window; a spine wider
+        // than MAX_BUCKETS truncates like an oversized GROUP BY would. Skipped when the query
+        // itself already truncated — the tail periods are unknown.
+        if (!truncated && r.dateBucketed()) {
+            FillResult filled = zeroFill(rows, r);
+            rows = filled.rows();
+            truncated = filled.truncated();
+        }
 
         String groupCol = r.grouped() ? r.groupBy().toLowerCase() : null;
         String seriesCol = r.hasSeries() ? r.seriesBy().toLowerCase() : null;
@@ -213,6 +227,122 @@ public final class WidgetBuckets {
             }
         }
         return out;
+    }
+
+    private record FillResult(List<Map<String, Object>> rows, boolean truncated) {}
+
+    /**
+     * Densify date buckets: walk the period spine from the window's {@code from} (or the first
+     * bucket present) to {@code to} exclusive (or the last bucket present) and emit a
+     * {@code {_bucket, _value: 0}} filler row for every period with no data. Existing rows —
+     * including several per period when series-split — pass through in place, so the merged list
+     * stays chronological. A spine longer than {@link #MAX_BUCKETS} periods stops there and flags
+     * truncation. Unparseable window bounds skip the fill rather than failing the widget.
+     */
+    private static FillResult zeroFill(List<Map<String, Object>> rows, Request r) {
+        String unit = r.groupByDate().toLowerCase();
+        // Group the existing rows by their (normalized) bucket start, keeping bucket order.
+        Map<java.time.LocalDateTime, List<Map<String, Object>>> byPeriod = new LinkedHashMap<>();
+        List<Map<String, Object>> nullBuckets = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            java.time.LocalDateTime bucket = toLocalDateTime(row.get("_bucket"));
+            if (bucket == null) {
+                nullBuckets.add(row); // rows whose date column is NULL keep their own bucket
+            } else {
+                // Key on the Java-side truncation so a DB whose week anchor differs from ISO
+                // Monday still lands its buckets on the spine instead of duplicating periods.
+                byPeriod.computeIfAbsent(truncate(bucket, unit), k -> new ArrayList<>()).add(row);
+            }
+        }
+
+        java.time.LocalDateTime from = parseBound(r.from());
+        java.time.LocalDateTime to = parseBound(r.to());
+        if (byPeriod.isEmpty() && (from == null || to == null)) {
+            return new FillResult(rows, false); // nothing present and no bounded window → no spine
+        }
+        java.time.LocalDateTime start = from != null
+                ? truncate(from, unit)
+                : byPeriod.keySet().stream().min(java.time.LocalDateTime::compareTo).orElseThrow();
+        // The window's `to` is exclusive (the SQL filters `< to`); with no `to`, walk to the last
+        // bucket present (inclusive — model it as an exclusive bound one instant past it).
+        java.time.LocalDateTime endExclusive = to != null
+                ? to
+                : byPeriod.keySet().stream().max(java.time.LocalDateTime::compareTo).orElseThrow().plusNanos(1);
+        if (!start.isBefore(endExclusive)) {
+            return new FillResult(rows, false);
+        }
+
+        List<Map<String, Object>> merged = new ArrayList<>(nullBuckets);
+        boolean truncated = false;
+        int periods = 0;
+        for (java.time.LocalDateTime p = start; p.isBefore(endExclusive); p = next(p, unit)) {
+            if (++periods > MAX_BUCKETS) {
+                truncated = true;
+                log.warn("Zero-filling the {} axis would exceed {} buckets; result truncated. "
+                        + "Narrow the window or use a coarser date unit.", unit, MAX_BUCKETS);
+                break;
+            }
+            List<Map<String, Object>> present = byPeriod.get(p);
+            if (present != null) {
+                merged.addAll(present);
+            } else {
+                Map<String, Object> filler = new LinkedHashMap<>();
+                filler.put("_bucket", p);
+                filler.put("_value", 0);
+                merged.add(filler);
+            }
+        }
+        return new FillResult(merged, truncated);
+    }
+
+    /** The window bound as a local timestamp, or null (absent or unparseable → no fill from it). */
+    private static java.time.LocalDateTime parseBound(String v) {
+        if (v == null || v.isBlank()) return null;
+        try {
+            return java.time.LocalDateTime.parse(v);
+        } catch (java.time.format.DateTimeParseException e) {
+            try {
+                return java.time.LocalDate.parse(v).atStartOfDay();
+            } catch (java.time.format.DateTimeParseException e2) {
+                return null;
+            }
+        }
+    }
+
+    /** A DB bucket value normalized to the LocalDateTime the spine walks in. */
+    private static java.time.LocalDateTime toLocalDateTime(Object v) {
+        if (v instanceof java.time.LocalDateTime ldt) return ldt;
+        if (v instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        if (v instanceof java.time.OffsetDateTime odt) return odt.toLocalDateTime();
+        if (v instanceof java.time.LocalDate ld) return ld.atStartOfDay();
+        return null;
+    }
+
+    /** Java-side DATE_TRUNC: the start of {@code dt}'s period, matching the SQL bucketing. */
+    private static java.time.LocalDateTime truncate(java.time.LocalDateTime dt, String unit) {
+        return switch (unit) {
+            case "minute" -> dt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+            case "hour" -> dt.truncatedTo(java.time.temporal.ChronoUnit.HOURS);
+            case "day" -> dt.toLocalDate().atStartOfDay();
+            // ISO week (Monday start) — how H2 and PostgreSQL both anchor DATE_TRUNC('week').
+            case "week" -> dt.toLocalDate()
+                    .with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+                    .atStartOfDay();
+            case "month" -> dt.toLocalDate().withDayOfMonth(1).atStartOfDay();
+            default -> throw new IllegalArgumentException("Unknown groupByDate unit: " + unit);
+        };
+    }
+
+    /** The start of the period after {@code p}. */
+    private static java.time.LocalDateTime next(java.time.LocalDateTime p, String unit) {
+        return switch (unit) {
+            case "minute" -> p.plusMinutes(1);
+            case "hour" -> p.plusHours(1);
+            case "day" -> p.plusDays(1);
+            case "week" -> p.plusWeeks(1);
+            case "month" -> p.plusMonths(1);
+            default -> throw new IllegalArgumentException("Unknown groupByDate unit: " + unit);
+        };
     }
 
     /** Timestamps → ISO strings, UUIDs → strings; JSON-native scalars pass through. */

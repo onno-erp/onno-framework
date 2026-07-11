@@ -99,27 +99,91 @@ class WidgetBucketsTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void dateBucketsWithWindowAndSpan_sumPerBucket() {
+    void dateBucketsWithWindowAndSpan_sumPerBucket_zeroFillingEmptyDays() {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
         insert("new", null, LocalDateTime.of(2026, 1, 5, 15, 0), "20");
-        insert("new", null, LocalDateTime.of(2026, 2, 10, 9, 0), "40");
+        insert("new", null, LocalDateTime.of(2026, 1, 8, 9, 0), "40");
         insert("new", null, LocalDateTime.of(2025, 6, 1, 9, 0), "999"); // outside the window
 
         Map<String, Object> out = service.aggregateBuckets(orders,
                 request("sum", col("amount"), col("placedAt"), "day", null, null,
-                        col("placedAt"), "2026-01-01T00:00:00", "2026-12-31T00:00:00"));
+                        col("placedAt"), "2026-01-04T00:00:00", "2026-01-10T00:00:00"));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
-        // Chronological (ORDER BY bucket), one row per day, out-of-window row excluded.
-        assertThat(buckets).hasSize(2);
-        assertThat((String) buckets.get(0).get("key")).startsWith("2026-01-05");
-        assertThat(new BigDecimal(buckets.get(0).get("value").toString())).isEqualByComparingTo("30");
-        assertThat((String) buckets.get(1).get("key")).startsWith("2026-02-10");
+        // A dense chronological axis over the whole window (#246): every day in [from, to)
+        // present, days with no rows plotted as 0 — not omitted.
+        assertThat(buckets).hasSize(6);
+        assertThat(buckets).extracting(b -> ((String) b.get("key")).substring(0, 10))
+                .containsExactly("2026-01-04", "2026-01-05", "2026-01-06",
+                        "2026-01-07", "2026-01-08", "2026-01-09");
+        assertThat(new BigDecimal(buckets.get(0).get("value").toString())).isEqualByComparingTo("0");
+        assertThat(new BigDecimal(buckets.get(1).get("value").toString())).isEqualByComparingTo("30");
+        assertThat(new BigDecimal(buckets.get(4).get("value").toString())).isEqualByComparingTo("40");
+        assertThat((Boolean) out.get("truncated")).isFalse();
 
         // Span covers the windowed rows only — what the client sizes granularity from.
         Map<String, Object> span = (Map<String, Object>) out.get("span");
         assertThat((String) span.get("min")).startsWith("2026-01-05");
-        assertThat((String) span.get("max")).startsWith("2026-02-10");
+        assertThat((String) span.get("max")).startsWith("2026-01-08");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void unboundedWindow_fillsBetweenFirstAndLastBucket() {
+        insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
+        insert("new", null, LocalDateTime.of(2026, 1, 8, 9, 0), "40");
+
+        Map<String, Object> out = service.aggregateBuckets(orders,
+                request("count", null, col("placedAt"), "day", null, null, null, null, null));
+
+        List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
+        // No window bounds: the interior gaps still fill (Jan 6, Jan 7 read as 0), edges stop at
+        // the data actually present.
+        assertThat(buckets).hasSize(4);
+        assertThat(buckets).extracting(b -> ((String) b.get("key")).substring(0, 10))
+                .containsExactly("2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08");
+        assertThat(buckets).extracting(b -> ((Number) b.get("value")).longValue())
+                .containsExactly(1L, 0L, 0L, 1L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void seriesSplitRowsSurviveZeroFill() {
+        insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
+        insert("done", null, LocalDateTime.of(2026, 1, 5, 15, 0), "20");
+        insert("new", null, LocalDateTime.of(2026, 1, 7, 9, 0), "5");
+
+        Map<String, Object> out = service.aggregateBuckets(orders,
+                request("count", null, col("placedAt"), "day", col("status"), null,
+                        col("placedAt"), "2026-01-05T00:00:00", "2026-01-08T00:00:00"));
+
+        List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
+        // Jan 5 keeps both series rows (their relative order is the DB's), Jan 6 is a zero filler
+        // with a null series, Jan 7 has one series.
+        assertThat(buckets).hasSize(4);
+        assertThat(buckets.subList(0, 2)).allSatisfy(b ->
+                assertThat((String) b.get("key")).startsWith("2026-01-05"));
+        assertThat(buckets.subList(0, 2)).extracting(b -> b.get("series"))
+                .containsExactlyInAnyOrder("new", "done");
+        assertThat(((String) buckets.get(2).get("key"))).startsWith("2026-01-06");
+        assertThat(buckets.get(2).get("series")).isNull();
+        assertThat(((Number) buckets.get(2).get("value")).longValue()).isZero();
+        assertThat(((String) buckets.get(3).get("key"))).startsWith("2026-01-07");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void oversizedSpineTruncatesAtMaxBuckets() {
+        insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
+
+        Map<String, Object> out = service.aggregateBuckets(orders,
+                request("count", null, col("placedAt"), "day", null, null,
+                        col("placedAt"), "2020-01-01T00:00:00", "2026-12-31T00:00:00"));
+
+        List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
+        // ~2500 days would be unreadable; the spine stops at the bucket cap and flags it.
+        assertThat(buckets).hasSize(WidgetBuckets.MAX_BUCKETS);
+        assertThat((Boolean) out.get("truncated")).isTrue();
     }
 
     @Test
