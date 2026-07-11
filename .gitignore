@@ -45,3 +45,6 @@ docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/public/api/
+
+# Dev-mode live-reload trigger (touch to refresh connected browsers)
+.onno-reload

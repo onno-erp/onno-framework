@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -56,6 +57,23 @@ public class UiEventPublisher {
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final UiAccessService access;
+
+    /**
+     * Identifies this application-context incarnation. Regenerated whenever the context restarts (a
+     * devtools reload, a redeploy) and carried on every {@code ready} ack, so a client that
+     * reconnects after a dropped stream can tell "same server, transient blip" from "the server was
+     * rebuilt under me". Because every layout/page/entity cache is a boot-time singleton, a changed
+     * {@code bootId} always means the client's rendered state is stale.
+     */
+    private final String bootId = UUID.randomUUID().toString();
+
+    /**
+     * Whether this server runs for live development ({@code onno.ui.dev-mode}; auto-on under
+     * spring-boot-devtools). Echoed on the {@code ready} ack — the web client full-reloads on a
+     * {@code bootId} change only when set, so a production redeploy never yanks the page out from
+     * under a user mid-edit.
+     */
+    private final boolean devMode;
     private final ScheduledExecutorService keepalive =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "onno-ui-events-keepalive");
@@ -64,7 +82,12 @@ public class UiEventPublisher {
             });
 
     public UiEventPublisher(UiAccessService access) {
+        this(access, false);
+    }
+
+    public UiEventPublisher(UiAccessService access, boolean devMode) {
         this.access = access;
+        this.devMode = devMode;
         keepalive.scheduleWithFixedDelay(this::ping,
                 KEEPALIVE_SECONDS, KEEPALIVE_SECONDS, TimeUnit.SECONDS);
     }
@@ -92,8 +115,39 @@ public class UiEventPublisher {
         emitter.onTimeout(() -> subscribers.remove(subscriber));
         emitter.onError(error -> subscribers.remove(subscriber));
         // The "ready" ack carries no entity data, so it is sent unconditionally to the new stream.
-        send(subscriber, "ready", Map.of("type", "ready", "timestamp", Instant.now().toString()));
+        // bootId/devMode let the client detect a server restart across reconnects (dev live-reload).
+        Map<String, Object> ready = new LinkedHashMap<>();
+        ready.put("type", "ready");
+        ready.put("timestamp", Instant.now().toString());
+        ready.put("bootId", bootId);
+        ready.put("devMode", devMode);
+        send(subscriber, "ready", ready);
         return emitter;
+    }
+
+    /** Whether this publisher was wired for a live-development server. */
+    public boolean isDevMode() {
+        return devMode;
+    }
+
+    /**
+     * Dev-mode live reload on demand: tells every connected browser to full-reload right now, without
+     * waiting for a context restart. Complements the automatic {@code bootId} reload — use it when
+     * something changed that no restart announces (static assets, a rebuilt widget bundle) or to
+     * refresh immediately after a batch of edits. No-op outside dev mode, so nothing can yank a
+     * production page out from under a user.
+     */
+    public void publishReload() {
+        if (!devMode) {
+            return;
+        }
+        Map<String, Object> payload = Map.of(
+                "type", "reload",
+                "devMode", true,
+                "timestamp", Instant.now().toString());
+        for (Subscriber subscriber : subscribers) {
+            send(subscriber, "reload", payload);
+        }
     }
 
     /**

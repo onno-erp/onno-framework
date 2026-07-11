@@ -157,14 +157,30 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public UiEventPublisher uiEventPublisher(UiAccessService access) {
-        return new UiEventPublisher(access);
+    public UiEventPublisher uiEventPublisher(UiAccessService access, UiProperties properties) {
+        // onno.ui.dev-mode unset → dev mode exactly when devtools is around: on the classpath under
+        // bootRun/exploded runs, excluded from the production boot jar. See UiProperties#devMode.
+        boolean devMode = properties.getDevMode() != null
+                ? properties.getDevMode()
+                : org.springframework.util.ClassUtils.isPresent(
+                        "org.springframework.boot.devtools.settings.DevToolsSettings",
+                        UiAutoConfiguration.class.getClassLoader());
+        return new UiEventPublisher(access, devMode);
     }
 
     @Bean
     public UiEventController uiEventController(UiEventPublisher publisher, UiAccessService access,
                                               CurrentUserResolver currentUserResolver) {
         return new UiEventController(publisher, access, currentUserResolver);
+    }
+
+    @Bean(destroyMethod = "stop")
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public DevReloadTrigger devReloadTrigger(UiEventPublisher publisher, UiProperties properties) {
+        // Inert outside dev mode — the watcher thread only exists on a live-development server.
+        return publisher.isDevMode()
+                ? new DevReloadTrigger(java.nio.file.Path.of(properties.getDevReloadTrigger()), publisher)
+                : DevReloadTrigger.disabled();
     }
 
     /**

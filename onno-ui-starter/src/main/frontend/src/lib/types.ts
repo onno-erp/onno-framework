@@ -233,6 +233,13 @@ export interface UiEvent {
   actorAvatar?: string;
   createdAt?: string;
   unread?: boolean;
+  // Present on the `ready` ack that opens each stream, and on the explicit dev `reload` push.
+  // `bootId` identifies the server's application-context incarnation; `devMode` marks a
+  // live-development server. A changed bootId across a reconnect means the server restarted under
+  // us; a `reload` event is an on-demand refresh (the .onno-reload trigger file). In dev mode the
+  // bus answers both with a full page reload (see ui-event-bus.ts).
+  bootId?: string;
+  devMode?: boolean;
 }
 
 export interface DashboardWidgetMeta {
