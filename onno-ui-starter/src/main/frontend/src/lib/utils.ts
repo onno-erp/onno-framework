@@ -65,6 +65,28 @@ export function enumPillStyle(
   return { backgroundColor: `#${hex}`, color: luminance > 0.6 ? "#1f2937" : "#ffffff" };
 }
 
+/**
+ * The row-tint classes for a server-computed conditional row style — the `_style` the list feed
+ * attaches per row (`ListSpec.rowStyle`, a semantic tone the theme maps, not a raw color). A
+ * translucent wash so hover/selection still read over it; an unknown tone returns `null` (no tint).
+ */
+export function rowStyleClass(style: unknown): string | null {
+  switch (style) {
+    case "danger":
+      return "bg-destructive/10";
+    case "warning":
+      return "bg-[hsl(var(--warning))]/10";
+    case "success":
+      return "bg-[hsl(var(--success))]/10";
+    case "accent":
+      return "bg-primary/10";
+    case "muted":
+      return "opacity-60";
+    default:
+      return null;
+  }
+}
+
 export function displayValue(attr: AttributeMeta, raw: unknown, row?: Record<string, unknown>): string {
   // Secrets are write-only: the server returns a "set" sentinel or null, never the value.
   if (attr.secret) {

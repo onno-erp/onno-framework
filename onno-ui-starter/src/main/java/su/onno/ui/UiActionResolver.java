@@ -103,6 +103,27 @@ public class UiActionResolver {
         return out;
     }
 
+    /**
+     * A DETAIL action's per-record resolution (issue #255): the same {@code visibleWhen} /
+     * {@code enabledWhen} / {@code label(fn)} / {@code icon(fn)} functions a ROW action evaluates
+     * per list row, evaluated once against the loaded detail record. {@code label}/{@code icon}
+     * fall back to the fixed values; a function that throws falls back the same way the row path
+     * does (visible + enabled + fixed label/icon), so one bad predicate can't break the surface.
+     */
+    public record RecordActionState(boolean visible, boolean enabled, String label, String icon) {}
+
+    /** Evaluate {@code a}'s per-record functions against a loaded record (see {@link RecordActionState}). */
+    public static RecordActionState recordActionState(Action a, Map<String, Object> record) {
+        ActionRow row = new ActionRow(record);
+        String label = a.labelFn() != null ? evalString(a.labelFn(), row) : null;
+        String icon = a.iconFn() != null ? evalString(a.iconFn(), row) : null;
+        return new RecordActionState(
+                eval(a.visibleFn(), row, true),
+                eval(a.enabledFn(), row, true),
+                label != null ? label : a.label(),
+                icon != null ? icon : a.icon());
+    }
+
     private static boolean eval(java.util.function.Predicate<ActionRow> p, ActionRow row, boolean fallback) {
         if (p == null) {
             return fallback;

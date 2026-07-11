@@ -63,6 +63,18 @@ public class OrderView implements EntityView {
         list.filter("assignedTo").label("Assignee").multiOptions(employeeFilterOptions());
         list.filter("date").label("Order date").dateRange();
         list.filter("note").label("Note").contains();
+        // Conditional row formatting: fresh orders get an amber wash (they need action), cancelled
+        // ones fade out. The function runs server-side per row; null means the default look.
+        list.rowStyle(row -> {
+            OrderStatus st = row.enumValue("status", OrderStatus.class);
+            if (st == OrderStatus.NEW) {
+                return ListSpec.RowStyle.WARNING;
+            }
+            if (st == OrderStatus.CANCELLED) {
+                return ListSpec.RowStyle.MUTED;
+            }
+            return null;
+        });
     }
 
     @Override
@@ -133,10 +145,23 @@ public class OrderView implements EntityView {
                 })
                 .handler(this::bulkReceive);
 
-        // DETAIL: the same two as fixed-label header buttons.
+        // DETAIL: the same two as header buttons — state-aware like the row ones (issue #255):
+        // the label shows the next status, and both disappear once the order is terminal.
         a.action("advanceTop").scope(ActionScope.DETAIL).icon("chevron-right").label("Advance")
+                .label(row -> {
+                    OrderStatus st = row.enumValue("status", OrderStatus.class);
+                    return "→ " + (st == null ? OrderStatus.CONFIRMED.name() : next(st).name());
+                })
+                .visibleWhen(row -> {
+                    OrderStatus st = row.enumValue("status", OrderStatus.class);
+                    return st != OrderStatus.COMPLETED && st != OrderStatus.CANCELLED;
+                })
                 .handler(ctx -> advance(ctx.id()));
         a.action("cancelTop").scope(ActionScope.DETAIL).icon("ban").label("Cancel order")
+                .visibleWhen(row -> {
+                    OrderStatus st = row.enumValue("status", OrderStatus.class);
+                    return st != OrderStatus.CANCELLED && st != OrderStatus.COMPLETED;
+                })
                 .form(f -> f.input("reason").label("Reason").type(su.onno.ui.InputType.TEXTAREA)
                         .placeholder("Why is this order cancelled?").required())
                 .handler(ctx -> cancel(ctx.id(), ctx.input("reason")));

@@ -664,34 +664,38 @@ public class DivKitController implements DisposableBean {
     }
 
     /**
-     * DETAIL-scope custom actions as detail-header buttons. A server action routes through the
-     * {@code onno://action/...} scheme (the client POSTs and applies the {@link ActionResult}); a
-     * navigation action fills its {@code {id}} placeholder and routes directly. Custom actions sit
-     * in the overflow menu so they never crowd the built-in Edit/Post/Delete buttons.
-     */
-    /**
      * Custom DETAIL-scope action buttons for an entity's detail header. Each honors the same
      * placement override the built-in post/edit/delete actions do — {@code f.action(key).primary()}
      * surfaces it as a prominent inline button, {@code .inMenu()} (the default) tucks it into the
      * overflow ⋯ menu, {@code .hidden()} drops it (the caller removes hidden entries). Issue #183.
+     *
+     * <p>The per-record functions ({@code visibleWhen} / {@code enabledWhen} / {@code label(fn)} /
+     * {@code icon(fn)}) are evaluated against the loaded record — {@code row} is the same resolved
+     * map the surface renders — so one header button can hide, relabel or grey itself by the
+     * record's state, the way a ROW action varies per list row. Issue #255.</p>
      */
     private List<SurfaceDivBuilder.HeaderAction> detailActions(Class<?> entity, String kind, String name, UUID id,
-                                                               Map<String, String> placement) {
+                                                               Map<String, String> placement,
+                                                               Map<String, Object> row) {
         List<SurfaceDivBuilder.HeaderAction> out = new ArrayList<>();
         for (ActionSpec.Action a : actionResolver.forEntity(entity)) {
             if (a.scope() != ActionScope.DETAIL) {
                 continue;
             }
+            UiActionResolver.RecordActionState state = UiActionResolver.recordActionState(a, row);
+            if (!state.visible()) {
+                continue;
+            }
             String url = a.isServer()
                     ? "onno://action/" + kind + "/" + name + "/" + a.key() + "/" + id
                     : a.navigateUrl().replace("{id}", id.toString());
-            String icon = a.icon() == null || a.icon().isBlank() ? "zap" : a.icon();
+            String icon = state.icon() == null || state.icon().isBlank() ? "zap" : state.icon();
             // Default to the overflow menu (the prior, only behavior); a view can promote a key
             // workflow action to a primary button — given the brand "accent" tone — via .primary().
             String place = placement.getOrDefault(a.key(), "menu");
             String tone = "primary".equals(place) ? "accent" : "normal";
-            out.add(new SurfaceDivBuilder.HeaderAction(icon, a.label(), tone, url, place,
-                    UiActionResolver.formDescriptors(a)));
+            out.add(new SurfaceDivBuilder.HeaderAction(icon, state.label(), tone, url, place,
+                    UiActionResolver.formDescriptors(a), !state.enabled()));
         }
         return out;
     }
@@ -732,6 +736,10 @@ public class DivKitController implements DisposableBean {
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
+        // Load the record before building the actions: the custom DETAIL actions' per-record
+        // functions (visibleWhen/label/…) evaluate against it (#255).
+        Map<String, Object> row = catalogQuery.get(desc, id);
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
@@ -742,12 +750,10 @@ public class DivKitController implements DisposableBean {
                     "onno://delete/catalogs/" + name + "/" + id, "menu"));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
             actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass())));
+                    resolvedMetadata.actionOverrides(desc.javaClass()), row));
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
-        Map<String, Object> row = catalogQuery.get(desc, id);
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(meta, row,
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
@@ -858,9 +864,10 @@ public class DivKitController implements DisposableBean {
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183),
-            // the same override map the built-in unpost/duplicate/delete actions read above.
+            // the same override map the built-in unpost/duplicate/delete actions read above. Their
+            // per-record functions evaluate against the loaded row (#255).
             actions.addAll(detailActions(desc.javaClass(), "documents", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass())));
+                    resolvedMetadata.actionOverrides(desc.javaClass()), row));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));

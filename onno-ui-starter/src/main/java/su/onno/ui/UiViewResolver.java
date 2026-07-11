@@ -26,6 +26,10 @@ public class UiViewResolver {
     private final int defaultPageSize;
     // entity -> (profile id | "" for default) -> view
     private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
+    // entity -> its authored rowStyle function (empty = none) — cached because the list-data feed
+    // asks per request and building a ListSpec re-runs the view's list() authoring each time.
+    private final Map<Class<?>, java.util.Optional<java.util.function.Function<ActionRow, ListSpec.RowStyle>>>
+            rowStyles = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Back-compat: resolver with the built-in defaults (infinite feed, 50 rows). */
     public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews) {
@@ -74,6 +78,38 @@ public class UiViewResolver {
     public boolean commentsEnabled(Class<?> entity) {
         Map<String, EntityView> byProfile = entity == null ? null : views.get(entity);
         return byProfile != null && byProfile.values().stream().anyMatch(EntityView::comments);
+    }
+
+    /**
+     * The entity's conditional row-formatting function ({@link ListSpec#rowStyle}), or {@code null}
+     * when no view declares one. Resolved at the entity level — the default-profile view first,
+     * then any profile-specific one — because the list-data feed that evaluates it has no profile
+     * context (mirroring how {@link UiActionResolver} aggregates actions across views).
+     */
+    public java.util.function.Function<ActionRow, ListSpec.RowStyle> rowStyle(Class<?> entity) {
+        if (entity == null) {
+            return null;
+        }
+        return rowStyles.computeIfAbsent(entity, e -> {
+            Map<String, EntityView> byProfile = views.get(e);
+            if (byProfile == null) {
+                return java.util.Optional.empty();
+            }
+            List<EntityView> ordered = new ArrayList<>();
+            EntityView def = byProfile.get(DEFAULT);
+            if (def != null) {
+                ordered.add(def);
+            }
+            byProfile.values().stream().filter(v -> v != def).forEach(ordered::add);
+            for (EntityView view : ordered) {
+                ListSpec spec = new ListSpec();
+                view.list(spec);
+                if (spec.rowStyleFn() != null) {
+                    return java.util.Optional.of(spec.rowStyleFn());
+                }
+            }
+            return java.util.Optional.empty();
+        }).orElse(null);
     }
 
     /** Profile-specific view wins, then the default view, then auto-generated columns. */

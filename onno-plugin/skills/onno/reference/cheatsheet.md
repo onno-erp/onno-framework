@@ -267,7 +267,11 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
     `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
-    refresh, and an unregistered type degrades to the default grid (no toggle).
+    refresh, and an unregistered type degrades to the default grid (no toggle); `rowStyle(row →
+    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow` as
+    state-aware actions), returns `ListSpec.RowStyle.DANGER/WARNING/SUCCESS/ACCENT/MUTED` or `null`
+    (default look); the grid renders a theme-aware translucent wash (e.g. urgent rows red, cancelled
+    faded), also inside expanded groups; a throwing function = `null` for that row.
   - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
@@ -285,7 +289,12 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     with `ctx.inputRows(key)` → `List<Map<String,String>>` (`.required()` = at least one row).
     Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
-    (`id()`, `text(col)`, `enumValue(col,Type)`), evaluated as the list renders (#116).
+    (`id()`, `text(col)`, `enumValue(col,Type)`, `bool(col)`), evaluated as the list renders (#116).
+    The **same functions apply to a `DETAIL` action**, evaluated against the loaded record as the
+    record surface renders (#255) — a header button can hide/relabel/grey itself by the record's
+    state (`visibleWhen` false drops it; `enabledWhen` false greys it); two DETAIL actions with
+    complementary `visibleWhen` swap a plain button for a form-opening one in a specific state.
+    TOOLBAR actions have no record context (fixed icon/label).
     `menu("Change status")` moves a ROW action off the inline row buttons into the row's
     **right-click context menu**, under a submenu with that label (same-label actions group; one
     action per enum value is the idiom). `color("#…")` renders a compact swatch for menu entries
