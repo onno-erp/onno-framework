@@ -214,7 +214,12 @@ function chartDataFromBuckets(
     };
   }
   const round = opts.kind === "donut" || opts.kind === "pie";
-  const built = seriesFromBuckets(buckets, {
+  // A pie/donut has no axis: the server's zero-filled empty periods (#246) would only add
+  // zero-value slices to the legend, so drop them here.
+  const shaped = round
+    ? { ...buckets, buckets: buckets.buckets.filter((b) => b.value !== 0 || (b.value2 ?? 0) !== 0) }
+    : buckets;
+  const built = seriesFromBuckets(shaped, {
     groupBy: config.groupBy,
     groupByDate: opts.granularity,
     seriesBy: round ? undefined : opts.seriesBy,

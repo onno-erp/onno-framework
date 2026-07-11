@@ -461,6 +461,9 @@ export function seriesFromBuckets(resp: AggregateBuckets, spec: SeriesSpec): Ser
       bucket = { sortKey: key, label, iso, series: new Map() };
       buckets.set(key, bucket);
     }
+    // A zero-fill filler for an empty period (#246) carries no series: keep the bucket on the
+    // axis but don't materialize a spurious "—" series — the wide rows read 0 for every series.
+    if (spec.seriesBy && b.series == null && b.seriesLabel == null && !b.value) continue;
     const seriesKey = spec.seriesBy ? b.seriesLabel ?? bucketLabel(b.series) : SINGLE_SERIES;
     bucket.series.set(seriesKey, (bucket.series.get(seriesKey) ?? 0) + b.value);
     seriesTotals.set(seriesKey, (seriesTotals.get(seriesKey) ?? 0) + b.value);
