@@ -4,12 +4,37 @@
     "name": "onno-erp",
     "url": "https://github.com/onno-erp"
   },
-  "description": "Skills for building ERP applications on the onno-framework.",
+  "metadata": {
+    "description": "Agent skills for building ERP applications on the onno-framework.",
+    "version": "0.0.3"
+  },
   "plugins": [
     {
       "name": "onno",
       "source": "./onno-plugin",
-      "description": "Expert playbook for building apps on the onno-framework (catalogs, documents, registers, posting, schema migration, the generic REST/DivKit UI, MCP, auth/RBAC)."
+      "description": "Skills for building apps on the onno-framework (catalogs, documents, registers, posting, schema migration, generic UI, MCP, auth/RBAC).",
+      "skills": [
+        "./skills/onno",
+        "./skills/onno-modeling",
+        "./skills/onno-modeling-interview",
+        "./skills/onno-catalogs-enums",
+        "./skills/onno-documents-lines",
+        "./skills/onno-registers",
+        "./skills/onno-rules-lifecycle",
+        "./skills/onno-schema-migrations",
+        "./skills/onno-ui",
+        "./skills/onno-ui-layout-pages",
+        "./skills/onno-ui-entity-views",
+        "./skills/onno-ui-widgets",
+        "./skills/onno-posting",
+        "./skills/onno-runtime",
+        "./skills/onno-runtime-api",
+        "./skills/onno-auth-rbac",
+        "./skills/onno-mcp",
+        "./skills/onno-testing-release",
+        "./skills/onno-extensions",
+        "./skills/onno-connectors"
+      ]
     }
   ]
 }

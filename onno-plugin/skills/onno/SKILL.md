@@ -24,6 +24,22 @@ Java packages are `su.onno.*`. Maven group is `su.onno` (open core, Apache-2.0);
 commercial connectors are `su.onno.enterprise`. Desktop Gradle plugin id is `su.onno.desktop`.
 Requires Java 21 and Spring Boot 3.4.x.
 
+## Focused sibling skills
+
+Use this skill for overview, routing, and cross-cutting work. For hands-on tasks, prefer the focused
+skill that owns the surface:
+
+| Task | Skill |
+| --- | --- |
+| Interviewing/modeling a business into concepts | `onno-modeling` |
+| Running the discovery interview / deciding what to ask | `onno-modeling-interview` |
+| Catalogs, enums, documents, registers | `onno-catalogs-enums`, `onno-documents-lines`, `onno-registers` |
+| Rules, lifecycle defaults, schema migration | `onno-rules-lifecycle`, `onno-schema-migrations` |
+| Layout/Page/EntityView/custom widgets/UI polish | `onno-ui` |
+| Posting, rules, lifecycle hooks, register movements | `onno-posting` |
+| Auth, REST/MCP/runtime verification, testing | `onno-auth-rbac`, `onno-runtime-api`, `onno-mcp`, `onno-testing-release` |
+| Community integrations, starters, connectors, plugins | `onno-extensions`, `onno-connectors` |
+
 ## First principle: model the business before writing code
 
 Do not start from tables or controllers. Ask what the company does, what it tracks, what documents

@@ -22,8 +22,9 @@ to future agents that may not have the full conversation context.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
 - `onno-ui-starter` builds a bundled frontend with Node 20 via Gradle.
 - The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onno.*`
-  property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); a hands-on playbook with the
-  concept cheat sheet lives in the [`onno` skill](onno-plugin/skills/onno/SKILL.md).
+  property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); hands-on playbooks live in the
+  [`onno` skills](onno-plugin/skills/onno/SKILL.md), with focused entries for modeling, UI, posting,
+  runtime verification, and extensions.
 
 ### Repo Map
 
@@ -84,7 +85,7 @@ see, that module's `META-INF/additional-spring-configuration-metadata.json` — 
 | a feature that was on the roadmap | move it from "next work" to "current state" in [ROADMAP.md](ROADMAP.md) |
 
 The deepest hands-on guidance for modeling and editing the framework lives in the
-[`onno` skill](onno-plugin/skills/onno/SKILL.md); keep it aligned with these docs too.
+[`onno` skills](onno-plugin/skills/onno/SKILL.md); keep the focused skills aligned with these docs too.
 
 ### Build And Verification Commands
 

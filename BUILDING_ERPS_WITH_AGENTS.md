@@ -4,8 +4,8 @@ This guide is for teams and AI coding agents using the published `onno-framework
 
 Use this file as the agent handoff document in the consuming ERP repo. It explains how to install the libraries, how to model business domains, and how to verify that the generated ERP surface is coherent.
 
-> **Tip — install the `onno` skill.** For the best results with Claude Code, install the skill that
-> packages this guidance as an always-available expert playbook (this framework's repo doubles as a
+> **Tip — install the `onno` skills.** For the best results with Claude Code, install the skill bundle
+> that packages this guidance as always-available expert playbooks (this framework's repo doubles as a
 > plugin marketplace):
 >
 > ```text
@@ -13,7 +13,12 @@ Use this file as the agent handoff document in the consuming ERP repo. It explai
 > /plugin install onno@onno-framework
 > ```
 >
-> It auto-loads when you model entities, write posting/validation, or call the runtime API.
+> It auto-loads when you model entities, write posting/validation, author UI metadata, build
+> extensions, or call the runtime API. You can also invoke focused entries such as
+> `/onno:onno-modeling-interview`, `/onno:onno-catalogs-enums`,
+> `/onno:onno-documents-lines`, `/onno:onno-registers`, `/onno:onno-posting`,
+> `/onno:onno-ui-entity-views`, `/onno:onno-runtime-api`, `/onno:onno-schema-migrations`,
+> `/onno:onno-testing-release`, and `/onno:onno-extensions`.
 
 ## What The Framework Does
 

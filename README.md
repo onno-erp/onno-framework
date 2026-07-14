@@ -28,7 +28,7 @@ by [`.github/workflows/docs.yml`](.github/workflows/docs.yml)).
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute code and how to list a community integration. |
 | [INTEGRATIONS.md](INTEGRATIONS.md) | Catalog of community-built integrations (generated from `community/registry.json`). |
 | Java API (Javadoc) | Aggregated API reference at [`/api`](https://docs.onno.su/api/) on the docs site (`./gradlew aggregateJavadoc`). |
-| [`onno` skill](onno-plugin/skills/onno/SKILL.md) | A hands-on expert playbook + cheat sheet that makes Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
+| [`onno` skills](onno-plugin/skills/onno/SKILL.md) | Focused agent skills that make Claude Code good at this framework. Auto-loaded for anyone working in this repo; installable by downstream apps (see below). |
 
 Each module also has its own `README.md` with integration-specific setup.
 
@@ -53,14 +53,14 @@ mkdir -p docs/public/api && cp -R build/docs/javadoc/. docs/public/api/   # stag
 cd docs && npm install && npm run docs:dev          # http://localhost:5173/onno-framework/
 ```
 
-### Using the onno skill
+### Using the onno skills
 
-The `onno` skill teaches Claude Code to model a business into framework concepts, get posting /
-validation / migration right, and use the runtime API — the canonical copy lives in
-[`onno-plugin/skills/onno/`](onno-plugin/skills/onno/SKILL.md).
+The `onno` plugin teaches Claude Code to model a business into framework concepts, get posting /
+validation / migration right, author the generated UI, build extensions, and verify the runtime API.
+The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/SKILL.md).
 
-- **Working in this repo?** It's auto-discovered — `.claude/skills/onno` is a symlink to the canonical
-  copy, so Claude Code loads it with no setup.
+- **Working in this repo?** They're auto-discovered — `.claude/skills/*` symlinks point to the
+  canonical plugin copies, so Claude Code loads them with no setup.
 - **Building a separate app on the published artifacts?** Install it as a plugin (this repo doubles as
   a plugin marketplace via [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)):
 
@@ -69,7 +69,28 @@ validation / migration right, and use the runtime API — the canonical copy liv
   /plugin install onno@onno-framework
   ```
 
-  Claude then auto-invokes it when relevant (or run `/onno:onno` explicitly).
+  Claude then auto-invokes the relevant skill, or you can run one explicitly:
+
+  | Skill | Use it for |
+  | --- | --- |
+  | `/onno:onno` | Overview, architecture routing, cross-cutting framework work |
+  | `/onno:onno-modeling-interview` | What to ask the user and how to extract the model |
+  | `/onno:onno-modeling` | Overall modeling workflow and concept routing |
+  | `/onno:onno-catalogs-enums` | Master data, refs, enums, labels, soft delete |
+  | `/onno:onno-documents-lines` | Business events, document headers, tabular sections |
+  | `/onno:onno-registers` | Balance, turnover, and information registers |
+  | `/onno:onno-rules-lifecycle` | Defaults, derived fields, validation hooks |
+  | `/onno:onno-schema-migrations` | Renames, generated schema diffs, data migrations |
+  | `/onno:onno-posting` | Register movements, post/unpost side effects |
+  | `/onno:onno-ui-layout-pages` | Sidebar, personas, dashboards, pages |
+  | `/onno:onno-ui-entity-views` | Lists, forms, actions, filters, related lists |
+  | `/onno:onno-ui-widgets` | Built-in and custom React widgets |
+  | `/onno:onno-runtime-api` | Authenticated REST/API smoke tests |
+  | `/onno:onno-auth-rbac` | Auth modes, roles, `@AccessControl`, CSRF |
+  | `/onno:onno-mcp` | MCP tool surface and client workflow |
+  | `/onno:onno-testing-release` | Gradle checks, docs generation, Maven local verification |
+  | `/onno:onno-extensions` | Community extensions and starter contracts |
+  | `/onno:onno-connectors` | External API connector patterns |
 
 ## Modules
 
