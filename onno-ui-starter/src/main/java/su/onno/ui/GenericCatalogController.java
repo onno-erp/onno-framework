@@ -20,17 +20,20 @@ public class GenericCatalogController {
     private final CatalogCommandService commands;
     private final RelatedListReader relatedLists;
     private final UiMessages messages;
+    private final BatchRunner batch;
 
     public GenericCatalogController(CatalogQueryService query,
                                     UiAccessService access,
                                     CatalogCommandService commands,
                                     RelatedListReader relatedLists,
-                                    UiMessages messages) {
+                                    UiMessages messages,
+                                    BatchRunner batch) {
         this.query = query;
         this.access = access;
         this.commands = commands;
         this.relatedLists = relatedLists;
         this.messages = messages;
+        this.batch = batch;
     }
 
     @GetMapping("/{name}")
@@ -144,27 +147,15 @@ public class GenericCatalogController {
     /**
      * Soft-delete a set of records in one request — the list's batch selection posts here instead
      * of firing N single DELETEs. Per-id failures are recorded and the batch continues; returns
-     * {@code {ok, failed, total}}. Capped like the action batch (see ActionController.BATCH_LIMIT).
+     * {@code {ok, failed, total}}. Ids run concurrently on the shared {@link BatchRunner} pool
+     * ({@code onno.ui.batch.parallelism}). Capped like the action batch (see
+     * ActionController.BATCH_LIMIT).
      */
     @PostMapping("/{name}/batch-delete")
     public Map<String, Object> batchDelete(@PathVariable String name,
                                            @RequestBody Map<String, Object> body, Principal principal) {
         CatalogDescriptor desc = query.require(name);
         List<UUID> ids = ActionController.idList(body);
-        int ok = 0;
-        List<String> failed = new java.util.ArrayList<>();
-        for (UUID rid : ids) {
-            try {
-                commands.delete(desc, rid, principal);
-                ok++;
-            } catch (RuntimeException e) {
-                failed.add(rid.toString());
-            }
-        }
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("ok", ok);
-        out.put("failed", failed);
-        out.put("total", ids.size());
-        return out;
+        return batch.run(ids, rid -> commands.delete(desc, rid, principal));
     }
 }

@@ -15,7 +15,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,14 +35,17 @@ public class ActionController {
     private final UiAccessService access;
     private final UiActionResolver actions;
     private final UiProperties properties;
+    private final BatchRunner batch;
 
     public ActionController(CatalogQueryService catalogQuery, DocumentQueryService documentQuery,
-                            UiAccessService access, UiActionResolver actions, UiProperties properties) {
+                            UiAccessService access, UiActionResolver actions, UiProperties properties,
+                            BatchRunner batch) {
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
         this.access = access;
         this.actions = actions;
         this.properties = properties;
+        this.batch = batch;
     }
 
     /**
@@ -94,10 +96,11 @@ public class ActionController {
 
     /**
      * Run a server action over a set of records in one request — the list's batch selection posts
-     * here instead of firing N single calls. The handler is invoked per id, sequentially, in the
-     * request's transaction-per-invocation semantics (identical to N single calls, minus the HTTP
-     * round-trips); a failing id is recorded and the batch continues. Returns {@code {ok, failed,
-     * total}} so the client can toast a summary. Capped at {@link #BATCH_LIMIT} ids.
+     * here instead of firing N single calls. The handler is invoked per id in its own
+     * transaction-per-invocation semantics (identical to N single calls, minus the HTTP round-trips);
+     * a failing id is recorded and the batch continues. Ids are resolved concurrently on the shared
+     * {@link BatchRunner} pool ({@code onno.ui.batch.parallelism}). Returns {@code {ok, failed, total}}
+     * so the client can toast a summary. Capped at {@link #BATCH_LIMIT} ids.
      */
     @PostMapping("/{kind}/{name}/{key}/batch")
     public Map<String, Object> runBatch(@PathVariable String kind, @PathVariable String name,
@@ -110,22 +113,8 @@ public class ActionController {
         String user = principal != null ? principal.getName() : null;
         // Parse the shared inputs/rows once; each id runs with the same collected values.
         ActionContext shared = ActionContext.from(kind, name, null, user, body);
-        int ok = 0;
-        List<String> failed = new ArrayList<>();
-        for (UUID id : ids) {
-            try {
-                action.handler().apply(
-                        new ActionContext(kind, name, id, user, shared.inputs(), shared.rows()));
-                ok++;
-            } catch (RuntimeException e) {
-                failed.add(id.toString());
-            }
-        }
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("ok", ok);
-        out.put("failed", failed);
-        out.put("total", ids.size());
-        return out;
+        return batch.run(ids, id -> action.handler().apply(
+                new ActionContext(kind, name, id, user, shared.inputs(), shared.rows())));
     }
 
     /** Parse and bound the {@code {"ids": [...]}} list of a batch request. */
