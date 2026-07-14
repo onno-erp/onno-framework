@@ -660,19 +660,29 @@ function TabularSectionEditor({
   const colClass = (a: AttributeMeta) =>
     isBoolCol(a) ? "shrink-0 basis-20" : "min-w-0 grow basis-44";
 
+  // The add-row control sits under the last row — where the new row will appear — so adding
+  // reads as "continue the grid downwards", not a jump back up to the header.
+  const addRowBtn = readOnly ? null : (
+    <button
+      type="button"
+      onClick={onAdd}
+      className="mt-1 flex w-full items-center gap-1.5 rounded-control border border-dashed border-border px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      <Plus className="size-4" aria-hidden="true" />
+      {t("action.addRow")}
+    </button>
+  );
+
   return (
     <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        {readOnly ? null : (
-          <button type="button" className={cn(actionBtn, "text-foreground")} onClick={onAdd}>
-            <Plus className="size-4" aria-hidden="true" />
-            {t("action.addRow")}
-          </button>
-        )}
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
+        <>
+          <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
+          {addRowBtn}
+        </>
       ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[28rem]">
@@ -725,6 +735,7 @@ function TabularSectionEditor({
                 </div>
               ))}
             </div>
+            {addRowBtn}
           </div>
         </div>
       )}

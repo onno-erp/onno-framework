@@ -203,7 +203,20 @@ export function ActionFormDialog({
 
   // Mirrors the entity form's TabularSectionEditor so an action's row group looks and behaves like a
   // document's @TabularSection editor: a titled card, a header row of column labels, one compact flex
-  // line per row with the same cell controls, a hover-fade remove, and a top-right "Add row".
+  // line per row with the same cell controls, a hover-fade remove, and "Add row" under the last row
+  // (where the new row appears).
+  const groupAddRowBtn = (g: ActionFormGroup) => (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => addRow(g)}
+      className="mt-1 flex w-full items-center gap-1.5 rounded-control border border-dashed border-border px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+    >
+      <Plus className="size-4" aria-hidden="true" />
+      Add row
+    </button>
+  );
+
   const groupGrid = (g: ActionFormGroup) => (
     <div key={g.key} className="rounded-card border border-border bg-card p-4 sm:p-5">
       <div className="mb-3 flex items-center justify-between">
@@ -211,18 +224,12 @@ export function ActionFormDialog({
           {g.label}
           {g.required ? <span className="ml-0.5 text-destructive">*</span> : null}
         </h3>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => addRow(g)}
-          className="inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-50"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          Add row
-        </button>
       </div>
       {(rows[g.key] ?? []).length === 0 ? (
-        <p className="text-sm text-muted-foreground">No rows yet.</p>
+        <>
+          <p className="text-sm text-muted-foreground">No rows yet.</p>
+          {groupAddRowBtn(g)}
+        </>
       ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[28rem]">
@@ -260,6 +267,7 @@ export function ActionFormDialog({
                 </div>
               ))}
             </div>
+            {groupAddRowBtn(g)}
           </div>
         </div>
       )}
