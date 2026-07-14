@@ -17,6 +17,7 @@ import type {
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar, RangeCalendar } from "@/components/ui/calendar";
+import { useMessages } from "@/providers/messages-provider";
 
 const inputCls =
   "flex h-10 w-full items-center gap-1 rounded-field border border-input bg-muted px-3 py-1 text-sm shadow-sm transition-all hover:border-ring/40 data-[focus-within=true]:border-ring data-[focus-within=true]:ring-2 data-[focus-within=true]:ring-ring/40 data-[disabled=true]:opacity-50";
@@ -38,6 +39,7 @@ export function DateInput<T extends DateValue>({
   withCalendar = true,
   ...props
 }: DateInputProps<T>) {
+  const t = useMessages();
   return (
     <AriaDatePicker {...props} className={cn("w-full", className)}>
       <Group className={inputCls}>
@@ -45,7 +47,7 @@ export function DateInput<T extends DateValue>({
           {(segment) => <DateSegment segment={segment} className={segmentCls} />}
         </AriaDateInput>
         {withCalendar && (
-          <AriaButton className={calendarBtnCls} aria-label="Open calendar">
+          <AriaButton className={calendarBtnCls} aria-label={t("calendar.open")}>
             <CalendarIcon className="h-4 w-4" />
           </AriaButton>
         )}
@@ -72,6 +74,7 @@ export function DateRangeInput<T extends DateValue>({
   numberOfMonths = 2,
   ...props
 }: DateRangeInputProps<T>) {
+  const t = useMessages();
   return (
     <AriaDateRangePicker {...props} className={cn("w-full", className)}>
       <Group className={inputCls}>
@@ -84,7 +87,7 @@ export function DateRangeInput<T extends DateValue>({
         <AriaDateInput slot="end" className="flex flex-1 items-center">
           {(segment) => <DateSegment segment={segment} className={segmentCls} />}
         </AriaDateInput>
-        <AriaButton className={calendarBtnCls} aria-label="Open calendar">
+        <AriaButton className={calendarBtnCls} aria-label={t("calendar.open")}>
           <CalendarIcon className="h-4 w-4" />
         </AriaButton>
       </Group>

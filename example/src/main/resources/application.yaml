@@ -14,6 +14,7 @@ server:
     include-message: always
 onno:
   ui:
+    locale: ru
     # One-tap demo logins on the sign-in screen (demo-only: passwords reach the browser). Each button
     # signs in as the matching in-memory user below, so an evaluator never types the email/password.
     login:

@@ -6,6 +6,8 @@
  * to window is needed (charts, logs, registers, the calendar), not just the chart widget.
  */
 
+import type { Translate } from "@/lib/messages";
+
 /** Duration units. Grafana's convention so they don't collide: `m` = minute, `M` = month. */
 export type TimeUnit = "s" | "m" | "h" | "d" | "w" | "M" | "y";
 
@@ -77,21 +79,22 @@ export function presetById(presets: RangePreset[], id: string): RangePreset | un
   return presets.find((p) => p.id === id);
 }
 
-const UNIT_WORD: Record<TimeUnit, [string, string]> = {
-  s: ["second", "seconds"],
-  m: ["minute", "minutes"],
-  h: ["hour", "hours"],
-  d: ["day", "days"],
-  w: ["week", "weeks"],
-  M: ["month", "months"],
-  y: ["year", "years"],
+const UNIT_WORD: Record<TimeUnit, [string, string, string, string]> = {
+  s: ["second", "seconds", "timeRange.lastSecond", "timeRange.lastSeconds"],
+  m: ["minute", "minutes", "timeRange.lastMinute", "timeRange.lastMinutes"],
+  h: ["hour", "hours", "timeRange.lastHour", "timeRange.lastHours"],
+  d: ["day", "days", "timeRange.lastDay", "timeRange.lastDays"],
+  w: ["week", "weeks", "timeRange.lastWeek", "timeRange.lastWeeks"],
+  M: ["month", "months", "timeRange.lastMonth", "timeRange.lastMonths"],
+  y: ["year", "years", "timeRange.lastYear", "timeRange.lastYears"],
 };
 
 /** A human label for a quick-pick: `30d` → "Last 30 days", `1h` → "Last hour", `all` → "All time". */
-export function presetLabel(preset: RangePreset): string {
-  if (preset.range.kind === "all") return "All time";
+export function presetLabel(preset: RangePreset, t?: Translate): string {
+  if (preset.range.kind === "all") return t ? t("timeRange.allTime") : "All time";
   const { amount, unit } = preset.range;
-  const [one, many] = UNIT_WORD[unit];
+  const [one, many, oneKey, manyKey] = UNIT_WORD[unit];
+  if (t) return amount === 1 ? t(oneKey) : t(manyKey, { n: amount });
   return amount === 1 ? `Last ${one}` : `Last ${amount} ${many}`;
 }
 

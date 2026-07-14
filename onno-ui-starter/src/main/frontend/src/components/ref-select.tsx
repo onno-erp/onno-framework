@@ -49,6 +49,7 @@ function displayOf(item: EntityRecord): string {
  * it's always reachable regardless of how many matches there are.
  */
 export function RefSelect({ targetName, refKind = "catalog", secondaryField, value, onChange }: RefSelectProps) {
+  const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
   const [open, setOpen] = useState(false);
@@ -134,9 +135,13 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="flex h-9 w-full items-center justify-between gap-2 rounded-control border border-input bg-muted px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+      className="flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-md border border-input bg-muted px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
     >
-      {selected ? <RefRow item={selected} /> : <span className="text-muted-foreground">Select {targetName}…</span>}
+      {selected ? (
+        <RefRow item={selected} />
+      ) : (
+        <span className="min-w-0 truncate text-muted-foreground">{t("form.select", { name: targetName })}</span>
+      )}
       <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );
@@ -160,7 +165,7 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
       <>
         {trigger}
         {open ? (
-          <FacetSheet label={`Select ${targetName}`} onClose={() => setOpen(false)}>
+          <FacetSheet label={t("form.select", { name: targetName })} onClose={() => setOpen(false)}>
             {content}
           </FacetSheet>
         ) : null}
@@ -245,6 +250,7 @@ function RefSelectOptions({
 }
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useMessages();
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     // Focus the search input when the popover mounts.
@@ -258,7 +264,7 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
         ref={ref}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search…"
+        placeholder={t("list.search")}
         className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
     </div>
@@ -277,7 +283,7 @@ function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string })
   const sub = secondary ? item[secondary] : undefined;
   const subText = sub == null ? "" : String(sub);
   return (
-    <span className="inline-flex min-w-0 items-center gap-2" title={code ? `${display} · ${code}` : display}>
+    <span className="inline-flex min-w-0 flex-1 items-center gap-2" title={code ? `${display} · ${code}` : display}>
       {avatarUrl ? (
         <Avatar className="h-5 w-5 text-[9px]">
           <AvatarImage src={avatarUrl} alt={display} />

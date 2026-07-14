@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Drawer } from "vaul";
+import { useMessages } from "@/providers/messages-provider";
 
 /**
  * Responsive overlay primitives shared by every faceted control (list filter bar, dashboard time
@@ -51,6 +52,7 @@ export function FacetSheet({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const t = useMessages();
   const overlay = useFacetOverlay();
   const onOpenChange = (open: boolean) => {
     if (!open) onClose();
@@ -70,13 +72,13 @@ export function FacetSheet({
   if (overlay === "modal") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
-        <button type="button" aria-label="Close" className="absolute inset-0 bg-black/50" onClick={onClose} />
+        <button type="button" aria-label={t("action.close")} className="absolute inset-0 bg-black/50" onClick={onClose} />
         <div className="relative flex max-h-[82dvh] w-full max-w-xl flex-col overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none">
           <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
             <span className="text-sm font-medium">{label}</span>
             <button
               type="button"
-              aria-label="Close"
+              aria-label={t("action.close")}
               onClick={onClose}
               className="grid size-8 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/10"
             >
@@ -100,7 +102,7 @@ export function FacetSheet({
             <span className="text-sm font-medium">{label}</span>
             <button
               type="button"
-              aria-label="Close"
+              aria-label={t("action.close")}
               onClick={onClose}
               className="grid size-8 place-items-center rounded-md text-muted-foreground transition hover:bg-foreground/10"
             >

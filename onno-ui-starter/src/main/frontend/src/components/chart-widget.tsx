@@ -56,6 +56,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { TimeRangeFacet } from "@/components/date-range-facet";
 import { cn } from "@/lib/utils";
+import { useMessages } from "@/providers/messages-provider";
 
 interface ChartWidgetProps {
   widget: DashboardWidgetMeta;
@@ -341,6 +342,7 @@ function dataSpanDays(rows: EntityRecord[], dateField: string): number {
 }
 
 export function ChartWidget({ widget }: ChartWidgetProps) {
+  const t = useMessages();
   const config = useMemo(() => readConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
   const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
@@ -510,7 +512,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       </CardHeader>
       <CardContent className="p-4 pt-2">
         {(config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0) ? (
-          <div className="flex h-[210px] items-center justify-center text-xs text-muted-foreground">No data yet</div>
+          <div className="flex h-[210px] items-center justify-center text-xs text-muted-foreground">{t("empty.noData")}</div>
         ) : (
           <ResponsiveChart height={round && !config.combo ? 230 : 210}>
             {config.combo && comboData
@@ -884,6 +886,7 @@ function renderCombo(
  * `<n><unit>`, plus `all`) and {@code config("default", "30d")}.
  */
 export function TimeRangeWidget({ widget }: ChartWidgetProps) {
+  const t = useMessages();
   const { range, presets, setPreset, setAbsolute, configure } = useTimeRange();
   const presetsCsv = widget.extraConfig?.presets;
   const defaultId = widget.extraConfig?.default;
@@ -893,7 +896,7 @@ export function TimeRangeWidget({ widget }: ChartWidgetProps) {
   return (
     <div className="flex items-center justify-end">
       <TimeRangeFacet
-        label="Date range"
+        label={t("timeRange.dateRange")}
         presets={presets}
         range={range}
         onPreset={setPreset}

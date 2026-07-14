@@ -115,6 +115,10 @@ DivKit builders read it directly, and it rides along on `GET /api/config` as a `
 web client overlays on its bundled defaults. Scope is **one language per deployment** — there is no
 `Accept-Language` negotiation or runtime locale switch.
 
+Set `onno.ui.locale` to use a built-in chrome bundle (onno ships `ru`) and to pass the same locale
+to browser-owned date controls, including the record-form date picker and calendar widgets. Explicit
+`onno.ui.messages.*` keys still win over the bundle for individual labels.
+
 Because the keys contain dots, quote them in YAML so they bind as literal map keys (in a `.properties`
 file use bracket notation: `onno.ui.messages[action.new]=Новый`):
 
@@ -133,8 +137,9 @@ onno:
       "empty.noRecords": "Нет записей"
 ```
 
-This is distinct from `config("locale", …)` (see [`config(key, value)` reference](#configkey-value-reference)),
-which only drives `Intl` number/currency formatting — it does not translate any chrome string.
+This is distinct from widget-level `config("locale", …)` (see
+[`config(key, value)` reference](#configkey-value-reference)), which only drives that widget's
+`Intl` number/currency formatting — it does not translate chrome strings.
 
 ## REST endpoints
 
@@ -1010,7 +1015,7 @@ best-effort — a dropped ping costs at most one TTL of staleness.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/theme` | The `onno.ui.theme.*` map. |
-| GET | `/api/config` | `{ readOnly, basePath, messages }` (the resolved chrome-string map — see [Localizing the chrome](#localizing-the-chrome)), plus `update: { available, current, latest, url }` when the update check is enabled. |
+| GET | `/api/config` | `{ readOnly, basePath, locale, messages }` (`locale` is `onno.ui.locale`; `messages` is the resolved chrome-string map — see [Localizing the chrome](#localizing-the-chrome)), plus `update: { available, current, latest, url }` when the update check is enabled. |
 | GET | `/api/events` | Server-Sent Events stream of CRUD/posting changes and `presence` viewer-set updates (`text/event-stream`). The SPA shares **one** such connection across all tabs of an origin (leader elected via the Web Locks API, events rebroadcast over a `BroadcastChannel`), so many open tabs don't exhaust the browser's per-origin connection limit. |
 
 > **There is no `/api/ui/metadata/manifest` endpoint** (no module serves it; the only `/manifest`

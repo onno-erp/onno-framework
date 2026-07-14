@@ -18,14 +18,16 @@ import type {
 } from "react-aria-components";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAppLocale, useMessages } from "@/providers/messages-provider";
 
 const navBtnCls =
   "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed";
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+function monthNames(locale?: string): string[] {
+  return Array.from({ length: 12 }, (_, i) =>
+    new Intl.DateTimeFormat(locale || undefined, { month: "long" }).format(new Date(2026, i, 1))
+  );
+}
 
 const baseCellCls = cn(
   "relative inline-flex h-9 w-9 cursor-pointer items-center justify-center text-sm rounded-lg outline-none transition-colors",
@@ -162,6 +164,8 @@ function HeaderDropdown({
 // Reads the live calendar state via context (works for both single and range calendars)
 // and moves the focused date on change.
 function CalendarTopBar({ className }: CalendarHeaderProps) {
+  const locale = useAppLocale();
+  const t = useMessages();
   const single = React.useContext(CalendarStateContext);
   const range = React.useContext(RangeCalendarStateContext);
   const state = single ?? range;
@@ -179,27 +183,28 @@ function CalendarTopBar({ className }: CalendarHeaderProps) {
   const go = (fields: { month?: number; year?: number }) => {
     if (state && focused) state.setFocusedDate(focused.set({ day: 1, ...fields }));
   };
+  const months = React.useMemo(() => monthNames(locale), [locale]);
 
   return (
     <header className={cn("mb-2 flex items-center gap-1.5", className)}>
-      <AriaButton slot="previous" className={navBtnCls} aria-label="Previous">
+      <AriaButton slot="previous" className={navBtnCls} aria-label={t("calendar.previous")}>
         <ChevronLeft className="h-4 w-4" />
       </AriaButton>
       <div className="flex flex-1 items-center justify-center gap-0.5">
         <HeaderDropdown
-          ariaLabel="Month"
+          ariaLabel={t("calendar.monthPicker")}
           value={focused?.month ?? 1}
-          options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+          options={months.map((m, i) => ({ value: i + 1, label: m }))}
           onPick={(month) => go({ month })}
         />
         <HeaderDropdown
-          ariaLabel="Year"
+          ariaLabel={t("calendar.yearPicker")}
           value={focused?.year ?? new Date().getFullYear()}
           options={years}
           onPick={(year) => go({ year })}
         />
       </div>
-      <AriaButton slot="next" className={navBtnCls} aria-label="Next">
+      <AriaButton slot="next" className={navBtnCls} aria-label={t("calendar.next")}>
         <ChevronRight className="h-4 w-4" />
       </AriaButton>
     </header>

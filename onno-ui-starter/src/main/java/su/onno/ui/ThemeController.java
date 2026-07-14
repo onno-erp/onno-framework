@@ -41,6 +41,7 @@ public class ThemeController {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("readOnly", properties.isReadOnly());
         out.put("basePath", properties.getPath());
+        out.put("locale", properties.getLocale());
         // The resolved chrome strings (English defaults + onno.ui.messages overrides). The web
         // client overlays this on its bundled defaults so the whole shell — buttons, dialogs,
         // login, empty/loading states, validation — speaks the app's configured language.

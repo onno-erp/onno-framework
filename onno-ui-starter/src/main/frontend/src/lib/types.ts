@@ -151,6 +151,9 @@ export interface RegisterMeta {
 export interface AppConfig {
   readOnly: boolean;
   basePath: string;
+  // BCP-47 locale configured by onno.ui.locale. The client uses it for date inputs, calendars, and
+  // locale-sensitive widgets; absent on older servers means browser/default English behavior.
+  locale?: string;
   // The framework's chrome strings (English defaults + onno.ui.messages overrides), keyed by the
   // ids in lib/messages.ts. MessagesProvider overlays this on the bundled defaults.
   messages?: Record<string, string>;

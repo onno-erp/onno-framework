@@ -78,6 +78,41 @@ public final class UiMessages {
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");
+        d.put("action.close", "Close");
+
+        // Calendar/date controls (React date inputs and dashboard calendar widgets).
+        d.put("calendar.today", "Today");
+        d.put("calendar.month", "Month");
+        d.put("calendar.week", "Week");
+        d.put("calendar.previous", "Previous");
+        d.put("calendar.next", "Next");
+        d.put("calendar.monthPicker", "Month");
+        d.put("calendar.yearPicker", "Year");
+        d.put("calendar.open", "Open calendar");
+        d.put("calendar.readOnly", "read only");
+        d.put("calendar.emptyThisMonth", "No {name} this month.");
+
+        // Time-range picker chrome (dashboard shared date-range control).
+        d.put("timeRange.dateRange", "Date range");
+        d.put("timeRange.custom", "Custom");
+        d.put("timeRange.allTime", "All time");
+        d.put("timeRange.lastSecond", "Last second");
+        d.put("timeRange.lastSeconds", "Last {n} seconds");
+        d.put("timeRange.lastMinute", "Last minute");
+        d.put("timeRange.lastMinutes", "Last {n} minutes");
+        d.put("timeRange.lastHour", "Last hour");
+        d.put("timeRange.lastHours", "Last {n} hours");
+        d.put("timeRange.lastDay", "Last day");
+        d.put("timeRange.lastDays", "Last {n} days");
+        d.put("timeRange.lastWeek", "Last week");
+        d.put("timeRange.lastWeeks", "Last {n} weeks");
+        d.put("timeRange.lastMonth", "Last month");
+        d.put("timeRange.lastMonths", "Last {n} months");
+        d.put("timeRange.lastYear", "Last year");
+        d.put("timeRange.lastYears", "Last {n} years");
+
+        // Shared select/bottom-sheet accessibility labels.
+        d.put("select.option", "Select option");
 
         // Document posting status.
         d.put("status.posted", "Posted");
@@ -211,6 +246,7 @@ public final class UiMessages {
         d.put("empty.noRecords", "No records");
         d.put("empty.noMatches", "No matches");
         d.put("empty.noRows", "No rows yet.");
+        d.put("empty.noData", "No data yet");
         d.put("loading.workspace", "Loading workspace...");
         d.put("loading.generic", "Loading…");
         d.put("loading.searching", "Searching…");
@@ -235,6 +271,7 @@ public final class UiMessages {
         // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
         d.put("form.staleChanged", "This record changed elsewhere.");
         d.put("form.reload", "Reload");
+        d.put("form.tabularEmptyHint", "Add the first row to start filling this section.");
         d.put("ref.new", "New {name}");
         d.put("relatedList.saveFirstManage", "Save this record first to manage {name}.");
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");

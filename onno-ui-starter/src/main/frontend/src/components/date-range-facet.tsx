@@ -4,9 +4,9 @@ import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, t
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FacetSheet, SheetDoneButton, useTouchLayout } from "@/components/ui/facet-sheet";
+import { FacetSheet, SheetDoneButton, useFacetOverlay } from "@/components/ui/facet-sheet";
 import { RangeCalendar } from "@/components/ui/calendar";
-import { useMessages } from "@/providers/messages-provider";
+import { useAppLocale, useMessages } from "@/providers/messages-provider";
 import { presetLabel, sameRange, type RangePreset, type TimeRange } from "@/lib/time-range";
 
 /**
@@ -39,9 +39,9 @@ export function FacetValueBadge({ children }: { children: ReactNode }) {
 }
 
 /** Short, locale-aware day label ("May 9") for a stored ISO date, shown inside the date-range chip. */
-export function fmtDay(iso: string): string {
+export function fmtDay(iso: string, locale?: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
+    return new Intl.DateTimeFormat(locale || undefined, { month: "short", day: "numeric" }).format(
       new Date(`${iso}T00:00`)
     );
   } catch {
@@ -217,6 +217,7 @@ export function TimeRangeFacet({
   onAbsolute: (from?: string, to?: string) => void;
 }) {
   const t = useMessages();
+  const locale = useAppLocale();
   const [open, setOpen] = useState(false);
   const abs = range.kind === "absolute" ? range : null;
   const dateOnly = !!abs && !!abs.from && !!abs.to && DATE_ONLY.test(abs.from) && DATE_ONLY.test(abs.to);
@@ -225,27 +226,29 @@ export function TimeRangeFacet({
   // (drag-zoom). Null only when a persisted selection no longer matches the configured presets.
   const value = abs
     ? dateOnly
-      ? `${fmtDay(abs.from!)} – ${fmtDay(abs.to!)}`
-      : "Custom"
+      ? `${fmtDay(abs.from!, locale)} – ${fmtDay(abs.to!, locale)}`
+      : t("timeRange.custom")
     : activePreset
-      ? presetLabel(activePreset)
+      ? presetLabel(activePreset, t)
       : null;
   const items: PanelPreset[] = presets.map((p) => ({
-    label: presetLabel(p),
+    label: presetLabel(p, t),
     active: p === activePreset,
     onSelect: () => {
       onPreset(p.id);
       setOpen(false);
     },
   }));
-  const touch = useTouchLayout();
+  const overlay = useFacetOverlay();
+  const framedOverlay = overlay !== "popover";
+  const phoneSheet = overlay === "sheet";
 
   const trigger = (
     <button
       type="button"
       className={facetTriggerCls(value != null)}
       title={label}
-      onClick={touch ? () => setOpen(true) : undefined}
+      onClick={framedOverlay ? () => setOpen(true) : undefined}
     >
       <CalendarDays className="size-3.5 shrink-0 opacity-60" />
       <span className="whitespace-nowrap">{label}</span>
@@ -258,9 +261,9 @@ export function TimeRangeFacet({
     </button>
   );
 
-  // Phones/tablets: the shared bottom sheet — the anchored two-month popover overflows a
-  // phone viewport entirely.
-  if (touch) {
+  // Phones/tablets: use the shared framed overlay, but only phones stack presets above the
+  // calendar. Tablet modals have enough width for the nicer left preset rail.
+  if (framedOverlay) {
     return (
       <>
         {trigger}
@@ -277,7 +280,7 @@ export function TimeRangeFacet({
               onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
               onClose={() => setOpen(false)}
               presetItems={items}
-              touch
+              touch={phoneSheet}
             />
           </FacetSheet>
         ) : null}
@@ -317,6 +320,7 @@ export function DateRangeFacet({
   to: string;
   onChange: (next: { from: string; to: string }) => void;
 }) {
+  const locale = useAppLocale();
   const [open, setOpen] = useState(false);
   const active = !!from && !!to;
   return (
@@ -329,7 +333,7 @@ export function DateRangeFacet({
             <>
               <FacetDivider />
               <FacetValueBadge>
-                {fmtDay(from)} – {fmtDay(to)}
+                {fmtDay(from, locale)} – {fmtDay(to, locale)}
               </FacetValueBadge>
             </>
           ) : null}

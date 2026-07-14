@@ -3,6 +3,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import ruLocale from "@fullcalendar/core/locales/ru";
 import type {
   EventInput,
   EventContentArg,
@@ -12,6 +13,7 @@ import type {
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { useNavigate } from "react-router-dom";
 import { format, endOfMonth, startOfMonth, addMonths, subMonths } from "date-fns";
+import { ru } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -22,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
+import { useAppLocale, useMessages } from "@/providers/messages-provider";
 import "./calendar-widget.css";
 
 interface CalendarWidgetProps {
@@ -94,6 +97,8 @@ function pickField(row: EntityRecord, fields: string[]): string | undefined {
 
 export function CalendarWidget({ widget }: CalendarWidgetProps) {
   const navigate = useNavigate();
+  const locale = useAppLocale();
+  const t = useMessages();
   const calendarRef = useRef<FullCalendar | null>(null);
   const isMobile = useIsMobile();
   const [items, setItems] = useState<EntityRecord[]>([]);
@@ -118,12 +123,12 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
   // Drive the range + title from the anchor month while in the mobile agenda.
   useEffect(() => {
     if (!isMobile) return;
-    setTitle(format(anchor, "MMMM yyyy"));
+    setTitle(format(anchor, "MMMM yyyy", { locale: locale?.startsWith("ru") ? ru : undefined }));
     setRange({
       from: format(startOfMonth(anchor), "yyyy-MM-dd'T'00:00:00"),
       to: format(endOfMonth(anchor), "yyyy-MM-dd'T'23:59:59"),
     });
-  }, [isMobile, anchor]);
+  }, [isMobile, anchor, locale]);
 
   useEffect(() => {
     const name = toSnakeCase(widget.entityName);
@@ -299,7 +304,9 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
   const renderAgenda = () => {
     if (agendaDays.length === 0) {
       return (
-        <div className="onno-agenda-empty">No {widget.entityName.toLowerCase()} this month.</div>
+        <div className="onno-agenda-empty">
+          {t("calendar.emptyThisMonth", { name: widget.entityName.toLowerCase() })}
+        </div>
       );
     }
     const today = format(new Date(), "yyyy-MM-dd");
@@ -308,7 +315,9 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         {agendaDays.map((day) => (
           <div key={day.key} className="onno-agenda-day">
             <div className={cn("onno-agenda-date", day.key === today && "is-today")}>
-              <span className="onno-agenda-dow">{format(day.date, "EEE")}</span>
+              <span className="onno-agenda-dow">
+                {format(day.date, "EEE", { locale: locale?.startsWith("ru") ? ru : undefined })}
+              </span>
               <span className="onno-agenda-dom">{format(day.date, "d")}</span>
             </div>
             <div className="onno-agenda-events">
@@ -423,7 +432,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
                 className="inline-flex items-center gap-0.5 rounded-control bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                 aria-label="Read only"
               >
-                <Lock className="h-2.5 w-2.5" /> read only
+                <Lock className="h-2.5 w-2.5" /> {t("calendar.readOnly")}
               </span>
             )}
           </div>
@@ -437,13 +446,13 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
               value={view}
               onChange={switchView}
               options={[
-                { value: "dayGridMonth", label: "Month" },
-                { value: "timeGridWeek", label: "Week" },
+                { value: "dayGridMonth", label: t("calendar.month") },
+                { value: "timeGridWeek", label: t("calendar.week") },
               ]}
             />
           )}
           <Button variant="outline" size="sm" className="h-7 px-2" onClick={goToday}>
-            Today
+            {t("calendar.today")}
           </Button>
           <div className="flex">
             <Button
@@ -451,7 +460,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
               size="icon"
               className="h-7 w-7"
               onClick={goPrev}
-              aria-label="Previous"
+              aria-label={t("calendar.previous")}
             >
               <ChevronLeft className="h-3.5 w-3.5" />
             </Button>
@@ -460,7 +469,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
               size="icon"
               className="h-7 w-7"
               onClick={goNext}
-              aria-label="Next"
+              aria-label={t("calendar.next")}
             >
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
@@ -478,6 +487,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
             headerToolbar={false}
             height="auto"
             firstDay={1}
+            locale={locale?.startsWith("ru") ? ruLocale : undefined}
             events={events}
             editable={editable}
             eventStartEditable={editable}

@@ -53,6 +53,41 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.delete": "Delete",
   "action.open": "Open",
   "action.copyLink": "Copy link",
+  "action.close": "Close",
+
+  // Calendar/date controls.
+  "calendar.today": "Today",
+  "calendar.month": "Month",
+  "calendar.week": "Week",
+  "calendar.previous": "Previous",
+  "calendar.next": "Next",
+  "calendar.monthPicker": "Month",
+  "calendar.yearPicker": "Year",
+  "calendar.open": "Open calendar",
+  "calendar.readOnly": "read only",
+  "calendar.emptyThisMonth": "No {name} this month.",
+
+  // Time-range picker chrome.
+  "timeRange.dateRange": "Date range",
+  "timeRange.custom": "Custom",
+  "timeRange.allTime": "All time",
+  "timeRange.lastSecond": "Last second",
+  "timeRange.lastSeconds": "Last {n} seconds",
+  "timeRange.lastMinute": "Last minute",
+  "timeRange.lastMinutes": "Last {n} minutes",
+  "timeRange.lastHour": "Last hour",
+  "timeRange.lastHours": "Last {n} hours",
+  "timeRange.lastDay": "Last day",
+  "timeRange.lastDays": "Last {n} days",
+  "timeRange.lastWeek": "Last week",
+  "timeRange.lastWeeks": "Last {n} weeks",
+  "timeRange.lastMonth": "Last month",
+  "timeRange.lastMonths": "Last {n} months",
+  "timeRange.lastYear": "Last year",
+  "timeRange.lastYears": "Last {n} years",
+
+  // Shared select/bottom-sheet accessibility labels.
+  "select.option": "Select option",
 
   // Document posting status.
   "status.posted": "Posted",
@@ -175,6 +210,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "empty.noRecords": "No records",
   "empty.noMatches": "No matches",
   "empty.noRows": "No rows yet.",
+  "empty.noData": "No data yet",
   "loading.workspace": "Loading workspace...",
   "loading.generic": "Loading…",
   "loading.searching": "Searching…",
@@ -199,6 +235,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
   "form.staleChanged": "This record changed elsewhere.",
   "form.reload": "Reload",
+  "form.tabularEmptyHint": "Add the first row to start filling this section.",
   "ref.new": "New {name}",
   "relatedList.saveFirstManage": "Save this record first to manage {name}.",
   "relatedList.saveFirstView": "Save this record first to see {name}.",

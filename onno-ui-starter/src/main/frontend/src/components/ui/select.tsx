@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 import { useFacetOverlay } from "@/components/ui/facet-sheet";
+import { useMessages } from "@/providers/messages-provider";
 
 const SelectOpenContext = React.createContext<{
   drawerOpen: boolean;
@@ -112,6 +113,7 @@ const SelectContent = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => {
+  const t = useMessages();
   const overlay = useFacetOverlay();
   const { drawerOpen, setOpen } = React.useContext(SelectOpenContext);
   if (overlay === "sheet") {
@@ -130,7 +132,7 @@ const SelectContent = React.forwardRef<
               {...props}
             >
               <Drawer.Handle className="mx-auto mt-2 h-1 w-10 rounded-full bg-border" />
-              <Drawer.Title className="sr-only">Select option</Drawer.Title>
+              <Drawer.Title className="sr-only">{t("select.option")}</Drawer.Title>
               <SelectScrollUpButton />
               <SelectPrimitive.Viewport className="max-h-[calc(85dvh-3rem)] p-2">
                 {children}
@@ -147,7 +149,7 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Portal>
         <button
           type="button"
-          aria-label="Close"
+          aria-label={t("action.close")}
           className="fixed inset-0 z-50 bg-black/50"
           onClick={() => setOpen(false)}
         />
