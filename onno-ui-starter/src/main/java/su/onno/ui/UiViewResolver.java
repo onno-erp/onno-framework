@@ -18,6 +18,8 @@ import java.util.Map;
  */
 public class UiViewResolver {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UiViewResolver.class);
+
     private static final String DEFAULT = "";
 
     private final ResolvedMetadataService metadata;
@@ -221,7 +223,22 @@ public class UiViewResolver {
                     a.fn().name().toLowerCase(java.util.Locale.ROOT),
                     a.label() != null ? a.label() : cm.label(), cm.format()));
         }
-        ResolvedListView.Grouping grouping = new ResolvedListView.Grouping(groupCols, aggregates);
+        // The default grouping must name one of the resolved groupable columns — a preselected
+        // column the picker doesn't offer (unknown field, or not declared groupable) is ignored
+        // with a warning rather than emitted, so the list still opens (flat).
+        String defaultGroup = "";
+        if (spec.defaultGroupBy() != null && !spec.defaultGroupBy().isBlank()) {
+            ColumnMeta cm = spec.groupable().contains(spec.defaultGroupBy())
+                    ? available.get(spec.defaultGroupBy()) : null;
+            if (cm != null) {
+                defaultGroup = cm.columnName();
+            } else {
+                log.warn("List '{}': defaultGroupBy(\"{}\") is not a groupable column — ignored "
+                        + "(declare it via groupable(...) too)", title, spec.defaultGroupBy());
+            }
+        }
+        ResolvedListView.Grouping grouping =
+                new ResolvedListView.Grouping(groupCols, aggregates, defaultGroup);
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,

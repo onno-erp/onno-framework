@@ -64,13 +64,20 @@ public record ResolvedListView(String title, List<Column> columns,
     }
 
     /**
-     * The list's grouping capability: the columns a user may group by (the "Group by ▾" picker) and
-     * the per-group subtotals to show. Empty {@link #columns()} means the list can't be grouped.
+     * The list's grouping capability: the columns a user may group by (the "Group by ▾" picker),
+     * the per-group subtotals to show, and the {@code defaultColumn} the list opens grouped by
+     * (blank = opens flat). Empty {@link #columns()} means the list can't be grouped.
      */
-    public record Grouping(List<GroupColumn> columns, List<Aggregate> aggregates) {
+    public record Grouping(List<GroupColumn> columns, List<Aggregate> aggregates, String defaultColumn) {
         public Grouping {
             columns = columns == null ? List.of() : List.copyOf(columns);
             aggregates = aggregates == null ? List.of() : List.copyOf(aggregates);
+            defaultColumn = defaultColumn == null ? "" : defaultColumn;
+        }
+
+        /** Back-compat: a grouping capability with no preselected column (the list opens flat). */
+        public Grouping(List<GroupColumn> columns, List<Aggregate> aggregates) {
+            this(columns, aggregates, "");
         }
 
         public static Grouping none() {

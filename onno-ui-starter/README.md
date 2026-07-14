@@ -229,6 +229,10 @@ day/month/year granularity and buckets by period); each header shows the group's
 rows through the **same** feed — the server hands each group the exact filter to replay — so grouping
 never double-counts and honours the active search/filters/sort. Group values that resolve to a
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
+`list.defaultGroupBy("status")` opens the list already grouped by that column instead of flat — the
+viewer can still switch grouping or back to "None". The default must also be declared `groupable`
+(and resolve to a real column), else it's ignored with a warning; a page-embedded list's
+`PageBuilder.list(entity, v -> v.groupBy(…))` default still wins over the view's.
 
 **Conditional row formatting.** `list.rowStyle(row -> …)` tints rows by their data: the function
 runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware

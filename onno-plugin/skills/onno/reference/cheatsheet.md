@@ -251,7 +251,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `onno.ui.list.default-feed`), `pageSize(n)` (rows per window/page; else `onno.ui.list.page-size`),
     `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
     day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
-    (per-group subtotal on each header),
+    (per-group subtotal on each header) + `defaultGroupBy(field)` (open the list already grouped by
+    that column — must also be `groupable`, else ignored with a warning; the viewer can still switch
+    back to "None"),
     `filter(field)` →
     `options/multiOptions(String...)` (value shown verbatim), `options/multiOptions(Map<value,label>)`
     (value→label split: query matches the value, dropdown shows the label — pass a `LinkedHashMap` for

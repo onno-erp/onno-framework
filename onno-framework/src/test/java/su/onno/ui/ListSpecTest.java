@@ -190,6 +190,14 @@ class ListSpecTest {
         ListSpec spec = new ListSpec();
         assertThat(spec.groupable()).isEmpty();
         assertThat(spec.aggregates()).isEmpty();
+        assertThat(spec.defaultGroupBy()).as("opens flat by default").isNull();
+    }
+
+    @Test
+    void defaultGroupByIsAuthored() {
+        ListSpec spec = new ListSpec();
+        spec.groupable("status", "warehouse").defaultGroupBy("status");
+        assertThat(spec.defaultGroupBy()).isEqualTo("status");
     }
 
     @Test
