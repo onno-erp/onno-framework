@@ -145,6 +145,35 @@ dependencies {
 > Maven coordinates use the `su.onno` group; the Java packages are still `su.onno.*`,
 > so your imports don't change.
 
+### Dev mode (live reload)
+
+Add `spring-boot-devtools` to your app and the save-to-screen loop closes itself:
+
+```kotlin
+dependencies {
+    developmentOnly("org.springframework.boot:spring-boot-devtools")
+}
+```
+
+Run the app with an exploded classpath (`./gradlew bootRun`) and keep a compiler going in a second
+terminal (`./gradlew -t classes`). On every save devtools restarts the application context — which
+in onno *is* the whole reload story: the metamodel rescan, the schema diff, and every layout/page
+rebuild all happen at boot. The UI starter detects devtools, stamps each SSE `ready` ack with a
+per-boot id, and the web client answers a changed id with a full page reload. Restarts take well
+under a second on the example app; the browser refreshes itself right after.
+
+Everything is automatic: devtools never ships in the production boot jar, so deployed apps never
+self-reload. To force the behaviour without devtools (e.g. a hosted preview instance), set
+`onno.ui.dev-mode=true` explicitly — see [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+
+Need an explicit "refresh now" — from a build script, an agent, or by hand? In dev mode the server
+also watches a trigger file (`onno.ui.dev-reload-trigger`, default `.onno-reload` in the working
+directory):
+
+```bash
+touch .onno-reload   # every connected browser reloads within ~½ s
+```
+
 ## Maven Central
 
 Released modules are published to [Maven Central](https://central.sonatype.com/namespace/su.onno)

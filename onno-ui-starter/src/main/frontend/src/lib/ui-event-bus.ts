@@ -28,7 +28,35 @@ let releaseLock: (() => void) | null = null;
 let stopStream: (() => void) | null = null;
 let running = false;
 
+/**
+ * Dev live-reload. Every stream's opening `ready` ack carries the server's `bootId` (one per
+ * application-context incarnation) and its `devMode` flag. The first ack this tab sees baselines
+ * the id; a later ack with a different id means the stream reconnected because the server was
+ * rebuilt under us (a devtools restart after a recompile) — every layout/page/entity the tab has
+ * rendered is stale, so in dev mode we answer with a full page reload. Guarded on `devMode` so a
+ * production redeploy never reloads a page out from under a user. Followers that joined after the
+ * leader's initial ack miss the baseline and skip the first restart — acceptable for a dev loop
+ * that is overwhelmingly single-tab.
+ */
+let lastBootId: string | null = null;
+
+function checkServerRestart(event: UiEvent) {
+  // An explicit dev-server push ("refresh now" — e.g. the .onno-reload trigger file was touched).
+  // The server only emits it in dev mode; the flag rides along as belt-and-braces.
+  if (event.type === "reload" && event.devMode) {
+    window.location.reload();
+    return;
+  }
+  if (event.type !== "ready" || !event.bootId) return;
+  if (lastBootId !== null && lastBootId !== event.bootId && event.devMode) {
+    window.location.reload();
+    return;
+  }
+  lastBootId = event.bootId;
+}
+
 function deliver(event: UiEvent) {
+  checkServerRestart(event);
   for (const listener of listeners) listener(event);
 }
 

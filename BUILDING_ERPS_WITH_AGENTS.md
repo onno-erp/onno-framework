@@ -361,7 +361,14 @@ Example first slices:
 
 ## Verification In Consuming ERP Apps
 
-Run:
+For iterative work, run the app in **dev mode** so every saved change deploys itself: add
+`developmentOnly("org.springframework.boot:spring-boot-devtools")`, run `./gradlew bootRun` plus a
+`./gradlew -t classes` watcher, and each save recompiles, restarts the context (metamodel + schema +
+layouts all rebuild at boot, typically under a second), and tells every open browser to reload over
+the `/api/events` stream. `touch .onno-reload` forces a refresh on demand. See the README's
+"Dev mode (live reload)" section.
+
+For the full check, run:
 
 ```bash
 ./gradlew clean check

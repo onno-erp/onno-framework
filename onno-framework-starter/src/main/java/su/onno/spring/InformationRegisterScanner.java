@@ -5,6 +5,7 @@ import su.onno.annotations.InformationRegister;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.util.ClassUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +22,9 @@ public class InformationRegisterScanner {
         for (String pkg : basePackages) {
             for (BeanDefinition bd : scanner.findCandidateComponents(pkg)) {
                 try {
-                    result.add(Class.forName(bd.getBeanClassName()));
+                    // Thread-context classloader, not this class's own — see CatalogScanner (the
+                    // devtools restart classloader would otherwise get a mismatched twin Class).
+                    result.add(ClassUtils.forName(bd.getBeanClassName(), null));
                 } catch (ClassNotFoundException e) {
                     throw new RuntimeException("Failed to load information register class: " + bd.getBeanClassName(), e);
                 }

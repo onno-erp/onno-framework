@@ -24,6 +24,28 @@ public class UiProperties {
     /** When true, every mutating REST call is rejected with {@code 403 UI is in read-only mode}. */
     private boolean readOnly = false;
 
+    /**
+     * Live-reload dev mode. When on, the {@code ready} ack of the {@code /api/events} SSE stream
+     * marks the server as a development instance, and the web client answers a server restart (a
+     * changed {@code bootId} across a stream reconnect) with a full page reload — so a devtools
+     * restart cycle (recompile → context restart → schema re-diff → layout/page rebuild) ends with
+     * the browser refreshing itself: save a file, see the change. Unset (the default) auto-detects:
+     * dev mode turns on exactly when {@code spring-boot-devtools} is on the classpath — present
+     * under {@code bootRun}/exploded-classpath runs, absent from the production boot jar — so a
+     * plain deployment never reloads a user's page on redeploy. Set explicitly to force it either
+     * way (e.g. {@code true} for a hosted preview instance that rebuilds without devtools).
+     */
+    private Boolean devMode;
+
+    /**
+     * The dev-mode reload trigger file, resolved against the working directory. While dev mode is
+     * on, touching this file ({@code touch .onno-reload}) broadcasts a {@code reload} event over the
+     * {@code /api/events} SSE stream and every connected browser does a full refresh — an explicit
+     * "refresh now" for scripts and agents, with no HTTP endpoint or CSRF dance. Complements the
+     * automatic reload a devtools restart already performs. Ignored outside dev mode.
+     */
+    private String devReloadTrigger = ".onno-reload";
+
     /** Free-form theme key/values served verbatim from {@code GET /api/theme}. */
     private Map<String, String> theme = new LinkedHashMap<>();
 
@@ -93,6 +115,22 @@ public class UiProperties {
 
     public void setReadOnly(boolean readOnly) {
         this.readOnly = readOnly;
+    }
+
+    public Boolean getDevMode() {
+        return devMode;
+    }
+
+    public void setDevMode(Boolean devMode) {
+        this.devMode = devMode;
+    }
+
+    public String getDevReloadTrigger() {
+        return devReloadTrigger;
+    }
+
+    public void setDevReloadTrigger(String devReloadTrigger) {
+        this.devReloadTrigger = devReloadTrigger;
     }
 
     public Map<String, String> getTheme() {

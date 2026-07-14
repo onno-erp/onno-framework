@@ -50,7 +50,9 @@ public class RegisterRepositoryRegistrar implements BeanDefinitionRegistryPostPr
                 if (className == null) continue;
 
                 try {
-                    Class<?> repoClass = Class.forName(className);
+                    // Thread-context classloader, not this class's own — see CatalogScanner (the
+                    // devtools restart classloader would otherwise get a mismatched twin Class).
+                    Class<?> repoClass = org.springframework.util.ClassUtils.forName(className, null);
                     if (!repoClass.isInterface()) continue;
                     if (repoClass == RegisterRepository.class) continue;
 
