@@ -33,6 +33,7 @@ public final class ListSpec {
     private FeedMode feedMode;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
+    private String defaultGroupBy;
     private final List<Aggregate> aggregates = new ArrayList<>();
     private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
 
@@ -230,6 +231,22 @@ public final class ListSpec {
     }
 
     /**
+     * Open the list already grouped by {@code field} instead of flat. The field must also be
+     * declared {@link #groupable} — it names one of the picker's choices, and the viewer can still
+     * switch to another grouping or back to "None". A default that isn't among the groupable
+     * columns (or doesn't resolve to a real column) is ignored with a warning rather than failing
+     * the list.
+     *
+     * <pre>
+     * list.groupable("status", "warehouse").defaultGroupBy("status");   // opens grouped by status
+     * </pre>
+     */
+    public ListSpec defaultGroupBy(String field) {
+        this.defaultGroupBy = field;
+        return this;
+    }
+
+    /**
      * Declare a per-group subtotal shown on each group header (and rolled up as a grand total): an
      * aggregate {@code fn} over a numeric {@code field}. Only meaningful alongside {@link #groupable};
      * every group always carries its row count regardless. The subtotal is formatted with the field's
@@ -293,6 +310,9 @@ public final class ListSpec {
 
     /** The fields offered in the group-by picker, in declaration order (empty = no grouping). */
     public List<String> groupable() { return List.copyOf(groupable); }
+
+    /** The field the list opens grouped by, or {@code null} when it opens flat (the default). */
+    public String defaultGroupBy() { return defaultGroupBy; }
 
     /** The declared per-group subtotals, in declaration order. */
     public List<Aggregate> aggregates() { return List.copyOf(aggregates); }

@@ -25,7 +25,8 @@ public class CustomerView implements EntityView {
         list.columns("description", "city", "email", "phone")
                 .label("description", "Name")
                 .sortBy("description", false)
-                .groupable("city");
+                // Opens grouped by city (the "Group by ▾" picker can still switch back to None).
+                .groupable("city").defaultGroupBy("city");
         // A multi-select city facet (the seeder's spread) and an email typeahead.
         list.filter("city").label("City").options(
                 "New York", "Los Angeles", "Chicago", "Toronto", "London", "Paris", "Berlin",

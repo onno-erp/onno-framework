@@ -130,6 +130,11 @@ public final class SurfaceDivBuilder {
             groupable.add(col);
         }
         descriptor.put("groupable", groupable);
+        // The column the list opens grouped by (ListSpec.defaultGroupBy). Same descriptor key a
+        // page-embedded list's defaults use, so a PageBuilder.list(...) groupBy still overrides it.
+        if (!view.grouping().defaultColumn().isBlank()) {
+            descriptor.put("defaultGroupBy", view.grouping().defaultColumn());
+        }
         List<Map<String, Object>> aggregates = new ArrayList<>();
         for (ResolvedListView.Aggregate a : view.grouping().aggregates()) {
             Map<String, Object> agg = new LinkedHashMap<>();
