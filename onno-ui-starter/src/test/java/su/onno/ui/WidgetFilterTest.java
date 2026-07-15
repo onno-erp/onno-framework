@@ -32,6 +32,20 @@ class WidgetFilterTest {
     }
 
     @Test
+    void bindsUuidColumnsTyped() {
+        java.util.UUID id = java.util.UUID.randomUUID();
+        // A uuid column (ref/enum) binds a typed UUID — PostgreSQL rejects a varchar param there.
+        assertThat(WidgetFilter.parse("client = " + id, COLUMNS, Set.of("client")).bindings())
+                .containsEntry("wf0", id);
+        // A non-uuid column keeps the varchar bind even for a uuid-shaped value.
+        assertThat(WidgetFilter.parse("status = " + id, COLUMNS, Set.of("client")).bindings())
+                .containsEntry("wf0", id.toString());
+        // A malformed uuid degrades to the varchar bind rather than failing the parse.
+        assertThat(WidgetFilter.parse("client = notauuid", COLUMNS, Set.of("client")).bindings())
+                .containsEntry("wf0", "notauuid");
+    }
+
+    @Test
     void nullBecomesIsNullSemantics() {
         assertThat(WidgetFilter.parse("client = null", COLUMNS).sql()).isEqualTo("client IS NULL");
         assertThat(WidgetFilter.parse("client != null", COLUMNS).sql()).isEqualTo("client IS NOT NULL");

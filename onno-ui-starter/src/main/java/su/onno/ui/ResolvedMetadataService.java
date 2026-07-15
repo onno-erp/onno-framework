@@ -301,6 +301,15 @@ public class ResolvedMetadataService {
                 if (secondary != null && !secondary.isBlank()) {
                     map.put("refSecondary", refSecondaryColumn(a.refTarget(), secondary));
                 }
+                // Cascading picker predicate (f.field(...).refFilter("supplier = ${supplier}")).
+                // Authored against the target's field names; rewrite each clause's left-hand side
+                // to the target's column name so the client can send it straight to the typeahead's
+                // ?filter= (which WidgetFilter validates against columns). ${...} placeholders are
+                // the client's to substitute with current form values.
+                String refFilter = hint == null ? null : hint.refFilter();
+                if (refFilter != null && !refFilter.isBlank()) {
+                    map.put("refFilter", refFilterColumns(a.refTarget(), refFilter));
+                }
             }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
@@ -375,6 +384,22 @@ public class ResolvedMetadataService {
      * an unrecognized name falls through unchanged (best effort — a typo shows nothing rather than
      * breaking the picker).
      */
+    /**
+     * Rewrite a {@code refFilter} template's clause left-hand sides from the target entity's field
+     * names to its column names (same best-effort mapping as {@link #refSecondaryColumn}), leaving
+     * operators, values, and {@code ${...}} placeholders untouched — e.g.
+     * {@code "assignedTo = ${manager} AND active = true"} → {@code "assigned_to = ${manager} AND active = true"}.
+     */
+    private String refFilterColumns(String refTarget, String template) {
+        return java.util.regex.Pattern.compile("(?i)\\s+AND\\s+").splitAsStream(template.trim())
+                .map(clause -> {
+                    var m = java.util.regex.Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)(.*)$")
+                            .matcher(clause);
+                    return m.matches() ? refSecondaryColumn(refTarget, m.group(1)) + m.group(2) : clause;
+                })
+                .collect(java.util.stream.Collectors.joining(" AND "));
+    }
+
     private String refSecondaryColumn(String refTarget, String fieldName) {
         return targetAttributes(refTarget).stream()
                 .filter(a -> a.fieldName().equals(fieldName) || a.columnName().equals(fieldName))

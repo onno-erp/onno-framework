@@ -3,7 +3,8 @@ name: onno-ui-entity-views
 description: >-
   Author onno-framework EntityView beans. Use when configuring entity list columns, field labels,
   system column labels, list filters, grouping, aggregation, conditional row styles, form layout,
-  field widgets, formatting, placeholders, hints, refSecondary, related lists, comments, toolbar row
+  field widgets, formatting, placeholders, hints, refSecondary, refFilter cascading pickers
+  (dependent ref fields filtered by another field's value), related lists, comments, toolbar row
   and detail actions, action forms, dynamic action labels/icons/visibility, built-in post/unpost
   placement, or map list views.
 ---

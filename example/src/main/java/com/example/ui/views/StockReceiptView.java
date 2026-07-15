@@ -33,6 +33,9 @@ public class StockReceiptView implements EntityView {
     public void fields(EntityConfigBuilder f) {
         f.field("supplier").order(0)
             .field("date").order(1).format("dd-MM-yyyy")
-            .field("note").order(2).widget("textarea");
+            .field("note").order(2).widget("textarea")
+            // Cascade: once the supplier is picked, the line's book picker only offers that
+            // supplier's titles (and re-clears if the supplier changes).
+            .field("lines.book").refFilter("supplier = ${supplier}");
     }
 }

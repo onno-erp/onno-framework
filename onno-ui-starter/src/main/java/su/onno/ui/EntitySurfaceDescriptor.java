@@ -66,6 +66,14 @@ record EntitySurfaceDescriptor(
         return columnNames();
     }
 
+    /** Columns whose SQL type is UUID (refs and enums), so a filter binds them typed (PG-strict). */
+    Set<String> uuidColumns() {
+        return attributes.stream()
+                .filter(a -> a.isRef() || a.javaType().isEnum())
+                .map(a -> a.columnName().toLowerCase())
+                .collect(Collectors.toSet());
+    }
+
     String safeSort(String sortColumn) {
         return sortColumn != null && sortableColumns.contains(sortColumn) ? sortColumn : defaultSortColumn;
     }

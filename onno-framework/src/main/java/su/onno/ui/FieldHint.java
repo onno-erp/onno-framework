@@ -20,9 +20,10 @@ public record FieldHint(
         String format,
         String hint,
         String label,
-        String refSecondary
+        String refSecondary,
+        String refFilter
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }

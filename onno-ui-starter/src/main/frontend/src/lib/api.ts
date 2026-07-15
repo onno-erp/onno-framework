@@ -386,8 +386,10 @@ export const api = {
     return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}${qs ? "?" + qs : ""}`);
   },
   // Server-side typeahead for ref pickers: capped, case-insensitive code/description match.
-  searchCatalog: (name: string, q: string, limit = 30) => {
+  // `filter` is a resolved refFilter predicate — the cascading picker's server-side narrowing.
+  searchCatalog: (name: string, q: string, limit = 30, filter?: string) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
+    if (filter) params.set("filter", filter);
     return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}?${params.toString()}`);
   },
   getCatalogItem: (name: string, id: string) =>
@@ -428,8 +430,10 @@ export const api = {
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
   // Server-side typeahead for document ref pickers: capped, case-insensitive _number match.
-  searchDocument: (name: string, q: string, limit = 30) => {
+  // `filter` is a resolved refFilter predicate — the cascading picker's server-side narrowing.
+  searchDocument: (name: string, q: string, limit = 30, filter?: string) => {
     const params = new URLSearchParams({ q, limit: String(limit) });
+    if (filter) params.set("filter", filter);
     return fetchJson<EntityRecord[]>(`${BASE}/documents/${name}?${params.toString()}`);
   },
   createDocument: (name: string, data: EntityRecord) =>
