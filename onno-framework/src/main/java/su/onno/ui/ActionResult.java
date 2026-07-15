@@ -34,8 +34,20 @@ public record ActionResult(String message, String navigate, boolean refresh) {
      * Send the top-level browser to an external {@code url} (a full-page navigation, not a new tab) —
      * e.g. kicking off an OAuth "Connect with X" consent screen so the provider can redirect back. The
      * url is passed verbatim after the {@code onno://redirect/} scheme, so it may carry a query string.
+     * For plain "show the user an external page" (a marketplace chat, a tracking page), prefer
+     * {@link #open(String)} — it opens a new tab and keeps the app where it is.
      */
     public static ActionResult redirect(String url) {
         return new ActionResult(null, "onno://redirect/" + url, false);
+    }
+
+    /**
+     * Open an external {@code url} in a new browser tab ({@code noopener}), leaving the app in place —
+     * the right choice for links that merely show something (a buyer chat, an external dashboard).
+     * Use {@link #redirect(String)} only when the page must come back (an OAuth round-trip). The url
+     * is passed verbatim after the {@code onno://open/} scheme, so it may carry a query string.
+     */
+    public static ActionResult open(String url) {
+        return new ActionResult(null, "onno://open/" + url, false);
     }
 }
