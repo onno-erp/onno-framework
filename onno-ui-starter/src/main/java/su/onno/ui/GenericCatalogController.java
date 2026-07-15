@@ -139,6 +139,21 @@ public class GenericCatalogController {
         return commands.update(query.require(name), id, body, principal);
     }
 
+    /**
+     * Dry-run validation for the form's live (as-you-type) feedback: runs the full write lifecycle —
+     * declarative constraints, hooks, {@code Validated} business rules — against the submitted
+     * values without persisting, and reports {@code {valid, fieldErrors, formErrors}} with 200
+     * either way. The id-less form validates a create; with {@code id}, the changes are overlaid
+     * onto the stored record first, exactly like {@code PUT}.
+     */
+    @PostMapping({"/{name}/validate", "/{name}/{id}/validate"})
+    public Map<String, Object> validate(@PathVariable String name,
+                                        @PathVariable(required = false) UUID id,
+                                        @RequestBody Map<String, Object> body,
+                                        Principal principal) {
+        return commands.validate(query.require(name), id, body, principal);
+    }
+
     @DeleteMapping("/{name}/{id}")
     public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         commands.delete(query.require(name), id, principal);

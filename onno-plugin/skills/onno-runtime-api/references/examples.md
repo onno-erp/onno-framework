@@ -53,6 +53,20 @@ curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" \
   -X POST "$base/api/documents/Sales%20Orders/$order_id/unpost"
 ```
 
+## Dry-Run Validation (live form feedback)
+
+Runs the full write lifecycle — declarative constraints, `onFilling`/`beforeWrite` hooks,
+`Validated` business rules — without persisting. Always HTTP 200; the verdict is the payload.
+Works on catalogs and documents alike; omit the id to validate a create, include it to overlay
+changes on the stored record like a `PUT`.
+
+```bash
+curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H "Content-Type: application/json" \
+  -d '{"note": "half-filled form"}' \
+  -X POST "$base/api/documents/Sales%20Orders/validate"
+# {"valid":false,"fieldErrors":{"customer":["Customer is required"]},"formErrors":["Choose a customer"]}
+```
+
 Posting writes register movements and marks `_posted=true`. Preview should be used before destructive
 or high-value tests.
 

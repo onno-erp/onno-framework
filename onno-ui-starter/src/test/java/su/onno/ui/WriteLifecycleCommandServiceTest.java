@@ -81,12 +81,18 @@ class WriteLifecycleCommandServiceTest {
 
     @Catalog(name = "LifecycleWidgets", codePrefix = "LW-")
     @AccessControl(readRoles = "ADMIN")
-    public static class LifecycleWidget extends CatalogObject implements BeforeWriteHandler {
+    public static class LifecycleWidget extends CatalogObject implements BeforeWriteHandler, Validated {
         @Attribute(length = 60) private String label;
         @Attribute(length = 60) private String slug; // derived from label
 
         @Override public void beforeWrite() {
             this.slug = label == null ? null : label.toLowerCase(Locale.ROOT);
+        }
+
+        @Override public List<BusinessRule> rules() {
+            // Field-scoped, so the dry-run validate can prove the message lands in fieldErrors.
+            return List.of(BusinessRule.onField("label", "Label is required",
+                    () -> label != null && !label.isBlank()));
         }
     }
 
@@ -196,6 +202,70 @@ class WriteLifecycleCommandServiceTest {
 
         Map<String, Object> row = catalogQuery.get(widgetDesc, id);
         assertThat(row.get(column(widgetDesc.attributes(), "slug"))).isEqualTo("beta");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void documentValidate_reportsCrossFieldRuleFailure_withoutPersisting() {
+        Map<String, Object> body = new HashMap<>();
+        body.put("title", "Titled but statusless");
+
+        Map<String, Object> report = documentCommands.validate(orderDesc, null, body, admin);
+
+        assertThat(report.get("valid")).isEqualTo(false);
+        assertThat((List<String>) report.get("formErrors"))
+                .anyMatch(m -> m.contains("needs a status"));
+        assertThat(documentQuery.list(orderDesc, null, null, null)).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void documentValidate_passesWhenRulesHold() {
+        Map<String, Object> body = new HashMap<>();
+        body.put("title", "Complete order");
+        body.put("status", statusId("NEW").toString());
+
+        Map<String, Object> report = documentCommands.validate(orderDesc, null, body, admin);
+
+        assertThat(report.get("valid")).isEqualTo(true);
+        assertThat((Map<String, List<String>>) report.get("fieldErrors")).isEmpty();
+        assertThat((List<String>) report.get("formErrors")).isEmpty();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void documentValidate_updateMode_overlaysChangesOnStoredRecord() {
+        Map<String, Object> create = new HashMap<>();
+        create.put("title", "Order Y");
+        create.put("status", statusId("NEW").toString());
+        UUID id = (UUID) documentCommands.create(orderDesc, create, admin).get("_id");
+
+        // Clearing the status on a titled order breaks the cross-field rule — the dry run must
+        // see the merged state (stored title + submitted null status), not just the delta.
+        Map<String, Object> change = new HashMap<>();
+        change.put("status", null);
+        Map<String, Object> report = documentCommands.validate(orderDesc, id, change, admin);
+
+        assertThat(report.get("valid")).isEqualTo(false);
+        assertThat((List<String>) report.get("formErrors"))
+                .anyMatch(m -> m.contains("needs a status"));
+        // Dry run only — the stored document still carries its status.
+        Map<String, Object> row = documentQuery.get(orderDesc, id);
+        assertThat(row.get(column(orderDesc.attributes(), "statusName"))).isEqualTo("NEW");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void catalogValidate_fieldScopedRule_landsInFieldErrors() {
+        Map<String, Object> body = new HashMap<>();
+        body.put("description", "Unlabeled");
+
+        Map<String, Object> report = catalogCommands.validate(widgetDesc, null, body, admin);
+
+        assertThat(report.get("valid")).isEqualTo(false);
+        Map<String, List<String>> fieldErrors = (Map<String, List<String>>) report.get("fieldErrors");
+        assertThat(fieldErrors).containsKey("label");
+        assertThat(fieldErrors.get("label")).anyMatch(m -> m.contains("Label is required"));
     }
 
     private UUID statusId(String name) {

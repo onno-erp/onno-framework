@@ -33,6 +33,16 @@ public final class ValidationErrors {
         return fieldErrors.isEmpty() && formErrors.isEmpty();
     }
 
+    /** Everything collected per field so far, for callers that report without throwing. */
+    public Map<String, List<String>> fieldErrors() {
+        return Map.copyOf(fieldErrors);
+    }
+
+    /** Every form-level message collected so far, for callers that report without throwing. */
+    public List<String> formErrors() {
+        return List.copyOf(formErrors);
+    }
+
     /** Throw a {@link ValidationException} carrying everything collected, if non-empty. */
     public void throwIfAny() {
         if (isEmpty()) {

@@ -211,6 +211,43 @@ public class CatalogCommandService {
         return result;
     }
 
+    /**
+     * Dry-run the write lifecycle against a form's current values and report every failure without
+     * persisting anything — the backend of the form's live (as-you-type) validation. Runs the same
+     * pipeline as {@link #create}/{@link #update}: declarative attribute constraints, then the typed
+     * entity's {@code onFilling}/{@code beforeWrite} hooks and {@link su.onno.rules.Validated} rules,
+     * so a conflict check written in Java surfaces while the user is still on the field. No code is
+     * consumed from the numbering sequence and no events fire. Always returns 200 — the outcome is
+     * the {@code {valid, fieldErrors, formErrors}} payload.
+     */
+    public Map<String, Object> validate(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                        Principal principal) {
+        access.requireWrite(principal, desc);
+        Map<String, Object> body = new LinkedHashMap<>(requestBody);
+
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validate(body, desc.attributes(), errors);
+        boolean isNew = id == null;
+        CatalogObject entity = isNew ? instantiate(desc.javaClass()) : loadCatalogObject(desc, id);
+        if (entity != null) {
+            if (isNew) {
+                entity.setId(UUID.randomUUID());
+                entity.setCode(asString(body.getOrDefault("code", "")));
+                entity.setDescription(asString(body.getOrDefault("description", "")));
+                entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+                entity.setParent(parseUuid(body.get("parent")));
+            } else {
+                if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
+                if (body.containsKey("description")) entity.setDescription(asString(body.get("description")));
+                if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
+                if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
+            }
+            lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            EntityWriteSupport.dryRunRules(lifecycle, entity, isNew, errors);
+        }
+        return EntityWriteSupport.validationReport(errors);
+    }
+
     public void delete(CatalogDescriptor desc, UUID id, Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);

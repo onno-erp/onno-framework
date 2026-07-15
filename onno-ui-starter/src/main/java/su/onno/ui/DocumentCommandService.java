@@ -234,6 +234,44 @@ public class DocumentCommandService {
         return result;
     }
 
+    /**
+     * Dry-run the write lifecycle against a form's current values and report every failure without
+     * persisting anything — the backend of the form's live (as-you-type) validation. Runs the same
+     * pipeline as {@link #create}/{@link #update}: declarative attribute constraints, then the typed
+     * document's {@code onFilling}/{@code beforeWrite} hooks and {@link su.onno.rules.Validated}
+     * rules on the merged state (tabular rows included), so a conflict check written in Java
+     * surfaces while the user is still on the field. No number is consumed from the sequence and no
+     * events fire. Always returns 200 — the outcome is the {@code {valid, fieldErrors, formErrors}}
+     * payload.
+     */
+    public Map<String, Object> validate(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
+                                        Principal principal) {
+        access.requireWrite(principal, desc);
+        Map<String, Object> body = new LinkedHashMap<>(requestBody);
+
+        ValidationErrors errors = new ValidationErrors();
+        attributeValidator.validate(body, desc.attributes(), errors);
+        boolean isNew = id == null;
+        DocumentObject doc = isNew ? instantiate(desc.javaClass()) : loadForUpdate(desc, id);
+        if (doc != null) {
+            if (isNew) {
+                doc.setId(UUID.randomUUID());
+                doc.setNumber(asString(body.getOrDefault("number", "")));
+                Object date = body.get("date");
+                doc.setDate(date == null || "".equals(date) ? LocalDateTime.now() : toLocalDateTime(date));
+            } else {
+                if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
+                // A half-edited form can carry a blank date; keep the stored one rather than throw.
+                Object date = body.get("date");
+                if (date != null && !"".equals(date)) doc.setDate(toLocalDateTime(date));
+            }
+            lifecycle.applyBody(doc, desc.attributes(), body, errors);
+            overlayTabularSections(doc, desc, body, errors);
+            EntityWriteSupport.dryRunRules(lifecycle, doc, isNew, errors);
+        }
+        return EntityWriteSupport.validationReport(errors);
+    }
+
     public Map<String, Object> post(DocumentDescriptor desc, UUID id, Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
