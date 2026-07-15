@@ -226,6 +226,9 @@ formatting. Close that gap in the same pass you model the business, not "later":
   `quantity = 1`, a default counterparty or warehouse, etc. This runs on the generic create path, so
   the rendered New form shows those values. Use `@Constant` for global defaults and plain Java field
   initializers for fixed constants. A blank form the user must fill from scratch is a missed default.
+  For `Ref` defaults and cross-navigation, the New form also prefills from query params
+  (`…/new?room=<uuid>&startsAt=2026-07-16T19:00` — keys are write-path field names, `Ref`/enum
+  values UUIDs, temporals ISO).
 
 - **Author field hints — don't hand back an auto-dumped form.** In `fields(EntityConfigBuilder)`, set
   `.order()`/`.group()`/`.width()` for layout, `.widget()` (`switch`, `textarea`, `avatar`/`gallery`,
@@ -332,6 +335,29 @@ token-refresh + backoff, `RefResolver` to map `Ref<T>` to external schemas, reac
 changes, stateful audit ledgers, one `onno.<connector>.enabled` switch) are in
 [reference/connectors.md](reference/connectors.md).
 
+## Working agreement
+
+Standing rules — follow them without being re-told:
+
+- **Edit in a worktree, never the main checkout**; finish with a PR (the default flow here is
+  PR-and-merge once checks pass).
+- **Run things yourself** — start the app, hit the endpoint, take the screenshot, run the migration.
+  Don't hand the user commands to run or ask permission for routine, reversible steps.
+- **Place work in the right repo**: `onno-framework` = open-core primitives; `onno-enterprise` =
+  commercial connectors and paid login providers; `onno-cloud` = control plane
+  (tenants/licensing/registry/billing). Building an app on the framework? Framework bugs get filed
+  as issues (below), not patched in-app.
+- **Before debugging a "known" symptom, read
+  [docs/GOTCHAS.md](https://github.com/onno-erp/onno-framework/blob/main/docs/GOTCHAS.md)** — the
+  documented traps (auth public-paths, SSE named events, wire-contract casing, SPA fallback…) cover
+  most first-session failures. Run/verify recipes:
+  [docs/RUNNING.md](https://github.com/onno-erp/onno-framework/blob/main/docs/RUNNING.md);
+  consuming/upgrading released artifacts:
+  [docs/CONSUMING.md](https://github.com/onno-erp/onno-framework/blob/main/docs/CONSUMING.md); SPA
+  design system: `onno-ui-starter/src/main/frontend/DESIGN.md`.
+- **Iterate on UI with dev mode** (devtools + `./gradlew -t <app>:classes`, `touch .onno-reload`),
+  not full rebuilds.
+
 ## Verify your work
 
 ```bash
@@ -390,6 +416,10 @@ optional housekeeping — stale docs are how every drift bug in this repo starte
 | a REST endpoint or its contract | `docs/ARCHITECTURE.md` (endpoint table), `docs/HEADLESS_READ_API.md`, the module README |
 | the module set / open-core boundary | `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/licensing/MODULE-SPLIT-PLAN.md` |
 | auth modes / endpoints | `docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `onno-auth-starter/README.md`, `onno-ui-starter/README.md` |
+| a documented gotcha's behaviour | `docs/GOTCHAS.md` (and the skill that repeats it) |
+| run/dev-mode/verify mechanics | `docs/RUNNING.md` |
+| publishing, registry, licensing of artifacts | `docs/CONSUMING.md` |
+| a reusable SPA component, token, or UI convention | `onno-ui-starter/src/main/frontend/DESIGN.md` |
 | a shipped roadmap item | move it from "next work" to "current state" in `ROADMAP.md` |
 
 Verify a doc claim against the code before repeating it — several historical docs referenced a

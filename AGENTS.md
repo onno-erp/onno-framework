@@ -98,8 +98,8 @@ Use the narrowest useful command while iterating, then finish with the broader c
 # Verify artifacts can be consumed by external projects through Maven local.
 ./gradlew publishToMavenLocal
 
-# Publish to GitHub Packages only when explicitly requested and credentials are available.
-GITHUB_ACTOR=... GITHUB_TOKEN=... ./gradlew publish
+# Real publishing is tag-driven CI only (Maven Central Portal + the cloud.onno.su/modules mirror);
+# never publish from a workstation. See docs/CONSUMING.md and .github/workflows/publish-packages.yml.
 ```
 
 For targeted iteration:
@@ -504,7 +504,6 @@ Likely outputs:
 - `BeforeWriteHandler`
 - `BeforePostHandler`
 - validation in Java services
-- eventually declarative rule metadata
 
 ### Round 6: Integrations, Scale, And Boundaries
 
@@ -712,7 +711,7 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
-`refSecondary(targetField)` (on a `Ref` field) shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records (e.g. a customer's phone); it names a field on the ref's *target* entity. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer, so it isn't seeded).
+`refSecondary(targetField)` (on a `Ref` field) shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records (e.g. a customer's phone); it names a field on the ref's *target* entity. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
 
 `label(String)` overrides a field's display label on the record form and list header — for custom attributes (over `@Attribute(displayName=…)`) and, crucially, for the built-in **system columns** that otherwise have no DSL label path: `code`/`description` (catalogs) and `number`/`date`/`posted` (documents). The primary use is localization, e.g. `f.field("code").label("Код")`, `f.field("posted").label("Статус")`. It is the form/detail counterpart to `ListSpec.label(field, …)` (which relabels only the list header); a `ListSpec.label` on the same field still wins for the list column specifically.
 
@@ -844,7 +843,8 @@ up every agent:
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
 token: it's delivered in a readable `XSRF-TOKEN` cookie and echoed back in the `X-XSRF-TOKEN` header.
-Users come from `onno.auth.users[*]` (there are **no** default credentials).
+Users come from `onno.auth.users[*]` (the starter ships **no** default credentials; the bundled
+example app seeds `admin@onnobooks.local`/`admin` and `manager@onnobooks.local`/`manager`).
 
 ```bash
 # 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.

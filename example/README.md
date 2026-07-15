@@ -24,8 +24,8 @@ It is deliberately **small and end-to-end** — one coherent domain, the core st
 
 ## Two roles, two UI profiles
 
-`admin`/`admin` resolves to the **admin profile** (`AdminLayout`): home is the dashboard, and the
-People section includes Employees. `manager`/`manager` resolves to the **default profile**
+`admin@onnobooks.local`/`admin` resolves to the **admin profile** (`AdminLayout`): home is the
+dashboard, and the People section includes Employees. `manager@onnobooks.local`/`manager` resolves to the **default profile**
 (`MainLayout`): home is the Orders list, no Employees nav. The split is enforced by per-entity RBAC
 (`@AccessControl` — `Employee` writes are ADMIN-only) and by role-scoped UI profiles (onno has no
 per-page RBAC, so the dashboard simply doesn't exist in the manager profile). Change these passwords

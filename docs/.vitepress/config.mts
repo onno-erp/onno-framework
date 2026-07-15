@@ -32,6 +32,9 @@ export default defineConfig({
         text: 'Guides',
         items: [
           { text: 'Architecture', link: '/ARCHITECTURE' },
+          { text: 'Running & verifying', link: '/RUNNING' },
+          { text: 'Consuming releases', link: '/CONSUMING' },
+          { text: 'Gotchas', link: '/GOTCHAS' },
           { text: 'Extending onno', link: '/EXTENDING' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
@@ -63,6 +66,9 @@ export default defineConfig({
         text: 'Guides',
         items: [
           { text: 'Architecture', link: '/ARCHITECTURE' },
+          { text: 'Running & verifying', link: '/RUNNING' },
+          { text: 'Consuming releases', link: '/CONSUMING' },
+          { text: 'Gotchas', link: '/GOTCHAS' },
           { text: 'Extending onno', link: '/EXTENDING' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },

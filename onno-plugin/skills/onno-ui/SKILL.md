@@ -44,8 +44,14 @@ Common builders: `b.title`, `b.subtitle`, `b.bare()`, `b.header(false)`, `b.widg
 
 Use `list(ListSpec)` for columns, labels, filters, conditional row styles, and map views. Use
 `fields(EntityConfigBuilder)` for `.order()`, `.group()`, `.width()`, `.widget()`, `.format()`,
-`.placeholder()`, `.hint()`, `.label()`, `.refSecondary()`, visibility, built-in action placement,
-and related lists.
+`.placeholder()`, `.hint()`, `.label()`, `.refSecondary()`, `.refFilter()` (cascading ref pickers —
+narrow one picker's options by another field's value), visibility, built-in action placement, and
+related lists.
+
+Seed a New form: field initializers for scalars/enums, `OnFillingHandler` for computed defaults, and
+query-param prefill for `Ref`s and cross-navigation
+(`…/new?room=<uuid>&startsAt=2026-07-16T19:00` — keys are write-path field names, `Ref`/enum values
+are UUIDs, temporals ISO).
 
 Use `actions(ActionSpec)` for custom toolbar, row, and detail actions. Prefer state-aware
 `visibleWhen`, `enabledWhen`, `label(row -> ...)`, and `icon(row -> ...)` when a button depends on
@@ -59,6 +65,19 @@ classes inside `src/main/widgets` are compiled into the widget CSS; dynamic clas
 
 Widgets that need live updates open `new EventSource("/api/events")` and listen for named events
 (`created`, `updated`, `deleted`, `posted`, `unposted`, `changed`). `onmessage` will not fire.
+
+## Iterate With Dev Mode
+
+Add `developmentOnly("org.springframework.boot:spring-boot-devtools")`, then run `bootRun` in one
+terminal and `./gradlew -t <app>:classes` in another — every save restarts the context and reloads
+all open browsers over SSE. Force a reload with `touch .onno-reload`. Do not full-rebuild per UI
+tweak.
+
+## Reuse Canonical Components
+
+When touching the host SPA itself, `onno-ui-starter/src/main/frontend/DESIGN.md` is the law: one
+`Segmented`, one `FacetSheet`, one `RefSelect`, one date-picking system, token radii
+(`rounded-control/field/card`), islands without shadows. Never add a second lookalike control.
 
 ## Polish Checklist
 
