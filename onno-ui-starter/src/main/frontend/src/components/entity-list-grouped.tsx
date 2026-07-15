@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
-import type { EntityRecord } from "@/lib/types";
+import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
-import { ListCell, ROW_H, type ListAggregate, type ListColumn } from "@/components/entity-list-widget";
+import { ListCell, ROW_H, eventMatches, type ListAggregate, type ListColumn } from "@/components/entity-list-widget";
 
 /** One expand filter param a group header carries; the flat feed replays it to load the group's rows. */
 type ExpandParam = { op: string; column: string; value: string };
@@ -102,6 +102,33 @@ export function GroupedList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedBase, groupBy, granularity, paramsBase, aggSig]);
 
+  // Live updates: the flat table patches/reloads itself off the "onno:dataevent" fan-out, but this
+  // grouped view owns its own data, so it must listen too — otherwise a grouped-by-default list
+  // (e.g. defaultGroupBy) never reflects SSE row changes. A matching event soft-refreshes: group
+  // headers (counts/subtotals shift) are refetched, and every expanded group reloads its first
+  // window while keeping its old rows on screen (no skeleton flash). Expansion is carried across by
+  // group label, since an insert/delete can shift group indexes. Bursts coalesce over 150ms,
+  // mirroring divkit-view's record-surface debounce.
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
+  const [liveTick, setLiveTick] = useState(0);
+  useEffect(() => {
+    let timer: number | undefined;
+    const onData = (e: Event) => {
+      const event = (e as CustomEvent).detail as UiEvent;
+      if (!eventMatches(event, kind, name)) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setLiveTick((t) => t + 1), 150);
+    };
+    window.addEventListener("onno:dataevent", onData);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("onno:dataevent", onData);
+    };
+  }, [kind, name]);
+
   // Fetch a window of a group's rows (first window or, with a cursor, the next) and splice it in.
   const loadGroupRows = useCallback(
     (index: number, group: GroupHeader, cursor: string | null) => {
@@ -135,6 +162,46 @@ export function GroupedList({
     },
     [feedBase, paramsBase, pageSize]
   );
+
+  // The soft refresh a live event triggers (see the listener above). Distinct from the hard-reset
+  // header effect: it never blanks `groups`, so the visible bands stay put until fresh data lands.
+  useEffect(() => {
+    if (liveTick === 0) return;
+    let alive = true;
+    const p = new URLSearchParams(paramsBase);
+    p.set("groupBy", groupBy);
+    if (granularity) p.set("granularity", granularity);
+    for (const a of aggregates) p.append("agg", `${a.fn},${a.columnName}`);
+    fetch(`${feedBase}/groups?${p.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { groups: GroupHeader[]; capped: boolean }) => {
+        if (!alive) return;
+        const fresh = data.groups ?? [];
+        // Carry each expanded group across by label; its stale rows stay visible while reloading.
+        const oldGroups = groupsRef.current ?? [];
+        const oldRowsByLabel = new Map<string, EntityRecord[]>();
+        for (const [idx, state] of Object.entries(expandedRef.current)) {
+          const label = oldGroups[Number(idx)]?.label;
+          if (label != null) oldRowsByLabel.set(label, state.rows);
+        }
+        const next: Record<number, GroupRows> = {};
+        setGroups(fresh);
+        setCapped(!!data.capped);
+        fresh.forEach((g, i) => {
+          if (!oldRowsByLabel.has(g.label) || g.expand.length === 0) return;
+          next[i] = { rows: oldRowsByLabel.get(g.label)!, cursor: null, hasMore: true, loading: true };
+        });
+        setExpanded(next);
+        fresh.forEach((g, i) => {
+          if (next[i]) loadGroupRows(i, g, null);
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTick]);
 
   const toggle = useCallback(
     (index: number, group: GroupHeader) => {

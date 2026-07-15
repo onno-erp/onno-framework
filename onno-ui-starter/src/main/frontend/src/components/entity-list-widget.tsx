@@ -345,7 +345,7 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
 function toSnake(name: string): string {
   return name.replace(/ /g, "").replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
-function eventMatches(event: UiEvent, kind: string, name: string): boolean {
+export function eventMatches(event: UiEvent, kind: string, name: string): boolean {
   if (!event || event.type === "ready") return false;
   // catalogs→"catalog", documents→"document", registers→"register" (posting emits register changes).
   const singular = kind === "catalogs" ? "catalog" : kind === "registers" ? "register" : "document";
