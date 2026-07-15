@@ -481,7 +481,11 @@ public class Order extends DocumentObject {
 ```
 
 (An entity with no usable no-arg constructor opens blank, as before. A `Ref` default can't be a
-literal initializer, so it isn't seeded.)
+literal initializer — but it *can* be seeded from the URL: the New form prefills from navigation
+query params, keys = write-path `fieldName`s, e.g. `…/new?room=<uuid>&startsAt=2026-07-16T19:00`.
+`Ref`/enum values are UUID strings, temporals ISO; `viewport`/`theme`/`profile` are reserved;
+unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
+field initializers, before ref/enum label resolution.)
 
 A **ref picker** (the typeahead for a `Ref` field) searches every text column of the target — code,
 description/number, and each String attribute — so a record is findable by a secondary attribute

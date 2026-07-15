@@ -23,5 +23,19 @@ Use the narrowest useful command while iterating, then broaden before handing of
 ./gradlew publishToMavenLocal
 ```
 
+## Runtime Smoke
+
+Prefer live verification over rebuild-and-stare: run the app with dev mode
+(`developmentOnly` devtools + `./gradlew -t :example:classes`; `touch .onno-reload` to force a
+browser reload) — see `docs/RUNNING.md`. Example logins: `admin@onnobooks.local`/`admin`,
+`manager@onnobooks.local`/`manager`.
+
+## Releases
+
+Publishing is tag-driven CI only (`vX.Y.Z` → Central Portal + cloud.onno.su/modules mirror) — never
+`./gradlew publish` locally. Verify an artifact landed before bumping consumers:
+`curl -sI https://repo1.maven.org/maven2/su/onno/onno-framework-starter/<v>/…pom`, or the registry
+with the license key as password. Consumer setup + upgrade checklist: `docs/CONSUMING.md`.
+
 Read [references/examples.md](references/examples.md) for when to use each command and what failures
 mean.

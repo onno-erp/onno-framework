@@ -42,7 +42,7 @@ Add the starter (Java 21, Spring Boot 3.4.x). Packages are `su.onno.*`; the Mave
 <dependency>
   <groupId>su.onno</groupId>
   <artifactId>onno-framework-starter</artifactId>
-  <version>0.10.0</version>
+  <version>1.10.2</version>
 </dependency>
 ```
 
