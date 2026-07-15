@@ -140,6 +140,22 @@ public class GenericDocumentController {
         return commands.update(query.require(name), id, body, principal);
     }
 
+    /**
+     * Dry-run validation for the form's live (as-you-type) feedback: runs the full write lifecycle —
+     * declarative constraints, hooks, {@code Validated} business rules (tabular rows included) —
+     * against the submitted values without persisting, and reports
+     * {@code {valid, fieldErrors, formErrors}} with 200 either way. The id-less form validates a
+     * create; with {@code id}, the changes are overlaid onto the stored document first, exactly
+     * like {@code PUT}.
+     */
+    @PostMapping({"/{name}/validate", "/{name}/{id}/validate"})
+    public Map<String, Object> validate(@PathVariable String name,
+                                        @PathVariable(required = false) UUID id,
+                                        @RequestBody Map<String, Object> body,
+                                        Principal principal) {
+        return commands.validate(query.require(name), id, body, principal);
+    }
+
     @PostMapping("/{name}/{id}/post")
     public Map<String, Object> post(@PathVariable String name, @PathVariable UUID id, Principal principal) {
         return commands.post(query.require(name), id, principal);

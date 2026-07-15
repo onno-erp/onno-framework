@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
@@ -289,12 +289,31 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const [staleExternal, setStaleExternal] = useState(false);
   // Inline validation messages, keyed by field key (attr fieldName / system "code"/"description").
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Live (as-you-type) server validation: the dry-run's per-field messages and form-level messages.
+  // Kept apart from `errors` (the save attempt's verdict) so a background check never wipes or
+  // fights the authoritative one; display merges them, save-set errors first.
+  const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
+  const [serverFormErrors, setServerFormErrors] = useState<string[]>([]);
+  // Only fields the user has actually visited show a live server error — the dry-run also reports
+  // "required" on every field the user simply hasn't reached yet, and painting those red while the
+  // form is being filled top-to-bottom would be noise.
+  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  // Monotonic guard so a slow validate response can't overwrite a newer one's verdict.
+  const validateSeq = useRef(0);
 
   const set = (key: string, value: unknown) => {
     markFormDirty(formPath);
     setData((prev) => ({ ...prev, [key]: value }));
-    // Clear a field's error as soon as the user edits it; it re-checks on the next save.
+    setTouched((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    // Clear a field's error as soon as the user edits it; it re-checks on the next save (and the
+    // live dry-run repaints it a debounce later if the value is still bad).
     setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setServerErrors((prev) => {
       if (!prev[key]) return prev;
       const next = { ...prev };
       delete next[key];
@@ -315,6 +334,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       setData(seedDataFrom(fresh, fields));
       setRowsBySection(seedRowsFrom(fresh, sections));
       setErrors({});
+      setServerErrors({});
+      setServerFormErrors([]);
+      setTouched(new Set());
       setStaleExternal(false);
       clearFormDirty(formPath);
     },
@@ -350,6 +372,60 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     window.addEventListener("onno:dataevent", onData);
     return () => window.removeEventListener("onno:dataevent", onData);
   }, [isEdit, id, kind, name, formPath, refetch]);
+
+  // The request body a save (or a dry-run validate) sends: the field state plus each tabular
+  // section as rows keyed by fieldName (what insertTabularSections reads server-side). Rows where
+  // every attribute is blank are dropped.
+  const buildPayload = useCallback((): EntityRecord => {
+    const payload = { ...data };
+    for (const ts of sections) {
+      const rows = (rowsBySection[ts.name] ?? [])
+        .filter((row) =>
+          ts.attributes.some((a) => {
+            const v = row[a.fieldName];
+            return v !== null && v !== undefined && v !== "";
+          })
+        )
+        .map((row) => {
+          const out: EntityRecord = {};
+          for (const a of ts.attributes) {
+            const v = row[a.fieldName];
+            // Booleans map to primitive columns — always send true/false, never null.
+            out[a.fieldName] = /^(boolean|Boolean)$/.test(a.javaType) ? v === true : v ?? null;
+          }
+          return out;
+        });
+      payload[ts.name] = rows;
+    }
+    return payload;
+  }, [data, sections, rowsBySection]);
+
+  // Live server validation: after a pause in editing, dry-run the full write lifecycle server-side
+  // (constraints + hooks + Validated business rules — e.g. a Java conflict check on a time slot)
+  // and paint the verdict inline, without waiting for Save. Only fires once the user has actually
+  // edited something; a stale (out-of-order) response is dropped via validateSeq. Errors are
+  // swallowed — this is advisory; the save path re-checks authoritatively.
+  useEffect(() => {
+    if (readOnly || !isFormDirty(formPath)) return;
+    const timer = setTimeout(() => {
+      const seq = ++validateSeq.current;
+      api
+        .validateRecord(kind, name, isEdit ? id : null, buildPayload())
+        .then((report) => {
+          if (seq !== validateSeq.current) return;
+          const mapped: Record<string, string> = {};
+          for (const [field, messages] of Object.entries(report.fieldErrors ?? {})) {
+            mapped[field] = Array.isArray(messages) ? messages[0] : String(messages);
+          }
+          setServerErrors(mapped);
+          setServerFormErrors(report.formErrors ?? []);
+        })
+        .catch(() => {
+          /* background check; Save re-validates for real */
+        });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [data, rowsBySection, readOnly, formPath, kind, name, isEdit, id, buildPayload]);
 
   // Validate every attribute field against its constraints; returns key -> message.
   const validateAll = (): Record<string, string> => {
@@ -391,28 +467,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     setErrors({});
     setSaving(true);
     try {
-      const payload = { ...data };
-      // Attach each tabular section as rows keyed by fieldName (what insertTabularSections
-      // reads server-side). Drop rows where every attribute is blank.
-      for (const ts of sections) {
-        const rows = (rowsBySection[ts.name] ?? [])
-          .filter((row) =>
-            ts.attributes.some((a) => {
-              const v = row[a.fieldName];
-              return v !== null && v !== undefined && v !== "";
-            })
-          )
-          .map((row) => {
-            const out: EntityRecord = {};
-            for (const a of ts.attributes) {
-              const v = row[a.fieldName];
-              // Booleans map to primitive columns — always send true/false, never null.
-              out[a.fieldName] = /^(boolean|Boolean)$/.test(a.javaType) ? v === true : v ?? null;
-            }
-            return out;
-          });
-        payload[ts.name] = rows;
-      }
+      const payload = buildPayload();
       let saved: EntityRecord;
       if (kind === "documents") {
         saved = isEdit ? await api.updateDocument(name, id!, payload) : await api.createDocument(name, payload);
@@ -550,7 +605,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
                 <FormFieldRow
                   field={f}
                   value={data[f.key]}
-                  error={errors[f.key]}
+                  // The save attempt's verdict wins; behind it, the live dry-run's message — but
+                  // only on fields the user has visited (see the `touched` note above).
+                  error={errors[f.key] ?? (touched.has(f.key) ? serverErrors[f.key] : undefined)}
                   onChange={(v) => set(f.key, v)}
                 />
               </div>
@@ -583,6 +640,15 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           meta={rl}
         />
       ))}
+      {/* Cross-field rule failures from the live dry-run (e.g. "slot already booked") have no
+          single input to attach to — surface them as a quiet form-level notice above the footer. */}
+      {!readOnly && serverFormErrors.length > 0 ? (
+        <div className="mt-4 rounded-card border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          {serverFormErrors.map((msg, i) => (
+            <p key={i}>{msg}</p>
+          ))}
+        </div>
+      ) : null}
       {readOnly ? null : (
         <div className="mt-5 flex justify-end gap-2">
           <button

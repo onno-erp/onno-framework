@@ -105,17 +105,17 @@ export async function streamUiEvents(
 // no cached response, hence no staleness (a later fetch always hits the network afresh).
 const inFlightGets = new Map<string, Promise<unknown>>();
 
-function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+function fetchJson<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
-  if (method !== "GET") return doFetch<T>(url, init);
+  if (method !== "GET") return doFetch<T>(url, init, opts);
   const existing = inFlightGets.get(url);
   if (existing) return existing as Promise<T>;
-  const p = doFetch<T>(url, init).finally(() => inFlightGets.delete(url));
+  const p = doFetch<T>(url, init, opts).finally(() => inFlightGets.delete(url));
   inFlightGets.set(url, p);
   return p;
 }
 
-async function doFetch<T>(url: string, init?: RequestInit): Promise<T> {
+async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -143,8 +143,9 @@ async function doFetch<T>(url: string, init?: RequestInit): Promise<T> {
       }
     } catch { /* ignore parse errors */ }
     // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
-    // failures (auth aside) surface as a toast as before.
-    if (res.status !== 401 && !fieldErrors) toast.error(message);
+    // failures (auth aside) surface as a toast as before. `silent` suppresses the toast for
+    // background calls (live validation) where a transient failure must not interrupt the user.
+    if (res.status !== 401 && !fieldErrors && !opts?.silent) toast.error(message);
     // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
     // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
     if (res.status === 401 && !url.endsWith("/auth/login")) onUnauthorized?.();
@@ -327,6 +328,19 @@ export interface NotificationPage {
   types: string[];
 }
 
+/**
+ * The outcome of a dry-run validate (`POST /api/{kind}/{name}[/{id}]/validate`): the full write
+ * lifecycle — declarative constraints, hooks, business rules — run server-side against the form's
+ * current values without persisting. Always HTTP 200; failures live in the payload.
+ */
+export interface ValidationReport {
+  valid: boolean;
+  /** Per-field messages, keyed by attribute field name (or "code"/"description"/"number"). */
+  fieldErrors: Record<string, string[]>;
+  /** Cross-field (form-level) rule messages. */
+  formErrors: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -433,6 +447,17 @@ export const api = {
   /** Server-side copy of a document (attributes + line items, unposted, dated now). Backs ⌘V paste. */
   duplicateDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}/duplicate`, { method: "POST" }),
+  /**
+   * Dry-run the write lifecycle server-side against the form's current values — live validation.
+   * No id validates a create; with an id the values overlay the stored record, like a PUT. Silent:
+   * a transient failure of a background check must not toast over the user's typing.
+   */
+  validateRecord: (kind: "catalogs" | "documents", name: string, id: string | null, data: EntityRecord) =>
+    fetchJson<ValidationReport>(
+      `${BASE}/${kind}/${name}/${id ? `${id}/` : ""}validate`,
+      { method: "POST", body: JSON.stringify(data) },
+      { silent: true }
+    ),
   // Pre-aggregated buckets for a data widget (chart/stat/sparkline/gauge): a server-side GROUP BY
   // returning O(buckets) rows instead of the entity's whole table (#199, see ListDataController).
   // `params` is the ready-to-send query — metric/field, groupBy/groupByDate, seriesBy, filter,

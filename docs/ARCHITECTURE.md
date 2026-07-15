@@ -198,8 +198,8 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 
 | Area | Endpoints (served by) |
 | --- | --- |
-| Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}` (ui-starter) |
-| Documents | `GET /api/documents/{name}` (`?from=&to=`), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost` (ui-starter) |
+| Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
+| Documents | `GET /api/documents/{name}` (`?from=&to=`), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
 | List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — **keyset-paginated** grid data by default: pass `?cursor=&limit=` and read back `{rows, nextCursor, hasMore}` (constant-time at any depth, no skip/dup on shifting data); `?count=exact\|estimate` adds a total. `?offset=` selects the legacy `{total, offset, rows}` mode. `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — register data for the virtualized register surface, same cursor envelope (`?offset=` selects the legacy page) and same declarative filter params (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's columns); movement rows carry a localized `_movement_type_display` + `_movement_type_color` (ui-starter) |
 | List grouping | `GET /api/list/{kind}/{name}/groups?groupBy=&granularity=&agg=fn,col&{q,filters}` — backend `GROUP BY`: `{groups: [{label, color?, count, values[], expand[]}], capped}`. One header per value (or per `day`/`month`/`year` bucket for a date column), each carrying an `expand` filter the grid replays on the list feed to load the group's rows. Same WHERE as the flat list; headers cap at 200 (ui-starter) |
@@ -230,6 +230,13 @@ the same entity write lifecycle as `repository.save(...)` — `onFilling()` (cre
 and `Validated` business rules — before the JDBI write, so a field a model derives in `beforeWrite()`
 is persisted on every write path, not just on the repository path. Auto-numbering and secret
 encryption stay in the command services; posting still runs its own lifecycle in `PostingEngine`.
+
+The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`
+dry-runs it — constraints, hooks, `Validated` rules (a Java conflict check included) — against the
+submitted values without persisting or consuming a number, and returns
+`{valid, fieldErrors, formErrors}` with 200 either way. The generated form calls it debounced while
+the user edits, painting a field-scoped rule (`BusinessRule.onField`) inline on its input and
+cross-field messages as a form-level notice, before Save is ever pressed.
 
 ## UI layer
 

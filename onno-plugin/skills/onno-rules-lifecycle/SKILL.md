@@ -24,4 +24,8 @@ Lifecycle hooks run on domain objects, not Spring beans. Do not `@Autowired` ins
 | call Spring services after post | `@EventListener DocumentPostedEvent` |
 | prevent deletion | `BeforeDeleteHandler` |
 
+Rules run on save/post — and live: the generated form debounce-calls
+`POST /api/{catalogs,documents}/{name}[/{id}]/validate` (a dry run of the same lifecycle) while the
+user edits, so a `BusinessRule.onField("slot", …)` conflict check surfaces inline before Save.
+
 Read [references/examples.md](references/examples.md) for complete examples.

@@ -38,6 +38,30 @@ final class EntityWriteSupport {
         }
     }
 
+    /**
+     * The write lifecycle for a dry-run validate: same hooks and rules as {@link #bake}, but a hook
+     * crashing is swallowed rather than surfaced. Live validation runs against half-filled forms,
+     * where a {@code beforeWrite()} that divides by a not-yet-entered quantity is routine — the save
+     * path still surfaces it for real.
+     */
+    static void dryRunRules(WriteLifecycle lifecycle, Object entity, boolean isNew, ValidationErrors errors) {
+        try {
+            lifecycle.runHooks(entity, isNew);
+            lifecycle.collectRules(entity, errors);
+        } catch (RuntimeException hookCrashedOnPartialInput) {
+            // report what was collected; the actual write re-runs and surfaces this
+        }
+    }
+
+    /** The JSON body of a dry-run validate: always 200, with the outcome in the payload. */
+    static java.util.Map<String, Object> validationReport(ValidationErrors errors) {
+        java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
+        report.put("valid", errors.isEmpty());
+        report.put("fieldErrors", errors.fieldErrors());
+        report.put("formErrors", errors.formErrors());
+        return report;
+    }
+
     static void requireWritable(UiProperties properties) {
         if (properties.isReadOnly()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
