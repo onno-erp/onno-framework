@@ -81,9 +81,48 @@ public final class ListFilter {
         // a case-insensitive match (matching the global search box) rather than Postgres-only ILIKE.
         appendLike(sql, bindings, i, like, allowedColumns, false);
         appendLike(sql, bindings, i, prefix, allowedColumns, true);
-        append(sql, bindings, i, ge, allowedColumns, "%s >= :%s");
-        append(sql, bindings, i, le, allowedColumns, "%s <= :%s");
+        appendBound(sql, bindings, i, ge, allowedColumns, false);
+        appendBound(sql, bindings, i, le, allowedColumns, true);
         return new Result(sql.toString(), bindings);
+    }
+
+    /** A calendar-date value as the island's date-range picker sends it ({@code yyyy-MM-dd}). */
+    private static final Pattern DATE_ONLY = Pattern.compile("^\\d{4}-\\d{2}-\\d{2}$");
+
+    /**
+     * A range bound ({@code ge}/{@code le}). A bare calendar date gets special treatment on both
+     * counts a plain {@code column >= :value} binding would miss:
+     * <ul>
+     *   <li>the bound string is CAST to TIMESTAMP in SQL — Postgres refuses to compare a timestamp
+     *       column against a varchar parameter (H2 coerces silently, so the break only showed in
+     *       production), and the explicit cast works on both;</li>
+     *   <li>the upper bound is extended to the end of its day. {@code _date} carries a time-of-day,
+     *       so {@code <= '2024-12-31'} (midnight) would silently drop every row dated inside the
+     *       range's last day — the classic "the date filter doesn't work" report.</li>
+     * </ul>
+     * Any other value (a full timestamp, a number) keeps the plain native comparison.
+     */
+    private static void appendBound(StringBuilder sql, Map<String, Object> bindings, int[] i,
+                                    List<String> pairs, Set<String> allowedColumns, boolean upper) {
+        if (pairs == null) {
+            return;
+        }
+        for (String pair : pairs) {
+            String[] cv = split(pair, allowedColumns);
+            if (cv == null) {
+                continue;
+            }
+            String param = "lf" + (i[0]++);
+            String op = upper ? "<=" : ">=";
+            if (DATE_ONLY.matcher(cv[1]).matches()) {
+                and(sql).append(cv[0]).append(' ').append(op)
+                        .append(" CAST(:").append(param).append(" AS TIMESTAMP)");
+                bindings.put(param, upper ? cv[1] + " 23:59:59.999999" : cv[1] + " 00:00:00");
+            } else {
+                and(sql).append(cv[0]).append(' ').append(op).append(" :").append(param);
+                bindings.put(param, cv[1]);
+            }
+        }
     }
 
     private static void append(StringBuilder sql, Map<String, Object> bindings, int[] i,

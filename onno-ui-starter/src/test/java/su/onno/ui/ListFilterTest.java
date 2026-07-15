@@ -25,11 +25,27 @@ class ListFilterTest {
     }
 
     @Test
-    void dateRangeBuildsNativeBounds() {
+    void dateRangeCastsCalendarDatesAndSpansTheWholeEndDay() {
+        // A bare yyyy-MM-dd bound is CAST to TIMESTAMP (Postgres won't compare timestamp to varchar)
+        // and the upper bound is pushed to end-of-day so the range includes rows dated inside its
+        // last day (the _date column carries a time-of-day).
         ListFilter.Result r = ListFilter.parse(null,
                 List.of("check_in,2024-01-01"), List.of("check_in,2024-12-31"), COLUMNS);
-        assertThat(r.sql()).isEqualTo("check_in >= :lf0 AND check_in <= :lf1");
-        assertThat(r.bindings()).containsEntry("lf0", "2024-01-01").containsEntry("lf1", "2024-12-31");
+        assertThat(r.sql()).isEqualTo(
+                "check_in >= CAST(:lf0 AS TIMESTAMP) AND check_in <= CAST(:lf1 AS TIMESTAMP)");
+        assertThat(r.bindings())
+                .containsEntry("lf0", "2024-01-01 00:00:00")
+                .containsEntry("lf1", "2024-12-31 23:59:59.999999");
+    }
+
+    @Test
+    void nonDateRangeBoundKeepsPlainNativeComparison() {
+        ListFilter.Result r = ListFilter.parse(null,
+                List.of("amount,100"), List.of("check_in,2024-12-31T18:30:00"), COLUMNS);
+        assertThat(r.sql()).isEqualTo("amount >= :lf0 AND check_in <= :lf1");
+        assertThat(r.bindings())
+                .containsEntry("lf0", "100")
+                .containsEntry("lf1", "2024-12-31T18:30:00");
     }
 
     @Test
@@ -53,7 +69,7 @@ class ListFilterTest {
     @Test
     void systemColumnsAreAllowed() {
         ListFilter.Result r = ListFilter.parse(null, List.of("_date,2024-01-01"), null, COLUMNS);
-        assertThat(r.sql()).isEqualTo("_date >= :lf0");
+        assertThat(r.sql()).isEqualTo("_date >= CAST(:lf0 AS TIMESTAMP)");
     }
 
     @Test
