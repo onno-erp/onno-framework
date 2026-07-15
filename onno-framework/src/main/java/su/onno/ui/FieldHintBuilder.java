@@ -24,6 +24,7 @@ public class FieldHintBuilder {
     private String hint;
     private String label;
     private String refSecondary;
+    private String refFilter;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -156,6 +157,29 @@ public class FieldHintBuilder {
         return this;
     }
 
+    /**
+     * For a {@code Ref} field: narrow the picker's options with a predicate over the ref's
+     * <em>target</em> entity, in the same small {@code field op value AND …} grammar a dashboard
+     * widget's {@code config("filter", …)} uses. A {@code ${field}} placeholder substitutes the
+     * form's <em>current</em> value of another field, making pickers cascade:
+     *
+     * <pre>
+     * f.field("employee").refFilter("department = ${department}");   // header field → header field
+     * f.field("lines.book").refFilter("supplier = ${supplier}");     // line cell ← header field
+     * </pre>
+     *
+     * <p>While a referenced field is still empty the filter is skipped (the picker shows
+     * everything); once it's set, options narrow and a later change clears the dependent field.
+     * Static predicates work too (no placeholder), e.g. {@code "active = true"}. Left-hand names
+     * are fields of the target entity; parsing is the injection-safe {@code WidgetFilter}
+     * (known-column allowlist, bound values), so an unknown name degrades to "no filter", never an
+     * error. No effect on a non-ref field.</p>
+     */
+    public FieldHintBuilder refFilter(String filter) {
+        this.refFilter = filter;
+        return this;
+    }
+
     /** Switch to configuring another field on the same entity. */
     public FieldHintBuilder field(String name) {
         return parent.field(name);
@@ -168,6 +192,6 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget, placeholder, format, hint, label, refSecondary);
+                order, group, width, widget, placeholder, format, hint, label, refSecondary, refFilter);
     }
 }

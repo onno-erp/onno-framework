@@ -47,10 +47,11 @@ public class GenericCatalogController {
         // A search query or an explicit limit switches to the capped server-side
         // typeahead (for ref pickers); without either, the full list is returned for
         // back-compat with callers that page client-side. `filter` is an authored
-        // WidgetFilter predicate so chart/list widgets scope their rows server-side.
+        // WidgetFilter predicate — chart/list widgets scope their rows with it, and the
+        // cascading ref picker narrows its typeahead with a resolved refFilter.
         if (q != null || limit != null) {
             int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
-            return query.search(desc, q, cap);
+            return query.search(desc, q, cap, filter);
         }
         return query.list(desc, filter);
     }

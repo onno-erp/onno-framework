@@ -21,6 +21,11 @@ interface RefSelectProps {
   refKind?: "catalog" | "document";
   /** Optional target column shown as a secondary line under each option's name (issue #184). */
   secondaryField?: string;
+  /**
+   * Resolved cascading predicate (refFilter with ${...} already substituted) sent to the
+   * typeahead's ?filter=, so only compatible records are offered. Undefined = unfiltered.
+   */
+  filter?: string;
   value?: string;
   onChange: (id: string) => void;
 }
@@ -48,7 +53,7 @@ function displayOf(item: EntityRecord): string {
  * shows even when it isn't in the current result page. "+ New" is pinned at the top so
  * it's always reachable regardless of how many matches there are.
  */
-export function RefSelect({ targetName, refKind = "catalog", secondaryField, value, onChange }: RefSelectProps) {
+export function RefSelect({ targetName, refKind = "catalog", secondaryField, filter, value, onChange }: RefSelectProps) {
   const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
@@ -102,7 +107,9 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
     setLoading(true);
     const t = setTimeout(() => {
       let cancelled = false;
-      const run = isDocument ? api.searchDocument(name, query, 30) : api.searchCatalog(name, query, 30);
+      const run = isDocument
+        ? api.searchDocument(name, query, 30, filter)
+        : api.searchCatalog(name, query, 30, filter);
       run
         .then((r) => !cancelled && setItems(r))
         .catch(() => {})
@@ -112,7 +119,7 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, val
       };
     }, 180);
     return () => clearTimeout(t);
-  }, [open, query, name, isDocument]);
+  }, [open, query, name, isDocument, filter]);
 
   const pick = (item: EntityRecord) => {
     // A manual pick supersedes any outstanding "+ New" hand-off.

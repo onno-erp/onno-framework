@@ -51,6 +51,18 @@ public final class WidgetFilter {
      * @param allowedColumns the entity's column names; the system allowlist is added automatically
      */
     public static Result parse(String filter, Set<String> allowedColumns) {
+        return parse(filter, allowedColumns, Set.of());
+    }
+
+    /**
+     * Like {@link #parse(String, Set)}, but values compared against a column in {@code uuidColumns}
+     * (ref / enum columns, whose SQL type is {@code UUID}) are bound as typed {@code java.util.UUID}s.
+     * PostgreSQL rejects a varchar parameter against a uuid column (H2 coerces silently, same class
+     * of problem as #163) — the ref picker's cascading {@code refFilter} compares record ids, so it
+     * passes the ref/enum column set here. A malformed uuid value degrades to a varchar bind (the
+     * clause then matches nothing on H2 and errors on PG only for a hand-crafted request).
+     */
+    public static Result parse(String filter, Set<String> allowedColumns, Set<String> uuidColumns) {
         Map<String, Object> bindings = new LinkedHashMap<>();
         if (filter == null || filter.isBlank()) {
             return new Result("", bindings);
@@ -71,6 +83,13 @@ public final class WidgetFilter {
             }
             String op = m.group(2).equals("!=") ? "<>" : m.group(2);
             Object value = literal(m.group(3));
+            if (value instanceof String s && uuidColumns.contains(column)) {
+                try {
+                    value = java.util.UUID.fromString(s);
+                } catch (IllegalArgumentException notAUuid) {
+                    // fall through to the varchar bind; see the javadoc
+                }
+            }
             if (sql.length() > 0) {
                 sql.append(" AND ");
             }

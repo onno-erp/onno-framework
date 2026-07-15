@@ -48,10 +48,11 @@ public class GenericDocumentController {
         access.requireRead(principal, desc);
         // A search query or explicit limit switches to the capped typeahead used by the
         // document ref picker; otherwise it's the full (date-ranged) list. `filter` is an
-        // authored WidgetFilter predicate so chart/list widgets scope their rows server-side.
+        // authored WidgetFilter predicate — chart/list widgets scope their rows with it, and
+        // the cascading ref picker narrows its typeahead with a resolved refFilter.
         if (q != null || limit != null) {
             int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
-            return query.search(desc, q, cap);
+            return query.search(desc, q, cap, filter);
         }
         return query.list(desc, from, to, filter);
     }

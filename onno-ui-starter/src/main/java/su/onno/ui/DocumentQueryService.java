@@ -101,13 +101,27 @@ public class DocumentQueryService {
      * only, newest first.
      */
     public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit) {
+        return search(desc, query, limit, null);
+    }
+
+    /**
+     * As {@link #search(DocumentDescriptor, String, int)}, additionally narrowed by a
+     * {@link WidgetFilter} predicate — the cascading ref picker sends its resolved
+     * {@code refFilter} here, so only compatible documents are offered. Ref/enum columns bind as
+     * typed uuids (PG-strict); a null/blank/invalid predicate is simply no filter.
+     */
+    public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit, String filter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        String where = "_deletion_mark = false" + searchClause(surface, query);
+        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        String where = "_deletion_mark = false"
+                + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")")
+                + searchClause(surface, query);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                             " WHERE " + where +
                             " ORDER BY _date DESC LIMIT :limit")
                     .bind("limit", limit);
+            wf.bindings().forEach(q::bind);
             EntityQuerySupport.bindSearch(q, query);
             return q.mapToMap().list();
         });

@@ -189,6 +189,32 @@ function validateField(attr: AttributeMeta, value: unknown, t: Translate): strin
   return null;
 }
 
+/**
+ * Substitute a refFilter template's ${field} placeholders with the form's current values, producing
+ * the predicate the picker's typeahead sends as ?filter=. A placeholder whose field is still empty
+ * disables the filter entirely (unfiltered picker) — a half-cascade like "supplier = " would match
+ * nothing and read as a broken picker. A template with no placeholders passes through (static
+ * narrowing, e.g. "active = true").
+ */
+function resolveRefFilter(template: string | undefined, values: EntityRecord): string | undefined {
+  if (!template) return undefined;
+  let incomplete = false;
+  const resolved = template.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, field: string) => {
+    const v = values[field];
+    if (v == null || v === "") {
+      incomplete = true;
+      return "";
+    }
+    return String(v);
+  });
+  return incomplete ? undefined : resolved;
+}
+
+// True when this attribute's refFilter cascades on `field` (its template references ${field}).
+function cascadesOn(attr: AttributeMeta, field: string): boolean {
+  return !!attr.refFilter && attr.refFilter.includes("${" + field + "}");
+}
+
 // Fire an onno:// action / pane-close through the host (divkit-view) — same routing the
 // DivKit surfaces use, so a form opened in an island behaves like any other navigation.
 function dispatchAction(url: string) {
@@ -303,7 +329,35 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
 
   const set = (key: string, value: unknown) => {
     markFormDirty(formPath);
-    setData((prev) => ({ ...prev, [key]: value }));
+    // A change to a field that other pickers cascade on (${key} in their refFilter) invalidates
+    // whatever those pickers hold — clear them so the user re-picks from the narrowed options.
+    const dependentFields = meta.attributes
+      .filter((a) => a.fieldName !== key && cascadesOn(a, key))
+      .map((a) => a.fieldName);
+    setData((prev) => {
+      const next = { ...prev, [key]: value };
+      for (const f of dependentFields) delete next[f];
+      return next;
+    });
+    const dependentCells = sections
+      .map((ts) => ({
+        name: ts.name,
+        cols: ts.attributes.filter((a) => cascadesOn(a, key)).map((a) => a.fieldName),
+      }))
+      .filter((s) => s.cols.length > 0);
+    if (dependentCells.length > 0) {
+      setRowsBySection((prev) => {
+        const next = { ...prev };
+        for (const { name: section, cols } of dependentCells) {
+          next[section] = (next[section] ?? []).map((row) => {
+            const r = { ...row };
+            for (const c of cols) delete r[c];
+            return r;
+          });
+        }
+        return next;
+      });
+    }
     setTouched((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
     // Clear a field's error as soon as the user edits it; it re-checks on the next save (and the
     // live dry-run repaints it a debounce later if the value is still bad).
@@ -451,9 +505,18 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   };
   const setCell = (section: string, idx: number, key: string, value: unknown) => {
     markFormDirty(formPath);
+    // Same-row cascade: a cell other cells' refFilters reference clears them in this row only.
+    const dependentCols = (sections.find((ts) => ts.name === section)?.attributes ?? [])
+      .filter((a) => a.fieldName !== key && cascadesOn(a, key))
+      .map((a) => a.fieldName);
     setRowsBySection((prev) => ({
       ...prev,
-      [section]: (prev[section] ?? []).map((row, i) => (i === idx ? { ...row, [key]: value } : row)),
+      [section]: (prev[section] ?? []).map((row, i) => {
+        if (i !== idx) return row;
+        const r = { ...row, [key]: value };
+        for (const c of dependentCols) delete r[c];
+        return r;
+      }),
     }));
   };
 
@@ -608,6 +671,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
                   // The save attempt's verdict wins; behind it, the live dry-run's message — but
                   // only on fields the user has visited (see the `touched` note above).
                   error={errors[f.key] ?? (touched.has(f.key) ? serverErrors[f.key] : undefined)}
+                  filterValues={data}
                   onChange={(v) => set(f.key, v)}
                 />
               </div>
@@ -621,6 +685,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           section={ts}
           rows={rowsBySection[ts.name] ?? []}
           readOnly={readOnly}
+          headerValues={data}
           onAdd={() => addRow(ts.name)}
           onRemove={(idx) => removeRow(ts.name, idx)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
@@ -698,6 +763,7 @@ function TabularSectionEditor({
   section,
   rows,
   readOnly,
+  headerValues,
   onAdd,
   onRemove,
   onCell,
@@ -706,6 +772,8 @@ function TabularSectionEditor({
   rows: EntityRecord[];
   /** Viewer without write access: cells disable via the enclosing fieldset; hide add/remove too. */
   readOnly?: boolean;
+  /** The form's top-level values, so a cell's refFilter can cascade on a header field. */
+  headerValues?: EntityRecord;
   onAdd: () => void;
   onRemove: (idx: number) => void;
   onCell: (idx: number, key: string, value: unknown) => void;
@@ -781,6 +849,8 @@ function TabularSectionEditor({
                         attr={attr}
                         value={row[attr.fieldName]}
                         compact
+                        // Row values win over header values, so a cell can cascade on either.
+                        filterValues={{ ...headerValues, ...row }}
                         onChange={(v) => onCell(idx, attr.fieldName, v)}
                       />
                     </div>
@@ -813,11 +883,14 @@ function FormFieldRow({
   field,
   value,
   error,
+  filterValues,
   onChange,
 }: {
   field: Field;
   value: unknown;
   error?: string;
+  /** The form's current values, for resolving a ref field's cascading refFilter. */
+  filterValues?: EntityRecord;
   onChange: (value: unknown) => void;
 }) {
   const required = field.kind === "attr" && field.attr.required;
@@ -838,6 +911,7 @@ function FormFieldRow({
         value={value}
         invalid={invalid}
         placeholder={placeholder}
+        filterValues={filterValues}
         onChange={onChange}
       />
     );
@@ -897,6 +971,7 @@ function AttrControl({
   invalid,
   placeholder,
   compact,
+  filterValues,
 }: {
   attr: AttributeMeta;
   value: unknown;
@@ -905,6 +980,8 @@ function AttrControl({
   placeholder?: string;
   /** Grid-cell rendering (tabular sections): keep multi-line controls to a single-row height. */
   compact?: boolean;
+  /** Current form/row values for resolving attr.refFilter's ${...} placeholders. */
+  filterValues?: EntityRecord;
 }) {
   const t = useMessages();
   const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
@@ -953,6 +1030,7 @@ function AttrControl({
         targetName={attr.refTarget}
         refKind={attr.refKind}
         secondaryField={attr.refSecondary}
+        filter={resolveRefFilter(attr.refFilter, filterValues ?? {})}
         value={value as string | undefined}
         onChange={onChange}
       />

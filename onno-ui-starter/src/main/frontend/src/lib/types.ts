@@ -36,6 +36,13 @@ export interface AttributeMeta {
    * disambiguate same-named records (from f.field(...).refSecondary(...); set only when isRef).
    */
   refSecondary?: string;
+  /**
+   * Cascading-picker predicate over the ref target's columns (from f.field(...).refFilter(...);
+   * set only when isRef). `${field}` placeholders reference this form's other fields — the form
+   * substitutes their current values and passes the result to the typeahead's ?filter=. While a
+   * placeholder's field is empty the filter is skipped (unfiltered picker).
+   */
+  refFilter?: string;
   isEnum: boolean;
   enumName?: string;
   /** Display title of the enumeration type (from @Enumeration.title); falls back to enumName. */

@@ -62,6 +62,9 @@ public class SalesOrderView implements EntityView {
             .field("posted").label("Posting status")
             .field("customer").order(10).width("half").refSecondary("phone")
                 .hint("Customer on the order.")
+            // Cascading picker: only this customer's delivery addresses. ${...} substitutes the
+            // form's current value; empty → unfiltered; changing customer clears this field.
+            .field("deliveryAddress").refFilter("customer = ${customer}")
             .field("status").order(20).width("half")
             .field("total").order(30).format("currency:USD").hideInForm()
                 .hint("Computed from lines.")
