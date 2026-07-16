@@ -35,6 +35,21 @@ public final class AttributeValidator {
         }
     }
 
+    /**
+     * Validate only the attributes a partial-update body actually submits. Updates touch just the
+     * keys present in the body, so an absent required attribute is "left unchanged", not "cleared" —
+     * flagging it would force clients to resend every required field on every write. A key that IS
+     * present with a null/blank value is still a violation (that write would clear the column).
+     */
+    public void validatePartial(Map<String, Object> values, List<AttributeDescriptor> attributes,
+                                ValidationErrors errors) {
+        for (AttributeDescriptor a : attributes) {
+            if (values.containsKey(a.fieldName())) {
+                check(a, values.get(a.fieldName()), errors);
+            }
+        }
+    }
+
     private void check(AttributeDescriptor a, Object value, ValidationErrors errors) {
         String label = a.displayName();
         boolean empty = value == null || (value instanceof String s && s.isBlank());
