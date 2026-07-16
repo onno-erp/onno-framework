@@ -128,6 +128,14 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "shell.menu": "Menu",
   "shell.more": "More",
 
+  // Register surface (the virtualized movements/balance lists).
+  "register.period": "Period",
+  "register.type": "Type",
+  "register.balanceTab": "Balance",
+  "register.movementsTab": "Movements",
+  "register.receipt": "Receipt",
+  "register.expense": "Expense",
+
   // List grid: toolbar count, search, sort, view toggle, and the pager footer.
   "list.count": "{count} rows",
   "list.search": "Search…",

@@ -155,7 +155,7 @@ public class DocumentCommandService {
         // recompute the way they do on the repository path; only fields a hook actually changed are
         // folded back in, leaving the partial-update semantics intact. (#158)
         ValidationErrors errors = new ValidationErrors();
-        attributeValidator.validate(body, desc.attributes(), errors);
+        attributeValidator.validatePartial(body, desc.attributes(), errors);
         DocumentObject doc = loadForUpdate(desc, id);
         if (doc != null) {
             if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
@@ -250,8 +250,12 @@ public class DocumentCommandService {
         Map<String, Object> body = new LinkedHashMap<>(requestBody);
 
         ValidationErrors errors = new ValidationErrors();
-        attributeValidator.validate(body, desc.attributes(), errors);
         boolean isNew = id == null;
+        if (isNew) {
+            attributeValidator.validate(body, desc.attributes(), errors);
+        } else {
+            attributeValidator.validatePartial(body, desc.attributes(), errors);
+        }
         DocumentObject doc = isNew ? instantiate(desc.javaClass()) : loadForUpdate(desc, id);
         if (doc != null) {
             if (isNew) {

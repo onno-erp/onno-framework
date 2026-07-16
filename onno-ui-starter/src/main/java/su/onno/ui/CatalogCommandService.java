@@ -135,7 +135,7 @@ public class CatalogCommandService {
         // the repository path; only fields a hook actually changed are folded back in, leaving the
         // partial-update semantics intact. (#158)
         ValidationErrors errors = new ValidationErrors();
-        attributeValidator.validate(body, desc.attributes(), errors);
+        attributeValidator.validatePartial(body, desc.attributes(), errors);
         CatalogObject entity = loadCatalogObject(desc, id);
         if (entity != null) {
             if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
@@ -226,8 +226,12 @@ public class CatalogCommandService {
         Map<String, Object> body = new LinkedHashMap<>(requestBody);
 
         ValidationErrors errors = new ValidationErrors();
-        attributeValidator.validate(body, desc.attributes(), errors);
         boolean isNew = id == null;
+        if (isNew) {
+            attributeValidator.validate(body, desc.attributes(), errors);
+        } else {
+            attributeValidator.validatePartial(body, desc.attributes(), errors);
+        }
         CatalogObject entity = isNew ? instantiate(desc.javaClass()) : loadCatalogObject(desc, id);
         if (entity != null) {
             if (isNew) {

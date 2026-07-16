@@ -139,7 +139,10 @@ Writes are the mirror image of reads, and two things surprise people:
   `version` (`_version` is also accepted). A `Ref<>`/enum is written as its bare UUID string.
 - **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
   in the body — omitted fields keep their stored value, and an empty body is a no-op. So a
-  `PUT { "startsAt": "…" }` moves just that field and does **not** null the rest.
+  `PUT { "startsAt": "…" }` moves just that field and does **not** null the rest. Validation follows
+  the same rule: `@Attribute(required = true)` fields absent from an update body are not flagged
+  (they're unchanged) — but a key explicitly present with `null`/blank still fails, because that
+  write would clear the column. Entity-level `rules()` always run on the merged state.
 
 ```text
 POST /api/catalogs/{name}                 create (body = camelCase fields)
