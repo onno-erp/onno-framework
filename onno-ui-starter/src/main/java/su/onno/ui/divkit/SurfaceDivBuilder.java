@@ -62,6 +62,10 @@ public final class SurfaceDivBuilder {
             col.put("format", c.format() == null ? "" : c.format());
             // Optional help text → a hoverable "?" next to the column header.
             col.put("hint", c.hint() == null ? "" : c.hint());
+            // A row-action submenu the cell opens directly on right-click (ListSpec.cellMenu).
+            if (c.cellMenu() != null && !c.cellMenu().isBlank()) {
+                col.put("cellMenu", c.cellMenu());
+            }
             columns.add(col);
         }
         Map<String, Object> sort = new LinkedHashMap<>();

@@ -33,6 +33,7 @@ public final class ListSpec {
     private FeedMode feedMode;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
+    private final Map<String, String> cellMenus = new LinkedHashMap<>();
     private String defaultGroupBy;
     private final List<Aggregate> aggregates = new ArrayList<>();
     private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
@@ -225,6 +226,26 @@ public final class ListSpec {
      * list.groupable("status", "warehouse", "orderDate");   // Group by ▾: None | Status | Warehouse | Order date
      * </pre>
      */
+    /**
+     * Attach a declared row-action <b>submenu</b> to a column's cells: right-clicking the cell
+     * (e.g. a status pill) opens JUST that submenu's entries as a flat menu at the cursor — one
+     * click to the choices, instead of row-menu → submenu. The label must match a
+     * {@code .menu("…")} used by this view's ROW actions; per-row visibility/labels/colors apply
+     * exactly as in the row menu. Anywhere else on the row keeps the full context menu.
+     *
+     * <pre>
+     * list.cellMenu("status", "Change status");   // right-click the pill → the status choices
+     * </pre>
+     */
+    public ListSpec cellMenu(String field, String submenuLabel) {
+        cellMenus.put(field, submenuLabel);
+        return this;
+    }
+
+    public Map<String, String> cellMenus() {
+        return cellMenus;
+    }
+
     public ListSpec groupable(String... fields) {
         groupable.addAll(List.of(fields));
         return this;

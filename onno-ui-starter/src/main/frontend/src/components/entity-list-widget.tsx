@@ -66,6 +66,8 @@ export type ListColumn = {
   format?: string;
   /** Optional help text; surfaced as a hoverable "?" next to the column header. */
   hint?: string;
+  /** A row-action submenu label this cell opens directly on right-click (ListSpec.cellMenu). */
+  cellMenu?: string;
 };
 /**
  * A custom action button declared by an EntityView. {@code scope} is "toolbar" (list-level) or
@@ -1228,7 +1230,15 @@ export function EntityListWidget({
   const selAnchorRef = useRef<number | null>(null);
   // The row right-click menu this island owns (built-ins + custom actions + batch ops). The
   // native event is preventDefault-ed so divkit-view's DOM-sniffing fallback menu stays quiet.
-  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; id: string; url: string; row: EntityRecord } | null>(null);
+  const [rowMenu, setRowMenu] = useState<{
+    x: number;
+    y: number;
+    id: string;
+    url: string;
+    row: EntityRecord;
+    /** Set by a cell-menu right-click (ListSpec.cellMenu): render ONLY this submenu's actions, flat. */
+    only?: string;
+  } | null>(null);
   // Two-step batch delete: first click arms ("sure?"), second click runs.
   const [armedDelete, setArmedDelete] = useState(false);
   // Table vs map vs custom view (each alternative only offered when the list declares it). The map
@@ -2134,6 +2144,9 @@ export function EntityListWidget({
         const submenus = rowSubmenus
           .map((g) => ({ label: g.label, actions: g.actions.filter(eligible) }))
           .filter((g) => g.actions.length);
+        // Cell-menu mode (ListSpec.cellMenu): just the named submenu's entries, flat — the status
+        // pill's right-click IS the status list.
+        const onlyMenu = rowMenu.only ? submenus.find((g) => g.label === rowMenu.only) : undefined;
         const close = () => {
           setRowMenu(null);
           setArmedDelete(false);
@@ -2173,7 +2186,9 @@ export function EntityListWidget({
         };
         // Built-ins: batch = label + open + delete; single = open/edit/dup/copyLink/delete — minus
         // the write items (edit, dup, delete) when the viewer can't write the entity.
-        const itemCount = (batch ? (canWrite ? 3 : 2) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
+        const itemCount = onlyMenu
+          ? onlyMenu.actions.length
+          : (batch ? (canWrite ? 3 : 2) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
             open
@@ -2184,6 +2199,11 @@ export function EntityListWidget({
             width={216}
             estimatedHeight={itemCount * 38 + 24}
           >
+            {onlyMenu ? (
+              // Cell-menu mode: the pill's right-click IS the choice list — nothing else.
+              onlyMenu.actions.map(actionItem)
+            ) : (
+              <>
             {batch ? (
               <>
                 <ContextMenuLabel>{t("list.selected", { count: selected.size })}</ContextMenuLabel>
@@ -2300,6 +2320,8 @@ export function EntityListWidget({
                 )}
               </>
             ) : null}
+              </>
+            )}
           </ContextMenuContent>
         );
       })()
@@ -2788,9 +2810,34 @@ export function EntityListWidget({
                       )}
                       style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                     >
-                      {columns.map((c) => (
-                        <ListCell key={c.columnName} row={row} col={c} />
-                      ))}
+                      {columns.map((c) =>
+                        c.cellMenu ? (
+                          // ListSpec.cellMenu: right-clicking THIS cell (e.g. the status pill)
+                          // opens just its submenu's choices at the cursor — one click closer
+                          // than row-menu → submenu. The rest of the row keeps the full menu.
+                          <span
+                            key={c.columnName}
+                            className="flex min-w-0 items-center"
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const rid = String(row._id);
+                              setRowMenu({
+                                x: e.clientX,
+                                y: e.clientY,
+                                id: rid,
+                                url: url ?? "",
+                                row,
+                                only: c.cellMenu,
+                              });
+                            }}
+                          >
+                            <ListCell row={row} col={c} />
+                          </span>
+                        ) : (
+                          <ListCell key={c.columnName} row={row} col={c} />
+                        )
+                      )}
                       {rowViewers ? (
                         <div className="pointer-events-none absolute left-0 top-1/2 z-10 flex w-11 -translate-y-1/2 items-center justify-end pr-1.5">
                           <PresenceAvatars viewers={rowViewers} size={16} max={3} overlap />

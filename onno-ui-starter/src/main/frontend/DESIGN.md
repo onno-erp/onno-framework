@@ -43,6 +43,10 @@ Colored pills: a cell renders as a pill whenever the row carries `{col}_color` (
 attribute (column-name convention, like `avatar_url`). The ref picker (`ref-select.tsx#RefRow`)
 shows the same color as a `size-2.5` dot before the option label (avatar wins when both exist).
 
+Cell menus: a column whose descriptor carries `cellMenu` (from `ListSpec.cellMenu`) opens ONLY that
+row-action submenu, flat, on cell right-click (`rowMenu.only` in `entity-list-widget.tsx`); the rest
+of the row keeps the full context menu. Flat table view only.
+
 ## Charts & dashboards
 
 `components/chart-widget.tsx` + `lib/time-range.ts` + `lib/widget-data.ts`:

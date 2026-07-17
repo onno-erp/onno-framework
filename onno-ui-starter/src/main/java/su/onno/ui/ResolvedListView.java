@@ -180,16 +180,24 @@ public record ResolvedListView(String title, List<Column> columns,
      * render an image thumbnail) and {@code format} (a date pattern or number spec applied to the
      * cell value). Both default to blank.
      */
+    /** {@code cellMenu}: a row-action submenu label the cell opens directly on right-click
+     *  ({@code ListSpec.cellMenu}); blank = the cell has no menu of its own. */
     public record Column(String label, String columnName, String width, String widget, String format,
-                         String hint) {
+                         String hint, String cellMenu) {
         /** Back-compat: a column with no display widget/format hints. */
         public Column(String label, String columnName, String width) {
-            this(label, columnName, width, "", "", "");
+            this(label, columnName, width, "", "", "", "");
         }
 
         /** Back-compat: a column with no help hint. */
         public Column(String label, String columnName, String width, String widget, String format) {
-            this(label, columnName, width, widget, format, "");
+            this(label, columnName, width, widget, format, "", "");
+        }
+
+        /** Back-compat: a column with no cell menu. */
+        public Column(String label, String columnName, String width, String widget, String format,
+                      String hint) {
+            this(label, columnName, width, widget, format, hint, "");
         }
     }
 }

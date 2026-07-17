@@ -447,6 +447,12 @@ placed with `.menu("…")` renders inside a **submenu** with that label instead 
 icon button — actions sharing a label group together in declaration order. The per-row functions
 (`label(row -> …)`, `visibleWhen`, `enabledWhen`) still apply to menu entries:
 
+**Cell menus** — `list.cellMenu("status", "Change status")` attaches a declared submenu to a
+*column*: right-clicking that column's cell (e.g. the status pill) opens JUST the submenu's entries
+as a flat menu at the cursor — one click to the choices instead of row-menu → submenu. Per-row
+visibility/labels/colors apply exactly as in the row menu; the rest of the row keeps the full
+context menu. Flat table view only (grouped rows keep the standard menu).
+
 ```java
 for (OrderStatus st : OrderStatus.values()) {
     a.action("status-" + st.name().toLowerCase()).scope(ActionScope.ROW)

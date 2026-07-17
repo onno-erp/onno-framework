@@ -151,7 +151,8 @@ public class UiViewResolver {
                 }
                 columns.add(new ResolvedListView.Column(
                         spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.width(),
-                        cm.widget(), cm.format(), cm.hint()));
+                        cm.widget(), cm.format(), cm.hint(),
+                        spec.cellMenus().getOrDefault(field, "")));
             }
         } else {
             // Default: visible columns in configured order, minus any hidden, with label overrides.
@@ -162,7 +163,8 @@ public class UiViewResolver {
                     .forEach(e -> columns.add(new ResolvedListView.Column(
                             spec.labels().getOrDefault(e.getKey(), e.getValue().label()),
                             e.getValue().columnName(), e.getValue().width(),
-                            e.getValue().widget(), e.getValue().format(), e.getValue().hint())));
+                            e.getValue().widget(), e.getValue().format(), e.getValue().hint(),
+                            spec.cellMenus().getOrDefault(e.getKey(), ""))));
         }
 
         // An authored view title wins; otherwise the entity's display title (which itself
