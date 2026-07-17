@@ -113,7 +113,7 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
-| `BeforeDeleteHandler` | `beforeDelete()` | Before delete. |
+| `BeforeDeleteHandler` | `beforeDelete()` | Before delete — runs on BOTH the repository path and the UI/REST DELETE; throw (e.g. `ValidationException`) to veto, which is how a catalog protects seeded system rows. |
 | `Validated` | `List<BusinessRule> rules()` | Rules checked before write and before post — **no Spring DI** (see below). |
 
 ⚠️ **No Spring DI in any of these hooks.** They run on the domain object, which the framework creates

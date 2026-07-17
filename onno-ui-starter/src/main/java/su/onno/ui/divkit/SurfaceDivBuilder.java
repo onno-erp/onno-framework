@@ -278,16 +278,23 @@ public final class SurfaceDivBuilder {
     /** {@code form} (may be empty): an action-form dialog's field descriptors — the client collects
      *  them in a modal before POSTing the action (see {@code ActionSpec.ActionBuilder#form}).
      *  {@code disabled} renders the button greyed and inert — a custom DETAIL action whose
-     *  {@code enabledWhen} predicate failed against the loaded record (issue #255). */
+     *  {@code enabledWhen} predicate failed against the loaded record (issue #255).
+     *  {@code dynamicForm}: the modal fetches its opening values from
+     *  {@code GET /api/actions/{kind}/{name}/{key}/form} before rendering ({@code formDefaults}). */
     public record HeaderAction(String icon, String label, String tone, String url, String placement,
-                               List<Map<String, Object>> form, boolean disabled) {
+                               List<Map<String, Object>> form, boolean disabled, boolean dynamicForm) {
         public HeaderAction(String icon, String label, String tone, String url, String placement) {
-            this(icon, label, tone, url, placement, List.of(), false);
+            this(icon, label, tone, url, placement, List.of(), false, false);
         }
 
         public HeaderAction(String icon, String label, String tone, String url, String placement,
                             List<Map<String, Object>> form) {
-            this(icon, label, tone, url, placement, form, false);
+            this(icon, label, tone, url, placement, form, false, false);
+        }
+
+        public HeaderAction(String icon, String label, String tone, String url, String placement,
+                            List<Map<String, Object>> form, boolean disabled) {
+            this(icon, label, tone, url, placement, form, disabled, false);
         }
     }
 
@@ -790,6 +797,10 @@ public final class SurfaceDivBuilder {
             if (a.form() != null && !a.form().isEmpty()) {
                 // The island opens a modal collecting these fields before it POSTs the action.
                 m.put("form", a.form());
+                if (a.dynamicForm()) {
+                    // The modal fetches its opening values (formDefaults) before rendering.
+                    m.put("dynamicForm", true);
+                }
             }
             list.add(m);
         }

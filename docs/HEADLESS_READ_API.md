@@ -54,10 +54,10 @@ Reading `description` (no underscore) or a camelCase `taxId` returns `undefined`
 | `_period`, `_active` | register rows | period / active flag |
 | `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is stored as its UUID |
 | `<col>_display` | `Ref<>` & enum attrs | resolved human label |
-| `<col>_ref` | `Ref<>` attrs | `{ id, type, display, code?, avatarUrl? }` |
+| `<col>_ref` | `Ref<>` attrs | `{ id, type, display, code?, avatarUrl?, color? }` |
 | `<col>_code` | catalog-`Ref<>` attrs only | the target's code |
 | `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
-| `<col>_color` | enum attrs only | `@EnumLabel(color)` hex, for a status pill |
+| `<col>_color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
 
 ### Catalog row
 
@@ -112,14 +112,16 @@ two sibling keys so the client need not make a second call:
 
 - `{column}_display` — a human-readable label (catalog description or code; for an enum, the value's
   `@EnumLabel`, falling back to the constant name when unlabelled).
-- `{column}_ref` — an object `{ id, type, display, code?, avatarUrl? }` for richer rendering (`type`
-  is `catalog`/`document`; `code`/`avatarUrl` present for catalog refs). Document refs get only
-  `_display` + `_ref`.
+- `{column}_ref` — an object `{ id, type, display, code?, avatarUrl?, color? }` for richer rendering
+  (`type` is `catalog`/`document`; `code`/`avatarUrl`/`color` present for catalog refs). Document
+  refs get only `_display` + `_ref`.
 - `{column}_code` — catalog refs only: the target's code.
 - `{column}_avatar` — catalog refs only: the target's `avatar_url`, when it has one.
-- `{column}_color` — for an **enum** value declaring `@EnumLabel(color="#…")`, its badge colour (a CSS
-  hex string), so the client can paint a status pill. Absent when the value has no colour. (Refs have
-  no `_color`.)
+- `{column}_color` — a badge colour (CSS hex) the client paints as a status pill. Emitted for an
+  **enum** value declaring `@EnumLabel(color="#…")`, and for a **catalog ref** whose target declares
+  a `color` attribute (column-name convention, like `avatar_url`) holding a non-blank value — this
+  is what lets a user-editable status *catalog* keep the colored pills a status enum had. Absent
+  when there is no colour.
 
 The raw `{column}` value remains the UUID, so writers can round-trip it unchanged.
 

@@ -77,19 +77,29 @@ public class RefResolver {
 
     private void resolveCatalogRef(List<Map<String, Object>> rows, AttributeDescriptor attr,
                                    CatalogDescriptor catalog, Set<UUID> ids) {
-        // Detect optional avatar column on the target catalog (convention: avatar_url).
+        // Detect optional presentation columns on the target catalog by name convention:
+        // avatar_url → a thumbnail beside the display name; color → the referencing cell renders
+        // as a colored pill ({col}_color), exactly like an @EnumLabel(color=…) enum value — this
+        // is what lets a user-editable status CATALOG keep the colored status pills an enum had.
         String avatarColumn = catalog.attributes().stream()
                 .map(AttributeDescriptor::columnName)
                 .filter(c -> c.equalsIgnoreCase("avatar_url"))
                 .findFirst()
                 .orElse(null);
+        String colorColumn = catalog.attributes().stream()
+                .map(AttributeDescriptor::columnName)
+                .filter(c -> c.equalsIgnoreCase("color"))
+                .findFirst()
+                .orElse(null);
 
         String selectSql = "SELECT _id, _code, _description"
                 + (avatarColumn != null ? ", " + avatarColumn : "")
+                + (colorColumn != null ? ", " + colorColumn : "")
                 + " FROM " + catalog.tableName()
                 + " WHERE _id IN (<ids>)";
 
         final String avatarCol = avatarColumn;
+        final String colorCol = colorColumn;
         Map<UUID, ResolvedRef> resolved = jdbi.withHandle(h ->
                 h.createQuery(selectSql)
                         .bindList("ids", new ArrayList<>(ids))
@@ -100,8 +110,9 @@ public class RefResolver {
                                     ? description
                                     : (code != null ? code : "");
                             String avatar = avatarCol != null ? rv.getColumn(avatarCol, String.class) : null;
+                            String color = colorCol != null ? rv.getColumn(colorCol, String.class) : null;
                             map.put(rv.getColumn("_id", UUID.class),
-                                    new ResolvedRef(display, code, avatar));
+                                    new ResolvedRef(display, code, avatar, color));
                             return map;
                         })
         );
@@ -115,6 +126,7 @@ public class RefResolver {
                 if (display == null || display.isBlank()) display = val.toString();
                 String code = hit != null ? hit.code() : null;
                 String avatarUrl = hit != null ? hit.avatarUrl() : null;
+                String color = hit != null ? hit.color() : null;
 
                 row.put(attr.columnName() + "_display", display);
                 if (code != null && !code.isBlank()) {
@@ -123,6 +135,9 @@ public class RefResolver {
                 if (avatarUrl != null && !avatarUrl.isBlank()) {
                     row.put(attr.columnName() + "_avatar", avatarUrl);
                 }
+                if (color != null && !color.isBlank()) {
+                    row.put(attr.columnName() + "_color", color);
+                }
 
                 Map<String, Object> refMap = new LinkedHashMap<>();
                 refMap.put("id", id.toString());
@@ -130,6 +145,7 @@ public class RefResolver {
                 refMap.put("display", display);
                 if (code != null && !code.isBlank()) refMap.put("code", code);
                 if (avatarUrl != null && !avatarUrl.isBlank()) refMap.put("avatarUrl", avatarUrl);
+                if (color != null && !color.isBlank()) refMap.put("color", color);
                 row.put(attr.columnName() + "_ref", refMap);
             }
         }
@@ -163,7 +179,7 @@ public class RefResolver {
         }
     }
 
-    private record ResolvedRef(String display, String code, String avatarUrl) {}
+    private record ResolvedRef(String display, String code, String avatarUrl, String color) {}
 
     private void resolveEnumColumn(List<Map<String, Object>> rows, AttributeDescriptor attr) {
         Map<String, EnumView> idToView = enumDisplayNames.computeIfAbsent(attr.javaType(), type -> {

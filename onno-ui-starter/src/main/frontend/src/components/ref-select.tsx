@@ -285,6 +285,9 @@ function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string })
     (item._avatar as string | undefined) ??
     (item.avatarUrl as string | undefined) ??
     undefined;
+  // A target catalog's `color` attribute (same convention the list uses for {col}_color pills):
+  // render a small dot so colored options — statuses, tags — read the same here as on the board.
+  const color = ((item.color as string | undefined) ?? "").trim();
   const code = item._code as string | undefined;
   // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
   const sub = secondary ? item[secondary] : undefined;
@@ -296,6 +299,12 @@ function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string })
           <AvatarImage src={avatarUrl} alt={display} />
           <AvatarFallback>{initials(display)}</AvatarFallback>
         </Avatar>
+      ) : color ? (
+        <span
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+          aria-hidden="true"
+        />
       ) : null}
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{display}</span>

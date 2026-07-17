@@ -255,6 +255,14 @@ public class CatalogCommandService {
     public void delete(CatalogDescriptor desc, UUID id, Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
+        // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
+        // (OnnoBeforeDeleteCallback): load the stored aggregate and let it veto the soft-delete —
+        // a thrown ValidationException maps to the standard 4xx. This is what lets a catalog
+        // protect system rows (e.g. seeded statuses) from the list's Delete.
+        CatalogObject stored = loadCatalogObject(desc, id);
+        if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
+            handler.beforeDelete();
+        }
         // Capture the natural key before the soft-delete so listeners can target the resource.
         String code = jdbi.withHandle(h ->
                 h.createQuery("SELECT _code FROM " + desc.tableName() + " WHERE _id = :id")

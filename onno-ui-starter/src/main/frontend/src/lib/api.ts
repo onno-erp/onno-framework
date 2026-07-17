@@ -472,6 +472,14 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return fetchJson<AggregateBuckets>(`${BASE}/list/${kind}/${name}/aggregate${qs ? "?" + qs : ""}`);
   },
+  /**
+   * The opening values of an action's form — the server-side formDefaults hook evaluated for this
+   * record/open. Only meaningful when the action descriptor carries dynamicForm: true.
+   */
+  getActionFormDefaults: (kind: string, name: string, key: string, id?: string) =>
+    fetchJson<{ values: Record<string, string>; rows: Record<string, Record<string, string>[]> }>(
+      `${BASE}/actions/${kind}/${name}/${key}/form${id ? `?id=${encodeURIComponent(id)}` : ""}`
+    ),
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
   // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
   // input values (if any) ride along in the body and reach the handler via ActionContext.

@@ -34,6 +34,8 @@ export type ActionItem = {
   disabled?: boolean;
   /** Form items the action collects in a modal before it POSTs (ActionSpec.form) — scalar fields and/or row groups. */
   form?: ActionFormItem[];
+  /** The form's opening values are fetched from the server per open (ActionSpec.formDefaults). */
+  dynamicForm?: boolean;
 };
 type Mount = { id: number; el: HTMLElement; items: ActionItem[] };
 
@@ -121,6 +123,15 @@ function fire(url: string) {
 function isAsync(url: string): boolean {
   const r = url.replace("onno://", "");
   return r.startsWith("post/") || r.startsWith("unpost/") || r.startsWith("action/");
+}
+
+// The formDefaults fetch source of a custom-action url ("onno://action/{kind}/{name}/{key}/{id}"),
+// or undefined for any other shape (post/unpost/navigation never declare dynamic forms).
+function actionSource(url: string): { kind: string; name: string; key: string; id?: string } | undefined {
+  const r = url.replace("onno://", "");
+  if (!r.startsWith("action/")) return undefined;
+  const [, kind, name, key, id] = r.split("/"); // [action, kind, name, key, id]
+  return { kind, name, key, id };
 }
 
 // Run a post/unpost/custom-action url and apply its result. Errors self-toast via the api layer.
@@ -265,6 +276,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
           title={formFor.label}
           fields={formFor.form ?? []}
           busy={formBusy}
+          defaultsSource={formFor.dynamicForm ? actionSource(formFor.url) : undefined}
           onClose={() => setFormFor(null)}
           onSubmit={(values) => {
             setFormBusy(true);

@@ -38,6 +38,11 @@ text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom
 Avatars: dicebear `notionists-neutral` is the default (`presence-avatars.tsx#notionistsAvatar`);
 avatars in lists and face-piles carry a thin `border border-border`.
 
+Colored pills: a cell renders as a pill whenever the row carries `{col}_color` (`enumPillStyle`,
+`utils.ts`) — emitted for `@EnumLabel(color)` enums AND catalog refs whose target has a `color`
+attribute (column-name convention, like `avatar_url`). The ref picker (`ref-select.tsx#RefRow`)
+shows the same color as a `size-2.5` dot before the option label (avatar wins when both exist).
+
 ## Charts & dashboards
 
 `components/chart-widget.tsx` + `lib/time-range.ts` + `lib/widget-data.ts`:

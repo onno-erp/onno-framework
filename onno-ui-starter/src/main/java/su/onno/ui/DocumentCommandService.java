@@ -318,6 +318,14 @@ public class DocumentCommandService {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
 
+        // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
+        // (OnnoBeforeDeleteCallback): the loaded aggregate may veto the soft-delete by throwing —
+        // a ValidationException maps to the standard 4xx.
+        DocumentObject stored = loadDocumentObject(desc, id);
+        if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
+            handler.beforeDelete();
+        }
+
         // Unpost first if posted
         Map<String, Object> row = jdbi.withHandle(h ->
                 h.createQuery("SELECT _posted FROM " + desc.tableName() + " WHERE _id = :id")

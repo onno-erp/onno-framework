@@ -236,6 +236,10 @@ public class UiActionResolver {
             if (a.hasForm()) {
                 // The click first opens a modal collecting these fields; values POST as inputs.
                 m.put("form", formDescriptors(a));
+                if (a.hasDynamicForm()) {
+                    // The modal fetches its opening values from GET /api/actions/{kind}/{name}/{key}/form.
+                    m.put("dynamicForm", true);
+                }
             }
             out.add(m);
         }

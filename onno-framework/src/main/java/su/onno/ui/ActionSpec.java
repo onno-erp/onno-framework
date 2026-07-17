@@ -2,6 +2,7 @@ package su.onno.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -74,6 +75,31 @@ public final class ActionSpec {
     }
 
     /**
+     * Values an action form opens with, computed server-side at open time by the
+     * {@link ActionBuilder#formDefaults(Function) formDefaults} hook: {@code values} seed the
+     * scalar inputs (keyed by input key), {@code rows} seed the row groups (keyed by group key,
+     * each row a {@code column → value} map — the same wire shape the form submits back). Either
+     * map may be empty; a key the form doesn't declare is ignored by the client.
+     */
+    public record FormDefaults(Map<String, String> values, Map<String, List<Map<String, String>>> rows) {
+
+        public FormDefaults {
+            values = values == null ? Map.of() : Map.copyOf(values);
+            rows = rows == null ? Map.of() : Map.copyOf(rows);
+        }
+
+        /** Defaults carrying only row-group rows. */
+        public static FormDefaults ofRows(String groupKey, List<Map<String, String>> groupRows) {
+            return new FormDefaults(Map.of(), Map.of(groupKey, groupRows));
+        }
+
+        /** Defaults carrying only scalar input values. */
+        public static FormDefaults ofValues(Map<String, String> values) {
+            return new FormDefaults(values, Map.of());
+        }
+    }
+
+    /**
      * A resolved action button. Exactly one of {@code navigateUrl} / {@code handler} is set.
      *
      * <p>{@code icon}/{@code label} are the fixed values (and the fallback). {@code logo} is an
@@ -91,6 +117,7 @@ public final class ActionSpec {
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
                          Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
                          List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
+                         Function<ActionContext, FormDefaults> formDefaultsFn,
                          List<String> roles) {
         public boolean isServer() {
             return handler != null;
@@ -99,6 +126,11 @@ public final class ActionSpec {
         /** Whether clicking must first collect the declared form fields (scalar or row group) in a modal dialog. */
         public boolean hasForm() {
             return (form != null && !form.isEmpty()) || (formGroups != null && !formGroups.isEmpty());
+        }
+
+        /** Whether the form's opening values are computed server-side per open ({@code formDefaults}). */
+        public boolean hasDynamicForm() {
+            return formDefaultsFn != null && hasForm();
         }
 
         /** Whether any aspect of this action varies per row (so the list must resolve it per row). */
@@ -124,6 +156,7 @@ public final class ActionSpec {
         private Predicate<ActionRow> enabledFn;
         private List<InputSpec.InputField> form = List.of();
         private List<InputSpec.InputGroup> formGroups = List.of();
+        private Function<ActionContext, FormDefaults> formDefaultsFn;
         private List<String> roles = List.of();
 
         ActionBuilder(String key) {
@@ -198,6 +231,30 @@ public final class ActionSpec {
         }
 
         /**
+         * Compute the form's opening values server-side <b>each time the dialog opens</b> — the
+         * dynamic counterpart of the static {@link InputSpec.InputBuilder#value(String)} default.
+         * The client fetches {@code GET /api/actions/{kind}/{name}/{key}/form?id=…} when the modal
+         * opens and seeds the scalar inputs from {@link FormDefaults#values()} and the row groups
+         * from {@link FormDefaults#rows()} (replacing the single blank row). The function receives
+         * an {@link ActionContext} carrying the surface kind/name, the record id (when opened from
+         * a row/detail; null for toolbar/page opens) and the caller — its inputs/rows are empty.
+         *
+         * <p>Must be <b>read-only</b> — it runs on a GET and may be called any number of times. It
+         * is not invoked for batch runs (no single record to compute against); a thrown exception
+         * is logged and the dialog falls back to the static defaults. Requires a {@link #form}.</p>
+         *
+         * <pre>
+         * a.action("startPrint").form(f -> f.group("prints", …))
+         *  .formDefaults(ctx -> FormDefaults.ofRows("prints", freePrinters(ctx.id())))
+         *  .handler(this::startPrint);
+         * </pre>
+         */
+        public ActionBuilder formDefaults(Function<ActionContext, FormDefaults> defaults) {
+            this.formDefaultsFn = defaults;
+            return this;
+        }
+
+        /**
          * Restrict this action to callers holding any of the given roles ({@code ADMIN} always
          * passes, like entity {@code @AccessControl}). The server rejects a caller without a
          * matching role, and page-action buttons the caller can't run are hidden from the rendered
@@ -254,7 +311,7 @@ public final class ActionSpec {
 
         Action build() {
             return new Action(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
-                    iconFn, labelFn, visibleFn, enabledFn, form, formGroups, roles);
+                    iconFn, labelFn, visibleFn, enabledFn, form, formGroups, formDefaultsFn, roles);
         }
     }
 }

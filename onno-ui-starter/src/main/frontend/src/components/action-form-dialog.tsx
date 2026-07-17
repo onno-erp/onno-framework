@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +76,7 @@ export function ActionFormDialog({
   title,
   fields,
   busy,
+  defaultsSource,
   onSubmit,
   onClose,
 }: {
@@ -82,6 +84,13 @@ export function ActionFormDialog({
   fields: ActionFormItem[];
   /** True while the action POST runs — locks the dialog and spins the submit button. */
   busy?: boolean;
+  /**
+   * Set when the action declares server-computed opening values (descriptor dynamicForm: true):
+   * the dialog fetches GET /api/actions/{kind}/{name}/{key}/form?id= on open and seeds the scalar
+   * inputs / row groups from the response before becoming editable. A fetch failure falls back to
+   * the static defaults — the dialog must never be blocked by a broken hook.
+   */
+  defaultsSource?: { kind: string; name: string; key: string; id?: string };
   onSubmit: (values: ActionFormValues) => void;
   onClose: () => void;
 }) {
@@ -95,6 +104,45 @@ export function ActionFormDialog({
   const [rows, setRows] = useState<Record<string, ActionRowValue[]>>(() =>
     Object.fromEntries(groups.map((g) => [g.key, [blankRow(g)]]))
   );
+  // While the server-computed opening values load, the dialog shows a busy shell (no flash of
+  // blank inputs that then repopulate under the user's cursor).
+  const [seeding, setSeeding] = useState(!!defaultsSource);
+
+  useEffect(() => {
+    if (!defaultsSource) return;
+    let cancelled = false;
+    api
+      .getActionFormDefaults(defaultsSource.kind, defaultsSource.name, defaultsSource.key, defaultsSource.id)
+      .then((d) => {
+        if (cancelled) return;
+        if (d?.values && Object.keys(d.values).length) {
+          setValues((prev) => ({ ...prev, ...d.values }));
+        }
+        if (d?.rows) {
+          setRows((prev) => {
+            const next = { ...prev };
+            for (const g of groups) {
+              const seeded = d.rows[g.key];
+              if (Array.isArray(seeded) && seeded.length) {
+                // Overlay each fetched row onto the column defaults so unmentioned cells keep them.
+                next[g.key] = seeded.map((r) => ({ ...blankRow(g), ...r }));
+              }
+            }
+            return next;
+          });
+        }
+      })
+      .catch(() => {
+        /* fall back to static defaults */
+      })
+      .finally(() => {
+        if (!cancelled) setSeeding(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one fetch per dialog open
+  }, []);
 
   const canSubmit = useMemo(() => {
     const scalarsOk = scalars.every((f) => !f.required || (values[f.key] ?? "").trim() !== "");
@@ -133,17 +181,19 @@ export function ActionFormDialog({
     });
 
   const submit = () => {
-    if (!canSubmit || busy) return;
+    if (!canSubmit || locked) return;
     const out: ActionFormValues = { ...values };
     for (const g of groups) out[g.key] = (rows[g.key] ?? []).filter((r) => !rowIsBlank(r));
     onSubmit(out);
   };
 
+  const locked = busy || seeding;
+
   const cellControl = (f: ActionFormField, value: string, onChange: (v: string) => void, autoFocus = false) => {
     const common = {
       value,
       placeholder: f.placeholder || undefined,
-      disabled: busy,
+      disabled: locked,
       autoFocus,
     };
     if (f.type === "reference" && f.reference) {
@@ -208,7 +258,7 @@ export function ActionFormDialog({
   const groupAddRowBtn = (g: ActionFormGroup) => (
     <button
       type="button"
-      disabled={busy}
+      disabled={locked}
       onClick={() => addRow(g)}
       className="mt-1 flex w-full items-center gap-1.5 rounded-control border border-dashed border-border px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
     >
@@ -256,7 +306,7 @@ export function ActionFormDialog({
                   ))}
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={locked}
                     onClick={() => removeRow(g.key, ri)}
                     aria-label={`Remove row ${ri + 1}`}
                     title="Remove row"
@@ -288,7 +338,12 @@ export function ActionFormDialog({
           groups.length ? "max-w-2xl" : "max-w-sm"
         )}
       >
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
+          {title}
+          {seeding ? (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : null}
+        </h2>
         <div className="mt-4 space-y-3">
           {scalars.map((f, i) => scalarField(f, i))}
           {groups.map((g) => groupGrid(g))}
@@ -304,7 +359,7 @@ export function ActionFormDialog({
           </button>
           <button
             type="button"
-            disabled={!canSubmit || busy}
+            disabled={!canSubmit || locked}
             onClick={submit}
             className="inline-flex items-center gap-1.5 rounded-control bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >

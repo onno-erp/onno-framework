@@ -162,7 +162,7 @@ name returns `404`.
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: same description/attributes/parent, fresh id + code, description suffixed with `duplicate.copySuffix` (" (copy)" by default). Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
-| DELETE | `/{name}/{id}` | Sets the deletion mark (soft delete). |
+| DELETE | `/{name}/{id}` | Sets the deletion mark (soft delete). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`) — e.g. a catalog protecting seeded system rows. |
 
 ### Documents — `/api/documents`
 
@@ -177,7 +177,7 @@ name returns `404`.
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
-| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). |
+| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
 
 ### Registers — `/api/registers`
 
@@ -418,6 +418,27 @@ a.action("receive").label("Receive shipment").scope(ActionScope.TOOLBAR)
 Scalar fields render first in the modal, then the row groups. Groups are an action-form feature
 only — a list toolbar renders scalar inputs and ignores any declared group.
 
+**Server-computed opening values** — `.formDefaults(ctx -> …)` seeds the modal *per open* (the
+dynamic counterpart of a field's static `.value(...)`): the dialog fetches
+`GET /api/actions/{kind}/{name}/{key}/form?id=…` when it opens and pre-fills the scalar inputs from
+`FormDefaults.values()` and the row groups from `FormDefaults.rows()` (replacing the single blank
+row; rows use the same `{column → value}` wire shape the form submits back). The hook receives an
+`ActionContext` with the record id (null for toolbar/page opens) and empty inputs, must be
+read-only, is skipped for batch runs, and a thrown exception falls back to the static defaults —
+the dialog is never blocked by a broken hook:
+
+```java
+a.action("startPrint").label("Print").scope(ActionScope.ROW)
+ .form(f -> f.group("prints", g -> g.label("Prints").required()
+         .column("printer", c -> c.label("Printer").reference(Printer.class).required())
+         .column("photoCount", c -> c.label("Photos").type(InputType.NUMBER).required())))
+ .formDefaults(ctx -> ActionSpec.FormDefaults.ofRows("prints",
+         freePrinters(ctx.id()).stream()
+                 .map(p -> Map.of("printer", p.getId().toString(), "photoCount", "50"))
+                 .toList()))
+ .handler(this::startPrint);
+```
+
 ### Row context menu, submenus & batch selection
 
 Right-clicking a list row opens a context menu with the built-ins (Open / Edit / Duplicate / Copy
@@ -498,6 +519,12 @@ f.field("customer").refSecondary("phone");   // shows the customer's phone under
 
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
+
+Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
+an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
+attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list
+cells into colored pills (`{col}_color` — the catalog counterpart of `@EnumLabel(color=…)`). A
+user-editable status *catalog* therefore keeps the colored status pills a status enum had.
 
 The picker's pinned **"+ New"** row opens the target's full create form in a side pane; when that
 form saves, the new record's id is handed straight back to the picker — the field is set to the

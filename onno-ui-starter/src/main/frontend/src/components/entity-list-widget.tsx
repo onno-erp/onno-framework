@@ -96,6 +96,11 @@ export type ListAction = {
    * alongside the toolbar input values.
    */
   form?: ActionFormItem[];
+  /**
+   * The form's opening values are computed server-side per open (ActionSpec.formDefaults): the
+   * dialog fetches GET /api/actions/{kind}/{name}/{key}/form?id= and seeds itself before editing.
+   */
+  dynamicForm?: boolean;
 };
 /**
  * Per-row override for a state-aware row action, computed server-side from the row's data and
@@ -2850,6 +2855,13 @@ export function EntityListWidget({
           title={formPrompt.action.label}
           fields={formPrompt.action.form ?? []}
           busy={formBusy}
+          defaultsSource={
+            // Server-computed opening values (formDefaults): single-record opens only — a batch
+            // has no one record to compute against, so it keeps the static defaults.
+            formPrompt.action.dynamicForm && !formPrompt.ids
+              ? { kind, name, key: formPrompt.action.key, id: formPrompt.id }
+              : undefined
+          }
           onClose={() => setFormPrompt(null)}
           onSubmit={(values) => {
             setFormBusy(true);

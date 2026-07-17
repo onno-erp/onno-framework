@@ -695,7 +695,7 @@ public class DivKitController implements DisposableBean {
             String place = placement.getOrDefault(a.key(), "menu");
             String tone = "primary".equals(place) ? "accent" : "normal";
             out.add(new SurfaceDivBuilder.HeaderAction(icon, state.label(), tone, url, place,
-                    UiActionResolver.formDescriptors(a), !state.enabled()));
+                    UiActionResolver.formDescriptors(a), !state.enabled(), a.hasDynamicForm()));
         }
         return out;
     }

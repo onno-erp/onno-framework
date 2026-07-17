@@ -4,7 +4,10 @@ import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.ui.ActionSpec.Action;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +32,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/actions")
 public class ActionController {
+
+    private static final Logger log = LoggerFactory.getLogger(ActionController.class);
 
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
@@ -89,6 +94,40 @@ public class ActionController {
                 principal != null ? principal.getName() : null, body);
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
+    }
+
+    /**
+     * The opening values of an action's form for one record — the {@code formDefaults} hook
+     * ({@link ActionSpec.ActionBuilder#formDefaults}) evaluated at open time. The modal fetches
+     * this before rendering when the action descriptor carries {@code dynamicForm: true}.
+     *
+     * <p>A read: no {@code requireWritable} gate (that stays on the POST that actually runs the
+     * handler), but the caller must still hold entity write access + the action's roles — the same
+     * checks that gate seeing/running the button. A hook that throws yields empty defaults (the
+     * dialog falls back to the static seeding) rather than breaking the modal.</p>
+     */
+    @GetMapping("/{kind}/{name}/{key}/form")
+    public Map<String, Object> formDefaults(@PathVariable String kind, @PathVariable String name,
+                                            @PathVariable String key,
+                                            @RequestParam(required = false) UUID id, Principal principal) {
+        Class<?> entity = resolveAndAuthorize(kind, name, principal);
+        Action action = findRunnable(entity, key, principal);
+        if (!action.hasDynamicForm()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Action has no dynamic form: " + key);
+        }
+        ActionContext ctx = new ActionContext(kind, name, id,
+                principal != null ? principal.getName() : null, Map.of(), Map.of());
+        try {
+            ActionSpec.FormDefaults defaults = action.formDefaultsFn().apply(ctx);
+            if (defaults == null) {
+                defaults = new ActionSpec.FormDefaults(Map.of(), Map.of());
+            }
+            return Map.of("values", defaults.values(), "rows", defaults.rows());
+        } catch (RuntimeException e) {
+            // Defaults are a convenience — never block the dialog on a broken hook.
+            log.warn("formDefaults for {}/{}/{} failed: {}", kind, name, key, e.getMessage());
+            return Map.of("values", Map.of(), "rows", Map.of());
+        }
     }
 
     /** How many records one batch call may target — a UI batch, not a data-migration channel. */
