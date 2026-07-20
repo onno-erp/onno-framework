@@ -138,7 +138,7 @@ export function LoginView() {
           {errorMessage && (
             <div
               role="alert"
-              className="mb-4 rounded-control border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              className="mb-4 rounded-field border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
             >
               {errorMessage}
             </div>

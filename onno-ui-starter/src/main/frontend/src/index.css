@@ -27,9 +27,11 @@
     /* Shape tokens — the single source of truth for corner rounding, so the whole UI reshapes from
        config. Override via onno.ui.theme (e.g. onno.ui.theme.radius-field: 0.75rem). Three tiers, by
        element size/role:
-         --radius-control : compact buttons, chips, filter facets, badges — full pill.
+         --radius-control : compact buttons, chips, filter facets, badges — full pill
+                            (`rounded-pill` preferred; `rounded-control` compatibility alias).
          --radius-field   : inputs, textareas, selects, search, tabs, segmented toggles — moderate.
-         --radius-card    : cards, the toolbar island, popovers, menus, dialogs, list/comment rows.
+         --radius-card    : cards, panels, toolbar island, popovers, menus, dialogs
+                            (`rounded-panel` preferred for bounded panels).
        Avatars and status pills stay fully round independently. */
     --radius-control: 9999px;
     --radius-field: 0.625rem;

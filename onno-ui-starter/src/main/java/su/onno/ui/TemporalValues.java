@@ -2,6 +2,9 @@ package su.onno.ui;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Coerces loosely-typed values — JSON strings from a write request, or JDBC
@@ -59,9 +62,16 @@ final class TemporalValues {
      */
     static LocalDateTime toLocalDateTime(Object value) {
         if (value instanceof LocalDateTime ldt) return ldt;
+        // LocalDateTime is a wall-clock business value. If a JDBC/Jackson boundary supplied an
+        // offset or zone, keep the displayed local fields; do not shift them to the server zone.
+        if (value instanceof OffsetDateTime odt) return odt.toLocalDateTime();
+        if (value instanceof ZonedDateTime zdt) return zdt.toLocalDateTime();
         if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
         if (value instanceof LocalDate ld) return ld.atStartOfDay();
         if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
-        return LocalDateTime.parse(value.toString().replace(' ', 'T'));
+        // ISO_DATE_TIME accepts both offset-free and offset-bearing values (including trailing Z);
+        // LocalDateTime.from deliberately retains the wall-clock component and ignores the offset.
+        return LocalDateTime.from(DateTimeFormatter.ISO_DATE_TIME.parse(
+                value.toString().replace(' ', 'T')));
     }
 }

@@ -99,11 +99,11 @@ function EventLog({ widget }: WidgetProps) {
   };
 
   if (error) {
-    return <div className="rounded-card border border-border p-4 text-xs text-destructive">Failed to load: {error}</div>;
+    return <div className="rounded-panel border border-border p-4 text-xs text-destructive">Failed to load: {error}</div>;
   }
 
   return (
-    <div className="rounded-card border bg-card p-6 text-card-foreground">
+    <div className="rounded-panel border bg-card p-6 text-card-foreground">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="text-[13px] font-medium text-foreground">{widget.title}</div>
         {/* Host primitive — the app's real segmented control, straight from the SDK. */}
@@ -137,7 +137,7 @@ function EventLog({ widget }: WidgetProps) {
                 <button
                   type="button"
                   onClick={() => open(r)}
-                  className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-card px-2 py-2 text-left transition-colors hover:bg-accent/40"
+                  className="-mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-3 rounded-field px-2 py-2 text-left transition-colors hover:bg-accent/40"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-medium leading-tight text-foreground">

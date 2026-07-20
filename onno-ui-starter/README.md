@@ -510,7 +510,10 @@ public class Order extends DocumentObject {
 (An entity with no usable no-arg constructor opens blank, as before. A `Ref` default can't be a
 literal initializer — but it *can* be seeded from the URL: the New form prefills from navigation
 query params, keys = write-path `fieldName`s, e.g. `…/new?room=<uuid>&startsAt=2026-07-16T19:00`.
-`Ref`/enum values are UUID strings, temporals ISO; `viewport`/`theme`/`profile` are reserved;
+`Ref`/enum values are UUID strings; `LocalDate` is `yyyy-MM-dd` and `LocalDateTime` is offset-free
+ISO wall time (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset-bearing temporal inputs are accepted
+without shifting the local fields, but the generated form and read API normalize to offset-free
+ISO. `viewport`/`theme`/`profile` are reserved;
 unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
 field initializers, before ref/enum label resolution.)
 
@@ -729,10 +732,23 @@ first-party in the app origin (full session) — author it as trusted code.
 (advertised as `pluginStyles` from `GET /api/config`, injected by the SPA at boot). So utility classes
 in your widget's own markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`)
 the host never emits — produce real CSS. It's utilities-only with **preflight off** and carries the
-host tokens (`bg-primary`, `rounded-card`, …), so it matches the product without fighting the host
+host tokens (`bg-primary`, `rounded-panel`, …), so it matches the product without fighting the host
 stylesheet. Caveats: only files under `src/main/widgets` are scanned (class names in imported helpers
 or built by string concatenation aren't seen — keep them literal), and dynamic colors still want
 inline `style` with `hsl(var(--primary))` / `hsl(var(--border))`.
+
+Radius utilities are semantic and shared with the host:
+
+| Widget structure | Use |
+| --- | --- |
+| Pill action, badge/chip, segmented trigger | `rounded-pill` |
+| Input/select, row, compact calendar event | `rounded-field` |
+| Card, bounded panel, dialog/popover | `rounded-panel` |
+| Large table/grid/scroll viewport | `rounded-field` or no radius |
+
+`rounded-control` is retained for compatibility but equals `rounded-pill` (`9999px`); it is not a
+general “interactive control” radius. `rounded-card` remains an alias of `rounded-panel`. Never put
+the pill/control tier on a large panel, schedule lane, table, generic row, or rectangular event.
 
 **UI primitives:** need a dropdown, date picker, toggle, or button? Import the host's real
 design-system controls straight from the SDK — they match the product exactly (keyboard nav, mobile

@@ -188,6 +188,12 @@ method references, e.g. `Q.ref(SalesOrder::getCustomer, Customer::getName)` emit
 
 ## Generic REST API
 
+Read rows use snake_case storage columns; writes use camelCase model field names and are partial
+(full contract: [HEADLESS_READ_API.md](HEADLESS_READ_API.md)). Temporal values are normalized at the
+read/write boundary: `LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time.
+Offset-bearing inputs are accepted without shifting their local fields. This keeps PostgreSQL,
+H2, generated forms, and headless clients on one round-trip-safe representation.
+
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is
 the entity's **display/logical name** (e.g. `Properties`, not the class `Property`), matched
 case-insensitively with spaces/underscores stripped. **There is no anonymous manifest endpoint** —

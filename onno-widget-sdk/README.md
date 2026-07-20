@@ -56,9 +56,15 @@ The `su.onno.widgets` Gradle plugin runs **Tailwind over your widget sources** a
 `onno-widgets.css`, which the host injects at boot. So Tailwind utility classes in your widget's own
 markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`) the host never
 emits — now produce real CSS. The stylesheet is **utilities-only with preflight off** and carries the
-host's design tokens (`bg-primary`, `text-muted-foreground`, `rounded-card`/`rounded-field`/
-`rounded-control`, which resolve against the host's runtime CSS variables), so it matches the product
+host's design tokens (`bg-primary`, `text-muted-foreground`, `rounded-pill`/`rounded-field`/
+`rounded-panel`, which resolve against the host's runtime CSS variables), so it matches the product
 and light/dark both work. No config on your side.
+
+Radius mapping: `rounded-pill` is a 9999px capsule for compact actions/chips/badges;
+`rounded-field` is for inputs, rows, and compact event blocks; `rounded-panel` is for cards and
+bounded surfaces. The older `rounded-control` and `rounded-card` names remain aliases for
+`rounded-pill` and `rounded-panel`. Do not use the pill/control tier on grids, tables, schedule
+lanes, generic rows, or large containers.
 
 Two caveats remain:
 

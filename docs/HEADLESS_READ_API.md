@@ -59,6 +59,32 @@ Reading `description` (no underscore) or a camelCase `taxId` returns `undefined`
 | `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
 | `<col>_color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
 
+### Temporal values
+
+Temporal columns are database-independent ISO strings:
+
+| Java type | Read representation | Accepted write representation |
+|-----------|---------------------|-------------------------------|
+| `LocalDate` | `yyyy-MM-dd` | `yyyy-MM-dd` |
+| `LocalDateTime` | offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]` | the same; offset-bearing ISO (`Z`, `+03:00`) is also accepted |
+
+`LocalDateTime` is a business wall-clock value, not an instant. If a write includes an offset, the
+offset is treated as transport decoration and the local fields are preserved without conversion:
+`2026-06-04T10:00+03:00` stores and reads back as `2026-06-04T10:00`.
+
+PostgreSQL/JDBC may internally expose timestamps as `Timestamp` or offset-bearing values, but the
+read API normalizes those before JSON serialization. The generated form also canonicalizes loaded
+catalog, document, and tabular-section temporal values before save. Headless callers must still map
+the snake_case read key to the camelCase write field:
+
+```jsonc
+// GET /api/documents/Events/{id}
+{ "starts_at": "2026-06-04T10:00" }
+
+// PUT /api/documents/Events/{id}
+{ "startsAt": "2026-06-04T10:00" }
+```
+
 ### Catalog row
 
 ```jsonc

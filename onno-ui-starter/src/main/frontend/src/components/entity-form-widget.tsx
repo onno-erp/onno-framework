@@ -90,6 +90,20 @@ function isNumeric(javaType: string): boolean {
   );
 }
 
+/**
+ * Canonical write representation for temporal values loaded from the read API. LocalDateTime is a
+ * wall-clock value: strip a transport offset/Z without shifting the displayed local fields.
+ */
+function canonicalTemporalSeed(value: unknown, javaType: string): unknown {
+  if (value == null || (javaType !== "LocalDate" && javaType !== "LocalDateTime")) return value;
+  const normalized = String(value).trim().replace(" ", "T");
+  if (javaType === "LocalDate") return normalized.slice(0, 10);
+  const local = normalized.match(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)/
+  );
+  return local?.[1] ?? normalized;
+}
+
 // Seed the top-level field state from a loaded record. Secret fields are write-only — never seeded
 // (see the form's save path). Records arrive keyed by column name; the form keys by field name.
 // Module-scope + record-parameterised so a live SSE refetch can re-seed from a fresh record with the
@@ -100,7 +114,10 @@ function seedDataFrom(record: EntityRecord | null, fields: Field[]): EntityRecor
   for (const f of fields) {
     if (f.kind === "attr" && f.attr.secret) continue;
     const col = f.kind === "system" ? f.column : f.attr.columnName;
-    if (record[col] != null) seed[f.key] = record[col];
+    if (record[col] != null) {
+      const javaType = f.kind === "attr" ? f.attr.javaType : f.key === "date" ? "LocalDateTime" : "";
+      seed[f.key] = canonicalTemporalSeed(record[col], javaType);
+    }
   }
   return seed;
 }
@@ -118,7 +135,9 @@ function seedRowsFrom(
           const row: EntityRecord = {};
           for (const attr of ts.attributes) {
             if (attr.secret) continue; // write-only — see seedDataFrom
-            if (r[attr.columnName] != null) row[attr.fieldName] = r[attr.columnName];
+            if (r[attr.columnName] != null) {
+              row[attr.fieldName] = canonicalTemporalSeed(r[attr.columnName], attr.javaType);
+            }
           }
           return row;
         })

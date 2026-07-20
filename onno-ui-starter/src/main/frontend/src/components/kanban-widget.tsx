@@ -177,7 +177,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                       ref={dropProvided.innerRef}
                       {...dropProvided.droppableProps}
                       className={cn(
-                        "flex w-72 shrink-0 flex-col gap-2 rounded-control p-2 transition-colors",
+                        "flex w-72 shrink-0 flex-col gap-2 rounded-panel p-2 transition-colors",
                         "border-2 bg-muted/40",
                         dropSnapshot.isDraggingOver
                           ? "border-primary/40 bg-muted/70"
@@ -194,7 +194,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                       </div>
                       <div className="flex flex-col gap-1.5 min-h-[40px]">
                         {cards.length === 0 && !dropSnapshot.isDraggingOver && (
-                          <div className="rounded-control border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground">
+                          <div className="rounded-field border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground">
                             No items
                           </div>
                         )}

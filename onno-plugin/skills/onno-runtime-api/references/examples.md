@@ -102,6 +102,19 @@ List/get responses include storage values and display companions:
 ```
 
 Use raw values for writes and filters. Use `*_display` and `*_color` for headless UI rendering.
+Do not echo a read row back as a write: reads use snake_case storage columns while writes use
+camelCase field names.
+
+Temporals are ISO wall-clock strings. `LocalDate` is `2026-06-04`; `LocalDateTime` reads canonically
+as offset-free `2026-06-04T10:00:00`. An offset-bearing write such as
+`2026-06-04T10:00:00+03:00` is accepted as the same local wall time (no timezone shift), but prefer
+the offset-free canonical representation:
+
+```bash
+curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
+  -X PUT "$base/api/documents/Events/$event_id" \
+  -d '{"startsAt":"2026-06-04T10:00:00"}'
+```
 
 ## Smoke Test Script
 

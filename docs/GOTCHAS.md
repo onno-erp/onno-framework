@@ -1,7 +1,7 @@
 # Consumer gotchas
 
 The short list of things that bite when building an app on the published `su.onno:*` libraries —
-each of these has cost a real debugging session. Verified against **v1.10.2**. Companion pages:
+each of these has cost a real debugging session. Verified against **v1.11.1**. Companion pages:
 [CONFIGURATION.md](CONFIGURATION.md) for every property, [HEADLESS_READ_API.md](HEADLESS_READ_API.md)
 for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit.
 
@@ -61,9 +61,13 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   `FQCN.CONSTANT`, so it is stable across databases; the write path rejects `"NEW"` where it
   expects the UUID. Display strings/colors come from `@EnumLabel` and ride the `{col}_display` /
   `{col}_color` sidecars.
-- **Temporals are ISO-8601 strings** (`2026-06-04T10:00:00`). The bundled form widgets always emit
-  ISO; headless callers must too (the write path also coerces space-separated variants, but don't
-  rely on it).
+- **Temporal reads and writes are ISO-8601 wall-clock values.** `LocalDate` reads/writes as
+  `yyyy-MM-dd`; `LocalDateTime` reads/writes as offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]`.
+  Since `LocalDateTime` has no zone, an accepted transport offset (`Z`, `+03:00`) is ignored without
+  shifting the local fields: `2026-06-04T10:00+03:00` persists as `2026-06-04T10:00`. Since v1.11.1
+  the read API normalizes PostgreSQL/JDBC timestamp representations and the bundled form normalizes
+  loaded values before resubmitting them. Headless clients must still map snake_case read columns
+  to camelCase write fields; do not echo the full read object as a write.
 
 ## SPA & static assets
 

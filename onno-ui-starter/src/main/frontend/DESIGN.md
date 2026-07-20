@@ -11,9 +11,12 @@ Paths below are relative to `src/`.
 
 ## Tokens (`index.css`, exposed via Tailwind)
 
-- **Radius, three tiers** — `rounded-control` (9999px pill: chips, badges, segmented, buttons),
-  `rounded-field` (0.625rem: inputs, search, tab strips), `rounded-card` (0.9rem: cards, toolbar
-  island, popovers, menus, dialogs). Never hand-pick a `rounded-*` outside these.
+- **Radius, three tiers** — `rounded-pill` (9999px: compact actions, chips, badges, segmented
+  triggers), `rounded-field` (0.625rem: inputs, selects, rows, compact event blocks), and
+  `rounded-panel` (0.9rem: cards, toolbar islands, popovers, menus, dialogs). Compatibility aliases
+  `rounded-control` = `rounded-pill` and `rounded-card` = `rounded-panel` remain, but prefer the
+  self-explanatory names in new code. Never use the pill tier for a panel, table/grid viewport,
+  calendar lane/event rectangle, generic row, error/empty-state box, or skeleton bar.
 - **Colors** — semantic vars (light + dark) plus `--chart-1..8`. Overridable at runtime through
   `onno.ui.theme.*` → `/api/theme` → CSS vars (`providers/theme-provider.tsx`). Never hardcode a
   hex; widgets use `hsl(var(--primary))` etc.
@@ -22,7 +25,7 @@ Paths below are relative to `src/`.
 
 ## Islands
 
-Surfaces are **islands**: `rounded-card` + `border` + `bg-card`, **no shadows**. Shadows belong
+Surfaces are **islands**: `rounded-panel` + `border` + `bg-card`, **no shadows**. Shadows belong
 only to transient overlays (popover, tooltip) and the Segmented active pill. Each island contains
 its own failures (`lib/island-error-boundary.tsx`) and — for route surfaces — owns its scroll: the
 island scrolls internally (virtualized), the page body does not scroll horizontally or double-scroll.
@@ -85,6 +88,19 @@ of the row keeps the full context menu. Flat table view only.
 Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/widget-data.ts` (bucket
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
 (`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR).
+
+### Radius mapping
+
+| Structure | Class |
+| --- | --- |
+| Pill action, compact badge/chip, segmented trigger | `rounded-pill` |
+| Input/select, generic row, compact calendar event | `rounded-field` |
+| Card, bounded panel, dialog/popover/menu | `rounded-panel` |
+| Large grid/table/scroll viewport | `rounded-field` or no radius |
+
+Anti-pattern: `rounded-control`/`rounded-pill` on a schedule viewport or event block creates a
+9999px capsule that can obscure the grid. The word “control” in the compatibility alias does not
+mean “any interactive container.”
 
 ## Misc conventions
 
