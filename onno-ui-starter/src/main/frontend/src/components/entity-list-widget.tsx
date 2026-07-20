@@ -1408,18 +1408,16 @@ export function EntityListWidget({
   const clearAllFilters = () =>
     setFilterState(Object.fromEntries(filters.map((f) => [f.key, {}])));
 
-  // Responsive header row, driven by the measured island width and the controls actually present
-  // (not a fixed media query). `stacked` puts the title on its own row and the controls below the
-  // moment they would no longer fit beside it — so the title never truncates. `compact` (much
-  // narrower) additionally drops the button labels to icons. Filters live on their own wrapping bar
-  // below, so only the header-row controls (view toggle, search, actions, New) count here.
+  // Responsive action sizing, driven by the measured island width and the controls actually present
+  // (not a fixed media query). `constrainedActions` lets search yield width when the fixed right-side
+  // controls need more room. `compact` additionally drops button labels to icons.
   const controlsWidthEstimate =
     (list.map ? 150 : 0) +
     (list.custom && CustomRenderer ? 150 : 0) +
     (list.searchable ? 220 : 0) +
     toolbarActions.length * 100 +
     (list.newUrl ? 90 : 0);
-  const stacked = toolbarWidth != null && toolbarWidth < controlsWidthEstimate + 170;
+  const constrainedActions = toolbarWidth != null && toolbarWidth < controlsWidthEstimate + 170;
   const compact = toolbarWidth != null && toolbarWidth < 560;
 
   // Live values of the custom toolbar inputs, seeded from their declared defaults. These are sent
@@ -1652,7 +1650,7 @@ export function EntityListWidget({
       window.removeEventListener("resize", measure);
       ro.disconnect();
     };
-  }, [surfaceMode, stacked]);
+  }, [surfaceMode]);
 
   // Embedded mode only: cap the scroll body at the space to the visible bottom of the enclosing
   // scroller (leaving room for the pager footer) so a big in-page list scrolls internally rather
@@ -2386,17 +2384,16 @@ export function EntityListWidget({
       )}
       style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
     >
-      {/* Control island — a single floating bar that replaces the old title/search/actions row AND
-          the separate filter bar. Title + row count lead; search, group-by and the filter facets fill
-          the middle; the view toggle, custom actions and New pin right. Controls stay on one line;
-          narrow islands scroll horizontally instead of splitting search/actions onto a second row.
-          `shrink-0` keeps the bar from being squeezed by a tall card below. */}
-      <div className="mb-3 flex shrink-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-card border border-border/70 bg-card px-2.5 py-2">
+      {/* Control island — three zones on one line: title/count stay visible on the left, facets get
+          the flexible middle rail (and scroll independently when they do not fit), while search and
+          actions stay visible on the right. The whole toolbar must never become one long scroller:
+          that pushes the primary actions offscreen precisely when space is scarce. */}
+      <div className="mb-3 flex shrink-0 items-center gap-2 overflow-hidden rounded-card border border-border/70 bg-card px-2.5 py-2">
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
-        <div className="mr-1 flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-base font-semibold text-foreground">{list.title}</h1>
+        <div className="mr-1 flex shrink-0 items-center gap-2">
+          <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>
           {headerExtra}
           <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
@@ -2414,18 +2411,21 @@ export function EntityListWidget({
           ) : null}
         </div>
 
-        {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
-            Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
-            grouped table, which the custom renderer replaces). */}
-        {!mapMode && !customMode && groupable.length ? (
-          <GroupByFacet
-            groupable={groupable}
-            groupBy={groupBy}
-            onGroupBy={setGroupBy}
-            granularity={granularity}
-            onGranularity={setGranularity}
-          />
-        ) : null}
+        {/* Flexible facet rail — the only horizontally scrolling zone. Keeping it min-w-0 lets it
+            yield to both fixed edge clusters instead of forcing search/New beyond the card. */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
+              Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
+              grouped table, which the custom renderer replaces). */}
+          {!mapMode && !customMode && groupable.length ? (
+            <GroupByFacet
+              groupable={groupable}
+              groupBy={groupBy}
+              onGroupBy={setGroupBy}
+              granularity={granularity}
+              onGranularity={setGranularity}
+            />
+          ) : null}
 
         {/* filter facets */}
         {!mapMode &&
@@ -2511,28 +2511,29 @@ export function EntityListWidget({
               )}
             </label>
           ))}
-        {!mapMode && activeFilterCount > 0 ? (
-          <button
-            type="button"
-            onClick={clearAllFilters}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-control px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <X className="size-3.5" />
-            {t("list.clearAll")}
-          </button>
-        ) : null}
+          {!mapMode && activeFilterCount > 0 ? (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-control px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-3.5" />
+              {t("list.clearAll")}
+            </button>
+          ) : null}
+        </div>
 
         {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
           {/* search — right-aligned, leading the action cluster */}
           {!mapMode && list.searchable ? (
-            <div className={cn("relative", stacked ? "min-w-[9rem] flex-1" : "")}>
+            <div className={cn("relative", constrainedActions ? "min-w-[9rem] flex-1" : "")}>
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("list.search")}
-                className={cn("h-8 rounded-field pl-8 text-xs", stacked ? "w-full" : "w-44 sm:w-52")}
+                className={cn("h-8 rounded-field pl-8 text-xs", constrainedActions ? "w-full" : "w-44 sm:w-52")}
               />
             </div>
           ) : null}
