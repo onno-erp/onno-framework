@@ -76,8 +76,11 @@ tweak.
 ## Reuse Canonical Components
 
 When touching the host SPA itself, `onno-ui-starter/src/main/frontend/DESIGN.md` is the law: one
-`Segmented`, one `FacetSheet`, one `RefSelect`, one date-picking system, token radii
-(`rounded-control/field/card`), islands without shadows. Never add a second lookalike control.
+`Segmented`, one `FacetSheet`, one `RefSelect`, one date-picking system, islands without shadows.
+Radius tiers are `rounded-pill` (9999px compact actions/chips/badges), `rounded-field`
+(inputs/selects/rows/compact events), and `rounded-panel` (cards/bounded surfaces). The old
+`rounded-control` alias means **pill**, not “any control”; never use it on a panel, table/grid,
+schedule lane/event rectangle, generic row, empty-state box, or other large container.
 
 ## Polish Checklist
 

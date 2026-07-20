@@ -7,6 +7,10 @@ import su.onno.security.SecretRedactor;
 import org.jdbi.v3.core.Jdbi;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,8 +31,45 @@ final class EntityQuerySupport {
 
     static void decorateRows(RefResolver refResolver, List<AttributeDescriptor> attributes,
                              List<Map<String, Object>> rows) {
+        normalizeTemporals(rows, attributes);
         refResolver.resolveAttributes(rows, attributes);
         SecretRedactor.redact(rows, attributes);
+    }
+
+    /**
+     * Keep the read contract database-independent: DATE is {@code yyyy-MM-dd}; TIMESTAMP /
+     * {@link LocalDateTime} is offset-free ISO. PostgreSQL/JDBI can surface timestamp values as
+     * {@link java.sql.Timestamp} or an offset-bearing temporal that Jackson would otherwise render
+     * with {@code +00:00}; H2 commonly returns a space-separated timestamp. LocalDateTime is a
+     * wall-clock value, so normalization never shifts the local fields.
+     */
+    private static void normalizeTemporals(List<Map<String, Object>> rows,
+                                           List<AttributeDescriptor> attributes) {
+        for (Map<String, Object> row : rows) {
+            // Normalize declared temporal attributes even when a driver returned a String.
+            for (AttributeDescriptor attr : attributes) {
+                Object value = row.get(attr.columnName());
+                if (value == null) continue;
+                if (attr.javaType() == LocalDate.class) {
+                    row.put(attr.columnName(), TemporalValues.toLocalDate(value).toString());
+                } else if (attr.javaType() == LocalDateTime.class) {
+                    row.put(attr.columnName(), TemporalValues.toLocalDateTime(value).toString());
+                }
+            }
+            // Also normalize framework system timestamps such as _date and _period.
+            row.replaceAll((column, value) -> canonicalTemporal(value));
+        }
+    }
+
+    private static Object canonicalTemporal(Object value) {
+        if (value instanceof LocalDate || value instanceof java.sql.Date) {
+            return TemporalValues.toLocalDate(value).toString();
+        }
+        if (value instanceof LocalDateTime || value instanceof java.sql.Timestamp
+                || value instanceof OffsetDateTime || value instanceof ZonedDateTime) {
+            return TemporalValues.toLocalDateTime(value).toString();
+        }
+        return value;
     }
 
     static Long estimateCount(Jdbi jdbi, EntitySurfaceDescriptor surface, boolean filtered) {

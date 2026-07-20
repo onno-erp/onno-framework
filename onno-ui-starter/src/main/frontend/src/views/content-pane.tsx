@@ -259,7 +259,7 @@ export function ContentPane({
         <PaneErrorState error={error} onRetry={load} onAction={onAction} />
       ) : !contentJson ? (
         <div className="flex flex-col gap-3 px-4 py-4 sm:px-6 sm:py-5">
-          <div className="h-8 w-48 rounded-control" style={{ background: skeletonBg }} />
+          <div className="h-8 w-48 rounded-field" style={{ background: skeletonBg }} />
           <div className="h-64 w-full rounded-card" style={{ background: skeletonBg }} />
         </div>
       ) : null}

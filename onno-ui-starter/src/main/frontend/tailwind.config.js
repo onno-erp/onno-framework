@@ -60,10 +60,12 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        // Configurable shape tokens (see index.css): rounded-control (pill buttons/chips),
-        // rounded-field (inputs/selects/tabs, moderate), rounded-card (surfaces). From onno.ui.theme.
+        // Configurable shape tokens (see index.css). Prefer the self-explanatory aliases in new
+        // code: rounded-pill, rounded-field, rounded-panel. The older control/card names remain.
+        pill: "var(--radius-control)",
         control: "var(--radius-control)",
         field: "var(--radius-field)",
+        panel: "var(--radius-card)",
         card: "var(--radius-card)",
       },
     },

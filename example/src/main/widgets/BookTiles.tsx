@@ -38,7 +38,7 @@ function BookTiles({ rows, open }: ListRendererProps) {
             key={String(row._id)}
             type="button"
             onClick={() => open(row)}
-            className="overflow-hidden rounded-card border border-border bg-card p-0 text-left transition-colors hover:bg-accent/40"
+            className="overflow-hidden rounded-panel border border-border bg-card p-0 text-left transition-colors hover:bg-accent/40"
           >
             <div className="flex aspect-[3/4] items-center justify-center bg-muted">
               {cover ? (

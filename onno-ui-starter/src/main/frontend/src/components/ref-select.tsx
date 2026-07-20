@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronsUpDown, Plus, Search } from "lucide-react";
+import { ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
 import type { EntityRecord } from "@/lib/types";
@@ -27,7 +27,9 @@ interface RefSelectProps {
    */
   filter?: string;
   value?: string;
-  onChange: (id: string) => void;
+  /** Whether an existing value may be reset to null. Required fields leave this false. */
+  clearable?: boolean;
+  onChange: (id: string | null) => void;
 }
 
 function initials(name: string | undefined): string {
@@ -50,10 +52,18 @@ function displayOf(item: EntityRecord): string {
  * A searchable ref picker backed by the server-side catalog typeahead, so it never
  * loads the whole catalog (a 2000-row Clients list stays on the server). Opens a popover
  * with a search box + capped results; the selected record's label is fetched by id so it
- * shows even when it isn't in the current result page. "+ New" is pinned at the top so
- * it's always reachable regardless of how many matches there are.
+ * shows even when it isn't in the current result page. "+ New" and, for nullable fields with a
+ * value, "Clear selection" are pinned at the top so they stay reachable regardless of the results.
  */
-export function RefSelect({ targetName, refKind = "catalog", secondaryField, filter, value, onChange }: RefSelectProps) {
+export function RefSelect({
+  targetName,
+  refKind = "catalog",
+  secondaryField,
+  filter,
+  value,
+  clearable = false,
+  onChange,
+}: RefSelectProps) {
   const t = useMessages();
   const name = toSnakeCase(targetName);
   const isDocument = refKind === "document";
@@ -138,6 +148,13 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, fil
     window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/new` }));
   };
 
+  const clear = () => {
+    cancelQuickCreate(kind, name);
+    setSelected(null);
+    onChange(null);
+    setOpen(false);
+  };
+
   const trigger = (
     <button
       type="button"
@@ -164,6 +181,7 @@ export function RefSelect({ targetName, refKind = "catalog", secondaryField, fil
       loading={loading}
       onPick={pick}
       onAddNew={addNew}
+      onClear={clearable && value ? clear : undefined}
     />
   );
 
@@ -207,6 +225,7 @@ function RefSelectOptions({
   loading,
   onPick,
   onAddNew,
+  onClear,
 }: {
   targetName: string;
   secondaryField?: string;
@@ -217,6 +236,7 @@ function RefSelectOptions({
   loading: boolean;
   onPick: (item: EntityRecord) => void;
   onAddNew: () => void;
+  onClear?: () => void;
 }) {
   const t = useMessages();
   return (
@@ -230,6 +250,16 @@ function RefSelectOptions({
         <Plus className="size-4 text-muted-foreground" aria-hidden="true" />
         {t("ref.new", { name: targetName })}
       </button>
+      {onClear ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex w-full items-center gap-2 border-b px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <X className="size-4" aria-hidden="true" />
+          {t("form.clearSelection")}
+        </button>
+      ) : null}
       <SearchBox value={query} onChange={onQueryChange} />
       <div className="max-h-64 overflow-y-auto py-1 sm:max-h-64">
         {items.length === 0 ? (

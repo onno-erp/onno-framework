@@ -35,7 +35,7 @@ export class IslandErrorBoundary extends Component<
     // Styled to match UnknownWidget in widget-bridge.tsx — the "something is off
     // here, but the page lives on" placeholder idiom.
     return (
-      <div className="rounded-control border border-dashed border-border p-4 text-xs text-muted-foreground">
+      <div className="rounded-panel border border-dashed border-border p-4 text-xs text-muted-foreground">
         <div className="font-medium text-foreground">
           {this.props.label ?? "Component"} failed to render
         </div>

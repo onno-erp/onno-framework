@@ -19,5 +19,9 @@ Generated APIs are authenticated. Browser page routes are not a substitute for A
 - Use entity display names in URLs: `/api/catalogs/Products`, not Java class names.
 - Unknown non-API routes can return SPA HTML with 200.
 - There is no anonymous `/api/ui/metadata/manifest`.
+- Reads use snake_case storage columns; writes use camelCase model field names and are partial.
+- `LocalDate` is `yyyy-MM-dd`. `LocalDateTime` is offset-free ISO wall time
+  (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset-bearing writes are accepted without shifting the
+  local fields, but callers should send the canonical offset-free form.
 
 Read [references/examples.md](references/examples.md) for curl flows and response-shape examples.

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,6 +31,15 @@ class TemporalValuesTest {
         // H2 hands TIMESTAMP back space-separated; must still parse.
         assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04 08:44:44.417097"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_097_000));
+        // PostgreSQL/Jackson may expose TIMESTAMP as offset-bearing ISO. LocalDateTime represents
+        // business wall time, so accept the transport offset without shifting the local fields.
+        assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04T08:44:44.417+00:00"))
+                .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_000_000));
+        assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04T08:44:44Z"))
+                .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
+        assertThat(TemporalValues.coerce(LocalDateTime.class,
+                OffsetDateTime.of(2026, 6, 4, 8, 44, 44, 0, ZoneOffset.ofHours(3))))
+                .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
     }
 
     @Test
