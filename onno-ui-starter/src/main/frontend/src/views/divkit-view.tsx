@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/context-menu";
 import { openPanel as openNotificationPanel, setNotificationsNavStyle } from "@/lib/notification-store";
 import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "@/lib/keybindings";
+import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
+import { Button } from "@/components/ui/button";
+import { DialogShell } from "@/components/ui/dialog-shell";
 import "@divkitframework/divkit/dist/client.css";
 
 // The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
@@ -809,12 +812,14 @@ export function DivKitView() {
           .runAction(kind, name, key, id)
           .then((result) => {
             toast.dismiss(loadingId);
-            if (result?.message) toast.success(result.message);
-            if (result?.navigate) onCustomAction({ url: result.navigate });
+            applyActionResult(result, { navigate: (url) => onCustomAction({ url }) });
             // A "refresh" result re-renders via the same SSE data stream the handler's writes
             // emit; the detail surface reloads itself, so no manual navigation is needed here.
           })
-          .catch(() => toast.dismiss(loadingId));
+          .catch((error) => {
+            toast.dismiss(loadingId);
+            actionFeedbackFromError(error);
+          });
         return;
       }
       if (rest.startsWith("post/") || rest.startsWith("unpost/")) {
@@ -1552,46 +1557,38 @@ export function DivKitView() {
   // The in-app confirmation modal (replaces window.confirm): a backdrop over a centered
   // card with Cancel / confirm actions. Backdrop click or Esc cancels.
   const confirmEl = confirm ? (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={() => setConfirm(null)} />
-      <div
-        className="relative z-10 w-full max-w-sm rounded-card border p-5 shadow-2xl"
-        style={{ background: surfaceBg, borderColor }}
-      >
-        <h2 className="text-base font-semibold text-foreground">{confirm.title}</h2>
-        {confirm.message ? (
-          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{confirm.message}</p>
-        ) : null}
-        <div className="mt-5 flex justify-end gap-2">
-          <button
+    <DialogShell
+      role="alertdialog"
+      title={confirm.title}
+      description={confirm.message}
+      tone={confirm.danger ? "error" : "info"}
+      size="sm"
+      onOpenChange={(open) => {
+        if (!open) setConfirm(null);
+      }}
+      footer={
+        <>
+          <Button
             type="button"
-            className="rounded-control border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            style={{ borderColor }}
+            variant="outline"
             onClick={() => setConfirm(null)}
           >
-            Cancel
-          </button>
-          <button
+            {t("action.cancel")}
+          </Button>
+          <Button
             type="button"
             autoFocus
-            className={cn(
-              "rounded-control px-3.5 py-2 text-sm font-medium text-white transition-colors",
-              confirm.danger ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:opacity-90"
-            )}
+            variant={confirm.danger ? "destructive" : "default"}
             onClick={() => {
               confirm.onConfirm();
               setConfirm(null);
             }}
           >
             {confirm.confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    />
   ) : null;
 
   // One island: a tab strip in its header (drop target + drag handles) over its

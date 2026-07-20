@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ActionFormDialog,
+  type ActionFormDialogConfig,
   type ActionFormItem,
   type ActionFormValues,
 } from "@/components/action-form-dialog";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { api } from "@/lib/api";
+import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,6 +38,8 @@ export type ActionItem = {
   form?: ActionFormItem[];
   /** The form's opening values are fetched from the server per open (ActionSpec.formDefaults). */
   dynamicForm?: boolean;
+  /** Canonical dialog presentation metadata declared alongside the action form. */
+  formDialog?: ActionFormDialogConfig;
 };
 type Mount = { id: number; el: HTMLElement; items: ActionItem[] };
 
@@ -148,8 +152,7 @@ async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
   }
   const [, kind, name, key, id] = r.split("/"); // [action, kind, name, key, id]
   const result = await api.runAction(kind, name, key, id, inputs);
-  if (result?.message) toast.success(result.message);
-  if (result?.navigate) fire(result.navigate);
+  applyActionResult(result, { navigate: fire });
 }
 
 // Exported so the combined record surface (EntityFormWidget) can render the same cluster
@@ -159,7 +162,6 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
   const [pending, setPending] = useState<Set<string>>(new Set());
   // A form-declaring action waiting for its dialog input; submit runs it with the values.
   const [formFor, setFormFor] = useState<ActionItem | null>(null);
-  const [formBusy, setFormBusy] = useState(false);
 
   const run = useCallback((it: ActionItem, inputs?: ActionFormValues): Promise<void> | void => {
     if (!isAsync(it.url)) {
@@ -177,7 +179,9 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
       return n;
     });
     return runAsync(it.url, inputs)
-      .catch(() => {})
+      .catch((error) => {
+        actionFeedbackFromError(error);
+      })
       .finally(() =>
         setPending((s) => {
           if (!s.has(it.url)) return s;
@@ -275,17 +279,10 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
         <ActionFormDialog
           title={formFor.label}
           fields={formFor.form ?? []}
-          busy={formBusy}
+          dialog={formFor.formDialog}
           defaultsSource={formFor.dynamicForm ? actionSource(formFor.url) : undefined}
           onClose={() => setFormFor(null)}
-          onSubmit={(values) => {
-            setFormBusy(true);
-            void Promise.resolve(run(formFor, values)).finally(() => {
-              setFormBusy(false);
-              setFormFor(null);
-              setOpen(false);
-            });
-          }}
+          onSubmit={(values) => runAsync(formFor.url, values).then(() => setOpen(false))}
         />
       ) : null}
     </div>

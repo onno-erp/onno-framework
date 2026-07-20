@@ -5,6 +5,7 @@ import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 import { useFacetOverlay } from "@/components/ui/facet-sheet";
 import { useMessages } from "@/providers/messages-provider";
+import { useDialogPortal } from "@/components/ui/dialog-portal";
 
 const SelectOpenContext = React.createContext<{
   drawerOpen: boolean;
@@ -115,11 +116,12 @@ const SelectContent = React.forwardRef<
 >(({ className, children, position = "popper", ...props }, ref) => {
   const t = useMessages();
   const overlay = useFacetOverlay();
+  const dialogPortal = useDialogPortal();
   const { drawerOpen, setOpen } = React.useContext(SelectOpenContext);
   if (overlay === "sheet") {
     return (
       <Drawer.Root open={drawerOpen} onOpenChange={setOpen} direction="bottom" closeThreshold={0.32}>
-        <Drawer.Portal>
+        <Drawer.Portal container={dialogPortal ?? undefined}>
           <Drawer.Overlay className="fixed inset-0 z-50 bg-black/50" />
           <Drawer.Content asChild>
             <SelectPrimitive.Content
@@ -146,7 +148,7 @@ const SelectContent = React.forwardRef<
   }
   if (overlay === "modal") {
     return (
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal container={dialogPortal ?? undefined}>
         <button
           type="button"
           aria-label={t("action.close")}
@@ -172,7 +174,7 @@ const SelectContent = React.forwardRef<
     );
   }
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={dialogPortal ?? undefined}>
       <SelectPrimitive.Content
         ref={ref}
         className={cn(

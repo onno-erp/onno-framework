@@ -1,12 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { actionFeedbackFromError } from "@/lib/action-feedback";
 import { cn } from "@/lib/utils";
+import { DialogShell, type DialogShellSize } from "@/components/ui/dialog-shell";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/date-picker";
 import { RefSelect } from "@/components/ref-select";
 import { useMessages } from "@/providers/messages-provider";
+import type { ActionFeedback, ActionSeverity } from "@/lib/types";
+import { DynamicLucide } from "@/lib/icon-bridge";
 
 /**
  * One scalar field of an action's form dialog — the client shape of a server-declared
@@ -50,6 +63,21 @@ export type ActionRowValue = Record<string, string>;
 /** Submitted form values: scalars are strings, row groups are arrays of {column → value} rows. */
 export type ActionFormValues = Record<string, string | ActionRowValue[]>;
 
+/** Server-authored presentation metadata for the canonical action-form dialog. */
+export type ActionFormDialogConfig = {
+  title?: string;
+  description?: string;
+  submitLabel?: string;
+  cancelLabel?: string;
+  icon?: string;
+  tone?: ActionSeverity;
+  size?: DialogShellSize;
+};
+
+// Radix reserves the empty string for the trigger placeholder, so optional selects use a stable
+// non-empty option value that is normalized back to an empty action input.
+const NO_SELECTION_VALUE = "__onno_no_selection__";
+
 function isGroup(item: ActionFormItem): item is ActionFormGroup {
   return item.kind === "group";
 }
@@ -78,6 +106,7 @@ export function ActionFormDialog({
   fields,
   busy,
   defaultsSource,
+  dialog,
   onSubmit,
   onClose,
 }: {
@@ -85,6 +114,7 @@ export function ActionFormDialog({
   fields: ActionFormItem[];
   /** True while the action POST runs — locks the dialog and spins the submit button. */
   busy?: boolean;
+  dialog?: ActionFormDialogConfig;
   /**
    * Set when the action declares server-computed opening values (descriptor dynamicForm: true):
    * the dialog fetches GET /api/actions/{kind}/{name}/{key}/form?id= on open and seeds the scalar
@@ -92,7 +122,7 @@ export function ActionFormDialog({
    * the static defaults — the dialog must never be blocked by a broken hook.
    */
   defaultsSource?: { kind: string; name: string; key: string; id?: string };
-  onSubmit: (values: ActionFormValues) => void;
+  onSubmit: (values: ActionFormValues) => Promise<unknown> | unknown;
   onClose: () => void;
 }) {
   const t = useMessages();
@@ -109,6 +139,8 @@ export function ActionFormDialog({
   // While the server-computed opening values load, the dialog shows a busy shell (no flash of
   // blank inputs that then repopulate under the user's cursor).
   const [seeding, setSeeding] = useState(!!defaultsSource);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
 
   useEffect(() => {
     if (!defaultsSource) return;
@@ -158,11 +190,11 @@ export function ActionFormDialog({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
+      if (e.key === "Escape" && !busy && !submitting) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, onClose]);
+  }, [busy, submitting, onClose]);
 
   const set = (key: string, value: string) => setValues((v) => ({ ...v, [key]: value }));
 
@@ -182,17 +214,42 @@ export function ActionFormDialog({
       return { ...prev, [groupKey]: list.length ? list : [{}] };
     });
 
-  const submit = () => {
+  const submit = async () => {
     if (!canSubmit || locked) return;
     const out: ActionFormValues = { ...values };
     for (const g of groups) out[g.key] = (rows[g.key] ?? []).filter((r) => !rowIsBlank(r));
-    onSubmit(out);
+    setFeedback(null);
+    let pending = false;
+    try {
+      const result = onSubmit(out);
+      if (result && typeof (result as PromiseLike<unknown>).then === "function") {
+        pending = true;
+        setSubmitting(true);
+        await result;
+      }
+      onClose();
+    } catch (error) {
+      const rejected = actionFeedbackFromError(error, true);
+      if (rejected) {
+        setFeedback(rejected);
+        if (rejected.keepFormOpen === false) onClose();
+      }
+    } finally {
+      if (pending) setSubmitting(false);
+    }
   };
 
-  const locked = busy || seeding;
+  const locked = busy || submitting || seeding;
 
-  const cellControl = (f: ActionFormField, value: string, onChange: (v: string) => void, autoFocus = false) => {
+  const cellControl = (
+    f: ActionFormField,
+    value: string,
+    onChange: (v: string) => void,
+    autoFocus = false,
+    id?: string
+  ) => {
     const common = {
+      id,
       value,
       placeholder: f.placeholder || undefined,
       disabled: locked,
@@ -214,32 +271,34 @@ export function ActionFormDialog({
     }
     if (f.type === "select") {
       return (
-        <select
-          {...common}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            "h-9 w-full rounded-field border border-input bg-background px-3 text-sm text-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-          )}
+        <Select
+          value={value}
+          disabled={locked}
+          onValueChange={(next) => onChange(next === NO_SELECTION_VALUE ? "" : next)}
         >
-          {!f.required ? (
-            <option value="">{t("form.noSelection")}</option>
-          ) : (value ?? "") === "" ? (
-            // An unset required value starts unanswered but cannot be cleared after selection.
-            <option value="" />
-          ) : null}
-          {(f.options ?? []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger id={id} autoFocus={autoFocus}>
+            <SelectValue placeholder={f.placeholder || t("form.select", { name: f.label })} />
+          </SelectTrigger>
+          <SelectContent>
+            {!f.required ? (
+              <SelectItem value={NO_SELECTION_VALUE}>{t("form.noSelection")}</SelectItem>
+            ) : null}
+            {(f.options ?? []).map((o) => (
+              <SelectItem key={o} value={o}>
+                {o}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
+    }
+    if (f.type === "date") {
+      return <DatePicker value={value} onChange={onChange} />;
     }
     return (
       <Input
         {...common}
-        type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+        type={f.type === "number" ? "number" : "text"}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && f.type !== "textarea") submit();
@@ -249,12 +308,15 @@ export function ActionFormDialog({
   };
 
   const scalarField = (f: ActionFormField, index: number) => (
-    <div key={f.key}>
-      <label htmlFor={`action-form-${f.key}`} className="mb-1 block text-xs font-medium text-muted-foreground">
+    <div key={f.key} className="space-y-1.5">
+      <Label htmlFor={`action-form-${f.key}`} className="text-xs text-muted-foreground">
         {f.label}
         {f.required ? <span className="text-destructive"> *</span> : null}
-      </label>
-      {cellControl(f, values[f.key] ?? "", (v) => set(f.key, v), index === 0)}
+      </Label>
+      {cellControl(f, values[f.key] ?? "", (v) => set(f.key, v), index === 0, `action-form-${f.key}`)}
+      {(feedback?.fieldErrors?.[f.key] ?? []).map((error) => (
+        <p key={error} className="mt-1 text-xs text-destructive" role="alert">{error}</p>
+      ))}
     </div>
   );
 
@@ -263,15 +325,17 @@ export function ActionFormDialog({
   // line per row with the same cell controls, a hover-fade remove, and "Add row" under the last row
   // (where the new row appears).
   const groupAddRowBtn = (g: ActionFormGroup) => (
-    <button
+    <Button
       type="button"
+      variant="outline"
+      size="sm"
       disabled={locked}
       onClick={() => addRow(g)}
-      className="mt-1 flex w-full items-center gap-1.5 rounded-control border border-dashed border-border px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+      className="mt-1 w-full justify-start border-dashed text-muted-foreground"
     >
       <Plus className="size-4" aria-hidden="true" />
-      Add row
-    </button>
+      {t("action.addRow")}
+    </Button>
   );
 
   const groupGrid = (g: ActionFormGroup) => (
@@ -284,7 +348,7 @@ export function ActionFormDialog({
       </div>
       {(rows[g.key] ?? []).length === 0 ? (
         <>
-          <p className="text-sm text-muted-foreground">No rows yet.</p>
+          <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
           {groupAddRowBtn(g)}
         </>
       ) : (
@@ -311,16 +375,18 @@ export function ActionFormDialog({
                       {cellControl(c, row[c.key] ?? "", (v) => setCell(g.key, ri, c.key, v))}
                     </div>
                   ))}
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     disabled={locked}
                     onClick={() => removeRow(g.key, ri)}
                     aria-label={`Remove row ${ri + 1}`}
                     title="Remove row"
-                    className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100 disabled:opacity-50"
+                    className="size-8 shrink-0 text-muted-foreground opacity-50 hover:text-destructive group-hover:opacity-100"
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
@@ -331,52 +397,65 @@ export function ActionFormDialog({
     </div>
   );
 
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-[1px]"
-        onClick={() => {
-          if (!busy) onClose();
-        }}
-      />
-      <div
-        className={cn(
-          "relative z-10 max-h-[85vh] w-full overflow-y-auto rounded-card border border-border bg-card p-5 shadow-2xl",
-          groups.length ? "max-w-2xl" : "max-w-sm"
-        )}
-      >
-        <h2 className="flex items-center gap-2 text-base font-semibold text-foreground">
-          {title}
-          {seeding ? (
-            <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden="true" />
-          ) : null}
-        </h2>
-        <div className="mt-4 space-y-3">
-          {scalars.map((f, i) => scalarField(f, i))}
-          {groups.map((g) => groupGrid(g))}
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
+  const formErrors = feedback?.formErrors ?? [];
+  const inlineMessage =
+    feedback?.presentation === "inline" || formErrors.length || Object.keys(feedback?.fieldErrors ?? {}).length
+      ? feedback?.message
+      : null;
+  return (
+    <DialogShell
+      title={dialog?.title || title}
+      description={dialog?.description}
+      tone={dialog?.tone || "info"}
+      size={dialog?.size || (groups.length ? "lg" : "sm")}
+      icon={dialog?.icon ? <DynamicLucide name={dialog.icon} size={20} /> : undefined}
+      dismissable={!locked}
+      onOpenChange={(open) => {
+        if (!open && !locked) onClose();
+      }}
+      footer={
+        <>
+          <Button
             type="button"
-            disabled={busy}
+            variant="outline"
+            disabled={locked}
             onClick={onClose}
-            className="rounded-control border border-border px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
           >
-            Cancel
-          </button>
-          <button
+            {dialog?.cancelLabel || t("action.cancel")}
+          </Button>
+          <Button
             type="button"
             disabled={!canSubmit || locked}
-            onClick={submit}
-            className="inline-flex items-center gap-1.5 rounded-control bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => void submit()}
           >
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-            {title}
-          </button>
+            {locked ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+            {dialog?.submitLabel || title}
+          </Button>
+        </>
+      }
+    >
+      {seeding ? (
+        <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          {t("loading.working")}
         </div>
-      </div>
-    </div>,
-    document.body
+      ) : (
+        <fieldset disabled={locked} className="space-y-3">
+          {inlineMessage || formErrors.length ? (
+            <div className="rounded-field border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+              {inlineMessage ? <p>{inlineMessage}</p> : null}
+              {formErrors.length ? (
+                <ul className={cn("list-disc pl-5", inlineMessage && "mt-1")}>
+                  {formErrors.map((error) => <li key={error}>{error}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+          {scalars.map((f, i) => scalarField(f, i))}
+          {groups.map((g) => groupGrid(g))}
+        </fieldset>
+      )}
+    </DialogShell>
   );
 }
 

@@ -15,6 +15,7 @@ import type {
   ActionInputs,
   BatchResult,
   RefOptionSearch,
+  ActionFeedback,
 } from "./types";
 
 import { toSnakeCase } from "./utils";
@@ -135,6 +136,7 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boo
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
     let fieldErrors: Record<string, string[]> | undefined;
+    let feedback: ActionFeedback | undefined;
     try {
       const body = await res.json();
       if (body.message) message = body.message;
@@ -142,15 +144,23 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boo
       if (body.fieldErrors && typeof body.fieldErrors === "object" && Object.keys(body.fieldErrors).length) {
         fieldErrors = body.fieldErrors as Record<string, string[]>;
       }
+      if (
+        typeof body.severity === "string" &&
+        typeof body.presentation === "string" &&
+        ["info", "success", "warning", "error"].includes(body.severity) &&
+        ["toast", "dialog", "inline"].includes(body.presentation)
+      ) {
+        feedback = body as ActionFeedback;
+      }
     } catch { /* ignore parse errors */ }
     // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
     // failures (auth aside) surface as a toast as before. `silent` suppresses the toast for
     // background calls (live validation) where a transient failure must not interrupt the user.
-    if (res.status !== 401 && !fieldErrors && !opts?.silent) toast.error(message);
+    if (res.status !== 401 && !fieldErrors && !feedback && !opts?.silent) toast.error(message);
     // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
     // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
     if (res.status === 401 && !url.endsWith("/auth/login")) onUnauthorized?.();
-    throw new ApiError(message, res.status, fieldErrors);
+    throw new ApiError(message, res.status, fieldErrors, feedback);
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -356,7 +366,9 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     /** Per-field validation messages from a 422, keyed by attribute field name. */
-    public fieldErrors?: Record<string, string[]>
+    public fieldErrors?: Record<string, string[]>,
+    /** Typed expected action rejection returned by ActionRejectedException. */
+    public feedback?: ActionFeedback
   ) {
     super(message);
   }

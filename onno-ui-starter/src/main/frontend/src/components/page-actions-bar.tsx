@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import type { ActionResult } from "@/lib/types";
+import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
+import {
+  ActionFormDialog,
+  type ActionFormDialogConfig,
+  type ActionFormItem,
+  type ActionFormValues,
+} from "@/components/action-form-dialog";
 
 /**
  * One button in a page-level action section (PageBuilder.actions). A server button runs an
@@ -18,6 +24,8 @@ export type PageActionButton = {
   logo?: string;
   server: boolean;
   url?: string;
+  form?: ActionFormItem[];
+  formDialog?: ActionFormDialogConfig;
 };
 
 function dispatchAction(url: string) {
@@ -43,22 +51,29 @@ export function PageActionsBar({
   buttons: PageActionButton[];
 }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
+  const [formFor, setFormFor] = useState<PageActionButton | null>(null);
 
-  const run = (b: PageActionButton) => {
+  const run = (b: PageActionButton, inputs?: ActionFormValues, propagateError = false) => {
     if (!b.server) {
       if (b.url) dispatchAction(b.url);
       return;
     }
+    if (b.form?.length && !inputs) {
+      setFormFor(b);
+      return;
+    }
     setPending((s) => ({ ...s, [b.key]: true }));
-    api
-      .runPageAction(route, b.key, profile)
+    return api
+      .runPageAction(route, b.key, profile, inputs)
       .then((result: ActionResult) => {
-        if (result?.message) toast.success(result.message);
-        if (result?.navigate) dispatchAction(result.navigate);
+        applyActionResult(result, { navigate: dispatchAction });
         // result.refresh needs no work here: the data the handler wrote fans out over SSE,
         // so any embedded onno-list on this page reloads its own window.
       })
-      .catch((e) => toast.error(e instanceof Error ? e.message : String(e)))
+      .catch((error) => {
+        if (propagateError) throw error;
+        actionFeedbackFromError(error);
+      })
       .finally(() => setPending((s) => ({ ...s, [b.key]: false })));
   };
 
@@ -103,6 +118,15 @@ export function PageActionsBar({
           );
         })}
       </div>
+      {formFor ? (
+        <ActionFormDialog
+          title={formFor.label}
+          fields={formFor.form ?? []}
+          dialog={formFor.formDialog}
+          onClose={() => setFormFor(null)}
+          onSubmit={(values) => run(formFor, values, true)}
+        />
+      ) : null}
     </div>
   );
 }

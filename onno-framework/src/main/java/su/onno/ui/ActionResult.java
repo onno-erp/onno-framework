@@ -7,27 +7,43 @@ package su.onno.ui;
  * @param message a toast to show (success), or {@code null}
  * @param navigate an {@code onno://} url to route to afterwards, or {@code null}
  * @param refresh  whether to reload the current list/detail surface
+ * @param feedback optional typed feedback; legacy {@code message} remains a success-toast shortcut
  */
-public record ActionResult(String message, String navigate, boolean refresh) {
+public record ActionResult(String message, String navigate, boolean refresh, ActionFeedback feedback) {
+
+    /** Backward-compatible canonical shape used by existing applications. */
+    public ActionResult(String message, String navigate, boolean refresh) {
+        this(message, navigate, refresh, null);
+    }
 
     /** Did nothing observable — just acknowledge. */
     public static ActionResult ok() {
-        return new ActionResult(null, null, false);
+        return new ActionResult(null, null, false, null);
     }
 
     /** Show a success toast. */
     public static ActionResult message(String message) {
-        return new ActionResult(message, null, false);
+        return new ActionResult(message, null, false, null);
     }
 
     /** Show a toast and reload the current surface (the common "it changed data" case). */
     public static ActionResult refresh(String message) {
-        return new ActionResult(message, null, true);
+        return new ActionResult(message, null, true, null);
     }
 
     /** Route to a destination (e.g. a generated report or a related record). */
     public static ActionResult navigate(String url) {
-        return new ActionResult(null, url, false);
+        return new ActionResult(null, url, false, null);
+    }
+
+    /** Show typed feedback without navigation or refresh. */
+    public static ActionResult feedback(ActionFeedback feedback) {
+        return new ActionResult(null, null, false, feedback);
+    }
+
+    /** Show a successful informational/warning acknowledgement dialog. */
+    public static ActionResult dialog(ActionDialog dialog) {
+        return feedback(dialog.feedback());
     }
 
     /**
@@ -38,7 +54,7 @@ public record ActionResult(String message, String navigate, boolean refresh) {
      * {@link #open(String)} — it opens a new tab and keeps the app where it is.
      */
     public static ActionResult redirect(String url) {
-        return new ActionResult(null, "onno://redirect/" + url, false);
+        return new ActionResult(null, "onno://redirect/" + url, false, null);
     }
 
     /**
@@ -48,6 +64,6 @@ public record ActionResult(String message, String navigate, boolean refresh) {
      * is passed verbatim after the {@code onno://open/} scheme, so it may carry a query string.
      */
     public static ActionResult open(String url) {
-        return new ActionResult(null, "onno://open/" + url, false);
+        return new ActionResult(null, "onno://open/" + url, false, null);
     }
 }

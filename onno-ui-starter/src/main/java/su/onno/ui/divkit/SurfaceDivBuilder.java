@@ -286,19 +286,26 @@ public final class SurfaceDivBuilder {
      *  {@code dynamicForm}: the modal fetches its opening values from
      *  {@code GET /api/actions/{kind}/{name}/{key}/form} before rendering ({@code formDefaults}). */
     public record HeaderAction(String icon, String label, String tone, String url, String placement,
-                               List<Map<String, Object>> form, boolean disabled, boolean dynamicForm) {
+                               List<Map<String, Object>> form, Map<String, Object> formDialog,
+                               boolean disabled, boolean dynamicForm) {
         public HeaderAction(String icon, String label, String tone, String url, String placement) {
-            this(icon, label, tone, url, placement, List.of(), false, false);
+            this(icon, label, tone, url, placement, List.of(), Map.of(), false, false);
         }
 
         public HeaderAction(String icon, String label, String tone, String url, String placement,
                             List<Map<String, Object>> form) {
-            this(icon, label, tone, url, placement, form, false, false);
+            this(icon, label, tone, url, placement, form, Map.of(), false, false);
         }
 
         public HeaderAction(String icon, String label, String tone, String url, String placement,
                             List<Map<String, Object>> form, boolean disabled) {
-            this(icon, label, tone, url, placement, form, disabled, false);
+            this(icon, label, tone, url, placement, form, Map.of(), disabled, false);
+        }
+
+        /** Backward-compatible full constructor from before configurable dialog metadata. */
+        public HeaderAction(String icon, String label, String tone, String url, String placement,
+                            List<Map<String, Object>> form, boolean disabled, boolean dynamicForm) {
+            this(icon, label, tone, url, placement, form, Map.of(), disabled, dynamicForm);
         }
     }
 
@@ -804,6 +811,9 @@ public final class SurfaceDivBuilder {
                 if (a.dynamicForm()) {
                     // The modal fetches its opening values (formDefaults) before rendering.
                     m.put("dynamicForm", true);
+                }
+                if (a.formDialog() != null && !a.formDialog().isEmpty()) {
+                    m.put("formDialog", a.formDialog());
                 }
             }
             list.add(m);

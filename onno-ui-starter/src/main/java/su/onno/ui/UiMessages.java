@@ -79,6 +79,9 @@ public final class UiMessages {
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");
         d.put("action.close", "Close");
+        d.put("action.ok", "OK");
+        d.put("action.feedback.blocked", "Action blocked");
+        d.put("action.feedback.completed", "Action completed");
 
         // Calendar/date controls (React date inputs and dashboard calendar widgets).
         d.put("calendar.today", "Today");

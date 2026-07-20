@@ -52,11 +52,12 @@ public class BatchRunner implements DisposableBean {
         // A slot per id: null == succeeded, else the failed id string. Fixed-size and index-addressed,
         // so workers never contend on a shared collection and the failed list stays in input order.
         String[] failedAt = new String[ids.size()];
+        ActionFeedback[] feedbackAt = new ActionFeedback[ids.size()];
         AtomicInteger ok = new AtomicInteger();
 
         if (pool == null) {
             for (int i = 0; i < ids.size(); i++) {
-                runOne(ids.get(i), perId, failedAt, i, ok);
+                runOne(ids.get(i), perId, failedAt, feedbackAt, i, ok);
             }
         } else {
             Object ctx = SecurityContextRelay.capture();
@@ -67,7 +68,7 @@ public class BatchRunner implements DisposableBean {
                 futures.add(pool.submit(() -> {
                     Object prev = SecurityContextRelay.install(ctx);
                     try {
-                        runOne(id, perId, failedAt, idx, ok);
+                        runOne(id, perId, failedAt, feedbackAt, idx, ok);
                     } finally {
                         SecurityContextRelay.restore(prev);
                     }
@@ -98,15 +99,28 @@ public class BatchRunner implements DisposableBean {
         out.put("ok", ok.get());
         out.put("failed", failed);
         out.put("total", ids.size());
+        for (ActionFeedback feedback : feedbackAt) {
+            if (feedback != null) {
+                // Preserve one purposeful rejection so the batch entry point uses the same typed
+                // presenter as single-row actions. Failed ids still carry the complete tally.
+                out.put("feedback", feedback);
+                out.put("feedbackRejected", true);
+                break;
+            }
+        }
         return out;
     }
 
-    private static void runOne(UUID id, Consumer<UUID> perId, String[] failedAt, int idx, AtomicInteger ok) {
+    private static void runOne(UUID id, Consumer<UUID> perId, String[] failedAt,
+                               ActionFeedback[] feedbackAt, int idx, AtomicInteger ok) {
         try {
             perId.accept(id);
             ok.incrementAndGet();
         } catch (RuntimeException e) {
             failedAt[idx] = id.toString();
+            if (e instanceof ActionRejectedException rejected) {
+                feedbackAt[idx] = rejected.feedback();
+            }
         }
     }
 

@@ -31,7 +31,13 @@ class ActionFormDefaultsTest {
                     .handler(ctx -> ActionResult.ok());
             // Static form: no defaults hook → no dynamicForm flag.
             a.action("cancel").scope(ActionScope.ROW)
-                    .form(f -> f.input("reason").label("Reason").required())
+                    .form(f -> f.title("Cancel order")
+                            .description("Explain why this order is being cancelled")
+                            .submitLabel("Cancel order")
+                            .cancelLabel("Back")
+                            .tone(ActionSeverity.WARNING)
+                            .size(DialogSize.LG)
+                            .input("reason").label("Reason").required())
                     .handler(ctx -> ActionResult.ok());
             // A defaults hook without a form is inert (nothing to seed).
             a.action("noForm").scope(ActionScope.ROW)
@@ -60,6 +66,23 @@ class ActionFormDefaultsTest {
         assertThat(resolver.find(String.class, "startPrint").hasDynamicForm()).isTrue();
         assertThat(resolver.find(String.class, "cancel").hasDynamicForm()).isFalse();
         assertThat(resolver.find(String.class, "noForm").hasDynamicForm()).isFalse();
+    }
+
+    @Test
+    void descriptorCarriesCanonicalDialogMetadata() {
+        Map<String, Object> cancel = byKey(
+                resolver.descriptors(String.class, java.util.Set.of(ActionScope.ROW)), "cancel");
+
+        assertThat(cancel).containsKey("formDialog");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> dialog = (Map<String, Object>) cancel.get("formDialog");
+        assertThat(dialog)
+                .containsEntry("title", "Cancel order")
+                .containsEntry("description", "Explain why this order is being cancelled")
+                .containsEntry("submitLabel", "Cancel order")
+                .containsEntry("cancelLabel", "Back")
+                .containsEntry("tone", "warning")
+                .containsEntry("size", "lg");
     }
 
     @Test

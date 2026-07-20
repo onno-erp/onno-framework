@@ -25,6 +25,7 @@ import { GeoPortals } from "@/lib/geo-bridge";
 import { NotificationCenter } from "@/components/notification-center";
 import { UpdateNotice } from "@/components/update-notice";
 import { BASE_PATH } from "@/lib/base-path";
+import { ActionFeedbackHost } from "@/lib/action-feedback";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -72,6 +73,7 @@ function ProtectedApp() {
     <TimeRangeProvider>
       <UpdateNotice />
       <NotificationCenter />
+      <ActionFeedbackHost />
       <DivKitView />
       <WidgetPortals />
       <FormPortals />

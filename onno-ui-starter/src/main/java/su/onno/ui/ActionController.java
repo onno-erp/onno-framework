@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Runs a custom {@link ActionSpec} server handler for an entity. The button on the list (toolbar /
@@ -152,8 +153,18 @@ public class ActionController {
         String user = principal != null ? principal.getName() : null;
         // Parse the shared inputs/rows once; each id runs with the same collected values.
         ActionContext shared = ActionContext.from(kind, name, null, user, body);
-        return batch.run(ids, id -> action.handler().apply(
-                new ActionContext(kind, name, id, user, shared.inputs(), shared.rows())));
+        AtomicReference<ActionFeedback> firstFeedback = new AtomicReference<>();
+        Map<String, Object> result = batch.run(ids, id -> {
+            ActionResult actionResult = action.handler().apply(
+                    new ActionContext(kind, name, id, user, shared.inputs(), shared.rows()));
+            if (actionResult != null && actionResult.feedback() != null) {
+                firstFeedback.compareAndSet(null, actionResult.feedback());
+            }
+        });
+        if (!result.containsKey("feedback") && firstFeedback.get() != null) {
+            result.put("feedback", firstFeedback.get());
+        }
+        return result;
     }
 
     /** Parse and bound the {@code {"ids": [...]}} list of a batch request. */

@@ -6,8 +6,13 @@ import com.example.domain.enumerations.OrderStatus;
 import com.example.repositories.EmployeeRepository;
 import com.example.repositories.OrderRepository;
 import su.onno.ui.ActionResult;
+import su.onno.ui.ActionDialog;
+import su.onno.ui.ActionPresentation;
+import su.onno.ui.ActionRejectedException;
+import su.onno.ui.ActionSeverity;
 import su.onno.ui.ActionScope;
 import su.onno.ui.ActionSpec;
+import su.onno.ui.DialogSize;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
 import su.onno.ui.ListSpec;
@@ -145,6 +150,27 @@ public class OrderView implements EntityView {
                 })
                 .handler(this::bulkReceive);
 
+        // TOOLBAR: a deterministic showcase for typed action feedback and the canonical dialog
+        // (#273). It deliberately has success and rejection paths so the example can exercise the
+        // complete wire/UI contract without changing any order data.
+        a.action("feedbackDemo").scope(ActionScope.TOOLBAR).icon("message-square-warning")
+                .label("Feedback demo")
+                .form(f -> {
+                    f.title("Typed action feedback")
+                            .description("Choose an outcome to test the canonical action dialog.")
+                            .submitLabel("Run demo")
+                            .cancelLabel("Back")
+                            .icon("message-square-warning")
+                            .tone(ActionSeverity.INFO)
+                            .size(DialogSize.MD);
+                    f.input("outcome").label("Outcome").type(su.onno.ui.InputType.SELECT)
+                            .options("Success dialog", "Inline rejection", "Error dialog", "Warning toast")
+                            .value("Success dialog").required();
+                    f.input("note").label("Test note")
+                            .placeholder("This value stays when the action is rejected");
+                })
+                .handler(this::feedbackDemo);
+
         // DETAIL: the same two as header buttons — state-aware like the row ones (issue #255):
         // the label shows the next status, and both disappear once the order is terminal.
         a.action("advanceTop").scope(ActionScope.DETAIL).icon("chevron-right").label("Advance")
@@ -204,6 +230,35 @@ public class OrderView implements EntityView {
                 })
                 .sum();
         return ActionResult.message(lines.size() + " line(s), " + total + " item(s) received");
+    }
+
+    private ActionResult feedbackDemo(su.onno.ui.ActionContext ctx) {
+        String outcome = ctx.input("outcome");
+        String note = ctx.input("note");
+        return switch (outcome == null ? "" : outcome) {
+            case "Inline rejection" -> throw ActionRejectedException.builder()
+                    .title("Demo action blocked")
+                    .message("The form stayed open and retained the test note.")
+                    .presentation(ActionPresentation.INLINE)
+                    .formError("This is a purposeful business-rule rejection.")
+                    .fieldError("note", "Edit this note and submit again, or choose another outcome.")
+                    .build();
+            case "Error dialog" -> throw ActionRejectedException.builder()
+                    .title("Demo action blocked")
+                    .message("No data was changed.")
+                    .presentation(ActionPresentation.DIALOG)
+                    .detail("This is structured detail returned by the server.")
+                    .detail("Dismiss the dialog to return to the still-open action form.")
+                    .build();
+            case "Warning toast" -> throw ActionRejectedException.builder()
+                    .severity(ActionSeverity.WARNING)
+                    .presentation(ActionPresentation.TOAST)
+                    .message("This is a typed warning toast; the action did not succeed.")
+                    .build();
+            default -> ActionResult.dialog(ActionDialog.success("Demo completed")
+                    .message("Typed successful feedback is using the canonical dialog.")
+                    .detail(note == null || note.isBlank() ? "No test note was supplied." : "Test note: " + note));
+        };
     }
 
     private ActionResult advance(UUID id) {

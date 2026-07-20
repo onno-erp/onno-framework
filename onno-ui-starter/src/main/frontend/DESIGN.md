@@ -81,7 +81,8 @@ of the row keeps the full context menu. Flat table view only.
 | `EntityListWidget` | `components/entity-list-widget.tsx` | The list island (see above). |
 | `ChartWidget` (+`TimeRangeWidget`), `StatWidget`, `SparklineWidget`, `GaugeWidget` | `components/*.tsx` | All chart kinds, KPI/trend/gauge tiles. |
 | `KanbanWidget`, `CalendarWidget`, `ListWidget`, `MapWidget` | `components/*.tsx` | Board / calendar / compact list / map surfaces. |
-| `ActionFormDialog` | `components/action-form-dialog.tsx` | Server-declared action forms. |
+| `DialogShell` | `components/ui/dialog-shell.tsx` | Canonical focus-managed shell for action forms, confirmations, and typed action feedback. |
+| `ActionFormDialog` | `components/action-form-dialog.tsx` | Server-declared action forms inside `DialogShell`; retains input and renders rejection errors. |
 | `IslandErrorBoundary` | `lib/island-error-boundary.tsx` | Per-island error containment. |
 | `registerWidget` / `resolveWidget` | `lib/widget-bridge.tsx` | Widget-type registry (extension point). |
 

@@ -379,15 +379,41 @@ receives the submitted values via `ActionContext.input(key)` — the "Cancel wit
 
 ```java
 a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.ROW)
- .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA)
+ .form(f -> f.title("Cancel order")
+             .description("Explain why this order is being cancelled")
+             .submitLabel("Cancel order").cancelLabel("Back")
+             .tone(ActionSeverity.WARNING).size(DialogSize.MD)
+             .input("reason").label("Reason").type(InputType.TEXTAREA)
              .placeholder("Why is this order cancelled?").required())
  .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
 ```
 
 Works on every scope and placement — row button, toolbar, detail header, the row context menu, and
-batch mode (the dialog collects once, then the values are sent with the action for every selected
-record). Form values are merged over the ambient toolbar-input values in the same
+batch/page actions (a batch dialog collects once, then sends the values for every selected record).
+The optional dialog metadata is `title`, `description`, `submitLabel`, `cancelLabel`, `icon`,
+semantic `tone` (`INFO`/`SUCCESS`/`WARNING`/`ERROR`), and `size` (`SM`/`MD`/`LG`). Form values are
+merged over the ambient toolbar-input values in the same
 `ActionContext.input(...)` namespace, so a key used by both is won by the form.
+
+Expected business-rule rejection is a typed outcome, not a green success toast. Throw
+`ActionRejectedException`; the starter returns HTTP 422 with structured feedback. An open action
+form stays open and retains its input by default, while `formError` and `fieldError` messages render
+in the form:
+
+```java
+throw ActionRejectedException.builder()
+        .title("Approval blocked")
+        .message("The room is occupied by another event")
+        .presentation(ActionPresentation.INLINE)
+        .detail("Main Stage · Onegin · 18:00–21:00")
+        .formError("A justification cannot override a hard room conflict")
+        .fieldError("reason", "Only soft conflicts may be justified")
+        .build();
+```
+
+For a no-form action, use `DIALOG` (the rejection default) or `TOAST`. Feedback has an explicit
+`INFO`/`SUCCESS`/`WARNING`/`ERROR` severity and `TOAST`/`DIALOG`/`INLINE` presentation; inline
+feedback without an open form safely falls back to the canonical dialog.
 
 **Reference inputs** — a field can be a searchable picker of another catalog/document's records
 (the same ref widget an entity form uses) with `.reference(Target.class)`; the submitted value is
@@ -929,7 +955,10 @@ Button face — set **one**:
 | `ok()` | acknowledge, nothing observable |
 | `message(text)` | success toast |
 | `refresh(text)` | toast + reload the current surface |
+| `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
+| `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
 | `navigate("onno://…")` | route the client (internal `onno://` scheme; `{id}` is filled for row actions) |
+| `open(url)` | open an external URL in a new tab |
 | `redirect(url)` | **full-page** navigation of the top-level browser to an external `url` (e.g. an OAuth consent screen that redirects back) — emitted as the `onno://redirect/<url>` scheme |
 
 `redirect(...)` differs from `navigate("onno://open/<url>")`, which opens a **new tab** (for viewing

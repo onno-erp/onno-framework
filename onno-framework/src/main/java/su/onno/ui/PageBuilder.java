@@ -109,6 +109,10 @@ public final class PageBuilder {
             if (!a.isServer()) {
                 m.put("url", a.navigateUrl());
             }
+            if (a.hasForm()) {
+                m.put("form", actionFormDescriptors(a));
+                m.put("formDialog", actionFormDialogDescriptor(a));
+            }
             if (!a.roles().isEmpty()) {
                 m.put("roles", a.roles());
             }
@@ -116,6 +120,55 @@ public final class PageBuilder {
         }
         components.add(PageComponent.actions(heading, buttons));
         return this;
+    }
+
+    private static List<Map<String, Object>> actionFormDescriptors(ActionSpec.Action action) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (InputSpec.InputField field : action.form()) {
+            Map<String, Object> m = inputFieldDescriptor(field);
+            m.put("kind", "field");
+            out.add(m);
+        }
+        for (InputSpec.InputGroup group : action.formGroups()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("kind", "group");
+            m.put("key", group.key());
+            m.put("label", group.label());
+            m.put("required", group.required());
+            m.put("columns", group.columns().stream().map(PageBuilder::inputFieldDescriptor).toList());
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static Map<String, Object> inputFieldDescriptor(InputSpec.InputField field) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("key", field.key());
+        m.put("label", field.label());
+        m.put("type", field.type().name().toLowerCase());
+        m.put("placeholder", field.placeholder());
+        m.put("options", field.options());
+        m.put("value", field.defaultValue());
+        m.put("required", field.required());
+        if (field.reference() != null) {
+            m.put("reference", field.reference());
+            m.put("refKind", field.refKind());
+        }
+        return m;
+    }
+
+    private static Map<String, Object> actionFormDialogDescriptor(ActionSpec.Action action) {
+        InputSpec.ActionFormDialog d = action.formDialog();
+        if (d == null) return Map.of();
+        Map<String, Object> m = new LinkedHashMap<>();
+        if (d.title() != null && !d.title().isBlank()) m.put("title", d.title());
+        if (d.description() != null && !d.description().isBlank()) m.put("description", d.description());
+        if (d.submitLabel() != null && !d.submitLabel().isBlank()) m.put("submitLabel", d.submitLabel());
+        if (d.cancelLabel() != null && !d.cancelLabel().isBlank()) m.put("cancelLabel", d.cancelLabel());
+        if (d.icon() != null && !d.icon().isBlank()) m.put("icon", d.icon());
+        if (d.tone() != null) m.put("tone", d.tone().name().toLowerCase());
+        if (d.size() != null) m.put("size", d.size().name().toLowerCase());
+        return m;
     }
 
     /** Add a {@code div-custom} extension block (chart, kanban, ...). */

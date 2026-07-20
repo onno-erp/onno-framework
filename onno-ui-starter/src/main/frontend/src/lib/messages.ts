@@ -54,6 +54,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.open": "Open",
   "action.copyLink": "Copy link",
   "action.close": "Close",
+  "action.ok": "OK",
+  "action.feedback.blocked": "Action blocked",
+  "action.feedback.completed": "Action completed",
 
   // Calendar/date controls.
   "calendar.today": "Today",

@@ -124,6 +124,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public ActionRejectedExceptionHandler actionRejectedExceptionHandler() {
+        return new ActionRejectedExceptionHandler();
+    }
+
+    @Bean
     public ThemeController themeController(UiProperties properties, su.onno.ui.UiLayout uiLayout,
                                           UiMessages uiMessages,
                                           org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker,

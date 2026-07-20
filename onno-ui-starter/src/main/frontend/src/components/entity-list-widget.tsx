@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
 import {
   ActionFormDialog,
+  type ActionFormDialogConfig,
   type ActionFormItem,
   type ActionFormValues,
 } from "@/components/action-form-dialog";
@@ -38,7 +39,8 @@ import {
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-bridge";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
+import { actionFeedbackFromError, applyActionResult, presentActionFeedback } from "@/lib/action-feedback";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
 import { cn, copyToClipboard, enumPillStyle, rowStyleClass } from "@/lib/utils";
@@ -103,6 +105,7 @@ export type ListAction = {
    * dialog fetches GET /api/actions/{kind}/{name}/{key}/form?id= and seeds itself before editing.
    */
   dynamicForm?: boolean;
+  formDialog?: ActionFormDialogConfig;
 };
 /**
  * Per-row override for a state-aware row action, computed server-side from the row's data and
@@ -1721,7 +1724,6 @@ export function EntityListWidget({
   // An action-form dialog waiting for input: the clicked form-declaring action plus its target —
   // one row id, a batch of ids, or neither (toolbar). Submitting runs the action with the values.
   const [formPrompt, setFormPrompt] = useState<{ action: ListAction; id?: string; ids?: string[] } | null>(null);
-  const [formBusy, setFormBusy] = useState(false);
 
   // Run a custom action button. A navigation action just routes (filling {id} for a row); a
   // server action POSTs to /api/actions and applies the ActionResult — toast, navigate, refresh.
@@ -1730,7 +1732,7 @@ export function EntityListWidget({
   // button shows a spinner and is disabled, so there's feedback and no double-submit.
   // (api.runAction is CSRF-aware and toasts failures.)
   const runAction = useCallback(
-    (action: ListAction, id?: string, formInputs?: ActionFormValues): Promise<void> | void => {
+    (action: ListAction, id?: string, formInputs?: ActionFormValues, propagateError = false): Promise<void> | void => {
       if (!action.server) {
         if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
         return;
@@ -1749,11 +1751,12 @@ export function EntityListWidget({
       return api
         .runAction(action.kind, action.name, action.key, id, { ...inputValuesRef.current, ...formInputs })
         .then((result) => {
-          if (result?.message) toast.success(result.message);
-          if (result?.navigate) dispatchAction(result.navigate);
-          if (result?.refresh) reload();
+          applyActionResult(result, { navigate: dispatchAction, refresh: reload });
         })
-        .catch(() => {})
+        .catch((error) => {
+          if (propagateError) throw error;
+          actionFeedbackFromError(error);
+        })
         .finally(() =>
           setPending((s) => {
             if (!s.has(k)) return s;
@@ -1804,7 +1807,7 @@ export function EntityListWidget({
   // round-trips, survives the tab closing mid-run, and gets a single loading→summary toast here.
   // Per-result navigate doesn't apply — a batch can't open N panes.
   const runBatchAction = useCallback(
-    async (action: ListAction, ids: string[], formInputs?: ActionFormValues) => {
+    async (action: ListAction, ids: string[], formInputs?: ActionFormValues, propagateFeedback = false) => {
       if (action.form?.length && !formInputs) {
         // Collect the form once up front; the submitted values apply to every selected row.
         setFormPrompt({ action, ids });
@@ -1820,15 +1823,24 @@ export function EntityListWidget({
           ...inputValuesRef.current,
           ...formInputs,
         });
-        (r.ok === r.total ? toast.success : toast.error)(
-          t("batch.done", { label: action.label, ok: r.ok, n: r.total }),
-          { id: toastId }
-        );
+        if (r.feedback) {
+          toast.dismiss(toastId);
+          if (propagateFeedback && r.feedbackRejected) {
+            throw new ApiError(r.feedback.message || r.feedback.title || "Action rejected", 422, undefined, r.feedback);
+          }
+          presentActionFeedback(r.feedback);
+        } else {
+          (r.ok === r.total ? toast.success : toast.error)(
+            t("batch.done", { label: action.label, ok: r.ok, n: r.total }),
+            { id: toastId }
+          );
+        }
         clearSelection();
         reload();
-      } catch {
+      } catch (error) {
         // the api layer already toasted the failure — just retire the loading toast
         toast.dismiss(toastId);
+        if (propagateFeedback) throw error;
       } finally {
         batchBusyRef.current = false;
         setPending((s) => {
@@ -2901,7 +2913,7 @@ export function EntityListWidget({
         <ActionFormDialog
           title={formPrompt.action.label}
           fields={formPrompt.action.form ?? []}
-          busy={formBusy}
+          dialog={formPrompt.action.formDialog}
           defaultsSource={
             // Server-computed opening values (formDefaults): single-record opens only — a batch
             // has no one record to compute against, so it keeps the static defaults.
@@ -2910,19 +2922,11 @@ export function EntityListWidget({
               : undefined
           }
           onClose={() => setFormPrompt(null)}
-          onSubmit={(values) => {
-            setFormBusy(true);
-            const done = () => {
-              setFormBusy(false);
-              setFormPrompt(null);
-            };
-            // Both runners resolve (never reject): failures are toasted inside them by the api
-            // layer / summary logic, so .finally is the whole contract — close the dialog either way.
-            const p = formPrompt.ids
-              ? runBatchAction(formPrompt.action, formPrompt.ids, values)
-              : Promise.resolve(runAction(formPrompt.action, formPrompt.id, values));
-            void Promise.resolve(p).finally(done);
-          }}
+          onSubmit={(values) =>
+            formPrompt.ids
+              ? runBatchAction(formPrompt.action, formPrompt.ids, values, true)
+              : Promise.resolve(runAction(formPrompt.action, formPrompt.id, values, true))
+          }
         />
       ) : null}
     </div>

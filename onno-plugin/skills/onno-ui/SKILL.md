@@ -58,7 +58,12 @@ are UUIDs, temporals ISO).
 
 Use `actions(ActionSpec)` for custom toolbar, row, and detail actions. Prefer state-aware
 `visibleWhen`, `enabledWhen`, `label(row -> ...)`, and `icon(row -> ...)` when a button depends on
-record state.
+record state. Configure an action form's canonical dialog inside `.form(f -> f.title(...)
+.description(...).submitLabel(...).cancelLabel(...).tone(...).size(...).input(...))`. Throw
+`ActionRejectedException` for an expected business rejection; use `fieldError`/`formError` so the
+open form retains its values and shows corrective feedback. Use `ActionResult.dialog(ActionDialog…)`
+for a successful outcome that needs acknowledgement; legacy `message`/`refresh` stay success-toast
+shortcuts.
 
 ## Custom Widgets
 

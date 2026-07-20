@@ -6,7 +6,8 @@ import { ActionFormDialog } from "@/components/action-form-dialog";
 afterEach(cleanup);
 
 describe("ActionFormDialog nullable selects (#270)", () => {
-  it("keeps a clear option for an optional select after a value is chosen", () => {
+  it("keeps a clear option for an optional select after a value is chosen", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
     const onSubmit = vi.fn();
     render(
       <ActionFormDialog
@@ -26,14 +27,20 @@ describe("ActionFormDialog nullable selects (#270)", () => {
     );
 
     const select = screen.getByRole("combobox");
-    expect(screen.getByRole("option", { name: "No selection" })).toBeTruthy();
-    fireEvent.change(select, { target: { value: "" } });
+    const dialogRoot = screen.getByRole("dialog").parentElement;
+    fireEvent.keyDown(select, { key: "ArrowDown" });
+    const noSelection = await screen.findByRole("option", { name: "No selection" });
+    // Nested overlays must portal into the modal subtree. Portalling to document.body makes React
+    // Aria's focus trap immediately dismiss the menu in the real browser.
+    expect(dialogRoot?.contains(noSelection)).toBe(true);
+    fireEvent.click(noSelection);
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
 
     expect(onSubmit).toHaveBeenCalledWith({ status: "" });
   });
 
-  it("does not offer clearing for a required select with a value", () => {
+  it("does not offer clearing for a required select with a value", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
     render(
       <ActionFormDialog
         title="Run"
@@ -52,7 +59,8 @@ describe("ActionFormDialog nullable selects (#270)", () => {
       />
     );
 
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
     expect(screen.queryByRole("option", { name: "No selection" })).toBeNull();
-    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(await screen.findAllByRole("option")).toHaveLength(2);
   });
 });

@@ -328,6 +328,22 @@ export interface ActionResult {
   message?: string | null;
   navigate?: string | null;
   refresh?: boolean;
+  feedback?: ActionFeedback | null;
+}
+
+export type ActionSeverity = "info" | "success" | "warning" | "error";
+export type ActionPresentation = "toast" | "dialog" | "inline";
+
+export interface ActionFeedback {
+  severity: ActionSeverity;
+  presentation: ActionPresentation;
+  title?: string | null;
+  message?: string | null;
+  details?: string[];
+  fieldErrors?: Record<string, string[]>;
+  formErrors?: string[];
+  dismissLabel?: string | null;
+  keepFormOpen?: boolean;
 }
 
 /**
@@ -342,4 +358,7 @@ export interface BatchResult {
   ok: number;
   failed: string[];
   total: number;
+  /** First purposeful rejection, when one of the per-record handlers rejected the batch. */
+  feedback?: ActionFeedback;
+  feedbackRejected?: boolean;
 }

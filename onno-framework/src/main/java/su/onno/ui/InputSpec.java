@@ -46,6 +46,50 @@ public final class InputSpec {
 
     private final List<InputBuilder> builders = new ArrayList<>();
     private final List<GroupBuilder> groupBuilders = new ArrayList<>();
+    private String title;
+    private String description;
+    private String submitLabel;
+    private String cancelLabel;
+    private String icon;
+    private ActionSeverity tone = ActionSeverity.INFO;
+    private DialogSize size = DialogSize.MD;
+
+    /** Action-form dialog title. Has no effect when this spec is used for list-toolbar inputs. */
+    public InputSpec title(String title) {
+        this.title = title;
+        return this;
+    }
+
+    /** Supporting copy shown beneath the action-form dialog title. */
+    public InputSpec description(String description) {
+        this.description = description;
+        return this;
+    }
+
+    public InputSpec submitLabel(String submitLabel) {
+        this.submitLabel = submitLabel;
+        return this;
+    }
+
+    public InputSpec cancelLabel(String cancelLabel) {
+        this.cancelLabel = cancelLabel;
+        return this;
+    }
+
+    public InputSpec icon(String icon) {
+        this.icon = icon;
+        return this;
+    }
+
+    public InputSpec tone(ActionSeverity tone) {
+        this.tone = tone;
+        return this;
+    }
+
+    public InputSpec size(DialogSize size) {
+        this.size = size;
+        return this;
+    }
 
     /** Start declaring an input with the given unique key (how the handler reads its value). */
     public InputBuilder input(String key) {
@@ -74,6 +118,16 @@ public final class InputSpec {
     /** The declared row groups (action forms only), in declaration order. */
     public List<InputGroup> groups() {
         return groupBuilders.stream().map(GroupBuilder::build).toList();
+    }
+
+    ActionFormDialog dialog() {
+        return new ActionFormDialog(title, description, submitLabel, cancelLabel, icon, tone, size);
+    }
+
+    /** Presentation metadata for an action-form dialog. */
+    public record ActionFormDialog(String title, String description, String submitLabel,
+                                   String cancelLabel, String icon, ActionSeverity tone,
+                                   DialogSize size) {
     }
 
     /**

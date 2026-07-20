@@ -117,8 +117,21 @@ public final class ActionSpec {
                          Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
                          Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
                          List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
+                         InputSpec.ActionFormDialog formDialog,
                          Function<ActionContext, FormDefaults> formDefaultsFn,
                          List<String> roles) {
+
+        /** Backward-compatible constructor for applications that instantiate resolved actions. */
+        public Action(String key, String label, String icon, String logo, String color, ActionScope scope,
+                      String menu, String navigateUrl, Function<ActionContext, ActionResult> handler,
+                      Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
+                      Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
+                      List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
+                      Function<ActionContext, FormDefaults> formDefaultsFn, List<String> roles) {
+            this(key, label, icon, logo, color, scope, menu, navigateUrl, handler, iconFn, labelFn,
+                    visibleFn, enabledFn, form, formGroups, null, formDefaultsFn, roles);
+        }
+
         public boolean isServer() {
             return handler != null;
         }
@@ -156,6 +169,7 @@ public final class ActionSpec {
         private Predicate<ActionRow> enabledFn;
         private List<InputSpec.InputField> form = List.of();
         private List<InputSpec.InputGroup> formGroups = List.of();
+        private InputSpec.ActionFormDialog formDialog;
         private Function<ActionContext, FormDefaults> formDefaultsFn;
         private List<String> roles = List.of();
 
@@ -227,6 +241,7 @@ public final class ActionSpec {
             form.accept(spec);
             this.form = spec.inputs();
             this.formGroups = spec.groups();
+            this.formDialog = spec.dialog();
             return this;
         }
 
@@ -311,7 +326,7 @@ public final class ActionSpec {
 
         Action build() {
             return new Action(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
-                    iconFn, labelFn, visibleFn, enabledFn, form, formGroups, formDefaultsFn, roles);
+                    iconFn, labelFn, visibleFn, enabledFn, form, formGroups, formDialog, formDefaultsFn, roles);
         }
     }
 }

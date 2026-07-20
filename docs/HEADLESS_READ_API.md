@@ -24,6 +24,25 @@ GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
 ```
 
+Action handlers use a typed write-response contract. Existing successful results remain
+`{message, navigate, refresh}`; `ActionResult.feedback(...)` additionally returns `feedback` with
+`severity` (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). An expected
+`ActionRejectedException` is HTTP 422 whose body is the feedback object itself:
+
+```json
+{
+  "severity": "error",
+  "presentation": "inline",
+  "title": "Approval blocked",
+  "message": "The room is occupied",
+  "details": ["Main Stage · Onegin · 18:00–21:00"],
+  "fieldErrors": { "reason": ["Only soft conflicts may be justified"] },
+  "formErrors": ["A justification cannot override a hard conflict"],
+  "dismissLabel": null,
+  "keepFormOpen": true
+}
+```
+
 Both list endpoints also accept `?q=<text>&limit=<n>` to switch to a capped typeahead search (used by
 ref pickers); without either parameter you get the full list, **capped at 1000 rows** as a safety
 limit (catalogs ordered by `_code`, documents newest first). Past the cap the server logs a warning

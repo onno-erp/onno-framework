@@ -195,6 +195,23 @@ public class UiActionResolver {
         return out;
     }
 
+    /** Optional presentation metadata for an action form's canonical dialog shell. */
+    public static Map<String, Object> formDialogDescriptor(Action a) {
+        InputSpec.ActionFormDialog d = a.formDialog();
+        if (d == null) {
+            return Map.of();
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (d.title() != null && !d.title().isBlank()) out.put("title", d.title());
+        if (d.description() != null && !d.description().isBlank()) out.put("description", d.description());
+        if (d.submitLabel() != null && !d.submitLabel().isBlank()) out.put("submitLabel", d.submitLabel());
+        if (d.cancelLabel() != null && !d.cancelLabel().isBlank()) out.put("cancelLabel", d.cancelLabel());
+        if (d.icon() != null && !d.icon().isBlank()) out.put("icon", d.icon());
+        if (d.tone() != null) out.put("tone", d.tone().name().toLowerCase());
+        if (d.size() != null) out.put("size", d.size().name().toLowerCase());
+        return out;
+    }
+
     /** One row group's descriptor map — its columns are scalar input-field maps. */
     static Map<String, Object> groupFieldMap(InputSpec.InputGroup g) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -236,6 +253,7 @@ public class UiActionResolver {
             if (a.hasForm()) {
                 // The click first opens a modal collecting these fields; values POST as inputs.
                 m.put("form", formDescriptors(a));
+                m.put("formDialog", formDialogDescriptor(a));
                 if (a.hasDynamicForm()) {
                     // The modal fetches its opening values from GET /api/actions/{kind}/{name}/{key}/form.
                     m.put("dynamicForm", true);

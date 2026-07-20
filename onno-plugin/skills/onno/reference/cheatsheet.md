@@ -284,7 +284,12 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
     submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
     on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to
-    every selected row). A form field can be a **reference picker** of another entity via
+    every selected row). The form spec also configures the canonical shell with `title`,
+    `description`, `submitLabel`, `cancelLabel`, `icon`, `tone(ActionSeverity)` and
+    `size(DialogSize)`. Throw `ActionRejectedException` for expected business rejection (HTTP 422
+    typed feedback); `fieldError`/`formError` keep the form open with its entered values. A no-form
+    rejection defaults to an error dialog. `ActionResult.dialog(ActionDialog…)` is the successful
+    acknowledgement-dialog path; `message`/`refresh` remain success-toast shortcuts. A form field can be a **reference picker** of another entity via
     `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
     and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an
     add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
