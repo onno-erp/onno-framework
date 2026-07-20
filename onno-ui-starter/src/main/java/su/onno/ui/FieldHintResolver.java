@@ -19,6 +19,7 @@ public class FieldHintResolver {
     private final Map<Class<?>, Map<String, FieldHint>> hints = new LinkedHashMap<>();
     private final Map<Class<?>, Map<String, String>> actions = new LinkedHashMap<>();
     private final Map<Class<?>, List<RelatedList>> relatedLists = new LinkedHashMap<>();
+    private final Map<Class<?>, List<FormValidation>> validations = new LinkedHashMap<>();
 
     public FieldHintResolver(List<EntityView> views) {
         for (EntityView view : views) {
@@ -30,6 +31,7 @@ public class FieldHintResolver {
             hints.put(view.entity(), cfg.buildFieldHints());
             actions.put(view.entity(), cfg.buildActions());
             relatedLists.put(view.entity(), cfg.buildRelatedLists());
+            validations.put(view.entity(), cfg.buildValidations());
         }
     }
 
@@ -52,6 +54,18 @@ public class FieldHintResolver {
     public RelatedList relatedList(Class<?> entity, String name) {
         return relatedListsFor(entity).stream()
                 .filter(rl -> rl.name().equals(name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Live form validators authored for this entity, in declaration order. */
+    public List<FormValidation> validationsFor(Class<?> entity) {
+        return validations.getOrDefault(entity, List.of());
+    }
+
+    public FormValidation validation(Class<?> entity, String key) {
+        return validationsFor(entity).stream()
+                .filter(validation -> validation.key().equals(key))
                 .findFirst()
                 .orElse(null);
     }

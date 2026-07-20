@@ -51,6 +51,7 @@ public class ResolvedMetadataService {
                 systemColumn("code", "Code", "_code", hints),
                 systemColumn("description", "Description", "_description", hints)));
         map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
+        map.put("formValidations", describeFormValidations(d.javaClass()));
         return map;
     }
 
@@ -190,7 +191,18 @@ public class ResolvedMetadataService {
         // the reverse side of a Booking↔Client junction — read-only on the detail and editable in
         // the form, exactly like a catalog. See #110.
         map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
+        map.put("formValidations", describeFormValidations(d.javaClass()));
         return map;
+    }
+
+    private List<Map<String, Object>> describeFormValidations(Class<?> entity) {
+        return fieldHints.validationsFor(entity).stream().map(validation -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("key", validation.key());
+            map.put("dependencies", validation.dependencies());
+            map.put("debounceMillis", validation.debounceMillis());
+            return map;
+        }).toList();
     }
 
     /**
@@ -309,6 +321,13 @@ public class ResolvedMetadataService {
                 String refFilter = hint == null ? null : hint.refFilter();
                 if (refFilter != null && !refFilter.isBlank()) {
                     map.put("refFilter", refFilterColumns(a.refTarget(), refFilter));
+                }
+                String refOptionDecorator = hint == null ? null : hint.refOptionDecorator();
+                if (refOptionDecorator != null && !refOptionDecorator.isBlank()) {
+                    map.put("refOptionDecorator", refOptionDecorator);
+                }
+                if (Boolean.TRUE.equals(hint == null ? null : hint.uniqueWithinSection())) {
+                    map.put("uniqueWithinSection", true);
                 }
             }
             map.put("precision", a.precision());

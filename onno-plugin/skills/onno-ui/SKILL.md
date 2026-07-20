@@ -45,8 +45,11 @@ Common builders: `b.title`, `b.subtitle`, `b.bare()`, `b.header(false)`, `b.widg
 Use `list(ListSpec)` for columns, labels, filters, conditional row styles, and map views. Use
 `fields(EntityConfigBuilder)` for `.order()`, `.group()`, `.width()`, `.widget()`, `.format()`,
 `.placeholder()`, `.hint()`, `.label()`, `.refSecondary()`, `.refFilter()` (cascading ref pickers —
-narrow one picker's options by another field's value), visibility, built-in action placement, and
-related lists.
+narrow one picker's options by another field's value), `.refOptions(Decorator.class)` (live
+form/row-aware badges, disabled reasons, and filtering), `.uniqueWithinSection()`, visibility,
+built-in action placement, and related lists. Use
+`fields.validation(key, FormValidator.class).dependsOn(...).debounce(...)` for advisory live
+cross-record error/warning/info feedback; keep hard invariants in the authoritative write path.
 
 Seed a New form: field initializers for scalars/enums, `OnFillingHandler` for computed defaults, and
 query-param prefill for `Ref`s and cross-navigation

@@ -551,6 +551,26 @@ The generic edit form honors the `FieldHintBuilder` layout hints:
   (dates, amounts, refs) sit side by side. Anything else spans the full row.
 - `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
   unbounded) gets a textarea automatically even without the hint.
+- `.refOptions(MyDecorator.class)` — delegates a Ref picker's result page to a Spring
+  `RefOptionDecorator`. It receives the live header, section row/index, sibling-independent
+  document id and may add badges/colors, disable an option with a reason, or filter it out with
+  `RefOptionDecoration.filteredOut()`. `.uniqueWithinSection()` disables values selected by sibling
+  rows while keeping the current row's value available.
+
+Cross-record feedback that should update while a user edits is authored separately:
+
+```java
+fields.validation("schedule-conflicts", ScheduleConflictValidator.class)
+    .dependsOn("room", "startsAt", "endsAt", "participants.employee")
+    .debounce(Duration.ofMillis(200));
+```
+
+The validator is an ordinary Spring `FormValidator` bean and may inject repositories. It returns
+error, warning, or info `FormFeedback`, targeted at a field/dotted section column or the whole form.
+The client debounces declared dependencies, discards stale responses, clears obsolete feedback,
+preserves entered values, and sends the current record id on edit. This feedback is advisory:
+authoritative save/post rules must still be implemented with constraints, lifecycle hooks, or
+`Validated`.
 
 An edit form's header also shows the record's identity (code/number · description) and, for a
 postable document, its Posted status pill.

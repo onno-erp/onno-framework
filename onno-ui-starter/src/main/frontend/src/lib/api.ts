@@ -14,6 +14,7 @@ import type {
   ActionResult,
   ActionInputs,
   BatchResult,
+  RefOptionSearch,
 } from "./types";
 
 import { toSnakeCase } from "./utils";
@@ -341,6 +342,15 @@ export interface ValidationReport {
   formErrors: string[];
 }
 
+export type FormFeedbackSeverity = "ERROR" | "WARNING" | "INFO";
+
+export interface FormFeedback {
+  severity: FormFeedbackSeverity;
+  /** Blank targets the whole form; dot paths target a tabular-section column. */
+  field: string;
+  message: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -392,6 +402,11 @@ export const api = {
     if (filter) params.set("filter", filter);
     return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}?${params.toString()}`);
   },
+  searchRefOptions: (request: RefOptionSearch) =>
+    fetchJson<EntityRecord[]>(`${BASE}/ref-options/search`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    }),
   getCatalogItem: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}`),
   createCatalogItem: (name: string, data: EntityRecord) =>
@@ -460,6 +475,18 @@ export const api = {
     fetchJson<ValidationReport>(
       `${BASE}/${kind}/${name}/${id ? `${id}/` : ""}validate`,
       { method: "POST", body: JSON.stringify(data) },
+      { silent: true }
+    ),
+  validateForm: (
+    kind: "catalogs" | "documents",
+    name: string,
+    key: string,
+    id: string | null,
+    values: EntityRecord
+  ) =>
+    fetchJson<FormFeedback[]>(
+      `${BASE}/form-validation/${kind}/${name}/${encodeURIComponent(key)}`,
+      { method: "POST", body: JSON.stringify({ id, values }) },
       { silent: true }
     ),
   // Pre-aggregated buckets for a data widget (chart/stat/sparkline/gauge): a server-side GROUP BY

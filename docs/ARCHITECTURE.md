@@ -205,6 +205,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | Area | Endpoints (served by) |
 | --- | --- |
 | Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead; `?filter=` narrows it with a WidgetFilter predicate — the cascading ref picker's resolved `refFilter`), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
+| Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
 | Documents | `GET /api/documents/{name}` (`?from=&to=`; `?q=`/`?limit=` typeahead, `?filter=` narrowing it like catalogs), `/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
 | List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — **keyset-paginated** grid data by default: pass `?cursor=&limit=` and read back `{rows, nextCursor, hasMore}` (constant-time at any depth, no skip/dup on shifting data); `?count=exact\|estimate` adds a total. `?offset=` selects the legacy `{total, offset, rows}` mode. `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — register data for the virtualized register surface, same cursor envelope (`?offset=` selects the legacy page) and same declarative filter params (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's columns); movement rows carry a localized `_movement_type_display` + `_movement_type_color` (ui-starter) |
@@ -273,7 +274,11 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   line (`refSecondary`) and **cascade** (`refFilter`): `f.field("lines.book").refFilter("supplier =
   ${supplier}")` narrows the picker server-side to records matching the form's current values —
   while a referenced field is empty the picker is unfiltered, and changing it clears the dependent
-  field. **An entity surface is only *served* if it has an `EntityView` for the active profile —
+  field. `refOptions(Decorator.class)` adds live context-aware badges, disabled reasons, and filtering;
+  `uniqueWithinSection()` prevents sibling duplicate picks. `EntityConfigBuilder.validation(...)`
+  registers a Spring `FormValidator` with explicit dependency paths and debounce for advisory
+  field/form errors, warnings, and info; save/post invariants remain authoritative business rules.
+  **An entity surface is only *served* if it has an `EntityView` for the active profile —
   the view layer is the allowlist (no view → `404`).** This gates reachability, not nav presence: a
   view makes the entity reachable by its direct route, but it shows in the sidebar only once a
   `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not

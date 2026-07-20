@@ -25,6 +25,8 @@ public class FieldHintBuilder {
     private String label;
     private String refSecondary;
     private String refFilter;
+    private String refOptionDecorator;
+    private Boolean uniqueWithinSection;
 
     FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
         this.parent = parent;
@@ -180,6 +182,36 @@ public class FieldHintBuilder {
         return this;
     }
 
+    /**
+     * Decorate this reference picker's options using the given application-provided Spring bean.
+     * The decorator receives live parent-form and tabular-row context and can add a status badge,
+     * disable an option, and explain a conflict. Resolution is batched across the current search
+     * page.
+     *
+     * <pre>
+     * f.field("participants.employee")
+     *     .refOptions(EmployeeAvailability.class)
+     *     .uniqueWithinSection();
+     * </pre>
+     */
+    public FieldHintBuilder refOptions(Class<? extends RefOptionDecorator> decoratorType) {
+        if (decoratorType == null) {
+            throw new IllegalArgumentException("decoratorType must not be null");
+        }
+        this.refOptionDecorator = decoratorType.getName();
+        return this;
+    }
+
+    /**
+     * For a reference column in a tabular section, disable values already selected in sibling rows.
+     * The current row's own value remains selectable. This is immediate UI guidance; domain
+     * validation remains the authoritative safeguard on write.
+     */
+    public FieldHintBuilder uniqueWithinSection() {
+        this.uniqueWithinSection = true;
+        return this;
+    }
+
     /** Switch to configuring another field on the same entity. */
     public FieldHintBuilder field(String name) {
         return parent.field(name);
@@ -192,6 +224,7 @@ public class FieldHintBuilder {
     FieldHint build() {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
-                order, group, width, widget, placeholder, format, hint, label, refSecondary, refFilter);
+                order, group, width, widget, placeholder, format, hint, label, refSecondary, refFilter,
+                refOptionDecorator, uniqueWithinSection);
     }
 }

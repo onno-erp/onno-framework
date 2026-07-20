@@ -254,6 +254,36 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public RefOptionService refOptionService(
+            org.springframework.beans.factory.ObjectProvider<RefOptionDecorator> decorators) {
+        return new RefOptionService(decorators.orderedStream().toList());
+    }
+
+    @Bean
+    public RefOptionController refOptionController(CatalogQueryService catalogQueryService,
+                                                   DocumentQueryService documentQueryService,
+                                                   UiAccessService access,
+                                                   RefOptionService refOptionService) {
+        return new RefOptionController(catalogQueryService, documentQueryService, access, refOptionService);
+    }
+
+    @Bean
+    public FormValidationService formValidationService(
+            org.springframework.beans.factory.ObjectProvider<FormValidator> validators) {
+        return new FormValidationService(validators.orderedStream().toList());
+    }
+
+    @Bean
+    public FormValidationController formValidationController(CatalogQueryService catalogQueryService,
+                                                             DocumentQueryService documentQueryService,
+                                                             UiAccessService access,
+                                                             FieldHintResolver fieldHintResolver,
+                                                             FormValidationService validationService) {
+        return new FormValidationController(catalogQueryService, documentQueryService, access,
+                fieldHintResolver, validationService);
+    }
+
+    @Bean
     public RegisterQueryService registerQueryService(MetadataRegistry registry, Jdbi jdbi) {
         return new RegisterQueryService(registry, jdbi);
     }

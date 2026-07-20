@@ -43,6 +43,13 @@ export interface AttributeMeta {
    * placeholder's field is empty the filter is skipped (unfiltered picker).
    */
   refFilter?: string;
+  /**
+   * Fully-qualified application RefOptionDecorator type. When present, the canonical picker sends
+   * live form/row context to the contextual option-search endpoint.
+   */
+  refOptionDecorator?: string;
+  /** Disable values selected in sibling rows of this tabular section. */
+  uniqueWithinSection?: boolean;
   isEnum: boolean;
   enumName?: string;
   /** Display title of the enumeration type (from @Enumeration.title); falls back to enumName. */
@@ -94,6 +101,21 @@ export interface TabularSectionMeta {
   name: string;
   tableName: string;
   attributes: AttributeMeta[];
+}
+
+export interface RefOptionSearch {
+  targetKind: "catalog" | "document";
+  targetName: string;
+  decorator: string;
+  query: string;
+  limit: number;
+  filter?: string;
+  fieldPath: string;
+  formValues: EntityRecord;
+  section?: string;
+  rowIndex?: number;
+  rowValues?: EntityRecord;
+  documentId?: string;
 }
 
 /**

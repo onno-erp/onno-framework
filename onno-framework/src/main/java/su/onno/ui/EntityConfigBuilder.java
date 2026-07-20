@@ -16,12 +16,21 @@ import java.util.Map;
 public class EntityConfigBuilder {
 
     private final Map<String, FieldHintBuilder> fields = new LinkedHashMap<>();
+    private final Map<String, FormValidationBuilder> validations = new LinkedHashMap<>();
     private final Map<String, String> actions = new LinkedHashMap<>();
     private final Map<String, RelatedListBuilder> relatedLists = new LinkedHashMap<>();
     private String icon = "";
 
     public FieldHintBuilder field(String name) {
         return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
+    }
+
+    /**
+     * Add debounced, dependency-aware live feedback to the generated form. The validator class
+     * must be a Spring bean; use {@link FormValidationBuilder#dependsOn} to avoid unrelated calls.
+     */
+    public FormValidationBuilder validation(String key, Class<? extends FormValidator> validator) {
+        return validations.computeIfAbsent(key, n -> new FormValidationBuilder(this, n, validator));
     }
 
     /**
@@ -81,6 +90,10 @@ public class EntityConfigBuilder {
             result.put(entry.getKey(), entry.getValue().build());
         }
         return Map.copyOf(result);
+    }
+
+    public List<FormValidation> buildValidations() {
+        return validations.values().stream().map(FormValidationBuilder::build).toList();
     }
 
     /** Related-list panels authored on this entity, in declaration order. */

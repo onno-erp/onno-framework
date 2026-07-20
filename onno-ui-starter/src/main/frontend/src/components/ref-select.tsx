@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
-import type { EntityRecord } from "@/lib/types";
+import type { EntityRecord, RefOptionSearch } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FacetSheet, useTouchLayout } from "@/components/ui/facet-sheet";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -29,6 +29,12 @@ interface RefSelectProps {
   value?: string;
   /** Whether an existing value may be reset to null. Required fields leave this false. */
   clearable?: boolean;
+  /** Application resolver class emitted by .refOptions(...). */
+  optionDecorator?: string;
+  /** Live form/row context sent only when optionDecorator is configured. */
+  optionContext?: Omit<RefOptionSearch, "targetKind" | "targetName" | "decorator" | "query" | "limit" | "filter">;
+  /** Sibling-row selections to disable immediately in this picker. */
+  excludedIds?: string[];
   onChange: (id: string | null) => void;
 }
 
@@ -62,6 +68,9 @@ export function RefSelect({
   filter,
   value,
   clearable = false,
+  optionDecorator,
+  optionContext,
+  excludedIds = [],
   onChange,
 }: RefSelectProps) {
   const t = useMessages();
@@ -74,6 +83,7 @@ export function RefSelect({
   const [loading, setLoading] = useState(false);
   const touchLayout = useTouchLayout();
   const kind = isDocument ? "documents" : "catalogs";
+  const contextKey = JSON.stringify(optionContext ?? {});
 
   // "+ New" quick-create hand-off. The result arrives as module state + a window event (not a
   // callback — this component can be remounted, or unmounted outright in single-pane layouts,
@@ -117,9 +127,24 @@ export function RefSelect({
     setLoading(true);
     const t = setTimeout(() => {
       let cancelled = false;
-      const run = isDocument
-        ? api.searchDocument(name, query, 30, filter)
-        : api.searchCatalog(name, query, 30, filter);
+      const run = optionDecorator
+        ? api.searchRefOptions({
+            targetKind: isDocument ? "document" : "catalog",
+            targetName,
+            decorator: optionDecorator,
+            query,
+            limit: 30,
+            filter,
+            fieldPath: optionContext?.fieldPath ?? "",
+            formValues: optionContext?.formValues ?? {},
+            section: optionContext?.section,
+            rowIndex: optionContext?.rowIndex,
+            rowValues: optionContext?.rowValues,
+            documentId: optionContext?.documentId,
+          })
+        : isDocument
+          ? api.searchDocument(name, query, 30, filter)
+          : api.searchCatalog(name, query, 30, filter);
       run
         .then((r) => !cancelled && setItems(r))
         .catch(() => {})
@@ -129,7 +154,7 @@ export function RefSelect({
       };
     }, 180);
     return () => clearTimeout(t);
-  }, [open, query, name, isDocument, filter]);
+  }, [open, query, name, targetName, isDocument, filter, optionDecorator, contextKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (item: EntityRecord) => {
     // A manual pick supersedes any outstanding "+ New" hand-off.
@@ -182,6 +207,7 @@ export function RefSelect({
       onPick={pick}
       onAddNew={addNew}
       onClear={clearable && value ? clear : undefined}
+      excludedIds={excludedIds}
     />
   );
 
@@ -226,6 +252,7 @@ function RefSelectOptions({
   onPick,
   onAddNew,
   onClear,
+  excludedIds,
 }: {
   targetName: string;
   secondaryField?: string;
@@ -237,6 +264,7 @@ function RefSelectOptions({
   onPick: (item: EntityRecord) => void;
   onAddNew: () => void;
   onClear?: () => void;
+  excludedIds: string[];
 }) {
   const t = useMessages();
   return (
@@ -267,19 +295,39 @@ function RefSelectOptions({
             {loading ? t("loading.searching") : t("empty.noMatches")}
           </div>
         ) : (
-          items.map((item) => (
-            <button
-              key={item._id as string}
-              type="button"
-              onClick={() => onPick(item)}
-              className={cn(
-                "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                item._id === value && "bg-accent/60"
-              )}
-            >
-              <RefRow item={item} secondary={secondaryField} />
-            </button>
-          ))
+          items.map((item) => {
+            const excluded = excludedIds.includes(String(item._id));
+            const disabled = excluded || item._optionDisabled === true;
+            const reason = excluded
+              ? t("ref.selectedElsewhere")
+              : String(item._optionReason ?? "");
+            const badge = excluded
+              ? t("ref.alreadySelected")
+              : String(item._optionBadge ?? "");
+            return (
+              <button
+                key={item._id as string}
+                type="button"
+                disabled={disabled}
+                title={disabled && reason ? reason : undefined}
+                onClick={() => onPick(item)}
+                className={cn(
+                  "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  item._id === value && "bg-accent/60",
+                  disabled && "cursor-not-allowed opacity-55 hover:bg-transparent"
+                )}
+              >
+                <RefRow
+                  item={item}
+                  secondary={secondaryField}
+                  badge={badge}
+                  tone={excluded ? "neutral" : String(item._optionTone ?? "neutral")}
+                  badgeColor={excluded ? "" : String(item._optionColor ?? "")}
+                  reason={reason}
+                />
+              </button>
+            );
+          })
         )}
       </div>
     </>
@@ -308,7 +356,21 @@ function SearchBox({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string }) {
+function RefRow({
+  item,
+  secondary,
+  badge,
+  tone = "neutral",
+  badgeColor,
+  reason,
+}: {
+  item: EntityRecord;
+  secondary?: string;
+  badge?: string;
+  tone?: string;
+  badgeColor?: string;
+  reason?: string;
+}) {
   const display = displayOf(item);
   const avatarUrl =
     (item.avatar_url as string | undefined) ??
@@ -322,6 +384,13 @@ function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string })
   // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
   const sub = secondary ? item[secondary] : undefined;
   const subText = sub == null ? "" : String(sub);
+  const toneClass: Record<string, string> = {
+    neutral: "bg-muted text-muted-foreground",
+    success: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    danger: "bg-red-500/15 text-red-700 dark:text-red-400",
+    accent: "bg-primary/15 text-primary",
+  };
   return (
     <span className="inline-flex min-w-0 flex-1 items-center gap-2" title={code ? `${display} · ${code}` : display}>
       {avatarUrl ? (
@@ -336,10 +405,22 @@ function RefRow({ item, secondary }: { item: EntityRecord; secondary?: string })
           aria-hidden="true"
         />
       ) : null}
-      <span className="flex min-w-0 flex-col">
+      <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate">{display}</span>
         {subText ? <span className="truncate text-xs text-muted-foreground">{subText}</span> : null}
+        {reason ? <span className="truncate text-xs text-muted-foreground">{reason}</span> : null}
       </span>
+      {badge ? (
+        <span
+          className={cn(
+            "ml-auto shrink-0 rounded-control px-2 py-0.5 text-[11px] font-medium",
+            !badgeColor && (toneClass[tone] ?? toneClass.neutral)
+          )}
+          style={badgeColor ? { backgroundColor: badgeColor, color: "#fff" } : undefined}
+        >
+          {badge}
+        </span>
+      ) : null}
     </span>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type FormFeedback } from "@/lib/api";
 import { cn, enumPillStyle } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,9 +75,31 @@ export type FormDescriptor = {
     relatedLists?: RelatedListMeta[];
     /** Per-action placement overrides (f.action("post").inMenu()/hidden()) — "post" hides the Post button. */
     actions?: Record<string, string>;
+    /** Application-authored dependency-aware, debounced advisory validators. */
+    formValidations?: FormValidationMeta[];
   };
   initial: EntityRecord | null;
 };
+
+type FormValidationMeta = {
+  key: string;
+  dependencies: string[];
+  debounceMillis: number;
+};
+
+function valueAtDependency(values: EntityRecord, path: string): unknown {
+  const [head, ...tail] = path.split(".");
+  const value = values[head];
+  if (tail.length === 0) return value;
+  if (Array.isArray(value)) {
+    return value.map((row) =>
+      row && typeof row === "object" ? valueAtDependency(row as EntityRecord, tail.join(".")) : null
+    );
+  }
+  return value && typeof value === "object"
+    ? valueAtDependency(value as EntityRecord, tail.join("."))
+    : null;
+}
 
 // One editable field: either a catalog system field (code/description) or an attribute.
 type Field =
@@ -343,12 +365,16 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // fights the authoritative one; display merges them, save-set errors first.
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [serverFormErrors, setServerFormErrors] = useState<string[]>([]);
+  // Application-authored advisory feedback (#274), replaced per validator so correcting a
+  // dependency clears obsolete messages without touching any form values.
+  const [asyncFeedbackByKey, setAsyncFeedbackByKey] = useState<Record<string, FormFeedback[]>>({});
   // Only fields the user has actually visited show a live server error — the dry-run also reports
   // "required" on every field the user simply hasn't reached yet, and painting those red while the
   // form is being filled top-to-bottom would be noise.
   const [touched, setTouched] = useState<Set<string>>(() => new Set());
   // Monotonic guard so a slow validate response can't overwrite a newer one's verdict.
   const validateSeq = useRef(0);
+  const asyncValidateSeq = useRef<Record<string, number>>({});
 
   const set = (key: string, value: unknown) => {
     markFormDirty(formPath);
@@ -413,6 +439,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       setErrors({});
       setServerErrors({});
       setServerFormErrors([]);
+      setAsyncFeedbackByKey({});
       setTouched(new Set());
       setStaleExternal(false);
       clearFormDirty(formPath);
@@ -476,6 +503,52 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     }
     return payload;
   }, [data, sections, rowsBySection]);
+
+  const formValidations = meta.formValidations ?? [];
+  const asyncDependencyKey = JSON.stringify(
+    formValidations.map((validation) => {
+      const payload = buildPayload();
+      return [
+        validation.key,
+        validation.dependencies.length
+          ? validation.dependencies.map((path) => valueAtDependency(payload, path))
+          : payload,
+      ];
+    })
+  );
+
+  // Each authored validator owns its debounce and stale-response sequence. A dependency change
+  // clears that validator's previous messages immediately; unrelated values are excluded from the
+  // fingerprint and therefore do not trigger a request.
+  useEffect(() => {
+    if (readOnly || formValidations.length === 0) return;
+    const payload = buildPayload();
+    const timers = formValidations.map((validation) => {
+      const seq = (asyncValidateSeq.current[validation.key] ?? 0) + 1;
+      asyncValidateSeq.current[validation.key] = seq;
+      setAsyncFeedbackByKey((prev) =>
+        prev[validation.key] ? { ...prev, [validation.key]: [] } : prev
+      );
+      return window.setTimeout(() => {
+        api
+          .validateForm(kind, name, validation.key, isEdit ? id : null, payload)
+          .then((feedback) => {
+            if (asyncValidateSeq.current[validation.key] !== seq) return;
+            setAsyncFeedbackByKey((prev) => ({ ...prev, [validation.key]: feedback }));
+          })
+          .catch(() => {
+            /* advisory endpoint; the authoritative save path remains unchanged */
+          });
+      }, Math.max(0, validation.debounceMillis ?? 250));
+    });
+    return () => timers.forEach(window.clearTimeout);
+    // asyncDependencyKey intentionally represents only declared dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asyncDependencyKey, readOnly, kind, name, isEdit, id]);
+
+  const asyncFeedback = Object.values(asyncFeedbackByKey).flat();
+  const feedbackFor = (field: string) => asyncFeedback.filter((item) => item.field === field);
+  const asyncFormFeedback = asyncFeedback.filter((item) => !item.field);
 
   // Live server validation: after a pause in editing, dry-run the full write lifecycle server-side
   // (constraints + hooks + Validated business rules — e.g. a Java conflict check on a time slot)
@@ -694,7 +767,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
                   // The save attempt's verdict wins; behind it, the live dry-run's message — but
                   // only on fields the user has visited (see the `touched` note above).
                   error={errors[f.key] ?? (touched.has(f.key) ? serverErrors[f.key] : undefined)}
+                  feedback={feedbackFor(f.key)}
                   filterValues={data}
+                  documentId={kind === "documents" && isEdit ? id ?? undefined : undefined}
                   onChange={(v) => set(f.key, v)}
                 />
               </div>
@@ -709,6 +784,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           rows={rowsBySection[ts.name] ?? []}
           readOnly={readOnly}
           headerValues={data}
+          documentId={isEdit ? id ?? undefined : undefined}
+          feedback={asyncFeedback}
           onAdd={() => addRow(ts.name)}
           onRemove={(idx) => removeRow(ts.name, idx)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
@@ -730,11 +807,16 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       ))}
       {/* Cross-field rule failures from the live dry-run (e.g. "slot already booked") have no
           single input to attach to — surface them as a quiet form-level notice above the footer. */}
-      {!readOnly && serverFormErrors.length > 0 ? (
-        <div className="mt-4 rounded-card border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+      {!readOnly && (serverFormErrors.length > 0 || asyncFormFeedback.length > 0) ? (
+        <div
+          className="mt-4 rounded-card border border-border bg-muted/30 px-4 py-2.5 text-sm"
+          aria-live="polite"
+          role={serverFormErrors.length > 0 || asyncFormFeedback.some((f) => f.severity === "ERROR") ? "alert" : "status"}
+        >
           {serverFormErrors.map((msg, i) => (
-            <p key={i}>{msg}</p>
+            <p className="text-destructive" key={`server-${i}`}>{msg}</p>
           ))}
+          <FeedbackMessages feedback={asyncFormFeedback} />
         </div>
       ) : null}
       {readOnly ? null : (
@@ -787,6 +869,8 @@ function TabularSectionEditor({
   rows,
   readOnly,
   headerValues,
+  documentId,
+  feedback,
   onAdd,
   onRemove,
   onCell,
@@ -797,6 +881,9 @@ function TabularSectionEditor({
   readOnly?: boolean;
   /** The form's top-level values, so a cell's refFilter can cascade on a header field. */
   headerValues?: EntityRecord;
+  /** Current document id on edit; absent for a new document. */
+  documentId?: string;
+  feedback?: FormFeedback[];
   onAdd: () => void;
   onRemove: (idx: number) => void;
   onCell: (idx: number, key: string, value: unknown) => void;
@@ -861,21 +948,51 @@ function TabularSectionEditor({
               {rows.map((row, idx) => (
                 <div
                   key={idx}
-                  className="group flex items-center gap-3 rounded-control px-2 py-1 transition-colors hover:bg-muted/40"
+                  className="group flex items-center gap-3 rounded-sm px-2 py-1 transition-colors hover:bg-muted/40"
                 >
                   {columns.map((attr) => (
                     <div
                       key={attr.fieldName}
                       className={cn(colClass(attr), isBoolCol(attr) && "flex justify-center")}
+                      role="group"
+                      aria-describedby={`feedback-${section.name}-${idx}-${attr.fieldName}`}
                     >
-                      <AttrControl
-                        attr={attr}
-                        value={row[attr.fieldName]}
-                        compact
-                        // Row values win over header values, so a cell can cascade on either.
-                        filterValues={{ ...headerValues, ...row }}
-                        onChange={(v) => onCell(idx, attr.fieldName, v)}
-                      />
+                      <div className="min-w-0">
+                        <AttrControl
+                          attr={attr}
+                          value={row[attr.fieldName]}
+                          compact
+                          invalid={feedback?.some(
+                            (item) => item.field === `${section.name}.${attr.fieldName}` && item.severity === "ERROR"
+                          )}
+                          // Row values win over header values, so a cell can cascade on either.
+                          filterValues={{ ...headerValues, ...row }}
+                          optionContext={{
+                            fieldPath: `${section.name}.${attr.fieldName}`,
+                            formValues: headerValues ?? {},
+                            section: section.name,
+                            rowIndex: idx,
+                            rowValues: row,
+                            documentId,
+                          }}
+                          excludedIds={
+                            attr.uniqueWithinSection
+                              ? rows
+                                  .filter((_, rowIndex) => rowIndex !== idx)
+                                  .map((sibling) => sibling[attr.fieldName])
+                                  .filter((candidate): candidate is string => typeof candidate === "string" && candidate !== "")
+                              : undefined
+                          }
+                          onChange={(v) => onCell(idx, attr.fieldName, v)}
+                        />
+                        <div id={`feedback-${section.name}-${idx}-${attr.fieldName}`} aria-live="polite">
+                          <FeedbackMessages
+                            feedback={feedback?.filter(
+                              (item) => item.field === `${section.name}.${attr.fieldName}`
+                            ) ?? []}
+                          />
+                        </div>
+                      </div>
                     </div>
                   ))}
                   {readOnly ? (
@@ -906,20 +1023,25 @@ function FormFieldRow({
   field,
   value,
   error,
+  feedback = [],
   filterValues,
+  documentId,
   onChange,
 }: {
   field: Field;
   value: unknown;
   error?: string;
+  feedback?: FormFeedback[];
   /** The form's current values, for resolving a ref field's cascading refFilter. */
   filterValues?: EntityRecord;
+  documentId?: string;
   onChange: (value: unknown) => void;
 }) {
   const required = field.kind === "attr" && field.attr.required;
   const placeholder = field.kind === "attr" ? field.attr.placeholder : undefined;
   const hint = field.kind === "attr" ? field.attr.hint : undefined;
-  const invalid = !!error;
+  const invalid = !!error || feedback.some((item) => item.severity === "ERROR");
+  const feedbackId = `feedback-${field.key}`;
   const control =
     field.kind === "system" ? (
       <Input
@@ -935,6 +1057,15 @@ function FormFieldRow({
         invalid={invalid}
         placeholder={placeholder}
         filterValues={filterValues}
+        optionContext={
+          field.kind === "attr"
+            ? {
+                fieldPath: field.attr.fieldName,
+                formValues: filterValues ?? {},
+                documentId,
+              }
+            : undefined
+        }
         onChange={onChange}
       />
     );
@@ -944,7 +1075,7 @@ function FormFieldRow({
   if (field.kind === "attr" && /^(boolean|Boolean)$/.test(field.attr.javaType)) {
     if (/^(switch|toggle)$/i.test(field.attr.widget ?? "")) {
       return (
-        <div>
+        <div role="group" aria-describedby={feedbackId}>
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-1.5">
               <Label htmlFor={field.key}>{field.label}</Label>
@@ -952,12 +1083,15 @@ function FormFieldRow({
             </div>
             <Switch id={field.key} checked={!!value} onCheckedChange={(v) => onChange(v === true)} />
           </div>
-          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+          <div id={feedbackId} aria-live="polite">
+            {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+            <FeedbackMessages feedback={feedback.filter((item) => item.message !== error)} />
+          </div>
         </div>
       );
     }
     return (
-      <div>
+      <div role="group" aria-describedby={feedbackId}>
         <div className="flex items-center gap-2">
           <Checkbox
             id={field.key}
@@ -967,13 +1101,16 @@ function FormFieldRow({
           <Label htmlFor={field.key}>{field.label}</Label>
           <HintIcon text={hint} size={13} />
         </div>
-        {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+        <div id={feedbackId} aria-live="polite">
+          {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+          <FeedbackMessages feedback={feedback.filter((item) => item.message !== error)} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1.5" role="group" aria-describedby={feedbackId}>
       <div className="flex items-center gap-1.5">
         <Label htmlFor={field.key}>
           {field.label}
@@ -982,8 +1119,31 @@ function FormFieldRow({
         <HintIcon text={hint} size={13} />
       </div>
       {control}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      <div id={feedbackId} aria-live="polite">
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        <FeedbackMessages feedback={feedback.filter((item) => item.message !== error)} />
+      </div>
     </div>
+  );
+}
+
+function FeedbackMessages({ feedback }: { feedback: FormFeedback[] }) {
+  return (
+    <>
+      {feedback.map((item, index) => (
+        <p
+          key={`${item.severity}-${item.field}-${index}`}
+          className={cn(
+            "mt-1 text-xs",
+            item.severity === "ERROR" && "text-destructive",
+            item.severity === "WARNING" && "text-amber-700 dark:text-amber-300",
+            item.severity === "INFO" && "text-sky-700 dark:text-sky-300"
+          )}
+        >
+          {item.message}
+        </p>
+      ))}
+    </>
   );
 }
 
@@ -995,6 +1155,8 @@ function AttrControl({
   placeholder,
   compact,
   filterValues,
+  optionContext,
+  excludedIds,
 }: {
   attr: AttributeMeta;
   value: unknown;
@@ -1005,6 +1167,16 @@ function AttrControl({
   compact?: boolean;
   /** Current form/row values for resolving attr.refFilter's ${...} placeholders. */
   filterValues?: EntityRecord;
+  /** Live form/row state for an application RefOptionDecorator. */
+  optionContext?: {
+    fieldPath: string;
+    formValues: EntityRecord;
+    section?: string;
+    rowIndex?: number;
+    rowValues?: EntityRecord;
+    documentId?: string;
+  };
+  excludedIds?: string[];
 }) {
   const t = useMessages();
   const invalidCls = invalid ? "border-destructive focus-visible:ring-destructive" : undefined;
@@ -1054,6 +1226,9 @@ function AttrControl({
         refKind={attr.refKind}
         secondaryField={attr.refSecondary}
         filter={resolveRefFilter(attr.refFilter, filterValues ?? {})}
+        optionDecorator={attr.refOptionDecorator}
+        optionContext={optionContext}
+        excludedIds={excludedIds}
         value={value as string | undefined}
         clearable={!attr.required}
         onChange={onChange}

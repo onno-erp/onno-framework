@@ -7,6 +7,8 @@ import com.example.domain.catalogs.Employee;
 import com.example.domain.catalogs.Supplier;
 import com.example.domain.documents.Order;
 import com.example.domain.documents.OrderLine;
+import com.example.domain.documents.ScheduleEvent;
+import com.example.domain.documents.ScheduleParticipant;
 import com.example.domain.documents.StockReceipt;
 import com.example.domain.documents.StockReceiptLine;
 import com.example.domain.enumerations.OrderStatus;
@@ -16,6 +18,7 @@ import com.example.repositories.BookRepository;
 import com.example.repositories.CustomerRepository;
 import com.example.repositories.EmployeeRepository;
 import com.example.repositories.OrderRepository;
+import com.example.repositories.ScheduleEventRepository;
 import com.example.repositories.StockReceiptRepository;
 import com.example.repositories.SupplierRepository;
 import su.onno.posting.PostingService;
@@ -237,12 +240,14 @@ public class BookstoreSeeder implements ApplicationRunner {
     private final BookRepository books;
     private final StockReceiptRepository receipts;
     private final OrderRepository orders;
+    private final ScheduleEventRepository schedules;
     private final PostingService posting;
 
     public BookstoreSeeder(BookCategoryRepository categories, SupplierRepository suppliers,
                            CustomerRepository customers, EmployeeRepository employees,
                            BookRepository books, StockReceiptRepository receipts,
-                           OrderRepository orders, PostingService posting) {
+                           OrderRepository orders, ScheduleEventRepository schedules,
+                           PostingService posting) {
         this.categories = categories;
         this.suppliers = suppliers;
         this.customers = customers;
@@ -250,6 +255,7 @@ public class BookstoreSeeder implements ApplicationRunner {
         this.books = books;
         this.receipts = receipts;
         this.orders = orders;
+        this.schedules = schedules;
         this.posting = posting;
     }
 
@@ -275,6 +281,17 @@ public class BookstoreSeeder implements ApplicationRunner {
         for (String[] e : EMPLOYEES) {
             employeeRefs.add(employee(e[0], e[1], Position.valueOf(e[2])));
         }
+
+        // One overlapping event makes the contextual picker visibly useful on first launch:
+        // tomorrow 10:00–12:00, the same default interval a fresh ScheduleEvent opens with.
+        ScheduleEvent briefing = new ScheduleEvent();
+        briefing.setSubject("Инвентаризация магазина");
+        briefing.setStartsAt(java.time.LocalDate.now().plusDays(1).atTime(10, 30));
+        briefing.setEndsAt(java.time.LocalDate.now().plusDays(1).atTime(11, 30));
+        briefing.setDate(briefing.getStartsAt());
+        briefing.getParticipants().add(participant(employeeRefs.get(0), "Ведущий"));
+        briefing.getParticipants().add(participant(employeeRefs.get(2), "Инвентаризация"));
+        schedules.save(briefing);
 
         List<Ref<Customer>> customerRefs = new ArrayList<>();
         for (int i = 0; i < 36; i++) {
@@ -366,6 +383,13 @@ public class BookstoreSeeder implements ApplicationRunner {
         e.setPosition(position);
         e.setAvatarUrl(avatarUrl(name));
         return Ref.of(Employee.class, employees.save(e).getId());
+    }
+
+    private ScheduleParticipant participant(Ref<Employee> employee, String responsibility) {
+        ScheduleParticipant row = new ScheduleParticipant();
+        row.setEmployee(employee);
+        row.setResponsibility(responsibility);
+        return row;
     }
 
     /** A deterministic notionists-neutral avatar per staff name (DiceBear), so every employee has a

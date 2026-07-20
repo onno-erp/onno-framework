@@ -270,6 +270,8 @@ public final class UiMessages {
         d.put("form.select", "Select {name}…");
         d.put("form.clearSelection", "Clear selection");
         d.put("form.noSelection", "No selection");
+        d.put("ref.selectedElsewhere", "Selected in another row");
+        d.put("ref.alreadySelected", "Already selected");
         // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
         d.put("form.staleChanged", "This record changed elsewhere.");
         d.put("form.reload", "Reload");

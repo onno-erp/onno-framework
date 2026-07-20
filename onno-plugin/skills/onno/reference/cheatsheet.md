@@ -311,7 +311,10 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     creates server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity,
     catalog description + " (copy)" [`duplicate.copySuffix`], documents unposted/dated now,
     secrets unset). Forms with unsaved edits confirm "Discard changes?" before the tab closes.
-  - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `icon(name)` (nav icon, any lucide
+  - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `validation(key, FormValidator.class)`
+    → `.dependsOn(fields…)` (dotted section paths supported) + `.debounce(Duration)` for live,
+    advisory error/warning/info feedback; validators are Spring beans and never replace
+    authoritative save/post rules; `icon(name)` (nav icon, any lucide
     name); a **tabular-section column** is addressed with a section-scoped key
     `field("<section>.<field>")` (e.g. `field("items.unitPrice").format("currency:USD")`) — the
     prefix is the `@TabularSection(name=…)`, and it scopes the hint so it can't collide with a
@@ -332,7 +335,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     `POST /api/media`, the attribute stores the returned URL; `map`/`geo`), `placeholder`, `format`
     (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
     `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each
-    Ref-picker option to disambiguate same-named records, #185), `hideInList/Form/Detail()`,
+    Ref-picker option to disambiguate same-named records, #185), `refOptions(Decorator.class)`
+    (live form/row/id badges, colors, disable reasons, and `filteredOut()` filtering),
+    `uniqueWithinSection()` (sibling-row uniqueness), `hideInList/Form/Detail()`,
     `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
     form/detail/list label — including the built-in system columns (`code`/`description`,
     `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.

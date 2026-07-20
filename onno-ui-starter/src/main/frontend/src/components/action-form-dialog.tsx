@@ -304,7 +304,7 @@ export function ActionFormDialog({
               {(rows[g.key] ?? []).map((row, ri) => (
                 <div
                   key={ri}
-                  className="group flex items-center gap-3 rounded-control px-2 py-1 transition-colors hover:bg-muted/40"
+                  className="group flex items-center gap-3 rounded-sm px-2 py-1 transition-colors hover:bg-muted/40"
                 >
                   {g.columns.map((c) => (
                     <div key={c.key} className="min-w-0 grow basis-44">

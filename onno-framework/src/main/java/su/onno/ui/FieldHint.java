@@ -21,9 +21,11 @@ public record FieldHint(
         String hint,
         String label,
         String refSecondary,
-        String refFilter
+        String refFilter,
+        String refOptionDecorator,
+        Boolean uniqueWithinSection
 ) {
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }

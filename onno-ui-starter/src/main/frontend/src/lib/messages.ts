@@ -242,6 +242,8 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "form.select": "Select {name}…",
   "form.clearSelection": "Clear selection",
   "form.noSelection": "No selection",
+  "ref.selectedElsewhere": "Selected in another row",
+  "ref.alreadySelected": "Already selected",
   // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
   "form.staleChanged": "This record changed elsewhere.",
   "form.reload": "Reload",
