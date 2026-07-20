@@ -69,7 +69,7 @@ of the row keeps the full context menu. Flat table view only.
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
 | `Select` | `components/ui/select.tsx` | No-search dropdown; auto-drawer on touch. |
-| `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create. |
+| `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. |
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |
 | `Avatar` / `PresenceAvatars` | `components/ui/avatar.tsx`, `components/presence-avatars.tsx` | Avatar primitive; face-pile + dicebear default. |
 | `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |

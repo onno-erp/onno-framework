@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RefSelect } from "@/components/ref-select";
+import { useMessages } from "@/providers/messages-provider";
 
 /**
  * One scalar field of an action's form dialog — the client shape of a server-declared
@@ -94,6 +95,7 @@ export function ActionFormDialog({
   onSubmit: (values: ActionFormValues) => void;
   onClose: () => void;
 }) {
+  const t = useMessages();
   const scalars = useMemo(() => fields.filter((f): f is ActionFormField => !isGroup(f)), [fields]);
   const groups = useMemo(() => fields.filter(isGroup), [fields]);
 
@@ -202,7 +204,8 @@ export function ActionFormDialog({
           targetName={f.reference}
           refKind={f.refKind ?? "catalog"}
           value={value || undefined}
-          onChange={onChange}
+          clearable={!f.required}
+          onChange={(id) => onChange(id ?? "")}
         />
       );
     }
@@ -219,8 +222,12 @@ export function ActionFormDialog({
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
           )}
         >
-          {/* An unset value renders a blank choice so a required select starts unanswered. */}
-          {(value ?? "") === "" ? <option value="" /> : null}
+          {!f.required ? (
+            <option value="">{t("form.noSelection")}</option>
+          ) : (value ?? "") === "" ? (
+            // An unset required value starts unanswered but cannot be cleared after selection.
+            <option value="" />
+          ) : null}
           {(f.options ?? []).map((o) => (
             <option key={o} value={o}>
               {o}

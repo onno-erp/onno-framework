@@ -240,6 +240,8 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Forms / ref pickers.
   "form.saveError": "Couldn't save: {error}",
   "form.select": "Select {name}…",
+  "form.clearSelection": "Clear selection",
+  "form.noSelection": "No selection",
   // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
   "form.staleChanged": "This record changed elsewhere.",
   "form.reload": "Reload",

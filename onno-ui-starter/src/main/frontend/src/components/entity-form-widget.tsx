@@ -35,6 +35,10 @@ import { ActionsCluster, type ActionItem } from "@/lib/actions-menu-bridge";
 const actionBtn =
   "inline-flex items-center gap-1.5 rounded-control bg-secondary px-3.5 py-2 text-sm font-medium transition-colors hover:bg-accent disabled:opacity-50";
 
+// Radix Select reserves the empty string for "no value", so an optional enum needs a stable
+// non-empty item value that we normalize back to null before updating form state.
+const NO_SELECTION_VALUE = "__onno_no_selection__";
+
 // The portable form descriptor the server emits as the onno-form custom component.
 export type FormDescriptor = {
   kind: "documents" | "catalogs";
@@ -1032,6 +1036,7 @@ function AttrControl({
         secondaryField={attr.refSecondary}
         filter={resolveRefFilter(attr.refFilter, filterValues ?? {})}
         value={value as string | undefined}
+        clearable={!attr.required}
         onChange={onChange}
       />
     );
@@ -1039,11 +1044,17 @@ function AttrControl({
 
   if (attr.isEnum && attr.enumValues) {
     return (
-      <Select value={(value as string) ?? ""} onValueChange={onChange}>
+      <Select
+        value={(value as string | null | undefined) ?? ""}
+        onValueChange={(next) => onChange(next === NO_SELECTION_VALUE ? null : next)}
+      >
         <SelectTrigger>
           <SelectValue placeholder={t("form.select", { name: attr.displayName })} />
         </SelectTrigger>
         <SelectContent>
+          {!attr.required ? (
+            <SelectItem value={NO_SELECTION_VALUE}>{t("form.noSelection")}</SelectItem>
+          ) : null}
           {attr.enumValues.map((ev) => {
             // A coloured value (from @EnumLabel(color = …)) gets a dot matching its list pill, shown
             // in the option and — since Radix mirrors the chosen item — in the closed trigger too.

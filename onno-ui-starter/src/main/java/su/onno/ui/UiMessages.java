@@ -268,6 +268,8 @@ public final class UiMessages {
         // Forms / ref pickers.
         d.put("form.saveError", "Couldn't save: {error}");
         d.put("form.select", "Select {name}…");
+        d.put("form.clearSelection", "Clear selection");
+        d.put("form.noSelection", "No selection");
         // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
         d.put("form.staleChanged", "This record changed elsewhere.");
         d.put("form.reload", "Reload");
