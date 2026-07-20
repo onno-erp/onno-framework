@@ -2388,9 +2388,10 @@ export function EntityListWidget({
     >
       {/* Control island — a single floating bar that replaces the old title/search/actions row AND
           the separate filter bar. Title + row count lead; search, group-by and the filter facets fill
-          the middle; the view toggle, custom actions and New pin right. It wraps (flex-wrap) when
-          narrow; `shrink-0` keeps it from being squeezed by a tall card below. */}
-      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 rounded-card border border-border/70 bg-card px-2.5 py-2">
+          the middle; the view toggle, custom actions and New pin right. Controls stay on one line;
+          narrow islands scroll horizontally instead of splitting search/actions onto a second row.
+          `shrink-0` keeps the bar from being squeezed by a tall card below. */}
+      <div className="mb-3 flex shrink-0 flex-nowrap items-center gap-2 overflow-x-auto rounded-card border border-border/70 bg-card px-2.5 py-2">
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
@@ -2522,7 +2523,7 @@ export function EntityListWidget({
         ) : null}
 
         {/* right cluster — search, view toggle, custom actions, New */}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
           {/* search — right-aligned, leading the action cluster */}
           {!mapMode && list.searchable ? (
             <div className={cn("relative", stacked ? "min-w-[9rem] flex-1" : "")}>
@@ -2683,7 +2684,7 @@ export function EntityListWidget({
           className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
           style={surfaceMode ? undefined : { maxHeight: maxBodyH }}
         >
-          <div style={{ minWidth: minTableWidth }}>
+          <div className="w-full" style={{ minWidth: minTableWidth }}>
             {/* sticky header */}
             <div
               className={cn("sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card py-2.5", leftPad)}

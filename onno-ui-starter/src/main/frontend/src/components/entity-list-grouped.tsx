@@ -232,7 +232,7 @@ export function GroupedList({
         className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
         style={surfaceMode ? undefined : { maxHeight: scrollCap }}
       >
-        <div style={{ minWidth: minTableWidth }}>
+        <div className="w-full" style={{ minWidth: minTableWidth }}>
           {/* column labels (non-interactive in grouped view — sort still comes from the toolbar) */}
           <div
             className={cn("sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card py-2.5", leftPad)}
