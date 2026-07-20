@@ -10,7 +10,7 @@ import su.onno.ui.FormValidator;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** Live cross-record preview for issue #274; save-time business rules remain authoritative. */
+/** Live bookstore staffing-conflict preview; save-time business rules remain authoritative. */
 @Component
 public class ScheduleConflictPreview implements FormValidator {
     private final ScheduleEventRepository schedules;
@@ -24,21 +24,21 @@ public class ScheduleConflictPreview implements FormValidator {
         LocalDateTime start = temporal(context.values().get("startsAt"));
         LocalDateTime end = temporal(context.values().get("endsAt"));
         if (start == null || end == null || !end.isAfter(start)) {
-            return List.of(FormFeedback.error("endsAt", "Окончание должно быть позже начала"));
+            return List.of(FormFeedback.error("endsAt", "End time must be after start time"));
         }
         long overlaps = schedules.findAllActive().stream()
                 .filter(event -> context.id() == null || !context.id().equals(event.getId()))
                 .filter(event -> overlaps(start, end, event))
                 .count();
         if (overlaps == 0) {
-            return List.of(FormFeedback.info("", "Конфликтов расписания не найдено"));
+            return List.of(FormFeedback.info("", "No schedule conflicts found"));
         }
-        String message = "Интервал пересекается с "
-                + overlaps + " событ" + (overlaps == 1 ? "ием" : "иями");
+        String message = "Time overlaps with " + overlaps
+                + (overlaps == 1 ? " scheduled event" : " scheduled events");
         return List.of(
                 FormFeedback.warning("startsAt", message),
                 FormFeedback.info("participants.employee",
-                        "Проверяйте отметки доступности перед добавлением участников"));
+                        "Check availability statuses before adding participants"));
     }
 
     private static boolean overlaps(LocalDateTime start, LocalDateTime end, ScheduleEvent event) {

@@ -38,7 +38,7 @@ public class EmployeeAvailability implements RefOptionDecorator {
             Map<UUID, RefOptionDecoration> waiting = new LinkedHashMap<>();
             for (RefOption option : options) {
                 waiting.put(option.id(), RefOptionDecoration.badge(
-                        "Укажите время", RefOptionTone.WARNING));
+                        "Choose a time", RefOptionTone.WARNING));
             }
             return waiting;
         }
@@ -55,7 +55,7 @@ public class EmployeeAvailability implements RefOptionDecorator {
                     .filter(row -> row.getEmployee() != null)
                     .forEach(row -> conflicts.putIfAbsent(
                             row.getEmployee().id(),
-                            "Пересекается с " + event.getNumber() + " · " + event.getSubject()));
+                            "Conflicts with " + event.getNumber() + " · " + event.getSubject()));
         }
 
         Map<UUID, RefOptionDecoration> result = new LinkedHashMap<>();
@@ -66,9 +66,9 @@ public class EmployeeAvailability implements RefOptionDecorator {
                 result.put(option.id(), RefOptionDecoration.filteredOut());
             } else {
                 result.put(option.id(), conflict == null
-                        ? RefOptionDecoration.badge("Доступен", RefOptionTone.SUCCESS)
+                        ? RefOptionDecoration.badge("Available", RefOptionTone.SUCCESS)
                         : RefOptionDecoration.disabled(
-                                "Недоступен", RefOptionTone.DANGER, conflict));
+                                "Unavailable", RefOptionTone.DANGER, conflict));
             }
         }
         return result;

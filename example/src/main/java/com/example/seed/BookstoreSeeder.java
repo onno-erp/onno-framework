@@ -284,14 +284,14 @@ public class BookstoreSeeder implements ApplicationRunner {
 
         // One overlapping event makes the contextual picker visibly useful on first launch:
         // tomorrow 10:00–12:00, the same default interval a fresh ScheduleEvent opens with.
-        ScheduleEvent briefing = new ScheduleEvent();
-        briefing.setSubject("Инвентаризация магазина");
-        briefing.setStartsAt(java.time.LocalDate.now().plusDays(1).atTime(10, 30));
-        briefing.setEndsAt(java.time.LocalDate.now().plusDays(1).atTime(11, 30));
-        briefing.setDate(briefing.getStartsAt());
-        briefing.getParticipants().add(participant(employeeRefs.get(0), "Ведущий"));
-        briefing.getParticipants().add(participant(employeeRefs.get(2), "Инвентаризация"));
-        schedules.save(briefing);
+        ScheduleEvent inventoryCount = new ScheduleEvent();
+        inventoryCount.setSubject("Store inventory count");
+        inventoryCount.setStartsAt(java.time.LocalDate.now().plusDays(1).atTime(10, 30));
+        inventoryCount.setEndsAt(java.time.LocalDate.now().plusDays(1).atTime(11, 30));
+        inventoryCount.setDate(inventoryCount.getStartsAt());
+        inventoryCount.getParticipants().add(participant(employeeRefs.get(0), "Lead"));
+        inventoryCount.getParticipants().add(participant(employeeRefs.get(2), "Inventory count"));
+        schedules.save(inventoryCount);
 
         List<Ref<Customer>> customerRefs = new ArrayList<>();
         for (int i = 0; i < 36; i++) {

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** Scheduling surface used to demonstrate issue #272 end to end. */
+/** Bookstore staff scheduling surface demonstrating contextual picks and live validation. */
 @Component
 public class ScheduleEventView implements EntityView {
 
@@ -21,25 +21,25 @@ public class ScheduleEventView implements EntityView {
     @Override
     public void list(ListSpec list) {
         list.columns("number", "subject", "startsAt", "endsAt")
-                .label("number", "Номер")
+                .label("number", "Number")
                 .sortBy("startsAt", false);
     }
 
     @Override
     public void fields(EntityConfigBuilder fields) {
-        fields.field("number").label("Номер")
+        fields.field("number").label("Number")
                 .field("date").hideInForm()
-                .field("subject").order(0).label("Название")
-                .field("startsAt").order(1).width("half").label("Начало")
-                .field("endsAt").order(2).width("half").label("Окончание")
+                .field("subject").order(0).label("Subject")
+                .field("startsAt").order(1).width("half").label("Starts at")
+                .field("endsAt").order(2).width("half").label("Ends at")
                 .field("showUnavailable").order(3).widget("switch")
-                    .label("Показывать занятых сотрудников")
+                    .label("Show unavailable employees")
                 .field("participants.employee")
-                    .label("Сотрудник")
+                    .label("Employee")
                     .refSecondary("email")
                     .refOptions(EmployeeAvailability.class)
                     .uniqueWithinSection()
-                .field("participants.responsibility").label("Роль на событии");
+                .field("participants.responsibility").label("Responsibility");
         fields.validation("schedule-conflicts", ScheduleConflictPreview.class)
                 .dependsOn("startsAt", "endsAt", "participants.employee")
                 .debounce(Duration.ofMillis(200));

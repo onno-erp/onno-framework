@@ -13,9 +13,9 @@ import lombok.Setter;
 @Setter
 public class ScheduleParticipant extends TabularSectionRow {
 
-    @Attribute(displayName = "Сотрудник", required = true)
+    @Attribute(displayName = "Employee", required = true)
     private Ref<Employee> employee;
 
-    @Attribute(displayName = "Роль на событии", length = 120)
+    @Attribute(displayName = "Responsibility", length = 120)
     private String responsibility;
 }

@@ -19,26 +19,27 @@ import java.util.HashSet;
 import java.util.List;
 
 /**
- * A staff event whose participant picker demonstrates contextual availability and sibling-row
- * uniqueness. The UI prevents duplicates early; {@link #rules()} still enforces the invariant on
- * every write, including imports and direct API clients.
+ * A bookstore staff event (inventory count, team meeting, floor coverage) whose participant picker
+ * demonstrates contextual availability and sibling-row uniqueness. The UI prevents duplicates
+ * early; {@link #rules()} still enforces the invariant on every write, including imports and direct
+ * API clients.
  */
-@Document(name = "Schedule Events", title = "Событие расписания", numberPrefix = "EV-", context = "People")
+@Document(name = "Schedule Events", title = "Staff schedule event", numberPrefix = "EV-", context = "People")
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter
 @Setter
 public class ScheduleEvent extends DocumentObject implements OnFillingHandler, Validated {
 
-    @Attribute(displayName = "Название", required = true, length = 200)
-    private String subject = "Командная встреча";
+    @Attribute(displayName = "Subject", required = true, length = 200)
+    private String subject = "Team meeting";
 
-    @Attribute(displayName = "Начало", required = true)
+    @Attribute(displayName = "Starts at", required = true)
     private LocalDateTime startsAt = LocalDate.now().plusDays(1).atTime(10, 0);
 
-    @Attribute(displayName = "Окончание", required = true)
+    @Attribute(displayName = "Ends at", required = true)
     private LocalDateTime endsAt = LocalDate.now().plusDays(1).atTime(12, 0);
 
-    @Attribute(displayName = "Показывать занятых")
+    @Attribute(displayName = "Show unavailable employees")
     private boolean showUnavailable = true;
 
     @TabularSection(name = "participants")
@@ -54,9 +55,9 @@ public class ScheduleEvent extends DocumentObject implements OnFillingHandler, V
     @Override
     public List<BusinessRule> rules() {
         return List.of(
-                new BusinessRule("valid-interval", "Окончание должно быть позже начала",
+                new BusinessRule("valid-interval", "End time must be after start time",
                         () -> startsAt != null && endsAt != null && endsAt.isAfter(startsAt)),
-                new BusinessRule("unique-participants", "Сотрудник не может быть добавлен дважды",
+                new BusinessRule("unique-participants", "An employee cannot be added twice",
                         this::participantsAreUnique));
     }
 
