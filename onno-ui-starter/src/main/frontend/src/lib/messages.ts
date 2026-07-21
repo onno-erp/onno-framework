@@ -142,6 +142,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // List grid: toolbar count, search, sort, view toggle, and the pager footer.
   "list.count": "{count} rows",
   "list.search": "Search…",
+  "list.searchLabel": "Search",
   "list.all": "All",
   "list.sortBy": "Sort by {column}",
   "list.tableView": "Table",

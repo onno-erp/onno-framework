@@ -753,43 +753,137 @@ function TextFacet({
     );
   }
 
+  // Desktop: the chip itself expands inline into the input — same morph as the list-wide search.
+  return <SearchChip label={label} value={value} onCommit={onCommit} openWidth={208} debounceMs={300} />;
+}
+
+/**
+ * The list-wide search dressed as a facet chip — the exact TextFacet grammar (icon + label, the
+ * committed query as a value badge, dashed→solid/accented borders), except clicking doesn't open a
+ * popover: the chip itself animates out into an inline input, with the icon staying put as the
+ * input's leading glyph. It collapses back on blur/Esc — the committed query then reads as a badge
+ * in the collapsed chip, like any other applied facet. Width tweens between measured pixel values,
+ * so the label-sized chip and the fixed-width input morph smoothly in both directions.
+ */
+function SearchChip({
+  label,
+  value,
+  onCommit,
+  openWidth,
+  debounceMs = 0,
+}: {
+  /** Collapsed-chip label, no ellipsis — the input's placeholder appends one on open. */
+  label: string;
+  value: string;
+  onCommit: (next: string) => void;
+  openWidth: number;
+  /** >0: keystrokes commit after this pause (TextFacet semantics); 0: every keystroke commits. */
+  debounceMs?: number;
+}) {
+  // Starts open when a query was restored (e.g. from the URL)… and immediately blurs closed into
+  // the badge form, which is fine — the query stays visible either way.
+  const [open, setOpen] = useState(() => !!value);
+  // The draft text; equal to `value` unless a debounced commit is pending.
+  const [text, setText] = useState(value);
+  // Keep the draft in sync if the committed value is reset externally (e.g. a clear-all).
+  useEffect(() => setText(value), [value]);
+  useEffect(() => {
+    if (debounceMs <= 0) return;
+    const id = window.setTimeout(() => {
+      if (text !== value) onCommit(text);
+    }, debounceMs);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+  // The collapsed chip's natural width — the tween needs numbers on both ends (auto doesn't
+  // animate). Re-measured whenever the collapsed content changes (the value badge grows it);
+  // null until the first measure, which renders width:auto with no tween (first paint only).
+  // +2 covers the container's own left+right border, which the border-box width must include —
+  // without it the button's right padding is clipped by exactly the border width.
+  const [chipW, setChipW] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open && chipRef.current) setChipW(chipRef.current.offsetWidth + 2);
+  }, [open, value]);
+  const active = !!value;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <FacetTip hint={t("list.filterHint", { label })}>
-        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      </FacetTip>
-      <PopoverContent align="start" className="w-64 p-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-          <Input
-            autoFocus
-            value={text}
-            placeholder={label}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                onCommit(text);
-                setOpen(false);
-              }
-            }}
-            className="h-8 rounded-field pl-8 text-xs"
-          />
-        </div>
+    <div
+      ref={wrapRef}
+      className={cn(
+        "relative h-8 shrink-0 overflow-hidden rounded-control border transition-[width,border-color,background-color] duration-300 ease-out focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-1 focus-within:ring-offset-background",
+        open
+          ? "border-solid border-input bg-transparent"
+          : active
+            ? "border-solid border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10"
+            : "border-dashed border-input bg-transparent text-muted-foreground hover:border-solid hover:bg-accent hover:text-foreground"
+      )}
+      style={{ width: open ? openWidth : chipW ?? undefined }}
+    >
+      <button
+        ref={chipRef}
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          // preventScroll: the browser would otherwise instantly yank the still-narrow chip into
+          // view mid-tween; the smooth scroll below reveals the full-width input instead, once
+          // the width transition has finished (300ms) — matters inside the scrolling facet rail.
+          requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+          window.setTimeout(() => {
+            wrapRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          }, 320);
+        }}
+        tabIndex={open ? -1 : 0}
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        className={cn(
+          // A touch more right padding than the px-3 facet chips: the leading icon shifts the
+          // label right, so a symmetric inset reads tighter on the trailing side.
+          "inline-flex h-full items-center gap-1.5 whitespace-nowrap pl-3 pr-4 text-xs font-medium outline-none",
+          open && "pointer-events-none"
+        )}
+      >
+        <Search className="size-3.5 shrink-0 opacity-60" />
+        <span className={cn("transition-opacity duration-200", open && "opacity-0")}>{label}</span>
         {active ? (
-          <button
-            type="button"
-            onClick={() => {
-              setText("");
-              onCommit("");
-              setOpen(false);
-            }}
-            className="mt-1 w-full rounded-field px-2 py-1.5 text-center text-xs text-muted-foreground hover:bg-accent"
-          >
-            {t("list.clear")}
-          </button>
+          <span className={cn("inline-flex items-center gap-1.5 transition-opacity duration-200", open && "opacity-0")}>
+            <FacetDivider />
+            <FacetValueBadge>
+              <span className="max-w-28 truncate">{value}</span>
+            </FacetValueBadge>
+          </span>
         ) : null}
-      </PopoverContent>
-    </Popover>
+      </button>
+      <Input
+        ref={inputRef}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (debounceMs <= 0) onCommit(e.target.value);
+        }}
+        onBlur={() => {
+          if (text !== value) onCommit(text); // flush a pending debounced commit
+          setOpen(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setText("");
+            onCommit("");
+            e.currentTarget.blur();
+          } else if (e.key === "Enter") {
+            e.currentTarget.blur();
+          }
+        }}
+        placeholder={`${label}…`}
+        tabIndex={open ? 0 : -1}
+        className={cn(
+          "absolute inset-0 h-full w-full rounded-none border-0 bg-transparent pl-8 pr-3 text-xs transition-opacity duration-200 focus-visible:ring-0 focus-visible:ring-offset-0",
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        )}
+      />
+    </div>
   );
 }
 
@@ -1216,6 +1310,22 @@ export function EntityListWidget({
   });
   const [query, setQuery] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
   const [debounced, setDebounced] = useState(() => (urlSynced ? initialParams.get("q") ?? "" : ""));
+  // The toolbar's facet rail: it scrolls horizontally when the chips don't fit, and the
+  // left/right fades are the "there's more" signal. Re-measured on every render (chips appear and
+  // resize with filter state) plus on rail scroll — the setter's referential guard keeps the
+  // every-render call from looping.
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const [railEdges, setRailEdges] = useState({ left: false, right: false });
+  const measureRail = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft < el.scrollWidth - el.clientWidth - 1;
+    setRailEdges((p) => (p.left === left && p.right === right ? p : { left, right }));
+  }, []);
+  useLayoutEffect(() => {
+    measureRail();
+  });
   // Grouping: which column the list is grouped by ("" = flat), and — for a date column — the bucket
   // granularity. Picking a column swaps the flat table for the collapsible grouped view.
   const groupable = useMemo(() => list.groupable ?? [], [list.groupable]);
@@ -1414,7 +1524,7 @@ export function EntityListWidget({
   const controlsWidthEstimate =
     (list.map ? 150 : 0) +
     (list.custom && CustomRenderer ? 150 : 0) +
-    (list.searchable ? 220 : 0) +
+    (list.searchable ? 36 : 0) + // the collapsed search icon; the expanded input may wrap, which is fine
     toolbarActions.length * 100 +
     (list.newUrl ? 90 : 0);
   const constrainedActions = toolbarWidth != null && toolbarWidth < controlsWidthEstimate + 170;
@@ -1536,7 +1646,7 @@ export function EntityListWidget({
       const loaded = rowsRef.current?.length ?? 0;
       const want = soft ? Math.min(MAX_WINDOW, Math.max(pageSize, loaded)) : pageSize;
       params.set("limit", String(want));
-      params.set("count", "estimate"); // cheap approximate total for the header; may be absent
+      params.set("count", "exact"); // real total for the header — an estimate drifts (and is absent on H2)
       fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { rows: EntityRecord[]; nextCursor: string | null; hasMore: boolean; total?: number }) => {
@@ -2412,8 +2522,16 @@ export function EntityListWidget({
         </div>
 
         {/* Flexible facet rail — the only horizontally scrolling zone. Keeping it min-w-0 lets it
-            yield to both fixed edge clusters instead of forcing search/New beyond the card. */}
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            yield to both fixed edge clusters instead of forcing search/New beyond the card. The
+            scroller carries a little padding (with negative margins compensating) so a chip's
+            focus ring isn't clipped by overflow-x-auto; the relative wrapper anchors the
+            left/right fades that signal chips hidden past either edge. */}
+        <div className="relative flex min-w-0 flex-1 items-center">
+          <div
+            ref={railRef}
+            onScroll={measureRail}
+            className="-mx-1 -my-1 flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
           {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
               Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
               grouped table, which the custom renderer replaces). */}
@@ -2521,21 +2639,31 @@ export function EntityListWidget({
               {t("list.clearAll")}
             </button>
           ) : null}
+          </div>
+          {/* rail-edge fades — chips dissolve into the toolbar instead of cutting off clean,
+              signalling there's more to scroll. Only while that edge actually clips. The 1px
+              outset matches the scroller's negative margin so the fade hugs its true edge. */}
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-0 -left-1 z-10 w-16 bg-gradient-to-r from-card from-25% via-card/80 to-transparent transition-opacity duration-200",
+              railEdges.left ? "opacity-100" : "opacity-0"
+            )}
+          />
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-0 -right-1 z-10 w-16 bg-gradient-to-l from-card from-25% via-card/80 to-transparent transition-opacity duration-200",
+              railEdges.right ? "opacity-100" : "opacity-0"
+            )}
+          />
         </div>
 
         {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
-          {/* search — right-aligned, leading the action cluster */}
+          {/* search — a facet-grammar chip that expands inline into the search input (SearchChip) */}
           {!mapMode && list.searchable ? (
-            <div className={cn("relative", constrainedActions ? "min-w-[9rem] flex-1" : "")}>
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("list.search")}
-                className={cn("h-8 rounded-field pl-8 text-xs", constrainedActions ? "w-full" : "w-44 sm:w-52")}
-              />
-            </div>
+            <SearchChip label={t("list.searchLabel")} value={query} onCommit={setQuery} openWidth={constrainedActions ? 160 : 208} />
           ) : null}
           {list.map || (list.custom && CustomRenderer) ? (
             // Table plus whichever alternate bodies the list declares. The custom option only
