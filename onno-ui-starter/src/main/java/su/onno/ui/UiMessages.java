@@ -168,6 +168,7 @@ public final class UiMessages {
         // List grid: toolbar count, search, sort, view toggle, and the pager footer.
         d.put("list.count", "{count} rows");
         d.put("list.search", "Search…");
+        d.put("list.searchLabel", "Search");
         d.put("list.all", "All");
         d.put("list.sortBy", "Sort by {column}");
         d.put("list.tableView", "Table");
