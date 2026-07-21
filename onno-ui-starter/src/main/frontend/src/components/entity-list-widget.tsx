@@ -1763,8 +1763,10 @@ export function EntityListWidget({
   }, [surfaceMode]);
 
   // Embedded mode only: cap the scroll body at the space to the visible bottom of the enclosing
-  // scroller (leaving room for the pager footer) so a big in-page list scrolls internally rather
-  // than stretching the host page.
+  // scroller so a big in-page list scrolls internally rather than stretching the host page. Paged
+  // feeds reserve room for the pager footer below the card; an infinite feed has no pager, so
+  // reserving it left a dead band under every page-embedded infinite list ("the board is cut
+  // short") — it only keeps the card's border + the root's bottom padding visible.
   useLayoutEffect(() => {
     if (surfaceMode) return;
     const measure = () => {
@@ -1775,7 +1777,7 @@ export function EntityListWidget({
       const bottom = sc
         ? sc.getBoundingClientRect().top + sc.clientTop + sc.clientHeight
         : window.innerHeight;
-      setMaxBodyH(Math.max(160, Math.floor(bottom - top - 72)));
+      setMaxBodyH(Math.max(160, Math.floor(bottom - top - (feedMode === "paged" ? 72 : 20))));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -1788,7 +1790,7 @@ export function EntityListWidget({
     // grouped/mapMode/customMode: the observed body remounts when those views swap back to the
     // table — re-run so the observer isn't left holding the unmounted element (see the viewport
     // effect).
-  }, [surfaceMode, grouped, mapMode, customMode]);
+  }, [surfaceMode, grouped, mapMode, customMode, feedMode]);
 
   // Keep the virtual-window viewport height in sync with the body's client height. Keyed on the
   // view toggles too: the grouped/map views unmount the table body, and unmount delivers a final
