@@ -226,7 +226,9 @@ typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime
     Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
     lookalikes. Reach for these before hand-rolling.
   - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
-    `onno-widgets.css` (utilities-only, preflight off, host tokens), injected at boot — so a widget's
+    `onno-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
+    host stylesheet (its unscoped utilities tie with the host's on specificity, so loaded last a bare
+    `.flex-col` would beat the host's `sm:flex-row` and break host layouts) — so a widget's
     own utility classes (incl. `border-l`, arbitrary `-left-[5px]`) get real CSS. Residual caveats:
     only `src/main/widgets` is scanned (class names in imported helpers or built by string
     concatenation aren't seen — keep them literal), and dynamic colors still want inline `style` with

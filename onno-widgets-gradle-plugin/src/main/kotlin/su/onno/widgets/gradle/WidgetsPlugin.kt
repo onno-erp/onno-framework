@@ -224,7 +224,10 @@ class WidgetsPlugin : Plugin<Project> {
             // Tailwind build). The stylesheet is utilities-only with preflight OFF (no global reset)
             // and carries the host's design tokens (colors → hsl(var(--…)), the rounded-control/field/
             // card radii), which resolve against the CSS variables the host defines at runtime — so a
-            // widget's classes match the product and never fight the host stylesheet.
+            // widget's classes match the product and never fight the host stylesheet. The utilities are
+            // unscoped, so the host must link this sheet BEFORE its own CSS (injectPluginStyles does):
+            // loaded after, a bare utility here (.flex-col) would win cascade ties against the host's
+            // responsive variants (sm:flex-row) and break host layouts.
             import { build, context, transform } from "esbuild";
             import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
             import { join, parse, dirname } from "node:path";

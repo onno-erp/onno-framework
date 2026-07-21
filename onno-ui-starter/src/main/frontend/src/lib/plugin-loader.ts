@@ -15,6 +15,14 @@ import { installPluginHost } from "./plugin-host";
  * the Gradle plugin's Tailwind pass). Idempotent — a URL already linked is skipped, so a config
  * refetch or HMR re-run doesn't stack duplicate links. Call before {@link loadPlugins} so the CSS is
  * present by the time a widget module renders.
+ *
+ * The links go BEFORE the host's own stylesheets, never appended to the end of <head>. Plugin CSS is
+ * a second, unscoped Tailwind utilities pass over the widget sources; utilities the host also emits
+ * are byte-identical, but the plugin sheet only has the variants the widgets use. Loaded after the
+ * host sheet, a plugin's bare `.flex-col` would win the cascade tie over the host's
+ * `@media … .sm:flex-row` on any host element carrying both classes (that broke the desktop
+ * date-range popover into a stacked column). Loaded first, host rules win ties on host markup while
+ * widget-only utilities still apply inside widgets.
  */
 export function injectPluginStyles(urls: string[] | undefined | null): void {
   if (!urls || urls.length === 0) return;
@@ -24,7 +32,11 @@ export function injectPluginStyles(urls: string[] | undefined | null): void {
     link.rel = "stylesheet";
     link.href = url;
     link.dataset.onnoPluginStyle = url;
-    document.head.appendChild(link);
+    // First host style in <head>: the built app's <link> or, in Vite dev, its injected <style>.
+    const hostStyle = document.head.querySelector(
+      'link[rel="stylesheet"]:not([data-onno-plugin-style]), style'
+    );
+    document.head.insertBefore(link, hostStyle);
   }
 }
 
