@@ -42,7 +42,12 @@ function granularityForStat(spanDays: number): GroupByDate {
 
 export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
   const cfg = widget.extraConfig ?? {};
-  const showTrend = cfg.trend !== "false" && cfg.sparkline !== "false";
+  const calculation = cfg.calculation;
+  // A ratio is calculated from two independently filtered aggregates. It deliberately renders as
+  // a headline-only tile: combining two bucket series into a meaningful trend needs an authored
+  // shared grouping contract, while the KPI itself only needs the selected window's two totals.
+  const showTrend = calculation !== "ratio" && cfg.trend !== "false" && cfg.sparkline !== "false";
+  const showComparison = cfg.comparison === "true";
   const { range } = useTimeRange();
   // Catalog/document tiles fetch pre-aggregated buckets (#199); registers keep the row path, so
   // hand useWidgetRows an entityType it ignores on the bucket path (the hook must still be called).
@@ -62,11 +67,12 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
     [windowRange]
   );
   const previousRange = useMemo(() => {
+    if (!showTrend && !showComparison) return null;
     if (windowRange.from === -Infinity || windowRange.to === Infinity) return null;
     const span = windowRange.to - windowRange.from;
     if (!Number.isFinite(span) || span <= 0) return null;
     return absoluteRange(windowRange.from - span, windowRange.from);
-  }, [windowRange]);
+  }, [showTrend, showComparison, windowRange]);
   const previousRegisterTurnoverRange = useMemo(
     () => (previousRange ? { from: previousRange.from, to: previousRange.to } : undefined),
     [previousRange]
@@ -94,22 +100,19 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
     ? granularityForStat(spanDays)
     : groupByDate;
   const color = resolveColor(cfg.colors);
-  const fmtNum = (n: number) =>
-    formatCompact(n, {
+  const fmtNum = (n: number) => {
+    const options = {
       currency: cfg.currency,
       unit: cfg.unit,
       unitPosition: cfg.unitPosition,
       format: cfg.format ?? (metric === "count" ? "integer" : undefined),
       locale: cfg.locale,
-    });
-  const fmtFull = (n: number) =>
-    formatNumber(n, {
-      currency: cfg.currency,
-      unit: cfg.unit,
-      unitPosition: cfg.unitPosition,
-      format: cfg.format ?? (metric === "count" ? "integer" : undefined),
-      locale: cfg.locale,
-    });
+    };
+    // A trend card needs a compact headline to leave room for its delta and sparkline. A
+    // headline-only KPI has the space to show the useful exact value directly, so it does not need
+    // a second badge underneath repeating the same measurement.
+    return showTrend ? formatCompact(n, options) : formatNumber(n, options);
+  };
 
   // The bucket request: same measure/grouping as the row path, with the authored "_display" suffix
   // stripped — the server groups the real column and resolves labels itself. Catalogs have no _date
@@ -119,7 +122,10 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
     const p: Record<string, string> = { metric };
     if (metricField) p.field = metricField;
     const group = groupBy.replace(/_display$/, "");
-    if (widget.entityType === "document" || group !== "_date") {
+    // A headline-only stat must be one grand-total bucket. Besides avoiding unnecessary rows, this
+    // matters for non-additive measures such as avg/max: summing daily averages is not the overall
+    // average. Trend cards retain their time buckets for the sparkline.
+    if (showTrend && (widget.entityType === "document" || group !== "_date")) {
       p.groupBy = group;
       if (effGroupByDate) p.groupByDate = effGroupByDate;
     }
@@ -130,8 +136,18 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
       if (windowRange.to !== Infinity) p.to = toLocalIso(windowRange.to);
     }
     return p;
-  }, [isRegister, isDocument, metric, metricField, groupBy, effGroupByDate, widget.entityType, cfg.filter, windowField, windowRange]);
+  }, [isRegister, isDocument, metric, metricField, groupBy, effGroupByDate, showTrend, widget.entityType, cfg.filter, windowField, windowRange]);
   const resp = useWidgetBuckets(widget, params);
+  const secondaryParams = useMemo(() => {
+    if (calculation !== "ratio" || !params) return null;
+    const p: Record<string, string> = { ...params, metric: cfg.secondaryMetric ?? "count" };
+    if (cfg.secondaryMetricField) p.field = cfg.secondaryMetricField;
+    else delete p.field;
+    if (cfg.secondaryFilter) p.filter = cfg.secondaryFilter;
+    else delete p.filter;
+    return p;
+  }, [calculation, params, cfg.secondaryMetric, cfg.secondaryMetricField, cfg.secondaryFilter]);
+  const secondaryResp = useWidgetBuckets(widget, secondaryParams);
   const previousParams = useMemo(() => {
     if (isRegister || !params || !previousRange) return null;
     return {
@@ -141,6 +157,15 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
     };
   }, [isRegister, params, previousRange]);
   const previousResp = useWidgetBuckets(widget, previousParams);
+  const previousSecondaryParams = useMemo(() => {
+    if (!secondaryParams || !previousRange) return null;
+    return {
+      ...secondaryParams,
+      from: previousRange.from,
+      to: previousRange.to,
+    };
+  }, [secondaryParams, previousRange]);
+  const previousSecondaryResp = useWidgetBuckets(widget, previousSecondaryParams);
 
   const series = useMemo(
     () =>
@@ -149,6 +174,18 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
         : seriesFromBuckets(resp ?? { buckets: [], truncated: false }, { groupBy, groupByDate: effGroupByDate, metric, metricField }),
     [isRegister, rangedItems, resp, groupBy, effGroupByDate, metric, metricField]
   );
+  const secondarySeries = useMemo(
+    () =>
+      calculation === "ratio"
+        ? seriesFromBuckets(secondaryResp ?? { buckets: [], truncated: false }, {
+            groupBy,
+            groupByDate: effGroupByDate,
+            metric: (cfg.secondaryMetric as Metric) ?? "count",
+            metricField: cfg.secondaryMetricField,
+          })
+        : null,
+    [calculation, secondaryResp, groupBy, effGroupByDate, cfg.secondaryMetric, cfg.secondaryMetricField]
+  );
   const previousSeries = useMemo(
     () =>
       isRegister
@@ -156,9 +193,33 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
         : seriesFromBuckets(previousResp ?? { buckets: [], truncated: false }, { groupBy, groupByDate: effGroupByDate, metric, metricField }),
     [isRegister, previousItems, previousResp, groupBy, effGroupByDate, metric, metricField]
   );
+  const previousSecondarySeries = useMemo(
+    () =>
+      calculation === "ratio"
+        ? seriesFromBuckets(previousSecondaryResp ?? { buckets: [], truncated: false }, {
+            groupBy,
+            groupByDate: effGroupByDate,
+            metric: (cfg.secondaryMetric as Metric) ?? "count",
+            metricField: cfg.secondaryMetricField,
+          })
+        : null,
+    [calculation, previousSecondaryResp, groupBy, effGroupByDate, cfg.secondaryMetric, cfg.secondaryMetricField]
+  );
 
+  const headlineValue = calculation === "ratio"
+    ? secondarySeries && secondarySeries.total !== 0
+      ? (series.total / secondarySeries.total) * 100
+      : 0
+    : series.total;
+  const previousHeadlineValue = calculation === "ratio"
+    ? previousSecondarySeries && previousSecondarySeries.total !== 0
+      ? (previousSeries.total / previousSecondarySeries.total) * 100
+      : 0
+    : previousSeries.total;
   const points = series.rows.map((r) => ({ value: Number(r.value) || 0 }));
-  const delta = previousSeries.total !== 0 ? (series.total - previousSeries.total) / previousSeries.total : null;
+  const delta = previousRange && previousHeadlineValue !== 0
+    ? (headlineValue - previousHeadlineValue) / previousHeadlineValue
+    : null;
 
   const Arrow = delta == null || delta === 0 ? ArrowRight : delta > 0 ? ArrowUpRight : ArrowDownRight;
   const deltaClass =
@@ -179,7 +240,7 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
         <div className={cn("mt-1 flex items-baseline gap-2", !showTrend && "mt-0 flex-col items-center justify-center gap-2 text-center")}>
           <div className="flex items-baseline gap-2">
             <span className={cn("font-semibold leading-none tabular-nums", showTrend ? "text-[28px]" : "text-[46px] tracking-normal")}>
-              {fmtNum(series.total)}
+              {fmtNum(headlineValue)}
             </span>
             {showTrend && delta != null && (
               <span className={`flex items-center gap-0.5 text-xs font-medium ${deltaClass}`}>
@@ -188,9 +249,11 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
               </span>
             )}
           </div>
-          {!showTrend && (
-            <span className="rounded-control border border-border/70 bg-muted/30 px-2 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-              {fmtFull(series.total)}
+          {!showTrend && showComparison && delta != null && (
+            <span className={`flex items-center gap-1 rounded-control border border-border/70 bg-muted/30 px-2 py-0.5 text-[11px] font-medium tabular-nums ${deltaClass}`}>
+              <Arrow size={12} />
+              {delta > 0 ? "+" : delta < 0 ? "−" : ""}{Math.abs(delta * 100).toFixed(1)}%
+              <span className="text-muted-foreground">{cfg.comparisonLabel ?? "vs previous period"}</span>
             </span>
           )}
         </div>
