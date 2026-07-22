@@ -1,5 +1,6 @@
 import {
   cloneElement,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -235,6 +236,7 @@ interface DragProps {
   style: React.CSSProperties;
   onMouseDown: (e: MouseHandlerDataParam) => void;
   onMouseMove: (e: MouseHandlerDataParam) => void;
+  onMouseUp: (e: MouseHandlerDataParam) => void;
 }
 interface RefAreaSel {
   x1: string;
@@ -257,32 +259,55 @@ function useDragZoom(
   // shaping layer widens duplicates, but the index is unambiguous by construction) and the index
   // maps straight back to the bucket's ISO_KEY.
   const [sel, setSel] = useState<{ left: number | null; right: number | null }>({ left: null, right: null });
+  const selRef = useRef(sel);
   const dragging = useRef(false);
 
-  useEffect(() => {
-    const isoAt = (idx: number) => String(rows[idx]?.[ISO_KEY] ?? "");
-    const up = () => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      setSel((s) => {
-        if (s.left != null && s.right != null && s.left !== s.right) {
-          let a = isoAt(s.left);
-          let b = isoAt(s.right);
-          if (a && b) {
-            if (a > b) [a, b] = [b, a];
-            onZoom(a, b);
+  const finish = useCallback((right?: number | null) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    const current = right == null ? selRef.current : { ...selRef.current, right };
+    if (current.left != null && current.right != null && current.left !== current.right) {
+      const first = Math.min(current.left, current.right);
+      const last = Math.max(current.left, current.right);
+      const a = String(rows[first]?.[ISO_KEY] ?? "");
+      let b = String(rows[last]?.[ISO_KEY] ?? "");
+      if (a && b) {
+        // A datetime bound is exact/exclusive downstream. Advance it to the following bucket so
+        // releasing on 18:00 includes the 18:00–19:00 bucket instead of redrawing only through
+        // 17:00. Date-only day bounds are already expanded to end-of-day by resolveRange().
+        if (b.includes("T")) {
+          const next = String(rows[last + 1]?.[ISO_KEY] ?? "");
+          if (next) b = next;
+          else {
+            const previous = String(rows[last - 1]?.[ISO_KEY] ?? "");
+            const at = Date.parse(b);
+            const before = Date.parse(previous);
+            if (!Number.isNaN(at) && !Number.isNaN(before) && at > before) {
+              b = format(new Date(at + (at - before)), "yyyy-MM-dd'T'HH:mm:ss");
+            }
           }
         }
-        return { left: null, right: null };
-      });
-    };
-    window.addEventListener("mouseup", up);
-    return () => window.removeEventListener("mouseup", up);
+        onZoom(a, b);
+      }
+    }
+    selRef.current = { left: null, right: null };
+    setSel(selRef.current);
   }, [rows, onZoom]);
 
+  useEffect(() => {
+    const up = () => finish();
+    window.addEventListener("mouseup", up);
+    return () => window.removeEventListener("mouseup", up);
+  }, [finish]);
+
   const idxOf = (e: MouseHandlerDataParam | undefined | null) => {
-    const i = e?.activeTooltipIndex;
-    return typeof i === "number" && i >= 0 && i < rows.length ? i : null;
+    // Recharts 3 stores the active tooltip index as a string ("14") even though some chart
+    // callbacks still type it as a number. Accept either representation; rejecting the string is
+    // what made drag-zoom silently stop working in 1.12.5.
+    const raw = e?.activeTooltipIndex;
+    if (raw == null || raw === "") return null;
+    const i = Number(raw);
+    return Number.isInteger(i) && i >= 0 && i < rows.length ? i : null;
   };
   const dragProps: DragProps = {
     // crosshair signals the region-select affordance; userSelect:none stops the drag from
@@ -292,13 +317,20 @@ function useDragZoom(
       const i = idxOf(e);
       if (i != null) {
         dragging.current = true;
-        setSel({ left: i, right: i });
+        selRef.current = { left: i, right: i };
+        setSel(selRef.current);
       }
     },
     onMouseMove: (e) => {
       const i = idxOf(e);
-      if (i != null && dragging.current) setSel((s) => (s.left != null ? { ...s, right: i } : s));
+      if (i != null && dragging.current && selRef.current.left != null) {
+        selRef.current = { ...selRef.current, right: i };
+        setSel(selRef.current);
+      }
     },
+    // Recharts can throttle onMouseMove during a quick gesture. Its mouse-up payload carries the
+    // actual bucket under the released pointer, so use that as the authoritative right endpoint.
+    onMouseUp: (e) => finish(idxOf(e)),
   };
   // ReferenceArea still addresses the category axis by label — indexes resolve to the (now
   // unambiguous) labels only at render time.
@@ -365,6 +397,14 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // The absolute window, resolved once per range change: resolveRange anchors a relative range to
   // "now", so resolving inline every render would shift the fetch params and never let them settle.
   const windowRange = useMemo(() => resolveRange(range), [range]);
+  // A bounded selection already tells us its ideal bucket size. Use it during the very first render
+  // after the range changes instead of requesting with the previous granularity, waiting for the
+  // response span, and immediately requesting the same chart a second time. All-time still sizes
+  // itself from the data span because its nominal window is intentionally unbounded.
+  const boundedGranularity = useMemo<GroupByDate | null>(() => {
+    if (windowRange.from === -Infinity || windowRange.to === Infinity) return null;
+    return granularityForSpan(Math.max(1 / 1440, (windowRange.to - windowRange.from) / 86_400_000));
+  }, [windowRange]);
   const registerTurnoverRange = useMemo(
     () =>
       windowRange.from === -Infinity && windowRange.to === Infinity
@@ -408,7 +448,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Effective settings: control state when that control is on, else the authored config. A time
   // chart (groupByDate set) always uses the auto/overridden granularity.
   const effKind = controls.enabled.has("type") ? kind : config.kind;
-  const effGranularity = config.groupByDate != null ? granularity : config.groupByDate;
+  const effGranularity = config.groupByDate != null ? boundedGranularity ?? granularity : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
   // Matches what the data pipeline computes for itself (a combo is never round).
@@ -458,7 +498,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     return span ? (Date.parse(span.max) - Date.parse(span.min)) / 86_400_000 + 1 : 1;
   }, [isRegister, ranged, windowField, bucketResp]);
   const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
-  useEffect(() => setGranularity(autoGran), [autoGran]);
+  useEffect(() => {
+    if (boundedGranularity == null) setGranularity(autoGran);
+  }, [autoGran, boundedGranularity]);
 
   const fmts = useChartFormatters(config);
   const { fmt, fmtAxis } = fmts;
