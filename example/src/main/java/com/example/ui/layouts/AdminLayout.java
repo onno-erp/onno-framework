@@ -32,16 +32,9 @@ public class AdminLayout implements Layout {
 
     @Override
     public void configure(LayoutSpec layout) {
-        // Same shell + sections as the default profile, but with the Employees catalog in "People".
+        // Same shell + sections as the default profile, but with the Employees catalog in "People"
+        // and the admin-only Settings page in "System".
         MainLayout.build(layout, true);
-
-        // The Settings page ({@link com.example.ui.pages.SettingsPage}) is an authored Page, surfaced
-        // in the sidebar as a plain .page(...) nav item — admin-only because it lives on this
-        // ADMIN-scoped profile (and the /api/settings write is admin-gated regardless).
-        layout.section("System")
-                .order(6)
-                .icon("settings")
-                .page("Settings", "/settings", "settings");
 
         // Restrict to ADMIN and outrank the default profile, so an ADMIN resolves to this profile
         // (and its dashboard home) rather than the manager baseline.

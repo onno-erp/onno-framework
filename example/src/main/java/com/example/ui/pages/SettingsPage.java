@@ -32,10 +32,10 @@ public class SettingsPage implements Page {
     @Override
     public void compose(PageBuilder b) {
         b.title("Settings");
-        b.subtitle("How Onno Books is configured");
 
-        // The single Store Name knob, edited in place through a generic setting widget bound to the
-        // @Constant by its logical name. Add another .widget(...).type("setting") per constant.
+        // Keep this surface deliberately minimal: the page title and the setting itself are enough.
+        // The old generic editor's administrator badge, section heading, explanatory copy and count
+        // repeated information without helping someone change the value.
         b.widget("Store name").type("setting").width("1/2").order(0)
                 .config("constant", "Store Name")
                 .hint("The trading name of the shop, shown across the app.");

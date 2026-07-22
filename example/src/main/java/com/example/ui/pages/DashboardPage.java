@@ -12,10 +12,10 @@ import org.springframework.stereotype.Component;
  * the default profile, whose {@code /} is the Orders list, and this page does not exist there — see
  * {@link com.example.ui.layouts.AdminLayout}).
  *
- * <p>Everything is server-aggregated from the {@link Order} document — count tiles that honor a
- * {@code filter} (an AND-chain of {@code col op value}), charts that group by a column, and a recent
- * list. Tiles aggregate a single column, which is why the order carries the derived {@code open}
- * boolean: "open orders" is then a plain {@code open = true} count.</p>
+ * <p>Everything is server-aggregated from the {@link Order} document — range-aware KPI stats that
+ * compare with the preceding equal-length period, charts that group by a column, and a recent list.
+ * The order carries the derived {@code open} boolean so "open orders" remains a plain
+ * {@code open = true} count.</p>
  */
 @Component
 public class DashboardPage implements Page {
@@ -45,16 +45,23 @@ public class DashboardPage implements Page {
                 .config("default", "30d");
 
         // ---- KPI row ----------------------------------------------------------------------------
-        b.widget("Open orders").type("count").width("1/3").order(0).document(Order.class)
+        b.widget("Open orders").type("stat").width("1/3").order(0).document(Order.class).dateField("_date")
                 .config("metric", "count")
+                .config("trend", "false").config("comparison", "true")
+                .config("comparisonLabel", "vs previous period")
                 .config("filter", "open = true")
                 .hint("Orders not yet completed or cancelled.");
 
-        b.widget("Total orders").type("count").width("1/3").order(1).document(Order.class)
-                .config("metric", "count");
+        b.widget("Total orders").type("stat").width("1/3").order(1).document(Order.class).dateField("_date")
+                .config("metric", "count")
+                .config("trend", "false").config("comparison", "true")
+                .config("comparisonLabel", "vs previous period");
 
-        b.widget("Revenue (posted)").type("count").width("1/3").order(2).document(Order.class)
+        b.widget("Revenue (posted)").type("stat").width("1/3").order(2).document(Order.class).dateField("_date")
                 .config("metric", "sum").config("metricField", "total")
+                .config("currency", "USD")
+                .config("trend", "false").config("comparison", "true")
+                .config("comparisonLabel", "vs previous period")
                 // System columns carry the `_` prefix in widget configs (cf. `_date` below): the
                 // posted flag is `_posted`, not `posted`.
                 .config("filter", "_posted = true")
