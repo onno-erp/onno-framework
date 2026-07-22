@@ -318,6 +318,12 @@ degrades to the default grid. See the README's "Custom list renderers" section.
   the token via `onno.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.
 
+Public, non-sensitive demos can opt into server-side in-memory auto-login with
+`onno.auth.demo.auto-login-username`; normal RBAC still sees that user's roles. Iframe embedding is
+deny-by-default and requires an explicit `onno.auth.embedding.frame-ancestors` CSP allowlist. A
+cross-site session iframe additionally needs `onno.auth.embedding.cross-site-cookies=true` and HTTPS
+`SameSite=None; Secure` servlet-session cookies.
+
 `/api/**` requires authentication (except the public allowlist: `/error`, `/api/theme`,
 `/api/config`, `/api/branding`, `/api/auth/login`, `/api/auth/me`, `/api/auth/csrf`,
 `/api/divkit/login`, `/api/desktop/**`). **Per-entity RBAC is deny-by-default**: a

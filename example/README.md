@@ -24,12 +24,13 @@ It is deliberately **small and end-to-end** — one coherent domain, the core st
 
 ## Two roles, two UI profiles
 
-`admin@onnobooks.local`/`admin` resolves to the **admin profile** (`AdminLayout`): home is the
-dashboard, and the People section includes Employees. `manager@onnobooks.local`/`manager` resolves to the **default profile**
-(`MainLayout`): home is the Orders list, no Employees nav. The split is enforced by per-entity RBAC
-(`@AccessControl` — `Employee` writes are ADMIN-only) and by role-scoped UI profiles (onno has no
-per-page RBAC, so the dashboard simply doesn't exist in the manager profile). Change these passwords
-before any real use.
+The demo automatically signs anonymous visitors in as `manager@onnobooks.local`, which resolves to
+the **default profile** (`MainLayout`): home is the Orders list, no Employees nav. The password never
+needs to reach the browser for this flow. `admin@onnobooks.local`/`admin` resolves to the **admin
+profile** (`AdminLayout`): home is the dashboard, and the People section includes Employees. The split
+is enforced by per-entity RBAC (`@AccessControl` — `Employee` writes are ADMIN-only) and by
+role-scoped UI profiles (onno has no per-page RBAC, so the dashboard simply doesn't exist in the
+manager profile). Remove `onno.auth.demo.auto-login-username` before any non-demo use.
 
 ## Running it
 
@@ -39,6 +40,20 @@ Requires **JDK 21**.
 ./gradlew :example:bootRun                       # http://localhost:8080
 ./gradlew :example:bootRun --args='--server.port=8090'   # or pick another port
 ```
+
+The example temporarily permits every iframe parent (`frame-ancestors *`). To narrow that policy for
+the hosted HTTPS demo, set an exact parent origin and enable cross-site secure cookies:
+
+```bash
+ONNO_DEMO_FRAME_ANCESTORS=https://www.example.com \
+ONNO_DEMO_COOKIE_SAME_SITE=none \
+ONNO_DEMO_COOKIE_SECURE=true \
+./gradlew :example:bootRun
+```
+
+Then use `<iframe src="https://demo.example.com" title="Onno Books demo"></iframe>`. Prefer keeping
+the landing page and demo under the same registrable domain; strict third-party-cookie blocking can
+otherwise prevent session-backed mutations.
 
 On first launch `BookstoreSeeder` fills a fresh database with a populated shop — 12 categories, 8
 suppliers and staff, ~36 customers, ~80 books, a generous opening stock receipt, and ~80 orders

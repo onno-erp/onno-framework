@@ -17,10 +17,16 @@ process to run.
 ./gradlew :example:bootRun --args='--server.port=8090'    # alternate port
 ```
 
-Log in as `admin@onnobooks.local`/`admin` (admin profile) or `manager@onnobooks.local`/`manager`
-(default profile), or use the one-tap demo buttons on the login screen
-(`onno.ui.login.demo-accounts`). First launch seeds a fixed-RNG bookstore into the file-H2 database
-at `example/data/` — delete that directory to re-seed.
+The example automatically logs anonymous visitors in as `manager@onnobooks.local` (default profile)
+through `onno.auth.demo.auto-login-username`. Remove that property to restore the login screen, where
+`admin@onnobooks.local`/`admin`, `manager@onnobooks.local`/`manager`, and the one-tap demo buttons are
+available. First launch seeds a fixed-RNG bookstore into the file-H2 database at `example/data/` —
+delete that directory to re-seed.
+
+The example temporarily defaults `ONNO_DEMO_FRAME_ANCESTORS` to `*`, so any landing page can frame
+it. Set that variable to an exact origin to restore an allowlist. For an HTTPS cross-site iframe,
+also set `ONNO_DEMO_COOKIE_SAME_SITE=none` and `ONNO_DEMO_COOKIE_SECURE=true`; those settings preserve
+session/CSRF state.
 
 To reach the app from a phone on the same network, bind to all interfaces and use the machine's
 LAN address:

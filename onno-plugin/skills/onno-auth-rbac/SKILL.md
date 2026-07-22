@@ -29,6 +29,11 @@ change.
   extra providers come from `AuthMethodsContributor` beans (Telegram lives in
   onno-enterprise/onno-telegram-starter; broker mode via cloud.onno.su needs no client secret).
 - Demo login buttons are `onno.ui.login.demo-accounts` (under `onno.ui`, not `onno.auth`).
+- Public demo auto-login is `onno.auth.demo.auto-login-username`; it bypasses sign-in and is only
+  safe for non-sensitive demo data.
+- Iframe embedding requires an explicit `onno.auth.embedding.frame-ancestors` allowlist. Cross-site
+  session iframes also need `onno.auth.embedding.cross-site-cookies=true` and HTTPS
+  `SameSite=None; Secure` servlet-session cookies.
 
 Read [references/examples.md](references/examples.md) for config and debugging flows, and
 `docs/GOTCHAS.md` for the failure-signature list (401 after config change, sign-out after
