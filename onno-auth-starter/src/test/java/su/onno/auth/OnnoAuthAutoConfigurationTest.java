@@ -11,6 +11,7 @@ import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerF
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
@@ -18,13 +19,20 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.FilterChainProxy;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockServletContext;
 
 import su.onno.auth.spi.AuthMethodsProvider;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -128,6 +136,67 @@ class OnnoAuthAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(TokenBasedRememberMeServices.class);
             assertThat(context).hasBean("onnoSecurityFilterChain");
         });
+    }
+
+    @Test
+    void demoAutoLoginAuthenticatesAnonymousApiRequestsAsConfiguredUser() {
+        runner.withPropertyValues(
+                        "onno.auth.users[0].username=manager@example.test",
+                        "onno.auth.users[0].password=manager",
+                        "onno.auth.users[0].roles[0]=MANAGER",
+                        "onno.auth.demo.auto-login-username=manager@example.test")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/auth/me");
+                    request.setServletPath("/api/auth/me");
+                    MockHttpServletResponse response = new MockHttpServletResponse();
+
+                    new FilterChainProxy(List.of(context.getBean(SecurityFilterChain.class)))
+                            .doFilter(request, response, new MockFilterChain());
+
+                    SecurityContext saved = (SecurityContext) request.getSession(false).getAttribute(
+                            HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+                    assertThat(saved.getAuthentication().getName()).isEqualTo("manager@example.test");
+                    assertThat(saved.getAuthentication().getAuthorities())
+                            .extracting(Object::toString)
+                            .containsExactly("ROLE_MANAGER");
+                });
+    }
+
+    @Test
+    void demoAutoLoginFailsFastWhenConfiguredUserDoesNotExist() {
+        runner.withPropertyValues("onno.auth.demo.auto-login-username=missing@example.test")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context).getFailure().hasMessageContaining("missing@example.test");
+                });
+    }
+
+    @Test
+    void configuredFrameAncestorsUseCspAndRemoveDenyHeader() {
+        runner.withPropertyValues(
+                        "onno.auth.embedding.frame-ancestors[0]='self'",
+                        "onno.auth.embedding.frame-ancestors[1]=https://landing.example",
+                        "onno.auth.embedding.cross-site-cookies=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    MockHttpServletRequest request = new MockHttpServletRequest("GET", "/");
+                    request.setServletPath("/");
+                    // Force CookieCsrfTokenRepository's raw Set-Cookie path. MockServlet 6's
+                    // addCookie renderer drops the standard SameSite attribute that Tomcat keeps.
+                    ((MockServletContext) request.getServletContext()).setMajorVersion(5);
+                    MockHttpServletResponse response = new MockHttpServletResponse();
+
+                    new FilterChainProxy(List.of(context.getBean(SecurityFilterChain.class)))
+                            .doFilter(request, response, new MockFilterChain());
+
+                    assertThat(response.getHeader("Content-Security-Policy"))
+                            .isEqualTo("frame-ancestors 'self' https://landing.example");
+                    assertThat(response.getHeader("X-Frame-Options")).isNull();
+                    assertThat(response.getHeaders("Set-Cookie"))
+                            .anyMatch(cookie -> cookie.startsWith("XSRF-TOKEN=")
+                                    && cookie.contains("Secure") && cookie.contains("SameSite=None"));
+                });
     }
 
     @Test

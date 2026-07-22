@@ -12,6 +12,13 @@ server:
   error:
     include-stacktrace: always
     include-message: always
+  servlet:
+    session:
+      cookie:
+        # Cross-site iframes require SameSite=None plus Secure (HTTPS). Local development keeps
+        # normal Lax/non-secure cookies; set both env vars on the hosted landing-page demo.
+        same-site: ${ONNO_DEMO_COOKIE_SAME_SITE:lax}
+        secure: ${ONNO_DEMO_COOKIE_SECURE:false}
 onno:
   ui:
     locale: ru
@@ -43,6 +50,17 @@ onno:
     # Employee row (see MainLayout.identity) — that's what lets the shell show their photo bottom-left
     # and greet them by name. Change these passwords before any real use.
     mode: in-memory
+    demo:
+      # Public demo convenience: every anonymous API request becomes the manager without exposing
+      # the password to browser JavaScript. Remove this setting for any non-demo deployment.
+      auto-login-username: manager@onnobooks.local
+    embedding:
+      # TEMPORARY public-demo policy: allow any site to frame the app. Set the env var to an exact
+      # comma-separated allowlist (e.g. "'self',https://www.onno.su") before production use.
+      frame-ancestors: ${ONNO_DEMO_FRAME_ANCESTORS:*}
+      # Applies SameSite=None; Secure to the separate XSRF-TOKEN cookie when the hosted iframe uses
+      # secure cross-site cookies. Kept in lockstep with the JSESSIONID setting above.
+      cross-site-cookies: ${ONNO_DEMO_COOKIE_SECURE:false}
     session:
       timeout: 8h
       remember-me:

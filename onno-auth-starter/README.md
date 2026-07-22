@@ -56,6 +56,9 @@ to contribute nothing and wire your own security.
 | `onno.auth.users[*].username` | — | In-memory account username. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
 | `onno.auth.users[*].roles` | `[]` | Role names (stored as `ROLE_*` authorities by Spring's `User.roles(...)`). |
+| `onno.auth.demo.auto-login-username` | — | **Public demos only:** authenticate every anonymous API request as this configured in-memory user, without sending its password to the browser. Blank disables it. |
+| `onno.auth.embedding.frame-ancestors` | `[]` | CSP sources allowed to embed the app (for example `['self', https://www.example.com]`). Empty keeps `X-Frame-Options: DENY`; a non-empty list replaces it with an explicit `Content-Security-Policy: frame-ancestors …`. |
+| `onno.auth.embedding.cross-site-cookies` | `false` | Put `SameSite=None; Secure` on the readable CSRF cookie. Enable only for an HTTPS cross-site iframe, together with equivalent `server.servlet.session.cookie.*` settings. |
 | `onno.auth.session.timeout` | `8h` | Idle session timeout for the cookie modes (`in-memory`, `oidc`), applied to the servlet container and **overriding** Spring Boot's 30-minute default. Slides on every request. Ignored in `resource-server` (stateless). |
 | `onno.auth.session.remember-me.enabled` | `true` | In-memory only: issue a persistent remember-me cookie on login and re-authenticate from it after the session lapses. |
 | `onno.auth.session.remember-me.validity` | `14d` | How long the remember-me cookie stays valid. |
@@ -92,6 +95,37 @@ and the desktop shell's readiness probe and window manifest). Everything else un
 - **Session creation policy is `IF_REQUIRED`** — a session is created on successful login.
 - **Unauthorized `/api/**` requests get `401` with JSON** `{"error":"unauthenticated"}` (no redirect
   to a login page).
+
+### Public demo auto-login and iframe embedding
+
+For a public, non-sensitive demo, `onno.auth.demo.auto-login-username` names one user from
+`onno.auth.users`. Anonymous API requests are authenticated server-side with that user's roles, so
+the browser never receives a demo password. This deliberately bypasses sign-in; do not enable it for
+private or production data.
+
+Framing stays denied unless `onno.auth.embedding.frame-ancestors` explicitly allowlists the parent
+origin. For a cross-site iframe using session auth, also serve both pages over HTTPS and configure
+the standard Spring Boot cookie settings:
+
+```yaml
+server:
+  servlet:
+    session:
+      cookie:
+        same-site: none
+        secure: true
+onno:
+  auth:
+    demo:
+      auto-login-username: manager
+    embedding:
+      frame-ancestors: ["'self'", "https://www.example.com"]
+      cross-site-cookies: true
+```
+
+Prefer hosting the landing page and demo under the same registrable domain. Browsers or privacy
+extensions that block all third-party cookies can still prevent session-backed mutations in a
+truly cross-site iframe.
 
 ### Session longevity & recovery
 

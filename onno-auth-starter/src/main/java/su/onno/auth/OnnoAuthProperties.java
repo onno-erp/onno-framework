@@ -103,6 +103,20 @@ public class OnnoAuthProperties {
     @NestedConfigurationProperty
     private Session session = new Session();
 
+    /**
+     * Demo-only authentication shortcuts. These settings deliberately bypass normal sign-in and
+     * must never be enabled for a production application that contains private data.
+     */
+    @NestedConfigurationProperty
+    private Demo demo = new Demo();
+
+    /**
+     * Browser embedding policy for applications intentionally hosted inside an iframe. Empty by
+     * default, which preserves Spring Security's deny-by-default frame protection.
+     */
+    @NestedConfigurationProperty
+    private Embedding embedding = new Embedding();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -159,6 +173,22 @@ public class OnnoAuthProperties {
         this.session = session;
     }
 
+    public Demo getDemo() {
+        return demo;
+    }
+
+    public void setDemo(Demo demo) {
+        this.demo = demo;
+    }
+
+    public Embedding getEmbedding() {
+        return embedding;
+    }
+
+    public void setEmbedding(Embedding embedding) {
+        this.embedding = embedding;
+    }
+
     public enum Mode {
         /** Username/password against {@code onno.auth.users}. */
         IN_MEMORY,
@@ -195,6 +225,61 @@ public class OnnoAuthProperties {
 
         public void setRoles(List<String> roles) {
             this.roles = roles;
+        }
+    }
+
+    /** Demo-only authentication shortcuts for the in-memory auth mode. */
+    public static class Demo {
+
+        /**
+         * In-memory username to authenticate automatically on every anonymous API request. Blank
+         * (the default) disables auto-login. The named user must exist in {@code onno.auth.users}.
+         * This bypasses password login and is intended only for public, non-sensitive demos.
+         */
+        private String autoLoginUsername;
+
+        public String getAutoLoginUsername() {
+            return autoLoginUsername;
+        }
+
+        public void setAutoLoginUsername(String autoLoginUsername) {
+            this.autoLoginUsername = autoLoginUsername;
+        }
+    }
+
+    /** Browser security policy for intentional iframe embedding. */
+    public static class Embedding {
+
+        /**
+         * Content-Security-Policy {@code frame-ancestors} sources allowed to embed the app, for
+         * example {@code 'self'} and {@code https://www.example.com}. Empty (the default) keeps
+         * Spring Security's {@code X-Frame-Options: DENY}. Configuring this list disables that
+         * legacy header and emits the explicit CSP directive instead. Cross-site session-based
+         * apps must also use HTTPS cookies with {@code SameSite=None}.
+         */
+        private List<String> frameAncestors = new ArrayList<>();
+
+        /**
+         * Whether the readable CSRF cookie should use {@code SameSite=None; Secure} for a
+         * cross-site iframe. Disabled by default. The servlet session cookie must be configured
+         * the same way through {@code server.servlet.session.cookie.*}, and HTTPS is required.
+         */
+        private boolean crossSiteCookies = false;
+
+        public List<String> getFrameAncestors() {
+            return frameAncestors;
+        }
+
+        public void setFrameAncestors(List<String> frameAncestors) {
+            this.frameAncestors = frameAncestors;
+        }
+
+        public boolean isCrossSiteCookies() {
+            return crossSiteCookies;
+        }
+
+        public void setCrossSiteCookies(boolean crossSiteCookies) {
+            this.crossSiteCookies = crossSiteCookies;
         }
     }
 

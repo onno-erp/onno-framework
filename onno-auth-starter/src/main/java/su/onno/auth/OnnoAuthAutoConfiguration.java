@@ -41,6 +41,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
@@ -134,6 +135,31 @@ public class OnnoAuthAutoConfiguration {
                 .anyRequest().permitAll());
     }
 
+    private static void applyEmbeddingPolicy(HttpSecurity http, OnnoAuthProperties properties) throws Exception {
+        List<String> sources = properties.getEmbedding().getFrameAncestors().stream()
+                .map(String::trim)
+                .filter(source -> !source.isEmpty())
+                .toList();
+        if (sources.isEmpty()) {
+            return;
+        }
+        if (sources.stream().anyMatch(source -> source.indexOf('\r') >= 0 || source.indexOf('\n') >= 0)) {
+            throw new IllegalStateException("onno.auth.embedding.frame-ancestors must not contain newlines");
+        }
+        String directive = "frame-ancestors " + String.join(" ", sources);
+        http.headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.disable())
+                .contentSecurityPolicy(csp -> csp.policyDirectives(directive)));
+    }
+
+    private static CookieCsrfTokenRepository csrfTokenRepository(OnnoAuthProperties properties) {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        if (properties.getEmbedding().isCrossSiteCookies()) {
+            repository.setCookieCustomizer(cookie -> cookie.sameSite("None").secure(true));
+        }
+        return repository;
+    }
+
     // ----------------------------------------------------------------------------------------
     // Mode: in-memory (default) — username/password against onno.auth.users, session cookie.
     // ----------------------------------------------------------------------------------------
@@ -220,7 +246,8 @@ public class OnnoAuthAutoConfiguration {
         @Bean
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoSecurityFilterChain(HttpSecurity http, OnnoAuthProperties properties,
-                                                    ObjectProvider<TokenBasedRememberMeServices> rememberMe)
+                                                    ObjectProvider<TokenBasedRememberMeServices> rememberMe,
+                                                    UserDetailsService userDetailsService)
                 throws Exception {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
@@ -242,12 +269,19 @@ public class OnnoAuthAutoConfiguration {
                             new RequestAttributeSecurityContextRepository(),
                             new HttpSessionSecurityContextRepository()));
 
+            String demoUsername = properties.getDemo().getAutoLoginUsername();
+            if (demoUsername != null && !demoUsername.isBlank()) {
+                http.addFilterBefore(new DemoAutoLoginFilter(demoUsername.trim(), userDetailsService,
+                        contextRepository), AnonymousAuthenticationFilter.class);
+            }
+            applyEmbeddingPolicy(http, properties);
+
             return http
                     .securityContext(sc -> sc.securityContextRepository(contextRepository))
                     .sessionManagement(session -> session
                             .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                     .csrf(csrf -> csrf
-                            .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                            .csrfTokenRepository(csrfTokenRepository(properties))
                             .csrfTokenRequestHandler(csrfHandler)
                             .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
@@ -320,11 +354,12 @@ public class OnnoAuthAutoConfiguration {
 
             OnnoAuthProperties.ResolvedOidc oidc = properties.getOidc().resolved();
             applyApiAuthorization(http, properties);
+            applyEmbeddingPolicy(http, properties);
             return http
                     .sessionManagement(session -> session
                             .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                     .csrf(csrf -> csrf
-                            .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                            .csrfTokenRepository(csrfTokenRepository(properties))
                             .csrfTokenRequestHandler(csrfHandler)
                             .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
@@ -416,6 +451,7 @@ public class OnnoAuthAutoConfiguration {
         SecurityFilterChain onnoResourceServerSecurityFilterChain(HttpSecurity http,
                                                                   OnnoAuthProperties properties) throws Exception {
             applyApiAuthorization(http, properties);
+            applyEmbeddingPolicy(http, properties);
             return http
                     // Bearer-token clients carry no cookies, so the session and CSRF machinery
                     // that protects the cookie-based modes is just overhead here.

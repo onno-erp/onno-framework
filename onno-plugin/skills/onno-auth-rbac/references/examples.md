@@ -31,6 +31,21 @@ onno:
 
 Passwords are BCrypt-hashed at startup. Do not ship real production passwords in config.
 
+For a public, non-sensitive iframe demo, authenticate as one in-memory user without exposing its
+password and allowlist only the landing-page origin:
+
+```yaml
+server.servlet.session.cookie:
+  same-site: none
+  secure: true
+onno.auth:
+  demo.auto-login-username: manager
+  embedding.frame-ancestors: ["'self'", "https://www.example.com"]
+  embedding.cross-site-cookies: true
+```
+
+The cookie settings require HTTPS. Remove auto-login for any deployment containing private data.
+
 ## OIDC Auth
 
 ```yaml
