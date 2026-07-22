@@ -25,6 +25,7 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type MouseHandlerDataParam,
 } from "recharts";
 import { format } from "date-fns";
 import { formatCompact, formatNumber, toNumber } from "@/lib/format";
@@ -232,8 +233,8 @@ function chartDataFromBuckets(
 
 interface DragProps {
   style: React.CSSProperties;
-  onMouseDown: (e: { activeTooltipIndex?: number; activeLabel?: string | number } | null) => void;
-  onMouseMove: (e: { activeTooltipIndex?: number; activeLabel?: string | number } | null) => void;
+  onMouseDown: (e: MouseHandlerDataParam) => void;
+  onMouseMove: (e: MouseHandlerDataParam) => void;
 }
 interface RefAreaSel {
   x1: string;
@@ -279,7 +280,7 @@ function useDragZoom(
     return () => window.removeEventListener("mouseup", up);
   }, [rows, onZoom]);
 
-  const idxOf = (e: { activeTooltipIndex?: number; activeLabel?: string | number } | undefined | null) => {
+  const idxOf = (e: MouseHandlerDataParam | undefined | null) => {
     const i = e?.activeTooltipIndex;
     return typeof i === "number" && i >= 0 && i < rows.length ? i : null;
   };
