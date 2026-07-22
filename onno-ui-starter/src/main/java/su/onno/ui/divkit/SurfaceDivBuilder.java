@@ -4,24 +4,23 @@ import su.onno.ui.ResolvedListView;
 import su.onno.ui.UiMessages;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
- * Builds the per-surface DivKit <em>content</em> (catalog/document lists, document
- * detail, register report) from the resolved metadata view + data rows. Returns a
- * bare content div — {@link su.onno.ui.DivKitController} wraps it in the app shell.
- * Composed only from native DivKit primitives so it renders on every official SDK
- * with no custom code, keeping a future Flutter client cheap.
+ * Builds the per-surface DivKit <em>content</em> (catalog/document lists, the combined
+ * record form, register report) from the resolved metadata view. Returns a bare content
+ * div — {@link su.onno.ui.DivKitController} wraps it in the app shell. The heavy surfaces
+ * are React islands carried as {@code div-custom} blocks ({@code onno-list},
+ * {@code onno-form}, {@code onno-register}); every client implements them from the same
+ * plain-JSON descriptors.
  */
 public final class SurfaceDivBuilder {
 
     private SurfaceDivBuilder() {}
 
-    // ----- catalog list -----
+    // ----- list surfaces -----
 
     /**
      * A list surface as the {@code onno-list} React island: a single custom block carrying a
@@ -176,108 +175,13 @@ public final class SurfaceDivBuilder {
         return descriptor;
     }
 
-    public static Map<String, Object> catalogList(ResolvedListView view, List<Map<String, Object>> rows,
-                                                  String routeName, String newUrl, Palette p) {
-        return listContent(view.title(), "items", newUrl, headerLabels(view), columnWidths(view),
-                catalogBody(view, rows, routeName), p);
-    }
+    // ----- record header actions -----
 
     /**
-     * The rows stack as a {@code div-patch} of {@code onno-rows} — a single replacement
-     * node re-carrying that id (see {@link #rowsPatch}).
-     */
-    public static List<Map<String, Object>> catalogRows(ResolvedListView view, List<Map<String, Object>> rows,
-                                                        String routeName, Palette p) {
-        return rowsPatch(headerLabels(view), columnWidths(view), catalogBody(view, rows, routeName), p);
-    }
-
-    private static List<Components.Row> catalogBody(ResolvedListView view, List<Map<String, Object>> rows,
-                                                   String routeName) {
-        List<Components.Row> body = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            String url = "onno://catalogs/" + routeName + "/" + str(row.get("_id"));
-            body.add(new Components.Row(rowCells(view, row), url));
-        }
-        return body;
-    }
-
-    // ----- document list -----
-
-    public static Map<String, Object> documentList(ResolvedListView view, List<Map<String, Object>> rows,
-                                                   String routeName, String newUrl, Palette p) {
-        return listContent(view.title(), "documents", newUrl, headerLabels(view), columnWidths(view),
-                documentBody(view, rows, routeName), p);
-    }
-
-    /**
-     * The rows stack as a {@code div-patch} of {@code onno-rows} — a single replacement
-     * node re-carrying that id (see {@link #rowsPatch}).
-     */
-    public static List<Map<String, Object>> documentRows(ResolvedListView view, List<Map<String, Object>> rows,
-                                                         String routeName, Palette p) {
-        return rowsPatch(headerLabels(view), columnWidths(view), documentBody(view, rows, routeName), p);
-    }
-
-    private static List<Components.Row> documentBody(ResolvedListView view, List<Map<String, Object>> rows,
-                                                    String routeName) {
-        List<Components.Row> body = new ArrayList<>();
-        for (Map<String, Object> row : rows) {
-            String url = "onno://documents/" + routeName + "/" + str(row.get("_id"));
-            body.add(new Components.Row(rowCells(view, row), url));
-        }
-        return body;
-    }
-
-    // A list surface: title + a count subtitle bound to the @{onno_count} variable
-    // (streamed on data changes) over a table whose rows are patched in place.
-    private static Map<String, Object> listContent(String title, String nounPlural, String newUrl,
-                                                   List<String> headers, List<String> widths,
-                                                   List<Components.Row> body, Palette p) {
-        Map<String, Object> titleNode = Div.color(Div.text(title, 22, "bold"), p.text());
-        Div.maxLines(titleNode, 1);
-        List<Map<String, Object>> topRow = new ArrayList<>(List.of(
-                Div.weight(titleNode, 1)));
-        if (newUrl != null) {
-            topRow.add(Components.actionButton("plus", "New", p.primary(), p.primarySoft(), null, newUrl, "new"));
-        }
-        Map<String, Object> top = Div.horizontal(topRow);
-        Div.matchWidth(top);
-        Div.alignV(top, "center");
-
-        Map<String, Object> subtitle = Div.color(Div.text("@{onno_count} " + nounPlural, 13, "regular"), p.muted());
-        Div.margins(subtitle, 2, 0, 0, 0);
-        Map<String, Object> header = Div.vertical(List.of(top, subtitle));
-        Div.margins(header, 0, 0, 16, 0);
-
-        Map<String, Object> table = Components.scrollX(rowsStack(headers, widths, body, p), p);
-        return content(List.of(header, table));
-    }
-
-    /**
-     * The header+rows stack carrying the {@code onno-rows} id. The scroll gallery holds
-     * exactly this one child, so a live update must replace it with a single node that
-     * <em>re-carries</em> the id — not splice in the bare row list, which would leave the
-     * gallery with N children and no patch target, breaking the next update.
-     */
-    private static Map<String, Object> rowsStack(List<String> headers, List<String> widths,
-                                                List<Components.Row> body, Palette p) {
-        return Div.id(Components.tableStack(Components.tableItems(headers, body, widths, p)), "onno-rows");
-    }
-
-    /** The single-node {@code onno-rows} replacement payload for a {@code div-patch}. */
-    private static List<Map<String, Object>> rowsPatch(List<String> headers, List<String> widths,
-                                                      List<Components.Row> body, Palette p) {
-        return List.of(rowsStack(headers, widths, body, p));
-    }
-
-    // ----- document detail -----
-
-    /**
-     * One detail-header action. {@code tone} is {@code "primary"} (solid success —
-     * Post), {@code "accent"} (solid brand — the surface's main action, e.g. Edit),
-     * {@code "danger"} (Delete) or {@code "normal"} (neutral); {@code placement} is
-     * {@code "primary"} (inline button) or {@code "menu"} (overflow ⋯). {@code icon}
-     * is a kebab-case lucide name. A null {@code url} drops the action.
+     * One record-header action (rendered by the entity form's action cluster). {@code tone}
+     * is {@code "primary"} (solid success), {@code "accent"} (solid brand), {@code "danger"}
+     * (Delete) or {@code "normal"} (neutral); {@code placement} is {@code "primary"} (inline
+     * button) or {@code "menu"} (overflow ⋯). {@code icon} is a kebab-case lucide name.
      */
     /** {@code form} (may be empty): an action-form dialog's field descriptors — the client collects
      *  them in a modal before POSTing the action (see {@code ActionSpec.ActionBuilder#form}).
@@ -309,185 +213,7 @@ public final class SurfaceDivBuilder {
         }
     }
 
-    /** Back-compat overload for surfaces with no related-list panels (e.g. unit tests). */
-    public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                     List<HeaderAction> actions, Palette p) {
-        return documentDetail(meta, row, Map.of(), actions, p, UiMessages.defaults());
-    }
-
-    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
-    public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                     Map<String, List<Map<String, Object>>> relatedRows,
-                                                     List<HeaderAction> actions, Palette p) {
-        return documentDetail(meta, row, relatedRows, actions, p, UiMessages.defaults());
-    }
-
-    /**
-     * A document's detail surface: header (+ posting/edit actions), a card of its visible system
-     * columns and attributes, then a table per tabular section and finally a read-only table per
-     * related-list panel. The related-list panels are the document-side parity with the catalog
-     * detail (see {@link #catalogDetail}) — a booking can surface its guests (the reverse side of a
-     * Booking↔Client junction) without entering edit mode (see #110).
-     *
-     * <p>{@code relatedRows} maps each panel's {@code name} to its preloaded junction rows; a panel
-     * renders iff it is {@code showInDetail} and present in that map (the caller omits panels the
-     * user may not read). Empty map → no panels.</p>
-     */
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                     Map<String, List<Map<String, Object>>> relatedRows,
-                                                     List<HeaderAction> actions, Palette p, UiMessages msg) {
-        List<Map<String, Object>> items = new ArrayList<>();
-
-        boolean posted = Boolean.TRUE.equals(row.get("_posted"));
-        Map<String, Object> badge = Components.statusBadge(posted,
-                msg.get(posted ? "status.posted" : "status.draft"), p);
-        items.add(detailHeader(titleOf(meta), str(row.get("_number")), badge, actions, p));
-
-        List<Map<String, Object>> fieldRows = new ArrayList<>();
-        // The header date honors a .field("date").format(...) hint, like any other column; its
-        // label honors a .field("date").label(...) hint (else the English "Date" fallback) — #154.
-        String dateText = ValueFormat.apply(systemColumnFormat(meta, "_date"), row.get("_date"));
-        fieldRows.add(Components.fieldRow(systemColumnLabel(meta, "_date", "Date"),
-                dateText != null ? dateText : str(row.get("_date")), p));
-        for (Map<String, Object> a : visible(
-                (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of()), "visibleInDetail")) {
-            fieldRows.add(fieldRowFor(a, row, p));
-        }
-        items.add(fieldCard(fieldRows, p));
-
-        for (Map<String, Object> ts : (List<Map<String, Object>>) meta.getOrDefault("tabularSections", List.of())) {
-            List<Map<String, Object>> tsAttrs = (List<Map<String, Object>>) ts.getOrDefault("attributes", List.of());
-            List<Map<String, Object>> tsRows = (List<Map<String, Object>>) row.getOrDefault(str(ts.get("name")), List.of());
-
-            List<String> headers = new ArrayList<>(List.of("#"));
-            for (Map<String, Object> a : tsAttrs) headers.add(str(a.get("displayName")));
-
-            List<Components.Row> body = new ArrayList<>();
-            int line = 1;
-            for (Map<String, Object> tsRow : tsRows) {
-                List<String> cells = new ArrayList<>();
-                List<String> cellUrls = new ArrayList<>();
-                Object ln = tsRow.get("_line_number");
-                cells.add(ln != null ? str(ln) : String.valueOf(line));
-                cellUrls.add(null); // the leading "#" line-number column is never a ref
-                for (Map<String, Object> a : tsAttrs) {
-                    cells.add(cell(a, tsRow));
-                    cellUrls.add(refUrlFor(a, tsRow)); // null for non-ref columns
-                }
-                body.add(new Components.Row(cells, null, cellUrls));
-                line++;
-            }
-            items.add(sectionLabel(str(ts.get("name")), p));
-            items.add(Components.table(headers, body, p, msg.get("empty.noRecords")));
-        }
-
-        // Related-list panels render read-only here — the document-side analogue of a catalog's
-        // (same flag/skip rules as catalogDetail): showInDetail and present in the preloaded map.
-        for (Map<String, Object> rl : (List<Map<String, Object>>) meta.getOrDefault("relatedLists", List.of())) {
-            if (!Boolean.TRUE.equals(rl.get("showInDetail")) || !relatedRows.containsKey(str(rl.get("name")))) {
-                continue;
-            }
-            items.add(sectionLabel(relatedListTitle(rl), p));
-            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p, msg));
-        }
-
-        return content(items);
-    }
-
-    // ----- catalog detail -----
-
-    /**
-     * A catalog item's detail surface: a header (with edit/delete actions when the
-     * caller may write) over a card of its visible system columns (code/description)
-     * and attributes, then a read-only table per related-list panel. Catalogs have no
-     * posting, so it's flatter than {@link #documentDetail} — but the related-list
-     * tables are the catalog-side analogue of that view's tabular sections.
-     *
-     * <p>{@code relatedRows} maps each panel's {@code name} to its preloaded join rows;
-     * a panel renders (read-only, no add/remove) iff it is {@code showInDetail} and present
-     * in that map (the caller omits panels the user may not read). Empty maps to no panel.
-     */
-    /** Back-compat overload rendering the English chrome defaults (used by unit tests). */
-    public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                    Map<String, List<Map<String, Object>>> relatedRows,
-                                                    List<HeaderAction> actions, Palette p) {
-        return catalogDetail(meta, row, relatedRows, actions, p, UiMessages.defaults());
-    }
-
-    @SuppressWarnings("unchecked")
-    public static Map<String, Object> catalogDetail(Map<String, Object> meta, Map<String, Object> row,
-                                                    Map<String, List<Map<String, Object>>> relatedRows,
-                                                    List<HeaderAction> actions, Palette p, UiMessages msg) {
-        List<Map<String, Object>> items = new ArrayList<>();
-
-        // Code/description lead the header (title + subtitle), so the card carries just
-        // the attributes — no duplicate Code/Description rows.
-        String description = str(row.get("_description"));
-        String code = str(row.get("_code"));
-        String title = description.isBlank() ? titleOf(meta) : description;
-        String subtitle = description.isBlank() ? code : (code.isBlank() ? null : code);
-        items.add(detailHeader(title, subtitle, null, actions, p));
-
-        List<Map<String, Object>> fieldRows = new ArrayList<>();
-        for (Map<String, Object> a : visible(
-                (List<Map<String, Object>>) meta.getOrDefault("attributes", List.of()), "visibleInDetail")) {
-            fieldRows.add(fieldRowFor(a, row, p));
-        }
-        if (!fieldRows.isEmpty()) {
-            items.add(fieldCard(fieldRows, p));
-        }
-
-        // Related-list panels render read-only here (the catalog-side analogue of a document's
-        // tabular sections), mirroring the form widget minus the add-row / remove controls.
-        for (Map<String, Object> rl : (List<Map<String, Object>>) meta.getOrDefault("relatedLists", List.of())) {
-            if (!Boolean.TRUE.equals(rl.get("showInDetail")) || !relatedRows.containsKey(str(rl.get("name")))) {
-                continue;
-            }
-            items.add(sectionLabel(relatedListTitle(rl), p));
-            items.add(relatedListTable(rl, relatedRows.get(str(rl.get("name"))), p, msg));
-        }
-
-        return content(items);
-    }
-
-    /** A related-list panel heading: its explicit {@code label}, else the capitalized panel name. */
-    private static String relatedListTitle(Map<String, Object> rl) {
-        String label = str(rl.get("label"));
-        if (!label.isBlank()) {
-            return label;
-        }
-        String name = str(rl.get("name"));
-        return name.isEmpty() ? name : Character.toUpperCase(name.charAt(0)) + name.substring(1);
-    }
-
-    /**
-     * One related-list panel as a read-only table: a column per resolved join-row column (refs
-     * resolved to their description, and clickable through to the target record), one row per
-     * join row. Shape mirrors {@link #documentDetail}'s tabular-section tables.
-     */
-    @SuppressWarnings("unchecked")
-    private static Map<String, Object> relatedListTable(Map<String, Object> rl,
-                                                        List<Map<String, Object>> rows, Palette p, UiMessages msg) {
-        List<Map<String, Object>> columns = (List<Map<String, Object>>) rl.getOrDefault("columns", List.of());
-        List<String> headers = new ArrayList<>();
-        for (Map<String, Object> c : columns) {
-            headers.add(str(c.get("displayName")));
-        }
-        List<Components.Row> body = new ArrayList<>();
-        for (Map<String, Object> r : rows) {
-            List<String> cells = new ArrayList<>();
-            List<String> cellUrls = new ArrayList<>();
-            for (Map<String, Object> c : columns) {
-                cells.add(cell(c, r));
-                cellUrls.add(refUrlFor(c, r)); // null for non-ref columns
-            }
-            body.add(new Components.Row(cells, null, cellUrls));
-        }
-        return Components.table(headers, body, p, msg.get("empty.noRecords"));
-    }
-
-    // ----- create / edit form -----
+    // ----- record form -----
 
     /**
      * Emits the create/edit form as the portable {@code onno-form} custom component: a
@@ -696,101 +422,9 @@ public final class SurfaceDivBuilder {
     }
 
     /**
-     * The detail surface header: a title (with an optional muted subtitle — e.g. a
-     * document number or catalog code, which keeps long identifiers out of the big
-     * title so it no longer wraps into the corner) on the left, and an action cluster
-     * (optional status chip + primary buttons + an overflow ⋯ menu) pinned right. The
-     * title takes the remaining width and ellipsizes so the actions never get crammed.
-     *
-     * <p>Each {@link HeaderAction} renders inline (placement {@code "primary"}) or is
-     * collected into a single trailing overflow menu (placement {@code "menu"}), so a
-     * document can keep just Post on the surface and tuck Unpost/Edit/Delete away.
-     */
-    private static Map<String, Object> detailHeader(String title, String subtitle, Map<String, Object> badge,
-                                                    List<HeaderAction> actions, Palette p) {
-        Map<String, Object> titleNode = Div.color(Div.text(title, 20, "bold"), p.text());
-        Div.matchWidth(titleNode);
-        Div.maxLines(titleNode, 2);
-        List<Map<String, Object>> leftItems = new ArrayList<>(List.of(titleNode));
-        if (subtitle != null && !subtitle.isBlank()) {
-            Map<String, Object> sub = Div.color(Div.text(subtitle, 13, "regular"), p.muted());
-            Div.matchWidth(sub);
-            Div.maxLines(sub, 1);
-            Div.margins(sub, 3, 0, 0, 0);
-            leftItems.add(sub);
-        }
-        Map<String, Object> left = Div.vertical(leftItems);
-        Div.weight(left, 1);
-
-        List<Map<String, Object>> cluster = new ArrayList<>();
-        if (badge != null) {
-            cluster.add(badge);
-        }
-        // The whole action cluster (inline primary buttons + the overflow ⋯ menu) renders as one
-        // React island, so the async actions (Post / Unpost / custom server actions) show an
-        // in-button loading state — like the list's toolbar/row buttons. Navigation actions
-        // (Edit / Duplicate) and Delete route through onno:// exactly as before.
-        List<HeaderAction> acts = new ArrayList<>();
-        for (HeaderAction a : actions == null ? List.<HeaderAction>of() : actions) {
-            if (a != null && a.url() != null) {
-                acts.add(a);
-            }
-        }
-        if (!acts.isEmpty()) {
-            cluster.add(actionCluster(acts));
-        }
-
-        Map<String, Object> actionRow = Div.horizontal(cluster);
-        // Hug the buttons (containers default to match_parent, which would stretch the
-        // cluster); the weighted title then pushes it to the right edge.
-        Div.wrapWidth(actionRow);
-        Div.gap(actionRow, 8);
-        Div.alignV(actionRow, "center");
-
-        Map<String, Object> row = Div.horizontal(List.of(left, actionRow));
-        Div.matchWidth(row);
-        Div.alignV(row, "center");
-        Div.margins(row, 0, 0, 16, 0);
-        return row;
-    }
-
-    /**
-     * The detail-header action cluster: an {@code onno-actions-menu} custom block carrying every
-     * action ({@code label / icon / url / tone / placement}). The React island renders the
-     * {@code "primary"}-placed ones as inline buttons and tucks {@code "menu"}-placed ones into an
-     * overflow ⋯ dropdown, runs the async ones (Post / Unpost / custom server actions) with an
-     * in-button loading state, and routes the rest through the same {@code onno://} events.
-     */
-    private static Map<String, Object> actionCluster(List<HeaderAction> items) {
-        List<Map<String, Object>> list = actionItems(items);
-        // Reserve a (generous) width for the DivKit box: the React island is portaled in after
-        // DivKit lays out, so wrap_content would measure it empty. Erring large avoids clipping —
-        // the inline-flex host still hugs the real buttons inside the reserved space.
-        int inline = 0;
-        boolean hasMenu = false;
-        int width = 0;
-        for (HeaderAction a : items) {
-            if ("menu".equals(a.placement())) {
-                hasMenu = true;
-            } else {
-                inline++;
-                width += 48 + a.label().length() * 9; // icon + label + horizontal padding
-            }
-        }
-        if (hasMenu) {
-            width += 44;
-        }
-        width += Math.max(0, (inline + (hasMenu ? 1 : 0)) - 1) * 8; // inter-button gaps
-        Map<String, Object> node = Div.custom("onno-actions-menu", Map.of("items", list));
-        Div.width(node, Math.max(40, width));
-        return node;
-    }
-
-    /**
-     * {@link HeaderAction}s as the plain-JSON items the action-cluster island consumes
-     * ({@code label / icon / url / tone / placement} + optional {@code form}). Shared by the
-     * {@code onno-actions-menu} block and the entity-form descriptor's {@code actions} — the
-     * combined record surface renders the same cluster from the same shape.
+     * {@link HeaderAction}s as the plain-JSON items the record surface's action cluster
+     * consumes ({@code label / icon / url / tone / placement} + optional {@code form}) —
+     * carried in the entity-form descriptor's {@code actions}.
      */
     public static List<Map<String, Object>> actionItems(List<HeaderAction> items) {
         List<Map<String, Object>> list = new ArrayList<>();
@@ -821,244 +455,14 @@ public final class SurfaceDivBuilder {
         return list;
     }
 
-    /** A definition-list card: field rows separated by hairline dividers. */
-    private static Map<String, Object> fieldCard(List<Map<String, Object>> rows, Palette p) {
-        List<Map<String, Object>> items = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i++) {
-            if (i > 0) {
-                items.add(Div.separator(p.border()));
-            }
-            items.add(rows.get(i));
-        }
-        Map<String, Object> card = Div.vertical(items);
-        Div.matchWidth(card);
-        Div.background(card, p.surface());
-        Div.pad(card, 4, 16);
-        Div.corner(card, Radii.CARD);
-        Div.stroke(card, p.border(), 1);
-        return card;
-    }
-
-    private static Map<String, Object> sectionLabel(String text, Palette p) {
-        Map<String, Object> label = Div.color(Div.text(text, 13, "medium"), p.muted());
-        Div.margins(label, 16, 0, 8, 2);
-        return label;
-    }
-
-    private static List<String> headerLabels(ResolvedListView view) {
-        return view.columns().stream().map(ResolvedListView.Column::label).toList();
-    }
-
-    /** Per-column authored width hints, positionally aligned with {@link #headerLabels}. */
-    private static List<String> columnWidths(ResolvedListView view) {
-        return view.columns().stream().map(ResolvedListView.Column::width).toList();
-    }
-
-    private static List<String> rowCells(ResolvedListView view, Map<String, Object> row) {
-        return view.columns().stream().map(c -> cellByColumn(c.columnName(), row)).toList();
-    }
-
-    private static String cellByColumn(String columnName, Map<String, Object> row) {
-        if ("_posted".equals(columnName)) {
-            return Boolean.TRUE.equals(row.get("_posted")) ? "Posted" : "Draft";
-        }
-        Object display = row.get(columnName + "_display");
-        Object value = display != null ? display : row.get(columnName);
-        return maskSecret(value);
-    }
-
-    private static List<Map<String, Object>> visible(List<Map<String, Object>> attrs, String slot) {
-        return attrs.stream()
-                .filter(a -> Boolean.TRUE.equals(a.get(slot)))
-                .sorted(Comparator.comparingInt(a -> a.get("order") == null
-                        ? 0 : ((Number) a.get("order")).intValue()))
-                .toList();
-    }
-
-    /** The display {@code format} hint declared for a system column (e.g. {@code _date}), or "". */
-    @SuppressWarnings("unchecked")
-    private static String systemColumnFormat(Map<String, Object> meta, String columnName) {
-        for (Map<String, Object> sc : (List<Map<String, Object>>) meta.getOrDefault("systemColumns", List.of())) {
-            if (columnName.equals(str(sc.get("columnName")))) {
-                return str(sc.get("format"));
-            }
-        }
-        return "";
-    }
-
-    /**
-     * The resolved display label for a system column (e.g. {@code _date}) — the {@code displayName}
-     * the metadata service emitted, which already folds in any {@code .field(...).label(...)} hint
-     * (#154). Falls back to {@code fallback} when the column or a blank label leaves nothing to show.
-     */
-    @SuppressWarnings("unchecked")
-    private static String systemColumnLabel(Map<String, Object> meta, String columnName, String fallback) {
-        for (Map<String, Object> sc : (List<Map<String, Object>>) meta.getOrDefault("systemColumns", List.of())) {
-            if (columnName.equals(str(sc.get("columnName")))) {
-                String label = str(sc.get("displayName"));
-                return label.isBlank() ? fallback : label;
-            }
-        }
-        return fallback;
-    }
-
-    private static String cell(Map<String, Object> attr, Map<String, Object> row) {
-        String col = str(attr.get("columnName"));
-        Object display = row.get(col + "_display");
-        // A resolved ref/enum label is shown as-is; only a raw typed value is run through the
-        // optional .format(...) hint (a date pattern or number spec).
-        if (display != null) {
-            return maskSecret(display);
-        }
-        Object value = row.get(col);
-        String formatted = ValueFormat.apply(str(attr.get("format")), value);
-        return formatted != null ? formatted : maskSecret(value);
-    }
-
-    /**
-     * A detail field row for an attribute: an inline image when the attribute is an image
-     * widget ({@code .widget("image"|"avatar")}) and holds a value, otherwise the usual
-     * label/value text row. The image source is the raw stored string — a {@code data:} URL
-     * from the picker or a plain {@code http(s)} URL.
-     */
-    private static Map<String, Object> fieldRowFor(Map<String, Object> a, Map<String, Object> row, Palette p) {
-        String label = str(a.get("displayName"));
-        String hint = str(a.get("hint"));
-        if (isGalleryWidget(a)) {
-            List<String> urls = splitGallery(str(row.get(str(a.get("columnName")))));
-            if (!urls.isEmpty()) {
-                return Components.imageGalleryRow(label, urls, hint, p);
-            }
-        } else if (isImageWidget(a)) {
-            String url = str(row.get(str(a.get("columnName"))));
-            if (!url.isBlank()) {
-                return Components.imageFieldRow(label, url, isAvatarWidget(a), hint, p);
-            }
-        } else if (isFileWidget(a)) {
-            String url = str(row.get(str(a.get("columnName"))));
-            if (!url.isBlank()) {
-                return Components.fileFieldRow(label, url, hint, p);
-            }
-        } else if (isMapWidget(a)) {
-            String value = str(row.get(str(a.get("columnName"))));
-            if (!value.isBlank()) {
-                return Components.geoFieldRow(label, value, hint, p);
-            }
-        }
-        String refUrl = refUrlFor(a, row);
-        if (refUrl != null) {
-            return Components.refFieldRow(label, cell(a, row), refUrl, hint, p);
-        }
-        // An enum value with an @EnumLabel(color = …) rides as {col}_color (RefResolver) — render it
-        // as a coloured status pill, matching the list cell and the form dropdown's colour.
-        String color = str(row.get(str(a.get("columnName")) + "_color"));
-        if (!color.isBlank()) {
-            return Components.pillFieldRow(label, cell(a, row), color, hint, p);
-        }
-        return Components.fieldRow(label, cell(a, row), hint, p);
-    }
-
-    /**
-     * The {@code onno://} url that opens the record a ref attribute points at, or null when the
-     * attribute isn't a (resolved) ref. The target id comes from the {@code {column}_ref} map the
-     * {@link su.onno.ui.RefResolver} stamps on the row; the route is the attribute's
-     * refKind/refTarget — same shape a list-row tap produces (see {@link #documentBody}).
-     */
-    @SuppressWarnings("unchecked")
-    private static String refUrlFor(Map<String, Object> a, Map<String, Object> row) {
-        if (!Boolean.TRUE.equals(a.get("isRef"))) {
-            return null;
-        }
-        Object refObj = row.get(str(a.get("columnName")) + "_ref");
-        if (!(refObj instanceof Map)) {
-            return null;
-        }
-        Object id = ((Map<String, Object>) refObj).get("id");
-        String target = str(a.get("refTarget"));
-        if (id == null || target.isBlank()) {
-            return null;
-        }
-        String kind = "document".equals(str(a.get("refKind"))) ? "documents" : "catalogs";
-        return "onno://" + kind + "/" + routeNameOf(target) + "/" + id;
-    }
-
-    /**
-     * The URL-safe route segment for a logical name: snake_case, mirroring the client's
-     * {@code toSnakeCase} so a ref link hits the same endpoint the user would by navigating.
-     */
-    private static String routeNameOf(String logicalName) {
-        return logicalName
-                .replaceAll("([a-z])([A-Z])", "$1_$2")
-                .replaceAll("\\s+", "_")
-                .toLowerCase(Locale.ROOT);
-    }
-
-    private static boolean isImageWidget(Map<String, Object> a) {
-        String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("image") || w.equalsIgnoreCase("photo") || isAvatarWidget(a);
-    }
-
-    private static boolean isAvatarWidget(Map<String, Object> a) {
-        return "avatar".equalsIgnoreCase(str(a.get("widget")));
-    }
-
-    /** A file-upload widget ({@code .widget("file")}); value is the stored media reference URL. */
-    private static boolean isFileWidget(Map<String, Object> a) {
-        return "file".equalsIgnoreCase(str(a.get("widget")));
-    }
-
-    /**
-     * A map widget ({@code .widget("map"|"geo"|"geolocation")} — a {@code "lat,lng"} point — or
-     * {@code .widget("geojson")} — GeoJSON points/paths/areas). Either renders read-only as a map.
-     */
-    private static boolean isMapWidget(Map<String, Object> a) {
-        String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("map") || w.equalsIgnoreCase("geo")
-                || w.equalsIgnoreCase("geolocation") || w.equalsIgnoreCase("geojson");
-    }
-
-    /** A multi-image widget ({@code .widget("images"|"gallery")}); value is newline-joined URLs. */
-    private static boolean isGalleryWidget(Map<String, Object> a) {
-        String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("images") || w.equalsIgnoreCase("gallery") || w.equalsIgnoreCase("photos");
-    }
-
-    /** Split a gallery value into its image URLs. base64 data URLs hold no newline, so the
-     *  newline join is unambiguous (see GalleryPicker on the client). */
-    private static List<String> splitGallery(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-        return value.lines().map(String::trim).filter(s -> !s.isBlank()).toList();
-    }
-
     private static String str(Object value) {
         return value == null ? "" : value.toString();
     }
 
     /**
-     * Renders a secret attribute's read-side sentinel as a masked "set" indicator rather than
-     * the raw {@code __SECRET_SET__} marker. Non-secret values pass through unchanged.
-     */
-    private static String maskSecret(Object value) {
-        if (value == null) return "";
-        if (su.onno.security.SecretRedactor.SET.equals(value)) return "•••• set";
-        // An image (or gallery) widget's value is a (potentially huge) data URL — or several,
-        // newline-joined; never dump it as text into a list cell or a fallback row. Show a
-        // compact placeholder. Detail surfaces render the actual image(s) (see fieldRowFor)
-        // before reaching here.
-        String s = value.toString();
-        if (s.startsWith("data:")) {
-            long n = s.lines().count();
-            return n > 1 ? "🖼 " + n + " images" : "🖼 Image";
-        }
-        return s;
-    }
-
-    /**
      * The entity's display heading: its {@code title} when set, else the URL-safe
      * {@code name}. Keeps localized/multi-word titles out of routes while still showing
-     * them in list/detail/report headers.
+     * them in list/report headers and the record form title.
      */
     private static String titleOf(Map<String, Object> meta) {
         String title = str(meta.get("title"));
