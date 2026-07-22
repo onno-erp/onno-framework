@@ -1884,6 +1884,18 @@ export function EntityListWidget({
     selAnchorRef.current = null;
   }, []);
 
+  // Open the row context menu — shared by the flat table's rows and the grouped view's (the menu
+  // element itself renders once at the island root, so either body can drive it). Right-clicking
+  // outside an active selection drops the selection first, like the flat rows always did.
+  const openRowMenu = useCallback(
+    (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string }) => {
+      if (selected.size && !selected.has(menu.id)) clearSelection();
+      setArmedDelete(false);
+      setRowMenu(menu);
+    },
+    [selected, clearSelection]
+  );
+
   // A changed query invalidates the selection's row set — indices shift, rows drop out.
   useEffect(() => {
     clearSelection();
@@ -2795,6 +2807,10 @@ export function EntityListWidget({
           canWrite={canWrite}
           surfaceMode={surfaceMode}
           scrollCap={maxBodyH}
+          selected={selected}
+          setSelected={setSelected}
+          clearSelection={clearSelection}
+          openRowMenu={openRowMenu}
         />
       ) : (
       /* table card — one scroller for both axes; the header sticks to the top (so it scrolls

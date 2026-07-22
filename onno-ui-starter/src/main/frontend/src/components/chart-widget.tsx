@@ -232,8 +232,8 @@ function chartDataFromBuckets(
 
 interface DragProps {
   style: React.CSSProperties;
-  onMouseDown: (e: { activeLabel?: string | number } | null) => void;
-  onMouseMove: (e: { activeLabel?: string | number } | null) => void;
+  onMouseDown: (e: { activeTooltipIndex?: number; activeLabel?: string | number } | null) => void;
+  onMouseMove: (e: { activeTooltipIndex?: number; activeLabel?: string | number } | null) => void;
 }
 interface RefAreaSel {
   x1: string;
@@ -252,21 +252,21 @@ function useDragZoom(
   rows: Array<Record<string, number | string>>,
   onZoom: (fromIso: string, toIso: string) => void
 ): { dragProps: DragProps; refArea: RefAreaSel | null } {
-  const [sel, setSel] = useState<{ left: string | null; right: string | null }>({ left: null, right: null });
+  // Selection is tracked by tooltip INDEX, not by label: labels aren't guaranteed unique (the
+  // shaping layer widens duplicates, but the index is unambiguous by construction) and the index
+  // maps straight back to the bucket's ISO_KEY.
+  const [sel, setSel] = useState<{ left: number | null; right: number | null }>({ left: null, right: null });
   const dragging = useRef(false);
 
   useEffect(() => {
-    const isoFor = (label: string) => {
-      const r = rows.find((row) => String(row.label) === label);
-      return r ? String(r[ISO_KEY] ?? "") : "";
-    };
+    const isoAt = (idx: number) => String(rows[idx]?.[ISO_KEY] ?? "");
     const up = () => {
       if (!dragging.current) return;
       dragging.current = false;
       setSel((s) => {
-        if (s.left && s.right && s.left !== s.right) {
-          let a = isoFor(s.left);
-          let b = isoFor(s.right);
+        if (s.left != null && s.right != null && s.left !== s.right) {
+          let a = isoAt(s.left);
+          let b = isoAt(s.right);
           if (a && b) {
             if (a > b) [a, b] = [b, a];
             onZoom(a, b);
@@ -279,23 +279,32 @@ function useDragZoom(
     return () => window.removeEventListener("mouseup", up);
   }, [rows, onZoom]);
 
+  const idxOf = (e: { activeTooltipIndex?: number; activeLabel?: string | number } | undefined | null) => {
+    const i = e?.activeTooltipIndex;
+    return typeof i === "number" && i >= 0 && i < rows.length ? i : null;
+  };
   const dragProps: DragProps = {
     // crosshair signals the region-select affordance; userSelect:none stops the drag from
     // highlighting axis labels mid-gesture.
     style: { cursor: "crosshair", userSelect: "none" },
     onMouseDown: (e) => {
-      const l = e?.activeLabel;
-      if (l != null) {
+      const i = idxOf(e);
+      if (i != null) {
         dragging.current = true;
-        setSel({ left: String(l), right: String(l) });
+        setSel({ left: i, right: i });
       }
     },
     onMouseMove: (e) => {
-      const l = e?.activeLabel;
-      if (l != null && dragging.current) setSel((s) => (s.left ? { ...s, right: String(l) } : s));
+      const i = idxOf(e);
+      if (i != null && dragging.current) setSel((s) => (s.left != null ? { ...s, right: i } : s));
     },
   };
-  const refArea = sel.left && sel.right && sel.left !== sel.right ? { x1: sel.left, x2: sel.right } : null;
+  // ReferenceArea still addresses the category axis by label — indexes resolve to the (now
+  // unambiguous) labels only at render time.
+  const refArea =
+    sel.left != null && sel.right != null && sel.left !== sel.right
+      ? { x1: String(rows[sel.left]?.label ?? ""), x2: String(rows[sel.right]?.label ?? "") }
+      : null;
   return { dragProps, refArea };
 }
 

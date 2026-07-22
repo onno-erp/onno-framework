@@ -153,6 +153,43 @@ function bucketKey(value: unknown, groupByDate?: GroupByDate): { key: string; la
 /** The bucket-start ISO date carried on each chart row, for drag-to-zoom (kept off the series keys). */
 export const ISO_KEY = "__iso";
 
+/**
+ * Widen date-bucket labels until they are unique across the plotted span. The compact formats are
+ * ambiguous once the span outgrows them — hour/minute buckets repeat "15:00" every day, day/week
+ * buckets repeat "Jul 3" every year — and duplicated x labels break everything recharts resolves
+ * by label value (ReferenceArea for drag-zoom, tooltip headers) beside just reading wrong. Runs on
+ * the ordered bucket list right before the wide rows are emitted; non-date buckets are left alone
+ * (a duplicated category label is the server's business). Escalates only as far as needed: first
+ * the day for time buckets / the year for day-week buckets, then the full date-time.
+ */
+function disambiguateLabels(buckets: Array<{ label: string; iso: string }>, groupByDate?: GroupByDate): void {
+  if (!groupByDate) return;
+  const hasDupes = (fmtOf: (b: { label: string; iso: string }) => string) => {
+    const seen = new Set<string>();
+    for (const b of buckets) {
+      const l = fmtOf(b);
+      if (seen.has(l)) return true;
+      seen.add(l);
+    }
+    return false;
+  };
+  if (!hasDupes((b) => b.label)) return;
+  const timed = groupByDate === "minute" || groupByDate === "hour";
+  const widen = (fmt: string) => {
+    for (const b of buckets) {
+      if (!b.iso) continue;
+      try {
+        b.label = format(parseISO(b.iso), fmt);
+      } catch {
+        // keep the compact label for an unparseable iso
+      }
+    }
+  };
+  widen(timed ? "MMM d HH:mm" : "MMM d, yyyy");
+  // Hour buckets spanning multiple years can still collide ("Jul 3 15:00") — go fully qualified.
+  if (timed && hasDupes((b) => b.label)) widen("MMM d, yyyy HH:mm");
+}
+
 export interface SeriesSpec extends AggregateSpec {
   /** Field that defines the x-axis buckets. */
   groupBy: string;
@@ -220,6 +257,7 @@ export function buildCombo(
   if (spec.groupByDate) {
     ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
   }
+  disambiguateLabels(ordered, spec.groupByDate);
   return {
     rows: ordered.map((b) => ({ label: b.label, [ISO_KEY]: b.iso, primary: b.primary, secondary: b.secondary })),
     totals: { primary: primaryTotal, secondary: secondaryTotal },
@@ -304,7 +342,7 @@ function assembleSeries(
   total: number,
   split: boolean,
   maxSeries: number,
-  dateOrdered: boolean
+  groupByDate?: GroupByDate
 ): SeriesData {
   let seriesKeys: string[];
   if (!split) {
@@ -330,9 +368,10 @@ function assembleSeries(
   }
 
   const ordered = [...buckets.values()];
-  if (dateOrdered) {
+  if (groupByDate) {
     ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
   }
+  disambiguateLabels(ordered, groupByDate);
 
   const out = ordered.map((bucket) => {
     const wide: Record<string, number | string> = { label: bucket.label, [ISO_KEY]: bucket.iso };
@@ -370,7 +409,7 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
     total += inc;
   }
 
-  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, !!spec.groupByDate);
+  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, spec.groupByDate);
 }
 
 // ----- server-aggregated buckets (#199) ---------------------------------------------------------
@@ -470,7 +509,7 @@ export function seriesFromBuckets(resp: AggregateBuckets, spec: SeriesSpec): Ser
     total += b.value;
   }
 
-  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, !!spec.groupByDate);
+  return assembleSeries(buckets, seriesTotals, total, !!spec.seriesBy, maxSeries, spec.groupByDate);
 }
 
 /**
@@ -500,6 +539,7 @@ export function comboFromBuckets(resp: AggregateBuckets, spec: { groupByDate?: G
   if (spec.groupByDate) {
     ordered.sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
   }
+  disambiguateLabels(ordered, spec.groupByDate);
   return {
     rows: ordered.map((b) => ({ label: b.label, [ISO_KEY]: b.iso, primary: b.primary, secondary: b.secondary })),
     totals: { primary: primaryTotal, secondary: secondaryTotal },

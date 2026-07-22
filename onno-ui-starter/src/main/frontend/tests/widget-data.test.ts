@@ -87,3 +87,35 @@ describe("buildSeries — multi series", () => {
     expect(out.total).toBe(165);
   });
 });
+
+describe("buildSeries — duplicate bucket labels widen until unique", () => {
+  it("hour buckets spanning multiple days pick up the day", () => {
+    const rows: EntityRecord[] = [
+      { _date: "2024-01-01T15:10:00", n: 1 },
+      { _date: "2024-01-02T15:20:00", n: 2 },
+      { _date: "2024-01-02T18:00:00", n: 3 },
+    ];
+    const out = buildSeries(rows, { groupBy: "_date", groupByDate: "hour", metric: "sum", metricField: "n" });
+    // Two different days both bucket to 15:00 — bare "15:00" labels would collide (and break
+    // everything recharts resolves by label, e.g. the drag-zoom ReferenceArea).
+    expect(out.rows.map((r) => r.label)).toEqual(["Jan 1 15:00", "Jan 2 15:00", "Jan 2 18:00"]);
+  });
+
+  it("day buckets spanning multiple years pick up the year", () => {
+    const rows: EntityRecord[] = [
+      { _date: "2023-03-05T00:00:00", n: 1 },
+      { _date: "2024-03-05T00:00:00", n: 2 },
+    ];
+    const out = buildSeries(rows, { groupBy: "_date", groupByDate: "day", metric: "sum", metricField: "n" });
+    expect(out.rows.map((r) => r.label)).toEqual(["Mar 5, 2023", "Mar 5, 2024"]);
+  });
+
+  it("unique labels keep their compact form", () => {
+    const rows: EntityRecord[] = [
+      { _date: "2024-01-01T15:00:00", n: 1 },
+      { _date: "2024-01-01T18:00:00", n: 2 },
+    ];
+    const out = buildSeries(rows, { groupBy: "_date", groupByDate: "hour", metric: "sum", metricField: "n" });
+    expect(out.rows.map((r) => r.label)).toEqual(["15:00", "18:00"]);
+  });
+});

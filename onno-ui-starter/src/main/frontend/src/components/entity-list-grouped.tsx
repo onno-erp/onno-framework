@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
@@ -48,6 +48,10 @@ export function GroupedList({
   canWrite,
   surfaceMode,
   scrollCap,
+  selected,
+  setSelected,
+  clearSelection,
+  openRowMenu,
 }: {
   feedBase: string;
   kind: string;
@@ -66,6 +70,12 @@ export function GroupedList({
   canWrite: boolean;
   surfaceMode: boolean;
   scrollCap: number;
+  /** Batch selection, shared with the island so the toolbar chip / batch menu / ⌘-shortcuts see it. */
+  selected: Set<string>;
+  setSelected: Dispatch<SetStateAction<Set<string>>>;
+  clearSelection: () => void;
+  /** Opens the island-level row context menu (built-ins + custom actions + batch ops). */
+  openRowMenu: (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string }) => void;
 }) {
   const t = useMessages();
   const [groups, setGroups] = useState<GroupHeader[] | null>(null);
@@ -203,6 +213,26 @@ export function GroupedList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveTick]);
 
+  // Flattened render-order view of every expanded group's rows: the id list drives Shift-range
+  // selection (a range can span group boundaries, exactly the visual order), and the per-group
+  // offsets give each row its absolute index. Expanding/collapsing shifts indexes, so the anchor
+  // resets whenever the headers reload (below).
+  const flat = useMemo(() => {
+    const ids: string[] = [];
+    const offsets: Record<number, number> = {};
+    (groups ?? []).forEach((_, i) => {
+      const st = expanded[i];
+      if (!st) return;
+      offsets[i] = ids.length;
+      for (const r of st.rows) ids.push(r._id != null ? String(r._id) : "");
+    });
+    return { ids, offsets };
+  }, [groups, expanded]);
+  const selAnchorRef = useRef<number | null>(null);
+  useEffect(() => {
+    selAnchorRef.current = null;
+  }, [groups]);
+
   const toggle = useCallback(
     (index: number, group: GroupHeader) => {
       if (group.expand.length === 0) return; // a null group isn't expandable
@@ -320,29 +350,93 @@ export function GroupedList({
                     ) : null}
                   </button>
 
-                  {/* the group's rows, lazily loaded */}
+                  {/* the group's rows, lazily loaded — same selection / context-menu grammar as the
+                      flat table: ⌘/Ctrl toggles, Shift ranges over the flattened render order
+                      (across group boundaries), right-click opens the island's row menu. */}
                   {open && state.rows.map((row, ri) => {
+                    const absIdx = (flat.offsets[i] ?? 0) + ri;
+                    const rowId = openable && row._id != null ? String(row._id) : null;
                     const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
+                    const isSelected = rowId != null && selected.has(rowId);
                     return (
                       <div
                         key={ri}
                         data-onno-row={url}
                         // "0" hides write actions in the shell's fallback row menu / shortcuts.
                         data-onno-row-writable={canWrite ? undefined : "0"}
-                        onClick={() => url && dispatchAction(url)}
+                        // Shift-click extends the selection — suppress the browser's text-range drag.
+                        onMouseDown={(e) => {
+                          if (e.shiftKey && rowId) e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                          if (rowId && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                            e.preventDefault();
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              if (e.shiftKey && selAnchorRef.current != null) {
+                                const lo = Math.min(selAnchorRef.current, absIdx);
+                                const hi = Math.max(selAnchorRef.current, absIdx);
+                                for (let j = lo; j <= hi; j++) {
+                                  const id = flat.ids[j];
+                                  if (id) next.add(id);
+                                }
+                              } else {
+                                if (next.has(rowId)) next.delete(rowId);
+                                else next.add(rowId);
+                                selAnchorRef.current = absIdx;
+                              }
+                              return next;
+                            });
+                            if (selAnchorRef.current == null) selAnchorRef.current = absIdx;
+                            return;
+                          }
+                          if (selected.size) {
+                            clearSelection();
+                            return;
+                          }
+                          if (url) dispatchAction(url);
+                        }}
+                        onContextMenu={(e) => {
+                          if (!url || !rowId) return; // keep the browser menu for non-openable rows
+                          // Yield to an active text selection, like the flat table does.
+                          const sel = window.getSelection();
+                          if (sel && !sel.isCollapsed && sel.toString().trim()) return;
+                          // preventDefault also marks the native event, so divkit-view's
+                          // DOM-sniffing fallback menu skips this row.
+                          e.preventDefault();
+                          openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
+                        }}
                         className={cn(
                           "grid items-center gap-3 border-b border-border/50 text-sm",
                           url && "cursor-pointer",
                           leftPad,
-                          // Conditional formatting (`_style`) replaces the zebra stripe when set.
-                          rowStyleClass(row._style),
-                          ri % 2 === 1 && !rowStyleClass(row._style) && "bg-muted/20"
+                          // Conditional formatting (`_style`) replaces the zebra stripe when set;
+                          // selection still wins over both.
+                          !isSelected && rowStyleClass(row._style),
+                          ri % 2 === 1 && !isSelected && !rowStyleClass(row._style) && "bg-muted/20",
+                          isSelected && "bg-primary/10"
                         )}
                         style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                       >
-                        {columns.map((c) => (
-                          <ListCell key={c.columnName} row={row} col={c} />
-                        ))}
+                        {columns.map((c) =>
+                          c.cellMenu && rowId && url ? (
+                            // ListSpec.cellMenu: right-clicking this cell opens just its submenu's
+                            // choices — same shortcut the flat table offers.
+                            <span
+                              key={c.columnName}
+                              className="flex min-w-0 items-center"
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row, only: c.cellMenu });
+                              }}
+                            >
+                              <ListCell row={row} col={c} />
+                            </span>
+                          ) : (
+                            <ListCell key={c.columnName} row={row} col={c} />
+                          )
+                        )}
                       </div>
                     );
                   })}
