@@ -254,18 +254,21 @@ export function GroupedList({
       className={cn(
         // On a route surface the card sizes to its groups and only shrinks (min-h-0, no grow)
         // when they overflow — a short list ends at its last row, not the window bottom.
-        "flex flex-col overflow-hidden rounded-card border border-border bg-card",
+        "flex flex-col",
         surfaceMode && "min-h-0"
       )}
     >
       <div
-        className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
+        className={cn(
+          "overflow-auto overscroll-contain rounded-card border border-border bg-card",
+          surfaceMode && "min-h-0 flex-1"
+        )}
         style={surfaceMode ? undefined : { maxHeight: scrollCap }}
       >
         <div className="w-full" style={{ minWidth: minTableWidth }}>
           {/* column labels (non-interactive in grouped view — sort still comes from the toolbar) */}
           <div
-            className={cn("sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card py-2.5", leftPad)}
+            className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
             style={{ gridTemplateColumns: template }}
           >
             {columns.map((c) => (
@@ -362,6 +365,7 @@ export function GroupedList({
                       <div
                         key={ri}
                         data-onno-row={url}
+                        data-onno-selected={isSelected ? "true" : undefined}
                         // "0" hides write actions in the shell's fallback row menu / shortcuts.
                         data-onno-row-writable={canWrite ? undefined : "0"}
                         // Shift-click extends the selection — suppress the browser's text-range drag.

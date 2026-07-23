@@ -12,11 +12,16 @@ Paths below are relative to `src/`.
 ## Tokens (`index.css`, exposed via Tailwind)
 
 - **Radius, three tiers** — `rounded-pill` (9999px: compact actions, chips, badges, segmented
-  triggers), `rounded-field` (0.625rem: inputs, selects, rows, compact event blocks), and
-  `rounded-panel` (0.9rem: cards, toolbar islands, popovers, menus, dialogs). Compatibility aliases
+  triggers), `rounded-field` (0.75rem: inputs, selects, rows, compact event blocks), and
+  `rounded-panel` (1rem: cards, toolbar islands, popovers, menus, dialogs). Compatibility aliases
   `rounded-control` = `rounded-pill` and `rounded-card` = `rounded-panel` remain, but prefer the
   self-explanatory names in new code. Never use the pill tier for a panel, table/grid viewport,
   calendar lane/event rectangle, generic row, error/empty-state box, or skeleton bar.
+- **Typography** — SF Pro Text/Display (system fallback), regular 400 and medium 500 only, with
+  `-0.15px` tracking. Use only the 12px, 13px, 14px, and 24px scale steps.
+- **Text hierarchy** — primary `#292929`, secondary `#5D5D5D`, tertiary `#9E9E9E` in light mode;
+  dark mode reverses the luminance order while keeping the same semantic levels.
+- **Icons** — 14px in navigation and 20px as the standard card/dialog icon.
 - **Colors** — semantic vars (light + dark) plus `--chart-1..8`. Overridable at runtime through
   `onno.ui.theme.*` → `/api/theme` → CSS vars (`providers/theme-provider.tsx`). Never hardcode a
   hex; widgets use `hsl(var(--primary))` etc.
@@ -106,6 +111,9 @@ mean “any interactive container.”
 ## Misc conventions
 
 - Search bars sit right-aligned in the island toolbar; search covers all columns.
+- Workspace tab reordering keeps native cross-pane drag semantics, but supplies a lifted custom drag
+  image, leaves the source as a real-width placeholder, and shifts neighboring tabs with FLIP using
+  `--duration-fast` / `--ease-smooth-out`. Preserve its reduced-motion treatment.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.

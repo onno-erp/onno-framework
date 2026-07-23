@@ -129,7 +129,7 @@ final class Widgets {
     // A KPI card: a big preformatted value (a record count, or a server-aggregated
     // sum/avg/…) above its title, clickable through to the entity's list surface.
     private static Map<String, Object> valueCard(PageWidgetDescriptor w, String value, Palette p) {
-        Map<String, Object> number = Div.color(Div.text(value, 30, "bold"), p.text());
+        Map<String, Object> number = Div.color(Div.text(value, 24, "medium"), p.text());
         Map<String, Object> titleText = Div.color(Div.text(w.title(), 13, "regular"), p.muted());
         Map<String, Object> hintGlyph = Components.hint(w.hint(), p.muted(), 14);
         Map<String, Object> title = titleText;

@@ -95,6 +95,22 @@ class BrandingPaletteTest {
     }
 
     @Test
+    void sidebarSection_keepsAuthoredCaseWithQuietBodyStyling() {
+        var section = new ShellLayoutBuilder.NavSection(
+                "Workspace", null,
+                List.of(new ShellLayoutBuilder.NavItem("Customers", "/ui/catalogs/customers",
+                        "users", "/catalogs/customers")));
+        Map<String, Object> nav = ShellLayoutBuilder.nav(
+                "Acme", null, List.of(section), NavStyle.SIDEBAR, false, Palette.LIGHT);
+
+        Map<String, Object> header = items(nav).get(1);
+        assertThat(header.get("text")).isEqualTo("Workspace");
+        assertThat(header.get("font_size")).isEqualTo(13);
+        assertThat(header.get("font_weight")).isEqualTo("regular");
+        assertThat(header).doesNotContainKey("letter_spacing");
+    }
+
+    @Test
     void menuLogo_rendersImageAsTitle() {
         Map<String, Object> menu = ShellLayoutBuilder.menu(
                 "Acme", ShellLayoutBuilder.Logo.of("/logo-dark.svg", null, null),

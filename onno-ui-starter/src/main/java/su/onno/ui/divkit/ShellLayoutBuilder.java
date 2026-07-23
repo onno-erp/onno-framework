@@ -137,7 +137,7 @@ public final class ShellLayoutBuilder {
 
         List<Map<String, Object>> identityItems = new ArrayList<>();
         if (userName != null && !userName.isBlank()) {
-            Map<String, Object> caption = Div.text(msg.get("shell.signedInAs"), 11, "medium");
+            Map<String, Object> caption = Div.text(msg.get("shell.signedInAs"), 12, "medium");
             Div.color(caption, p.muted());
             Div.maxLines(caption, 1);
             identityItems.add(caption);
@@ -222,7 +222,7 @@ public final class ShellLayoutBuilder {
 
     /** A compact icon action. {@code border} null = no stroke. */
     private static Map<String, Object> iconButton(String iconName, String label, String color, String bg, String border) {
-        Map<String, Object> glyph = icon(iconName, color, 18);
+        Map<String, Object> glyph = icon(iconName, color, 20);
         Map<String, Object> btn = Div.vertical(List.of(glyph));
         Div.background(btn, bg);
         Div.width(btn, 28);
@@ -323,7 +323,7 @@ public final class ShellLayoutBuilder {
         Div.color(label, color);
 
         Map<String, Object> link;
-        Map<String, Object> glyph = activeIcon(item.icon(), p.text(), p.primary(), item.path(), 16);
+        Map<String, Object> glyph = activeIcon(item.icon(), p.text(), p.primary(), item.path(), 14);
         if (glyph != null) {
             link = Div.horizontal(List.of(glyph, label));
             Div.gap(link, 6);
@@ -332,7 +332,7 @@ public final class ShellLayoutBuilder {
             link = label;
         }
         Div.pad(link, 8, 12);
-        Div.corner(link, 8);
+        Div.corner(link, Radii.TAB);
         Div.margins(link, 0, 2, 0, 2);
         Div.background(link, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
         Div.action(link, "nav", item.url());
@@ -351,7 +351,7 @@ public final class ShellLayoutBuilder {
             Div.margins(brandLogo, 6, 10, 14, 10);
             items.add(brandLogo);
         } else if (brand != null && !brand.isBlank()) {
-            Map<String, Object> brandText = Div.text(brand, 16, "bold");
+            Map<String, Object> brandText = Div.text(brand, 14, "medium");
             Div.color(brandText, p.text());
             Div.margins(brandText, 6, 10, 14, 10);
             items.add(brandText);
@@ -385,15 +385,10 @@ public final class ShellLayoutBuilder {
         return root;
     }
 
-    /**
-     * A section label: quiet tracked small-caps, no icon. The rows below already carry
-     * per-item glyphs, so an icon here just repeated one of them (SUPPLIERS truck over a
-     * Supplier truck) — the type treatment alone separates groups with less noise.
-     */
+    /** A quiet, sentence-case section label; navigation rows below carry the icons. */
     private static Map<String, Object> sidebarHeader(String title, Palette p) {
-        Map<String, Object> header = Div.text(title.toUpperCase(), 10, "medium");
+        Map<String, Object> header = Div.text(title, 13, "regular");
         Div.color(header, p.faint());
-        Div.letterSpacing(header, 0.8);
         Div.maxLines(header, 1);
         // Left margin matches the links' horizontal padding so headers and rows align;
         // the tall top margin is what visually separates one group from the last.
@@ -411,7 +406,7 @@ public final class ShellLayoutBuilder {
         // Icon + label, like the mobile menu rows and bottom tabs — the icon stays muted,
         // the label carries the active highlight. Degrades to label-only when unauthored.
         List<Map<String, Object>> cells = new ArrayList<>();
-        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 16);
+        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 14);
         if (glyph != null) {
             cells.add(glyph);
         }
@@ -425,7 +420,7 @@ public final class ShellLayoutBuilder {
         Div.alignV(row, "center");
         Div.gap(row, 8);
         Div.pad(row, 6, 10);
-        Div.corner(row, 8);
+        Div.corner(row, Radii.TAB);
         Div.background(row, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
         Div.action(row, "nav", item.url());
         return row;
@@ -505,22 +500,15 @@ public final class ShellLayoutBuilder {
 
     private static Map<String, Object> bottomTab(NavItem item, Palette p, boolean compact, boolean unreadDot) {
         String color = activeColor(item.path(), p.primary(), p.muted());
-        // On a phone the bar splits its width five ways, so the label is tight. At 10sp a
-        // common single word like "Dashboard" overran the tab by a hair and the renderer
-        // broke it mid-word, orphaning one letter on line two ("Dashboar" / "d"). 9sp lets
-        // those long single words sit on one line, while multi-word destinations ("Sales
-        // Orders", "Traveller Reports") still wrap whole at the space; ellipsis stays the
-        // last resort for a genuinely long single word. The tablet island has room for the
-        // full-size single-line label.
-        Map<String, Object> label = Div.text(item.label(), compact ? 12 : 9, "regular");
+        Map<String, Object> label = Div.text(item.label(), 12, "regular");
         Div.maxLines(label, compact ? 1 : 2);
         Div.color(label, color);
         Div.textAlign(label, "center");
 
         List<Map<String, Object>> stack = new ArrayList<>();
-        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 20);
+        Map<String, Object> glyph = activeIcon(item.icon(), p.muted(), p.primary(), item.path(), 14);
         if (glyph != null) {
-            stack.add(unreadDot ? withUnreadDot(glyph, 20) : glyph);
+            stack.add(unreadDot ? withUnreadDot(glyph, 14) : glyph);
         }
         stack.add(label);
 
@@ -534,7 +522,7 @@ public final class ShellLayoutBuilder {
             Div.pad(tab, 8, 2);
         }
         Div.gap(tab, 3);
-        Div.corner(tab, compact ? 18 : 14);
+        Div.corner(tab, Radii.TAB);
         Div.alignH(tab, "center");
         Div.background(tab, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
         Div.action(tab, "nav", item.url());
@@ -580,7 +568,7 @@ public final class ShellLayoutBuilder {
             Div.margins(title, 0, 0, 14, 0);
             items.add(title);
         } else {
-            Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : msg.get("shell.menu"), 22, "bold");
+            Map<String, Object> title = Div.text(brand != null && !brand.isBlank() ? brand : msg.get("shell.menu"), 24, "medium");
             Div.color(title, p.text());
             Div.margins(title, 0, 0, 14, 0);
             items.add(title);
@@ -626,9 +614,9 @@ public final class ShellLayoutBuilder {
      */
     private static Map<String, Object> notificationsRow(Palette p, UiMessages msg) {
         List<Map<String, Object>> cells = new ArrayList<>();
-        cells.add(icon("bell", p.muted(), 18));
+        cells.add(icon("bell", p.muted(), 14));
 
-        Map<String, Object> label = Div.color(Div.text(msg.get("notifications.title"), 15, "regular"), p.text());
+        Map<String, Object> label = Div.color(Div.text(msg.get("notifications.title"), 14, "regular"), p.text());
         Div.maxLines(label, 1);
         Div.weight(label, 1); // take the remaining width so the badge pins right
         cells.add(label);
@@ -648,7 +636,7 @@ public final class ShellLayoutBuilder {
     }
 
     private static Map<String, Object> menuSectionHeader(String title, Palette p) {
-        Map<String, Object> header = Div.text(title.toUpperCase(), 11, "medium");
+        Map<String, Object> header = Div.text(title, 13, "regular");
         Div.color(header, p.muted());
         Div.maxLines(header, 1);
         Div.margins(header, 14, 4, 6, 4);
@@ -679,11 +667,11 @@ public final class ShellLayoutBuilder {
         // (DivKit grows every flex child equally, so a right-pinned chevron isn't worth
         // the fight). The icon stays muted; the label carries the active highlight.
         List<Map<String, Object>> cells = new ArrayList<>();
-        Map<String, Object> glyph = icon(item.icon(), p.muted(), 18);
+        Map<String, Object> glyph = icon(item.icon(), p.muted(), 14);
         if (glyph != null) {
             cells.add(glyph);
         }
-        Map<String, Object> label = Div.color(Div.text(item.label(), 15, "regular"),
+        Map<String, Object> label = Div.color(Div.text(item.label(), 14, "regular"),
                 activeColor(item.path(), p.primary(), p.text()));
         Div.maxLines(label, 1);
         Div.weight(label, 1); // take the remaining width so the presence pile pins right
@@ -695,6 +683,7 @@ public final class ShellLayoutBuilder {
         Div.alignV(row, "center");
         Div.pad(row, 15, 14);
         Div.matchWidth(row);
+        Div.corner(row, Radii.TAB);
         Div.background(row, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
         Div.action(row, "nav", item.url());
         return row;

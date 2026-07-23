@@ -50,6 +50,7 @@ vi.mock("@/views/content-pane", () => ({
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
   setIconActivePath: vi.fn(),
+  DynamicLucide: ({ name }: { name: string }) => <svg data-testid={`icon-${name}`} />,
 }));
 
 vi.mock("sonner", () => ({

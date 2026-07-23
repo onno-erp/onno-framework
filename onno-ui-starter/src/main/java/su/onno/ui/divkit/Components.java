@@ -120,7 +120,7 @@ final class Components {
         titleStyle.put("inactive_text_color", p.muted());
         titleStyle.put("active_background_color", p.primarySoft());
         titleStyle.put("inactive_background_color", TRANSPARENT);
-        titleStyle.put("corner_radius", 8);
+        titleStyle.put("corner_radius", Radii.TAB);
         titleStyle.put("paddings", Map.of("top", 7, "bottom", 7, "left", 14, "right", 14));
         // Switch instantly: the active pill jumps to the selected tab instead of
         // sliding (DivKit's tab_title_style defaults to animation_type "slide"/300ms).
@@ -149,7 +149,7 @@ final class Components {
      */
     static Map<String, Object> pageHeader(String title, String subtitle, Map<String, Object> trailing, Palette p) {
         List<Map<String, Object>> items = new ArrayList<>();
-        items.add(Div.color(Div.text(title, 22, "bold"), p.text()));
+        items.add(Div.color(Div.text(title, 24, "medium"), p.text()));
         if (subtitle != null && !subtitle.isBlank()) {
             Map<String, Object> sub = Div.color(Div.text(subtitle, 13, "regular"), p.muted());
             Div.margins(sub, 2, 0, 0, 0);

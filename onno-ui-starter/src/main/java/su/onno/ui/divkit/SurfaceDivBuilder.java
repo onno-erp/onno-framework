@@ -233,7 +233,7 @@ public final class SurfaceDivBuilder {
     private static Map<String, Object> listContent(String title, String nounPlural, String newUrl,
                                                    List<String> headers, List<String> widths,
                                                    List<Components.Row> body, Palette p) {
-        Map<String, Object> titleNode = Div.color(Div.text(title, 22, "bold"), p.text());
+        Map<String, Object> titleNode = Div.color(Div.text(title, 24, "medium"), p.text());
         Div.maxLines(titleNode, 1);
         List<Map<String, Object>> topRow = new ArrayList<>(List.of(
                 Div.weight(titleNode, 1)));
@@ -708,7 +708,7 @@ public final class SurfaceDivBuilder {
      */
     private static Map<String, Object> detailHeader(String title, String subtitle, Map<String, Object> badge,
                                                     List<HeaderAction> actions, Palette p) {
-        Map<String, Object> titleNode = Div.color(Div.text(title, 20, "bold"), p.text());
+        Map<String, Object> titleNode = Div.color(Div.text(title, 24, "medium"), p.text());
         Div.matchWidth(titleNode);
         Div.maxLines(titleNode, 2);
         List<Map<String, Object>> leftItems = new ArrayList<>(List.of(titleNode));

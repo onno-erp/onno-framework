@@ -5,17 +5,18 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
+    --foreground: 0 0% 16.1%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
+    --card-foreground: 0 0% 16.1%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
+    --popover-foreground: 0 0% 16.1%;
     --primary: 0 0% 9%;
     --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted-foreground: 0 0% 36.5%;
+    --tertiary-foreground: 0 0% 62%;
     --accent: 0 0% 96%;
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84% 60%;
@@ -34,12 +35,18 @@
                             (`rounded-panel` preferred for bounded panels).
        Avatars and status pills stay fully round independently. */
     --radius-control: 9999px;
-    --radius-field: 0.625rem;
-    --radius-card: 0.9rem;
+    --radius-field: 0.75rem;
+    --radius-card: 1rem;
+    --icon-navigation: 14px;
+    --icon-card: 20px;
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
+    /* Motion tokens used by workspace chrome. Position changes should settle quickly without
+       feeling linear; reduced-motion overrides live beside the component treatment below. */
+    --duration-fast: 250ms;
+    --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
     /* Categorical chart palette (data widgets). Ordered so adjacent series stay
        distinguishable; --chart-1 is also the default single-series accent. The
        Java DSL can override per widget via config("colors", "..."). */
@@ -52,7 +59,7 @@
     --chart-7: 24 90% 55%;
     --chart-8: 322 75% 58%;
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 4%;
+    --sidebar-foreground: 0 0% 36.5%;
     --sidebar-primary: 0 0% 9%;
     --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 0 0% 96%;
@@ -73,7 +80,8 @@
     --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 93%;
     --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 50%;
+    --muted-foreground: 0 0% 62%;
+    --tertiary-foreground: 0 0% 36.5%;
     --accent: 0 0% 12%;
     --accent-foreground: 0 0% 93%;
     --destructive: 0 63% 50%;
@@ -96,7 +104,7 @@
     --chart-7: 24 90% 62%;
     --chart-8: 322 78% 66%;
     --sidebar-background: 0 0% 5%;
-    --sidebar-foreground: 0 0% 60%;
+    --sidebar-foreground: 0 0% 62%;
     --sidebar-primary: 0 0% 98%;
     --sidebar-primary-foreground: 0 0% 4%;
     --sidebar-accent: 0 0% 10%;
@@ -106,12 +114,70 @@
   }
 }
 
+@layer components {
+  .onno-workspace-tab {
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      opacity 150ms ease,
+      border-color 150ms ease;
+  }
+
+  /* The tab stays in layout as a quiet landing slot while the native drag image follows the
+     pointer. Keeping a real-width placeholder prevents the strip from collapsing under the hand. */
+  .onno-workspace-tab--dragging {
+    border: 1px dashed hsl(var(--border));
+    background: hsl(var(--muted) / 0.45) !important;
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 0.34;
+  }
+
+  /* Appended to body only for the lifetime of a native tab drag, then supplied to setDragImage.
+     Shadows are appropriate here because this is a transient surface visibly lifted above chrome. */
+  .onno-workspace-tab-drag-image {
+    position: fixed;
+    top: -1000px;
+    left: -1000px;
+    z-index: 9999;
+    pointer-events: none;
+    overflow: hidden;
+    opacity: 0.98;
+    transform: rotate(1deg) scale(1.035);
+    transform-origin: center;
+    box-shadow:
+      0 12px 28px hsl(0 0% 0% / 0.18),
+      0 3px 8px hsl(0 0% 0% / 0.12);
+  }
+
+  [data-tab-strip][data-reordering] [data-flip] {
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .onno-workspace-tab {
+      transition: none;
+    }
+
+    .onno-workspace-tab-drag-image {
+      transform: none;
+    }
+
+    [data-tab-strip][data-reordering] [data-flip] {
+      will-change: auto;
+    }
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: -0.15px;
   }
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
@@ -164,6 +230,21 @@
 }
 
 @layer utilities {
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[11px\] {
+    font-size: 12px;
+    line-height: 16px;
+  }
+  .text-\[15px\] {
+    font-size: 14px;
+    line-height: 20px;
+  }
+  .text-\[28px\],
+  .text-\[46px\] {
+    font-size: 24px;
+    line-height: 30px;
+  }
   .animate-in-page {
     animation: fadeSlideIn 0.15s ease-out;
   }
@@ -278,6 +359,14 @@ onno-icon {
   background-color: hsl(var(--primary) / 0.1) !important;
 }
 .dark [data-onno-row]:hover {
+  background-color: hsl(var(--primary) / 0.18) !important;
+}
+[data-onno-row][data-onno-selected="true"],
+[data-onno-row][data-onno-selected="true"]:hover {
+  background-color: hsl(var(--primary) / 0.1) !important;
+}
+.dark [data-onno-row][data-onno-selected="true"],
+.dark [data-onno-row][data-onno-selected="true"]:hover {
   background-color: hsl(var(--primary) / 0.18) !important;
 }
 

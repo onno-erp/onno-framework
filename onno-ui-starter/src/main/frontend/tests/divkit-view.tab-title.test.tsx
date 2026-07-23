@@ -47,6 +47,7 @@ vi.mock("@/views/content-pane", () => ({
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
   setIconActivePath: vi.fn(),
+  DynamicLucide: ({ name }: { name: string }) => <svg data-testid={`icon-${name}`} />,
 }));
 
 vi.mock("sonner", () => ({
@@ -64,6 +65,7 @@ function mockShell() {
         nav: { type: "nav" },
         account: { type: "account" },
         titles: { "/catalogs/customers": "Клиенты" },
+        icons: { "/catalogs/customers": "users" },
       }),
       { headers: { "Content-Type": "application/json" }, status: 200 }
     )
@@ -100,6 +102,29 @@ describe("DivKitView tab titles", () => {
     expect(screen.queryByTitle("Customers")).not.toBeInTheDocument();
   });
 
+  it("uses the authored navigation icon", async () => {
+    render(
+      <MemoryRouter initialEntries={["/catalogs/customers"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId("icon-users")).toBeInTheDocument();
+  });
+
+  it("keeps the pane border neutral and emphasizes the active tab", async () => {
+    render(
+      <MemoryRouter initialEntries={["/catalogs/customers"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    const tab = await screen.findByTitle("Клиенты");
+    expect(tab.closest("section")).toHaveStyle({ borderColor: "#EBEBEB" });
+    expect(tab).toHaveClass("font-medium");
+    expect(screen.getByTestId("icon-users").parentElement).toHaveClass("opacity-100");
+  });
+
   it("falls back to the humanized route token for an entity absent from the map", async () => {
     render(
       <MemoryRouter initialEntries={["/catalogs/products"]}>
@@ -120,5 +145,6 @@ describe("DivKitView tab titles", () => {
 
     // tab.new = "New {entity}" with the localized entity name substituted.
     expect(await screen.findByTitle("New Клиенты")).toBeInTheDocument();
+    expect(screen.getByTestId("icon-users")).toBeInTheDocument();
   });
 });
