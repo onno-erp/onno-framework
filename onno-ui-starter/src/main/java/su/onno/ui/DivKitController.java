@@ -188,16 +188,21 @@ public class DivKitController implements DisposableBean {
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",
                 ShellLayoutBuilder.account(user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(), p, messages)));
-        // A flat route-path → localized label map (e.g. "/catalogs/customers" → "Клиенты"), built
-        // from the same nav the sidebar renders. The web client titles its workspace tabs from this
-        // so a tab reads in the chrome language instead of the humanized URL segment ("Customers").
+        // Flat route-path → label/icon maps, built from the same nav the sidebar renders. The web
+        // client uses these for workspace tabs so their title and glyph stay aligned with the
+        // authored navigation instead of being guessed from the URL.
         Map<String, String> titles = new LinkedHashMap<>();
+        Map<String, String> icons = new LinkedHashMap<>();
         for (ShellLayoutBuilder.NavSection section : nav) {
             for (ShellLayoutBuilder.NavItem item : section.items()) {
                 titles.putIfAbsent(item.path(), item.label());
+                if (item.icon() != null && !item.icon().isBlank()) {
+                    icons.putIfAbsent(item.path(), item.icon());
+                }
             }
         }
         out.put("titles", titles);
+        out.put("icons", icons);
         return out;
     }
 

@@ -11,12 +11,44 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: [
+          "SF Pro Text",
+          "SF Pro Display",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+      },
+      fontSize: {
+        xs: ["12px", { lineHeight: "16px" }],
+        sm: ["13px", { lineHeight: "18px" }],
+        base: ["14px", { lineHeight: "20px" }],
+        lg: ["14px", { lineHeight: "20px" }],
+        xl: ["24px", { lineHeight: "30px" }],
+        "2xl": ["24px", { lineHeight: "30px" }],
+        "3xl": ["24px", { lineHeight: "30px" }],
+        "4xl": ["24px", { lineHeight: "30px" }],
+      },
+      fontWeight: {
+        normal: "400",
+        medium: "500",
+        semibold: "500",
+        bold: "500",
+      },
+      spacing: {
+        "icon-nav": "var(--icon-navigation)",
+        "icon-card": "var(--icon-card)",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        tertiary: "hsl(var(--tertiary-foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

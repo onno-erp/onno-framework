@@ -20,7 +20,7 @@ import { stripBasePath, withBasePath } from "@/lib/base-path";
 import { clearFormDirty, isFormDirty } from "@/lib/dirty-forms";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
-import { ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
+import { DynamicLucide, ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
 import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
 import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
 import { startPresence } from "@/lib/presence-store";
@@ -98,6 +98,9 @@ type ShellData = {
   // nav the sidebar renders. Workspace tabs title themselves from this instead of humanizing the
   // URL segment, so a tab reads in the chrome language. Absent for entities not placed in the nav.
   titles?: Record<string, string>;
+  // Route path → authored Lucide icon name, from the same nav item as titles. Detail/form tabs
+  // inherit their entity list's icon.
+  icons?: Record<string, string>;
 };
 
 type WorkspaceTab = { path: string; title: string };
@@ -193,6 +196,21 @@ function titleForPath(
   if (action === "duplicate") return t("tab.duplicate", { entity });
   if (detail) return `${entity} ${decodeSegment(detail).slice(0, 8)}`;
   return entity;
+}
+
+function iconForPath(pathname: string, icons: Record<string, string> | undefined): string {
+  const path = stripQuery(pathname || "/");
+  const [kind, name] = path.split("/").filter(Boolean);
+  const basePath = name ? `/${kind}/${name}` : path;
+  const authored = icons?.[basePath];
+  if (authored) return authored;
+
+  if (path === "/") return "house";
+  if (kind === "catalogs") return "book-open";
+  if (kind === "documents") return "file-text";
+  if (kind === "registers") return "chart-column";
+  if (kind === "settings") return "settings";
+  return "panel-top";
 }
 
 // A record surface opened from a list — a document/catalog detail or a "new" form
@@ -388,6 +406,10 @@ export function DivKitView() {
   const tabTitle = useCallback(
     (path: string) => titleForPath(path, shell?.titles, t),
     [shell?.titles, t]
+  );
+  const tabIcon = useCallback(
+    (path: string) => iconForPath(path, shell?.icons),
+    [shell?.icons]
   );
 
   const resolvedTheme = useMemo<"light" | "dark">(() => {
@@ -1079,8 +1101,14 @@ export function DivKitView() {
   const [tabDrop, setTabDrop] = useState<{ paneId: string; index: number } | null>(null);
   // The tab currently being dragged (reactive mirror of dragRef, for the preview).
   const [dragState, setDragState] = useState<{ path: string; fromPaneId: string } | null>(null);
+  // Native HTML drag is still the reliable way to cross pane/portal boundaries, but its default
+  // translucent screenshot looks detached from our live reorder preview. Keep one deliberate,
+  // lifted drag image alive until dragend (Safari requires it to remain in the document).
+  const tabDragImageRef = useRef<HTMLElement | null>(null);
 
   const clearTabDrag = useCallback(() => {
+    tabDragImageRef.current?.remove();
+    tabDragImageRef.current = null;
     dragRef.current = null;
     setDragState(null);
     setDropTarget(null);
@@ -1214,15 +1242,50 @@ export function DivKitView() {
   );
 
   const onTabDragStart = useCallback((paneId: string, path: string, e: React.DragEvent) => {
+    activateTab(paneId, path);
     dragRef.current = { path, fromPaneId: paneId };
     setDragState({ path, fromPaneId: paneId });
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", path);
-  }, []);
+
+    tabDragImageRef.current?.remove();
+    const source = e.currentTarget as HTMLElement;
+    const rect = source.getBoundingClientRect();
+    const image = source.cloneNode(true) as HTMLElement;
+    image.removeAttribute("data-tab");
+    image.removeAttribute("data-flip");
+    image.removeAttribute("draggable");
+    image.removeAttribute("title");
+    image.classList.remove("onno-workspace-tab--dragging");
+    image.classList.add("onno-workspace-tab-drag-image");
+    image.style.width = `${rect.width}px`;
+    image.style.background =
+      source.style.background && source.style.background !== "transparent"
+        ? source.style.background
+        : "hsl(var(--accent))";
+    image.style.color = getComputedStyle(source).color;
+    image.setAttribute("aria-hidden", "true");
+    document.body.appendChild(image);
+    tabDragImageRef.current = image;
+
+    // Preserve the exact point the user grabbed instead of snapping the pointer to the preview's
+    // corner. A small clamp keeps browser rounding from placing the hot spot outside the image.
+    const offsetX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    const offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+    e.dataTransfer.setDragImage(image, offsetX, offsetY);
+  }, [activateTab]);
 
   const onTabDragEnd = useCallback(() => {
     clearTabDrag();
   }, [clearTabDrag]);
+
+  useEffect(
+    () => () => {
+      tabDragImageRef.current?.remove();
+      tabDragImageRef.current = null;
+    },
+    []
+  );
 
   // Insertion slot in a strip for the cursor x: the count of tabs (excluding the one
   // being dragged) whose midpoint sits left of the cursor. Excluding the dragged tab
@@ -1327,6 +1390,7 @@ export function DivKitView() {
     if (!container) return;
     const prev = flipRects.current;
     const next = new Map<string, number>();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     for (const el of container.querySelectorAll<HTMLElement>("[data-flip]")) {
       const key = el.dataset.flip!;
       // offsetLeft, not getBoundingClientRect: the layout position, immune to the
@@ -1335,6 +1399,11 @@ export function DivKitView() {
       // the baseline, so the next delta — and the animation back — would be wrong.
       const left = el.offsetLeft;
       next.set(key, left);
+      if (reduceMotion) {
+        el.style.transition = "none";
+        el.style.transform = "";
+        continue;
+      }
       // Don't fight the pointer: leave the tab being dragged alone.
       if (dragState && key.endsWith(":" + dragState.path)) continue;
       const old = prev.get(key);
@@ -1345,7 +1414,7 @@ export function DivKitView() {
         // Play: next frame, release to the real position with a transition. A stale
         // frame from an earlier render is harmless — every play does the same thing.
         requestAnimationFrame(() => {
-          el.style.transition = "transform 160ms ease";
+          el.style.transition = "transform var(--duration-fast) var(--ease-smooth-out)";
           el.style.transform = "";
         });
       }
@@ -1397,11 +1466,9 @@ export function DivKitView() {
   const surfaceBg = brand.surface ?? (resolvedTheme === "dark" ? "#121212" : "#FFFFFF");
   const borderColor = brand.border ?? (resolvedTheme === "dark" ? "#242424" : "#EBEBEB");
   const tabStripBg = brand.surface ?? (resolvedTheme === "dark" ? "#0E0E0E" : "#FAFAFA");
-  // The focused island's border signals *which pane is active* — that's state, not structure, so
-  // it carries the brand when one is set, but only as a faint ~25%-opacity wash so it reads as a
-  // soft hint rather than a loud frame (the focus ring is desaturated for the same reason). Resting
-  // borders stay neutral; the focused one lights up just enough to tell panes apart.
-  const focusBorder = brand.primary ? `${brand.primary}40` : (resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4");
+  // Pane borders stay structural and neutral. Brand color is reserved for transient drag targets
+  // and the active tab, so selecting a pane does not draw a loud frame around its content.
+  const dropBorder = brand.primary ? `${brand.primary}40` : (resolvedTheme === "dark" ? "#3A3A3A" : "#D4D4D4");
   const accent = brand.primary ?? (resolvedTheme === "dark" ? "#E5E5E5" : "#171717");
   const activeTabBg = brand.primarySoft ?? "hsl(var(--accent))";
   const activeTabText = brand.primary ?? "hsl(var(--accent-foreground))";
@@ -1605,18 +1672,18 @@ export function DivKitView() {
     // While a tab is dragged over this strip, lay the tabs out in their would-be
     // order so the row visibly shifts to open a gap: the dragged tab (if it's ours)
     // moves to the slot; a tab from another island shows a translucent ghost there.
-    type Slot = { kind: "tab"; tab: WorkspaceTab; dragged: boolean } | { kind: "ghost"; title: string };
-    let displayTabs: Slot[] = pane.tabs.map((tab) => ({ kind: "tab", tab, dragged: false }));
+    type Slot = { kind: "tab"; tab: WorkspaceTab } | { kind: "ghost"; title: string };
+    let displayTabs: Slot[] = pane.tabs.map((tab) => ({ kind: "tab", tab }));
     if (dragState && tabDrop?.paneId === pane.id) {
       const others = pane.tabs.filter((t) => t.path !== dragState.path);
       const at = Math.max(0, Math.min(others.length, tabDrop.index));
       if (dragState.fromPaneId === pane.id) {
         const dragged = pane.tabs.find((t) => t.path === dragState.path);
-        const rest: Slot[] = others.map((t) => ({ kind: "tab", tab: t, dragged: false }));
-        if (dragged) rest.splice(at, 0, { kind: "tab", tab: dragged, dragged: true });
+        const rest: Slot[] = others.map((t) => ({ kind: "tab", tab: t }));
+        if (dragged) rest.splice(at, 0, { kind: "tab", tab: dragged });
         displayTabs = rest;
       } else {
-        const rest: Slot[] = pane.tabs.map((t) => ({ kind: "tab", tab: t, dragged: false }));
+        const rest: Slot[] = pane.tabs.map((t) => ({ kind: "tab", tab: t }));
         rest.splice(at, 0, { kind: "ghost", title: tabTitle(dragState.path) });
         displayTabs = rest;
       }
@@ -1624,7 +1691,7 @@ export function DivKitView() {
     return (
       <section
         className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-card border transition-colors"
-        style={{ background: surfaceBg, borderColor: showFocusedChrome ? focusBorder : borderColor }}
+        style={{ background: surfaceBg, borderColor }}
         onMouseDownCapture={() => {
           if (!focused) setWorkspace((ws) => ({ ...ws, focused: pane.id }));
         }}
@@ -1648,6 +1715,8 @@ export function DivKitView() {
         {/* tab strip — lives inside the island, Rider-style. Owns the reorder/move
             drop (precise slot); the island body owns the append/split drop. */}
         <div
+          data-tab-strip
+          data-reordering={dragState ? "true" : undefined}
           className="flex min-h-11 shrink-0 items-center gap-1 overflow-x-auto border-b px-2 py-1.5"
           style={{ background: tabStripBg, borderColor }}
           onDragOver={(e) => {
@@ -1679,7 +1748,7 @@ export function DivKitView() {
                 <div
                   key="ghost"
                   className="flex h-8 max-w-56 shrink-0 items-center rounded-field px-3 text-sm text-muted-foreground"
-                  style={{ background: `${accent}14`, border: `1px dashed ${focusBorder}` }}
+                  style={{ background: `${accent}14`, border: `1px dashed ${dropBorder}` }}
                 >
                   <span className="truncate">{slot.title}</span>
                 </div>
@@ -1687,7 +1756,9 @@ export function DivKitView() {
             }
             const tab = slot.tab;
             const label = tabTitle(tab.path);
+            const icon = tabIcon(tab.path);
             const active = tab.path === pane.activePath;
+            const dragging = dragState?.fromPaneId === pane.id && dragState.path === tab.path;
             // Selection reads in the configured brand accent. With an explicit
             // primarySoft this matches the server-rendered DivKit tabs/nav; otherwise it
             // falls back to the shadcn accent variable that BrandingProvider derives from
@@ -1709,22 +1780,30 @@ export function DivKitView() {
                   setTabMenu({ x: e.clientX, y: e.clientY, path: tab.path });
                 }}
                 className={cn(
-                  "group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-field pl-1 text-sm transition-colors active:cursor-grabbing",
+                  "onno-workspace-tab group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-field border border-transparent pl-1 text-sm active:cursor-grabbing",
+                  dragging && "onno-workspace-tab--dragging",
                   active
-                    ? "text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  // Hide the source tab while it's dragged, but keep its slot so the
-                  // empty space reads as the live "drop here" gap that follows the cursor.
-                  slot.dragged && "opacity-0"
+                    ? "font-medium text-foreground"
+                    : "font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
                 style={{ background: fill, color: activeText }}
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate px-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
                   onClick={() => activateTab(pane.id, tab.path)}
                 >
-                  {label}
+                  <span
+                    className={cn(
+                      "shrink-0 transition-opacity",
+                      active ? "opacity-100" : "opacity-70"
+                    )}
+                    data-tab-icon={icon}
+                    aria-hidden="true"
+                  >
+                    <DynamicLucide name={icon} size={14} />
+                  </span>
+                  <span className="truncate">{label}</span>
                 </button>
                 <button
                   type="button"

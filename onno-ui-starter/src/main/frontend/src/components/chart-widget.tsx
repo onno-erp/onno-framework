@@ -713,7 +713,7 @@ function renderChart(
   const tooltipValue = (value: unknown) => fmt(toNumber(value) ?? 0);
   const { seriesKeys } = data;
   const multi = seriesKeys.length > 1 || seriesKeys[0] !== SINGLE_SERIES;
-  const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 11, tickLine: false, axisLine: false } as const;
+  const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 12, tickLine: false, axisLine: false } as const;
 
   // Clicking a legend item toggles its series off/on. We pass an explicit, stable `payload` so a
   // hidden series keeps its (greyed, `inactive`) legend entry to click back on — relying on a child's
@@ -726,7 +726,7 @@ function renderChart(
   // click-to-toggle and grey the hidden ones via the formatter.
   const seriesLegend = multi ? (
     <Legend
-      wrapperStyle={{ fontSize: 11, paddingTop: 6, cursor: "pointer" }}
+      wrapperStyle={{ fontSize: 12, paddingTop: 6, cursor: "pointer" }}
       iconType="circle"
       iconSize={8}
       onClick={onLegendClick}
@@ -753,7 +753,7 @@ function renderChart(
       <PieChart>
         <Tooltip wrapperStyle={TOOLTIP_WRAPPER} content={<ChartTooltipContent format={pieValue} />} />
         <Legend
-          wrapperStyle={{ fontSize: 11, cursor: "pointer" }}
+          wrapperStyle={{ fontSize: 12, cursor: "pointer" }}
           iconType="circle"
           iconSize={8}
           onClick={(e: { value?: unknown }) => {
@@ -881,7 +881,7 @@ function renderCombo(
   dragProps?: DragProps,
   refArea?: RefAreaSel | null
 ): React.ReactElement {
-  const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 11, tickLine: false, axisLine: false } as const;
+  const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 12, tickLine: false, axisLine: false } as const;
   const [pColor, sColor] = colors;
   const measures = [
     { id: "left", key: "primary", kind: config.kind, color: pColor, name: config.primaryLabel },
@@ -921,7 +921,7 @@ function renderCombo(
       <YAxis yAxisId="left" {...axis} width={40} tickFormatter={fmtPrimaryAxis} />
       <YAxis yAxisId="right" orientation="right" {...axis} width={36} tickFormatter={fmtSecondaryAxis} />
       <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ fill: "hsl(var(--accent) / 0.2)" }} content={<ChartTooltipContent format={tooltipValue} />} />
-      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
+      <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} iconType="circle" iconSize={8} />
       {ordered.map(renderMeasure)}
     </ComposedChart>
   );

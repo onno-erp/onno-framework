@@ -84,7 +84,7 @@ public final class LoginDivBuilder {
         if (lock != null) {
             items.add(lock);
         }
-        items.add(Div.color(Div.text(msg.get("login.title"), 22, "bold"), p.text()));
+        items.add(Div.color(Div.text(msg.get("login.title"), 24, "medium"), p.text()));
 
         String subtitle = subtitleKey(showPasswordForm, picker && !passwordStep);
         Map<String, Object> sub = Div.color(Div.text(msg.get(subtitle), 13, "regular"), p.muted());

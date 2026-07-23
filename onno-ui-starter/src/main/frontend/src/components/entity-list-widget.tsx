@@ -2820,7 +2820,7 @@ export function EntityListWidget({
          height — a short list ends at its last row instead of dragging an empty card to the window
          bottom; embedded, it caps at maxBodyH. */
       <div className={cn(
-        "flex flex-col overflow-hidden rounded-card border border-border bg-card",
+        "flex flex-col",
         surfaceMode && "min-h-0"
       )}>
         {/* the body scroller — the only thing that scrolls. Header sticks to its top; the inner
@@ -2828,13 +2828,16 @@ export function EntityListWidget({
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
+          className={cn(
+            "overflow-auto overscroll-contain rounded-card border border-border bg-card",
+            surfaceMode && "min-h-0 flex-1"
+          )}
           style={surfaceMode ? undefined : { maxHeight: maxBodyH }}
         >
           <div className="w-full" style={{ minWidth: minTableWidth }}>
             {/* sticky header */}
             <div
-              className={cn("sticky top-0 z-10 grid items-center gap-3 border-b border-border bg-card py-2.5", leftPad)}
+              className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
               style={{ gridTemplateColumns: template }}
             >
               {columns.map((c) => {
@@ -2906,6 +2909,7 @@ export function EntityListWidget({
                     <div
                       key={absIdx}
                       data-onno-row={url}
+                      data-onno-selected={isSelected ? "true" : undefined}
                       // "0" tells the shell's fallback row menu / shortcuts to hide write actions;
                       // omitted when writable so rows from older servers keep the full menu.
                       data-onno-row-writable={canWrite ? undefined : "0"}

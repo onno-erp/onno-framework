@@ -49,6 +49,7 @@ vi.mock("@/views/content-pane", () => ({
 vi.mock("@/lib/icon-bridge", () => ({
   ICON_CUSTOM_COMPONENTS: new Map(),
   setIconActivePath: vi.fn(),
+  DynamicLucide: ({ name }: { name: string }) => <svg data-testid={`icon-${name}`} />,
 }));
 
 describe("DivKitView tab dragging", () => {
@@ -91,16 +92,26 @@ describe("DivKitView tab dragging", () => {
     const dataTransfer = {
       effectAllowed: "",
       setData: vi.fn(),
+      setDragImage: vi.fn(),
     };
 
-    fireEvent.dragStart(tab, { dataTransfer });
+    fireEvent.dragStart(tab, { dataTransfer, clientX: 120, clientY: 40 });
     expect(await screen.findByTestId("tab-drag-overlay")).toBeInTheDocument();
+    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+    const [dragImage] = dataTransfer.setDragImage.mock.calls[0];
+    expect(dragImage).toHaveClass("onno-workspace-tab-drag-image");
+    expect(document.body).toContainElement(dragImage);
+    expect(tab).toHaveClass("onno-workspace-tab--dragging");
+
+    fireEvent.dragOver(tab.parentElement!, { dataTransfer, clientX: 120 });
+    expect(screen.getByTitle("Products")).not.toHaveClass("opacity-0");
 
     fireEvent.drop(window);
 
     await waitFor(() => {
       expect(screen.queryByTestId("tab-drag-overlay")).not.toBeInTheDocument();
     });
+    expect(document.querySelector(".onno-workspace-tab-drag-image")).not.toBeInTheDocument();
     expect(screen.getByTestId("content-/catalogs/products")).toBeEnabled();
   });
 });

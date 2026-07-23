@@ -54,22 +54,23 @@ controller, and a static-resource handler that serves the bundled frontend from
 
 ### Shape tokens
 
-Corner rounding is unified behind two CSS custom properties, so the whole UI reshapes from config
+Corner rounding is unified behind three CSS custom properties, so the whole UI reshapes from config
 rather than per-component classes:
 
 | Token | Drives | Default |
 |-------|--------|---------|
-| `--radius-control` | every interactive control — buttons, inputs, selects, filter chips, toggles | `9999px` (pill) |
-| `--radius-card` | surfaces — cards, the list toolbar island, popovers, menus, dialogs | `0.9rem` |
+| `--radius-control` | compact actions, chips and badges | `9999px` (pill) |
+| `--radius-field` | inputs, selects, search fields, tabs and segmented controls | `0.75rem` (12px) |
+| `--radius-card` | surfaces — cards, the list toolbar island, popovers, menus and dialogs | `1rem` (16px) |
 
-Override either via `onno.ui.theme` (the key `radius-control` maps to `--radius-control`). Every
-button and control across every page reads the same token, so one line restyles the app:
+Override them via `onno.ui.theme` (the key `radius-field` maps to `--radius-field`):
 
 ```yaml
 onno:
   ui:
     theme:
       "radius-control": "0.5rem"   # square-ish controls instead of the default pill
+      "radius-field": "0.625rem"
       "radius-card": "0.75rem"
 ```
 
@@ -97,11 +98,11 @@ empty/loading states, the client-side validation messages, and the workspace tab
 one English default per key (`su.onno.ui.UiMessages.DEFAULTS`, mirrored in the web client's
 `lib/messages.ts`); an override replaces it.
 
-A workspace tab's name is the **domain** title, not a chrome string: the tab reads the entity's
-localized `title` from the shell's route→title map (the same labels the sidebar shows), so a list
-tab already follows the entity's language with no `onno.ui.messages` key. Only the record-tab verbs
-are chrome — `tab.new` / `tab.edit` / `tab.duplicate` (`New {entity}` etc.) wrap that localized
-name. A tab for an entity not placed in the nav falls back to the humanized route segment.
+A workspace tab's name and icon come from the **domain** navigation item: the tab reads the
+localized `title` and Lucide icon from the shell's route maps. Detail and form tabs inherit the
+entity list's icon. Only the record-tab verbs are chrome — `tab.new` / `tab.edit` /
+`tab.duplicate` (`New {entity}` etc.) wrap that localized name. An unlisted entity falls back to
+the humanized route segment and a surface-type icon.
 
 The home/dashboard entry is the one nav/tab label that can also be chrome: it uses the authored `/`
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
