@@ -3,7 +3,8 @@ name: onno
 description: >-
   Expert playbook for the onno-framework — the Java/Spring "model-the-business" ERP toolkit
   (catalogs, documents, tabular sections, accumulation/information registers, enumerations,
-  constants, posting, schema migration, generic REST + DivKit UI, MCP, auth/RBAC). Use when working
+  constants, typed process definitions, posting, schema migration, generic REST + DivKit UI,
+  MCP, auth/RBAC). Use when working
   in the onno-framework or onno-enterprise repos, or building/modifying an ERP app that consumes
   su.onno:onno-* (su.onno.* packages) — i.e. anything touching @Catalog, @Document,
   @AccumulationRegister, @InformationRegister, @TabularSection, Postable/handlePosting, Ref<T>,
@@ -61,6 +62,7 @@ when a user asks you to model a business.
 | historical facts by dimension over time (Prices by date) | `@InformationRegister` | `InformationRecord` |
 | one global setting (CompanyName) | `@Constant` | plain class with one field |
 | scheduled/async work | `@ScheduledJob(cron=…)` / `@Scheduled` | — |
+| multi-step coordination with typed human-task outcomes | `ProcessDefinition<P,S>` + `HumanTask<P,O>` (prototype) | — |
 | something another team/service owns | `context = "…"` on the annotation | — |
 
 A reference to another entity is `Ref<T>` (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)`,
@@ -69,6 +71,11 @@ stored as a UUID column, resolved with `RefResolver`. Use it instead of embeddin
 The exact attributes and defaults of every annotation, the fields each base class carries, and all
 lifecycle interfaces are in [reference/cheatsheet.md](reference/cheatsheet.md). Read it before
 writing model classes — guessing an attribute name or default wastes a build cycle.
+
+The `su.onno.process` API is currently a language prototype: enum step keys and outcomes, typed node
+handles, exhaustive route validation, transition history, and an in-memory engine. It has no durable
+instances, assignee work items, inbox, timers, or parallel/subprocess execution yet. Use it to
+exercise the authoring model, not as a production workflow engine.
 
 ## Canonical vertical slice
 
