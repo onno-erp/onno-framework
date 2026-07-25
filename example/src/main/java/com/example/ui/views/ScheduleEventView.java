@@ -9,7 +9,10 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-/** Bookstore staff scheduling surface demonstrating contextual picks and live validation. */
+/**
+ * Team-event record view demonstrating contextual picks and live validation. The entity is edited
+ * from the calendar on {@link com.example.ui.pages.TeamPage}, not listed directly in navigation.
+ */
 @Component
 public class ScheduleEventView implements EntityView {
 

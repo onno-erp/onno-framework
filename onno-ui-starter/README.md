@@ -721,7 +721,7 @@ to `1` for the old sequential behaviour.
 | `titleTemplate` | list | `"{guest_name} — {property_display}"`; unknown fields render empty. |
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
 | `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
-| `dateField` | list, calendar | Column for the date (also `.dateField(...)` on the builder). |
+| `dateField` | list, calendar | API column for the date (also `.dateField(...)` on the builder), e.g. `starts_at`. For a document calendar, dragging an event updates this field and the document's built-in `date` together, so custom business timestamps remain aligned with calendar windowing. |
 | `geoField` | map | Field holding a `"lat,lng"` string marker point (what `.widget("map")` writes). |
 | `latField`, `lngField` | map | Numeric latitude/longitude fields, when the point is stored split (used when `geoField` is unset). |
 | `geoJsonField` | map | Field holding GeoJSON geometry — points, paths, areas (what `.widget("geojson")` writes). Plotted alongside any marker point. |
