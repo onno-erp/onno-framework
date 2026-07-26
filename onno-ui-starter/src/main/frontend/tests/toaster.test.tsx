@@ -24,7 +24,7 @@ describe("AppToaster", () => {
     useThemeMock.mockReturnValue({ theme: "dark" });
   });
 
-  it("owns the monochrome animated Sonner stack configuration", () => {
+  it("owns the monochrome Sonner stack configuration", () => {
     render(<AppToaster />);
 
     expect(toasterSpy).toHaveBeenCalledTimes(1);
@@ -40,8 +40,7 @@ describe("AppToaster", () => {
       className: "onno-toaster",
     });
     expect(props.style).toMatchObject({ "--width": "440px" });
-    expect(props.toastOptions.className).toContain("t-toast");
-    expect(props.toastOptions.className).toContain("onno-toast");
+    expect(props.toastOptions.className).toBe("onno-toast");
     expect(props.swipeDirections).toEqual(["right", "bottom"]);
   });
 });

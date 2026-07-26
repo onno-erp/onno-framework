@@ -10,8 +10,8 @@ import { Toaster } from "sonner";
 import { useTheme } from "@/providers/theme-provider";
 
 /**
- * The one application toast host. Sonner owns queueing, focus, swipe-to-dismiss, and stack
- * geometry; the onno classes in index.css own its theme, shape, and motion.
+ * The one application toast host. Sonner owns queueing, focus, swipe-to-dismiss, stack geometry,
+ * and motion; the onno classes in index.css only own its theme and shape.
  */
 export function AppToaster() {
   const { theme } = useTheme();
@@ -31,7 +31,7 @@ export function AppToaster() {
       className="onno-toaster"
       style={{ "--width": "440px" } as CSSProperties}
       toastOptions={{
-        className: "t-toast onno-toast",
+        className: "onno-toast",
         classNames: {
           title: "onno-toast__title",
           description: "onno-toast__description",

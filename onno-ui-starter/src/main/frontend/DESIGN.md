@@ -127,7 +127,8 @@ mean “any interactive container.”
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
 - Toast calls use Sonner's `toast` API and render through `AppToaster`; do not mount another
-  `Toaster`. Keep the surface monochrome and borderless (the dark theme uses the raised `secondary`
+  `Toaster`, and do not override toast transforms or removal states—Sonner owns stack geometry and
+  motion. Keep the surface monochrome and borderless (the dark theme uses the raised `secondary`
   surface); semantic status colour belongs to the icon well and detail markers. Actual actions use
   the filled button; acknowledgement/dismiss controls use the quiet button. Prefer the server-side
   `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a

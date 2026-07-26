@@ -67,13 +67,6 @@
     --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
     --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
     --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
-    /* transitions.dev toast: Sonner supplies the queue/stack; these tune its open and close motion. */
-    --toast-open: 350ms;
-    --toast-close: 250ms;
-    --toast-distance: 16px;
-    --toast-blur: 2px;
-    --toast-scale: 0.97;
-    --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
     /* Categorical chart palette (data widgets). Ordered so adjacent series stay
        distinguishable; --chart-1 is also the default single-series accent. The
        Java DSL can override per widget via config("colors", "..."). */
@@ -268,8 +261,7 @@
 
   /*
    * Canonical Sonner treatment. Keep the surface monochrome and let only the icon communicate
-   * severity. Sonner writes --y for the live stack geometry, so the
-   * transitions.dev rise/scale motion composes with it instead of replacing the stack.
+   * severity. Sonner exclusively owns transforms, stacking, insertion, and removal motion.
    */
   .onno-toaster[data-theme="light"],
   .onno-toaster[data-theme="dark"] {
@@ -311,35 +303,6 @@
 
   .onno-toaster[data-theme="dark"] [data-sonner-toast].onno-toast[data-styled="true"] {
     background: hsl(var(--secondary));
-  }
-
-  .t-toast {
-    opacity: 0;
-    transform: var(--y, translateY(var(--toast-distance))) scale(var(--toast-scale));
-    filter: blur(var(--toast-blur));
-    will-change: transform, opacity, filter;
-    transition:
-      opacity var(--toast-close) var(--toast-ease),
-      transform var(--toast-close) var(--toast-ease),
-      filter var(--toast-close) var(--toast-ease),
-      height var(--toast-close) var(--toast-ease),
-      box-shadow var(--toast-close) var(--toast-ease);
-  }
-
-  .t-toast[data-mounted="true"][data-visible="true"]:not([data-removed="true"]) {
-    opacity: 1;
-    transform: var(--y) scale(1);
-    filter: blur(0);
-    transition:
-      opacity var(--toast-open) var(--toast-ease),
-      transform var(--toast-open) var(--toast-ease),
-      filter var(--toast-open) var(--toast-ease),
-      height var(--toast-open) var(--toast-ease),
-      box-shadow var(--toast-open) var(--toast-ease);
-  }
-
-  .t-toast[data-removed="true"] {
-    filter: blur(var(--toast-blur));
   }
 
   .onno-toaster .onno-toast__content {
@@ -513,10 +476,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .t-toast {
-      transition: none !important;
-    }
-
     .onno-toast__action,
     .onno-toast__cancel {
       transition: none !important;
