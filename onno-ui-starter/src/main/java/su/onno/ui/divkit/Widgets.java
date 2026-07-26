@@ -11,8 +11,8 @@ import java.util.function.Function;
 
 /**
  * Lays out a dashboard's widgets and compiles each to DivKit. The {@code count} and
- * {@code metric} tiles render as native cards (a server-resolved big number);
- * everything else — the built-in {@code chart}/{@code calendar}/{@code kanban}/
+ * {@code metric} tiles carry a server-resolved big number into a web-rendered value card;
+ * all widget types — including the built-in {@code chart}/{@code calendar}/{@code kanban}/
  * {@code list} and any app-registered widget type — compiles to a {@code div-custom}
  * block of {@code custom_type "onno-widget"} whose {@code custom_props.widget} carries
  * the full descriptor. The web client mounts the matching React component (built-in or
@@ -27,8 +27,8 @@ final class Widgets {
 
     private Widgets() {}
 
-    /** Widget types rendered as a native big-number card rather than a {@code div-custom} block. */
-    static final Set<String> NATIVE_CARD_TYPES = Set.of("count", "metric");
+    /** Widget types whose custom block carries a preformatted, server-resolved aggregate. */
+    static final Set<String> VALUE_CARD_TYPES = Set.of("count", "metric");
 
     private static final int GAP = 12;
 
@@ -98,10 +98,10 @@ final class Widgets {
     private static Map<String, Object> block(PageWidgetDescriptor w,
                                              Function<PageWidgetDescriptor, String> values,
                                              Function<PageWidgetDescriptor, Boolean> canWrite, Palette p) {
-        // count/metric tiles are native cards; every other type — built-in or
-        // app-registered — flows through the open onno-widget custom block.
-        if (w.widgetType() == null || NATIVE_CARD_TYPES.contains(w.widgetType())) {
-            return valueCard(w, values.apply(w), p);
+        // count/metric tiles use the same open custom block, but carry their pre-resolved value so
+        // the web renderer can animate live replacements without repeating the aggregate query.
+        if (w.widgetType() == null || VALUE_CARD_TYPES.contains(w.widgetType())) {
+            return valueCustom(w, values.apply(w), !Boolean.FALSE.equals(canWrite.apply(w)));
         }
         return custom(w, !Boolean.FALSE.equals(canWrite.apply(w)));
     }
@@ -110,7 +110,7 @@ final class Widgets {
     static Map<String, Object> custom(PageWidgetDescriptor w, boolean canWrite) {
         Map<String, Object> meta = new LinkedHashMap<>();
         meta.put("title", w.title());
-        meta.put("widgetType", w.widgetType());
+        meta.put("widgetType", w.widgetType() == null ? "count" : w.widgetType());
         meta.put("entityType", w.entityType());
         meta.put("entityName", w.entityName());
         meta.put("maxItems", w.maxItems());
@@ -126,27 +126,18 @@ final class Widgets {
         return node;
     }
 
-    // A KPI card: a big preformatted value (a record count, or a server-aggregated
-    // sum/avg/…) above its title, clickable through to the entity's list surface.
-    private static Map<String, Object> valueCard(PageWidgetDescriptor w, String value, Palette p) {
-        Map<String, Object> number = Div.color(Div.text(value, 24, "medium"), p.text());
-        Map<String, Object> titleText = Div.color(Div.text(w.title(), 13, "regular"), p.muted());
-        Map<String, Object> hintGlyph = Components.hint(w.hint(), p.muted(), 14);
-        Map<String, Object> title = titleText;
-        if (hintGlyph != null) {
-            title = Div.horizontal(List.of(titleText, hintGlyph));
-            Div.wrapWidth(title);
-            Div.gap(title, 5);
-            Div.alignV(title, "center");
-        }
-        Div.margins(title, 4, 0, 0, 0);
-        Map<String, Object> card = Components.card(List.of(number, title), p);
+    private static Map<String, Object> valueCustom(PageWidgetDescriptor w, String value, boolean canWrite) {
+        Map<String, Object> node = custom(w, canWrite);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> props = (Map<String, Object>) node.get("custom_props");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> meta = (Map<String, Object>) props.get("widget");
+        meta.put("resolvedValue", value);
         String href = hrefFor(w);
         if (href != null) {
-            // Matches the nav's "onno:/" + "/entity..." convention → "onno://entity...".
-            Div.action(card, "open", "onno:/" + href);
+            meta.put("href", href);
         }
-        return card;
+        return node;
     }
 
     // The list-surface route for a widget's entity, matching UiLayoutResolver's hrefs.

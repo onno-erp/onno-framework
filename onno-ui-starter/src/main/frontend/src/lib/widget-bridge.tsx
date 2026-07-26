@@ -12,6 +12,7 @@ import { GaugeWidget } from "@/components/gauge-widget";
 import { MapWidget } from "@/components/map-widget";
 import { SettingWidget } from "@/components/setting-widget";
 import { ProcessTasksWidget } from "@/components/process-tasks-widget";
+import { ValueWidget } from "@/components/value-widget";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks to React widgets. The server emits a
@@ -31,6 +32,8 @@ import { ProcessTasksWidget } from "@/components/process-tasks-widget";
  * onno-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
  */
 const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> = {
+  count: ValueWidget,
+  metric: ValueWidget,
   chart: ChartWidget,
   timeRange: TimeRangeWidget,
   calendar: CalendarWidget,

@@ -21,6 +21,8 @@ import {
 describe("widget registry lookups", () => {
   it("resolves built-ins and leaves unknown types undefined", () => {
     expect(resolveWidget("chart")).toBeDefined();
+    expect(resolveWidget("count")).toBeDefined();
+    expect(resolveWidget("metric")).toBeDefined();
     expect(resolveWidget("no-such-renderer")).toBeUndefined();
   });
 

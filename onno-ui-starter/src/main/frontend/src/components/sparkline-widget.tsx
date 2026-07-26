@@ -13,6 +13,7 @@ import type { DashboardWidgetMeta } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Sparkline } from "@/components/sparkline";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 /**
  * The minimal trend tile: a title, the aggregate figure, and an inline sparkline — no delta badge
@@ -76,7 +77,10 @@ export function SparklineWidget({ widget }: { widget: DashboardWidgetMeta }) {
             <span className="text-[13px] font-medium text-muted-foreground">{widget.title}</span>
             <HintIcon text={widget.hint} size={13} />
           </div>
-          <span className="text-[15px] font-semibold tabular-nums">{fmtNum(series.total)}</span>
+          <AnimatedNumber
+            value={fmtNum(series.total)}
+            className="text-[15px] font-semibold tabular-nums"
+          />
         </div>
         <Sparkline data={points} color={color} kind={cfg.kind === "line" ? "line" : "area"} height={40} />
       </CardContent>

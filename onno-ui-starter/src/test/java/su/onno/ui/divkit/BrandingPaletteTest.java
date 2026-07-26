@@ -46,6 +46,19 @@ class BrandingPaletteTest {
 
         assertThat(Palette.of("light", b).primary()).isEqualTo("#2563EB");
         assertThat(Palette.of("dark", b).primary()).isEqualTo("#3B82F6");
+        assertThat(Palette.of("light", b).dark()).isFalse();
+        assertThat(Palette.of("dark", b).dark()).isTrue();
+    }
+
+    @Test
+    void brandedDarkAccount_keepsTheSunThemeIcon() {
+        BrandPalette dark = new BrandPalette("#09090B", "#111113", null, null, null, "#A78BFA", null);
+        Map<String, Object> account = ShellLayoutBuilder.account(
+                "Mara", List.of(), "default",
+                Palette.of("dark", branding(BrandPalette.empty(), dark)));
+
+        assertThat(findIcon(account, "sun")).isTrue();
+        assertThat(findIcon(account, "moon")).isFalse();
     }
 
     @Test
@@ -119,5 +132,20 @@ class BrandingPaletteTest {
         Map<String, Object> title = items(menu).get(0);
         assertThat(title.get("type")).isEqualTo("image");
         assertThat(title.get("image_url")).isEqualTo("/logo-dark.svg");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static boolean findIcon(Object node, String name) {
+        if (node instanceof Map<?, ?> map) {
+            Object props = map.get("custom_props");
+            if (props instanceof Map<?, ?> custom && name.equals(custom.get("name"))) {
+                return true;
+            }
+            return map.values().stream().anyMatch(value -> findIcon(value, name));
+        }
+        if (node instanceof List<?> list) {
+            return list.stream().anyMatch(value -> findIcon(value, name));
+        }
+        return false;
     }
 }

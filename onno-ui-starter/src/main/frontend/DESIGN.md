@@ -75,6 +75,8 @@ of the row keeps the full context menu. Flat table view only.
 | Component | Path | Use for |
 | --- | --- | --- |
 | `Segmented` | `components/ui/segmented.tsx` | Every mutually-exclusive view/mode switcher. Documented exceptions: tool palettes, server-emitted DivKit form tab strips. |
+| `AnimatedNumber` | `components/ui/animated-number.tsx` | Formatted KPI/count/stat values that should replay the shared character pop-in when replaced. |
+| `NotificationBadgeMotion` | `components/ui/notification-badge-motion.tsx` | Unread dots/count pills that slide and pop when the unread count increases. |
 | `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
@@ -116,6 +118,11 @@ mean “any interactive container.”
 - Workspace tab reordering keeps native cross-pane drag semantics, but supplies a lifted custom drag
   image, leaves the source as a real-width placeholder, and shifts neighboring tabs with FLIP using
   `--duration-fast` / `--ease-smooth-out`. Preserve its reduced-motion treatment.
+- `Segmented` uses one measured sliding pill with the same motion tokens; first paint and geometry
+  changes snap, value changes tween. KPI value cards and `StatWidget` use `AnimatedNumber`; both
+  primitives must retain their reduced-motion guards.
+- Notification triggers and server-emitted notification indicator islands share
+  `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.

@@ -1181,7 +1181,7 @@ public class DivKitController implements DisposableBean {
      * server-side. The value is formatted here — currency- and locale-aware — so every
      * client renders the same string ("—" if the widget can't be resolved).
      */
-    /** Mirrors {@code Widgets.NATIVE_CARD_TYPES}: the widget types that carry a server-resolved value. */
+    /** Mirrors {@code Widgets.VALUE_CARD_TYPES}: widget types carrying a server-resolved value. */
     private static final Set<String> VALUE_CARD_TYPES = Set.of("count", "metric");
 
     /**

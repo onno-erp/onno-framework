@@ -154,7 +154,7 @@ public final class ShellLayoutBuilder {
         // an avatar sits to its left.
         Div.weight(identity, 1);
 
-        String themeIcon = p.equals(Palette.DARK) ? "sun" : "moon";
+        String themeIcon = p.dark() ? "sun" : "moon";
         Map<String, Object> themeBtn = iconButton(themeIcon, msg.get("shell.theme"), p.muted(), TRANSPARENT, null);
         Div.action(themeBtn, "theme", "onno://theme/toggle");
 

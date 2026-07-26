@@ -287,6 +287,10 @@ export interface DashboardWidgetMeta {
   dateField: string;
   titleField: string;
   extraConfig: Record<string, string>;
+  /** Preformatted server aggregate carried by built-in count/metric tiles. */
+  resolvedValue?: string;
+  /** Optional entity surface opened by a built-in count/metric tile. */
+  href?: string;
   /** Optional help text (from .widget(...).hint(...)); surfaced as a hoverable "?" by the title. */
   hint?: string;
   /**

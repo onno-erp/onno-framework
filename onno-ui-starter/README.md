@@ -727,10 +727,10 @@ the starter, a current task candidate/assignee, or an actor recorded in that ins
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
-compiled to DivKit. `count`/`metric` render as native big-number cards (resolved server-side);
-every other type — the built-in `chart`/`stat`/`sparkline`/`gauge`/`calendar`/`kanban`/`list` and
-any app-registered type — is emitted as an `onno-widget` custom block that the client renders with
-a React component.
+compiled to DivKit. `count`/`metric` aggregates are resolved server-side and carried into a
+lightweight `onno-widget` value card so live replacements can animate without repeating the query.
+Other built-ins (`chart`/`stat`/`sparkline`/`gauge`/`calendar`/`kanban`/`list`) and app-registered
+types use the same custom-block bridge.
 
 ```java
 b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
@@ -746,7 +746,8 @@ Each `count`/`metric` card resolves a server-side aggregate (one SQL query). The
 resolves them **concurrently** and de-duplicates identical `(entity, metric, field, filter)` queries,
 so a wide dashboard isn't N sequential round-trips. The fan-out is bounded by
 `onno.ui.dashboard.widget-parallelism` (default 8) — keep it below the datasource's pool size; set it
-to `1` for the old sequential behaviour.
+to `1` for sequential behaviour. The preformatted value animates character-by-character on first
+render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motion` disables this.
 
 ### Widget types
 

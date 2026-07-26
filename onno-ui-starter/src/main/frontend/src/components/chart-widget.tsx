@@ -32,6 +32,7 @@ import { format } from "date-fns";
 import { formatCompact, formatNumber, toNumber } from "@/lib/format";
 import { resolveColors } from "@/lib/chart-colors";
 import { Segmented } from "@/components/ui/segmented";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import {
   applyScale,
   buildCombo,
@@ -558,7 +559,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
           {controlNodes.length > 0 ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">{controlNodes}</div>
           ) : showTotal ? (
-            <span className="text-[13px] font-semibold tabular-nums text-foreground">{fmt(data.total)}</span>
+            <AnimatedNumber
+              value={fmt(data.total)}
+              className="text-[13px] font-semibold tabular-nums text-foreground"
+            />
           ) : null}
         </div>
       </CardHeader>

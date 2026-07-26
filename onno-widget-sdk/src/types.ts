@@ -27,6 +27,10 @@ export interface DashboardWidgetMeta {
   titleField: string;
   /** Free-form key/values from {@code .config(key, value)} — the widget's own parameters. */
   extraConfig: Record<string, string>;
+  /** Preformatted server aggregate, present on built-in count/metric tiles. */
+  resolvedValue?: string;
+  /** Optional entity surface opened by a built-in count/metric tile. */
+  href?: string;
   /** Optional help text (from {@code .hint(...)}). */
   hint?: string;
 }

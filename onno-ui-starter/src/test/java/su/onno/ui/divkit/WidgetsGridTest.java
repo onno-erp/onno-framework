@@ -74,4 +74,17 @@ class WidgetsGridTest {
         // One block per widget, stacked — no row wrappers.
         assertThat(rows(grid)).hasSize(2);
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void valueCardsCarryTheResolvedAggregateIntoTheCustomWidget() {
+        Map<String, Object> card = cells(rows(grid(List.of(widget("a", "1/2", false)), 2)).get(0)).get(0);
+
+        assertThat(card).containsEntry("custom_type", "onno-widget");
+        Map<String, Object> props = (Map<String, Object>) card.get("custom_props");
+        Map<String, Object> meta = (Map<String, Object>) props.get("widget");
+        assertThat(meta)
+                .containsEntry("widgetType", "count")
+                .containsEntry("resolvedValue", "0");
+    }
 }
