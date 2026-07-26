@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ImgHTMLAttributes, ReactNode } from "react";
 import type { DashboardWidgetMeta, ProcessWorkItem, UiEvent } from "@/lib/types";
 
 const {
@@ -37,6 +38,12 @@ vi.mock("@/hooks/use-ui-events", () => ({
   },
 }));
 
+vi.mock("@/components/ui/avatar", () => ({
+  Avatar: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+  AvatarImage: (props: ImgHTMLAttributes<HTMLImageElement>) => <img {...props} />,
+  AvatarFallback: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
+
 import { ProcessTasksWidget } from "@/components/process-tasks-widget";
 
 const widget = {
@@ -55,6 +62,10 @@ const task = {
   assignee: null,
   outcomes: ["APPROVE", "REJECT"],
 } as ProcessWorkItem;
+
+beforeEach(() => {
+  searchTaskAssignees.mockResolvedValue([]);
+});
 
 afterEach(() => {
   cleanup();
@@ -104,7 +115,18 @@ describe("ProcessTasksWidget live inbox", () => {
     } as ProcessWorkItem;
     listProcessTasks.mockResolvedValueOnce([claimed]).mockResolvedValueOnce([]);
     searchTaskAssignees.mockResolvedValue([
-      { actorId: "employee-2", username: "mina@example.test", display: "Mina Lee" },
+      {
+        actorId: "employee-1",
+        username: "mara@example.test",
+        display: "Mara",
+        avatarUrl: "https://images.example.test/mara.jpg",
+      },
+      {
+        actorId: "employee-2",
+        username: "mina@example.test",
+        display: "Mina Lee",
+        avatarUrl: "https://images.example.test/mina.jpg",
+      },
     ]);
     delegateProcessTask.mockResolvedValue({
       ...claimed,
@@ -113,9 +135,21 @@ describe("ProcessTasksWidget live inbox", () => {
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-42");
-    expect(screen.getByRole("link", { name: "Open Order O-42" }))
+    expect((await screen.findAllByRole("img", { name: "Mara" }))[0])
+      .toHaveAttribute("src", "https://images.example.test/mara.jpg");
+    const subjectLink = screen.getByRole("link", { name: "Open Order O-42" });
+    expect(subjectLink)
       .toHaveAttribute("href", "/documents/orders/order-42");
+    const action = vi.fn();
+    window.addEventListener("onno:action", action);
+    fireEvent.click(subjectLink);
+    expect(action).toHaveBeenCalledOnce();
+    expect((action.mock.calls[0][0] as CustomEvent).detail)
+      .toBe("onno://documents/orders/order-42");
+    window.removeEventListener("onno:action", action);
     fireEvent.click(screen.getByRole("button", { name: "Delegate" }));
+    expect(await screen.findByRole("img", { name: "Mina Lee" }))
+      .toHaveAttribute("src", "https://images.example.test/mina.jpg");
     fireEvent.click(await screen.findByRole("button", { name: /Mina Lee/i }));
     fireEvent.change(screen.getByLabelText("Reason"), {
       target: { value: "Covering annual leave" },
@@ -181,6 +215,14 @@ describe("ProcessTasksWidget live inbox", () => {
       assignee: "Mara",
     } as ProcessWorkItem;
     listProcessTasks.mockResolvedValue([claimed]);
+    searchTaskAssignees.mockResolvedValue([
+      {
+        actorId: "employee-1",
+        username: "mara@example.test",
+        display: "Mara",
+        avatarUrl: "https://images.example.test/mara.jpg",
+      },
+    ]);
     getProcessTaskHistory.mockResolvedValue([
       {
         id: "event-1",
@@ -200,6 +242,8 @@ describe("ProcessTasksWidget live inbox", () => {
     await screen.findByText("Review order O-42");
     fireEvent.click(screen.getByRole("button", { name: "History" }));
     expect(await screen.findByText("Mara claimed the task")).toBeInTheDocument();
+    expect((await screen.findAllByRole("img", { name: "Mara" }))[0])
+      .toHaveAttribute("src", "https://images.example.test/mara.jpg");
     expect(screen.queryByText(/Mara → Mara/)).not.toBeInTheDocument();
   });
 });

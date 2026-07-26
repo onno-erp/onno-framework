@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Loader2, Search, UserRound, UserRoundPlus } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type {
@@ -12,12 +12,14 @@ import type {
 import { useUiEvents } from "@/hooks/use-ui-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { initials, notionistsAvatar, tint } from "@/components/presence-avatars";
 import { toSnakeCase } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
 
@@ -84,6 +86,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   const [historyLoading, setHistoryLoading] = useState(false);
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [query, setQuery] = useState("");
+  const [people, setPeople] = useState<TaskAssigneeOption[]>([]);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -99,6 +102,18 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    let current = true;
+    void api.searchTaskAssignees("").then((result) => {
+      if (current) setPeople(result);
+    }).catch(() => {
+      if (current) setPeople([]);
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const onUiEvent = useCallback((event: UiEvent) => {
     if (event.type === "tasks-changed") {
@@ -172,16 +187,14 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
     });
   }, [filter, query, tasks]);
 
+  const peopleById = useMemo(
+    () => new Map(people.map((person) => [person.actorId, person])),
+    [people],
+  );
+
   return (
     <Card className="pointer-events-auto w-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-base">{widget.title || "My tasks"}</CardTitle>
-          {!loading && !error ? <Badge variant="secondary">{tasks.length}</Badge> : null}
-          {widget.hint ? <HintIcon text={widget.hint} /> : null}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-4">
         {loading ? (
           <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading tasks…
@@ -198,16 +211,19 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Segmented
-                size="sm"
-                value={filter}
-                onChange={setFilter}
-                options={[
-                  { value: "all", label: `All ${counts.all}` },
-                  { value: "mine", label: `Mine ${counts.mine}` },
-                  { value: "available", label: `Available ${counts.available}` },
-                ]}
-              />
+              <div className="flex items-center gap-2">
+                <Segmented
+                  size="sm"
+                  value={filter}
+                  onChange={setFilter}
+                  options={[
+                    { value: "all", label: `All ${counts.all}` },
+                    { value: "mine", label: `Mine ${counts.mine}` },
+                    { value: "available", label: `Available ${counts.available}` },
+                  ]}
+                />
+                {widget.hint ? <HintIcon text={widget.hint} /> : null}
+              </div>
               <div className="relative w-full sm:w-64">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -229,6 +245,9 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
                   const age = timeAgo(task.status === "CLAIMED" ? task.claimedAt : task.createdAt);
                   const subjectLabel = task.subject?.label
                     || humanize(singularize(task.subject?.entityName || ""));
+                  const assignee = task.assigneeId
+                    ? peopleById.get(task.assigneeId)
+                    : undefined;
                   return (
                     <div
                       key={task.id}
@@ -254,13 +273,36 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
                               href={withBasePath(
                                 `/${task.subject.kind}/${toSnakeCase(task.subject.entityName)}/${task.subject.id}`,
                               )}
+                              onClick={(event) => {
+                                if (
+                                  event.button !== 0
+                                  || event.metaKey
+                                  || event.ctrlKey
+                                  || event.shiftKey
+                                  || event.altKey
+                                ) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                window.dispatchEvent(new CustomEvent("onno:action", {
+                                  detail: `onno://${task.subject!.kind}/${
+                                    toSnakeCase(task.subject!.entityName)
+                                  }/${task.subject!.id}`,
+                                }));
+                              }}
                             >
                               Open {subjectLabel}
                             </a>
                           ) : null}
                           {task.assignee ? (
                             <span className="flex items-center gap-1 text-muted-foreground">
-                              <UserRound className="size-3.5" /> {task.assignee}
+                              <PersonAvatar
+                                person={assignee}
+                                id={task.assigneeId}
+                                display={task.assignee}
+                                size="size-5"
+                              />
+                              {task.assignee}
                             </span>
                           ) : null}
                         </div>
@@ -332,6 +374,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
           task={historyTask}
           events={historyEvents}
           loading={historyLoading}
+          peopleById={peopleById}
           onClose={() => setHistoryTask(null)}
         />
       ) : null}
@@ -392,11 +435,13 @@ function TaskHistoryDialog({
   task,
   events,
   loading,
+  peopleById,
   onClose,
 }: {
   task: ProcessWorkItem;
   events: ProcessWorkItemEvent[];
   loading: boolean;
+  peopleById: Map<string, TaskAssigneeOption>;
   onClose: () => void;
 }) {
   return (
@@ -416,14 +461,22 @@ function TaskHistoryDialog({
       ) : (
         <ol className="space-y-2">
           {events.map((event) => (
-            <li key={event.id} className="rounded-field border border-border px-3 py-2">
-              <div className="text-sm text-foreground">{historyEventText(event)}</div>
-              <div
-                className="mt-0.5 text-xs text-muted-foreground"
-                title={new Date(event.occurredAt).toLocaleString()}
-              >
-                {timeAgo(event.occurredAt)}
-                {event.reason ? ` · ${event.reason}` : ""}
+            <li key={event.id} className="flex gap-2 rounded-field border border-border px-3 py-2">
+              <PersonAvatar
+                person={event.actorId ? peopleById.get(event.actorId) : undefined}
+                id={event.actorId}
+                display={event.actor || "System"}
+                size="size-7"
+              />
+              <div className="min-w-0">
+                <div className="text-sm text-foreground">{historyEventText(event)}</div>
+                <div
+                  className="mt-0.5 text-xs text-muted-foreground"
+                  title={new Date(event.occurredAt).toLocaleString()}
+                >
+                  {timeAgo(event.occurredAt)}
+                  {event.reason ? ` · ${event.reason}` : ""}
+                </div>
               </div>
             </li>
           ))}
@@ -520,8 +573,20 @@ function DelegateTaskDialog({
                   setQuery(option.display);
                 }}
               >
-                <span className="block font-medium">{option.display}</span>
-                <span className="block text-xs text-muted-foreground">{option.username}</span>
+                <span className="flex items-center gap-2">
+                  <PersonAvatar
+                    person={option}
+                    id={option.actorId}
+                    display={option.display}
+                    size="size-8"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{option.display}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {option.username}
+                    </span>
+                  </span>
+                </span>
               </button>
             ))}
           </div>
@@ -538,5 +603,33 @@ function DelegateTaskDialog({
         </div>
       </div>
     </DialogShell>
+  );
+}
+
+function PersonAvatar({
+  person,
+  id,
+  display,
+  size,
+}: {
+  person?: TaskAssigneeOption;
+  id?: string | null;
+  display: string;
+  size: string;
+}) {
+  const seed = id || person?.actorId || display;
+  return (
+    <Avatar className={`${size} border border-border`}>
+      <AvatarImage
+        src={person?.avatarUrl || notionistsAvatar(seed)}
+        alt={display}
+      />
+      <AvatarFallback
+        className="text-white"
+        style={{ backgroundColor: tint(seed) }}
+      >
+        {initials(display)}
+      </AvatarFallback>
+    </Avatar>
   );
 }

@@ -135,8 +135,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             su.onno.metadata.MetadataRegistry registry,
             CatalogQueryService catalogQueryService,
             UiAccessService access,
-            su.onno.ui.UiLayout uiLayout) {
-        return new TaskAssigneeDirectory(registry, catalogQueryService, access, uiLayout);
+            su.onno.ui.UiLayout uiLayout,
+            CommentAuthorAvatars commentAuthorAvatars) {
+        return new TaskAssigneeDirectory(
+                registry, catalogQueryService, access, uiLayout, commentAuthorAvatars);
     }
 
     @Bean

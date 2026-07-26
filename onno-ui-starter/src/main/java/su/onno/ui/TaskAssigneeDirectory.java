@@ -3,6 +3,7 @@ package su.onno.ui;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.ui.comments.CommentAuthorAvatars;
 
 import java.security.Principal;
 import java.util.List;
@@ -21,17 +22,20 @@ public final class TaskAssigneeDirectory {
     private final CatalogQueryService catalogs;
     private final UiAccessService access;
     private final UiLayout layout;
+    private final CommentAuthorAvatars avatars;
 
     public TaskAssigneeDirectory(
             MetadataRegistry registry,
             CatalogQueryService catalogs,
             UiAccessService access,
-            UiLayout layout
+            UiLayout layout,
+            CommentAuthorAvatars avatars
     ) {
         this.registry = registry;
         this.catalogs = catalogs;
         this.access = access;
         this.layout = layout;
+        this.avatars = avatars;
     }
 
     public List<AssigneeOption> search(String query, Principal principal) {
@@ -51,8 +55,13 @@ public final class TaskAssigneeDirectory {
         if (login == null) {
             return List.of();
         }
-        return catalogs.search(descriptor, query == null ? "" : query.trim(), 20).stream()
-                .map(row -> option(row, login.columnName()))
+        List<Map<String, Object>> rows =
+                catalogs.search(descriptor, query == null ? "" : query.trim(), 20);
+        Map<String, String> avatarUrls = avatars == null
+                ? Map.of()
+                : avatars.avatarsFor(rows.stream().map(row -> text(row.get("_id"))).toList());
+        return rows.stream()
+                .map(row -> option(row, login.columnName(), avatarUrls.get(text(row.get("_id")))))
                 .filter(option -> option.username() != null && !option.username().isBlank())
                 .toList();
     }
@@ -66,7 +75,7 @@ public final class TaskAssigneeDirectory {
             throw new IllegalArgumentException("targetActorId must be an identity record UUID");
         }
         AssigneeOption option = option(
-                catalogs.get(directory.descriptor(), id), directory.loginColumn());
+                catalogs.get(directory.descriptor(), id), directory.loginColumn(), null);
         if (option.username() == null || option.username().isBlank()) {
             throw new IllegalArgumentException("Selected identity has no configured login");
         }
@@ -74,11 +83,15 @@ public final class TaskAssigneeDirectory {
                 ProcessActorId.of(option.actorId()), option.username(), option.display());
     }
 
-    private static AssigneeOption option(Map<String, Object> row, String loginColumn) {
+    private static AssigneeOption option(
+            Map<String, Object> row,
+            String loginColumn,
+            String avatarUrl
+    ) {
         String username = text(row.get(loginColumn));
         String display = text(row.get("_description"));
         String id = text(row.get("_id"));
-        return new AssigneeOption(id, username, display == null ? username : display);
+        return new AssigneeOption(id, username, display == null ? username : display, avatarUrl);
     }
 
     private static String text(Object value) {
@@ -107,6 +120,11 @@ public final class TaskAssigneeDirectory {
     private record Directory(CatalogDescriptor descriptor, String loginColumn) {
     }
 
-    public record AssigneeOption(String actorId, String username, String display) {
+    public record AssigneeOption(
+            String actorId,
+            String username,
+            String display,
+            String avatarUrl
+    ) {
     }
 }

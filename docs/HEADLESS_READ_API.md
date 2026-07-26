@@ -41,8 +41,9 @@ against the active `HumanTask`'s declared enum before the persisted graph advanc
 mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
 Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
 and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
-catalog and returns `{actorId, username, display}`. `actorId` is the stable catalog record UUID;
-username/display are mutable presentation data.
+catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
+UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
+catalog has an attribute configured with the `avatar`, `image`, or `photo` field widget.
 
 ```jsonc
 // GET /api/tasks

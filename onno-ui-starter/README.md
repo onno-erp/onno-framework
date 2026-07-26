@@ -674,6 +674,7 @@ class TasksPage implements Page {
     public String route() { return "/tasks"; }
     public void compose(PageBuilder b) {
         b.title("My tasks");
+        b.header(false);
         b.widget("Process tasks").type("tasks").width("full");
     }
 }
@@ -688,8 +689,14 @@ employee catalog configured by `Layout.identity(...)`, requires a reason, and is
 current assignee or `ADMIN`. Task ownership uses the Employee record UUID, so changing its
 login/email does not orphan work. A task whose `HumanTask.subject(payload)` returns a typed
 catalog/document `Ref<T>` shows an **Open …** link to that record; `subjectLabel(payload)` supplies
-the durable human label shown there. The inbox groups all/mine/available work, supports local search,
-shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog.
+the durable human label shown there. On the desktop sidebar shell, that link opens the record in the
+detail pane to the right while leaving the inbox mounted; its ordinary base-path-aware `href` still
+supports copy, modifier-click, and opening in a new browser tab. The inbox groups
+all/mine/available work, supports local search,
+shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog. Claimed
+rows, delegation results, and history reuse the configured identity catalog's live avatar/photo;
+deterministic faces and initials keep people recognizable when no photo has been uploaded. The inbox
+starts directly with its filters instead of repeating the page title in a second widget header.
 Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
 its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an

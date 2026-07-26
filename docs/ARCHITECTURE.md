@@ -126,8 +126,9 @@ status field:
   versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
 - `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
   role-scoped task inbox and claim/delegate/history/complete commands. The `tasks` page widget
-  resolves delegation targets through the layout identity catalog and provides the same
-  loop to humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
+  resolves delegation targets and their live avatar/photo through the layout identity catalog,
+  opens typed task subjects in the shell's adjacent detail pane, and provides the same loop to
+  humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
   transaction commits; the UI routes a payload-free `tasks-changed` SSE invalidation to affected
 candidate users/roles and admins, so every open inbox refetches automatically.
 

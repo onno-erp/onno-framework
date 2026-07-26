@@ -351,6 +351,7 @@ export interface TaskAssigneeOption {
   actorId: string;
   username: string;
   display: string;
+  avatarUrl?: string | null;
 }
 
 export interface ProcessWorkItemEvent {

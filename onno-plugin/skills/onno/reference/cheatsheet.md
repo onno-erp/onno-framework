@@ -104,8 +104,10 @@ of a task's outcome enum.
 The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
 UI starter exposes the inbox plus claim/delegate/history/complete commands and the built-in `tasks`
 page widget. Delegation uses the configured `Layout.identity(...)` catalog as its employee picker.
-`HumanTask.subject(payload)` may return a typed catalog/document `Ref<T>`; the widget links directly
-to that record. `subjectLabel(payload)` optionally persists a human-readable link snapshot such as
+Avatar/image/photo-hinted identity fields supply live photos in ownership, delegation, and history.
+`HumanTask.subject(payload)` may return a typed catalog/document `Ref<T>`; the widget opens that
+record in the shell's adjacent detail pane while retaining an ordinary deep-link `href`.
+`subjectLabel(payload)` optionally persists a human-readable link snapshot such as
 `"Order " + payload.orderNumber()`.
 Every committed task mutation publishes `ProcessTasksChangedEvent`; eligible browser inboxes receive
 the audience-scoped, payload-free `tasks-changed` SSE event and refetch automatically (also across

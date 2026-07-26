@@ -16,7 +16,7 @@ public final class TasksPage implements Page {
     @Override
     public void compose(PageBuilder b) {
         b.title("My tasks");
-        b.subtitle("Claim and complete work assigned to you or one of your roles.");
+        b.header(false);
         b.widget("Process tasks")
                 .type("tasks")
                 .width("full")
