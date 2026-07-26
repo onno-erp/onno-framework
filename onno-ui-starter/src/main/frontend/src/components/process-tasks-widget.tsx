@@ -12,7 +12,6 @@ import type {
 import { useUiEvents } from "@/hooks/use-ui-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Input } from "@/components/ui/input";
@@ -193,12 +192,12 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   );
 
   return (
-    <Card className="pointer-events-auto w-full">
-      <CardHeader className="flex-row flex-wrap items-center gap-2 space-y-0 border-b border-border p-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <CardTitle className="truncate text-sm font-medium">
+    <div className="pointer-events-auto w-full">
+      <div className="mb-3 flex flex-wrap items-center gap-2 overflow-hidden rounded-card border border-border/70 bg-card px-2.5 py-2">
+        <div className="mr-1 flex min-w-0 shrink-0 items-center gap-2">
+          <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">
             {widget.title || "My tasks"}
-          </CardTitle>
+          </h1>
           {widget.hint ? <HintIcon text={widget.hint} /> : null}
         </div>
         <Segmented
@@ -222,29 +221,29 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
             placeholder="Search tasks"
           />
         </div>
-      </CardHeader>
-      <CardContent className="space-y-3 p-3">
+      </div>
+      <div className="overflow-hidden rounded-field border border-border bg-card">
         {loading ? (
-          <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-3 py-5 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading tasks…
           </div>
         ) : error ? (
-          <div className="flex items-center justify-between gap-3 py-3">
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
             <p className="text-sm text-destructive">{error}</p>
             <Button variant="outline" size="sm" onClick={() => void reload()}>Retry</Button>
           </div>
         ) : tasks.length === 0 ? (
-          <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 px-3 py-5 text-sm text-muted-foreground">
             <CheckCircle2 className="size-4" /> You have no open tasks.
           </div>
         ) : (
           <>
             {visibleTasks.length === 0 ? (
-              <div className="rounded-field border border-border py-8 text-center text-sm text-muted-foreground">
+              <div className="px-3 py-8 text-center text-sm text-muted-foreground">
                 No tasks match this view.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-field border border-border">
+              <div>
                 {visibleTasks.map((task, index) => {
                   const age = timeAgo(task.status === "CLAIMED" ? task.claimedAt : task.createdAt);
                   const subjectLabel = task.subject?.label
@@ -363,7 +362,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
             )}
           </>
         )}
-      </CardContent>
+      </div>
       {completing ? (
         <ConfirmOutcomeDialog
           task={completing.task}
@@ -392,7 +391,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
           }}
         />
       ) : null}
-    </Card>
+    </div>
   );
 }
 

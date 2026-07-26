@@ -696,8 +696,9 @@ all/mine/available work, supports local search,
 shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog. Claimed
 rows, delegation results, and history reuse the configured identity catalog's live avatar/photo;
 deterministic faces and initials keep people recognizable when no photo has been uploaded. The inbox
-uses one compact header for its title, all/mine/available switcher, hint, and search; keep the
-surrounding page header disabled when the task widget is the page's primary surface.
+uses a compact toolbar island—matching the entity-list header—for its title, all/mine/available
+switcher, hint, and search; task rows live in a separate island below it. Keep the surrounding page
+header disabled when the task widget is the page's primary surface.
 Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
 its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
