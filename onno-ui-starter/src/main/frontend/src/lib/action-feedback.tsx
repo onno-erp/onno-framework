@@ -32,7 +32,7 @@ function toastFor(feedback: ActionFeedback) {
   let id: string | number;
   const options = {
     description,
-    action: feedback.dismissLabel ? {
+    cancel: feedback.dismissLabel ? {
       label: feedback.dismissLabel,
       onClick: () => toast.dismiss(id),
     } : undefined,

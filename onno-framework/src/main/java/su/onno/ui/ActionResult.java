@@ -46,6 +46,11 @@ public record ActionResult(String message, String navigate, boolean refresh, Act
         return feedback(dialog.feedback());
     }
 
+    /** Show a structured toast with an explicit tone, heading, explanation, and optional details. */
+    public static ActionResult toast(ActionToast toast) {
+        return feedback(toast.feedback());
+    }
+
     /**
      * Send the top-level browser to an external {@code url} (a full-page navigation, not a new tab) —
      * e.g. kicking off an OAuth "Connect with X" consent screen so the provider can redirect back. The

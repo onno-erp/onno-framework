@@ -332,8 +332,9 @@ because they are not Java field references.
     `description`, `submitLabel`, `cancelLabel`, `icon`, `tone(ActionSeverity)` and
     `size(DialogSize)`. Throw `ActionRejectedException` for expected business rejection (HTTP 422
     typed feedback); `fieldError`/`formError` keep the form open with its entered values. A no-form
-    rejection defaults to an error dialog. `ActionResult.dialog(ActionDialog…)` is the successful
-    acknowledgement-dialog path; `message`/`refresh` remain success-toast shortcuts. A form field can be a **reference picker** of another entity via
+    rejection defaults to an error dialog. `ActionResult.toast(ActionToast…)` is the structured
+    transient-feedback path and `ActionResult.dialog(ActionDialog…)` is the successful
+    acknowledgement-dialog path; `message`/`refresh` remain compact success-toast shortcuts. A form field can be a **reference picker** of another entity via
     `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
     and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an
     add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back

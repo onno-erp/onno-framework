@@ -43,6 +43,6 @@ describe("AppToaster Sonner integration", () => {
     expect(screen.getByText("Two lines need attention.")).toBeInTheDocument();
     expect(screen.getByText("Review quantities")).toBeInTheDocument();
     expect(screen.getByText("Create replenishment")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toHaveClass("onno-toast__cancel");
   });
 });

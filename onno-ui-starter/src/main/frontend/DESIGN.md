@@ -127,8 +127,11 @@ mean “any interactive container.”
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
 - Toast calls use Sonner's `toast` API and render through `AppToaster`; do not mount another
-  `Toaster`. Keep the surface monochrome; semantic status colour belongs to the icon well and detail
-  markers. Typed `ActionFeedback` toasts preserve `title`, `message`, `details`, and `dismissLabel`.
+  `Toaster`. Keep the surface monochrome and borderless (the dark theme uses the raised `secondary`
+  surface); semantic status colour belongs to the icon well and detail markers. Actual actions use
+  the filled button; acknowledgement/dismiss controls use the quiet button. Prefer the server-side
+  `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a
+  title, explanation, or details.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.

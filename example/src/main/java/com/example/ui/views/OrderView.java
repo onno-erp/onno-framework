@@ -10,11 +10,11 @@ import com.example.process.OrderApprovalProcess;
 import su.onno.process.ProcessActor;
 import su.onno.process.ProcessEngine;
 import su.onno.ui.ActionDialog;
-import su.onno.ui.ActionFeedback;
 import su.onno.ui.ActionPresentation;
 import su.onno.ui.ActionRejectedException;
 import su.onno.ui.ActionResult;
 import su.onno.ui.ActionSeverity;
+import su.onno.ui.ActionToast;
 import su.onno.ui.ActionScope;
 import su.onno.ui.ActionSpec;
 import su.onno.ui.DialogSize;
@@ -26,7 +26,6 @@ import su.onno.types.Ref;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -296,27 +295,22 @@ public class OrderView implements EntityView<Order> {
     }
 
     private ActionResult toastDemo() {
-        ActionFeedback feedback = switch (Math.floorMod(toastDemoSequence.getAndIncrement(), 4)) {
-            case 0 -> toast(ActionSeverity.SUCCESS, "Order ready",
-                    "Everything passed validation and the order can move forward.",
-                    "Inventory reserved", "Customer timeline updated");
-            case 1 -> toast(ActionSeverity.INFO, "Background sync started",
-                    "You can keep working while the latest sales data is refreshed.",
-                    "Usually finishes in under a minute");
-            case 2 -> toast(ActionSeverity.WARNING, "Stock is running low",
-                    "Two order lines need attention before the next shipment.",
-                    "Review quantities", "Consider a supplier replenishment");
-            default -> toast(ActionSeverity.ERROR, "Shipment could not be completed",
-                    "The carrier rejected the hand-off. No order data was changed.",
-                    "Check the delivery address", "Try again when the carrier is available");
+        ActionToast toast = switch (Math.floorMod(toastDemoSequence.getAndIncrement(), 4)) {
+            case 0 -> ActionToast.success("Order ready")
+                    .message("Everything passed validation and the order can move forward.")
+                    .details(List.of("Inventory reserved", "Customer timeline updated"));
+            case 1 -> ActionToast.info("Background sync started")
+                    .message("You can keep working while the latest sales data is refreshed.")
+                    .detail("Usually finishes in under a minute");
+            case 2 -> ActionToast.warning("Stock is running low")
+                    .message("Two order lines need attention before the next shipment.")
+                    .details(List.of("Review quantities", "Consider a supplier replenishment"));
+            default -> ActionToast.error("Shipment could not be completed")
+                    .message("The carrier rejected the hand-off. No order data was changed.")
+                    .details(List.of("Check the delivery address",
+                            "Try again when the carrier is available"));
         };
-        return ActionResult.feedback(feedback);
-    }
-
-    private static ActionFeedback toast(ActionSeverity severity, String title, String message,
-                                        String... details) {
-        return new ActionFeedback(severity, ActionPresentation.TOAST, title, message,
-                List.of(details), Map.of(), List.of(), "Dismiss", false);
+        return ActionResult.toast(toast.dismissLabel("Dismiss"));
     }
 
     private ActionResult advance(UUID id) {
