@@ -31,8 +31,8 @@ public record PageComponent(Kind kind, String text, String customType, Map<Strin
 
     /**
      * An embedded list opened on a default view — {@code defaults} carries the preset
-     * {@code filter}/{@code groupBy}/{@code sort}/{@code sortDescending} the renderer stamps onto the
-     * list descriptor.
+     * {@code filter}/{@code defaultFilters}/{@code groupBy}/{@code groupByDateGranularity}/
+     * {@code sort}/{@code sortDescending} the renderer stamps onto the list descriptor.
      */
     public static PageComponent list(Class<?> entity, Map<String, Object> defaults) {
         return new PageComponent(Kind.LIST, null, null,

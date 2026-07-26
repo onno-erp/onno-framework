@@ -237,8 +237,15 @@ never double-counts and honours the active search/filters/sort. Group values tha
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
 `list.defaultGroupBy("status")` opens the list already grouped by that column instead of flat — the
 viewer can still switch grouping or back to "None". The default must also be declared `groupable`
-(and resolve to a real column), else it's ignored with a warning; a page-embedded list's
-`PageBuilder.list(entity, v -> v.groupBy(…))` default still wins over the view's.
+(and resolve to a real column), else it's ignored with a warning. A page-embedded list can override
+the view with `PageBuilder.list(entity, v -> v.groupBy("created_at", DateGranularity.DAY))`; the
+typed overload also chooses the initial day/month/year bucket instead of assuming month.
+
+An embedded page may also preselect a declared toolbar filter without making it a permanent feed
+constraint: `v.defaultFilter("status", "READY")` selects explicit values, while
+`v.defaultFirstFilterOption("assignedTo")` selects the first dynamically resolved option. Both
+remain normal UI filters that the viewer can clear or replace. Use `v.filter("active = true")` only
+for a base constraint that must always apply.
 
 **Conditional row formatting.** `list.rowStyle(row -> …)` tints rows by their data: the function
 runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware
