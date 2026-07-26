@@ -687,7 +687,10 @@ the active task's declared enum outcomes. Writes are CSRF-protected. Delegation 
 employee catalog configured by `Layout.identity(...)`, requires a reason, and is limited to the
 current assignee or `ADMIN`. Task ownership uses the Employee record UUID, so changing its
 login/email does not orphan work. A task whose `HumanTask.subject(payload)` returns a typed
-catalog/document `Ref<T>` shows an **Open …** link to that record. Visibility is computed from
+catalog/document `Ref<T>` shows an **Open …** link to that record; `subjectLabel(payload)` supplies
+the durable human label shown there. The inbox groups all/mine/available work, supports local search,
+shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog.
+Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
 its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
 audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details

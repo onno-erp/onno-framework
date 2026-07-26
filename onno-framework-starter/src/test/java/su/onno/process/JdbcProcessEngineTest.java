@@ -65,7 +65,7 @@ class JdbcProcessEngineTest {
         assertThat(engine.inbox(finance)).isEmpty();
         assertThat(managerTask.outcomes()).containsExactlyInAnyOrder("APPROVED", "REJECTED");
         assertThat(managerTask.subject()).isEqualTo(new ProcessDomainLink(
-                "documents", "Test Orders", managerTask.subject().id()));
+                "documents", "Test Orders", managerTask.subject().id(), "Purchase laptops"));
 
         ProcessWorkItem claimed = engine.claim(managerTask.id(), manager);
         assertThat(claimed.status()).isEqualTo(WorkItemStatus.CLAIMED);
@@ -197,6 +197,7 @@ class JdbcProcessEngineTest {
         @Override public Ref<TestOrder> subject(Request payload) {
             return Ref.of(TestOrder.class, payload.orderId());
         }
+        @Override public String subjectLabel(Request payload) { return payload.subject(); }
     }
 
     static final class ApprovalProcess extends ProcessDefinition<Request, Step> {

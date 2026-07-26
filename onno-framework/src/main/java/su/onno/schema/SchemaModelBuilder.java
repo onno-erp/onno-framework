@@ -106,6 +106,7 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_subject_kind", "VARCHAR(32)"),
                 ColumnModel.of("_subject_entity", "VARCHAR(255)"),
                 ColumnModel.of("_subject_id", "UUID"),
+                ColumnModel.of("_subject_label", "VARCHAR(255)"),
                 ColumnModel.of("_created_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_claimed_at", "TIMESTAMP"),
                 ColumnModel.of("_completed_at", "TIMESTAMP"),

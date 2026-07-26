@@ -338,6 +338,7 @@ export interface ProcessWorkItem {
     kind: "catalogs" | "documents";
     entityName: string;
     id: string;
+    label?: string | null;
   } | null;
   createdAt: string;
   claimedAt?: string | null;

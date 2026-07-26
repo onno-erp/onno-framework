@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock3, Loader2, UserRound, UserRoundPlus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Clock3, Loader2, Search, UserRound, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import type {
@@ -16,8 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { Textarea } from "@/components/ui/textarea";
 import { toSnakeCase } from "@/lib/utils";
+import { withBasePath } from "@/lib/base-path";
 
 const humanize = (value: string) =>
   value
@@ -25,13 +27,63 @@ const humanize = (value: string) =>
     .replace(/[_-]+/g, " ")
     .replace(/^\p{L}/u, (letter) => letter.toUpperCase());
 
+type TaskFilter = "all" | "mine" | "available";
+
+const singularize = (value: string) => {
+  if (value.endsWith("ies")) return `${value.slice(0, -3)}y`;
+  if (value.endsWith("s") && !value.endsWith("ss")) return value.slice(0, -1);
+  return value;
+};
+
+const timeAgo = (iso?: string | null) => {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.max(1, Math.round((Date.now() - then) / 1000));
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto", style: "narrow" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["week", 604_800],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+  ];
+  for (const [unit, size] of units) {
+    if (seconds >= size) return formatter.format(-Math.floor(seconds / size), unit);
+  }
+  return formatter.format(-seconds, "second");
+};
+
+const historyEventText = (event: ProcessWorkItemEvent) => {
+  const actor = event.actor || "Someone";
+  switch (event.type) {
+    case "CREATED":
+      return "Task created";
+    case "CLAIMED":
+      return event.actor ? `${actor} claimed the task` : "Task claimed";
+    case "DELEGATED": {
+      const source = event.fromAssignee ? ` from ${event.fromAssignee}` : "";
+      const target = event.toAssignee ? ` to ${event.toAssignee}` : "";
+      return `${actor} delegated the task${source}${target}`;
+    }
+    case "COMPLETED":
+      return event.actor ? `${actor} completed the task` : "Task completed";
+  }
+};
+
 export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) {
   const [tasks, setTasks] = useState<ProcessWorkItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [delegating, setDelegating] = useState<ProcessWorkItem | null>(null);
-  const [history, setHistory] = useState<Record<string, ProcessWorkItemEvent[]>>({});
+  const [completing, setCompleting] = useState<{ task: ProcessWorkItem; outcome: string } | null>(null);
+  const [historyTask, setHistoryTask] = useState<ProcessWorkItem | null>(null);
+  const [historyEvents, setHistoryEvents] = useState<ProcessWorkItemEvent[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [query, setQuery] = useState("");
 
   const reload = useCallback(async () => {
     setError(null);
@@ -73,6 +125,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
     try {
       await api.completeProcessTask(task.id, outcome);
       toast.success(`Task completed: ${humanize(outcome)}`);
+      setCompleting(null);
       await reload();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : "Could not complete task");
@@ -81,28 +134,50 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
     }
   };
 
-  const toggleHistory = async (task: ProcessWorkItem) => {
-    if (history[task.id]) {
-      setHistory((current) => {
-        const next = { ...current };
-        delete next[task.id];
-        return next;
-      });
-      return;
-    }
+  const openHistory = async (task: ProcessWorkItem) => {
+    setHistoryTask(task);
+    setHistoryEvents([]);
+    setHistoryLoading(true);
     try {
       const events = await api.getProcessTaskHistory(task.id);
-      setHistory((current) => ({ ...current, [task.id]: events }));
+      setHistoryEvents(events);
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : "Could not load task history");
+      setHistoryTask(null);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
+  const counts = useMemo(() => ({
+    all: tasks.length,
+    mine: tasks.filter((task) => task.status === "CLAIMED").length,
+    available: tasks.filter((task) => task.status === "OPEN").length,
+  }), [tasks]);
+
+  const visibleTasks = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return tasks.filter((task) => {
+      if (filter === "mine" && task.status !== "CLAIMED") return false;
+      if (filter === "available" && task.status !== "OPEN") return false;
+      if (!needle) return true;
+      return [
+        task.title,
+        task.definitionKey,
+        task.stepKey,
+        task.assignee,
+        task.subject?.label,
+        task.subject?.entityName,
+      ].some((value) => value?.toLowerCase().includes(needle));
+    });
+  }, [filter, query, tasks]);
+
   return (
     <Card className="pointer-events-auto w-full">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-1.5">
+      <CardHeader className="pb-2">
+        <div className="flex items-center gap-2">
           <CardTitle className="text-base">{widget.title || "My tasks"}</CardTitle>
+          {!loading && !error ? <Badge variant="secondary">{tasks.length}</Badge> : null}
           {widget.hint ? <HintIcon text={widget.hint} /> : null}
         </div>
       </CardHeader>
@@ -121,82 +196,145 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
             <CheckCircle2 className="size-4" /> You have no open tasks.
           </div>
         ) : (
-          tasks.map((task) => (
-            <div key={task.id} className="rounded-panel border border-border p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="font-medium text-foreground">{task.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {humanize(task.definitionKey)} · {humanize(task.stepKey)}
-                  </div>
-                </div>
-                <Badge variant={task.status === "CLAIMED" ? "secondary" : "outline"}>
-                  {humanize(task.status)}
-                </Badge>
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Segmented
+                size="sm"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "all", label: `All ${counts.all}` },
+                  { value: "mine", label: `Mine ${counts.mine}` },
+                  { value: "available", label: `Available ${counts.available}` },
+                ]}
+              />
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  aria-label="Search tasks"
+                  className="h-8 pl-8 text-xs"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search tasks"
+                />
               </div>
-              {task.assignee ? (
-                <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <UserRound className="size-3.5" /> {task.assignee}
-                </div>
-              ) : null}
-              {task.subject ? (
-                <a
-                  className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
-                  href={`/${task.subject.kind}/${toSnakeCase(task.subject.entityName)}/${task.subject.id}`}
-                >
-                  Open {humanize(task.subject.entityName)}
-                </a>
-              ) : null}
-              <div className="mt-4 flex flex-wrap gap-2">
-                {task.status === "OPEN" ? (
-                  <Button size="sm" onClick={() => void claim(task)} disabled={busy === task.id}>
-                    {busy === task.id ? <Loader2 className="animate-spin" /> : null}
-                    Claim
-                  </Button>
-                ) : (
-                  <>
-                  {task.outcomes.map((outcome) => (
-                    <Button
-                      key={outcome}
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void complete(task, outcome)}
-                      disabled={busy === task.id}
-                    >
-                      {busy === task.id ? <Loader2 className="animate-spin" /> : null}
-                      {humanize(outcome)}
-                    </Button>
-                  ))}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDelegating(task)}
-                    disabled={busy === task.id}
-                  >
-                    <UserRoundPlus /> Delegate
-                  </Button>
-                  </>
-                )}
-                <Button size="sm" variant="ghost" onClick={() => void toggleHistory(task)}>
-                  <Clock3 /> History
-                </Button>
-              </div>
-              {history[task.id] ? (
-                <ol className="mt-3 space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
-                  {history[task.id].map((event) => (
-                    <li key={event.id}>
-                      <span className="font-medium text-foreground">{humanize(event.type)}</span>
-                      {event.actor ? ` by ${event.actor}` : ""}
-                      {event.toAssignee ? ` → ${event.toAssignee}` : ""}
-                      {event.reason ? ` — ${event.reason}` : ""}
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
             </div>
-          ))
+            {visibleTasks.length === 0 ? (
+              <div className="rounded-field border border-border py-8 text-center text-sm text-muted-foreground">
+                No tasks match this view.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-field border border-border">
+                {visibleTasks.map((task, index) => {
+                  const age = timeAgo(task.status === "CLAIMED" ? task.claimedAt : task.createdAt);
+                  const subjectLabel = task.subject?.label
+                    || humanize(singularize(task.subject?.entityName || ""));
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-3 ${index ? "border-t border-border" : ""}`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-foreground">{task.title}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {humanize(task.definitionKey)} · {humanize(task.stepKey)}
+                            {age ? ` · ${task.status === "CLAIMED" ? "Claimed" : "Created"} ${age}` : ""}
+                          </div>
+                        </div>
+                        <Badge variant={task.status === "CLAIMED" ? "secondary" : "outline"}>
+                          {task.status === "CLAIMED" ? "Mine" : "Available"}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                          {task.subject ? (
+                            <a
+                              className="font-medium text-primary hover:underline"
+                              href={withBasePath(
+                                `/${task.subject.kind}/${toSnakeCase(task.subject.entityName)}/${task.subject.id}`,
+                              )}
+                            >
+                              Open {subjectLabel}
+                            </a>
+                          ) : null}
+                          {task.assignee ? (
+                            <span className="flex items-center gap-1 text-muted-foreground">
+                              <UserRound className="size-3.5" /> {task.assignee}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          {task.status === "OPEN" ? (
+                            <Button
+                              className="h-8"
+                              size="sm"
+                              onClick={() => void claim(task)}
+                              disabled={busy === task.id}
+                            >
+                              {busy === task.id ? <Loader2 className="animate-spin" /> : null}
+                              Claim
+                            </Button>
+                          ) : (
+                            <>
+                              {task.outcomes.map((outcome) => (
+                                <Button
+                                  className="h-8"
+                                  key={outcome}
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setCompleting({ task, outcome })}
+                                  disabled={busy === task.id}
+                                >
+                                  {humanize(outcome)}
+                                </Button>
+                              ))}
+                              <Button
+                                className="h-8"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDelegating(task)}
+                                disabled={busy === task.id}
+                              >
+                                <UserRoundPlus /> Delegate
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            className="h-8"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void openHistory(task)}
+                          >
+                            <Clock3 /> History
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </CardContent>
+      {completing ? (
+        <ConfirmOutcomeDialog
+          task={completing.task}
+          outcome={completing.outcome}
+          submitting={busy === completing.task.id}
+          onClose={() => setCompleting(null)}
+          onConfirm={() => void complete(completing.task, completing.outcome)}
+        />
+      ) : null}
+      {historyTask ? (
+        <TaskHistoryDialog
+          task={historyTask}
+          events={historyEvents}
+          loading={historyLoading}
+          onClose={() => setHistoryTask(null)}
+        />
+      ) : null}
       {delegating ? (
         <DelegateTaskDialog
           task={delegating}
@@ -208,6 +346,90 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
         />
       ) : null}
     </Card>
+  );
+}
+
+function ConfirmOutcomeDialog({
+  task,
+  outcome,
+  submitting,
+  onClose,
+  onConfirm,
+}: {
+  task: ProcessWorkItem;
+  outcome: string;
+  submitting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <DialogShell
+      role="alertdialog"
+      size="sm"
+      tone="warning"
+      title={`${humanize(outcome)} task?`}
+      description={task.title}
+      onOpenChange={(open) => { if (!open && !submitting) onClose(); }}
+      dismissable={!submitting}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={onConfirm} disabled={submitting}>
+            {submitting ? <Loader2 className="animate-spin" /> : null}
+            Confirm {humanize(outcome)}
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        This completes the task and advances the process. The action cannot be undone from this inbox.
+      </p>
+    </DialogShell>
+  );
+}
+
+function TaskHistoryDialog({
+  task,
+  events,
+  loading,
+  onClose,
+}: {
+  task: ProcessWorkItem;
+  events: ProcessWorkItemEvent[];
+  loading: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <DialogShell
+      size="sm"
+      title="Task history"
+      description={task.title}
+      onOpenChange={(open) => { if (!open) onClose(); }}
+      footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+    >
+      {loading ? (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading history…
+        </div>
+      ) : events.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">No history is available.</p>
+      ) : (
+        <ol className="space-y-2">
+          {events.map((event) => (
+            <li key={event.id} className="rounded-field border border-border px-3 py-2">
+              <div className="text-sm text-foreground">{historyEventText(event)}</div>
+              <div
+                className="mt-0.5 text-xs text-muted-foreground"
+                title={new Date(event.occurredAt).toLocaleString()}
+              >
+                {timeAgo(event.occurredAt)}
+                {event.reason ? ` · ${event.reason}` : ""}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </DialogShell>
   );
 }
 

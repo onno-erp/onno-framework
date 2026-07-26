@@ -28,7 +28,8 @@ class SchemaGeneratorTest {
                 .contains("_assignee_display VARCHAR(255)")
                 .contains("_subject_kind VARCHAR(32)")
                 .contains("_subject_entity VARCHAR(255)")
-                .contains("_subject_id UUID");
+                .contains("_subject_id UUID")
+                .contains("_subject_label VARCHAR(255)");
         assertThat(ddl.get(4)).contains("CREATE TABLE IF NOT EXISTS onno_process_work_item_events");
 
         String sql = ddl.get(6);

@@ -405,16 +405,18 @@ public final class JdbcProcessEngine implements ProcessEngine {
         HumanTask humanTask = task.task();
         TaskAssignment assignment = Objects.requireNonNull(
                 humanTask.assignment(payload), "task assignment");
-        ProcessDomainLink subject = resolveSubject(humanTask.subject(payload));
+        ProcessDomainLink subject = resolveSubject(
+                humanTask.subject(payload), humanTask.subjectLabel(payload));
         UUID workItemId = UUID.randomUUID();
         handle.createUpdate("""
                 insert into onno_process_work_items
                     (_id, _instance_id, _step_key, _title, _status,
                      _candidate_users, _candidate_roles,
-                     _subject_kind, _subject_entity, _subject_id,
+                     _subject_kind, _subject_entity, _subject_id, _subject_label,
                      _created_at, _version)
                 values (:id, :instance, :step, :title, 'OPEN',
-                        :users, :roles, :subjectKind, :subjectEntity, :subjectId, :now, 0)
+                        :users, :roles, :subjectKind, :subjectEntity, :subjectId, :subjectLabel,
+                        :now, 0)
                 """)
                 .bind("id", workItemId).bind("instance", instanceId)
                 .bind("step", ((ProcessStepKey) task.step()).key())
@@ -425,6 +427,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .bind("subjectKind", subject == null ? null : subject.kind())
                 .bind("subjectEntity", subject == null ? null : subject.entityName())
                 .bind("subjectId", subject == null ? null : subject.id())
+                .bind("subjectLabel", subject == null ? null : subject.label())
                 .bind("now", now)
                 .execute();
         insertWorkItemEvent(handle, workItemId, instanceId, WorkItemEventType.CREATED,
@@ -567,7 +570,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
-    private ProcessDomainLink resolveSubject(Ref<?> ref) {
+    private ProcessDomainLink resolveSubject(Ref<?> ref, String label) {
         if (ref == null) {
             return null;
         }
@@ -575,12 +578,12 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .filter(descriptor -> descriptor.javaClass().equals(ref.type()))
                 .findFirst()
                 .map(descriptor -> new ProcessDomainLink(
-                        "catalogs", descriptor.logicalName(), ref.id()))
+                        "catalogs", descriptor.logicalName(), ref.id(), label))
                 .or(() -> registry.allDocuments().stream()
                         .filter(descriptor -> descriptor.javaClass().equals(ref.type()))
                         .findFirst()
                         .map(descriptor -> new ProcessDomainLink(
-                                "documents", descriptor.logicalName(), ref.id())))
+                                "documents", descriptor.logicalName(), ref.id(), label)))
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Task subject must reference a registered catalog or document: "
                                 + ref.type().getName()));
@@ -635,7 +638,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 rs.getString("_candidate_users"), rs.getString("_candidate_roles"),
                 rs.getString("_assignee"), rs.getString("_assignee_display"),
                 rs.getString("_subject_kind"), rs.getString("_subject_entity"),
-                rs.getObject("_subject_id", UUID.class),
+                rs.getObject("_subject_id", UUID.class), rs.getString("_subject_label"),
                 instant(rs, "_created_at"), instant(rs, "_claimed_at"),
                 instant(rs, "_completed_at"), rs.getString("_outcome"), rs.getInt("_version"));
     }
@@ -655,12 +658,13 @@ public final class JdbcProcessEngine implements ProcessEngine {
             UUID id, UUID instanceId, String definitionKey, String stepKey, String title,
             WorkItemStatus status, String candidateUsers, String candidateRoles, String assignee,
             String assigneeDisplay, String subjectKind, String subjectEntity, UUID subjectId,
+            String subjectLabel,
             Instant createdAt, Instant claimedAt, Instant completedAt, String outcome, int version) {
         WorkRow claimed(ProcessIdentity identity, Instant at) {
             return new WorkRow(
                     id, instanceId, definitionKey, stepKey, title, WorkItemStatus.CLAIMED,
                     candidateUsers, candidateRoles, identity.id().value(), identity.displayName(),
-                    subjectKind, subjectEntity, subjectId,
+                    subjectKind, subjectEntity, subjectId, subjectLabel,
                     createdAt, at, completedAt, outcome, version + 1);
         }
 
@@ -668,7 +672,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
             return new WorkRow(
                     id, instanceId, definitionKey, stepKey, title, WorkItemStatus.CLAIMED,
                     candidateUsers, candidateRoles, identity.id().value(), identity.displayName(),
-                    subjectKind, subjectEntity, subjectId, createdAt, claimedAt,
+                    subjectKind, subjectEntity, subjectId, subjectLabel, createdAt, claimedAt,
                     completedAt, outcome, version + 1);
         }
 
@@ -679,7 +683,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
 
         ProcessDomainLink subject() {
             return subjectId == null ? null
-                    : new ProcessDomainLink(subjectKind, subjectEntity, subjectId);
+                    : new ProcessDomainLink(subjectKind, subjectEntity, subjectId, subjectLabel);
         }
     }
 

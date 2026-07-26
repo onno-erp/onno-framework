@@ -478,12 +478,18 @@ not its mutable login/email. For applications without `Layout.identity(...)`,
 `ProcessActorId.of(externalSubject)` is the explicit stable-id fallback.
 
 Override `HumanTask.subject(payload)` with a typed catalog/document `Ref<T>` when the task concerns
-a business record. The engine persists its metadata and the task widget renders a direct link:
+a business record. Add `subjectLabel(payload)` for a durable human snapshot such as an order
+number. The engine persists both and the task widget renders a direct link:
 
 ```java
 @Override
 public Ref<Order> subject(PurchaseRequest payload) {
     return payload.order();
+}
+
+@Override
+public String subjectLabel(PurchaseRequest payload) {
+    return "Order " + payload.orderNumber();
 }
 ```
 

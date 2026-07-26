@@ -115,7 +115,8 @@ status field:
 - `HumanTask<P,O>` declares an enum outcome type, a payload-dependent title, and a
   `TaskAssignment` of candidate stable identities/roles. `TaskAssignment.identities(Ref<?>...)`
   keeps employee routing typed and stable across login/email changes. Optional `subject(payload)`
-  returns a typed catalog/document `Ref<T>` that becomes a durable task-to-record link.
+  returns a typed catalog/document `Ref<T>` that becomes a durable task-to-record link;
+  `subjectLabel(payload)` stores its human-readable snapshot for the inbox.
   Definition validation requires every enum outcome to
   have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
   and unreachable nodes.

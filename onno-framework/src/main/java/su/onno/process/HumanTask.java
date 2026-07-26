@@ -25,4 +25,14 @@ public interface HumanTask<P, O extends Enum<O>> {
     default Ref<?> subject(P payload) {
         return null;
     }
+
+    /**
+     * Human-readable snapshot for {@link #subject(Object)}, such as an order number.
+     *
+     * <p>The value is persisted with the task so its link remains understandable even when the
+     * referenced record later changes.</p>
+     */
+    default String subjectLabel(P payload) {
+        return null;
+    }
 }

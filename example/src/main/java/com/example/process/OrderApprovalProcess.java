@@ -89,5 +89,10 @@ public final class OrderApprovalProcess
         public Ref<Order> subject(Payload payload) {
             return Ref.of(Order.class, payload.orderId());
         }
+
+        @Override
+        public String subjectLabel(Payload payload) {
+            return "Order " + payload.orderNumber();
+        }
     }
 }

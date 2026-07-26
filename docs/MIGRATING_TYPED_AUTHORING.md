@@ -120,11 +120,16 @@ engine.complete(workItemId, Outcome.APPROVE, actor);
 
 Automatic employee routing belongs in `assignment(payload)`: call a typed routing service and
 return `TaskAssignment.identities(router.approverFor(payload))`, where the result is a
-`Ref<Employee>`. Add `subject(payload)` when the task concerns a catalog/document record:
+`Ref<Employee>`. Add `subject(payload)` when the task concerns a catalog/document record and
+`subjectLabel(payload)` when its inbox link needs a stable human label:
 
 ```java
 public Ref<Order> subject(Payload payload) {
     return payload.order();
+}
+
+public String subjectLabel(Payload payload) {
+    return "Order " + payload.orderNumber();
 }
 ```
 
