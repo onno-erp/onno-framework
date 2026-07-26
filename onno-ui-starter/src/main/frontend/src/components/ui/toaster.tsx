@@ -5,6 +5,7 @@ import {
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react";
+import type { CSSProperties } from "react";
 import { Toaster } from "sonner";
 import { useTheme } from "@/providers/theme-provider";
 
@@ -21,13 +22,14 @@ export function AppToaster() {
       position="bottom-right"
       expand={false}
       richColors={false}
-      visibleToasts={4}
-      gap={10}
-      duration={4_000}
-      offset={{ right: 16, bottom: 16 }}
+      visibleToasts={5}
+      gap={12}
+      duration={5_500}
+      offset={{ right: 20, bottom: 20 }}
       mobileOffset={{ right: 12, bottom: 12, left: 12 }}
       swipeDirections={["right", "bottom"]}
       className="onno-toaster"
+      style={{ "--width": "440px" } as CSSProperties}
       toastOptions={{
         className: "t-toast onno-toast",
         classNames: {

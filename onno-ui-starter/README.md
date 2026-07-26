@@ -422,7 +422,9 @@ throw ActionRejectedException.builder()
 
 For a no-form action, use `DIALOG` (the rejection default) or `TOAST`. Feedback has an explicit
 `INFO`/`SUCCESS`/`WARNING`/`ERROR` severity and `TOAST`/`DIALOG`/`INLINE` presentation; inline
-feedback without an open form safely falls back to the canonical dialog.
+feedback without an open form safely falls back to the canonical dialog. Toast feedback preserves
+its full hierarchy (`title`, `message`, `details`) and optional `dismissLabel`; the example Orders
+toolbar's **Toast demo** action cycles through all four semantic tones for visual verification.
 
 **Reference inputs** — a field can be a searchable picker of another catalog/document's records
 (the same ref widget an entity form uses) with `.reference(Target.class)`; the submitted value is

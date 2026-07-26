@@ -3,22 +3,50 @@ import { toast } from "sonner";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import type { ActionFeedback, ActionResult, ActionSeverity } from "@/lib/types";
+import type { ActionFeedback, ActionResult } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 
 const EVENT = "onno:action-feedback";
 
-function toastFor(severity: ActionSeverity, message: string) {
-  if (severity === "success") toast.success(message);
-  else if (severity === "warning") toast.warning(message);
-  else if (severity === "error") toast.error(message);
-  else toast.info(message);
+function toastFor(feedback: ActionFeedback) {
+  const details = feedback.details ?? [];
+  const title = feedback.title || feedback.message || "Done";
+  const description = ((feedback.title && feedback.message) || details.length) ? (
+    <div className="onno-toast__body">
+      {feedback.title && feedback.message ? (
+        <p className="onno-toast__message">{feedback.message}</p>
+      ) : null}
+      {details.length ? (
+        <ul className="onno-toast__details">
+          {details.map((detail, index) => (
+            <li key={`${index}-${detail}`}>
+              <span aria-hidden="true" />
+              {detail}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  ) : undefined;
+
+  let id: string | number;
+  const options = {
+    description,
+    action: feedback.dismissLabel ? {
+      label: feedback.dismissLabel,
+      onClick: () => toast.dismiss(id),
+    } : undefined,
+  };
+  if (feedback.severity === "success") id = toast.success(title, options);
+  else if (feedback.severity === "warning") id = toast.warning(title, options);
+  else if (feedback.severity === "error") id = toast.error(title, options);
+  else id = toast.info(title, options);
 }
 
 /** Present typed feedback consistently. Inline feedback without an active form falls back to a dialog. */
 export function presentActionFeedback(feedback: ActionFeedback) {
   if (feedback.presentation === "toast") {
-    toastFor(feedback.severity, feedback.message || feedback.title || "Done");
+    toastFor(feedback);
     return;
   }
   window.dispatchEvent(new CustomEvent<ActionFeedback>(EVENT, { detail: feedback }));

@@ -34,10 +34,12 @@ describe("AppToaster", () => {
       position: "bottom-right",
       expand: false,
       richColors: false,
-      visibleToasts: 4,
-      gap: 10,
+      visibleToasts: 5,
+      gap: 12,
+      duration: 5_500,
       className: "onno-toaster",
     });
+    expect(props.style).toMatchObject({ "--width": "440px" });
     expect(props.toastOptions.className).toContain("t-toast");
     expect(props.toastOptions.className).toContain("onno-toast");
     expect(props.swipeDirections).toEqual(["right", "bottom"]);

@@ -79,7 +79,7 @@ of the row keeps the full context menu. Flat table view only.
 | `Segmented` | `components/ui/segmented.tsx` | Every mutually-exclusive view/mode switcher. Documented exceptions: tool palettes, server-emitted DivKit form tab strips. |
 | `AnimatedNumber` | `components/ui/animated-number.tsx` | Formatted KPI/count/stat values that should replay the shared character pop-in when replaced. |
 | `NotificationBadgeMotion` | `components/ui/notification-badge-motion.tsx` | Unread dots/count pills that slide and pop when the unread count increases. |
-| `AppToaster` | `components/ui/toaster.tsx` | The single Sonner host: themed monochrome toast surfaces, actions, icons, and animated stack. |
+| `AppToaster` | `components/ui/toaster.tsx` | The single Sonner host: large themed toast surfaces, typed title/message/detail hierarchy, semantic icon wells, actions, and animated stack. |
 | `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
@@ -127,7 +127,8 @@ mean “any interactive container.”
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
 - Toast calls use Sonner's `toast` API and render through `AppToaster`; do not mount another
-  `Toaster`. Keep the surface monochrome and let the icon alone carry semantic status colour.
+  `Toaster`. Keep the surface monochrome; semantic status colour belongs to the icon well and detail
+  markers. Typed `ActionFeedback` toasts preserve `title`, `message`, `details`, and `dismissLabel`.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.
