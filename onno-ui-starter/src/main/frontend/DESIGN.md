@@ -42,6 +42,8 @@ sort, group-by), keyset infinite scroll by default (`feedMode: "paged"` is the o
 windowing, context menu, batch actions. Server search spans every non-secret column — scalars as
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
+The island owns padding only on standalone entity routes. When embedded with `PageBuilder.list`,
+it has no outer spacing; the surrounding page region owns sibling gaps and content insets.
 
 Avatars: DiceBear 10 `glass` is the default (`presence-avatars.tsx#glassAvatar`);
 avatars in lists and face-piles carry a thin `border border-border`.

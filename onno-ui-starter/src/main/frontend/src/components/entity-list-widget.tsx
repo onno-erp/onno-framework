@@ -2498,13 +2498,14 @@ export function EntityListWidget({
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
     // As its own route surface the island takes the full height from its top to the window bottom
     // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
-    // Embedded in a page, it flows with the host page (which owns scrolling) and drops its
-    // horizontal gutter so the table aligns with the sibling cards.
+    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
+    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
+    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
     <div
       ref={rootRef}
       className={cn(
         "pointer-events-auto flex min-h-0 flex-col",
-        surfaceMode ? "overflow-hidden p-4 sm:p-6" : "py-4"
+        surfaceMode && "overflow-hidden p-4 sm:p-6"
       )}
       style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
     >

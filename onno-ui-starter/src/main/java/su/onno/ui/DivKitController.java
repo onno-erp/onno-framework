@@ -557,8 +557,8 @@ public class DivKitController implements DisposableBean {
             if (c.kind() == PageComponent.Kind.LIST) {
                 Map<String, Object> descriptor = embeddedListDescriptor(c.entity(), profileId, principal);
                 if (descriptor != null) {
-                    // Embedded in a page (which already applies content padding) the list drops its
-                    // own horizontal gutter so its table aligns with the sibling cards, full width.
+                    // Embedded in a page the list carries no outer spacing: PageDivBuilder owns
+                    // content padding and sibling gaps, keeping the table aligned with adjacent cards.
                     descriptor.put("embedded", true);
                     applyListDefaults(descriptor, c.payload());
                     out.add(PageComponent.custom("onno-list", Map.of("list", descriptor)));
