@@ -645,16 +645,16 @@ class SalesOpsPage implements Page {
   equal share. Columns lay out side by side on desktop and stack on mobile.
 
   ```java
-  b.row(kpis -> {                                        // a 3-column KPI band
-      kpis.col(c -> c.widget("Open").type("count").document(Order.class).config("filter", "open = true"));
-      kpis.col(c -> c.widget("Revenue").type("metric").document(Order.class)
-                     .config("metric", "sum").config("metricField", "total").config("currency", "USD"));
-      kpis.col(c -> c.widget("Total").type("count").document(Order.class));
-  });
-  b.row(body -> {                                         // a 2/3 + 1/3 body
+  b.row(body -> {                                         // list + one coherent right rail
       body.col("2/3", main -> main.list(Order.class));
-      body.col("1/3", side -> side.widget("By status").type("chart").document(Order.class)
-                                  .config("kind", "pie").config("groupBy", "status_display").config("metric", "count"));
+      body.col("1/3", side -> {
+          side.widget("Open").type("count").document(Order.class).config("filter", "open = true");
+          side.widget("Revenue").type("metric").document(Order.class)
+              .config("metric", "sum").config("metricField", "total").config("currency", "USD");
+          side.widget("Total").type("count").document(Order.class);
+          side.widget("By status").type("chart").document(Order.class)
+              .config("kind", "pie").config("groupBy", "status_display").config("metric", "count");
+      });
   });
   ```
 - **Right rail** (shortcut). `b.aside(a -> { … })` is the common two-column case — a narrow side
@@ -675,7 +675,7 @@ class TasksPage implements Page {
     public void compose(PageBuilder b) {
         b.title("My tasks");
         b.header(false);
-        b.widget("Process tasks").type("tasks").width("full");
+        b.widget("My tasks").type("tasks").width("full");
     }
 }
 
@@ -696,7 +696,8 @@ all/mine/available work, supports local search,
 shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog. Claimed
 rows, delegation results, and history reuse the configured identity catalog's live avatar/photo;
 deterministic faces and initials keep people recognizable when no photo has been uploaded. The inbox
-starts directly with its filters instead of repeating the page title in a second widget header.
+uses one compact header for its title, all/mine/available switcher, hint, and search; keep the
+surrounding page header disabled when the task widget is the page's primary surface.
 Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
 its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an

@@ -176,6 +176,8 @@ describe("ProcessTasksWidget live inbox", () => {
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-10");
+    expect(screen.getByRole("heading", { name: "Process tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search tasks" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mine 1" }));
     expect(screen.queryByText("Review order O-10")).not.toBeInTheDocument();
     expect(screen.getByText("Review order O-20")).toBeInTheDocument();

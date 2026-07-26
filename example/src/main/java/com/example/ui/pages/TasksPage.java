@@ -17,7 +17,7 @@ public final class TasksPage implements Page {
     public void compose(PageBuilder b) {
         b.title("My tasks");
         b.header(false);
-        b.widget("Process tasks")
+        b.widget("My tasks")
                 .type("tasks")
                 .width("full")
                 .hint("Tasks remain here across restarts until they are completed.");

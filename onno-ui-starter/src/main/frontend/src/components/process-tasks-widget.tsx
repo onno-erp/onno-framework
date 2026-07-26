@@ -12,7 +12,7 @@ import type {
 import { useUiEvents } from "@/hooks/use-ui-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Input } from "@/components/ui/input";
@@ -194,7 +194,36 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
 
   return (
     <Card className="pointer-events-auto w-full">
-      <CardContent className="space-y-3 pt-4">
+      <CardHeader className="flex-row flex-wrap items-center gap-2 space-y-0 border-b border-border p-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <CardTitle className="truncate text-sm font-medium">
+            {widget.title || "My tasks"}
+          </CardTitle>
+          {widget.hint ? <HintIcon text={widget.hint} /> : null}
+        </div>
+        <Segmented
+          className="order-3 sm:order-none"
+          size="sm"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "all", label: `All ${counts.all}` },
+            { value: "mine", label: `Mine ${counts.mine}` },
+            { value: "available", label: `Available ${counts.available}` },
+          ]}
+        />
+        <div className="relative order-2 ml-auto w-full sm:order-none sm:w-56">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            aria-label="Search tasks"
+            className="h-8 pl-8 text-xs"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search tasks"
+          />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-3">
         {loading ? (
           <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" /> Loading tasks…
@@ -210,31 +239,6 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Segmented
-                  size="sm"
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: "all", label: `All ${counts.all}` },
-                    { value: "mine", label: `Mine ${counts.mine}` },
-                    { value: "available", label: `Available ${counts.available}` },
-                  ]}
-                />
-                {widget.hint ? <HintIcon text={widget.hint} /> : null}
-              </div>
-              <div className="relative w-full sm:w-64">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  aria-label="Search tasks"
-                  className="h-8 pl-8 text-xs"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search tasks"
-                />
-              </div>
-            </div>
             {visibleTasks.length === 0 ? (
               <div className="rounded-field border border-border py-8 text-center text-sm text-muted-foreground">
                 No tasks match this view.

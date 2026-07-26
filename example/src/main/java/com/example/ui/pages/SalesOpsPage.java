@@ -13,9 +13,8 @@ import org.springframework.stereotype.Component;
  * the framework serves any route that has a registered {@code Page} bean.
  *
  * <p>Declares no {@code profile()}, so it exists for every persona — a MANAGER and an ADMIN both open
- * it from the sidebar, each seeing the same live order KPIs above the working Orders list embedded
- * with {@code b.list(...)}. The header is dropped with {@code bare()}: the surface leads straight with
- * its tiles, and the browser tab still reads "Sales Ops" from the nav label.</p>
+ * it from the sidebar, each seeing the same working Orders list with its KPIs and status breakdown
+ * collected in a right rail. The browser tab still reads "Sales Ops" from the nav label.</p>
  */
 @Component
 public class SalesOpsPage implements Page {
@@ -30,24 +29,23 @@ public class SalesOpsPage implements Page {
         b.title("Sales ops");
         b.subtitle("Whatever layout the page wants — columns, splits, nesting");
 
-        // A three-column KPI band across the top: each column an equal share of the row.
-        b.row(kpis -> {
-            kpis.col(c -> c.widget("Open orders").type("count").document(Order.class)
-                    .config("metric", "count").config("filter", "open = true")
-                    .hint("Orders not yet completed or cancelled."));
-            kpis.col(c -> c.widget("Posted revenue").type("count").document(Order.class)
-                    .config("metric", "sum").metricField(Order::getTotal)
-                    .config("filter", "_posted = true").config("currency", "USD"));
-            kpis.col(c -> c.widget("Total orders").type("count").document(Order.class)
-                    .config("metric", "count"));
-        });
-
-        // A 2/3 + 1/3 body: the full Orders list on the left, a status breakdown chart on the right.
+        // One working surface: the full list stays dominant while every summary sits together in
+        // the right rail. The framework stacks the rail below the list on mobile.
         b.row(body -> {
             body.col("2/3", main -> main.list(Order.class));
-            body.col("1/3", side -> side.widget("Orders by status").type("chart").document(Order.class)
+            body.col("1/3", side -> {
+                side.widget("Open orders").type("count").document(Order.class)
+                    .config("metric", "count").config("filter", "open = true")
+                    .hint("Orders not yet completed or cancelled.");
+                side.widget("Posted revenue").type("count").document(Order.class)
+                    .config("metric", "sum").metricField(Order::getTotal)
+                    .config("filter", "_posted = true").config("currency", "USD");
+                side.widget("Total orders").type("count").document(Order.class)
+                    .config("metric", "count");
+                side.widget("Orders by status").type("chart").document(Order.class)
                     .config("kind", "pie").config("groupBy", "status_display").config("metric", "count")
-                    .hint("Where orders sit in the lifecycle."));
+                    .hint("Where orders sit in the lifecycle.");
+            });
         });
     }
 }
