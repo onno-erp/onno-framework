@@ -30,6 +30,6 @@ public class UiEventController {
         // notification events to this viewer's streams.
         CurrentUserResolver.CurrentUser me = currentUser.resolve(principal);
         String userId = me.recordId() != null ? me.recordId() : me.username();
-        return publisher.subscribe(access.roles(principal), userId);
+        return publisher.subscribe(access.roles(principal), userId, me.username());
     }
 }

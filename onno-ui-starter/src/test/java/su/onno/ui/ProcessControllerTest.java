@@ -41,7 +41,7 @@ class ProcessControllerTest {
         ProcessDefinitions definitions = new ProcessDefinitions(List.of(definition));
         ObjectMapper json = new ObjectMapper().findAndRegisterModules();
         controller = new ProcessController(
-                new JdbcProcessEngine(jdbi, definitions, json),
+                new JdbcProcessEngine(jdbi, definitions, json, ignored -> { }),
                 definitions,
                 json,
                 new UiAccessService(new MetadataRegistry()));

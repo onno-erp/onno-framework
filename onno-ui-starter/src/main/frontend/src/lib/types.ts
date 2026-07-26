@@ -265,6 +265,8 @@ export interface UiEvent {
   actorAvatar?: string;
   createdAt?: string;
   unread?: boolean;
+  // `tasks-changed` uses entityType "process-task" and carries only the affected instance id.
+  // Candidate users/roles stay server-side; eligible clients refetch their authenticated inbox.
   // Present on the `ready` ack that opens each stream, and on the explicit dev `reload` push.
   // `bootId` identifies the server's application-context incarnation; `devMode` marks a
   // live-development server. A changed bootId across a reconnect means the server restarted under

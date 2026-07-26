@@ -685,7 +685,10 @@ layout.section("Work").page("/tasks", "My tasks", "list-checks");
 The widget calls authenticated `GET /api/tasks` and renders claim plus the active task's declared
 enum outcomes. Claim/complete writes are CSRF-protected. Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
-its own actor or roles.
+its own actor or roles. The inbox is live: every committed start, claim, or completion emits an
+audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details
+stay server-side; the event contains only an invalidation. A Retry control appears only after a
+failed read—there is no normal-state refresh button.
 
 Headless clients use the same boundary:
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Loader2, RefreshCw, UserRound } from "lucide-react";
+import { CheckCircle2, Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import type { DashboardWidgetMeta, ProcessWorkItem } from "@/lib/types";
+import type { DashboardWidgetMeta, ProcessWorkItem, UiEvent } from "@/lib/types";
+import { useUiEvents } from "@/hooks/use-ui-events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,13 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
     void reload();
   }, [reload]);
 
+  const onUiEvent = useCallback((event: UiEvent) => {
+    if (event.type === "tasks-changed") {
+      void reload();
+    }
+  }, [reload]);
+  useUiEvents(onUiEvent);
+
   const claim = async (task: ProcessWorkItem) => {
     setBusy(task.id);
     try {
@@ -63,14 +71,11 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
 
   return (
     <Card className="pointer-events-auto w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+      <CardHeader className="pb-3">
         <div className="flex items-center gap-1.5">
           <CardTitle className="text-base">{widget.title || "My tasks"}</CardTitle>
           {widget.hint ? <HintIcon text={widget.hint} /> : null}
         </div>
-        <Button variant="ghost" size="icon" onClick={() => void reload()} aria-label="Refresh tasks">
-          <RefreshCw className={loading ? "animate-spin" : ""} />
-        </Button>
       </CardHeader>
       <CardContent className="space-y-3">
         {loading ? (
@@ -78,7 +83,10 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
             <Loader2 className="size-4 animate-spin" /> Loading tasks…
           </div>
         ) : error ? (
-          <p className="py-3 text-sm text-destructive">{error}</p>
+          <div className="flex items-center justify-between gap-3 py-3">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => void reload()}>Retry</Button>
+          </div>
         ) : tasks.length === 0 ? (
           <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
             <CheckCircle2 className="size-4" /> You have no open tasks.

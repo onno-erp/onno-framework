@@ -252,8 +252,10 @@ everything. The same event drives the browser live-update SSE stream (`GET /api/
 
 If you consume `/api/events` with a browser `EventSource`, note the stream sends **named** events
 (the change type: `created` / `updated` / `deleted` / `posted` / `unposted` / `changed`, plus
-`ready` / `presence` / `notification`) — never the default unnamed `message`. So `EventSource.onmessage`
-fires for nothing; you must `addEventListener("updated", …)` (etc.) per event name you care about.
+`ready` / `presence` / `notification` / `tasks-changed`) — never the default unnamed `message`.
+`tasks-changed` is an audience-scoped, payload-free signal to refetch authenticated `GET /api/tasks`;
+candidate assignments are not sent to the browser. `EventSource.onmessage` fires for nothing; you
+must `addEventListener("updated", …)` (etc.) per event name you care about.
 
 ## Notes for a public read view
 

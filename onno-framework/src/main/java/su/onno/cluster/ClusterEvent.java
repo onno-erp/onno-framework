@@ -29,6 +29,9 @@ public sealed interface ClusterEvent {
     /** {@link #kind()} tag for a {@link Notification} notice — a per-user notification to wake on a peer node. */
     String KIND_NOTIFICATION = "notification";
 
+    /** {@link #kind()} tag for an audience-scoped process-task inbox invalidation. */
+    String KIND_PROCESS_TASKS_CHANGED = "process-tasks-changed";
+
     /** The payload-shape tag identifying which permitted variant this event is. */
     String kind();
 
@@ -69,6 +72,15 @@ public sealed interface ClusterEvent {
     static Notification notification(String recipientId, String notificationId, String type,
                                      String title, String body, String link, String actorName) {
         return new Notification(null, recipientId, notificationId, type, title, body, link, actorName);
+    }
+
+    /**
+     * Build an audience-scoped process-task inbox invalidation. It carries no task data: eligible
+     * browsers re-read their own authenticated inbox from the shared durable store.
+     */
+    static ProcessTasksChanged processTasksChanged(
+            String instanceId, java.util.Set<String> audienceUsers, java.util.Set<String> audienceRoles) {
+        return new ProcessTasksChanged(null, instanceId, audienceUsers, audienceRoles);
     }
 
     /**
@@ -185,6 +197,33 @@ public sealed interface ClusterEvent {
         @Override
         public Notification withOrigin(String originNodeId) {
             return new Notification(originNodeId, recipientId, notificationId, type, title, body, link, actorName);
+        }
+    }
+
+    /**
+     * A process mutation changed which task rows are visible to one or more users or roles.
+     * Candidate data remains in this server-to-server envelope; the browser receives only a
+     * {@code tasks-changed} invalidation and refetches its authorized inbox.
+     */
+    record ProcessTasksChanged(
+            String originNodeId,
+            String instanceId,
+            java.util.Set<String> audienceUsers,
+            java.util.Set<String> audienceRoles) implements ClusterEvent {
+
+        public ProcessTasksChanged {
+            audienceUsers = audienceUsers == null ? java.util.Set.of() : java.util.Set.copyOf(audienceUsers);
+            audienceRoles = audienceRoles == null ? java.util.Set.of() : java.util.Set.copyOf(audienceRoles);
+        }
+
+        @Override
+        public String kind() {
+            return KIND_PROCESS_TASKS_CHANGED;
+        }
+
+        @Override
+        public ProcessTasksChanged withOrigin(String originNodeId) {
+            return new ProcessTasksChanged(originNodeId, instanceId, audienceUsers, audienceRoles);
         }
     }
 }

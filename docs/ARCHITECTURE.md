@@ -38,7 +38,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
-| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, collaboration markers, and notification delivery in sync across instances. |
+| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-mail-starter` | `su.onno` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
 | `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
@@ -121,7 +121,9 @@ status field:
   versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
 - `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
   role-scoped task inbox and claim/complete commands. The `tasks` page widget provides the same
-  loop to humans.
+  loop to humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
+  transaction commits; the UI routes a payload-free `tasks-changed` SSE invalidation to affected
+  candidate users/roles and admins, so every open inbox refetches automatically.
 
 The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
 HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,
@@ -302,7 +304,7 @@ Durable process routes are `GET /api/process-definitions`,
 | Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new]`, `/api/divkit/registers/{name}` (ui-starter). `/{id}` is the combined record surface — the editable form (disabled for read-only viewers) with the record-level actions in its header; `/{id}/edit` is kept as a back-compat alias. `GET /api/divkit/{*route}` is the catch-all page endpoint: any route with a registered `Page` bean renders (a custom dashboard/report, **including `/settings`** — there is no built-in Settings surface), otherwise `404`. An authored `Page` at a default surface route (`/catalogs/{name}`, `/documents/{name}`, `/registers/{name}`) overrides that surface's default list/report |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
-| Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by per-entity read access (#190) |
+| Events | `GET /api/events` — SSE stream of CRUD/posting changes, `tasks-changed` inbox invalidations, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by entity read access or process-task audience (#190) |
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
@@ -451,6 +453,8 @@ resource instead of polling. The browser stream is **filtered per subscriber by 
 access** — an event (including `comment` and `presence` events) reaches a viewer only when their roles
 may read the affected record, so the live channel honours the same deny-by-default RBAC as the
 REST/UI/MCP surfaces; unknown event kinds are delivered only to `ADMIN` (fail closed) (#190).
+Process-task invalidations use their own audience gate: only candidate users/roles and `ADMIN`
+receive `tasks-changed`, and the candidate assignment itself never enters the browser payload.
 `@DomainEvent` declarations append to the transactional `onno_outbox`;
 `onno-kafka-starter` relays those rows when you want cross-service streaming.
 
@@ -483,8 +487,10 @@ Running more than one instance behind a load balancer needs these, beyond a shar
   once, on the node that made the change. `DocumentPostedEvent`/`DocumentUnpostedEvent` are node-local
   by design; their cross-node *visibility* rides on the `posted`/`unposted` `EntityChangedEvent`. To
   swap in Kafka/Redis, expose your own `ClusterEventBus` bean (`@ConditionalOnMissingBean`).
-  `ClusterEvent` is a sealed family discriminated by `kind`: `EntityChanged` (above) and `Presence`
-  (record-level collaboration markers) share the one channel, so the same bus carries both.
+  `ClusterEvent` is a sealed family discriminated by `kind`: `EntityChanged`, `Presence`,
+  `Notification`, and `ProcessTasksChanged` share the one channel. Task invalidations retain their
+  user/role audience across nodes, so a process advanced on one node refreshes only eligible inboxes
+  connected elsewhere.
 - **Presence markers across nodes** — record-level presence ("who else is viewing this") is held in an
   in-memory per-node registry (`PresenceRegistry`, ui-starter) and relayed as a `Presence` `ClusterEvent`
   over the same bus, so a viewer on any node sees viewers on every node. It is deliberately best-effort

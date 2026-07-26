@@ -23,16 +23,29 @@ public final class JdbcProcessEngine implements ProcessEngine {
     private final ProcessDefinitions definitions;
     private final ObjectMapper json;
     private final Clock clock;
+    private final ProcessEventPublisher events;
 
-    public JdbcProcessEngine(Jdbi jdbi, ProcessDefinitions definitions, ObjectMapper json) {
-        this(jdbi, definitions, json, Clock.systemUTC());
+    public JdbcProcessEngine(
+            Jdbi jdbi,
+            ProcessDefinitions definitions,
+            ObjectMapper json,
+            ProcessEventPublisher events
+    ) {
+        this(jdbi, definitions, json, Clock.systemUTC(), events);
     }
 
-    JdbcProcessEngine(Jdbi jdbi, ProcessDefinitions definitions, ObjectMapper json, Clock clock) {
+    JdbcProcessEngine(
+            Jdbi jdbi,
+            ProcessDefinitions definitions,
+            ObjectMapper json,
+            Clock clock,
+            ProcessEventPublisher events
+    ) {
         this.jdbi = Objects.requireNonNull(jdbi, "jdbi");
         this.definitions = Objects.requireNonNull(definitions, "definitions");
         this.json = Objects.requireNonNull(json, "json");
         this.clock = Objects.requireNonNull(clock, "clock");
+        this.events = Objects.requireNonNull(events, "events");
     }
 
     @Override
@@ -54,7 +67,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 ? ProcessStatus.COMPLETED : ProcessStatus.ACTIVE;
         String payloadJson = write(payload);
 
-        return jdbi.inTransaction(handle -> {
+        Mutation<ProcessSnapshot> mutation = jdbi.inTransaction(handle -> {
             handle.createUpdate("""
                     insert into onno_process_instances
                         (_id, _definition_key, _payload, _current_step, _status,
@@ -71,13 +84,16 @@ public final class JdbcProcessEngine implements ProcessEngine {
                     .bind("now", now)
                     .execute();
             insertTransition(handle, id, null, first.step().key(), null, actor.username(), now);
-            if (first instanceof HumanTaskNode<?, ?, ?> task) {
-                insertWorkItem(handle, id, task, payload, now);
-            }
-            return new ProcessSnapshot(
+            TaskAudience audience = first instanceof HumanTaskNode<?, ?, ?> task
+                    ? insertWorkItem(handle, id, task, payload, now)
+                    : null;
+            ProcessSnapshot snapshot = new ProcessSnapshot(
                     id, definition.key(), first.step().key(), status,
                     actor.username(), now, now, 0);
+            return new Mutation<>(snapshot, id, audience);
         });
+        publish(mutation);
+        return mutation.value;
     }
 
     @Override
@@ -137,11 +153,11 @@ public final class JdbcProcessEngine implements ProcessEngine {
     @Override
     public ProcessWorkItem claim(UUID workItemId, ProcessActor actor) {
         Objects.requireNonNull(actor, "actor");
-        return jdbi.inTransaction(handle -> {
+        Mutation<ProcessWorkItem> mutation = jdbi.inTransaction(handle -> {
             WorkRow row = requireWorkItem(handle, workItemId, true);
             if (row.status == WorkItemStatus.CLAIMED) {
                 if (actor.username().equals(row.assignee) || actor.roles().contains("ADMIN")) {
-                    return toWorkItem(row);
+                    return new Mutation<>(toWorkItem(row), row.instanceId, null);
                 }
                 throw new IllegalStateException("Work item is already claimed by " + row.assignee);
             }
@@ -162,15 +178,21 @@ public final class JdbcProcessEngine implements ProcessEngine {
             if (changed != 1) {
                 throw new IllegalStateException("Work item was changed by another user");
             }
-            return toWorkItem(row.claimed(actor.username(), now));
+            WorkRow claimed = row.claimed(actor.username(), now);
+            return new Mutation<>(
+                    toWorkItem(claimed),
+                    row.instanceId,
+                    audience(row).withUser(actor.username()));
         });
+        publish(mutation);
+        return mutation.value;
     }
 
     @Override
     public ProcessSnapshot complete(UUID workItemId, String outcome, ProcessActor actor) {
         Objects.requireNonNull(outcome, "outcome");
         Objects.requireNonNull(actor, "actor");
-        return jdbi.inTransaction(handle -> {
+        Mutation<ProcessSnapshot> mutation = jdbi.inTransaction(handle -> {
             WorkRow work = requireWorkItem(handle, workItemId, true);
             if (work.status == WorkItemStatus.COMPLETED) {
                 throw new IllegalStateException("Work item is already completed");
@@ -222,13 +244,18 @@ public final class JdbcProcessEngine implements ProcessEngine {
             }
             insertTransition(handle, instance.id, work.stepKey, target.node.step().key(),
                     outcome, actor.username(), now);
+            TaskAudience audience = audience(work).withUser(actor.username());
             if (target.node instanceof HumanTaskNode<?, ?, ?> nextTask) {
-                insertWorkItem(handle, instance.id, nextTask, target.payload, now);
+                audience = audience.merge(insertWorkItem(
+                        handle, instance.id, nextTask, target.payload, now));
             }
-            return new ProcessSnapshot(
+            ProcessSnapshot snapshot = new ProcessSnapshot(
                     instance.id, instance.definitionKey, target.node.step().key(), nextStatus,
                     instance.startedBy, instance.startedAt, now, instance.version + 1);
+            return new Mutation<>(snapshot, instance.id, audience);
         });
+        publish(mutation);
+        return mutation.value;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -257,7 +284,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private void insertWorkItem(
+    private TaskAudience insertWorkItem(
             Handle handle, UUID instanceId, HumanTaskNode task, Object payload, Instant now) {
         HumanTask humanTask = task.task();
         TaskAssignment assignment = Objects.requireNonNull(
@@ -276,6 +303,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .bind("roles", write(assignment.roles()))
                 .bind("now", now)
                 .execute();
+        return new TaskAudience(assignment.users(), assignment.roles());
     }
 
     private void insertTransition(
@@ -373,6 +401,19 @@ public final class JdbcProcessEngine implements ProcessEngine {
         }
     }
 
+    private TaskAudience audience(WorkRow row) {
+        TaskAudience audience = new TaskAudience(
+                readSet(row.candidateUsers), readSet(row.candidateRoles));
+        return row.assignee == null ? audience : audience.withUser(row.assignee);
+    }
+
+    private void publish(Mutation<?> mutation) {
+        if (mutation.audience != null) {
+            events.publish(new ProcessTasksChangedEvent(
+                    mutation.instanceId, mutation.audience.users, mutation.audience.roles));
+        }
+    }
+
     private static ProcessSnapshot snapshot(InstanceRow row) {
         return new ProcessSnapshot(
                 row.id, row.definitionKey, row.currentStep, row.status,
@@ -419,5 +460,32 @@ public final class JdbcProcessEngine implements ProcessEngine {
     }
 
     private record TransitionTarget(ProcessNode<?, ?> node, Object payload) {
+    }
+
+    private record Mutation<T>(T value, UUID instanceId, TaskAudience audience) {
+    }
+
+    private record TaskAudience(Set<String> users, Set<String> roles) {
+        TaskAudience {
+            users = Set.copyOf(users);
+            roles = Set.copyOf(roles);
+        }
+
+        TaskAudience withUser(String user) {
+            if (user == null || user.isBlank() || users.contains(user)) {
+                return this;
+            }
+            LinkedHashSet<String> merged = new LinkedHashSet<>(users);
+            merged.add(user);
+            return new TaskAudience(merged, roles);
+        }
+
+        TaskAudience merge(TaskAudience other) {
+            LinkedHashSet<String> mergedUsers = new LinkedHashSet<>(users);
+            mergedUsers.addAll(other.users);
+            LinkedHashSet<String> mergedRoles = new LinkedHashSet<>(roles);
+            mergedRoles.addAll(other.roles);
+            return new TaskAudience(mergedUsers, mergedRoles);
+        }
     }
 }

@@ -173,6 +173,13 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return applicationEventPublisher::publishEvent;
     }
 
+    /** Bridges durable process mutations onto Spring after their database transaction commits. */
+    @Bean
+    public su.onno.process.ProcessEventPublisher processEventPublisher(
+            org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
+        return applicationEventPublisher::publishEvent;
+    }
+
     /**
      * Local-only fallback {@link su.onno.cluster.ClusterEventBus}. {@code onno-cluster-starter}
      * supplies a Postgres {@code LISTEN}/{@code NOTIFY} bus (its auto-configuration is ordered
@@ -193,6 +200,13 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     @Bean
     public ClusterEntityChangeRelay clusterEntityChangeRelay(su.onno.cluster.ClusterEventBus clusterEventBus) {
         return new ClusterEntityChangeRelay(clusterEventBus);
+    }
+
+    /** Relays audience-scoped process-task inbox invalidations to peer nodes. */
+    @Bean
+    public ClusterProcessTaskRelay clusterProcessTaskRelay(
+            su.onno.cluster.ClusterEventBus clusterEventBus) {
+        return new ClusterProcessTaskRelay(clusterEventBus);
     }
 
     @Bean
@@ -248,10 +262,11 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public su.onno.process.ProcessEngine processEngine(
             Jdbi jdbi,
             su.onno.process.ProcessDefinitions definitions,
-            ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper) {
+            ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper,
+            su.onno.process.ProcessEventPublisher events) {
         com.fasterxml.jackson.databind.ObjectMapper mapper = objectMapper.getIfAvailable(
                 () -> new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
-        return new su.onno.process.JdbcProcessEngine(jdbi, definitions, mapper);
+        return new su.onno.process.JdbcProcessEngine(jdbi, definitions, mapper, events);
     }
 
     /**

@@ -101,6 +101,9 @@ of a task's outcome enum.
 
 The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
 UI starter exposes `GET /api/tasks`, claim/complete commands, and the built-in `tasks` page widget.
+Every committed task mutation publishes `ProcessTasksChangedEvent`; eligible browser inboxes receive
+the audience-scoped, payload-free `tasks-changed` SSE event and refetch automatically (also across
+nodes through `ClusterEvent.ProcessTasksChanged`).
 Not yet implemented: timers, automatic/decision nodes, cancellation, parallel fork/join,
 subprocesses, and definition-version migration.
 

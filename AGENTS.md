@@ -403,6 +403,11 @@ which step is active. Do not turn a document into a process merely because it ha
 documents record business events, posting changes registers, and processes coordinate durable work
 over time.
 
+Process mutations publish `ProcessTasksChangedEvent` after the durable transaction commits. The UI
+starter turns it into an audience-scoped `tasks-changed` SSE invalidation, and the built-in task
+inbox refetches automatically. Publish process changes through `ProcessEngine`, not a controller-only
+side channel, so programmatic starts/completions stay live too.
+
 Step identity is a Java enum implementing `ProcessStepKey`; task outcomes are enums; transitions
 connect typed node handles, never string names. Definitions are Spring beans with an explicit stable
 key and payload type:

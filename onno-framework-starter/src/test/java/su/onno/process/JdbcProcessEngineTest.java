@@ -23,6 +23,7 @@ class JdbcProcessEngineTest {
 
     private ApprovalProcess definition;
     private JdbcProcessEngine engine;
+    private List<ProcessTasksChangedEvent> events;
 
     @BeforeEach
     void setUp() {
@@ -32,10 +33,12 @@ class JdbcProcessEngineTest {
         Jdbi jdbi = Jdbi.create(dataSource);
         new SchemaGenerator(new MetadataRegistry()).execute(jdbi);
         definition = new ApprovalProcess();
+        events = new java.util.ArrayList<>();
         engine = new JdbcProcessEngine(
                 jdbi, new ProcessDefinitions(List.of(definition)),
                 new ObjectMapper().findAndRegisterModules(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                events::add);
     }
 
     @Test
@@ -46,6 +49,8 @@ class JdbcProcessEngineTest {
                 definition, new Request("PO-42", "Purchase laptops"), manager);
 
         assertThat(started.currentStep()).isEqualTo("manager-approval");
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().audienceRoles()).containsExactly("MANAGER");
         ProcessWorkItem managerTask = engine.inbox(manager).getFirst();
         assertThat(engine.inbox(finance)).isEmpty();
         assertThat(managerTask.outcomes()).containsExactlyInAnyOrder("APPROVED", "REJECTED");
@@ -53,15 +58,21 @@ class JdbcProcessEngineTest {
         ProcessWorkItem claimed = engine.claim(managerTask.id(), manager);
         assertThat(claimed.status()).isEqualTo(WorkItemStatus.CLAIMED);
         assertThat(claimed.assignee()).isEqualTo("mara");
+        assertThat(events).hasSize(2);
+        assertThat(events.getLast().audienceUsers()).containsExactly("mara");
         assertThatThrownBy(() ->
                 engine.complete(managerTask.id(), Outcome.APPROVED, finance))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("claimed by");
+        assertThat(events).as("failed mutations publish nothing").hasSize(2);
 
         ProcessSnapshot awaitingFinance =
                 engine.complete(managerTask.id(), Outcome.APPROVED, manager);
         assertThat(awaitingFinance.currentStep()).isEqualTo("finance-approval");
         assertThat(engine.inbox(manager)).isEmpty();
+        assertThat(events).hasSize(3);
+        assertThat(events.getLast().audienceRoles())
+                .containsExactlyInAnyOrder("MANAGER", "FINANCE");
 
         ProcessWorkItem financeTask = engine.inbox(finance).getFirst();
         ProcessSnapshot completed = engine.complete(financeTask.id(), Outcome.APPROVED, finance);
@@ -72,6 +83,9 @@ class JdbcProcessEngineTest {
         assertThat(engine.history(started.id()))
                 .extracting(ProcessTransitionSnapshot::toStep)
                 .containsExactly("manager-approval", "finance-approval", "completed");
+        assertThat(events).hasSize(4);
+        assertThat(events.getLast().audienceUsers()).containsExactly("finn");
+        assertThat(events.getLast().audienceRoles()).containsExactly("FINANCE");
     }
 
     record Request(String number, String subject) {

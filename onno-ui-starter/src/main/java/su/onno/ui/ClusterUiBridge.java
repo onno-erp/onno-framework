@@ -36,10 +36,14 @@ public class ClusterUiBridge {
         bus.subscribe(event -> {
             if (event instanceof ClusterEvent.EntityChanged ec) {
                 publisher.publish(ec.changeType(), ec.entityType(), ec.entityName(), ec.id(), ec.naturalKey());
+            } else if (event instanceof ClusterEvent.ProcessTasksChanged tasks) {
+                publisher.publishProcessTasksChanged(
+                        tasks.instanceId(), tasks.audienceUsers(), tasks.audienceRoles());
             }
         });
         if (bus.isDistributed()) {
-            log.info("Cluster live-UI sync active: forwarding peer-node entity changes to local SSE clients.");
+            log.info("Cluster live-UI sync active: forwarding peer-node entity and process-task changes "
+                    + "to local SSE clients.");
         }
     }
 }
