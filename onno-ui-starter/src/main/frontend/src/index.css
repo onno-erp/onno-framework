@@ -358,6 +358,10 @@
     color: hsl(var(--success));
   }
 
+  .onno-toaster [data-sonner-toast][data-type="info"] .onno-toast__icon {
+    color: hsl(var(--chart-1));
+  }
+
   .onno-toaster [data-sonner-toast][data-type="warning"] .onno-toast__icon {
     color: hsl(var(--warning));
   }
