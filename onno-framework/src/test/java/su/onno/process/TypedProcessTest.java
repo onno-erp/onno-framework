@@ -48,7 +48,13 @@ class TypedProcessTest {
 
     @Test
     void rejectsAProcessThatDoesNotHandleEveryTaskOutcome() {
-        ProcessDefinition<PurchaseRequest, PurchaseStep> incomplete = new ProcessDefinition<>() {
+        ProcessDefinition<PurchaseRequest, PurchaseStep> incomplete =
+                new ProcessDefinition<>("incomplete", PurchaseRequest.class) {
+            @Override
+            public TaskAssignment startAssignment(PurchaseRequest payload) {
+                return TaskAssignment.roles("MANAGER");
+            }
+
             @Override
             protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
                 var manager = graph.human(PurchaseStep.MANAGER_APPROVAL, new ApprovalTask());
@@ -66,7 +72,13 @@ class TypedProcessTest {
 
     @Test
     void rejectsUnreachableStepsAndCrossGraphConnections() {
-        ProcessDefinition<PurchaseRequest, PurchaseStep> unreachable = new ProcessDefinition<>() {
+        ProcessDefinition<PurchaseRequest, PurchaseStep> unreachable =
+                new ProcessDefinition<>("unreachable", PurchaseRequest.class) {
+            @Override
+            public TaskAssignment startAssignment(PurchaseRequest payload) {
+                return TaskAssignment.roles("MANAGER");
+            }
+
             @Override
             protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
                 graph.start().to(graph.end(PurchaseStep.COMPLETED));
@@ -123,6 +135,11 @@ class TypedProcessTest {
         public Class<ApprovalOutcome> outcomeType() {
             return ApprovalOutcome.class;
         }
+
+        @Override
+        public TaskAssignment assignment(PurchaseRequest payload) {
+            return TaskAssignment.roles("MANAGER");
+        }
     }
 
     static final class PurchaseApproval
@@ -130,6 +147,15 @@ class TypedProcessTest {
 
         private HumanTaskNode<PurchaseRequest, PurchaseStep, ApprovalOutcome> manager;
         private HumanTaskNode<PurchaseRequest, PurchaseStep, ApprovalOutcome> finance;
+
+        PurchaseApproval() {
+            super("purchase-approval", PurchaseRequest.class);
+        }
+
+        @Override
+        public TaskAssignment startAssignment(PurchaseRequest payload) {
+            return TaskAssignment.roles("MANAGER");
+        }
 
         @Override
         protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {

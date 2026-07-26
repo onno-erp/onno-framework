@@ -1,6 +1,11 @@
 package su.onno.ui;
 
+import su.onno.fields.Field;
+import su.onno.fields.Fields;
+import su.onno.types.Ref;
+
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,24 +18,61 @@ import java.util.Map;
  * Future entity-level UI knobs (default sort, list columns subset, form
  * grouping order, etc.) belong here too.</p>
  */
-public class EntityConfigBuilder {
+public class EntityConfigBuilder<E> {
 
-    private final Map<String, FieldHintBuilder> fields = new LinkedHashMap<>();
-    private final Map<String, FormValidationBuilder> validations = new LinkedHashMap<>();
+    private final Map<String, FieldHintBuilder<E, ?>> fields = new LinkedHashMap<>();
+    private final Map<String, FormValidationBuilder<E>> validations = new LinkedHashMap<>();
     private final Map<String, String> actions = new LinkedHashMap<>();
-    private final Map<String, RelatedListBuilder> relatedLists = new LinkedHashMap<>();
+    private final Map<String, RelatedListBuilder<E, ?>> relatedLists = new LinkedHashMap<>();
     private String icon = "";
 
-    public FieldHintBuilder field(String name) {
-        return fields.computeIfAbsent(name, n -> new FieldHintBuilder(this, n));
+    public FieldHintBuilder<E, Object> field(String name) {
+        @SuppressWarnings("unchecked")
+        FieldHintBuilder<E, Object> result = (FieldHintBuilder<E, Object>) fields.computeIfAbsent(
+                name, n -> new FieldHintBuilder<>(this, n));
+        return result;
+    }
+
+    /** Configure a field using a compiler-checked getter reference. */
+    public <V> FieldHintBuilder<E, Object> field(Field<E, V> field) {
+        return field(Fields.name(field));
+    }
+
+    /** Configure a Ref field while retaining its target type for target-field hints. */
+    public <T> FieldHintBuilder<E, T> refField(Field<E, Ref<T>> field) {
+        String name = Fields.name(field);
+        @SuppressWarnings("unchecked")
+        FieldHintBuilder<E, T> result = (FieldHintBuilder<E, T>) fields.computeIfAbsent(
+                name, n -> new FieldHintBuilder<>(this, n));
+        return result;
+    }
+
+    /** Configure a field inside a typed collection/tabular section. */
+    public <R, V> FieldHintBuilder<E, Object> rowField(
+            Field<E, ? extends Collection<R>> section,
+            Field<R, V> rowField
+    ) {
+        return field(Fields.path(section, rowField));
+    }
+
+    /** Configure a Ref inside a typed collection/tabular section, retaining its target type. */
+    public <R, T> FieldHintBuilder<E, T> rowRefField(
+            Field<E, ? extends Collection<R>> section,
+            Field<R, Ref<T>> rowField
+    ) {
+        String name = Fields.path(section, rowField);
+        @SuppressWarnings("unchecked")
+        FieldHintBuilder<E, T> result = (FieldHintBuilder<E, T>) fields.computeIfAbsent(
+                name, n -> new FieldHintBuilder<>(this, n));
+        return result;
     }
 
     /**
      * Add debounced, dependency-aware live feedback to the generated form. The validator class
      * must be a Spring bean; use {@link FormValidationBuilder#dependsOn} to avoid unrelated calls.
      */
-    public FormValidationBuilder validation(String key, Class<? extends FormValidator> validator) {
-        return validations.computeIfAbsent(key, n -> new FormValidationBuilder(this, n, validator));
+    public FormValidationBuilder<E> validation(String key, Class<? extends FormValidator> validator) {
+        return validations.computeIfAbsent(key, n -> new FormValidationBuilder<>(this, n, validator));
     }
 
     /**
@@ -47,8 +89,10 @@ public class EntityConfigBuilder {
      * <p>See {@link RelatedList}. Editor-only — no schema change; rows are read/written live
      * against the join catalog.</p>
      */
-    public RelatedListBuilder relatedList(String name, Class<?> joinCatalog) {
-        return relatedLists.computeIfAbsent(name, n -> new RelatedListBuilder(this, n, joinCatalog));
+    @SuppressWarnings("unchecked")
+    public <J> RelatedListBuilder<E, J> relatedList(String name, Class<J> joinCatalog) {
+        return (RelatedListBuilder<E, J>) relatedLists.computeIfAbsent(
+                name, n -> new RelatedListBuilder<>(this, n, joinCatalog));
     }
 
     /**
@@ -99,7 +143,7 @@ public class EntityConfigBuilder {
     /** Related-list panels authored on this entity, in declaration order. */
     public List<RelatedList> buildRelatedLists() {
         List<RelatedList> result = new ArrayList<>();
-        for (RelatedListBuilder b : relatedLists.values()) {
+        for (RelatedListBuilder<E, ?> b : relatedLists.values()) {
             result.add(b.build());
         }
         return List.copyOf(result);

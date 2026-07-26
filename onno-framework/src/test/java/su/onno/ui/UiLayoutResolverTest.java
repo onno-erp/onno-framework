@@ -1,9 +1,11 @@
 package su.onno.ui;
 
 import su.onno.fixtures.TestProduct;
+import su.onno.fixtures.TestSalesOrder;
 import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
+import su.onno.metadata.PageWidgetDescriptor;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,7 @@ class UiLayoutResolverTest {
         registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerCatalog(scanner.scan(TestProduct.class));
+        registry.registerDocument(scanner.scanDocument(TestSalesOrder.class));
         resolver = new UiLayoutResolver(registry);
     }
 
@@ -89,6 +92,25 @@ class UiLayoutResolverTest {
         assertThat(kpi.type()).isEqualTo("page");
         assertThat(kpi.href()).isEqualTo("/kpi");
         assertThat(kpi.icon()).isBlank();                // no explicit icon → left to the nav heuristic
+    }
+
+    @Test
+    void resolveWidgets_mapsTypedJavaFieldsToApiColumns() {
+        PageBuilder page = new PageBuilder();
+        page.widget("Orders").type("chart").document(TestSalesOrder.class)
+                .dateField(TestSalesOrder::getDate)
+                .titleField(TestSalesOrder::getNumber)
+                .metricField(TestSalesOrder::getAmount)
+                .groupBy(TestSalesOrder::getStatus);
+
+        PageWidgetDescriptor widget =
+                resolver.resolveWidgetConfigs(page.widgets()).getFirst();
+
+        assertThat(widget.dateField()).isEqualTo("_date");
+        assertThat(widget.titleField()).isEqualTo("_number");
+        assertThat(widget.extraConfig())
+                .containsEntry("metricField", "amount")
+                .containsEntry("groupBy", "status");
     }
 
     private static UiLayout buildLayout(UiLayoutBuilder builder) {

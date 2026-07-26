@@ -122,12 +122,94 @@ public class UiLayoutResolver {
             result.add(new PageWidgetDescriptor(
                     wc.title(), wc.type(), wc.order(), wc.width(),
                     wc.entityType(), entityName, wc.maxItems(),
-                    wc.dateField(), wc.titleField(),
-                    wc.extraConfig() == null ? Map.of() : wc.extraConfig(),
+                    resolveWidgetField(wc, wc.dateField()), resolveWidgetField(wc, wc.titleField()),
+                    resolveWidgetConfig(wc),
                     wc.hint(), wc.rowBreak()
             ));
         }
         return result;
+    }
+
+    private Map<String, String> resolveWidgetConfig(UiLayoutBuilder.WidgetConfig widget) {
+        if (widget.extraConfig() == null || widget.extraConfig().isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> resolved = new LinkedHashMap<>(widget.extraConfig());
+        for (String key : List.of(
+                "endDateField", "durationField", "secondaryField", "amountField",
+                "currencyField", "metricField", "field2", "groupBy", "seriesBy",
+                "latField", "lngField", "geoField", "geoJsonField")) {
+            String value = resolved.get(key);
+            if (value == null || value.isBlank() || value.contains(",")) {
+                continue;
+            }
+            resolved.put(key, resolveWidgetField(widget, value));
+        }
+        return Map.copyOf(resolved);
+    }
+
+    /**
+     * Widgets consume REST rows, whose keys are physical/API columns. Typed authoring supplies Java
+     * property names, so resolve them through metadata at this boundary. Already-resolved system or
+     * API column names pass through unchanged.
+     */
+    private String resolveWidgetField(UiLayoutBuilder.WidgetConfig widget, String authored) {
+        if (authored == null || authored.isBlank() || widget.entityClass() == null) {
+            return authored;
+        }
+        if (authored.startsWith("_")) {
+            return authored;
+        }
+        String systemColumn = switch (widget.entityType()) {
+            case "catalog" -> switch (authored) {
+                case "id" -> "_id";
+                case "code" -> "_code";
+                case "description" -> "_description";
+                case "deletionMark" -> "_deletion_mark";
+                case "folder" -> "_is_folder";
+                case "parent" -> "_parent";
+                case "version" -> "_version";
+                default -> null;
+            };
+            case "document" -> switch (authored) {
+                case "id" -> "_id";
+                case "number" -> "_number";
+                case "date" -> "_date";
+                case "posted" -> "_posted";
+                case "deletionMark" -> "_deletion_mark";
+                case "version" -> "_version";
+                default -> null;
+            };
+            case "register" -> switch (authored) {
+                case "id" -> "_id";
+                case "period" -> "_period";
+                case "active" -> "_active";
+                default -> null;
+            };
+            default -> null;
+        };
+        if (systemColumn != null) {
+            return systemColumn;
+        }
+        List<AttributeDescriptor> attributes = switch (widget.entityType()) {
+            case "catalog" -> registry.allCatalogs().stream()
+                    .filter(d -> d.javaClass().equals(widget.entityClass()))
+                    .findFirst().map(CatalogDescriptor::attributes).orElse(List.of());
+            case "document" -> registry.allDocuments().stream()
+                    .filter(d -> d.javaClass().equals(widget.entityClass()))
+                    .findFirst().map(DocumentDescriptor::attributes).orElse(List.of());
+            case "register" -> registry.allRegisters().stream()
+                    .filter(d -> d.javaClass().equals(widget.entityClass()))
+                    .findFirst().map(d -> {
+                        List<AttributeDescriptor> all = new ArrayList<>(d.dimensions());
+                        all.addAll(d.resources());
+                        return all;
+                    }).orElse(List.of());
+            default -> List.of();
+        };
+        return attributes.stream()
+                .filter(a -> a.fieldName().equals(authored) || a.columnName().equals(authored))
+                .findFirst().map(AttributeDescriptor::columnName).orElse(authored);
     }
 
     private String resolveEntityName(UiLayoutBuilder.EntityRef ref) {

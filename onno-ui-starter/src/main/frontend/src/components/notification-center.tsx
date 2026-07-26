@@ -1,8 +1,10 @@
 import { useEffect } from "react";
 import { AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { initials, notionistsAvatar, tint } from "@/components/presence-avatars";
+import { glassAvatar, initials, tint } from "@/components/presence-avatars";
 import { Segmented } from "@/components/ui/segmented";
+import { NotificationBadgeMotion } from "@/components/ui/notification-badge-motion";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
 import { cn } from "@/lib/utils";
@@ -116,7 +118,7 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
     >
       {item.actorName ? (
         <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
-          <AvatarImage src={item.actorAvatar || notionistsAvatar(item.actorName)} alt={item.actorName} />
+          <AvatarImage src={item.actorAvatar || glassAvatar(item.actorName)} alt={item.actorName} />
           <AvatarFallback className="text-xs font-semibold text-white" style={{ backgroundColor: tint(item.actorName) }}>
             {initials(item.actorName)}
           </AvatarFallback>
@@ -226,11 +228,11 @@ export function NotificationTrigger({ style }: { style?: React.CSSProperties }) 
     >
       <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
       <span className="flex-1 text-left">{t("notifications.title")}</span>
-      {unreadCount > 0 ? (
+      <NotificationBadgeMotion count={unreadCount} className="!static">
         <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>
-      ) : null}
+      </NotificationBadgeMotion>
     </button>
   );
 }
@@ -292,11 +294,11 @@ export function NotificationCenter() {
           className="fixed right-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-full border border-border/60 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-muted hover:text-foreground"
         >
           <Bell className="h-4 w-4" />
-          {unreadCount > 0 ? (
-            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+          <NotificationBadgeMotion count={unreadCount} className="!-right-0.5 !-top-0.5">
+            <span className="flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
-          ) : null}
+          </NotificationBadgeMotion>
         </button>
       ) : null}
 
@@ -338,9 +340,10 @@ export function NotificationCenter() {
           <div className="flex items-center gap-2.5">
             <h2 className="text-base font-semibold text-foreground">{t("notifications.title")}</h2>
             {unreadCount > 0 ? (
-              <span className="rounded-control bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                {unreadCount}
-              </span>
+              <AnimatedNumber
+                value={String(unreadCount)}
+                className="rounded-control bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+              />
             ) : null}
           </div>
           <div className="flex items-center gap-1">

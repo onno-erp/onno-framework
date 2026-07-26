@@ -1,12 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <defs>
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="3" result="blur" />
-      <feMerge>
-        <feMergeNode in="blur" />
-        <feMergeNode in="SourceGraphic" />
-      </feMerge>
-    </filter>
-  </defs>
-  <circle cx="32" cy="32" r="12" fill="#ffffff" filter="url(#glow)" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 103 103">
+  <style>
+    path { fill: #171719; }
+    @media (prefers-color-scheme: dark) {
+      path { fill: #ffffff; }
+    }
+  </style>
+  <path
+    d="M47.049 0.150391C66.0112 -1.31238 85.0313 7.93772 95.1754 25.5079C105.319 43.0779 103.82 64.1741 93.0719 79.8645L47.049 0.150391ZM53.8547 101.938C35.2644 102.962 16.7865 93.7344 6.84082 76.5079C-3.10498 59.2812 -1.85842 38.6642 8.32391 23.0766L53.8547 101.938Z"
+  />
 </svg>

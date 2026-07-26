@@ -31,6 +31,22 @@ class ActionFeedbackTest {
     }
 
     @Test
+    void structuredToastCarriesHierarchyAndAcknowledgement() {
+        ActionResult result = ActionResult.toast(ActionToast.warning("Stock is running low")
+                .message("Two order lines need attention")
+                .detail("Review quantities")
+                .detail("Create replenishment")
+                .dismissLabel("Dismiss"));
+
+        assertThat(result.feedback().severity()).isEqualTo(ActionSeverity.WARNING);
+        assertThat(result.feedback().presentation()).isEqualTo(ActionPresentation.TOAST);
+        assertThat(result.feedback().title()).isEqualTo("Stock is running low");
+        assertThat(result.feedback().message()).isEqualTo("Two order lines need attention");
+        assertThat(result.feedback().details()).containsExactly("Review quantities", "Create replenishment");
+        assertThat(result.feedback().dismissLabel()).isEqualTo("Dismiss");
+    }
+
+    @Test
     void rejectionCarriesFormAndFieldErrorsAndKeepsFormOpenByDefault() {
         ActionRejectedException rejection = ActionRejectedException.builder()
                 .title("Approval blocked")

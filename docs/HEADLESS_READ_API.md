@@ -22,6 +22,43 @@ GET /api/documents/{name}/{id}           one document, with tabular sections inl
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/process-definitions                 registered stable keys and payload classes
+POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
+GET /api/processes/{instanceId}              durable process snapshot
+GET /api/processes/{instanceId}/history      append-only transition audit trail
+GET /api/tasks                               caller's candidate/assigned open work
+POST /api/tasks/{workItemId}/claim
+GET /api/tasks/{workItemId}/history       ordered task audit trail
+POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
+POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
+```
+
+Process actors are always derived from the authenticated principal; usernames and roles are never
+accepted from the request body. Starting is authorized by the definition's typed
+`startAssignment(payload)`. `GET /api/tasks` returns open candidate work plus work already
+claimed by the caller. `ADMIN` is the process superuser. Completion outcome names are checked
+against the active `HumanTask`'s declared enum before the persisted graph advances. Process
+mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
+Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
+and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
+catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
+UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
+catalog has an attribute configured with the `avatar`, `image`, or `photo` field widget.
+
+```jsonc
+// GET /api/tasks
+[{
+  "id": "2d95…",
+  "instanceId": "a4f1…",
+  "definitionKey": "order-approval",
+  "stepKey": "review",
+  "title": "Review order O-42",
+  "status": "OPEN",
+  "assigneeId": null,
+  "assignee": null,
+  "subject": {"kind": "documents", "entityName": "Orders", "id": "f34c…"},
+  "outcomes": ["APPROVE", "REJECT"]
+}]
 ```
 
 Action handlers use a typed write-response contract. Existing successful results remain
@@ -222,8 +259,10 @@ everything. The same event drives the browser live-update SSE stream (`GET /api/
 
 If you consume `/api/events` with a browser `EventSource`, note the stream sends **named** events
 (the change type: `created` / `updated` / `deleted` / `posted` / `unposted` / `changed`, plus
-`ready` / `presence` / `notification`) — never the default unnamed `message`. So `EventSource.onmessage`
-fires for nothing; you must `addEventListener("updated", …)` (etc.) per event name you care about.
+`ready` / `presence` / `notification` / `tasks-changed`) — never the default unnamed `message`.
+`tasks-changed` is an audience-scoped, payload-free signal to refetch authenticated `GET /api/tasks`;
+candidate assignments are not sent to the browser. `EventSource.onmessage` fires for nothing; you
+must `addEventListener("updated", …)` (etc.) per event name you care about.
 
 ## Notes for a public read view
 

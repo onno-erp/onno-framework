@@ -15,19 +15,20 @@ import su.onno.ui.BrandingConfig;
  */
 public record Palette(
         String page, String surface, String border, String text, String muted, String faint,
-        String primary, String primarySoft, String success, String successSoft, String rowAlt) {
+        String primary, String primarySoft, String success, String successSoft, String rowAlt,
+        boolean dark) {
 
     // shadcn :root  (background/card #fff, foreground #0a0a0a, primary #171717,
     // secondary/accent #f5f5f5, muted-foreground #737373, border #ebebeb)
     public static final Palette LIGHT = new Palette(
             "#FFFFFF", "#FFFFFF", "#EBEBEB", "#0A0A0A", "#737373", "#A3A3A3",
-            "#171717", "#F5F5F5", "#16A34A", "#DCFCE7", "#FAFAFA");
+            "#171717", "#F5F5F5", "#16A34A", "#DCFCE7", "#FAFAFA", false);
 
     // shadcn .dark  (background #0d0d0d, card #121212, foreground #ededed,
     // primary #fafafa, secondary/accent #1f1f1f, muted-foreground #808080, border #242424)
     public static final Palette DARK = new Palette(
             "#0D0D0D", "#121212", "#242424", "#EDEDED", "#808080", "#5C5C5C",
-            "#FAFAFA", "#1F1F1F", "#22C55E", "#14532D", "#171717");
+            "#FAFAFA", "#1F1F1F", "#22C55E", "#14532D", "#171717", true);
 
     public static Palette of(String theme) {
         return "dark".equalsIgnoreCase(theme) ? DARK : LIGHT;
@@ -57,7 +58,7 @@ public record Palette(
                 faint,
                 coalesce(o.primary(), primary),
                 coalesce(o.primarySoft(), primarySoft),
-                success, successSoft, rowAlt);
+                success, successSoft, rowAlt, dark);
     }
 
     private static String coalesce(String override, String fallback) {

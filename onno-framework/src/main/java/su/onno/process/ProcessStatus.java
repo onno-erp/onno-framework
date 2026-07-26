@@ -1,7 +1,8 @@
 package su.onno.process;
 
-/** Lifecycle of a process instance in the prototype runtime. */
+/** Lifecycle of a process instance. */
 public enum ProcessStatus {
     ACTIVE,
-    COMPLETED
+    COMPLETED,
+    CANCELLED
 }

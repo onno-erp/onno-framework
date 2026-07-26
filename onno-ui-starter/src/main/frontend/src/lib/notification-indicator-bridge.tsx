@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useNotifications } from "@/lib/notification-store";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
+import { NotificationBadgeMotion } from "@/components/ui/notification-badge-motion";
 
 /**
  * Bridges DivKit's unread-notification indicator blocks to the live notification store — the
@@ -75,10 +76,12 @@ export const NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS = new Map<string, { elemen
 /** A small dot in the block's top-right corner — the block overlaps the tab icon 1:1. */
 function UnreadDot() {
   const { available, unreadCount } = useNotifications();
-  if (!available || unreadCount === 0) return null;
+  if (!available) return null;
   return (
     <span className="relative block h-full w-full">
-      <span className="absolute right-0 top-0 h-2 w-2 rounded-full bg-primary" aria-hidden />
+      <NotificationBadgeMotion count={unreadCount} className="!right-0 !top-0">
+        <span className="block h-2 w-2 rounded-full bg-primary" aria-hidden />
+      </NotificationBadgeMotion>
     </span>
   );
 }
@@ -86,12 +89,14 @@ function UnreadDot() {
 /** The unread-count pill, right-aligned in its reserved slot. */
 function UnreadBadge() {
   const { available, unreadCount } = useNotifications();
-  if (!available || unreadCount === 0) return null;
+  if (!available) return null;
   return (
     <span className="flex h-full w-full items-center justify-end">
-      <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
-        {unreadCount > 99 ? "99+" : unreadCount}
-      </span>
+      <NotificationBadgeMotion count={unreadCount} className="!static">
+        <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
+          {unreadCount > 99 ? "99+" : unreadCount}
+        </span>
+      </NotificationBadgeMotion>
     </span>
   );
 }

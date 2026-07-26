@@ -6,6 +6,7 @@ import { aggregate, useWidgetBuckets, useWidgetRows, type Metric } from "@/lib/w
 import type { DashboardWidgetMeta } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 /**
  * A radial progress gauge: an aggregate value (`metric`/`metricField`, like the `metric` card)
@@ -74,7 +75,10 @@ export function GaugeWidget({ widget }: { widget: DashboardWidgetMeta }) {
           </ResponsiveContainer>
           {/* recharts has no built-in centerpiece, so overlay the readout in the ring's hole. */}
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[24px] font-semibold leading-none tabular-nums">{fmtNum(value)}</span>
+            <AnimatedNumber
+              value={fmtNum(value)}
+              className="text-[24px] font-semibold leading-none tabular-nums"
+            />
             {hasTarget && (
               <span className="mt-1.5 text-[11px] text-muted-foreground">
                 {Math.round(pct)}% of {fmtNum(target)}

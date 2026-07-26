@@ -232,6 +232,8 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     private static final int ORDER_COUNT = 80;
     private static final int OPENING_STOCK_PER_BOOK = 150;
+    private static final String LEGACY_DEMO_AVATAR_PREFIX =
+            "https://api.dicebear.com/9.x/notionists-neutral/svg";
 
     private final BookCategoryRepository categories;
     private final SupplierRepository suppliers;
@@ -261,6 +263,7 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        upgradeLegacyDemoAvatars();
         if (books.count() > 0) {
             return; // already seeded
         }
@@ -351,6 +354,21 @@ public class BookstoreSeeder implements ApplicationRunner {
         }
     }
 
+    /**
+     * Existing demo databases predate the Glass avatar style and contain generated Notionists URLs
+     * in the employee photo field. Upgrade only those known synthetic URLs; uploaded/custom photos
+     * remain untouched.
+     */
+    private void upgradeLegacyDemoAvatars() {
+        employees.findAllActive().stream()
+                .filter(employee -> employee.getAvatarUrl() != null
+                        && employee.getAvatarUrl().startsWith(LEGACY_DEMO_AVATAR_PREFIX))
+                .forEach(employee -> {
+                    employee.setAvatarUrl(avatarUrl(employee.getDescription()));
+                    employees.save(employee);
+                });
+    }
+
     // --- helpers ----------------------------------------------------------------------------------
 
     private Ref<BookCategory> category(String name) {
@@ -392,15 +410,12 @@ public class BookstoreSeeder implements ApplicationRunner {
         return row;
     }
 
-    /** A deterministic notionists-neutral avatar per staff name (DiceBear), so every employee has a
+    /** A deterministic DiceBear Glass avatar per staff name, so every employee has a
      *  photo and the signed-in person's shows in the shell's account block without shipping image
-     *  files. The backgroundColor list is a pastel palette DiceBear picks from per seed, so each
-     *  person gets their own colour instead of the shared default grey. */
+     *  files. */
     private static String avatarUrl(String name) {
         String seed = URLEncoder.encode(name, StandardCharsets.UTF_8);
-        return "https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50"
-                + "&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c8e6c9,f4d1b6"
-                + "&seed=" + seed;
+        return "https://api.dicebear.com/10.x/glass/svg?seed=" + seed;
     }
 
     private Ref<Book> book(String title, String author, String isbn,

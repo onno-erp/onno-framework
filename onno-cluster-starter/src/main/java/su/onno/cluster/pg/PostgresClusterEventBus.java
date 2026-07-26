@@ -260,6 +260,13 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
                         text(node, "link"),
                         text(node, "actorName"));
             }
+            if (ClusterEvent.KIND_PROCESS_TASKS_CHANGED.equals(kind)) {
+                return new ClusterEvent.ProcessTasksChanged(
+                        text(node, "originNodeId"),
+                        text(node, "instanceId"),
+                        strings(node, "audienceUsers"),
+                        strings(node, "audienceRoles"));
+            }
             log.debug("onno-cluster: ignoring notification of unknown kind '{}'", kind);
             return null;
         } catch (Exception e) {
@@ -295,6 +302,10 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
             node.put("body", n.body());
             node.put("link", n.link());
             node.put("actorName", n.actorName());
+        } else if (event instanceof ClusterEvent.ProcessTasksChanged tasks) {
+            node.put("instanceId", tasks.instanceId());
+            node.putPOJO("audienceUsers", tasks.audienceUsers());
+            node.putPOJO("audienceRoles", tasks.audienceRoles());
         }
         return node;
     }
@@ -303,6 +314,21 @@ public class PostgresClusterEventBus implements ClusterEventBus, InitializingBea
     private static String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asText();
+    }
+
+    /** Read a JSON string array as an immutable set, ignoring null/non-text entries. */
+    private static java.util.Set<String> strings(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || !value.isArray()) {
+            return java.util.Set.of();
+        }
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<>();
+        value.forEach(item -> {
+            if (item.isTextual() && !item.asText().isBlank()) {
+                result.add(item.asText());
+            }
+        });
+        return java.util.Set.copyOf(result);
     }
 
     private static int utf8Length(String value) {

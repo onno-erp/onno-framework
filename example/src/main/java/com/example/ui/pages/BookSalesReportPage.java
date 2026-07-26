@@ -31,12 +31,12 @@ public class BookSalesReportPage implements Page {
         b.subtitle("Turnover across the Book Sales register");
 
         b.widget("Total revenue").type("count").width("1/2").order(0).register(BookSales.class)
-                .config("metric", "sum").config("metricField", "revenue")
+                .config("metric", "sum").metricField(BookSales::getRevenue)
                 .config("currency", "USD")
                 .hint("Sum of the register's Revenue resource.");
 
         b.widget("Units sold").type("count").width("1/2").order(1).register(BookSales.class)
-                .config("metric", "sum").config("metricField", "quantity")
+                .config("metric", "sum").metricField(BookSales::getQuantity)
                 .hint("Sum of the register's Quantity resource.");
 
         b.text("A page authored at a register route — the curated report replaces the raw movement log.");

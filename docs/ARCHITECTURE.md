@@ -21,8 +21,8 @@ and migration history. You do not hand-write tables, DTOs, or CRUD controllers. 
 code — posting rules, validation, lifecycle hooks, UI authoring — is plain, refactorable,
 compiler-checked Java, never string-mapped configuration.
 
-The `su.onno.process` prototype applies the same typed-Java principle to business-process routes,
-while deliberately stopping short of generated persistence or UI until its language is proven.
+The `su.onno.process` model applies the same typed-Java principle to durable business-process routes;
+the starter persists instances/work and the UI starter exposes an authenticated human task inbox.
 
 Java packages are always `su.onno.*`. The published Maven group is `su.onno` (core,
 Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle plugin id is
@@ -32,13 +32,13 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 | Module | Group | Role |
 | --- | --- | --- |
-| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed business-process prototype, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
+| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed process contracts/schema, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, query engine, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
-| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, collaboration markers, and notification delivery in sync across instances. |
+| `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-mail-starter` | `su.onno` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
 | `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
@@ -102,26 +102,46 @@ In brief:
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
 
-### Typed business-process prototype
+### Durable typed business processes
 
-The `su.onno.process` package is an executable language spike for long-running coordination that
-does not belong in a document status field:
+The `su.onno.process` package models long-running coordination that does not belong in a document
+status field:
 
-- `ProcessDefinition<P,S>` owns one lazily built, validated route graph. `P` is the typed process
-  payload; `S` is an enum implementing `ProcessStepKey`.
+- `ProcessDefinition<P,S>` is an application Spring bean with a stable persisted key, a declared
+  payload class, and one lazily built, validated route graph. `P` is the typed payload; `S` is an
+  enum implementing `ProcessStepKey`.
 - `ProcessGraph<P,S>` creates `HumanTaskNode<P,S,O>` and `EndNode<P,S>` handles. Routes connect those
   handles directly; no string node lookups or expression language are involved.
-- `HumanTask<P,O>` declares an enum outcome type. Definition validation requires every enum outcome
-  to have exactly one transition and rejects duplicate keys, cross-graph connections, missing start
-  targets, and unreachable nodes.
-- `InMemoryProcessEngine` proves start/complete semantics and records `ProcessTransition<S>`
-  history. Completing a task requires its typed node handle and its declared outcome enum.
+- `HumanTask<P,O>` declares an enum outcome type, a payload-dependent title, and a
+  `TaskAssignment` of candidate stable identities/roles. `TaskAssignment.identities(Ref<?>...)`
+  keeps employee routing typed and stable across login/email changes. Optional `subject(payload)`
+  returns a typed catalog/document `Ref<T>` that becomes a durable task-to-record link;
+  `subjectLabel(payload)` stores its human-readable snapshot for the inbox.
+  Definition validation requires every enum outcome to
+  have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
+  and unreachable nodes.
+- `JdbcProcessEngine` persists payload JSON, instances, work items, transition history, and ordered
+  task audit events in the framework-managed `onno_process_*` tables. Claim, delegate, and complete
+  use row locks plus optimistic
+  versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
+- `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
+  role-scoped task inbox and claim/delegate/history/complete commands. The `tasks` page widget
+  resolves delegation targets and their live avatar/photo through the layout identity catalog,
+  opens typed task subjects in the shell's adjacent detail pane, and provides the same loop to
+  humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
+  transaction commits; the UI routes a payload-free `tasks-changed` SSE invalidation to affected
+candidate users/roles and admins, so every open inbox refetches automatically.
 
-This is intentionally **not yet a production process runtime**. It does not persist process
-instances, generate durable work items, resolve assignees, expose an inbox/API/UI, run timers, or
-support automatic/decision/fork/join/subprocess nodes. Those contracts should be added only after
-the typed authoring language has been exercised. Documents remain business events and posting
-remains register movement; a process coordinates work across those objects over time.
+`HumanTask.assignment(payload)` is the automatic-routing seam. It may use an injected application
+service and return `TaskAssignment.identities(selectedEmployeeRef)`. The employee record UUID is
+the stable task owner; login and display name are mutable snapshots only. The authenticated
+principal is resolved through `Layout.identity(...)` to that same UUID.
+
+The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
+HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,
+automatic/decision/fork/join/subprocess nodes, cancellation, and definition-version migration remain
+future work. Documents still record business events and posting still writes register movements; a
+process coordinates work across them.
 
 ```java
 enum PurchaseStep implements ProcessStepKey {
@@ -132,10 +152,19 @@ enum ApprovalOutcome { APPROVED, REJECTED }
 
 final class ApprovalTask implements HumanTask<PurchaseRequest, ApprovalOutcome> {
     public Class<ApprovalOutcome> outcomeType() { return ApprovalOutcome.class; }
+    public TaskAssignment assignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
 }
 
+@Component
 final class PurchaseApproval
         extends ProcessDefinition<PurchaseRequest, PurchaseStep> {
+    PurchaseApproval() { super("purchase-approval", PurchaseRequest.class); }
+    public TaskAssignment startAssignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
+
     protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
         var manager = graph.human(PurchaseStep.MANAGER_APPROVAL, new ApprovalTask());
         var finance = graph.human(PurchaseStep.FINANCE_APPROVAL, new ApprovalTask());
@@ -173,6 +202,15 @@ tombstones (a `Ref`-resolution or restore/admin lookup) declares it with
 
 UI is authored with `Layout`, `Page`, and `EntityView` beans. Domain annotations do not carry UI
 placement or field-display hints.
+
+Authored Java uses the shared serializable `Field<E,V>` getter token wherever a value denotes a
+model field. `ListSpec<E>`, `EntityConfigBuilder<E>`, widget field methods, related lists,
+form-validation dependencies, `ActionRow`, register queries, and `Q` all accept method references
+such as `Order::getStatus`. `Fields.name(...)` resolves the JavaBean property and boundary resolvers
+map it to the physical API/storage column. This keeps Java source compiler-checked while preserving
+string metadata on the wire. String overloads are unsafe compatibility/dynamic escape hatches.
+Strings remain correct for semantic identifiers (routes, roles, action/process keys, labels) and
+for intentionally parsed expression text such as a widget filter.
 
 ## Persistence & schema migration
 
@@ -255,6 +293,12 @@ model via the real generated endpoints below or the MCP `describe_metadata` tool
 contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET__` redaction) is in
 [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
 
+Durable process routes are `GET /api/process-definitions`,
+`POST /api/processes/{definitionKey}`, `GET /api/processes/{id}` plus `/history`, and
+`GET /api/tasks` with task claim, delegate, history, and complete endpoints. Start authorization comes from
+`ProcessDefinition.startAssignment(payload)`; inbox/task authorization comes from each
+`HumanTask.assignment(payload)`. Actors always come from the authenticated principal.
+
 | Area | Endpoints (served by) |
 | --- | --- |
 | Catalogs | `GET /api/catalogs/{name}` (`?q=`/`?limit=` typeahead; `?filter=` narrows it with a WidgetFilter predicate — the cascading ref picker's resolved `refFilter`), `/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
@@ -265,14 +309,14 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 | List grouping | `GET /api/list/{kind}/{name}/groups?groupBy=&granularity=&agg=fn,col&{q,filters}` — backend `GROUP BY`: `{groups: [{label, color?, count, values[], expand[]}], capped}`. One header per value (or per `day`/`month`/`year` bucket for a date column), each carrying an `expand` filter the grid replays on the list feed to load the group's rows. Same WHERE as the flat list; headers cap at 200 (ui-starter) |
 | Widget aggregate | `GET /api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` — server-side `GROUP BY` for the chart/stat/sparkline/gauge widgets: `{buckets: [{key, label?, series?, seriesLabel?, value, value2?}], truncated, span?}`, O(buckets) over the wire instead of the entity's whole table (#199). `groupByDate` (`minute…month`) buckets a timestamp via `DATE_TRUNC`; blank `groupBy` yields one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/Ref bucket values carry a resolved `label`; `span` is the windowed MIN/MAX of `dateField` (granularity auto-sizing). Date-bucketed axes always zero-fill empty periods with `{key, value: 0}` fillers over the window — or between the first/last data when unbounded (#246). Buckets (filled spine included) cap at 1000 (`truncated: true`) (ui-starter) |
 | Settings | `GET`/`PUT /api/settings` — `@Constant` values, ADMIN (ui-starter) |
-| Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions; an action declaring `.form(...)` first opens the canonical dialog client-side and POSTs `inputs` (read via `ActionContext.input(key)`). Form metadata (`title`, description, labels, tone, icon, `SM`/`MD`/`LG`) rides in the action descriptor. `GET …/{key}/form?id=` returns server-computed opening values (`.formDefaults(ctx -> …)` → `{values, rows}`). `ActionRejectedException` maps to HTTP 422 `ActionFeedback` (`severity`, `presentation`, title/message/details, `fieldErrors`, `formErrors`, `dismissLabel`, `keepFormOpen`); forms retain input and render errors, while no-form rejection can use the accessible feedback dialog. Successful `ActionResult.feedback/dialog` uses the same client presenter; legacy `message/refresh/navigate/open/redirect` remains compatible. `POST …/{key}/batch` runs `{ids:[…]}` once (≤500, `{ok, failed, total, feedback?}`; the first typed per-row rejection is preserved); `POST /api/divkit/page-action?route=&key=` runs a page button. All POSTs honour `onno.ui.read-only` and declared `.roles(...)` (#227). `POST /api/{catalogs|documents}/{name}/batch-delete` is bulk DELETE (ui-starter) |
+| Actions | `POST /api/actions/{kind}/{name}/{key}` — authored toolbar/row/detail actions; an action declaring `.form(...)` first opens the canonical dialog client-side and POSTs `inputs` (read via `ActionContext.input(key)`). Form metadata (`title`, description, labels, tone, icon, `SM`/`MD`/`LG`) rides in the action descriptor. `GET …/{key}/form?id=` returns server-computed opening values (`.formDefaults(ctx -> …)` → `{values, rows}`). `ActionRejectedException` maps to HTTP 422 `ActionFeedback` (`severity`, `presentation`, title/message/details, `fieldErrors`, `formErrors`, `dismissLabel`, `keepFormOpen`); forms retain input and render errors, while no-form rejection can use the accessible feedback dialog. Successful `ActionResult.toast(ActionToast…)` and `ActionResult.dialog(ActionDialog…)` provide fluent structured feedback; legacy `message/refresh/navigate/open/redirect` remains compatible. `POST …/{key}/batch` runs `{ids:[…]}` once (≤500, `{ok, failed, total, feedback?}`; the first typed per-row rejection is preserved); `POST /api/divkit/page-action?route=&key=` runs a page button. All POSTs honour `onno.ui.read-only` and declared `.roles(...)` (#227). `POST /api/{catalogs|documents}/{name}/batch-delete` is bulk DELETE (ui-starter) |
 | Media | `POST /api/media`, `GET /api/media/{key}` — uploads ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
 | Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new]`, `/api/divkit/registers/{name}` (ui-starter). `/{id}` is the combined record surface — the editable form (disabled for read-only viewers) with the record-level actions in its header; `/{id}/edit` is kept as a back-compat alias. `GET /api/divkit/{*route}` is the catch-all page endpoint: any route with a registered `Page` bean renders (a custom dashboard/report, **including `/settings`** — there is no built-in Settings surface), otherwise `404`. An authored `Page` at a default surface route (`/catalogs/{name}`, `/documents/{name}`, `/registers/{name}`) overrides that surface's default list/report |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
-| Events | `GET /api/events` — SSE stream of CRUD/posting changes, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by per-entity read access (#190) |
+| Events | `GET /api/events` — SSE stream of CRUD/posting changes, `tasks-changed` inbox invalidations, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by entity read access or process-task audience (#190) |
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (ui-starter) |
 | Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/csrf` (auth-starter) |
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
@@ -421,6 +465,8 @@ resource instead of polling. The browser stream is **filtered per subscriber by 
 access** — an event (including `comment` and `presence` events) reaches a viewer only when their roles
 may read the affected record, so the live channel honours the same deny-by-default RBAC as the
 REST/UI/MCP surfaces; unknown event kinds are delivered only to `ADMIN` (fail closed) (#190).
+Process-task invalidations use their own audience gate: only candidate users/roles and `ADMIN`
+receive `tasks-changed`, and the candidate assignment itself never enters the browser payload.
 `@DomainEvent` declarations append to the transactional `onno_outbox`;
 `onno-kafka-starter` relays those rows when you want cross-service streaming.
 
@@ -453,8 +499,10 @@ Running more than one instance behind a load balancer needs these, beyond a shar
   once, on the node that made the change. `DocumentPostedEvent`/`DocumentUnpostedEvent` are node-local
   by design; their cross-node *visibility* rides on the `posted`/`unposted` `EntityChangedEvent`. To
   swap in Kafka/Redis, expose your own `ClusterEventBus` bean (`@ConditionalOnMissingBean`).
-  `ClusterEvent` is a sealed family discriminated by `kind`: `EntityChanged` (above) and `Presence`
-  (record-level collaboration markers) share the one channel, so the same bus carries both.
+  `ClusterEvent` is a sealed family discriminated by `kind`: `EntityChanged`, `Presence`,
+  `Notification`, and `ProcessTasksChanged` share the one channel. Task invalidations retain their
+  user/role audience across nodes, so a process advanced on one node refreshes only eligible inboxes
+  connected elsewhere.
 - **Presence markers across nodes** — record-level presence ("who else is viewing this") is held in an
   in-memory per-node registry (`PresenceRegistry`, ui-starter) and relayed as a `Presence` `ClusterEvent`
   over the same bus, so a viewer on any node sees viewers on every node. It is deliberately best-effort

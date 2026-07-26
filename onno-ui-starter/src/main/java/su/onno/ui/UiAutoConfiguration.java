@@ -118,6 +118,30 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public ProcessController processController(
+            su.onno.process.ProcessEngine processEngine,
+            su.onno.process.ProcessDefinitions processDefinitions,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            UiAccessService access,
+            TaskAssigneeDirectory taskAssigneeDirectory,
+            CurrentUserResolver currentUserResolver) {
+        return new ProcessController(
+                processEngine, processDefinitions, objectMapper, access,
+                taskAssigneeDirectory, currentUserResolver);
+    }
+
+    @Bean
+    public TaskAssigneeDirectory taskAssigneeDirectory(
+            su.onno.metadata.MetadataRegistry registry,
+            CatalogQueryService catalogQueryService,
+            UiAccessService access,
+            su.onno.ui.UiLayout uiLayout,
+            CommentAuthorAvatars commentAuthorAvatars) {
+        return new TaskAssigneeDirectory(
+                registry, catalogQueryService, access, uiLayout, commentAuthorAvatars);
+    }
+
+    @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     public OnnoValidationExceptionHandler onnoValidationExceptionHandler() {
         return new OnnoValidationExceptionHandler();

@@ -19,10 +19,10 @@ package su.onno.ui;
  * }
  * </pre>
  */
-public interface EntityView {
+public interface EntityView<E> {
 
     /** The domain class (catalog or document) this view customizes. */
-    Class<?> entity();
+    Class<E> entity();
 
     /**
      * The profile/persona id this view applies to, or {@code null} (default) to
@@ -35,7 +35,7 @@ public interface EntityView {
     }
 
     /** Customize the list/table surface. Default: auto-generated columns. */
-    default void list(ListSpec list) {}
+    default void list(ListSpec<E> list) {}
 
     /**
      * Per-field hints for this entity — order, visibility (list/form/detail),
@@ -43,7 +43,7 @@ public interface EntityView {
      * Field config lives here now; the layout's section calls are pure placement.
      * Applies to the default view; a profile-specific view can override.
      */
-    default void fields(EntityConfigBuilder fields) {}
+    default void fields(EntityConfigBuilder<E> fields) {}
 
     /**
      * Custom action buttons for this entity — on the list (toolbar / per-row) or the record

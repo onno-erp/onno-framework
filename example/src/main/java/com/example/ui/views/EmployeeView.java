@@ -9,32 +9,33 @@ import org.springframework.stereotype.Component;
 
 /** The employees catalog (ADMIN-only writes; see the catalog's @AccessControl). */
 @Component
-public class EmployeeView implements EntityView {
+public class EmployeeView implements EntityView<Employee> {
 
     @Override
-    public Class<?> entity() {
+    public Class<Employee> entity() {
         return Employee.class;
     }
 
     @Override
-    public void list(ListSpec list) {
-        list.columns("avatarUrl", "description", "email", "position")
-                .label("description", "Name")
-                .label("avatarUrl", "")
-                .sortBy("description", false);
+    public void list(ListSpec<Employee> list) {
+        list.columns(Employee::getAvatarUrl, Employee::getDescription,
+                        Employee::getEmail, Employee::getPosition)
+                .label(Employee::getDescription, "Name")
+                .label(Employee::getAvatarUrl, "")
+                .sortBy(Employee::getDescription, false);
         // Role facet: an enum field with no authored options offers every declared value,
         // labelled by its @EnumLabel.
-        list.filter("position").label("Role").multiOptions();
+        list.filter(Employee::getPosition).label("Role").multiOptions();
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("description").order(0).label("Name")
-            .field("email").order(1)
-            .field("position").order(2)
+    public void fields(EntityConfigBuilder<Employee> f) {
+        f.field(Employee::getDescription).order(0).label("Name")
+            .field(Employee::getEmail).order(1)
+            .field(Employee::getPosition).order(2)
             // The avatar widget marks this as the staff photo: the framework reads it for the
             // signed-in person's shell account block and for comment-author avatars.
-            .field("avatarUrl").order(3).label("Photo").widget("avatar")
+            .field(Employee::getAvatarUrl).order(3).label("Photo").widget("avatar")
                 .hint("Link to a staff photo.");
     }
 }

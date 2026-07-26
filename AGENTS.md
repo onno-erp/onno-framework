@@ -30,7 +30,7 @@ to future agents that may not have the full conversation context.
 
 | Path | Role |
 | --- | --- |
-| `onno-framework` | Core annotations, metadata, schema, posting, typed process language prototype, repository contracts, UI model, and shared types. |
+| `onno-framework` | Core annotations, metadata, schema, posting, durable typed process contracts/schema, repository contracts, UI model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
@@ -396,16 +396,21 @@ public class DailySalesReportJob implements BackgroundTask {
 }
 ```
 
-### Business Processes And Human Tasks (Prototype)
+### Business Processes And Human Tasks
 
 Use a typed business process when work spans several people or business objects and must remember
 which step is active. Do not turn a document into a process merely because it has a status:
 documents record business events, posting changes registers, and processes coordinate durable work
 over time.
 
-The current `su.onno.process` package is an executable language prototype. Step identity is a Java
-enum implementing `ProcessStepKey`; task outcomes are enums; transitions connect typed node handles,
-never string names:
+Process mutations publish `ProcessTasksChangedEvent` after the durable transaction commits. The UI
+starter turns it into an audience-scoped `tasks-changed` SSE invalidation, and the built-in task
+inbox refetches automatically. Publish process changes through `ProcessEngine`, not a controller-only
+side channel, so programmatic starts/completions stay live too.
+
+Step identity is a Java enum implementing `ProcessStepKey`; task outcomes are enums; transitions
+connect typed node handles, never string names. Definitions are Spring beans with an explicit stable
+key and payload type:
 
 ```java
 enum PurchaseStep implements ProcessStepKey {
@@ -421,10 +426,25 @@ final class ApprovalTask implements HumanTask<PurchaseRequest, ApprovalOutcome> 
     public Class<ApprovalOutcome> outcomeType() {
         return ApprovalOutcome.class;
     }
+
+    @Override
+    public TaskAssignment assignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
 }
 
+@Component
 final class PurchaseApproval
         extends ProcessDefinition<PurchaseRequest, PurchaseStep> {
+
+    PurchaseApproval() {
+        super("purchase-approval", PurchaseRequest.class);
+    }
+
+    @Override
+    public TaskAssignment startAssignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
 
     @Override
     protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
@@ -444,12 +464,44 @@ final class PurchaseApproval
 
 Calling `definition.graph()` validates the graph once and seals it. Validation rejects missing
 outcome branches, duplicate or blank persistent step keys, duplicate enum steps, cross-definition
-connections, a missing start target, and unreachable nodes. `InMemoryProcessEngine` can start a
-payload and complete typed task nodes while recording transition history.
+connections, a missing start target, and unreachable nodes. The auto-configured `ProcessEngine`
+persists JSON payloads, instances, transitions, and human work items in framework-managed tables.
+Start work from ordinary Java with
+`processes.start(definition, payload, new ProcessActor(username, roles))`. Candidates come from
+`TaskAssignment.identities(Ref<?>...)` / `.actors(ProcessActorId...)` / `.roles(...)`; `ADMIN` is
+the process superuser.
 
-This prototype does **not** yet persist instances, create durable assignee work items, expose a task
-inbox, run timers, or implement automatic steps, decisions, parallel fork/join, or subprocesses.
-Do not present it as a production workflow engine until those pieces ship.
+`HumanTask.assignment(payload)` is also the automatic-routing hook: it may call an injected
+application service and return the selected employee reference with
+`TaskAssignment.identities(employeeRef)`. The persisted owner is the identity catalog record id,
+not its mutable login/email. For applications without `Layout.identity(...)`,
+`ProcessActorId.of(externalSubject)` is the explicit stable-id fallback.
+
+Override `HumanTask.subject(payload)` with a typed catalog/document `Ref<T>` when the task concerns
+a business record. Add `subjectLabel(payload)` for a durable human snapshot such as an order
+number. The engine persists both and the task widget renders a direct link:
+
+```java
+@Override
+public Ref<Order> subject(PurchaseRequest payload) {
+    return payload.order();
+}
+
+@Override
+public String subjectLabel(PurchaseRequest payload) {
+    return "Order " + payload.orderNumber();
+}
+```
+
+The authenticated UI/API exposes `GET /api/tasks`, claim, delegate, history, and complete commands,
+and the built-in `type("tasks")` page widget. A claimed task may be delegated by its assignee (or
+`ADMIN`); the reason and assignee transfer are stored in an ordered audit trail. When
+`Layout.identity(Employee.class, "email")` is configured, the widget searches that catalog instead
+of asking for a raw username. Application Java still owns the typed graph; the HTTP boundary accepts
+an enum constant name because JSON has no Java enum type.
+
+Timers, automatic steps, typed decisions, parallel fork/join, subprocesses, cancellation, and
+definition-version migration are not implemented yet.
 
 ### Contexts And Future Services
 
@@ -642,6 +694,14 @@ Do not create premature microservices. Mark contexts first, then split when load
 
 Keep UI concerns out of domain classes. Sidebar placement belongs in `Layout` beans, dashboard widgets belong in `Page` beans, and per-field display hints belong in `EntityView` or `Layout` configuration.
 
+Use getter references for fields in authored Java APIs: `list.columns(Order::getNumber,
+Order::getStatus)`, `list.filter(Order::getStatus)`, `f.field(Order::getCustomer)`,
+`row.enumValue(Order::getStatus, OrderStatus.class)`, and
+`f.relatedList("orders", Order.class).via(Order::getCustomer)`. String overloads remain explicit
+unsafe escape hatches for runtime/dynamic metadata and dot-path/expression text. Routes, action keys,
+role names, stable process keys, labels, and filter expressions are identifiers or data—not Java
+field references—and intentionally remain strings.
+
 ## Code Patterns
 
 ### Catalog
@@ -769,7 +829,7 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
-`refSecondary(targetField)` (on a `Ref` field) shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records (e.g. a customer's phone); it names a field on the ref's *target* entity. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
+`refField(Order::getCustomer).refSecondary(Customer::getPhone)` shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records. `refField` retains the `Ref<T>` target type, so the secondary getter must belong to `T`. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
 
 `label(String)` overrides a field's display label on the record form and list header — for custom attributes (over `@Attribute(displayName=…)`) and, crucially, for the built-in **system columns** that otherwise have no DSL label path: `code`/`description` (catalogs) and `number`/`date`/`posted` (documents). The primary use is localization, e.g. `f.field("code").label("Код")`, `f.field("posted").label("Статус")`. It is the form/detail counterpart to `ListSpec.label(field, …)` (which relabels only the list header); a `ListSpec.label` on the same field still wins for the list column specifically.
 

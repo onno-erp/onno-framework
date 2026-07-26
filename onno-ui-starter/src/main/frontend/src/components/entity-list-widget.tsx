@@ -1928,9 +1928,9 @@ export function EntityListWidget({
   // pending key still drives the disabled state of the menu items.
   const batchBusyRef = useRef(false);
 
-  // Run a custom server action over every selected row — ONE request: the server's batch endpoint
-  // invokes the handler per id and returns {ok, failed, total}, so a 200-row batch isn't 200 HTTP
-  // round-trips, survives the tab closing mid-run, and gets a single loading→summary toast here.
+  // Run a custom server action over every selected row. The API client chunks selections above the
+  // server's 500-id request ceiling and folds them into one {ok, failed, total}, so the island still
+  // owns one loading→summary toast and one refresh for the complete selection.
   // Per-result navigate doesn't apply — a batch can't open N panes.
   const runBatchAction = useCallback(
     async (action: ListAction, ids: string[], formInputs?: ActionFormValues, propagateFeedback = false) => {
@@ -2502,13 +2502,14 @@ export function EntityListWidget({
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
     // As its own route surface the island takes the full height from its top to the window bottom
     // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
-    // Embedded in a page, it flows with the host page (which owns scrolling) and drops its
-    // horizontal gutter so the table aligns with the sibling cards.
+    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
+    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
+    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
     <div
       ref={rootRef}
       className={cn(
         "pointer-events-auto flex min-h-0 flex-col",
-        surfaceMode ? "overflow-hidden p-4 sm:p-6" : "py-4"
+        surfaceMode && "overflow-hidden p-4 sm:p-6"
       )}
       style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
     >

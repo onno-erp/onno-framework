@@ -47,6 +47,14 @@ public final class ProcessGraph<P, S extends Enum<S> & ProcessStepKey> {
         return nodes.get(step);
     }
 
+    /** Resolve a node by its stable persisted step key. */
+    public ProcessNode<P, S> nodeByKey(String key) {
+        return nodes.values().stream()
+                .filter(node -> node.step().key().equals(key))
+                .findFirst()
+                .orElse(null);
+    }
+
     /** Declared route nodes in definition order, excluding the synthetic start. */
     public List<ProcessNode<P, S>> nodes() {
         return List.copyOf(nodes.values());

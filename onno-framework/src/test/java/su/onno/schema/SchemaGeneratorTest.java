@@ -22,10 +22,17 @@ class SchemaGeneratorTest {
         SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
-        assertThat(ddl).hasSize(3);
+        assertThat(ddl).hasSize(7);
         assertThat(ddl.get(1)).contains("CREATE TABLE IF NOT EXISTS onno_outbox");
+        assertThat(ddl.get(3))
+                .contains("_assignee_display VARCHAR(255)")
+                .contains("_subject_kind VARCHAR(32)")
+                .contains("_subject_entity VARCHAR(255)")
+                .contains("_subject_id UUID")
+                .contains("_subject_label VARCHAR(255)");
+        assertThat(ddl.get(4)).contains("CREATE TABLE IF NOT EXISTS onno_process_work_item_events");
 
-        String sql = ddl.get(2);
+        String sql = ddl.get(6);
         assertThat(sql).contains("CREATE TABLE IF NOT EXISTS catalog_test_products");
         assertThat(sql).contains("_id UUID PRIMARY KEY");
         assertThat(sql).contains("_code VARCHAR(9)");

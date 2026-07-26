@@ -1,5 +1,6 @@
 package su.onno.repository;
 
+import su.onno.fields.Field;
 import su.onno.model.AccumulationRecord;
 
 import java.io.Serializable;
@@ -13,7 +14,7 @@ public class RegisterFilter<T extends AccumulationRecord> {
 
     private final Map<String, Object> fieldFilters = new LinkedHashMap<>();
 
-    public <R> RegisterFilter<T> where(FieldReference<T, R> getter, R value) {
+    public <R> RegisterFilter<T> where(Field<T, R> getter, R value) {
         String fieldName = resolveFieldName(getter);
         fieldFilters.put(fieldName, value);
         return this;
@@ -24,7 +25,7 @@ public class RegisterFilter<T extends AccumulationRecord> {
      * read balances for exactly a document's dimension values in one query. An empty collection
      * matches no rows.
      */
-    public <R> RegisterFilter<T> whereIn(FieldReference<T, R> getter, Collection<R> values) {
+    public <R> RegisterFilter<T> whereIn(Field<T, R> getter, Collection<R> values) {
         String fieldName = resolveFieldName(getter);
         fieldFilters.put(fieldName, values);
         return this;

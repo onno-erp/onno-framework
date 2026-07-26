@@ -62,7 +62,7 @@ when a user asks you to model a business.
 | historical facts by dimension over time (Prices by date) | `@InformationRegister` | `InformationRecord` |
 | one global setting (CompanyName) | `@Constant` | plain class with one field |
 | scheduled/async work | `@ScheduledJob(cron=…)` / `@Scheduled` | — |
-| multi-step coordination with typed human-task outcomes | `ProcessDefinition<P,S>` + `HumanTask<P,O>` (prototype) | — |
+| durable multi-step coordination with typed human-task outcomes | `ProcessDefinition<P,S>` + `HumanTask<P,O>` | — |
 | something another team/service owns | `context = "…"` on the annotation | — |
 
 A reference to another entity is `Ref<T>` (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)`,
@@ -72,10 +72,11 @@ The exact attributes and defaults of every annotation, the fields each base clas
 lifecycle interfaces are in [reference/cheatsheet.md](reference/cheatsheet.md). Read it before
 writing model classes — guessing an attribute name or default wastes a build cycle.
 
-The `su.onno.process` API is currently a language prototype: enum step keys and outcomes, typed node
-handles, exhaustive route validation, transition history, and an in-memory engine. It has no durable
-instances, assignee work items, inbox, timers, or parallel/subprocess execution yet. Use it to
-exercise the authoring model, not as a production workflow engine.
+The `su.onno.process` API uses enum step keys and outcomes, typed node handles, exhaustive route
+validation, and stable definition/step keys. The starter persists instances, transitions, and
+candidate/assigned work items; the UI starter exposes the authenticated inbox, claim, and complete
+loop. Timers, automatic/decision nodes, cancellation, definition migration, and
+parallel/subprocess execution are not implemented yet.
 
 ## Canonical vertical slice
 

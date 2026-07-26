@@ -761,6 +761,13 @@ export function DivKitView() {
         openNotificationPanel();
         return;
       }
+      if (rest === "") {
+        // The logo and authored Dashboard nav item emit the generic home intent. Resolve it through
+        // this profile's shell rather than assuming "/" is a real page: dashboard-less personas
+        // (for example a manager) declare their first reachable nav surface as shell.home.
+        openPath(shell?.home ?? "/");
+        return;
+      }
       if (rest.startsWith("download/")) {
         // download/{path} — a server endpoint that returns a file with Content-Disposition:
         // attachment. A full-page GET lets the browser save it (the attachment header means the
@@ -874,6 +881,7 @@ export function DivKitView() {
       openPath,
       openDetailRight,
       closePath,
+      shell?.home,
       shell?.navStyle,
       t,
     ]

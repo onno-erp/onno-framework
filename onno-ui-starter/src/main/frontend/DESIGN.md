@@ -42,8 +42,12 @@ sort, group-by), keyset infinite scroll by default (`feedMode: "paged"` is the o
 windowing, context menu, batch actions. Server search spans every non-secret column — scalars as
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
+Selections larger than the server's 500-id per-request safety cap are split sequentially by the
+shared API client and folded into one batch summary; screens must not implement their own chunking.
+The island owns padding only on standalone entity routes. When embedded with `PageBuilder.list`,
+it has no outer spacing; the surrounding page region owns sibling gaps and content insets.
 
-Avatars: dicebear `notionists-neutral` is the default (`presence-avatars.tsx#notionistsAvatar`);
+Avatars: DiceBear 10 `glass` is the default (`presence-avatars.tsx#glassAvatar`);
 avatars in lists and face-piles carry a thin `border border-border`.
 
 Colored pills: a cell renders as a pill whenever the row carries `{col}_color` (`enumPillStyle`,
@@ -73,6 +77,9 @@ of the row keeps the full context menu. Flat table view only.
 | Component | Path | Use for |
 | --- | --- | --- |
 | `Segmented` | `components/ui/segmented.tsx` | Every mutually-exclusive view/mode switcher. Documented exceptions: tool palettes, server-emitted DivKit form tab strips. |
+| `AnimatedNumber` | `components/ui/animated-number.tsx` | Formatted KPI/count/stat values that should replay the shared character pop-in when replaced. |
+| `NotificationBadgeMotion` | `components/ui/notification-badge-motion.tsx` | Unread dots/count pills that slide and pop when the unread count increases. |
+| `AppToaster` | `components/ui/toaster.tsx` | The single Sonner host: large themed toast surfaces, typed title/message/detail hierarchy, semantic icon wells, actions, and animated stack. |
 | `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
@@ -114,6 +121,20 @@ mean “any interactive container.”
 - Workspace tab reordering keeps native cross-pane drag semantics, but supplies a lifted custom drag
   image, leaves the source as a real-width placeholder, and shifts neighboring tabs with FLIP using
   `--duration-fast` / `--ease-smooth-out`. Preserve its reduced-motion treatment.
+- `Segmented` uses one measured sliding pill with the same motion tokens; first paint and geometry
+  changes snap, value changes tween. KPI value cards and `StatWidget` use `AnimatedNumber`; both
+  primitives must retain their reduced-motion guards.
+- Notification triggers and server-emitted notification indicator islands share
+  `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
+- Toast calls use Sonner's `toast` API and render through `AppToaster`; do not mount another
+  `Toaster`, and do not override toast transforms or removal states—Sonner owns stack geometry and
+  motion. Keep the surface monochrome and borderless (the dark theme uses the raised `secondary`
+  surface); semantic status colour belongs to the icon well and detail markers. Actual actions use
+  the filled button; acknowledgement/dismiss controls use the quiet button. Prefer the server-side
+  `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a
+  title, explanation, or details.
+- The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
+  `shell.home`; only profiles that actually own a dashboard should land on `/`.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.

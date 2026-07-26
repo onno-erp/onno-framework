@@ -12,7 +12,7 @@ class ListSpecTest {
 
     @Test
     void optionsFilterCarriesItsChoices() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("season").options("2024", "2025", "2026");
 
         assertThat(spec.filters()).hasSize(1);
@@ -27,7 +27,7 @@ class ListSpecTest {
 
     @Test
     void multiOptionsFilterCarriesItsChoices() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("role").label("Role").multiOptions("Хирург", "Терапевт");
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -44,7 +44,7 @@ class ListSpecTest {
         valueToLabel.put("NEW", "Новый");
         valueToLabel.put("DONE", "Готово");
 
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("statusName").label("Статус").options(valueToLabel);
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -60,7 +60,7 @@ class ListSpecTest {
         valueToLabel.put("FILES_RECEIVED", "Файлы получены");
         valueToLabel.put("DOWNLOADING", "Загрузка");
 
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("statusName").multiOptions(valueToLabel);
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -72,7 +72,7 @@ class ListSpecTest {
 
     @Test
     void optionsFilterCanBeMadeMultiple() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("city").options("Madrid", "Paris").multiple();
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -83,7 +83,7 @@ class ListSpecTest {
 
     @Test
     void multiOptionsFilterCanBeMadeSingleAgain() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("city").multiOptions("Madrid", "Paris").single();
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -94,7 +94,7 @@ class ListSpecTest {
 
     @Test
     void containsFilterIsTypeaheadWithNoOptions() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("doctorName").label("Doctor").contains();
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -104,7 +104,7 @@ class ListSpecTest {
 
     @Test
     void startsWithFilterIsTypeaheadWithNoOptions() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("doctorName").startsWith();
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -114,7 +114,7 @@ class ListSpecTest {
 
     @Test
     void dateRangeFilterHasNoOptions() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("checkIn").label("Check-in").dateRange();
 
         ListSpec.Filter f = spec.filters().get(0);
@@ -126,7 +126,7 @@ class ListSpecTest {
 
     @Test
     void filtersKeepDeclarationOrder() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.filter("a").options("1");
         spec.filter("b").dateRange();
 
@@ -140,7 +140,7 @@ class ListSpecTest {
 
     @Test
     void feedModeAndPageSizeUnsetByDefault() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         // Unset → null / 0, so the resolver falls back to the global onno.ui.list.* defaults.
         assertThat(spec.feedMode()).isNull();
         assertThat(spec.pageSize()).isZero();
@@ -148,7 +148,7 @@ class ListSpecTest {
 
     @Test
     void feedModeAndPageSizeAreAuthored() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.feed(ListSpec.FeedMode.PAGED).pageSize(25);
 
         assertThat(spec.feedMode()).isEqualTo(ListSpec.FeedMode.PAGED);
@@ -162,7 +162,7 @@ class ListSpecTest {
 
     @Test
     void customRendererCarriesTypeLabelAndDefaultView() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.custom("bookTiles").label("Shelf").defaultView();
 
         ListSpec.CustomSpec c = spec.customSpec();
@@ -174,7 +174,7 @@ class ListSpecTest {
 
     @Test
     void repeatedCustomCallsAccumulateOnOneSpec() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.custom("tiles").label("Tiles");
         // A later call replaces the type but keeps the same spec (mirrors map()).
         spec.custom("cards");
@@ -187,7 +187,7 @@ class ListSpecTest {
 
     @Test
     void noGroupingByDefault() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         assertThat(spec.groupable()).isEmpty();
         assertThat(spec.aggregates()).isEmpty();
         assertThat(spec.defaultGroupBy()).as("opens flat by default").isNull();
@@ -195,21 +195,21 @@ class ListSpecTest {
 
     @Test
     void defaultGroupByIsAuthored() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.groupable("status", "warehouse").defaultGroupBy("status");
         assertThat(spec.defaultGroupBy()).isEqualTo("status");
     }
 
     @Test
     void groupableColumnsKeepDeclarationOrder() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.groupable("status", "assignedTo", "date");
         assertThat(spec.groupable()).containsExactly("status", "assignedTo", "date");
     }
 
     @Test
     void aggregatesCarryFieldFunctionAndLabel() {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         spec.aggregate("total", ListSpec.Agg.SUM)
                 .aggregate("amount", ListSpec.Agg.AVG, "Average");
 

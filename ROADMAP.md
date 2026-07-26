@@ -26,8 +26,13 @@ Implemented:
 - Durable outbox table and core outbox writer
 - Kafka starter foundation with CloudEvent relay, service registry, and remote reference client
 - Typed-Java posting (`Postable.handlePosting`) writing document-to-register movements
-- Typed business-process language prototype: enum step keys, typed human-task outcomes, node-handle
-  transitions, structural validation, transition history, and an executable in-memory engine
+- Durable typed business processes: stable definition/step keys, typed payloads and human-task
+  outcome enums, node-handle transitions, structural validation, persisted instances/transitions,
+  role/user candidate work items, claim/delegate/complete commands, durable task audit, authenticated
+  task API, stable identity-record ownership, typed task-to-domain links, employee-backed
+  delegation picker, and live task widget
+- Shared typed field tokens across queries and UI authoring: getter references for list columns,
+  filters, field hints, related lists, form dependencies, state-aware rows, and widget field config
 - Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
 - Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
@@ -57,11 +62,8 @@ It should remain friendly to normal Java:
 ## Near-Term Next Work
 
 Good next slices:
-- Turn the typed business-process prototype into a durable runtime: persisted process instances,
-  work items, assignee/candidate resolution, claim/complete commands, timers, and a task inbox.
-  Persistence and UI must preserve the typed definition API; the current `InMemoryProcessEngine`
-  is explicitly a language/semantics spike, not a production workflow engine.
-- Add automatic steps, typed decisions, parallel fork/join, and subprocess nodes to the process graph
+- Add timers, automatic steps, typed decisions, cancellation, definition-version migration,
+  parallel fork/join, and subprocess nodes to the process graph
 - UI widgets for hierarchy browsing and posting-preview inspection
 - Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
 - Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)

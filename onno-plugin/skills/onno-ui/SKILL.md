@@ -61,9 +61,10 @@ Use `actions(ActionSpec)` for custom toolbar, row, and detail actions. Prefer st
 record state. Configure an action form's canonical dialog inside `.form(f -> f.title(...)
 .description(...).submitLabel(...).cancelLabel(...).tone(...).size(...).input(...))`. Throw
 `ActionRejectedException` for an expected business rejection; use `fieldError`/`formError` so the
-open form retains its values and shows corrective feedback. Use `ActionResult.dialog(ActionDialog…)`
-for a successful outcome that needs acknowledgement; legacy `message`/`refresh` stay success-toast
-shortcuts.
+open form retains its values and shows corrective feedback. Use
+`ActionResult.toast(ActionToast.success(title).message(...).detail(...))` for structured,
+severity-aware transient feedback and `ActionResult.dialog(ActionDialog…)` for a successful outcome
+that needs acknowledgement; legacy `message`/`refresh` stay compact success-toast shortcuts.
 
 ## Custom Widgets
 

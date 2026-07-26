@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +34,9 @@ class ClusterUiBridgeTest {
         record Call(String type, String entityType, String entityName, Object id, String naturalKey) { }
 
         final List<Call> calls = new ArrayList<>();
+        String taskInstance;
+        Set<String> taskUsers;
+        Set<String> taskRoles;
 
         RecordingPublisher() {
             // publish(...) is overridden to record, so the access service is never consulted.
@@ -42,6 +46,14 @@ class ClusterUiBridgeTest {
         @Override
         public void publish(String type, String entityType, String entityName, Object id, String naturalKey) {
             calls.add(new Call(type, entityType, entityName, id, naturalKey));
+        }
+
+        @Override
+        public void publishProcessTasksChanged(
+                String instanceId, Set<String> audienceUsers, Set<String> audienceRoles) {
+            taskInstance = instanceId;
+            taskUsers = audienceUsers;
+            taskRoles = audienceRoles;
         }
     }
 
@@ -65,5 +77,20 @@ class ClusterUiBridgeTest {
         assertThat(call.entityName()).isEqualTo("Invoices");
         assertThat(call.id()).isEqualTo("id-9");
         assertThat(call.naturalKey()).isEqualTo("INV-9");
+    }
+
+    @Test
+    void forwardsRemoteProcessTaskInvalidationsToTheAudienceScopedSink() {
+        CapturingBus bus = new CapturingBus();
+        RecordingPublisher publisher = new RecordingPublisher();
+        new ClusterUiBridge(bus, publisher).wire();
+
+        bus.sink.accept(ClusterEvent.processTasksChanged(
+                "instance-8", Set.of("alex"), Set.of("MANAGER")).withOrigin("node-B"));
+
+        assertThat(publisher.taskInstance).isEqualTo("instance-8");
+        assertThat(publisher.taskUsers).containsExactly("alex");
+        assertThat(publisher.taskRoles).containsExactly("MANAGER");
+        assertThat(publisher.calls).isEmpty();
     }
 }

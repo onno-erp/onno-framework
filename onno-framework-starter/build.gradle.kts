@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.spring.jdbc)
     implementation(libs.spring.data.jdbc)
     implementation(libs.micrometer.core)
+    implementation(libs.jackson.databind)
 
     api(libs.jobrunr.spring.boot3.starter)
 

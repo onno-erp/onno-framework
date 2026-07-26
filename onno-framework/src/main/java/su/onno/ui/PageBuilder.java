@@ -60,7 +60,7 @@ public final class PageBuilder {
     }
 
     /** Add a dashboard widget; returns the widget builder for further config. */
-    public UiLayoutBuilder.WidgetBuilder widget(String title) {
+    public UiLayoutBuilder.WidgetBuilder<Void> widget(String title) {
         return widgetHost.widget(title);
     }
 

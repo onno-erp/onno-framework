@@ -227,7 +227,8 @@ Author it on the view (`list.feed(FeedMode.PAGED)`, `list.pageSize(25)`) or set 
 with `onno.ui.list.default-feed` (`infinite` | `paged`) and `onno.ui.list.page-size`. A register's
 report surface is always infinite (its movement log is depth-scrolled).
 
-**Grouping — backend `GROUP BY` with lazy expansion.** Declare `list.groupable("status", "date", …)`
+**Grouping — backend `GROUP BY` with lazy expansion.** Declare
+`list.groupable(Order::getStatus, Order::getDate)`
 and the toolbar gains a "Group by ▾" picker (None = the flat list). Picking a column swaps the flat
 table for collapsible group headers fetched from `/groups` (one per value; a date column offers a
 day/month/year granularity and buckets by period); each header shows the group's row count and any
@@ -235,7 +236,7 @@ day/month/year granularity and buckets by period); each header shows the group's
 rows through the **same** feed — the server hands each group the exact filter to replay — so grouping
 never double-counts and honours the active search/filters/sort. Group values that resolve to a
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
-`list.defaultGroupBy("status")` opens the list already grouped by that column instead of flat — the
+`list.defaultGroupBy(Order::getStatus)` opens the list already grouped by that column instead of flat — the
 viewer can still switch grouping or back to "None". The default must also be declared `groupable`
 (and resolve to a real column), else it's ignored with a warning. A page-embedded list can override
 the view with `PageBuilder.list(entity, v -> v.groupBy("created_at", DateGranularity.DAY))`; the
@@ -256,10 +257,17 @@ tone ships under the row's `_style` and the grid renders it as a translucent the
 flat grid and expanded groups alike; a function that throws is treated as `null` for that row:
 
 ```java
-list.rowStyle(row -> row.bool("urgent") ? ListSpec.RowStyle.DANGER
-        : row.enumValue("status", Status.class) == Status.CANCELLED ? ListSpec.RowStyle.MUTED
+list.rowStyle(row -> row.bool(Order::getUrgent) ? ListSpec.RowStyle.DANGER
+        : row.enumValue(Order::getStatus, Status.class) == Status.CANCELLED ? ListSpec.RowStyle.MUTED
         : null);
 ```
+
+Use getter references throughout authored Java: `list.columns(Order::getNumber, Order::getStatus)`,
+`list.filter(Order::getStatus)`, `f.field(Order::getCustomer)`, related-list
+`via`/`display`/`columns`, widget field methods, and form-validation dependencies. These resolve to
+wire/storage names only at the metadata boundary. The string overloads remain for dynamic metadata
+and are deliberately unsafe; routes, labels, role/action/process keys, and filter-expression text
+remain strings because they are not Java field references.
 
 The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
 default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
@@ -421,7 +429,20 @@ throw ActionRejectedException.builder()
 
 For a no-form action, use `DIALOG` (the rejection default) or `TOAST`. Feedback has an explicit
 `INFO`/`SUCCESS`/`WARNING`/`ERROR` severity and `TOAST`/`DIALOG`/`INLINE` presentation; inline
-feedback without an open form safely falls back to the canonical dialog.
+feedback without an open form safely falls back to the canonical dialog. Toast feedback preserves
+its full hierarchy (`title`, `message`, `details`) and optional `dismissLabel`. Prefer the typed
+builder instead of constructing `ActionFeedback` directly:
+
+```java
+return ActionResult.toast(ActionToast.warning("Stock is running low")
+        .message("Two order lines need attention before the next shipment.")
+        .detail("Review quantities")
+        .detail("Consider a supplier replenishment")
+        .dismissLabel("Dismiss"));
+```
+
+The example Orders toolbar's **Toast demo** action cycles through all four semantic tones for visual
+verification.
 
 **Reference inputs** — a field can be a searchable picker of another catalog/document's records
 (the same ref widget an entity form uses) with `.reference(Target.class)`; the submitted value is
@@ -507,7 +528,9 @@ infinite feed selects the rows loaded so far, not the whole server-side result (
 when more rows exist). Batch operations run as **one request** against the batch endpoints
 (`POST /api/actions/{kind}/{name}/{key}/batch`, `POST /api/{kind}/{name}/batch-delete`), with a
 loading → summary toast — a 200-row batch isn't 200 round-trips and survives the tab closing
-mid-run. Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
+mid-run. Each server request remains capped at 500 ids; the SPA transparently sends larger
+selections as sequential ≤500-id chunks and combines their tallies into the same single summary.
+Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
 the last. Right-clicking a
 selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
 runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
@@ -557,7 +580,7 @@ description/number, and each String attribute — so a record is findable by a s
 disambiguate same-named records), name it on the ref field from the entity's `fields(...)`:
 
 ```java
-f.field("customer").refSecondary("phone");   // shows the customer's phone under the name in the picker
+f.refField(Order::getCustomer).refSecondary(Customer::getPhone);
 ```
 
 The named field is on the ref's **target** entity; the value already rides along in the picker
@@ -644,16 +667,16 @@ class SalesOpsPage implements Page {
   equal share. Columns lay out side by side on desktop and stack on mobile.
 
   ```java
-  b.row(kpis -> {                                        // a 3-column KPI band
-      kpis.col(c -> c.widget("Open").type("count").document(Order.class).config("filter", "open = true"));
-      kpis.col(c -> c.widget("Revenue").type("metric").document(Order.class)
-                     .config("metric", "sum").config("metricField", "total").config("currency", "USD"));
-      kpis.col(c -> c.widget("Total").type("count").document(Order.class));
-  });
-  b.row(body -> {                                         // a 2/3 + 1/3 body
+  b.row(body -> {                                         // list + one coherent right rail
       body.col("2/3", main -> main.list(Order.class));
-      body.col("1/3", side -> side.widget("By status").type("chart").document(Order.class)
-                                  .config("kind", "pie").config("groupBy", "status_display").config("metric", "count"));
+      body.col("1/3", side -> {
+          side.widget("Open").type("count").document(Order.class).config("filter", "open = true");
+          side.widget("Revenue").type("metric").document(Order.class)
+              .config("metric", "sum").config("metricField", "total").config("currency", "USD");
+          side.widget("Total").type("count").document(Order.class);
+          side.widget("By status").type("chart").document(Order.class)
+              .config("kind", "pie").config("groupBy", "status_display").config("metric", "count");
+      });
   });
   ```
 - **Right rail** (shortcut). `b.aside(a -> { … })` is the common two-column case — a narrow side
@@ -663,13 +686,73 @@ class SalesOpsPage implements Page {
   it: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
   `.catalog(...)`/`.document(...)`.
 
+### Process task inbox
+
+Durable business-process work is an ordinary page widget. Add a page and link it from a layout:
+
+```java
+@Component
+class TasksPage implements Page {
+    public String route() { return "/tasks"; }
+    public void compose(PageBuilder b) {
+        b.title("My tasks");
+        b.header(false);
+        b.widget("My tasks").type("tasks").width("full");
+    }
+}
+
+// Layout.configure:
+layout.section("Work").page("/tasks", "My tasks", "list-checks");
+```
+
+The widget calls authenticated `GET /api/tasks` and renders claim, delegation, audit history, and
+the active task's declared enum outcomes. Writes are CSRF-protected. Delegation searches the
+employee catalog configured by `Layout.identity(...)`, requires a reason, and is limited to the
+current assignee or `ADMIN`. Task ownership uses the Employee record UUID, so changing its
+login/email does not orphan work. A task whose `HumanTask.subject(payload)` returns a typed
+catalog/document `Ref<T>` shows an **Open …** link to that record; `subjectLabel(payload)` supplies
+the durable human label shown there. On the desktop sidebar shell, that link opens the record in the
+detail pane to the right while leaving the inbox mounted; its ordinary base-path-aware `href` still
+supports copy, modifier-click, and opening in a new browser tab. The inbox groups
+all/mine/available work, supports local search,
+shows task age, confirms completion outcomes, and keeps timestamped audit history in a dialog. Claimed
+rows, delegation results, and history reuse the configured identity catalog's live avatar/photo;
+deterministic faces and initials keep people recognizable when no photo has been uploaded. The inbox
+uses a compact toolbar island—matching the entity-list header—for its title, all/mine/available
+switcher, hint, and search; task rows live in a separate island below it. Keep the surrounding page
+header disabled when the task widget is the page's primary surface.
+Visibility is computed from
+`HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
+its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
+audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details
+stay server-side; the event contains only an invalidation. A Retry control appears only after a
+failed read—there is no normal-state refresh button.
+
+Headless clients use the same boundary:
+
+```text
+GET  /api/process-definitions
+POST /api/processes/{definitionKey}
+GET  /api/processes/{instanceId}
+GET  /api/processes/{instanceId}/history
+GET  /api/tasks
+POST /api/tasks/{workItemId}/claim
+GET  /api/tasks/{workItemId}/history
+POST /api/tasks/{workItemId}/delegate   {"targetActorId":"identity-record-uuid","reason":"…"}
+POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
+```
+
+The start body is converted to the definition's declared payload class and authorized through
+`ProcessDefinition.startAssignment(payload)`. Instance/history reads are limited to an `ADMIN`,
+the starter, a current task candidate/assignee, or an actor recorded in that instance's history.
+
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
-compiled to DivKit. `count`/`metric` render as native big-number cards (resolved server-side);
-every other type — the built-in `chart`/`stat`/`sparkline`/`gauge`/`calendar`/`kanban`/`list` and
-any app-registered type — is emitted as an `onno-widget` custom block that the client renders with
-a React component.
+compiled to DivKit. `count`/`metric` aggregates are resolved server-side and carried into a
+lightweight `onno-widget` value card so live replacements can animate without repeating the query.
+Other built-ins (`chart`/`stat`/`sparkline`/`gauge`/`calendar`/`kanban`/`list`) and app-registered
+types use the same custom-block bridge.
 
 ```java
 b.widget("Revenue").type("metric").width("1/4").document(Bill.class)
@@ -685,7 +768,8 @@ Each `count`/`metric` card resolves a server-side aggregate (one SQL query). The
 resolves them **concurrently** and de-duplicates identical `(entity, metric, field, filter)` queries,
 so a wide dashboard isn't N sequential round-trips. The fan-out is bounded by
 `onno.ui.dashboard.widget-parallelism` (default 8) — keep it below the datasource's pool size; set it
-to `1` for the old sequential behaviour.
+to `1` for sequential behaviour. The preformatted value animates character-by-character on first
+render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motion` disables this.
 
 ### Widget types
 
@@ -701,6 +785,7 @@ to `1` for the old sequential behaviour.
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `geoField` (a `"lat,lng"` string) **or** `latField`+`lngField` for markers, and/or `geoJsonField` for shapes (paths/areas); features link to the record and label from `.titleField(...)`. |
+| `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
 
 > `stat`, `sparkline` and `gauge` read the same source + aggregate config as `chart`
@@ -963,6 +1048,7 @@ Button face — set **one**:
 | `ok()` | acknowledge, nothing observable |
 | `message(text)` | success toast |
 | `refresh(text)` | toast + reload the current surface |
+| `toast(ActionToast.success(title).message(text).detail(detail))` | structured typed toast with an explicit severity and hierarchy |
 | `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
 | `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
 | `navigate("onno://…")` | route the client (internal `onno://` scheme; `{id}` is filled for row actions) |

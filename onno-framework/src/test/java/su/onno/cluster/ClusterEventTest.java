@@ -2,6 +2,8 @@ package su.onno.cluster;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ClusterEventTest {
@@ -31,5 +33,16 @@ class ClusterEventTest {
         assertThat(stamped.entityName()).isEqualTo("Invoices");
         assertThat(stamped.id()).isEqualTo("id-2");
         assertThat(stamped.naturalKey()).isEqualTo("INV-2");
+    }
+
+    @Test
+    void processTaskFactoryPreservesItsAudience() {
+        ClusterEvent.ProcessTasksChanged event = ClusterEvent.processTasksChanged(
+                "instance-1", Set.of("alex"), Set.of("MANAGER"));
+
+        assertThat(event.kind()).isEqualTo(ClusterEvent.KIND_PROCESS_TASKS_CHANGED);
+        assertThat(event.originNodeId()).isNull();
+        assertThat(event.audienceUsers()).containsExactly("alex");
+        assertThat(event.audienceRoles()).containsExactly("MANAGER");
     }
 }

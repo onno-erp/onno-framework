@@ -265,6 +265,8 @@ export interface UiEvent {
   actorAvatar?: string;
   createdAt?: string;
   unread?: boolean;
+  // `tasks-changed` uses entityType "process-task" and carries only the affected instance id.
+  // Candidate users/roles stay server-side; eligible clients refetch their authenticated inbox.
   // Present on the `ready` ack that opens each stream, and on the explicit dev `reload` push.
   // `bootId` identifies the server's application-context incarnation; `devMode` marks a
   // live-development server. A changed bootId across a reconnect means the server restarted under
@@ -285,6 +287,10 @@ export interface DashboardWidgetMeta {
   dateField: string;
   titleField: string;
   extraConfig: Record<string, string>;
+  /** Preformatted server aggregate carried by built-in count/metric tiles. */
+  resolvedValue?: string;
+  /** Optional entity surface opened by a built-in count/metric tile. */
+  href?: string;
   /** Optional help text (from .widget(...).hint(...)); surfaced as a hoverable "?" by the title. */
   hint?: string;
   /**
@@ -318,6 +324,66 @@ export interface SettingMeta {
   type: string;
   widget: string;
   value: unknown;
+}
+
+export type ProcessWorkItemStatus = "OPEN" | "CLAIMED" | "COMPLETED" | "CANCELLED";
+
+/** One durable human task returned by the authenticated process inbox. */
+export interface ProcessWorkItem {
+  id: string;
+  instanceId: string;
+  definitionKey: string;
+  stepKey: string;
+  title: string;
+  status: ProcessWorkItemStatus;
+  assigneeId?: string | null;
+  assignee?: string | null;
+  subject?: {
+    kind: "catalogs" | "documents";
+    entityName: string;
+    id: string;
+    label?: string | null;
+  } | null;
+  createdAt: string;
+  claimedAt?: string | null;
+  completedAt?: string | null;
+  outcome?: string | null;
+  outcomes: string[];
+}
+
+export interface TaskAssigneeOption {
+  actorId: string;
+  username: string;
+  display: string;
+  avatarUrl?: string | null;
+}
+
+export interface ProcessWorkItemEvent {
+  id: string;
+  workItemId: string;
+  instanceId: string;
+  type: "CREATED" | "CLAIMED" | "DELEGATED" | "COMPLETED";
+  actorId?: string | null;
+  actor?: string | null;
+  fromAssigneeId?: string | null;
+  fromAssignee?: string | null;
+  toAssigneeId?: string | null;
+  toAssignee?: string | null;
+  reason?: string | null;
+  occurredAt: string;
+  sequence: number;
+}
+
+export interface ProcessSnapshot {
+  id: string;
+  definitionKey: string;
+  currentStep: string;
+  status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+  startedById: string;
+  startedBy: string;
+  startedAt: string;
+  updatedAt: string;
+  version: number;
 }
 
 /**

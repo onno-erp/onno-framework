@@ -82,7 +82,8 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 - **`/api/events` emits only NAMED events — `EventSource.onmessage` receives nothing.** Subscribe
   with `addEventListener` per event name. Current names: `created`, `updated`, `deleted`, `posted`,
   `unposted`, `changed` (entity changes; payload `{type, entityType, entityName, id, naturalKey,
-  timestamp}`), plus `ready` (carries `bootId`/`devMode`), `reload`, `presence`, `notification`.
+  timestamp}`), plus `ready` (carries `bootId`/`devMode`), `reload`, `presence`, `notification`,
+  and audience-scoped `tasks-changed`.
   Keepalives are SSE comments.
 - **The stream is lossy by design.** There is no `Last-Event-ID`/since replay; on reconnect
   (client retries every 3s) refetch the surfaces you care about. Events are role-filtered per

@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 
 /**
  * A KPI tile with momentum: the headline figure (the same aggregate the `metric` card shows),
@@ -239,9 +240,10 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
         </div>
         <div className={cn("mt-1 flex items-baseline gap-2", !showTrend && "mt-0 flex-col items-center justify-center gap-2 text-center")}>
           <div className="flex items-baseline gap-2">
-            <span className={cn("font-semibold leading-none tabular-nums", showTrend ? "text-[28px]" : "text-[46px] tracking-normal")}>
-              {fmtNum(headlineValue)}
-            </span>
+            <AnimatedNumber
+              value={fmtNum(headlineValue)}
+              className={cn("font-semibold leading-none tabular-nums", showTrend ? "text-[28px]" : "text-[46px] tracking-normal")}
+            />
             {showTrend && delta != null && (
               <span className={`flex items-center gap-0.5 text-xs font-medium ${deltaClass}`}>
                 <Arrow size={13} />

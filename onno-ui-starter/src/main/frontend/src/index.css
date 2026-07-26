@@ -47,6 +47,26 @@
        feeling linear; reduced-motion overrides live beside the component treatment below. */
     --duration-fast: 250ms;
     --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+    /* transitions.dev number-pop: formatted KPI characters re-enter on live value changes. */
+    --digit-dur: 500ms;
+    --digit-distance: 8px;
+    --digit-stagger: 70ms;
+    --digit-blur: 2px;
+    --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+    --digit-dir-x: 0;
+    --digit-dir-y: 1;
+    /* transitions.dev notification-badge: position slide and independent count/dot pop. */
+    --badge-slide-dur: 260ms;
+    --badge-pop-dur: 500ms;
+    --badge-pop-close-dur: 180ms;
+    --badge-fade-dur: 400ms;
+    --badge-fade-close-dur: 180ms;
+    --badge-blur: 2px;
+    --badge-offset-x: -8.2px;
+    --badge-offset-y: 12.4px;
+    --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+    --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
     /* Categorical chart palette (data widgets). Ordered so adjacent series stay
        distinguishable; --chart-1 is also the default single-series accent. The
        Java DSL can override per widget via config("colors", "..."). */
@@ -115,6 +135,363 @@
 }
 
 @layer components {
+  @keyframes t-badge-slide-in {
+    from {
+      transform: translate(var(--badge-offset-x), var(--badge-offset-y));
+    }
+    to {
+      transform: translate(0, 0);
+    }
+  }
+
+  .t-badge {
+    position: absolute;
+    top: -6px;
+    right: -8px;
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .t-badge[data-open="true"] {
+    animation: t-badge-slide-in var(--badge-slide-dur) var(--badge-slide-ease);
+  }
+
+  .t-badge-dot {
+    display: block;
+    transform-origin: center;
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+    transition:
+      transform var(--badge-pop-dur) var(--badge-pop-ease),
+      opacity var(--badge-fade-dur) var(--badge-pop-ease),
+      filter var(--badge-pop-dur) var(--badge-pop-ease);
+    will-change: transform, opacity, filter;
+  }
+
+  .t-badge[data-open="false"] .t-badge-dot {
+    transform: scale(0);
+    opacity: 0;
+    filter: blur(var(--badge-blur));
+    transition:
+      transform var(--badge-pop-close-dur) var(--badge-close-ease),
+      opacity var(--badge-fade-close-dur) var(--badge-close-ease),
+      filter var(--badge-pop-close-dur) var(--badge-close-ease);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .t-badge,
+    .t-badge-dot {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  @keyframes t-digit-pop-in {
+    0% {
+      transform: translate(
+        calc(var(--digit-distance) * var(--digit-dir-x)),
+        calc(var(--digit-distance) * var(--digit-dir-y))
+      );
+      opacity: 0;
+      filter: blur(var(--digit-blur));
+    }
+    100% {
+      transform: translate(0, 0);
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  .t-digit-group {
+    display: inline-flex;
+    align-items: baseline;
+  }
+
+  .t-digit {
+    display: inline-block;
+    will-change: transform, opacity, filter;
+  }
+
+  .t-digit-group.is-animating .t-digit {
+    animation: t-digit-pop-in var(--digit-dur) var(--digit-ease) both;
+  }
+
+  .t-digit-group.is-animating .t-digit[data-stagger="1"] {
+    animation-delay: var(--digit-stagger);
+  }
+
+  .t-digit-group.is-animating .t-digit[data-stagger="2"] {
+    animation-delay: calc(var(--digit-stagger) * 2);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .t-digit-group .t-digit {
+      animation: none !important;
+    }
+  }
+
+  /* transitions.dev tabs-sliding: JS writes the active option's measured X/width; CSS owns the
+     tween. First paint, resize, and reduced-motion snapping are orchestrated by Segmented. */
+  .t-tabs-pill {
+    position: absolute;
+    top: 2px;
+    left: 0;
+    height: calc(100% - 4px);
+    width: 0;
+    transform: translateX(0);
+    transition:
+      transform var(--duration-fast) var(--ease-smooth-out),
+      width var(--duration-fast) var(--ease-smooth-out);
+    will-change: transform, width;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .t-tab {
+    transition: color var(--duration-fast) var(--ease-smooth-out);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .t-tabs-pill,
+    .t-tab {
+      transition: none !important;
+    }
+  }
+
+  /*
+   * Canonical Sonner treatment. Keep the surface monochrome and let only the icon communicate
+   * severity. Sonner exclusively owns transforms, stacking, insertion, and removal motion.
+   */
+  .onno-toaster[data-theme="light"],
+  .onno-toaster[data-theme="dark"] {
+    --normal-text: hsl(var(--popover-foreground));
+    --onno-toast-muted: hsl(var(--muted-foreground));
+    --onno-toast-accent: hsl(var(--chart-1));
+    --onno-toast-accent-bg: hsl(var(--chart-1) / 0.12);
+  }
+
+  .onno-toaster[data-theme="light"] {
+    --normal-bg: hsl(var(--popover));
+    --onno-toast-shadow:
+      0 10px 32px hsl(0 0% 0% / 0.09),
+      0 2px 8px hsl(0 0% 0% / 0.05);
+  }
+
+  .onno-toaster[data-theme="dark"] {
+    --normal-bg: hsl(var(--secondary));
+    --onno-toast-shadow:
+      0 14px 38px hsl(0 0% 0% / 0.32),
+      0 2px 10px hsl(0 0% 0% / 0.2);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] {
+    width: var(--width);
+    min-height: 88px;
+    padding: 1rem 1.125rem;
+    gap: 0.875rem;
+    align-items: flex-start;
+    border: 0;
+    border-radius: var(--radius-card);
+    background: hsl(var(--popover));
+    color: var(--normal-text);
+    box-shadow: var(--onno-toast-shadow);
+    font-family: inherit;
+    font-size: 14px;
+    letter-spacing: -0.1px;
+  }
+
+  .onno-toaster[data-theme="dark"] [data-sonner-toast].onno-toast[data-styled="true"] {
+    background: hsl(var(--secondary));
+  }
+
+  .onno-toaster .onno-toast__content {
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .onno-toaster .onno-toast__title {
+    color: var(--normal-text);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .onno-toaster .onno-toast__description {
+    color: var(--onno-toast-muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .onno-toast__body {
+    display: grid;
+    gap: 8px;
+  }
+
+  .onno-toast__message {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .onno-toast__details {
+    display: grid;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--onno-toast-muted);
+    font-size: 12px;
+  }
+
+  .onno-toast__details li {
+    display: grid;
+    grid-template-columns: 6px minmax(0, 1fr);
+    gap: 7px;
+    align-items: baseline;
+  }
+
+  .onno-toast__details li > span {
+    width: 4px;
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--onno-toast-accent);
+  }
+
+  .onno-toaster .onno-toast__icon {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    margin: 0 !important;
+    padding: 0;
+    border-radius: var(--radius-field);
+    background: var(--onno-toast-accent-bg);
+    color: var(--onno-toast-accent);
+    line-height: 0;
+  }
+
+  .onno-toaster .onno-toast__icon > * {
+    margin: 0 !important;
+  }
+
+  .onno-toaster .onno-toast__icon svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    stroke-width: 1.8;
+  }
+
+  .onno-toaster [data-sonner-toast][data-type="success"] {
+    --onno-toast-accent: hsl(var(--success));
+    --onno-toast-accent-bg: hsl(var(--success) / 0.12);
+  }
+
+  .onno-toaster [data-sonner-toast][data-type="info"] {
+    --onno-toast-accent: hsl(var(--chart-1));
+    --onno-toast-accent-bg: hsl(var(--chart-1) / 0.12);
+  }
+
+  .onno-toaster [data-sonner-toast][data-type="warning"] {
+    --onno-toast-accent: hsl(var(--warning));
+    --onno-toast-accent-bg: hsl(var(--warning) / 0.12);
+  }
+
+  .onno-toaster [data-sonner-toast][data-type="error"] {
+    --onno-toast-accent: hsl(var(--destructive));
+    --onno-toast-accent-bg: hsl(var(--destructive) / 0.12);
+  }
+
+  .onno-toaster [data-sonner-toast][data-type="loading"] {
+    --onno-toast-accent: hsl(var(--muted-foreground));
+    --onno-toast-accent-bg: hsl(var(--muted));
+  }
+
+  .onno-toast__spinner {
+    animation: onno-toast-spin 900ms linear infinite;
+  }
+
+  @keyframes onno-toast-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action,
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel {
+    align-self: center;
+    height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 9999px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 150ms var(--ease-smooth-out);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.12);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel {
+    background: hsl(var(--foreground) / 0.06);
+    color: var(--normal-text);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:hover {
+    background: color-mix(in srgb, hsl(var(--foreground)) 88%, transparent);
+    box-shadow:
+      0 2px 6px hsl(0 0% 0% / 0.16),
+      0 1px 2px hsl(0 0% 0% / 0.1);
+    transform: translateY(-1px);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:hover {
+    background: hsl(var(--foreground) / 0.12);
+    color: var(--normal-text);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:active,
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:active {
+    transform: scale(0.97);
+  }
+
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:focus-visible,
+  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .onno-toast__action,
+    .onno-toast__cancel {
+      transition: none !important;
+    }
+
+    .onno-toast__spinner {
+      animation: none !important;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .onno-toaster[data-sonner-toaster] {
+      --width: calc(100vw - 24px) !important;
+    }
+  }
+
   .onno-workspace-tab {
     transition:
       color 150ms ease,

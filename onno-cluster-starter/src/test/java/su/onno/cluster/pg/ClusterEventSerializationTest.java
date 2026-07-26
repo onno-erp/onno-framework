@@ -5,6 +5,8 @@ import su.onno.cluster.ClusterEvent;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ClusterEventSerializationTest {
@@ -80,6 +82,19 @@ class ClusterEventSerializationTest {
         assertThat(back).isInstanceOf(ClusterEvent.Notification.class);
         assertThat(((ClusterEvent.Notification) back).title()).isEqualTo("You were assigned SO-1");
         assertThat(((ClusterEvent.Notification) back).recipientId()).isEqualTo("u-42");
+    }
+
+    @Test
+    void roundTripsAProcessTaskInvalidation() {
+        ClusterEvent event = ClusterEvent.processTasksChanged(
+                "instance-7", Set.of("alex"), Set.of("MANAGER", "FINANCE"))
+                .withOrigin("node-A");
+
+        String json = PostgresClusterEventBus.serialize(mapper, event, 7000);
+        ClusterEvent back = PostgresClusterEventBus.deserialize(mapper, json);
+
+        assertThat(back).isEqualTo(event);
+        assertThat(back).isInstanceOf(ClusterEvent.ProcessTasksChanged.class);
     }
 
     @Test

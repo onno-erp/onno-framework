@@ -1,6 +1,7 @@
 package su.onno.ui;
 
 import su.onno.events.EntityChangedEvent;
+import su.onno.process.ProcessTasksChangedEvent;
 
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -53,7 +54,12 @@ public class UiEventPublisher {
      * per-user {@code notification} events, which are addressed to exactly one recipient rather than
      * filtered by role.
      */
-    private record Subscriber(SseEmitter emitter, Set<String> roles, String userId) {}
+    private record Subscriber(
+            SseEmitter emitter,
+            Set<String> roles,
+            String userId,
+            String username
+    ) {}
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final UiAccessService access;
@@ -108,8 +114,17 @@ public class UiEventPublisher {
      * filter every broadcast event; {@code userId} routes {@code notification} events addressed to it.
      */
     public SseEmitter subscribe(Set<String> roles, String userId) {
+        return subscribe(roles, userId, userId);
+    }
+
+    /**
+     * Open a stream with separate identity-record and authentication usernames. Notifications route
+     * by {@code userId}; process task assignments route by the principal {@code username}.
+     */
+    public SseEmitter subscribe(Set<String> roles, String userId, String username) {
         SseEmitter emitter = new SseEmitter(0L);
-        Subscriber subscriber = new Subscriber(emitter, roles == null ? Set.of() : Set.copyOf(roles), userId);
+        Subscriber subscriber = new Subscriber(
+                emitter, roles == null ? Set.of() : Set.copyOf(roles), userId, username);
         subscribers.add(subscriber);
         emitter.onCompletion(() -> subscribers.remove(subscriber));
         emitter.onTimeout(() -> subscribers.remove(subscriber));
@@ -158,6 +173,48 @@ public class UiEventPublisher {
     @EventListener
     public void onEntityChanged(EntityChangedEvent event) {
         publish(event.changeType(), event.entityType(), event.entityName(), event.id(), event.naturalKey());
+    }
+
+    /** Route a committed process-task inbox invalidation only to affected users, roles, and admins. */
+    @EventListener
+    public void onProcessTasksChanged(ProcessTasksChangedEvent event) {
+        publishProcessTasksChanged(
+                event.instanceId().toString(), event.audienceUsers(), event.audienceRoles());
+    }
+
+    /**
+     * Push a payload-free task inbox invalidation. Candidate assignments remain server-side; an
+     * eligible browser learns only that its own authenticated {@code /api/tasks} view is stale.
+     */
+    public void publishProcessTasksChanged(
+            String instanceId,
+            Set<String> audienceUsers,
+            Set<String> audienceRoles
+    ) {
+        Set<String> users = audienceUsers == null ? Set.of() : audienceUsers;
+        Set<String> roles = audienceRoles == null ? Set.of() : audienceRoles;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "tasks-changed");
+        payload.put("entityType", "process-task");
+        payload.put("id", instanceId);
+        payload.put("timestamp", Instant.now().toString());
+
+        for (Subscriber subscriber : subscribers) {
+            if (canReceiveProcessTasks(subscriber.roles(), subscriber.userId(), users, roles)) {
+                send(subscriber, "tasks-changed", payload);
+            }
+        }
+    }
+
+    static boolean canReceiveProcessTasks(
+            Set<String> subscriberRoles,
+            String actorId,
+            Set<String> audienceUsers,
+            Set<String> audienceRoles
+    ) {
+        return subscriberRoles.contains("ADMIN")
+                || audienceUsers.contains(actorId)
+                || audienceRoles.stream().anyMatch(subscriberRoles::contains);
     }
 
     public void publish(String type, String entityType, String entityName, Object id) {

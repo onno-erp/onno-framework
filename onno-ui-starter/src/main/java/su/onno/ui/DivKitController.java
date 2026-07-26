@@ -558,8 +558,8 @@ public class DivKitController implements DisposableBean {
             if (c.kind() == PageComponent.Kind.LIST) {
                 Map<String, Object> descriptor = embeddedListDescriptor(c.entity(), profileId, principal);
                 if (descriptor != null) {
-                    // Embedded in a page (which already applies content padding) the list drops its
-                    // own horizontal gutter so its table aligns with the sibling cards, full width.
+                    // Embedded in a page the list carries no outer spacing: PageDivBuilder owns
+                    // content padding and sibling gaps, keeping the table aligned with adjacent cards.
                     descriptor.put("embedded", true);
                     applyListDefaults(descriptor, c.payload());
                     out.add(PageComponent.custom("onno-list", Map.of("list", descriptor)));
@@ -1234,7 +1234,7 @@ public class DivKitController implements DisposableBean {
      * server-side. The value is formatted here — currency- and locale-aware — so every
      * client renders the same string ("—" if the widget can't be resolved).
      */
-    /** Mirrors {@code Widgets.NATIVE_CARD_TYPES}: the widget types that carry a server-resolved value. */
+    /** Mirrors {@code Widgets.VALUE_CARD_TYPES}: widget types carrying a server-resolved value. */
     private static final Set<String> VALUE_CARD_TYPES = Set.of("count", "metric");
 
     /**
