@@ -18,6 +18,22 @@ public interface ProcessEngine {
 
     ProcessWorkItem claim(UUID workItemId, ProcessActor actor);
 
+    /**
+     * Transfer a claimed task to another authenticated username.
+     *
+     * <p>The current assignee (or an administrator) may delegate. The reason is
+     * required and the transfer is recorded in {@link #workItemHistory}.</p>
+     */
+    ProcessWorkItem delegate(
+            UUID workItemId,
+            String targetUsername,
+            String reason,
+            ProcessActor actor
+    );
+
+    /** Authorized, chronological audit history for one human task. */
+    List<ProcessWorkItemEventSnapshot> workItemHistory(UUID workItemId, ProcessActor actor);
+
     /** Complete from typed Java; the enum constant is validated again against the active task. */
     default <O extends Enum<O>> ProcessSnapshot complete(
             UUID workItemId,

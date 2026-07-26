@@ -90,17 +90,19 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 | `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)`, declare `startAssignment(payload)`, and override `define(ProcessGraph<P,S>)`; `graph()` validates, seals, and caches it. |
 | `ProcessGraph<P,S>` | `start()`, `human(step, task)`, `end(step)`, `node(step)`, `nodes()`. |
 | `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
-| `ProcessEngine` | Durable `start`, `find`, role/user-scoped `inbox`, `claim`, and `complete`. |
+| `ProcessEngine` | Durable `start`, `find`, role/user-scoped `inbox`, `claim`, `delegate`, task `workItemHistory`, and `complete`. |
 | `ProcessActor` | Authenticated username + normalized role set for a process command. |
 | `ProcessSnapshot` | Persisted instance id, definition/step keys, status, starter, timestamps, version. |
 | `ProcessWorkItem` | Durable task, candidates, assignee, timestamps, and allowed enum outcome names. |
+| `ProcessWorkItemEventSnapshot` | Ordered `CREATED`/`CLAIMED`/`DELEGATED`/`COMPLETED` task audit entry. |
 
 Graph validation rejects a missing start target, duplicate/blank stable keys, duplicate enum steps,
 cross-graph connections, unreachable nodes, duplicate outcome branches, and any unhandled constant
 of a task's outcome enum.
 
 The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
-UI starter exposes `GET /api/tasks`, claim/complete commands, and the built-in `tasks` page widget.
+UI starter exposes the inbox plus claim/delegate/history/complete commands and the built-in `tasks`
+page widget. Delegation uses the configured `Layout.identity(...)` catalog as its employee picker.
 Every committed task mutation publishes `ProcessTasksChangedEvent`; eligible browser inboxes receive
 the audience-scoped, payload-free `tasks-changed` SSE event and refetch automatically (also across
 nodes through `ClusterEvent.ProcessTasksChanged`).

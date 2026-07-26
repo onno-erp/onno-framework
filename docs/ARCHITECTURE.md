@@ -116,14 +116,20 @@ status field:
   `TaskAssignment` of candidate users/roles. Definition validation requires every enum outcome to
   have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
   and unreachable nodes.
-- `JdbcProcessEngine` persists payload JSON, instances, work items, and transition history in the
-  framework-managed `onno_process_*` tables. Claim and complete use row locks plus optimistic
+- `JdbcProcessEngine` persists payload JSON, instances, work items, transition history, and ordered
+  task audit events in the framework-managed `onno_process_*` tables. Claim, delegate, and complete
+  use row locks plus optimistic
   versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
 - `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
-  role-scoped task inbox and claim/complete commands. The `tasks` page widget provides the same
+  role-scoped task inbox and claim/delegate/history/complete commands. The `tasks` page widget
+  resolves delegation targets through the layout identity catalog and provides the same
   loop to humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
   transaction commits; the UI routes a payload-free `tasks-changed` SSE invalidation to affected
-  candidate users/roles and admins, so every open inbox refetches automatically.
+candidate users/roles and admins, so every open inbox refetches automatically.
+
+`HumanTask.assignment(payload)` is the automatic-routing seam. It may use an injected application
+service and return `TaskAssignment.users(selectedEmployeeLogin)`. The payload and routing service
+are typed Java; the selected login remains runtime identity data.
 
 The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
 HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,
@@ -283,7 +289,7 @@ contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET
 
 Durable process routes are `GET /api/process-definitions`,
 `POST /api/processes/{definitionKey}`, `GET /api/processes/{id}` plus `/history`, and
-`GET /api/tasks` with `POST /api/tasks/{id}/claim|complete`. Start authorization comes from
+`GET /api/tasks` with task claim, delegate, history, and complete endpoints. Start authorization comes from
 `ProcessDefinition.startAssignment(payload)`; inbox/task authorization comes from each
 `HumanTask.assignment(payload)`. Actors always come from the authenticated principal.
 

@@ -470,8 +470,16 @@ Start work from ordinary Java with
 `processes.start(definition, payload, new ProcessActor(username, roles))`. Candidates come from
 `TaskAssignment.users(...)` / `.roles(...)`; `ADMIN` is the process superuser.
 
-The authenticated UI/API exposes `GET /api/tasks`, claim and complete commands, and the built-in
-`type("tasks")` page widget. Application Java still owns the typed graph; the HTTP boundary accepts
+`HumanTask.assignment(payload)` is also the automatic-routing hook: it may call an injected
+application service and return the selected employee login with `TaskAssignment.users(login)`.
+Employee logins are runtime identity data, so they intentionally remain values rather than Java
+type names.
+
+The authenticated UI/API exposes `GET /api/tasks`, claim, delegate, history, and complete commands,
+and the built-in `type("tasks")` page widget. A claimed task may be delegated by its assignee (or
+`ADMIN`); the reason and assignee transfer are stored in an ordered audit trail. When
+`Layout.identity(Employee.class, "email")` is configured, the widget searches that catalog instead
+of asking for a raw username. Application Java still owns the typed graph; the HTTP boundary accepts
 an enum constant name because JSON has no Java enum type.
 
 Timers, automatic steps, typed decisions, parallel fork/join, subprocesses, cancellation, and

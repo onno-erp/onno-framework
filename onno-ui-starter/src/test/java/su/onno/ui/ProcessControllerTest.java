@@ -86,6 +86,28 @@ class ProcessControllerTest {
                         .isEqualTo(403));
     }
 
+    @Test
+    void delegatesAndExposesTaskAudit() {
+        var delegate = new UsernamePasswordAuthenticationToken("mina", "n/a", List.of());
+        controller.start("approval", Map.of("number", "O-45"), manager);
+        var task = controller.claim(controller.inbox(manager).getFirst().id(), manager);
+
+        var delegated = controller.delegate(
+                task.id(),
+                new ProcessController.DelegateTaskRequest("mina", "Manager is away"),
+                manager);
+
+        assertThat(delegated.assignee()).isEqualTo("mina");
+        assertThat(controller.inbox(delegate)).extracting(su.onno.process.ProcessWorkItem::id)
+                .containsExactly(task.id());
+        assertThat(controller.workItemHistory(task.id(), delegate))
+                .extracting(su.onno.process.ProcessWorkItemEventSnapshot::type)
+                .containsExactly(
+                        su.onno.process.WorkItemEventType.CREATED,
+                        su.onno.process.WorkItemEventType.CLAIMED,
+                        su.onno.process.WorkItemEventType.DELEGATED);
+    }
+
     record Payload(String number) {
     }
 

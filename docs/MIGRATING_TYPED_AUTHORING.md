@@ -118,14 +118,20 @@ ProcessSnapshot process = engine.start(
 engine.complete(workItemId, Outcome.APPROVE, actor);
 ```
 
-Instances, transition history, candidates, claims, and completions are durable. Put
+Automatic employee routing belongs in `assignment(payload)`: call a typed routing service and
+return `TaskAssignment.users(router.approverFor(payload))`. The login returned by that service is
+runtime identity data, not a source-code key.
+
+Instances, transition history, candidates, claims, delegation reasons, task audit events, and
+completions are durable. A claimed task's assignee can call
+`engine.delegate(workItemId, targetUsername, reason, actor)`. Put
 `b.widget("My tasks").type("tasks")` on a page for the human inbox. Headless clients use
 `/api/processes/**` and `/api/tasks/**`; only the JSON completion boundary uses an enum constant
 name string.
 
 ## Strings that intentionally remain
 
-- route, action, role, stable process, and widget type keys;
+- route, action, role, stable process, and widget type keys, plus runtime usernames;
 - human labels, hints, and formatting patterns;
 - parsed filter expressions and their runtime values;
 - derived/synthetic wire columns such as `status_display`;

@@ -342,6 +342,25 @@ export interface ProcessWorkItem {
   outcomes: string[];
 }
 
+export interface TaskAssigneeOption {
+  username: string;
+  display: string;
+  recordId?: string | null;
+}
+
+export interface ProcessWorkItemEvent {
+  id: string;
+  workItemId: string;
+  instanceId: string;
+  type: "CREATED" | "CLAIMED" | "DELEGATED" | "COMPLETED";
+  actor?: string | null;
+  fromAssignee?: string | null;
+  toAssignee?: string | null;
+  reason?: string | null;
+  occurredAt: string;
+  sequence: number;
+}
+
 export interface ProcessSnapshot {
   id: string;
   definitionKey: string;

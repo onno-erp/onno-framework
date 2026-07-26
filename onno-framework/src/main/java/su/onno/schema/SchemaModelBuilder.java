@@ -27,6 +27,7 @@ public class SchemaModelBuilder {
         tables.add(outboxTable());
         tables.add(processInstancesTable());
         tables.add(processWorkItemsTable());
+        tables.add(processWorkItemEventsTable());
         tables.add(processTransitionsTable());
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
             tables.add(catalogTable(catalog));
@@ -117,6 +118,23 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_to_step", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_outcome", "VARCHAR(255)"),
                 ColumnModel.of("_actor", "VARCHAR(255)"),
+                ColumnModel.of("_occurred_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_sequence", "INTEGER").asNotNull()
+        ), List.of(), List.of());
+    }
+
+    static TableModel processWorkItemEventsTable() {
+        return new TableModel("onno_process_work_item_events", List.of(
+                ColumnModel.primaryKey("_id", "UUID"),
+                new ColumnModel("_work_item_id", "UUID", false, true, null,
+                        "onno_process_work_items(_id)", List.of()),
+                new ColumnModel("_instance_id", "UUID", false, true, null,
+                        "onno_process_instances(_id)", List.of()),
+                ColumnModel.of("_event_type", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_actor", "VARCHAR(255)"),
+                ColumnModel.of("_from_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_to_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_reason", "TEXT"),
                 ColumnModel.of("_occurred_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_sequence", "INTEGER").asNotNull()
         ), List.of(), List.of());

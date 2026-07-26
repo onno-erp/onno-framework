@@ -178,6 +178,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
             if (changed != 1) {
                 throw new IllegalStateException("Work item was changed by another user");
             }
+            insertWorkItemEvent(handle, row.id, row.instanceId, WorkItemEventType.CLAIMED,
+                    actor.username(), null, actor.username(), null, now);
             WorkRow claimed = row.claimed(actor.username(), now);
             return new Mutation<>(
                     toWorkItem(claimed),
@@ -186,6 +188,104 @@ public final class JdbcProcessEngine implements ProcessEngine {
         });
         publish(mutation);
         return mutation.value;
+    }
+
+    @Override
+    public ProcessWorkItem delegate(
+            UUID workItemId,
+            String targetUsername,
+            String reason,
+            ProcessActor actor
+    ) {
+        Objects.requireNonNull(workItemId, "workItemId");
+        Objects.requireNonNull(actor, "actor");
+        String target = targetUsername == null ? "" : targetUsername.trim();
+        String explanation = reason == null ? "" : reason.trim();
+        if (target.isEmpty()) {
+            throw new IllegalArgumentException("targetUsername is required");
+        }
+        if (explanation.isEmpty()) {
+            throw new IllegalArgumentException("reason is required");
+        }
+        Mutation<ProcessWorkItem> mutation = jdbi.inTransaction(handle -> {
+            WorkRow row = requireWorkItem(handle, workItemId, true);
+            if (row.status != WorkItemStatus.CLAIMED) {
+                throw new IllegalStateException("Claim the work item before delegating it");
+            }
+            if (!actor.roles().contains("ADMIN") && !actor.username().equals(row.assignee)) {
+                throw new SecurityException("Only the current assignee may delegate this work item");
+            }
+            if (target.equals(row.assignee)) {
+                return new Mutation<>(toWorkItem(row), row.instanceId, null);
+            }
+            Instant now = Instant.now(clock);
+            int changed = handle.createUpdate("""
+                    update onno_process_work_items
+                       set _assignee = :target, _version = _version + 1
+                     where _id = :id and _status = 'CLAIMED' and _version = :version
+                    """)
+                    .bind("target", target)
+                    .bind("id", row.id).bind("version", row.version)
+                    .execute();
+            if (changed != 1) {
+                throw new IllegalStateException("Work item was changed by another user");
+            }
+            insertWorkItemEvent(handle, row.id, row.instanceId, WorkItemEventType.DELEGATED,
+                    actor.username(), row.assignee, target, explanation, now);
+            WorkRow delegated = row.delegated(target);
+            return new Mutation<>(
+                    toWorkItem(delegated),
+                    row.instanceId,
+                    audience(row).withUser(actor.username()).withUser(target));
+        });
+        publish(mutation);
+        return mutation.value;
+    }
+
+    @Override
+    public List<ProcessWorkItemEventSnapshot> workItemHistory(
+            UUID workItemId,
+            ProcessActor actor
+    ) {
+        Objects.requireNonNull(workItemId, "workItemId");
+        Objects.requireNonNull(actor, "actor");
+        return jdbi.withHandle(handle -> {
+            WorkRow row = requireWorkItem(handle, workItemId, false);
+            boolean allowed = actor.roles().contains("ADMIN")
+                    || actor.username().equals(row.assignee)
+                    || new TaskAssignment(
+                            readSet(row.candidateUsers), readSet(row.candidateRoles)).allows(actor)
+                    || handle.createQuery("""
+                            select count(*) from onno_process_work_item_events
+                             where _work_item_id = :id
+                               and (:actor = _actor
+                                    or :actor = _from_assignee
+                                    or :actor = _to_assignee)
+                            """)
+                        .bind("id", workItemId).bind("actor", actor.username())
+                        .mapTo(Integer.class).one() > 0;
+            if (!allowed) {
+                throw new SecurityException("Current user cannot access this work item history");
+            }
+            return handle.createQuery("""
+                            select * from onno_process_work_item_events
+                             where _work_item_id = :id
+                             order by _sequence
+                            """)
+                    .bind("id", workItemId)
+                    .map((rs, ctx) -> new ProcessWorkItemEventSnapshot(
+                            rs.getObject("_id", UUID.class),
+                            rs.getObject("_work_item_id", UUID.class),
+                            rs.getObject("_instance_id", UUID.class),
+                            WorkItemEventType.valueOf(rs.getString("_event_type")),
+                            rs.getString("_actor"),
+                            rs.getString("_from_assignee"),
+                            rs.getString("_to_assignee"),
+                            rs.getString("_reason"),
+                            instant(rs, "_occurred_at"),
+                            rs.getInt("_sequence")))
+                    .list();
+        });
     }
 
     @Override
@@ -226,6 +326,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
             if (workChanged != 1) {
                 throw new IllegalStateException("Work item was changed by another user");
             }
+            insertWorkItemEvent(handle, work.id, work.instanceId, WorkItemEventType.COMPLETED,
+                    actor.username(), null, null, null, now);
 
             ProcessStatus nextStatus = target.node instanceof EndNode<?, ?>
                     ? ProcessStatus.COMPLETED : ProcessStatus.ACTIVE;
@@ -289,6 +391,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
         HumanTask humanTask = task.task();
         TaskAssignment assignment = Objects.requireNonNull(
                 humanTask.assignment(payload), "task assignment");
+        UUID workItemId = UUID.randomUUID();
         handle.createUpdate("""
                 insert into onno_process_work_items
                     (_id, _instance_id, _step_key, _title, _status,
@@ -296,14 +399,44 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 values (:id, :instance, :step, :title, 'OPEN',
                         :users, :roles, :now, 0)
                 """)
-                .bind("id", UUID.randomUUID()).bind("instance", instanceId)
+                .bind("id", workItemId).bind("instance", instanceId)
                 .bind("step", ((ProcessStepKey) task.step()).key())
                 .bind("title", humanTask.title(payload))
                 .bind("users", write(assignment.users()))
                 .bind("roles", write(assignment.roles()))
                 .bind("now", now)
                 .execute();
+        insertWorkItemEvent(handle, workItemId, instanceId, WorkItemEventType.CREATED,
+                null, null, null, null, now);
         return new TaskAudience(assignment.users(), assignment.roles());
+    }
+
+    private void insertWorkItemEvent(
+            Handle handle,
+            UUID workItemId,
+            UUID instanceId,
+            WorkItemEventType type,
+            String actor,
+            String fromAssignee,
+            String toAssignee,
+            String reason,
+            Instant now
+    ) {
+        handle.createUpdate("""
+                insert into onno_process_work_item_events
+                    (_id, _work_item_id, _instance_id, _event_type, _actor,
+                     _from_assignee, _to_assignee, _reason, _occurred_at, _sequence)
+                values (:id, :workItem, :instance, :type, :actor,
+                        :fromAssignee, :toAssignee, :reason, :now,
+                        (select coalesce(max(e._sequence), 0) + 1
+                           from onno_process_work_item_events e
+                          where e._work_item_id = :workItem))
+                """)
+                .bind("id", UUID.randomUUID()).bind("workItem", workItemId)
+                .bind("instance", instanceId).bind("type", type.name()).bind("actor", actor)
+                .bind("fromAssignee", fromAssignee).bind("toAssignee", toAssignee)
+                .bind("reason", reason).bind("now", now)
+                .execute();
     }
 
     private void insertTransition(
@@ -456,6 +589,13 @@ public final class JdbcProcessEngine implements ProcessEngine {
             return new WorkRow(
                     id, instanceId, definitionKey, stepKey, title, WorkItemStatus.CLAIMED,
                     candidateUsers, candidateRoles, user, createdAt, at, completedAt, outcome, version + 1);
+        }
+
+        WorkRow delegated(String user) {
+            return new WorkRow(
+                    id, instanceId, definitionKey, stepKey, title, WorkItemStatus.CLAIMED,
+                    candidateUsers, candidateRoles, user, createdAt, claimedAt,
+                    completedAt, outcome, version + 1);
         }
     }
 

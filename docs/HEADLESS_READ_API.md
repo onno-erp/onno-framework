@@ -28,6 +28,8 @@ GET /api/processes/{instanceId}              durable process snapshot
 GET /api/processes/{instanceId}/history      append-only transition audit trail
 GET /api/tasks                               caller's candidate/assigned open work
 POST /api/tasks/{workItemId}/claim
+GET /api/tasks/{workItemId}/history       ordered task audit trail
+POST /api/tasks/{workItemId}/delegate     body: {"targetUsername":"…","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
 
@@ -37,6 +39,9 @@ accepted from the request body. Starting is authorized by the definition's typed
 claimed by the caller. `ADMIN` is the process superuser. Completion outcome names are checked
 against the active `HumanTask`'s declared enum before the persisted graph advances. Process
 mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
+Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
+and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
+catalog for UI pickers. Headless integrations may submit a known authenticated username directly.
 
 ```jsonc
 // GET /api/tasks

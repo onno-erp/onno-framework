@@ -682,10 +682,12 @@ class TasksPage implements Page {
 layout.section("Work").page("/tasks", "My tasks", "list-checks");
 ```
 
-The widget calls authenticated `GET /api/tasks` and renders claim plus the active task's declared
-enum outcomes. Claim/complete writes are CSRF-protected. Visibility is computed from
+The widget calls authenticated `GET /api/tasks` and renders claim, delegation, audit history, and
+the active task's declared enum outcomes. Writes are CSRF-protected. Delegation searches the
+employee catalog configured by `Layout.identity(...)`, requires a reason, and is limited to the
+current assignee or `ADMIN`. Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
-its own actor or roles. The inbox is live: every committed start, claim, or completion emits an
+its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
 audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details
 stay server-side; the event contains only an invalidation. A Retry control appears only after a
 failed read—there is no normal-state refresh button.
@@ -699,6 +701,8 @@ GET  /api/processes/{instanceId}
 GET  /api/processes/{instanceId}/history
 GET  /api/tasks
 POST /api/tasks/{workItemId}/claim
+GET  /api/tasks/{workItemId}/history
+POST /api/tasks/{workItemId}/delegate   {"targetUsername":"…","reason":"…"}
 POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
 ```
 

@@ -88,6 +88,47 @@ class JdbcProcessEngineTest {
         assertThat(events.getLast().audienceRoles()).containsExactly("FINANCE");
     }
 
+    @Test
+    void delegatesClaimedWorkWithAuthorizationAuditAndLiveAudience() {
+        ProcessActor manager = new ProcessActor("mara", Set.of("MANAGER"));
+        ProcessActor delegate = new ProcessActor("mina", Set.of());
+        ProcessActor outsider = new ProcessActor("olivia", Set.of());
+        engine.start(definition, new Request("PO-43", "Renew contract"), manager);
+        ProcessWorkItem task = engine.claim(engine.inbox(manager).getFirst().id(), manager);
+
+        assertThatThrownBy(() ->
+                engine.delegate(task.id(), "mina", "Covering leave", outsider))
+                .isInstanceOf(SecurityException.class);
+        assertThatThrownBy(() ->
+                engine.delegate(task.id(), "mina", " ", manager))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("reason");
+
+        ProcessWorkItem delegated =
+                engine.delegate(task.id(), "mina", "Covering leave", manager);
+
+        assertThat(delegated.assignee()).isEqualTo("mina");
+        assertThat(engine.inbox(manager)).isEmpty();
+        assertThat(engine.inbox(delegate)).extracting(ProcessWorkItem::id)
+                .containsExactly(task.id());
+        assertThat(events.getLast().audienceUsers())
+                .containsExactlyInAnyOrder("mara", "mina");
+        assertThat(engine.workItemHistory(task.id(), manager))
+                .extracting(ProcessWorkItemEventSnapshot::type)
+                .containsExactly(
+                        WorkItemEventType.CREATED,
+                        WorkItemEventType.CLAIMED,
+                        WorkItemEventType.DELEGATED);
+        ProcessWorkItemEventSnapshot transfer =
+                engine.workItemHistory(task.id(), delegate).getLast();
+        assertThat(transfer.actor()).isEqualTo("mara");
+        assertThat(transfer.fromAssignee()).isEqualTo("mara");
+        assertThat(transfer.toAssignee()).isEqualTo("mina");
+        assertThat(transfer.reason()).isEqualTo("Covering leave");
+        assertThatThrownBy(() -> engine.workItemHistory(task.id(), outsider))
+                .isInstanceOf(SecurityException.class);
+    }
+
     record Request(String number, String subject) {
     }
 

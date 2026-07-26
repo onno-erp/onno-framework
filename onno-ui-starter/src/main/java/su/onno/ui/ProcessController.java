@@ -16,6 +16,7 @@ import su.onno.process.ProcessEngine;
 import su.onno.process.ProcessSnapshot;
 import su.onno.process.ProcessTransitionSnapshot;
 import su.onno.process.ProcessWorkItem;
+import su.onno.process.ProcessWorkItemEventSnapshot;
 
 import java.security.Principal;
 import java.util.List;
@@ -32,17 +33,29 @@ public final class ProcessController {
     private final ProcessDefinitions definitions;
     private final ObjectMapper json;
     private final UiAccessService access;
+    private final TaskAssigneeDirectory assignees;
 
     public ProcessController(
             ProcessEngine engine,
             ProcessDefinitions definitions,
             ObjectMapper json,
-            UiAccessService access
+            UiAccessService access,
+            TaskAssigneeDirectory assignees
     ) {
         this.engine = engine;
         this.definitions = definitions;
         this.json = json;
         this.access = access;
+        this.assignees = assignees;
+    }
+
+    ProcessController(
+            ProcessEngine engine,
+            ProcessDefinitions definitions,
+            ObjectMapper json,
+            UiAccessService access
+    ) {
+        this(engine, definitions, json, access, null);
     }
 
     @GetMapping("/process-definitions")
@@ -109,6 +122,45 @@ public final class ProcessController {
         }
     }
 
+    @GetMapping("/task-assignees")
+    public List<TaskAssigneeDirectory.AssigneeOption> assignees(
+            @org.springframework.web.bind.annotation.RequestParam(
+                    name = "q", required = false) String query,
+            Principal principal
+    ) {
+        actor(principal);
+        return assignees == null ? List.of() : assignees.search(query, principal);
+    }
+
+    @GetMapping("/tasks/{workItemId}/history")
+    public List<ProcessWorkItemEventSnapshot> workItemHistory(
+            @PathVariable UUID workItemId,
+            Principal principal
+    ) {
+        try {
+            return engine.workItemHistory(workItemId, actor(principal));
+        } catch (RuntimeException exception) {
+            throw operationFailure(exception);
+        }
+    }
+
+    @PostMapping("/tasks/{workItemId}/delegate")
+    public ProcessWorkItem delegate(
+            @PathVariable UUID workItemId,
+            @RequestBody DelegateTaskRequest request,
+            Principal principal
+    ) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request is required");
+        }
+        try {
+            return engine.delegate(
+                    workItemId, request.targetUsername(), request.reason(), actor(principal));
+        } catch (RuntimeException exception) {
+            throw operationFailure(exception);
+        }
+    }
+
     @PostMapping("/tasks/{workItemId}/complete")
     public ProcessSnapshot complete(
             @PathVariable UUID workItemId,
@@ -165,6 +217,9 @@ public final class ProcessController {
     }
 
     public record CompleteTaskRequest(String outcome) {
+    }
+
+    public record DelegateTaskRequest(String targetUsername, String reason) {
     }
 
     public record DefinitionView(String key, String title, String payloadType) {

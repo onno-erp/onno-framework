@@ -18,6 +18,8 @@ import type {
   ActionFeedback,
   ProcessSnapshot,
   ProcessWorkItem,
+  ProcessWorkItemEvent,
+  TaskAssigneeOption,
 } from "./types";
 
 import { toSnakeCase } from "./utils";
@@ -400,6 +402,15 @@ export const api = {
   listProcessTasks: () => fetchJson<ProcessWorkItem[]>(`${BASE}/tasks`),
   claimProcessTask: (id: string) =>
     fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/claim`, { method: "POST" }),
+  searchTaskAssignees: (query: string) =>
+    fetchJson<TaskAssigneeOption[]>(`${BASE}/task-assignees?q=${encodeURIComponent(query)}`),
+  getProcessTaskHistory: (id: string) =>
+    fetchJson<ProcessWorkItemEvent[]>(`${BASE}/tasks/${id}/history`),
+  delegateProcessTask: (id: string, targetUsername: string, reason: string) =>
+    fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/delegate`, {
+      method: "POST",
+      body: JSON.stringify({ targetUsername, reason }),
+    }),
   completeProcessTask: (id: string, outcome: string) =>
     fetchJson<ProcessSnapshot>(`${BASE}/tasks/${id}/complete`, {
       method: "POST",
