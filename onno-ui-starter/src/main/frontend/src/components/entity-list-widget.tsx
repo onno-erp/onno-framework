@@ -10,6 +10,7 @@ import {
   type ActionFormValues,
 } from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
+import { initialFilterState, type FilterState } from "@/components/list-defaults";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { useViewersById } from "@/lib/presence-store";
 import { Input } from "@/components/ui/input";
@@ -217,6 +218,9 @@ export type ListDescriptor = {
   // seeds the group-by column the list opens on. The initial sort rides on `sort` (above).
   baseFilter?: string;
   defaultGroupBy?: string;
+  defaultGroupByDateGranularity?: "day" | "month" | "year";
+  /** Removable initial selections keyed by a declared filter's key. */
+  defaultFilters?: Record<string, string[]>;
   /** Per-group subtotals shown on each group header (and their display format). */
   aggregates?: ListAggregate[];
   pageSize: number;
@@ -1082,8 +1086,8 @@ function GroupByFacet({
   groupable: GroupableColumn[];
   groupBy: string;
   onGroupBy: (v: string) => void;
-  granularity: string;
-  onGranularity: (v: string) => void;
+  granularity: "day" | "month" | "year";
+  onGranularity: (v: "day" | "month" | "year") => void;
 }) {
   const t = useMessages();
   const [open, setOpen] = useState(false);
@@ -1332,7 +1336,9 @@ export function EntityListWidget({
   const aggregates = useMemo(() => list.aggregates ?? [], [list.aggregates]);
   // Opens on the descriptor's default group-by (PageBuilder.list default view), else flat ("").
   const [groupBy, setGroupBy] = useState(list.defaultGroupBy ?? "");
-  const [granularity, setGranularity] = useState("month");
+  const [granularity, setGranularity] = useState<"day" | "month" | "year">(
+    list.defaultGroupByDateGranularity ?? "month"
+  );
   const groupCol = groupable.find((g) => g.columnName === groupBy);
   // Keys of in-flight server actions (`key` for toolbar, `key:id` for a row) → spinner + disabled.
   const [pending, setPending] = useState<Set<string>>(new Set());
@@ -1448,10 +1454,8 @@ export function EntityListWidget({
   // multi-select, {text} for a contains/starts-with typeahead, {from,to} for a date range. Changing
   // one resets the grid and re-queries (see the reset effect below) — it narrows the rows, not just
   // the toolbar. Serialized into filterSig so effects can depend on its content.
-  const [filterState, setFilterState] = useState<
-    Record<string, { eq?: string; in?: string[]; text?: string; from?: string; to?: string }>
-  >(() =>
-    urlSynced ? readFiltersFromUrl(initialParams) : Object.fromEntries(filters.map((f) => [f.key, {}]))
+  const [filterState, setFilterState] = useState<FilterState>(() =>
+    urlSynced ? readFiltersFromUrl(initialParams) : initialFilterState(filters, list.defaultFilters)
   );
   const filterSig = JSON.stringify(filterState);
   const filterStateRef = useRef(filterState);

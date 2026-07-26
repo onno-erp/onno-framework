@@ -34,6 +34,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -580,10 +581,11 @@ public class DivKitController implements DisposableBean {
 
     /**
      * Stamp a {@code PageBuilder.list(entity, v -> …)} default view onto the list descriptor: a base
-     * {@code filter} (a server-side feed constraint), a {@code defaultGroupBy} column, and/or the
-     * initial {@code sort}. The viewer can still change grouping/sort; the base filter always applies.
+     * {@code filter} (a server-side feed constraint), removable default filter selections, a
+     * {@code defaultGroupBy} column/date granularity, and/or the initial {@code sort}. The viewer
+     * can still change filters/grouping/sort; the base filter always applies.
      */
-    private static void applyListDefaults(Map<String, Object> descriptor, Map<String, Object> defaults) {
+    static void applyListDefaults(Map<String, Object> descriptor, Map<String, Object> defaults) {
         if (defaults == null || defaults.isEmpty()) {
             return;
         }
@@ -594,6 +596,14 @@ public class DivKitController implements DisposableBean {
         Object groupBy = defaults.get("groupBy");
         if (groupBy != null && !groupBy.toString().isBlank()) {
             descriptor.put("defaultGroupBy", groupBy.toString());
+            Object granularity = defaults.get("groupByDateGranularity");
+            if (granularity != null && !granularity.toString().isBlank()) {
+                descriptor.put("defaultGroupByDateGranularity", granularity.toString());
+            }
+        }
+        Map<String, List<String>> defaultFilters = resolvedDefaultFilters(descriptor, defaults);
+        if (!defaultFilters.isEmpty()) {
+            descriptor.put("defaultFilters", defaultFilters);
         }
         Object sortColumn = defaults.get("sort");
         if (sortColumn != null && !sortColumn.toString().isBlank()) {
@@ -602,6 +612,49 @@ public class DivKitController implements DisposableBean {
             sort.put("descending", Boolean.TRUE.equals(defaults.get("sortDescending")));
             descriptor.put("sort", sort);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, List<String>> resolvedDefaultFilters(
+            Map<String, Object> descriptor, Map<String, Object> defaults) {
+        Map<String, List<String>> resolved = new LinkedHashMap<>();
+        Object explicit = defaults.get("defaultFilters");
+        if (explicit instanceof Map<?, ?> valuesByKey) {
+            valuesByKey.forEach((key, values) -> {
+                if (key != null && values instanceof List<?> list) {
+                    List<String> clean = list.stream()
+                            .filter(Objects::nonNull)
+                            .map(Object::toString)
+                            .filter(value -> !value.isBlank())
+                            .toList();
+                    if (!clean.isEmpty()) {
+                        resolved.put(key.toString(), clean);
+                    }
+                }
+            });
+        }
+
+        Object first = defaults.get("defaultFirstFilterOptions");
+        Object rawFilters = descriptor.get("filters");
+        if (!(first instanceof List<?> keys) || !(rawFilters instanceof List<?> filters)) {
+            return resolved;
+        }
+        for (Object rawKey : keys) {
+            if (rawKey == null) continue;
+            String key = rawKey.toString();
+            for (Object rawFilter : filters) {
+                if (!(rawFilter instanceof Map<?, ?> filter) || !key.equals(filter.get("key"))) continue;
+                Object rawOptions = filter.get("options");
+                if (rawOptions instanceof List<?> options && !options.isEmpty()
+                        && options.getFirst() instanceof Map<?, ?> option
+                        && option.get("value") != null
+                        && !option.get("value").toString().isBlank()) {
+                    resolved.putIfAbsent(key, List.of(option.get("value").toString()));
+                }
+                break;
+            }
+        }
+        return resolved;
     }
 
     /**

@@ -260,13 +260,15 @@ public final class PageBuilder {
     }
 
     /**
-     * Embed an entity list opened on a <b>default view</b> — a preset filter, grouping, and/or sort
-     * the list starts from (the viewer can still change them, and the filter is a base constraint on
-     * the feed). Reuses the same {@code col op value} filter grammar as dashboard widgets:
+     * Embed an entity list opened on a <b>default view</b> — preset filter selections, grouping,
+     * sorting, and/or a base feed constraint. The viewer can still change the selected filters,
+     * grouping, and sort; only {@link ListDefaults#filter(String)} is a permanent feed constraint.
+     * Reuses the same {@code col op value} filter grammar as dashboard widgets:
      *
      * <pre>
      * b.list(Order.class, v -> v.filter("open = true")
-     *                           .groupBy("status_display")
+     *                           .defaultFirstFilterOption("assignedTo")
+     *                           .groupBy("created_at", DateGranularity.DAY)
      *                           .sort("_date", true));   // newest first
      * </pre>
      */
@@ -278,12 +280,16 @@ public final class PageBuilder {
     }
 
     /**
-     * Preset view for an embedded {@link #list(Class, Consumer)} — a base filter, a group-by column,
-     * and a sort. Every part is optional; only what's set is applied.
+     * Preset view for an embedded {@link #list(Class, Consumer)} — initial filter selections, a
+     * base feed constraint, a group-by column and date granularity, and a sort. Every part is
+     * optional; only what's set is applied.
      */
     public static final class ListDefaults {
         private String filter;
         private String groupBy;
+        private DateGranularity groupByDateGranularity;
+        private final Map<String, List<String>> defaultFilters = new LinkedHashMap<>();
+        private final List<String> defaultFirstFilterOptions = new ArrayList<>();
         private String sortColumn;
         private boolean sortDescending;
 
@@ -296,6 +302,41 @@ public final class PageBuilder {
         /** Open the list grouped by this column (a column the list declares groupable). */
         public ListDefaults groupBy(String column) {
             this.groupBy = column;
+            return this;
+        }
+
+        /**
+         * Open the list grouped by this temporal column using the requested calendar bucket.
+         */
+        public ListDefaults groupBy(String column, DateGranularity granularity) {
+            this.groupBy = column;
+            this.groupByDateGranularity = java.util.Objects.requireNonNull(granularity, "granularity");
+            return this;
+        }
+
+        /**
+         * Preselect values in a declared list filter. Unlike {@link #filter(String)}, this is a
+         * removable toolbar selection: the viewer may clear or replace it.
+         */
+        public ListDefaults defaultFilter(String filterKey, String... values) {
+            if (filterKey != null && !filterKey.isBlank()) {
+                defaultFilters.put(filterKey, values == null ? List.of()
+                        : java.util.Arrays.stream(values)
+                                .filter(java.util.Objects::nonNull)
+                                .filter(value -> !value.isBlank())
+                                .toList());
+            }
+            return this;
+        }
+
+        /**
+         * Preselect the first option of a declared options filter. Useful when the option values
+         * are resolved dynamically by the entity view; an empty option list leaves the filter clear.
+         */
+        public ListDefaults defaultFirstFilterOption(String filterKey) {
+            if (filterKey != null && !filterKey.isBlank()) {
+                defaultFirstFilterOptions.add(filterKey);
+            }
             return this;
         }
 
@@ -318,6 +359,15 @@ public final class PageBuilder {
             }
             if (groupBy != null && !groupBy.isBlank()) {
                 m.put("groupBy", groupBy);
+                if (groupByDateGranularity != null) {
+                    m.put("groupByDateGranularity", groupByDateGranularity.wireValue());
+                }
+            }
+            if (!defaultFilters.isEmpty()) {
+                m.put("defaultFilters", Map.copyOf(defaultFilters));
+            }
+            if (!defaultFirstFilterOptions.isEmpty()) {
+                m.put("defaultFirstFilterOptions", List.copyOf(defaultFirstFilterOptions));
             }
             if (sortColumn != null && !sortColumn.isBlank()) {
                 m.put("sort", sortColumn);
