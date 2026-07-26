@@ -10,6 +10,7 @@ public record ProcessTransitionSnapshot(
         String fromStep,
         String toStep,
         String outcome,
+        ProcessActorId actorId,
         String actor,
         Instant occurredAt,
         int sequence

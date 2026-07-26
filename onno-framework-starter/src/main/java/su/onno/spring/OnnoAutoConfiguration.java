@@ -262,11 +262,13 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public su.onno.process.ProcessEngine processEngine(
             Jdbi jdbi,
             su.onno.process.ProcessDefinitions definitions,
+            MetadataRegistry metadataRegistry,
             ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper,
             su.onno.process.ProcessEventPublisher events) {
         com.fasterxml.jackson.databind.ObjectMapper mapper = objectMapper.getIfAvailable(
                 () -> new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
-        return new su.onno.process.JdbcProcessEngine(jdbi, definitions, mapper, events);
+        return new su.onno.process.JdbcProcessEngine(
+                jdbi, definitions, metadataRegistry, mapper, events);
     }
 
     /**

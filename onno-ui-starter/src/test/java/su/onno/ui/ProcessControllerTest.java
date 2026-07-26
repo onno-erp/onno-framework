@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ProcessControllerTest {
 
     private ProcessController controller;
+    private ObjectMapper json;
     private UsernamePasswordAuthenticationToken manager;
 
     @BeforeEach
@@ -39,9 +40,10 @@ class ProcessControllerTest {
         new SchemaGenerator(new MetadataRegistry()).execute(jdbi);
         Approval definition = new Approval();
         ProcessDefinitions definitions = new ProcessDefinitions(List.of(definition));
-        ObjectMapper json = new ObjectMapper().findAndRegisterModules();
+        json = new ObjectMapper().findAndRegisterModules();
         controller = new ProcessController(
-                new JdbcProcessEngine(jdbi, definitions, json, ignored -> { }),
+                new JdbcProcessEngine(
+                        jdbi, definitions, new MetadataRegistry(), json, ignored -> { }),
                 definitions,
                 json,
                 new UiAccessService(new MetadataRegistry()));
@@ -50,16 +52,18 @@ class ProcessControllerTest {
     }
 
     @Test
-    void startsTypedPayloadAndCompletesAuthenticatedInboxTask() {
+    void startsTypedPayloadAndCompletesAuthenticatedInboxTask() throws Exception {
         var started = controller.start(
                 "approval", Map.of("number", "O-42"), manager);
 
         var task = controller.inbox(manager).getFirst();
         assertThat(task.title()).isEqualTo("Review O-42");
-        assertThat(task.candidateRoles()).containsExactly("MANAGER");
 
         var claimed = controller.claim(task.id(), manager);
         assertThat(claimed.assignee()).isEqualTo("mara");
+        assertThat(json.writeValueAsString(claimed))
+                .contains("\"assigneeId\":\"mara\"")
+                .doesNotContain("candidateUsers", "candidateRoles");
 
         var completed = controller.complete(
                 task.id(), new ProcessController.CompleteTaskRequest("APPROVE"), manager);

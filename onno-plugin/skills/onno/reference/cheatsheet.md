@@ -86,14 +86,15 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 | --- | --- |
 | `ProcessStepKey` | Implement on the step enum. `key()` defaults to the enum name and may be overridden with a stable persistence key. |
 | `HumanTask<P,O extends Enum<O>>` | Typed human work; declares `outcomeType()`, `assignment(payload)`, and optional `title(payload)`. |
-| `TaskAssignment` | Candidate `users(...)`, `roles(...)`, or both; `ADMIN` bypasses assignment checks. |
+| `ProcessActorId` / `ProcessIdentity` | Stable task-owner id plus mutable login/display snapshots. A linked Employee record UUID is the normal id. |
+| `TaskAssignment` | Candidate `identities(Ref<?>...)`, `actors(ProcessActorId...)`, `roles(...)`, or both; `ADMIN` bypasses assignment checks. |
 | `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)`, declare `startAssignment(payload)`, and override `define(ProcessGraph<P,S>)`; `graph()` validates, seals, and caches it. |
 | `ProcessGraph<P,S>` | `start()`, `human(step, task)`, `end(step)`, `node(step)`, `nodes()`. |
 | `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
 | `ProcessEngine` | Durable `start`, `find`, role/user-scoped `inbox`, `claim`, `delegate`, task `workItemHistory`, and `complete`. |
 | `ProcessActor` | Authenticated username + normalized role set for a process command. |
 | `ProcessSnapshot` | Persisted instance id, definition/step keys, status, starter, timestamps, version. |
-| `ProcessWorkItem` | Durable task, candidates, assignee, timestamps, and allowed enum outcome names. |
+| `ProcessWorkItem` | Durable task, stable assignee id/display snapshot, optional domain `subject`, timestamps, and allowed enum outcome names. |
 | `ProcessWorkItemEventSnapshot` | Ordered `CREATED`/`CLAIMED`/`DELEGATED`/`COMPLETED` task audit entry. |
 
 Graph validation rejects a missing start target, duplicate/blank stable keys, duplicate enum steps,
@@ -103,6 +104,8 @@ of a task's outcome enum.
 The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
 UI starter exposes the inbox plus claim/delegate/history/complete commands and the built-in `tasks`
 page widget. Delegation uses the configured `Layout.identity(...)` catalog as its employee picker.
+`HumanTask.subject(payload)` may return a typed catalog/document `Ref<T>`; the widget links directly
+to that record.
 Every committed task mutation publishes `ProcessTasksChangedEvent`; eligible browser inboxes receive
 the audience-scoped, payload-free `tasks-changed` SSE event and refetch automatically (also across
 nodes through `ClusterEvent.ProcessTasksChanged`).

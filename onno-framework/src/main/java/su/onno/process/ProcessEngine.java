@@ -19,14 +19,14 @@ public interface ProcessEngine {
     ProcessWorkItem claim(UUID workItemId, ProcessActor actor);
 
     /**
-     * Transfer a claimed task to another authenticated username.
+     * Transfer a claimed task to another stable authenticated identity.
      *
      * <p>The current assignee (or an administrator) may delegate. The reason is
      * required and the transfer is recorded in {@link #workItemHistory}.</p>
      */
     ProcessWorkItem delegate(
             UUID workItemId,
-            String targetUsername,
+            ProcessIdentity target,
             String reason,
             ProcessActor actor
     );

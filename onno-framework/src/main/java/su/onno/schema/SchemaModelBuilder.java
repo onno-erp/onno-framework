@@ -84,6 +84,7 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_current_step", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
                 ColumnModel.of("_started_by", "VARCHAR(255)"),
+                ColumnModel.of("_started_by_display", "VARCHAR(255)"),
                 ColumnModel.of("_started_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_updated_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
@@ -101,6 +102,10 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_candidate_users", "TEXT"),
                 ColumnModel.of("_candidate_roles", "TEXT"),
                 ColumnModel.of("_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_assignee_display", "VARCHAR(255)"),
+                ColumnModel.of("_subject_kind", "VARCHAR(32)"),
+                ColumnModel.of("_subject_entity", "VARCHAR(255)"),
+                ColumnModel.of("_subject_id", "UUID"),
                 ColumnModel.of("_created_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_claimed_at", "TIMESTAMP"),
                 ColumnModel.of("_completed_at", "TIMESTAMP"),
@@ -118,6 +123,7 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_to_step", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_outcome", "VARCHAR(255)"),
                 ColumnModel.of("_actor", "VARCHAR(255)"),
+                ColumnModel.of("_actor_display", "VARCHAR(255)"),
                 ColumnModel.of("_occurred_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_sequence", "INTEGER").asNotNull()
         ), List.of(), List.of());
@@ -132,8 +138,11 @@ public class SchemaModelBuilder {
                         "onno_process_instances(_id)", List.of()),
                 ColumnModel.of("_event_type", "VARCHAR(32)").asNotNull(),
                 ColumnModel.of("_actor", "VARCHAR(255)"),
+                ColumnModel.of("_actor_display", "VARCHAR(255)"),
                 ColumnModel.of("_from_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_from_assignee_display", "VARCHAR(255)"),
                 ColumnModel.of("_to_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_to_assignee_display", "VARCHAR(255)"),
                 ColumnModel.of("_reason", "TEXT"),
                 ColumnModel.of("_occurred_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_sequence", "INTEGER").asNotNull()

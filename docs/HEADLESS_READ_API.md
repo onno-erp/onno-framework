@@ -29,7 +29,7 @@ GET /api/processes/{instanceId}/history      append-only transition audit trail
 GET /api/tasks                               caller's candidate/assigned open work
 POST /api/tasks/{workItemId}/claim
 GET /api/tasks/{workItemId}/history       ordered task audit trail
-POST /api/tasks/{workItemId}/delegate     body: {"targetUsername":"…","reason":"…"}
+POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
 
@@ -41,7 +41,8 @@ against the active `HumanTask`'s declared enum before the persisted graph advanc
 mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
 Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank reason is required
 and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
-catalog for UI pickers. Headless integrations may submit a known authenticated username directly.
+catalog and returns `{actorId, username, display}`. `actorId` is the stable catalog record UUID;
+username/display are mutable presentation data.
 
 ```jsonc
 // GET /api/tasks
@@ -52,9 +53,9 @@ catalog for UI pickers. Headless integrations may submit a known authenticated u
   "stepKey": "review",
   "title": "Review order O-42",
   "status": "OPEN",
-  "candidateUsers": [],
-  "candidateRoles": ["MANAGER"],
+  "assigneeId": null,
   "assignee": null,
+  "subject": {"kind": "documents", "entityName": "Orders", "id": "f34c…"},
   "outcomes": ["APPROVE", "REJECT"]
 }]
 ```

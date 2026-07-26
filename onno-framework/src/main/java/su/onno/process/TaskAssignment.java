@@ -4,43 +4,52 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import su.onno.types.Ref;
 
 /**
- * Candidate users and roles allowed to claim a human task.
+ * Candidate stable identities and roles allowed to claim a human task.
  *
  * <p>An empty assignment is deliberately not public: only {@code ADMIN} can operate it. Use
- * {@link #roles} or {@link #users} to make the work visible to business users.</p>
+ * {@link #roles} or {@link #identities} to make the work visible to business users.</p>
  */
-public record TaskAssignment(Set<String> users, Set<String> roles) {
+public record TaskAssignment(Set<ProcessActorId> actors, Set<String> roles) {
 
     public TaskAssignment {
-        users = users == null ? Set.of() : users.stream()
-                .filter(user -> user != null && !user.isBlank())
-                .map(String::trim)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        actors = actors == null ? Set.of() : Set.copyOf(actors);
         roles = roles == null ? Set.of() : roles.stream()
                 .filter(role -> role != null && !role.isBlank())
                 .map(TaskAssignment::normalizeRole)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
-    public static TaskAssignment users(String... usernames) {
-        return new TaskAssignment(values(usernames), Set.of());
+    public static TaskAssignment actors(ProcessActorId... actorIds) {
+        return new TaskAssignment(actorIds == null ? Set.of() : Set.of(actorIds), Set.of());
+    }
+
+    /** Assign directly to typed identity-catalog references. */
+    public static TaskAssignment identities(Ref<?>... identities) {
+        if (identities == null) {
+            return new TaskAssignment(Set.of(), Set.of());
+        }
+        return new TaskAssignment(Arrays.stream(identities)
+                .map(ProcessActorId::of)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()), Set.of());
     }
 
     public static TaskAssignment roles(String... roles) {
         return new TaskAssignment(Set.of(), values(roles));
     }
 
-    public static TaskAssignment usersAndRoles(Set<String> users, Set<String> roles) {
-        return new TaskAssignment(users, roles);
+    public static TaskAssignment actorsAndRoles(
+            Set<ProcessActorId> actors, Set<String> roles) {
+        return new TaskAssignment(actors, roles);
     }
 
     public boolean allows(ProcessActor actor) {
         if (actor.roles().contains("ADMIN")) {
             return true;
         }
-        return users.contains(actor.username())
+        return actors.contains(actor.id())
                 || roles.stream().anyMatch(actor.roles()::contains);
     }
 

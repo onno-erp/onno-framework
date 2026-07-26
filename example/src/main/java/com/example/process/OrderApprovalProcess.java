@@ -9,6 +9,9 @@ import su.onno.process.TaskAssignment;
 
 import java.math.BigDecimal;
 import java.util.UUID;
+import com.example.domain.catalogs.Employee;
+import com.example.domain.documents.Order;
+import su.onno.types.Ref;
 
 /** Small real process used by the example app's order action and task inbox. */
 @Component
@@ -39,7 +42,12 @@ public final class OrderApprovalProcess
         review.on(Outcome.REJECT).to(rejected);
     }
 
-    public record Payload(UUID orderId, String orderNumber, BigDecimal total) {
+    public record Payload(
+            UUID orderId,
+            String orderNumber,
+            BigDecimal total,
+            Ref<Employee> assignedTo
+    ) {
     }
 
     public enum Step implements ProcessStepKey {
@@ -72,7 +80,14 @@ public final class OrderApprovalProcess
 
         @Override
         public TaskAssignment assignment(Payload payload) {
-            return TaskAssignment.roles("MANAGER");
+            return payload.assignedTo() == null
+                    ? TaskAssignment.roles("MANAGER")
+                    : TaskAssignment.identities(payload.assignedTo());
+        }
+
+        @Override
+        public Ref<Order> subject(Payload payload) {
+            return Ref.of(Order.class, payload.orderId());
         }
     }
 }

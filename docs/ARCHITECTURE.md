@@ -113,7 +113,10 @@ status field:
 - `ProcessGraph<P,S>` creates `HumanTaskNode<P,S,O>` and `EndNode<P,S>` handles. Routes connect those
   handles directly; no string node lookups or expression language are involved.
 - `HumanTask<P,O>` declares an enum outcome type, a payload-dependent title, and a
-  `TaskAssignment` of candidate users/roles. Definition validation requires every enum outcome to
+  `TaskAssignment` of candidate stable identities/roles. `TaskAssignment.identities(Ref<?>...)`
+  keeps employee routing typed and stable across login/email changes. Optional `subject(payload)`
+  returns a typed catalog/document `Ref<T>` that becomes a durable task-to-record link.
+  Definition validation requires every enum outcome to
   have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
   and unreachable nodes.
 - `JdbcProcessEngine` persists payload JSON, instances, work items, transition history, and ordered
@@ -128,8 +131,9 @@ status field:
 candidate users/roles and admins, so every open inbox refetches automatically.
 
 `HumanTask.assignment(payload)` is the automatic-routing seam. It may use an injected application
-service and return `TaskAssignment.users(selectedEmployeeLogin)`. The payload and routing service
-are typed Java; the selected login remains runtime identity data.
+service and return `TaskAssignment.identities(selectedEmployeeRef)`. The employee record UUID is
+the stable task owner; login and display name are mutable snapshots only. The authenticated
+principal is resolved through `Layout.identity(...)` to that same UUID.
 
 The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
 HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,

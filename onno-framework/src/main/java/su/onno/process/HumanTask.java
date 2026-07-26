@@ -1,5 +1,7 @@
 package su.onno.process;
 
+import su.onno.types.Ref;
+
 /**
  * A typed unit of human work in a business process.
  *
@@ -18,4 +20,9 @@ public interface HumanTask<P, O extends Enum<O>> {
 
     /** Candidate users/roles allowed to see and claim this task. */
     TaskAssignment assignment(P payload);
+
+    /** Typed business object this task concerns; rendered as a direct link when present. */
+    default Ref<?> subject(P payload) {
+        return null;
+    }
 }

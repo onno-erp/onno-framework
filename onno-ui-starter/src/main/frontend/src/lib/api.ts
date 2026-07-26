@@ -406,10 +406,10 @@ export const api = {
     fetchJson<TaskAssigneeOption[]>(`${BASE}/task-assignees?q=${encodeURIComponent(query)}`),
   getProcessTaskHistory: (id: string) =>
     fetchJson<ProcessWorkItemEvent[]>(`${BASE}/tasks/${id}/history`),
-  delegateProcessTask: (id: string, targetUsername: string, reason: string) =>
+  delegateProcessTask: (id: string, targetActorId: string, reason: string) =>
     fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/delegate`, {
       method: "POST",
-      body: JSON.stringify({ targetUsername, reason }),
+      body: JSON.stringify({ targetActorId, reason }),
     }),
   completeProcessTask: (id: string, outcome: string) =>
     fetchJson<ProcessSnapshot>(`${BASE}/tasks/${id}/complete`, {

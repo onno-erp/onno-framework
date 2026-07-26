@@ -468,12 +468,24 @@ connections, a missing start target, and unreachable nodes. The auto-configured 
 persists JSON payloads, instances, transitions, and human work items in framework-managed tables.
 Start work from ordinary Java with
 `processes.start(definition, payload, new ProcessActor(username, roles))`. Candidates come from
-`TaskAssignment.users(...)` / `.roles(...)`; `ADMIN` is the process superuser.
+`TaskAssignment.identities(Ref<?>...)` / `.actors(ProcessActorId...)` / `.roles(...)`; `ADMIN` is
+the process superuser.
 
 `HumanTask.assignment(payload)` is also the automatic-routing hook: it may call an injected
-application service and return the selected employee login with `TaskAssignment.users(login)`.
-Employee logins are runtime identity data, so they intentionally remain values rather than Java
-type names.
+application service and return the selected employee reference with
+`TaskAssignment.identities(employeeRef)`. The persisted owner is the identity catalog record id,
+not its mutable login/email. For applications without `Layout.identity(...)`,
+`ProcessActorId.of(externalSubject)` is the explicit stable-id fallback.
+
+Override `HumanTask.subject(payload)` with a typed catalog/document `Ref<T>` when the task concerns
+a business record. The engine persists its metadata and the task widget renders a direct link:
+
+```java
+@Override
+public Ref<Order> subject(PurchaseRequest payload) {
+    return payload.order();
+}
+```
 
 The authenticated UI/API exposes `GET /api/tasks`, claim, delegate, history, and complete commands,
 and the built-in `type("tasks")` page widget. A claimed task may be delegated by its assignee (or

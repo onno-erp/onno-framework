@@ -29,7 +29,8 @@ Implemented:
 - Durable typed business processes: stable definition/step keys, typed payloads and human-task
   outcome enums, node-handle transitions, structural validation, persisted instances/transitions,
   role/user candidate work items, claim/delegate/complete commands, durable task audit, authenticated
-  task API, employee-backed delegation picker, and live task widget
+  task API, stable identity-record ownership, typed task-to-domain links, employee-backed
+  delegation picker, and live task widget
 - Shared typed field tokens across queries and UI authoring: getter references for list columns,
   filters, field hints, related lists, form dependencies, state-aware rows, and widget field config
 - Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation

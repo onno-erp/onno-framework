@@ -200,7 +200,7 @@ public class UiEventPublisher {
         payload.put("timestamp", Instant.now().toString());
 
         for (Subscriber subscriber : subscribers) {
-            if (canReceiveProcessTasks(subscriber.roles(), subscriber.username(), users, roles)) {
+            if (canReceiveProcessTasks(subscriber.roles(), subscriber.userId(), users, roles)) {
                 send(subscriber, "tasks-changed", payload);
             }
         }
@@ -208,12 +208,12 @@ public class UiEventPublisher {
 
     static boolean canReceiveProcessTasks(
             Set<String> subscriberRoles,
-            String username,
+            String actorId,
             Set<String> audienceUsers,
             Set<String> audienceRoles
     ) {
         return subscriberRoles.contains("ADMIN")
-                || audienceUsers.contains(username)
+                || audienceUsers.contains(actorId)
                 || audienceRoles.stream().anyMatch(subscriberRoles::contains);
     }
 

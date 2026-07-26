@@ -24,6 +24,11 @@ class SchemaGeneratorTest {
 
         assertThat(ddl).hasSize(7);
         assertThat(ddl.get(1)).contains("CREATE TABLE IF NOT EXISTS onno_outbox");
+        assertThat(ddl.get(3))
+                .contains("_assignee_display VARCHAR(255)")
+                .contains("_subject_kind VARCHAR(32)")
+                .contains("_subject_entity VARCHAR(255)")
+                .contains("_subject_id UUID");
         assertThat(ddl.get(4)).contains("CREATE TABLE IF NOT EXISTS onno_process_work_item_events");
 
         String sql = ddl.get(6);

@@ -6,13 +6,19 @@ import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.metadata.MetadataScanner;
+import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.schema.SchemaGenerator;
+import su.onno.annotations.Document;
+import su.onno.model.DocumentObject;
+import su.onno.types.Ref;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,8 +40,12 @@ class JdbcProcessEngineTest {
         new SchemaGenerator(new MetadataRegistry()).execute(jdbi);
         definition = new ApprovalProcess();
         events = new java.util.ArrayList<>();
+        MetadataRegistry registry = new MetadataRegistry();
+        registry.registerDocument(new MetadataScanner(new DefaultNamingStrategy())
+                .scanDocument(TestOrder.class));
         engine = new JdbcProcessEngine(
                 jdbi, new ProcessDefinitions(List.of(definition)),
+                registry,
                 new ObjectMapper().findAndRegisterModules(),
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 events::add);
@@ -46,7 +56,7 @@ class JdbcProcessEngineTest {
         ProcessActor manager = new ProcessActor("mara", Set.of("MANAGER"));
         ProcessActor finance = new ProcessActor("finn", Set.of("FINANCE"));
         ProcessSnapshot started = engine.start(
-                definition, new Request("PO-42", "Purchase laptops"), manager);
+                definition, request("PO-42", "Purchase laptops"), manager);
 
         assertThat(started.currentStep()).isEqualTo("manager-approval");
         assertThat(events).hasSize(1);
@@ -54,6 +64,8 @@ class JdbcProcessEngineTest {
         ProcessWorkItem managerTask = engine.inbox(manager).getFirst();
         assertThat(engine.inbox(finance)).isEmpty();
         assertThat(managerTask.outcomes()).containsExactlyInAnyOrder("APPROVED", "REJECTED");
+        assertThat(managerTask.subject()).isEqualTo(new ProcessDomainLink(
+                "documents", "Test Orders", managerTask.subject().id()));
 
         ProcessWorkItem claimed = engine.claim(managerTask.id(), manager);
         assertThat(claimed.status()).isEqualTo(WorkItemStatus.CLAIMED);
@@ -90,29 +102,39 @@ class JdbcProcessEngineTest {
 
     @Test
     void delegatesClaimedWorkWithAuthorizationAuditAndLiveAudience() {
-        ProcessActor manager = new ProcessActor("mara", Set.of("MANAGER"));
-        ProcessActor delegate = new ProcessActor("mina", Set.of());
+        ProcessActor manager = new ProcessActor(
+                new ProcessIdentity(ProcessActorId.of("employee-mara"), "mara@old.test", "Mara"),
+                Set.of("MANAGER"));
+        ProcessIdentity target = new ProcessIdentity(
+                ProcessActorId.of("employee-mina"), "mina@old.test", "Mina");
+        ProcessActor delegateAfterLoginChange = new ProcessActor(
+                new ProcessIdentity(
+                        ProcessActorId.of("employee-mina"), "mina@new.test", "Mina"),
+                Set.of());
         ProcessActor outsider = new ProcessActor("olivia", Set.of());
-        engine.start(definition, new Request("PO-43", "Renew contract"), manager);
+        engine.start(definition, request("PO-43", "Renew contract"), manager);
         ProcessWorkItem task = engine.claim(engine.inbox(manager).getFirst().id(), manager);
 
         assertThatThrownBy(() ->
-                engine.delegate(task.id(), "mina", "Covering leave", outsider))
+                engine.delegate(
+                        task.id(), target, "Covering leave", outsider))
                 .isInstanceOf(SecurityException.class);
         assertThatThrownBy(() ->
-                engine.delegate(task.id(), "mina", " ", manager))
+                engine.delegate(task.id(), target, " ", manager))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("reason");
 
         ProcessWorkItem delegated =
-                engine.delegate(task.id(), "mina", "Covering leave", manager);
+                engine.delegate(
+                        task.id(), target, "Covering leave", manager);
 
-        assertThat(delegated.assignee()).isEqualTo("mina");
+        assertThat(delegated.assigneeId()).isEqualTo(ProcessActorId.of("employee-mina"));
+        assertThat(delegated.assignee()).isEqualTo("Mina");
         assertThat(engine.inbox(manager)).isEmpty();
-        assertThat(engine.inbox(delegate)).extracting(ProcessWorkItem::id)
+        assertThat(engine.inbox(delegateAfterLoginChange)).extracting(ProcessWorkItem::id)
                 .containsExactly(task.id());
         assertThat(events.getLast().audienceUsers())
-                .containsExactlyInAnyOrder("mara", "mina");
+                .containsExactlyInAnyOrder("employee-mara", "employee-mina");
         assertThat(engine.workItemHistory(task.id(), manager))
                 .extracting(ProcessWorkItemEventSnapshot::type)
                 .containsExactly(
@@ -120,16 +142,25 @@ class JdbcProcessEngineTest {
                         WorkItemEventType.CLAIMED,
                         WorkItemEventType.DELEGATED);
         ProcessWorkItemEventSnapshot transfer =
-                engine.workItemHistory(task.id(), delegate).getLast();
-        assertThat(transfer.actor()).isEqualTo("mara");
-        assertThat(transfer.fromAssignee()).isEqualTo("mara");
-        assertThat(transfer.toAssignee()).isEqualTo("mina");
+                engine.workItemHistory(task.id(), delegateAfterLoginChange).getLast();
+        assertThat(transfer.actor()).isEqualTo("Mara");
+        assertThat(transfer.fromAssignee()).isEqualTo("Mara");
+        assertThat(transfer.toAssignee()).isEqualTo("Mina");
+        assertThat(transfer.toAssigneeId()).isEqualTo(ProcessActorId.of("employee-mina"));
         assertThat(transfer.reason()).isEqualTo("Covering leave");
         assertThatThrownBy(() -> engine.workItemHistory(task.id(), outsider))
                 .isInstanceOf(SecurityException.class);
     }
 
-    record Request(String number, String subject) {
+    private static Request request(String number, String subject) {
+        return new Request(number, subject, UUID.randomUUID());
+    }
+
+    record Request(String number, String subject, UUID orderId) {
+    }
+
+    @Document(name = "Test Orders")
+    static final class TestOrder extends DocumentObject {
     }
 
     enum Step implements ProcessStepKey {
@@ -162,6 +193,9 @@ class JdbcProcessEngineTest {
         @Override public String title(Request payload) { return title + ": " + payload.subject(); }
         @Override public TaskAssignment assignment(Request payload) {
             return TaskAssignment.roles(role);
+        }
+        @Override public Ref<TestOrder> subject(Request payload) {
+            return Ref.of(TestOrder.class, payload.orderId());
         }
     }
 

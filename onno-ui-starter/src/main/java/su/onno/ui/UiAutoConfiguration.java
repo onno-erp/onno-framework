@@ -123,9 +123,11 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             su.onno.process.ProcessDefinitions processDefinitions,
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             UiAccessService access,
-            TaskAssigneeDirectory taskAssigneeDirectory) {
+            TaskAssigneeDirectory taskAssigneeDirectory,
+            CurrentUserResolver currentUserResolver) {
         return new ProcessController(
-                processEngine, processDefinitions, objectMapper, access, taskAssigneeDirectory);
+                processEngine, processDefinitions, objectMapper, access,
+                taskAssigneeDirectory, currentUserResolver);
     }
 
     @Bean

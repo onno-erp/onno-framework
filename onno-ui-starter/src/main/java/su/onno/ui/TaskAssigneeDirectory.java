@@ -7,6 +7,9 @@ import su.onno.metadata.MetadataRegistry;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import su.onno.process.ProcessActorId;
+import su.onno.process.ProcessIdentity;
 
 /**
  * Resolves task assignees from the identity catalog configured by
@@ -54,17 +57,56 @@ public final class TaskAssigneeDirectory {
                 .toList();
     }
 
+    public ProcessIdentity require(String actorId, Principal principal) {
+        Directory directory = directory(principal);
+        UUID id;
+        try {
+            id = UUID.fromString(actorId);
+        } catch (RuntimeException exception) {
+            throw new IllegalArgumentException("targetActorId must be an identity record UUID");
+        }
+        AssigneeOption option = option(
+                catalogs.get(directory.descriptor(), id), directory.loginColumn());
+        if (option.username() == null || option.username().isBlank()) {
+            throw new IllegalArgumentException("Selected identity has no configured login");
+        }
+        return new ProcessIdentity(
+                ProcessActorId.of(option.actorId()), option.username(), option.display());
+    }
+
     private static AssigneeOption option(Map<String, Object> row, String loginColumn) {
         String username = text(row.get(loginColumn));
         String display = text(row.get("_description"));
         String id = text(row.get("_id"));
-        return new AssigneeOption(username, display == null ? username : display, id);
+        return new AssigneeOption(id, username, display == null ? username : display);
     }
 
     private static String text(Object value) {
         return value == null ? null : value.toString();
     }
 
-    public record AssigneeOption(String username, String display, String recordId) {
+    private Directory directory(Principal principal) {
+        UiIdentityLink link = layout.identity();
+        if (link == null) {
+            throw new IllegalStateException("Layout.identity(...) is required for task delegation");
+        }
+        CatalogDescriptor descriptor = registry.allCatalogs().stream()
+                .filter(catalog -> catalog.javaClass().equals(link.javaClass()))
+                .findFirst().orElseThrow(() ->
+                        new IllegalStateException("Identity catalog is not registered"));
+        if (!access.canRead(principal, descriptor)) {
+            throw new SecurityException("Current user cannot read the identity catalog");
+        }
+        AttributeDescriptor login = descriptor.attributes().stream()
+                .filter(attribute -> attribute.fieldName().equals(link.loginField()))
+                .findFirst().orElseThrow(() ->
+                        new IllegalStateException("Identity login field is not registered"));
+        return new Directory(descriptor, login.columnName());
+    }
+
+    private record Directory(CatalogDescriptor descriptor, String loginColumn) {
+    }
+
+    public record AssigneeOption(String actorId, String username, String display) {
     }
 }

@@ -2,7 +2,6 @@ package su.onno.process;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /** Durable human task exposed by {@link ProcessEngine}. */
@@ -13,9 +12,9 @@ public record ProcessWorkItem(
         String stepKey,
         String title,
         WorkItemStatus status,
-        Set<String> candidateUsers,
-        Set<String> candidateRoles,
+        ProcessActorId assigneeId,
         String assignee,
+        ProcessDomainLink subject,
         Instant createdAt,
         Instant claimedAt,
         Instant completedAt,

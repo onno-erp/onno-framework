@@ -685,7 +685,9 @@ layout.section("Work").page("/tasks", "My tasks", "list-checks");
 The widget calls authenticated `GET /api/tasks` and renders claim, delegation, audit history, and
 the active task's declared enum outcomes. Writes are CSRF-protected. Delegation searches the
 employee catalog configured by `Layout.identity(...)`, requires a reason, and is limited to the
-current assignee or `ADMIN`. Visibility is computed from
+current assignee or `ADMIN`. Task ownership uses the Employee record UUID, so changing its
+login/email does not orphan work. A task whose `HumanTask.subject(payload)` returns a typed
+catalog/document `Ref<T>` shows an **Open …** link to that record. Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
 its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
 audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details
@@ -702,7 +704,7 @@ GET  /api/processes/{instanceId}/history
 GET  /api/tasks
 POST /api/tasks/{workItemId}/claim
 GET  /api/tasks/{workItemId}/history
-POST /api/tasks/{workItemId}/delegate   {"targetUsername":"…","reason":"…"}
+POST /api/tasks/{workItemId}/delegate   {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
 ```
 

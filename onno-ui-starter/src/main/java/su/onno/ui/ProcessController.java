@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.process.ProcessActor;
+import su.onno.process.ProcessActorId;
+import su.onno.process.ProcessIdentity;
 import su.onno.process.ProcessDefinition;
 import su.onno.process.ProcessDefinitions;
 import su.onno.process.ProcessEngine;
@@ -34,19 +36,22 @@ public final class ProcessController {
     private final ObjectMapper json;
     private final UiAccessService access;
     private final TaskAssigneeDirectory assignees;
+    private final CurrentUserResolver currentUser;
 
     public ProcessController(
             ProcessEngine engine,
             ProcessDefinitions definitions,
             ObjectMapper json,
             UiAccessService access,
-            TaskAssigneeDirectory assignees
+            TaskAssigneeDirectory assignees,
+            CurrentUserResolver currentUser
     ) {
         this.engine = engine;
         this.definitions = definitions;
         this.json = json;
         this.access = access;
         this.assignees = assignees;
+        this.currentUser = currentUser;
     }
 
     ProcessController(
@@ -55,7 +60,7 @@ public final class ProcessController {
             ObjectMapper json,
             UiAccessService access
     ) {
-        this(engine, definitions, json, access, null);
+        this(engine, definitions, json, access, null, null);
     }
 
     @GetMapping("/process-definitions")
@@ -88,10 +93,10 @@ public final class ProcessController {
                         HttpStatus.NOT_FOUND, "Unknown process instance: " + instanceId));
         ProcessActor actor = actor(principal);
         boolean allowed = actor.roles().contains("ADMIN")
-                || actor.username().equals(snapshot.startedBy())
+                || actor.id().equals(snapshot.startedById())
                 || engine.inbox(actor).stream().anyMatch(item -> item.instanceId().equals(instanceId))
                 || engine.history(instanceId).stream()
-                    .anyMatch(transition -> actor.username().equals(transition.actor()));
+                    .anyMatch(transition -> actor.id().equals(transition.actorId()));
         if (!allowed) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "Current user cannot access process " + instanceId);
@@ -155,7 +160,12 @@ public final class ProcessController {
         }
         try {
             return engine.delegate(
-                    workItemId, request.targetUsername(), request.reason(), actor(principal));
+                    workItemId,
+                    assignees == null
+                            ? ProcessIdentity.unlinked(request.targetActorId())
+                            : assignees.require(request.targetActorId(), principal),
+                    request.reason(),
+                    actor(principal));
         } catch (RuntimeException exception) {
             throw operationFailure(exception);
         }
@@ -181,7 +191,18 @@ public final class ProcessController {
         if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication is required");
         }
-        return new ProcessActor(principal.getName(), access.roles(principal));
+        if (currentUser == null) {
+            return new ProcessActor(principal.getName(), access.roles(principal));
+        }
+        CurrentUserResolver.CurrentUser resolved = currentUser.resolve(principal);
+        String stableId = resolved.recordId() == null
+                ? resolved.username() : resolved.recordId();
+        return new ProcessActor(
+                new ProcessIdentity(
+                        ProcessActorId.of(stableId),
+                        resolved.username(),
+                        resolved.displayName()),
+                access.roles(principal));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -219,7 +240,7 @@ public final class ProcessController {
     public record CompleteTaskRequest(String outcome) {
     }
 
-    public record DelegateTaskRequest(String targetUsername, String reason) {
+    public record DelegateTaskRequest(String targetActorId, String reason) {
     }
 
     public record DefinitionView(String key, String title, String payloadType) {

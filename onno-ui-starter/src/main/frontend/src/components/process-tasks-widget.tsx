@@ -17,6 +17,7 @@ import { HintIcon } from "@/components/ui/hint-icon";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { toSnakeCase } from "@/lib/utils";
 
 const humanize = (value: string) =>
   value
@@ -138,6 +139,14 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
                   <UserRound className="size-3.5" /> {task.assignee}
                 </div>
               ) : null}
+              {task.subject ? (
+                <a
+                  className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+                  href={`/${task.subject.kind}/${toSnakeCase(task.subject.entityName)}/${task.subject.id}`}
+                >
+                  Open {humanize(task.subject.entityName)}
+                </a>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 {task.status === "OPEN" ? (
                   <Button size="sm" onClick={() => void claim(task)} disabled={busy === task.id}>
@@ -221,7 +230,7 @@ function DelegateTaskDialog({
     let current = true;
     const timer = window.setTimeout(() => {
       void api.searchTaskAssignees(query).then((result) => {
-        if (current) setOptions(result.filter((option) => option.username !== task.assignee));
+        if (current) setOptions(result.filter((option) => option.actorId !== task.assigneeId));
       }).catch(() => {
         if (current) setOptions([]);
       });
@@ -230,13 +239,13 @@ function DelegateTaskDialog({
       current = false;
       window.clearTimeout(timer);
     };
-  }, [query, task.assignee]);
+  }, [query, task.assigneeId]);
 
   const submit = async () => {
     if (!target || !reason.trim()) return;
     setSubmitting(true);
     try {
-      await api.delegateProcessTask(task.id, target.username, reason.trim());
+      await api.delegateProcessTask(task.id, target.actorId, reason.trim());
       toast.success(`Task delegated to ${target.display}`);
       await onDelegated();
     } catch (failure) {
@@ -277,10 +286,10 @@ function DelegateTaskDialog({
           <div className="max-h-44 space-y-1 overflow-y-auto">
             {options.map((option) => (
               <button
-                key={option.username}
+                key={option.actorId}
                 type="button"
                 className={`w-full rounded-field border px-3 py-2 text-left text-sm ${
-                  target?.username === option.username
+                  target?.actorId === option.actorId
                     ? "border-primary bg-primary/10"
                     : "border-border hover:bg-muted"
                 }`}

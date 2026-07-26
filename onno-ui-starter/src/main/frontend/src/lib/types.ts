@@ -332,9 +332,13 @@ export interface ProcessWorkItem {
   stepKey: string;
   title: string;
   status: ProcessWorkItemStatus;
-  candidateUsers: string[];
-  candidateRoles: string[];
+  assigneeId?: string | null;
   assignee?: string | null;
+  subject?: {
+    kind: "catalogs" | "documents";
+    entityName: string;
+    id: string;
+  } | null;
   createdAt: string;
   claimedAt?: string | null;
   completedAt?: string | null;
@@ -343,9 +347,9 @@ export interface ProcessWorkItem {
 }
 
 export interface TaskAssigneeOption {
+  actorId: string;
   username: string;
   display: string;
-  recordId?: string | null;
 }
 
 export interface ProcessWorkItemEvent {
@@ -353,8 +357,11 @@ export interface ProcessWorkItemEvent {
   workItemId: string;
   instanceId: string;
   type: "CREATED" | "CLAIMED" | "DELEGATED" | "COMPLETED";
+  actorId?: string | null;
   actor?: string | null;
+  fromAssigneeId?: string | null;
   fromAssignee?: string | null;
+  toAssigneeId?: string | null;
   toAssignee?: string | null;
   reason?: string | null;
   occurredAt: string;
@@ -366,6 +373,7 @@ export interface ProcessSnapshot {
   definitionKey: string;
   currentStep: string;
   status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+  startedById: string;
   startedBy: string;
   startedAt: string;
   updatedAt: string;

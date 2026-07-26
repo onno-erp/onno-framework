@@ -47,8 +47,7 @@ const task = {
   stepKey: "review",
   title: "Review order O-42",
   status: "OPEN",
-  candidateUsers: [],
-  candidateRoles: ["MANAGER"],
+  assigneeId: null,
   assignee: null,
   outcomes: ["APPROVE", "REJECT"],
 } as ProcessWorkItem;
@@ -91,10 +90,13 @@ describe("ProcessTasksWidget live inbox", () => {
   });
 
   it("delegates a claimed task through the employee picker with a reason", async () => {
-    const claimed = { ...task, status: "CLAIMED", assignee: "mara" } as ProcessWorkItem;
+    const claimed = {
+      ...task, status: "CLAIMED", assigneeId: "employee-1", assignee: "Mara",
+      subject: { kind: "documents", entityName: "Orders", id: "order-42" },
+    } as ProcessWorkItem;
     listProcessTasks.mockResolvedValueOnce([claimed]).mockResolvedValueOnce([]);
     searchTaskAssignees.mockResolvedValue([
-      { username: "mina@example.test", display: "Mina Lee", recordId: "employee-2" },
+      { actorId: "employee-2", username: "mina@example.test", display: "Mina Lee" },
     ]);
     delegateProcessTask.mockResolvedValue({
       ...claimed,
@@ -103,6 +105,8 @@ describe("ProcessTasksWidget live inbox", () => {
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-42");
+    expect(screen.getByRole("link", { name: "Open Orders" }))
+      .toHaveAttribute("href", "/documents/orders/order-42");
     fireEvent.click(screen.getByRole("button", { name: "Delegate" }));
     fireEvent.click(await screen.findByRole("button", { name: /Mina Lee/i }));
     fireEvent.change(screen.getByLabelText("Reason"), {
@@ -111,7 +115,7 @@ describe("ProcessTasksWidget live inbox", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delegate" }));
 
     await waitFor(() => expect(delegateProcessTask).toHaveBeenCalledWith(
-      "task-1", "mina@example.test", "Covering annual leave",
+      "task-1", "employee-2", "Covering annual leave",
     ));
     expect(await screen.findByText("You have no open tasks.")).toBeInTheDocument();
   });

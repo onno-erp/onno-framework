@@ -9,6 +9,7 @@ public record ProcessSnapshot(
         String definitionKey,
         String currentStep,
         ProcessStatus status,
+        ProcessActorId startedById,
         String startedBy,
         Instant startedAt,
         Instant updatedAt,

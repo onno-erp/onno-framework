@@ -119,19 +119,29 @@ engine.complete(workItemId, Outcome.APPROVE, actor);
 ```
 
 Automatic employee routing belongs in `assignment(payload)`: call a typed routing service and
-return `TaskAssignment.users(router.approverFor(payload))`. The login returned by that service is
-runtime identity data, not a source-code key.
+return `TaskAssignment.identities(router.approverFor(payload))`, where the result is a
+`Ref<Employee>`. Add `subject(payload)` when the task concerns a catalog/document record:
+
+```java
+public Ref<Order> subject(Payload payload) {
+    return payload.order();
+}
+```
+
+The employee record UUID—not its mutable login/email—is persisted as the owner.
 
 Instances, transition history, candidates, claims, delegation reasons, task audit events, and
 completions are durable. A claimed task's assignee can call
-`engine.delegate(workItemId, targetUsername, reason, actor)`. Put
+`engine.delegate(workItemId, targetIdentity, reason, actor)`. HTTP callers select the
+`targetActorId` returned by `/api/task-assignees`. Put
 `b.widget("My tasks").type("tasks")` on a page for the human inbox. Headless clients use
 `/api/processes/**` and `/api/tasks/**`; only the JSON completion boundary uses an enum constant
 name string.
 
 ## Strings that intentionally remain
 
-- route, action, role, stable process, and widget type keys, plus runtime usernames;
+- route, action, role, stable process, and widget type keys;
+- external authentication subjects when no identity catalog is configured;
 - human labels, hints, and formatting patterns;
 - parsed filter expressions and their runtime values;
 - derived/synthetic wire columns such as `status_display`;

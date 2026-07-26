@@ -237,7 +237,7 @@ public class OrderView implements EntityView<Order> {
         Order order = orders.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
         var payload = new OrderApprovalProcess.Payload(
-                orderId, order.getNumber(), order.getTotal());
+                orderId, order.getNumber(), order.getTotal(), order.getAssignedTo());
         processes.start(orderApproval, payload, new ProcessActor(username, java.util.Set.of()));
         return ActionResult.message("Approval task created");
     }
