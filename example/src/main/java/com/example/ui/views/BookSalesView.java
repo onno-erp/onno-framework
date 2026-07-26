@@ -14,17 +14,17 @@ import org.springframework.stereotype.Component;
  * (the format hints) applies to a register.
  */
 @Component
-public class BookSalesView implements EntityView {
+public class BookSalesView implements EntityView<BookSales> {
 
     @Override
-    public Class<?> entity() {
+    public Class<BookSales> entity() {
         return BookSales.class;
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("revenue").format("currency:USD")
+    public void fields(EntityConfigBuilder<BookSales> f) {
+        f.field(BookSales::getRevenue).format("currency:USD")
             // Date-only movement timestamp in the register report (unhinted columns get the locale default).
-            .field("period").format("dd-MM-yyyy");
+            .field(BookSales::getPeriod).format("dd-MM-yyyy");
     }
 }

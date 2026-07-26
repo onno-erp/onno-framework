@@ -2,9 +2,13 @@ package com.example.ui.views;
 
 import com.example.domain.catalogs.Employee;
 import com.example.domain.documents.Order;
+import com.example.domain.documents.OrderLine;
 import com.example.domain.enumerations.OrderStatus;
 import com.example.repositories.EmployeeRepository;
 import com.example.repositories.OrderRepository;
+import com.example.process.OrderApprovalProcess;
+import su.onno.process.ProcessActor;
+import su.onno.process.ProcessEngine;
 import su.onno.ui.ActionResult;
 import su.onno.ui.ActionDialog;
 import su.onno.ui.ActionPresentation;
@@ -31,18 +35,23 @@ import java.util.UUID;
  * stock and records the sale — the status actions here just move the lifecycle flag.
  */
 @Component
-public class OrderView implements EntityView {
+public class OrderView implements EntityView<Order> {
 
     private final OrderRepository orders;
     private final EmployeeRepository employees;
+    private final ProcessEngine processes;
+    private final OrderApprovalProcess orderApproval;
 
-    public OrderView(OrderRepository orders, EmployeeRepository employees) {
+    public OrderView(OrderRepository orders, EmployeeRepository employees,
+                     ProcessEngine processes, OrderApprovalProcess orderApproval) {
         this.orders = orders;
         this.employees = employees;
+        this.processes = processes;
+        this.orderApproval = orderApproval;
     }
 
     @Override
-    public Class<?> entity() {
+    public Class<Order> entity() {
         return Order.class;
     }
 
@@ -52,26 +61,27 @@ public class OrderView implements EntityView {
     }
 
     @Override
-    public void list(ListSpec list) {
-        list.columns("number", "date", "customer", "status", "total", "assignedTo")
-                .label("total", "Total")
-                .sortBy("date", true)
+    public void list(ListSpec<Order> list) {
+        list.columns(Order::getNumber, Order::getDate, Order::getCustomer, Order::getStatus,
+                        Order::getTotal, Order::getAssignedTo)
+                .label(Order::getTotal, "Total")
+                .sortBy(Order::getDate, true)
                 // Group the board by status/assignee (discrete) or by date (bucketed day/month/year),
                 // with the order total summed per group.
-                .groupable("status", "assignedTo", "date")
-                .aggregate("total", ListSpec.Agg.SUM, "Total");
+                .groupable(Order::getStatus, Order::getAssignedTo, Order::getDate)
+                .aggregate(Order::getTotal, ListSpec.Agg.SUM, "Total");
         // Faceted filter bar: a status multi-select (no options authored — an enum field offers
         // every declared value, labelled like the colored pills), a date-range facet (with Today /
         // Last 7 days / This month presets) and a note typeahead. They narrow the same query the
         // grouping and search run over.
-        list.filter("status").label("Status").multiOptions();
-        list.filter("assignedTo").label("Assignee").multiOptions(employeeFilterOptions());
-        list.filter("date").label("Order date").dateRange();
-        list.filter("note").label("Note").contains();
+        list.filter(Order::getStatus).label("Status").multiOptions();
+        list.filter(Order::getAssignedTo).label("Assignee").multiOptions(employeeFilterOptions());
+        list.filter(Order::getDate).label("Order date").dateRange();
+        list.filter(Order::getNote).label("Note").contains();
         // Conditional row formatting: fresh orders get an amber wash (they need action), cancelled
         // ones fade out. The function runs server-side per row; null means the default look.
         list.rowStyle(row -> {
-            OrderStatus st = row.enumValue("status", OrderStatus.class);
+            OrderStatus st = row.enumValue(Order::getStatus, OrderStatus.class);
             if (st == OrderStatus.NEW) {
                 return ListSpec.RowStyle.WARNING;
             }
@@ -83,27 +93,29 @@ public class OrderView implements EntityView {
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
+    public void fields(EntityConfigBuilder<Order> f) {
         // Short paired fields sit side by side on the edit form (width "half").
-        f.field("customer").order(0).width("half")
+        f.field(Order::getCustomer).order(0).width("half")
                 .hint("Who's buying. Required.")
-            .field("status").order(1).width("half")
+            .field(Order::getStatus).order(1).width("half")
                 .hint("Lifecycle. Default «New»; advance it with the → button on the list.")
-            .field("assignedTo").order(2).width("half")
+            .field(Order::getAssignedTo).order(2).width("half")
                 .hint("The bookseller handling this order.")
-            .field("date").order(3).width("half").format("dd-MM-yyyy")
-            .field("total").order(4).hideInForm().format("currency:USD")
+            .field(Order::getDate).order(3).width("half").format("dd-MM-yyyy")
+            .field(Order::getTotal).order(4).hideInForm().format("currency:USD")
                 .hint("Auto-computed from the line amounts. Read-only.")
-            .field("open").order(5).hideInForm().hideInList().hideInDetail()
-            .field("note").order(10).widget("textarea")
+            .field(Order::getOpen).order(5).hideInForm().hideInList().hideInDetail()
+            .field(Order::getNote).order(10).widget("textarea")
                 .hint("Internal notes on the order.");
 
         // Line-item column hints, addressed with the "<section>.<field>" key (the section is "items").
         // Money columns render as currency in the order's line table, like the Total above.
-        f.field("items.book").label("Book")
-            .field("items.quantity").label("Qty")
-            .field("items.unitPrice").label("Unit price").format("currency:USD")
-            .field("items.amount").label("Amount").format("currency:USD");
+        f.rowField(Order::getItems, OrderLine::getBook).label("Book");
+        f.rowField(Order::getItems, OrderLine::getQuantity).label("Qty");
+        f.rowField(Order::getItems, OrderLine::getUnitPrice)
+                .label("Unit price").format("currency:USD");
+        f.rowField(Order::getItems, OrderLine::getAmount)
+                .label("Amount").format("currency:USD");
 
         // Surface "Advance" as a primary button on the detail header next to Post; Cancel goes to the ⋯ menu.
         f.action("advanceTop").primary();
@@ -111,6 +123,10 @@ public class OrderView implements EntityView {
 
     @Override
     public void actions(ActionSpec a) {
+        a.action("requestApproval").scope(ActionScope.DETAIL).icon("list-checks")
+                .label("Request approval").roles("MANAGER")
+                .handler(ctx -> requestApproval(ctx.id(), ctx.user()));
+
         // ROW: advance to the next lifecycle status, with a dynamic "→ <next>" label. The static
         // label is the fallback where no single row is in hand (e.g. the batch context menu).
         a.action("advance").scope(ActionScope.ROW).icon("chevron-right").label("Advance")
@@ -215,6 +231,15 @@ public class OrderView implements EntityView {
                     .menu("Assign").icon("user-round").logo(employee.getAvatarUrl()).label(label)
                     .handler(ctx -> assign(ctx.id(), employeeId, label));
         }
+    }
+
+    private ActionResult requestApproval(UUID orderId, String username) {
+        Order order = orders.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
+        var payload = new OrderApprovalProcess.Payload(
+                orderId, order.getNumber(), order.getTotal());
+        processes.start(orderApproval, payload, new ProcessActor(username, java.util.Set.of()));
+        return ActionResult.message("Approval task created");
     }
 
     private ActionResult bulkReceive(su.onno.ui.ActionContext ctx) {

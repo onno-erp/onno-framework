@@ -36,7 +36,7 @@ public class SalesOpsPage implements Page {
                     .config("metric", "count").config("filter", "open = true")
                     .hint("Orders not yet completed or cancelled."));
             kpis.col(c -> c.widget("Posted revenue").type("count").document(Order.class)
-                    .config("metric", "sum").config("metricField", "total")
+                    .config("metric", "sum").metricField(Order::getTotal)
                     .config("filter", "_posted = true").config("currency", "USD"));
             kpis.col(c -> c.widget("Total orders").type("count").document(Order.class)
                     .config("metric", "count"));

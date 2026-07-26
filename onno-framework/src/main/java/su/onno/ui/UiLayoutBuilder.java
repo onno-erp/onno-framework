@@ -1,5 +1,8 @@
 package su.onno.ui;
 
+import su.onno.fields.Field;
+import su.onno.fields.Fields;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,7 +12,7 @@ import java.util.function.Consumer;
 public class UiLayoutBuilder {
 
     private final Map<String, SectionBuilder> sections = new LinkedHashMap<>();
-    private final List<WidgetBuilder> widgets = new ArrayList<>();
+    private final List<WidgetBuilder<?>> widgets = new ArrayList<>();
     private final Map<String, ProfileBuilder> profiles = new LinkedHashMap<>();
     private final ShellBuilder shell = new ShellBuilder();
     private UiIdentityLink identity;
@@ -31,8 +34,8 @@ public class UiLayoutBuilder {
         return sections.computeIfAbsent(name, SectionBuilder::new);
     }
 
-    public WidgetBuilder widget(String title) {
-        WidgetBuilder wb = new WidgetBuilder(this, title);
+    public WidgetBuilder<Void> widget(String title) {
+        WidgetBuilder<Void> wb = new WidgetBuilder<>(this, title);
         widgets.add(wb);
         return wb;
     }
@@ -79,7 +82,7 @@ public class UiLayoutBuilder {
 
     public List<WidgetConfig> buildWidgets() {
         List<WidgetConfig> result = new ArrayList<>();
-        for (WidgetBuilder wb : widgets) {
+        for (WidgetBuilder<?> wb : widgets) {
             result.add(wb.build());
         }
         result.sort((a, b) -> Integer.compare(a.order(), b.order()));
@@ -164,7 +167,7 @@ public class UiLayoutBuilder {
 
         private SectionBuilder entity(String type, Class<?> clazz,
                                        Consumer<EntityConfigBuilder> configurer) {
-            EntityConfigBuilder cfg = new EntityConfigBuilder();
+            EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
             configurer.accept(cfg);
             entities.add(new EntityRef(type, clazz, cfg.buildFieldHints(), cfg.buildIcon()));
             return this;
@@ -191,7 +194,7 @@ public class UiLayoutBuilder {
         }
     }
 
-    public static class WidgetBuilder {
+    public static class WidgetBuilder<E> {
         private final UiLayoutBuilder parent;
         private String title;
         private String type = "count";
@@ -211,61 +214,100 @@ public class UiLayoutBuilder {
             this.title = title;
         }
 
-        public WidgetBuilder type(String type) {
+        public WidgetBuilder<E> type(String type) {
             this.type = type;
             return this;
         }
 
-        public WidgetBuilder order(int order) {
+        public WidgetBuilder<E> order(int order) {
             this.order = order;
             return this;
         }
 
-        public WidgetBuilder width(String width) {
+        public WidgetBuilder<E> width(String width) {
             this.width = width;
             return this;
         }
 
-        public WidgetBuilder catalog(Class<?> clazz) {
+        @SuppressWarnings("unchecked")
+        public <N> WidgetBuilder<N> catalog(Class<N> clazz) {
             this.entityClass = clazz;
             this.entityType = "catalog";
-            return this;
+            return (WidgetBuilder<N>) this;
         }
 
-        public WidgetBuilder document(Class<?> clazz) {
+        @SuppressWarnings("unchecked")
+        public <N> WidgetBuilder<N> document(Class<N> clazz) {
             this.entityClass = clazz;
             this.entityType = "document";
-            return this;
+            return (WidgetBuilder<N>) this;
         }
 
-        public WidgetBuilder register(Class<?> clazz) {
+        @SuppressWarnings("unchecked")
+        public <N> WidgetBuilder<N> register(Class<N> clazz) {
             this.entityClass = clazz;
             this.entityType = "register";
-            return this;
+            return (WidgetBuilder<N>) this;
         }
 
-        public WidgetBuilder maxItems(int maxItems) {
+        public WidgetBuilder<E> maxItems(int maxItems) {
             this.maxItems = maxItems;
             return this;
         }
 
-        public WidgetBuilder dateField(String dateField) {
+        public WidgetBuilder<E> dateField(String dateField) {
             this.dateField = dateField;
             return this;
         }
 
-        public WidgetBuilder titleField(String titleField) {
+        /** Date column selected with a compiler-checked getter reference. */
+        public <V> WidgetBuilder<E> dateField(Field<E, V> dateField) {
+            this.dateField = Fields.name(dateField);
+            return this;
+        }
+
+        public WidgetBuilder<E> titleField(String titleField) {
             this.titleField = titleField;
             return this;
         }
 
-        public WidgetBuilder config(String key, String value) {
+        /** Title column selected with a compiler-checked getter reference. */
+        public <V> WidgetBuilder<E> titleField(Field<E, V> titleField) {
+            this.titleField = Fields.name(titleField);
+            return this;
+        }
+
+        /** Calendar end column selected with a compiler-checked getter reference. */
+        public <V> WidgetBuilder<E> endDateField(Field<E, V> endDateField) {
+            this.extraConfig.put("endDateField", Fields.name(endDateField));
+            return this;
+        }
+
+        /** Metric column selected with a compiler-checked numeric getter reference. */
+        public <N extends Number> WidgetBuilder<E> metricField(Field<E, N> metricField) {
+            this.extraConfig.put("metricField", Fields.name(metricField));
+            return this;
+        }
+
+        /** Chart grouping column selected with a compiler-checked getter reference. */
+        public <V> WidgetBuilder<E> groupBy(Field<E, V> groupBy) {
+            this.extraConfig.put("groupBy", Fields.name(groupBy));
+            return this;
+        }
+
+        /** Multi-series split column selected with a compiler-checked getter reference. */
+        public <V> WidgetBuilder<E> seriesBy(Field<E, V> seriesBy) {
+            this.extraConfig.put("seriesBy", Fields.name(seriesBy));
+            return this;
+        }
+
+        public WidgetBuilder<E> config(String key, String value) {
             this.extraConfig.put(key, value);
             return this;
         }
 
         /** Optional help text, surfaced as a hoverable {@code ?} icon next to the widget title. */
-        public WidgetBuilder hint(String hint) {
+        public WidgetBuilder<E> hint(String hint) {
             this.hint = hint;
             return this;
         }
@@ -277,13 +319,13 @@ public class UiLayoutBuilder {
          * their declared width). No effect on the single-column (mobile) layout, which stacks
          * everything anyway.
          */
-        public WidgetBuilder rowBreak() {
+        public WidgetBuilder<E> rowBreak() {
             this.rowBreak = true;
             return this;
         }
 
         /** Start a new widget. */
-        public WidgetBuilder widget(String title) {
+        public WidgetBuilder<Void> widget(String title) {
             return parent.widget(title);
         }
 

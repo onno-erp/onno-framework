@@ -235,6 +235,25 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return Jdbi.create(dataSource);
     }
 
+    /** Validates and indexes every application-provided typed process definition. */
+    @Bean
+    public su.onno.process.ProcessDefinitions processDefinitions(
+            ObjectProvider<su.onno.process.ProcessDefinition<?, ?>> definitions) {
+        return new su.onno.process.ProcessDefinitions(definitions.orderedStream().toList());
+    }
+
+    /** Durable transactional process runtime backed by the framework-managed process tables. */
+    @Bean
+    @ConditionalOnMissingBean(su.onno.process.ProcessEngine.class)
+    public su.onno.process.ProcessEngine processEngine(
+            Jdbi jdbi,
+            su.onno.process.ProcessDefinitions definitions,
+            ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper) {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = objectMapper.getIfAvailable(
+                () -> new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
+        return new su.onno.process.JdbcProcessEngine(jdbi, definitions, mapper);
+    }
+
     /**
      * The unified type-safe query layer: a {@link su.onno.query.QueryEngine} over
      * catalogs, documents, and registers with {@code Ref}-navigation joins. Apps inject

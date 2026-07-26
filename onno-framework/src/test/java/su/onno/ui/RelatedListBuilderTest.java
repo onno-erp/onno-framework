@@ -17,7 +17,7 @@ class RelatedListBuilderTest {
 
     @Test
     void relatedList_capturesViaDisplayColumnsAndLabel() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("doctors", Join.class)
                 .via("clinic")
                 .display("doctor")
@@ -37,7 +37,7 @@ class RelatedListBuilderTest {
 
     @Test
     void columns_defaultEmpty_andLabelBlank_whenUnset() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("clinics", Join.class).via("doctor").display("clinic");
 
         RelatedList rl = cfg.buildRelatedLists().get(0);
@@ -49,7 +49,7 @@ class RelatedListBuilderTest {
 
     @Test
     void hideInDetail_optsPanelOutOfTheDetailRender() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("doctors", Join.class).via("clinic").display("doctor").hideInDetail();
 
         assertThat(cfg.buildRelatedLists().get(0).hideInDetail()).isTrue();
@@ -57,7 +57,7 @@ class RelatedListBuilderTest {
 
     @Test
     void columns_dedupesRepeatedFields() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("doctors", Join.class).columns("doctor").columns("doctor", "role");
 
         assertThat(cfg.buildRelatedLists().get(0).columns()).containsExactly("doctor", "role");
@@ -65,7 +65,7 @@ class RelatedListBuilderTest {
 
     @Test
     void multiplePanels_keptInDeclarationOrder_andChainBackToFields() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("doctors", Join.class).via("clinic").display("doctor")
                 .relatedList("nurses", Join.class).via("clinic").display("nurse")
                 .field("address").order(0);
@@ -78,7 +78,7 @@ class RelatedListBuilderTest {
 
     @Test
     void sameName_reconfiguresOnePanel_ratherThanAddingDuplicate() {
-        EntityConfigBuilder cfg = new EntityConfigBuilder();
+        EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
         cfg.relatedList("doctors", Join.class).via("clinic");
         cfg.relatedList("doctors", Join.class).display("doctor");
 

@@ -12,7 +12,10 @@ public interface HumanTask<P, O extends Enum<O>> {
     Class<O> outcomeType();
 
     /** Human-facing task title. */
-    default String title() {
+    default String title(P payload) {
         return getClass().getSimpleName();
     }
+
+    /** Candidate users/roles allowed to see and claim this task. */
+    TaskAssignment assignment(P payload);
 }

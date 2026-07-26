@@ -37,9 +37,9 @@ public class TeamPage implements Page {
                     .widget("Upcoming team events")
                     .type("calendar")
                     .document(ScheduleEvent.class)
-                    .dateField("starts_at")
-                    .titleField("subject")
-                    .config("endDateField", "ends_at")
+                    .dateField(ScheduleEvent::getStartsAt)
+                    .titleField(ScheduleEvent::getSubject)
+                    .endDateField(ScheduleEvent::getEndsAt)
                     .config("allDay", "false")
                     .config("secondaryField", "_number")
                     .hint("Open an event to manage participants; drag it to reschedule."));

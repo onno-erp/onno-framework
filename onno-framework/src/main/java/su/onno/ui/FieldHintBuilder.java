@@ -1,5 +1,8 @@
 package su.onno.ui;
 
+import su.onno.fields.Field;
+import su.onno.fields.Fields;
+
 /**
  * Per-field hint builder. Obtained from {@link EntityConfigBuilder#field(String)}
  * inside a lambda passed to {@code SectionBuilder.catalog/document/register}.
@@ -7,9 +10,9 @@ package su.onno.ui;
  * <p>Chain field-level setters; call {@link #field(String)} to switch to another
  * field on the same entity. Anything not set falls through to the scanner default.</p>
  */
-public class FieldHintBuilder {
+public class FieldHintBuilder<O, T> {
 
-    private final EntityConfigBuilder parent;
+    private final EntityConfigBuilder<O> parent;
     private final String fieldName;
 
     private Boolean visibleInList;
@@ -28,22 +31,22 @@ public class FieldHintBuilder {
     private String refOptionDecorator;
     private Boolean uniqueWithinSection;
 
-    FieldHintBuilder(EntityConfigBuilder parent, String fieldName) {
+    FieldHintBuilder(EntityConfigBuilder<O> parent, String fieldName) {
         this.parent = parent;
         this.fieldName = fieldName;
     }
 
-    public FieldHintBuilder order(int order) {
+    public FieldHintBuilder<O, T> order(int order) {
         this.order = order;
         return this;
     }
 
-    public FieldHintBuilder group(String group) {
+    public FieldHintBuilder<O, T> group(String group) {
         this.group = group;
         return this;
     }
 
-    public FieldHintBuilder width(String width) {
+    public FieldHintBuilder<O, T> width(String width) {
         this.width = width;
         return this;
     }
@@ -59,13 +62,13 @@ public class FieldHintBuilder {
      * and store only the returned reference URL, so a plain String attribute holds it — see
      * {@code su.onno.ui.media}.
      */
-    public FieldHintBuilder widget(String widget) {
+    public FieldHintBuilder<O, T> widget(String widget) {
         this.widget = widget;
         return this;
     }
 
     /** Placeholder text shown in this field's empty input on the edit form. */
-    public FieldHintBuilder placeholder(String placeholder) {
+    public FieldHintBuilder<O, T> placeholder(String placeholder) {
         this.placeholder = placeholder;
         return this;
     }
@@ -82,7 +85,7 @@ public class FieldHintBuilder {
      * </ul>
      * It does not affect the edit form's input control (use {@link #widget(String)} for that).
      */
-    public FieldHintBuilder format(String format) {
+    public FieldHintBuilder<O, T> format(String format) {
         this.format = format;
         return this;
     }
@@ -93,7 +96,7 @@ public class FieldHintBuilder {
      * short — a sentence explaining what the field means or how to fill it in. Blank (default) shows
      * no icon.
      */
-    public FieldHintBuilder hint(String hint) {
+    public FieldHintBuilder<O, T> hint(String hint) {
         this.hint = hint;
         return this;
     }
@@ -110,37 +113,37 @@ public class FieldHintBuilder {
      * relabels the list header); a {@code ListSpec.label(...)} on the same field still wins for the
      * list column specifically. Blank/unset falls through to the descriptor's display name.</p>
      */
-    public FieldHintBuilder label(String label) {
+    public FieldHintBuilder<O, T> label(String label) {
         this.label = label;
         return this;
     }
 
-    public FieldHintBuilder hideInList() {
+    public FieldHintBuilder<O, T> hideInList() {
         this.visibleInList = false;
         return this;
     }
 
-    public FieldHintBuilder hideInForm() {
+    public FieldHintBuilder<O, T> hideInForm() {
         this.visibleInForm = false;
         return this;
     }
 
-    public FieldHintBuilder hideInDetail() {
+    public FieldHintBuilder<O, T> hideInDetail() {
         this.visibleInDetail = false;
         return this;
     }
 
-    public FieldHintBuilder visibleInList(boolean v) {
+    public FieldHintBuilder<O, T> visibleInList(boolean v) {
         this.visibleInList = v;
         return this;
     }
 
-    public FieldHintBuilder visibleInForm(boolean v) {
+    public FieldHintBuilder<O, T> visibleInForm(boolean v) {
         this.visibleInForm = v;
         return this;
     }
 
-    public FieldHintBuilder visibleInDetail(boolean v) {
+    public FieldHintBuilder<O, T> visibleInDetail(boolean v) {
         this.visibleInDetail = v;
         return this;
     }
@@ -154,9 +157,14 @@ public class FieldHintBuilder {
      * <p>Independent of search: the typeahead already matches every text column of the target, so a
      * record is findable by this attribute whether or not it's shown. See issue #184.</p>
      */
-    public FieldHintBuilder refSecondary(String targetFieldName) {
+    public FieldHintBuilder<O, T> refSecondary(String targetFieldName) {
         this.refSecondary = targetFieldName;
         return this;
+    }
+
+    /** Compiler-checked counterpart of {@link #refSecondary(String)}. */
+    public <V> FieldHintBuilder<O, T> refSecondary(Field<T, V> targetField) {
+        return refSecondary(Fields.name(targetField));
     }
 
     /**
@@ -177,7 +185,7 @@ public class FieldHintBuilder {
      * (known-column allowlist, bound values), so an unknown name degrades to "no filter", never an
      * error. No effect on a non-ref field.</p>
      */
-    public FieldHintBuilder refFilter(String filter) {
+    public FieldHintBuilder<O, T> refFilter(String filter) {
         this.refFilter = filter;
         return this;
     }
@@ -194,7 +202,7 @@ public class FieldHintBuilder {
      *     .uniqueWithinSection();
      * </pre>
      */
-    public FieldHintBuilder refOptions(Class<? extends RefOptionDecorator> decoratorType) {
+    public FieldHintBuilder<O, T> refOptions(Class<? extends RefOptionDecorator> decoratorType) {
         if (decoratorType == null) {
             throw new IllegalArgumentException("decoratorType must not be null");
         }
@@ -207,14 +215,19 @@ public class FieldHintBuilder {
      * The current row's own value remains selectable. This is immediate UI guidance; domain
      * validation remains the authoritative safeguard on write.
      */
-    public FieldHintBuilder uniqueWithinSection() {
+    public FieldHintBuilder<O, T> uniqueWithinSection() {
         this.uniqueWithinSection = true;
         return this;
     }
 
     /** Switch to configuring another field on the same entity. */
-    public FieldHintBuilder field(String name) {
+    public FieldHintBuilder<O, Object> field(String name) {
         return parent.field(name);
+    }
+
+    /** Continue with a compiler-checked field on the same entity. */
+    public <V> FieldHintBuilder<O, Object> field(Field<O, V> field) {
+        return parent.field(field);
     }
 
     String fieldName() {

@@ -45,20 +45,23 @@ public class DashboardPage implements Page {
                 .config("default", "30d");
 
         // ---- KPI row ----------------------------------------------------------------------------
-        b.widget("Open orders").type("stat").width("1/3").order(0).document(Order.class).dateField("_date")
+        b.widget("Open orders").type("stat").width("1/3").order(0).document(Order.class)
+                .dateField(Order::getDate)
                 .config("metric", "count")
                 .config("trend", "false").config("comparison", "true")
                 .config("comparisonLabel", "vs previous period")
                 .config("filter", "open = true")
                 .hint("Orders not yet completed or cancelled.");
 
-        b.widget("Total orders").type("stat").width("1/3").order(1).document(Order.class).dateField("_date")
+        b.widget("Total orders").type("stat").width("1/3").order(1).document(Order.class)
+                .dateField(Order::getDate)
                 .config("metric", "count")
                 .config("trend", "false").config("comparison", "true")
                 .config("comparisonLabel", "vs previous period");
 
-        b.widget("Revenue (posted)").type("stat").width("1/3").order(2).document(Order.class).dateField("_date")
-                .config("metric", "sum").config("metricField", "total")
+        b.widget("Revenue (posted)").type("stat").width("1/3").order(2).document(Order.class)
+                .dateField(Order::getDate)
+                .config("metric", "sum").metricField(Order::getTotal)
                 .config("currency", "USD")
                 .config("trend", "false").config("comparison", "true")
                 .config("comparisonLabel", "vs previous period")
@@ -77,8 +80,8 @@ public class DashboardPage implements Page {
         // bucket size (day/week/month) auto-follows it.
         b.widget("Revenue by day").type("chart").width("1/2").order(11).document(Order.class)
                 .config("kind", "area")
-                .config("groupBy", "_date").config("groupByDate", "day")
-                .config("metric", "sum").config("metricField", "total")
+                .groupBy(Order::getDate).config("groupByDate", "day")
+                .config("metric", "sum").metricField(Order::getTotal)
                 .config("filter", "_posted = true")
                 .hint("Posted-order revenue over time.");
 
@@ -87,8 +90,8 @@ public class DashboardPage implements Page {
         // config("measure2", …) adds the secondary measure.
         b.widget("Orders & revenue").type("chart").width("full").order(12).document(Order.class)
                 .config("kind", "area").config("label", "Revenue")
-                .config("groupBy", "_date").config("groupByDate", "week")
-                .config("metric", "sum").config("metricField", "total")
+                .groupBy(Order::getDate).config("groupByDate", "week")
+                .config("metric", "sum").metricField(Order::getTotal)
                 .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
                 .config("filter", "_posted = true")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");

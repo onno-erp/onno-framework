@@ -104,7 +104,7 @@ public class UiViewResolver {
             }
             byProfile.values().stream().filter(v -> v != def).forEach(ordered::add);
             for (EntityView view : ordered) {
-                ListSpec spec = new ListSpec();
+                ListSpec<Object> spec = new ListSpec<>();
                 view.list(spec);
                 if (spec.rowStyleFn() != null) {
                     return java.util.Optional.of(spec.rowStyleFn());
@@ -126,7 +126,7 @@ public class UiViewResolver {
 
     @SuppressWarnings("unchecked")
     private ResolvedListView resolveList(Class<?> entity, String profileId, Map<String, Object> meta) {
-        ListSpec spec = new ListSpec();
+        ListSpec<Object> spec = new ListSpec<>();
         EntityView view = viewFor(entity, profileId);
         if (view != null) {
             view.list(spec);

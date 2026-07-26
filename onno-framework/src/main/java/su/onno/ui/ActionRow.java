@@ -1,6 +1,8 @@
 package su.onno.ui;
 
 import su.onno.annotations.EnumLabel;
+import su.onno.fields.Field;
+import su.onno.fields.Fields;
 import su.onno.repository.EnumerationPersistence;
 
 import java.util.Locale;
@@ -69,6 +71,11 @@ public final class ActionRow {
         return data.get(column.toUpperCase(Locale.ROOT));
     }
 
+    /** Read a raw value using a compiler-checked field reference. */
+    public <E, V> Object get(Field<E, V> field) {
+        return get(Fields.name(field));
+    }
+
     /**
      * The column read as a boolean: {@code true} for a {@code Boolean.TRUE}, the strings
      * {@code "true"}/{@code "t"}/{@code "1"} (case-insensitive, how H2/Postgres booleans read back
@@ -89,6 +96,11 @@ public final class ActionRow {
         return s.equalsIgnoreCase("true") || s.equalsIgnoreCase("t") || s.equals("1");
     }
 
+    /** Read a boolean using a compiler-checked field reference. */
+    public <E> boolean bool(Field<E, Boolean> field) {
+        return bool(Fields.name(field));
+    }
+
     /**
      * The display string of {@code column}: the resolved {@code {column}_display} (a ref's label, an
      * enum's constant name) when present, else the raw value as text, else {@code ""} — never null.
@@ -97,6 +109,11 @@ public final class ActionRow {
         Object display = get(column + "_display");
         Object v = display != null ? display : get(column);
         return v == null ? "" : v.toString();
+    }
+
+    /** Read display text using a compiler-checked field reference. */
+    public <E, V> String text(Field<E, V> field) {
+        return text(Fields.name(field));
     }
 
     /**
@@ -149,6 +166,11 @@ public final class ActionRow {
             }
         }
         return null;
+    }
+
+    /** Resolve an enum using a compiler-checked field reference. */
+    public <T, E extends Enum<E>> E enumValue(Field<T, E> field, Class<E> enumType) {
+        return enumValue(Fields.name(field), enumType);
     }
 
     private static <E extends Enum<E>> EnumLabel labelOf(Class<E> enumType, E constant) {

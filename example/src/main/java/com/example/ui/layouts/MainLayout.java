@@ -60,7 +60,8 @@ public class MainLayout implements Layout {
                 .order(0)
                 .icon("shopping-cart")
                 .document(Order.class)
-                .catalog(Customer.class);
+                .catalog(Customer.class)
+                .page("/tasks", "My tasks", "list-checks");
 
         layout.section("Catalog")
                 .order(1)

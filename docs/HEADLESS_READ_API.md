@@ -22,6 +22,36 @@ GET /api/documents/{name}/{id}           one document, with tabular sections inl
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/process-definitions                 registered stable keys and payload classes
+POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
+GET /api/processes/{instanceId}              durable process snapshot
+GET /api/processes/{instanceId}/history      append-only transition audit trail
+GET /api/tasks                               caller's candidate/assigned open work
+POST /api/tasks/{workItemId}/claim
+POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
+```
+
+Process actors are always derived from the authenticated principal; usernames and roles are never
+accepted from the request body. Starting is authorized by the definition's typed
+`startAssignment(payload)`. `GET /api/tasks` returns open candidate work plus work already
+claimed by the caller. `ADMIN` is the process superuser. Completion outcome names are checked
+against the active `HumanTask`'s declared enum before the persisted graph advances. Process
+mutations use the same CSRF requirements as other session-authenticated `/api/**` writes.
+
+```jsonc
+// GET /api/tasks
+[{
+  "id": "2d95…",
+  "instanceId": "a4f1…",
+  "definitionKey": "order-approval",
+  "stepKey": "review",
+  "title": "Review order O-42",
+  "status": "OPEN",
+  "candidateUsers": [],
+  "candidateRoles": ["MANAGER"],
+  "assignee": null,
+  "outcomes": ["APPROVE", "REJECT"]
+}]
 ```
 
 Action handlers use a typed write-response contract. Existing successful results remain

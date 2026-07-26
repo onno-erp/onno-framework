@@ -16,6 +16,8 @@ import type {
   BatchResult,
   RefOptionSearch,
   ActionFeedback,
+  ProcessSnapshot,
+  ProcessWorkItem,
 } from "./types";
 
 import { toSnakeCase } from "./utils";
@@ -393,6 +395,16 @@ export const api = {
   getSettings: () => fetchJson<SettingMeta[]>(`${BASE}/settings`),
   saveSettings: (values: Record<string, unknown>) =>
     fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }),
+
+  // Durable business-process work
+  listProcessTasks: () => fetchJson<ProcessWorkItem[]>(`${BASE}/tasks`),
+  claimProcessTask: (id: string) =>
+    fetchJson<ProcessWorkItem>(`${BASE}/tasks/${id}/claim`, { method: "POST" }),
+  completeProcessTask: (id: string, outcome: string) =>
+    fetchJson<ProcessSnapshot>(`${BASE}/tasks/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ outcome }),
+    }),
 
   // Catalog CRUD
   // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied

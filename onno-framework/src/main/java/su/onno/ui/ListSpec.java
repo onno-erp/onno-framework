@@ -1,5 +1,8 @@
 package su.onno.ui;
 
+import su.onno.fields.Field;
+import su.onno.fields.Fields;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -18,7 +21,7 @@ import java.util.Set;
  * {@code "description"} (catalogs) and {@code "number"}, {@code "date"},
  * {@code "posted"} (documents) address the built-in system columns.</p>
  */
-public final class ListSpec {
+public final class ListSpec<E> {
 
     private String title;
     private final List<String> include = new ArrayList<>();
@@ -66,9 +69,28 @@ public final class ListSpec {
         return this;
     }
 
+    /** Compiler-checked initial sort field. */
+    public <V> ListSpec<E> sortBy(Field<E, V> field) {
+        return sortBy(Fields.name(field), false);
+    }
+
+    /** Compiler-checked initial sort field and direction. */
+    public <V> ListSpec<E> sortBy(Field<E, V> field, boolean descending) {
+        return sortBy(Fields.name(field), descending);
+    }
+
     /** Take explicit control: only these fields, in this order. */
     public ListSpec columns(String... fields) {
         include.addAll(List.of(fields));
+        return this;
+    }
+
+    /** Take explicit control with compiler-checked getter references. */
+    @SafeVarargs
+    public final ListSpec<E> columns(Field<E, ?>... fields) {
+        for (Field<E, ?> field : fields) {
+            include.add(Fields.name(field));
+        }
         return this;
     }
 
@@ -79,15 +101,34 @@ public final class ListSpec {
         return this;
     }
 
+    /** Add a compiler-checked column with a custom label. */
+    public <V> ListSpec<E> column(Field<E, V> field, String label) {
+        return column(Fields.name(field), label);
+    }
+
     /** Override a column's header label. */
     public ListSpec label(String field, String label) {
         labels.put(field, label);
         return this;
     }
 
+    /** Override a compiler-checked column's label. */
+    public <V> ListSpec<E> label(Field<E, V> field, String label) {
+        return label(Fields.name(field), label);
+    }
+
     /** Hide fields from the default column set (ignored when {@link #columns} is used). */
     public ListSpec hide(String... fields) {
         hidden.addAll(List.of(fields));
+        return this;
+    }
+
+    /** Hide compiler-checked fields from the default set. */
+    @SafeVarargs
+    public final ListSpec<E> hide(Field<E, ?>... fields) {
+        for (Field<E, ?> field : fields) {
+            hidden.add(Fields.name(field));
+        }
         return this;
     }
 
@@ -131,6 +172,11 @@ public final class ListSpec {
         FilterBuilder b = new FilterBuilder(field);
         filters.add(b);
         return b;
+    }
+
+    /** Declare a filter bound to a compiler-checked field. */
+    public <V> FilterBuilder filter(Field<E, V> field) {
+        return filter(Fields.name(field));
     }
 
     /**
@@ -242,12 +288,26 @@ public final class ListSpec {
         return this;
     }
 
+    /** Attach a cell menu to a compiler-checked field. */
+    public <V> ListSpec<E> cellMenu(Field<E, V> field, String submenuLabel) {
+        return cellMenu(Fields.name(field), submenuLabel);
+    }
+
     public Map<String, String> cellMenus() {
         return cellMenus;
     }
 
     public ListSpec groupable(String... fields) {
         groupable.addAll(List.of(fields));
+        return this;
+    }
+
+    /** Declare compiler-checked grouping fields. */
+    @SafeVarargs
+    public final ListSpec<E> groupable(Field<E, ?>... fields) {
+        for (Field<E, ?> field : fields) {
+            groupable.add(Fields.name(field));
+        }
         return this;
     }
 
@@ -265,6 +325,11 @@ public final class ListSpec {
     public ListSpec defaultGroupBy(String field) {
         this.defaultGroupBy = field;
         return this;
+    }
+
+    /** Open grouped by a compiler-checked field. */
+    public <V> ListSpec<E> defaultGroupBy(Field<E, V> field) {
+        return defaultGroupBy(Fields.name(field));
     }
 
     /**
@@ -286,6 +351,16 @@ public final class ListSpec {
     public ListSpec aggregate(String field, Agg fn, String label) {
         aggregates.add(new Aggregate(field, fn, label));
         return this;
+    }
+
+    /** Add an aggregate over a compiler-checked numeric field. */
+    public <N extends Number> ListSpec<E> aggregate(Field<E, N> field, Agg fn) {
+        return aggregate(Fields.name(field), fn, null);
+    }
+
+    /** Add a labelled aggregate over a compiler-checked numeric field. */
+    public <N extends Number> ListSpec<E> aggregate(Field<E, N> field, Agg fn, String label) {
+        return aggregate(Fields.name(field), fn, label);
     }
 
     /**
@@ -416,10 +491,20 @@ public final class ListSpec {
             return this;
         }
 
+        /** Compiler-checked latitude field. */
+        public <T, N extends Number> MapSpec lat(Field<T, N> field) {
+            return lat(Fields.name(field));
+        }
+
         /** The longitude field, when the point is stored as a numeric lat/lng pair. */
         public MapSpec lng(String lngField) {
             this.lngField = lngField;
             return this;
+        }
+
+        /** Compiler-checked longitude field. */
+        public <T, N extends Number> MapSpec lng(Field<T, N> field) {
+            return lng(Fields.name(field));
         }
 
         /** A GeoJSON field for arbitrary geometry — points, paths, and areas (what {@code .widget("geojson")} writes). */
@@ -432,6 +517,11 @@ public final class ListSpec {
         public MapSpec label(String labelField) {
             this.labelField = labelField;
             return this;
+        }
+
+        /** Compiler-checked marker label field. */
+        public <T, V> MapSpec label(Field<T, V> field) {
+            return label(Fields.name(field));
         }
 
         /** Open the list on the map view rather than the table. */

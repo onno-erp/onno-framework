@@ -11,6 +11,7 @@ import { SparklineWidget } from "@/components/sparkline-widget";
 import { GaugeWidget } from "@/components/gauge-widget";
 import { MapWidget } from "@/components/map-widget";
 import { SettingWidget } from "@/components/setting-widget";
+import { ProcessTasksWidget } from "@/components/process-tasks-widget";
 
 /**
  * Bridges DivKit's {@code div-custom} blocks to React widgets. The server emits a
@@ -40,6 +41,7 @@ const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> =
   gauge: GaugeWidget,
   map: MapWidget,
   setting: SettingWidget,
+  tasks: ProcessTasksWidget,
 };
 
 /**

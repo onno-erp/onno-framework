@@ -320,6 +320,37 @@ export interface SettingMeta {
   value: unknown;
 }
 
+export type ProcessWorkItemStatus = "OPEN" | "CLAIMED" | "COMPLETED" | "CANCELLED";
+
+/** One durable human task returned by the authenticated process inbox. */
+export interface ProcessWorkItem {
+  id: string;
+  instanceId: string;
+  definitionKey: string;
+  stepKey: string;
+  title: string;
+  status: ProcessWorkItemStatus;
+  candidateUsers: string[];
+  candidateRoles: string[];
+  assignee?: string | null;
+  createdAt: string;
+  claimedAt?: string | null;
+  completedAt?: string | null;
+  outcome?: string | null;
+  outcomes: string[];
+}
+
+export interface ProcessSnapshot {
+  id: string;
+  definitionKey: string;
+  currentStep: string;
+  status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+  startedBy: string;
+  startedAt: string;
+  updatedAt: string;
+  version: number;
+}
+
 /**
  * The result of a custom EntityView action ({@link ActionSpec} handler): an optional success
  * toast, an optional {@code onno://} route to navigate to, and whether to refresh the surface.

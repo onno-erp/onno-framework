@@ -21,8 +21,8 @@ and migration history. You do not hand-write tables, DTOs, or CRUD controllers. 
 code — posting rules, validation, lifecycle hooks, UI authoring — is plain, refactorable,
 compiler-checked Java, never string-mapped configuration.
 
-The `su.onno.process` prototype applies the same typed-Java principle to business-process routes,
-while deliberately stopping short of generated persistence or UI until its language is proven.
+The `su.onno.process` model applies the same typed-Java principle to durable business-process routes;
+the starter persists instances/work and the UI starter exposes an authenticated human task inbox.
 
 Java packages are always `su.onno.*`. The published Maven group is `su.onno` (core,
 Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle plugin id is
@@ -32,7 +32,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 | Module | Group | Role |
 | --- | --- | --- |
-| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed business-process prototype, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
+| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed process contracts/schema, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, query engine, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
@@ -102,26 +102,32 @@ In brief:
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
 
-### Typed business-process prototype
+### Durable typed business processes
 
-The `su.onno.process` package is an executable language spike for long-running coordination that
-does not belong in a document status field:
+The `su.onno.process` package models long-running coordination that does not belong in a document
+status field:
 
-- `ProcessDefinition<P,S>` owns one lazily built, validated route graph. `P` is the typed process
-  payload; `S` is an enum implementing `ProcessStepKey`.
+- `ProcessDefinition<P,S>` is an application Spring bean with a stable persisted key, a declared
+  payload class, and one lazily built, validated route graph. `P` is the typed payload; `S` is an
+  enum implementing `ProcessStepKey`.
 - `ProcessGraph<P,S>` creates `HumanTaskNode<P,S,O>` and `EndNode<P,S>` handles. Routes connect those
   handles directly; no string node lookups or expression language are involved.
-- `HumanTask<P,O>` declares an enum outcome type. Definition validation requires every enum outcome
-  to have exactly one transition and rejects duplicate keys, cross-graph connections, missing start
-  targets, and unreachable nodes.
-- `InMemoryProcessEngine` proves start/complete semantics and records `ProcessTransition<S>`
-  history. Completing a task requires its typed node handle and its declared outcome enum.
+- `HumanTask<P,O>` declares an enum outcome type, a payload-dependent title, and a
+  `TaskAssignment` of candidate users/roles. Definition validation requires every enum outcome to
+  have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
+  and unreachable nodes.
+- `JdbcProcessEngine` persists payload JSON, instances, work items, and transition history in the
+  framework-managed `onno_process_*` tables. Claim and complete use row locks plus optimistic
+  versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
+- `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
+  role-scoped task inbox and claim/complete commands. The `tasks` page widget provides the same
+  loop to humans.
 
-This is intentionally **not yet a production process runtime**. It does not persist process
-instances, generate durable work items, resolve assignees, expose an inbox/API/UI, run timers, or
-support automatic/decision/fork/join/subprocess nodes. Those contracts should be added only after
-the typed authoring language has been exercised. Documents remain business events and posting
-remains register movement; a process coordinates work across those objects over time.
+The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
+HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,
+automatic/decision/fork/join/subprocess nodes, cancellation, and definition-version migration remain
+future work. Documents still record business events and posting still writes register movements; a
+process coordinates work across them.
 
 ```java
 enum PurchaseStep implements ProcessStepKey {
@@ -132,10 +138,19 @@ enum ApprovalOutcome { APPROVED, REJECTED }
 
 final class ApprovalTask implements HumanTask<PurchaseRequest, ApprovalOutcome> {
     public Class<ApprovalOutcome> outcomeType() { return ApprovalOutcome.class; }
+    public TaskAssignment assignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
 }
 
+@Component
 final class PurchaseApproval
         extends ProcessDefinition<PurchaseRequest, PurchaseStep> {
+    PurchaseApproval() { super("purchase-approval", PurchaseRequest.class); }
+    public TaskAssignment startAssignment(PurchaseRequest payload) {
+        return TaskAssignment.roles("MANAGER");
+    }
+
     protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
         var manager = graph.human(PurchaseStep.MANAGER_APPROVAL, new ApprovalTask());
         var finance = graph.human(PurchaseStep.FINANCE_APPROVAL, new ApprovalTask());
@@ -173,6 +188,15 @@ tombstones (a `Ref`-resolution or restore/admin lookup) declares it with
 
 UI is authored with `Layout`, `Page`, and `EntityView` beans. Domain annotations do not carry UI
 placement or field-display hints.
+
+Authored Java uses the shared serializable `Field<E,V>` getter token wherever a value denotes a
+model field. `ListSpec<E>`, `EntityConfigBuilder<E>`, widget field methods, related lists,
+form-validation dependencies, `ActionRow`, register queries, and `Q` all accept method references
+such as `Order::getStatus`. `Fields.name(...)` resolves the JavaBean property and boundary resolvers
+map it to the physical API/storage column. This keeps Java source compiler-checked while preserving
+string metadata on the wire. String overloads are unsafe compatibility/dynamic escape hatches.
+Strings remain correct for semantic identifiers (routes, roles, action/process keys, labels) and
+for intentionally parsed expression text such as a widget filter.
 
 ## Persistence & schema migration
 
@@ -254,6 +278,12 @@ the only `/manifest` route is the desktop shell's `/api/desktop/manifest`; agent
 model via the real generated endpoints below or the MCP `describe_metadata` tool. The read-response
 contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET__` redaction) is in
 [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
+
+Durable process routes are `GET /api/process-definitions`,
+`POST /api/processes/{definitionKey}`, `GET /api/processes/{id}` plus `/history`, and
+`GET /api/tasks` with `POST /api/tasks/{id}/claim|complete`. Start authorization comes from
+`ProcessDefinition.startAssignment(payload)`; inbox/task authorization comes from each
+`HumanTask.assignment(payload)`. Actors always come from the authenticated principal.
 
 | Area | Endpoints (served by) |
 | --- | --- |

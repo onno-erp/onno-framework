@@ -23,6 +23,7 @@ by [`.github/workflows/docs.yml`](.github/workflows/docs.yml)).
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the framework fits together: boot pipeline, each subsystem, the full endpoint catalog, open-core boundary. |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onno.*` configuration property, by module, with defaults. **Generated** from the `@ConfigurationProperties` Javadoc — see below. |
 | [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) | JSON response contract for the generic read API. |
+| [docs/MIGRATING_TYPED_AUTHORING.md](docs/MIGRATING_TYPED_AUTHORING.md) | Agent-ready migration checklist for typed fields and durable processes. |
 | [docs/MEDIA_UPLOADS.md](docs/MEDIA_UPLOADS.md) | Binary upload endpoint and the `MediaStorage` SPI. |
 | [docs/EXTENDING.md](docs/EXTENDING.md) | How to build a community extension (connector, SPI, UI, skill), the naming/namespace conventions, and how to get it listed. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute code and how to list a community integration. |
@@ -96,7 +97,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 
 | Module | Purpose |
 | --- | --- |
-| `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, typed business-process prototype, UI layout model, and shared types. |
+| `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, durable typed process contracts/schema, UI layout model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
 | `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |

@@ -26,7 +26,7 @@ public class FieldHintResolver {
             if (view.entity() == null || view.profile() != null) {
                 continue;
             }
-            EntityConfigBuilder cfg = new EntityConfigBuilder();
+            EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
             view.fields(cfg);
             hints.put(view.entity(), cfg.buildFieldHints());
             actions.put(view.entity(), cfg.buildActions());

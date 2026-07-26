@@ -1,5 +1,6 @@
 package su.onno.repository;
 
+import su.onno.fields.Field;
 import su.onno.model.AccumulationRecord;
 import su.onno.posting.RegisterPersistence;
 
@@ -60,12 +61,12 @@ public class RegisterQueryBuilder<T extends AccumulationRecord> {
         return this;
     }
 
-    public <R> RegisterQueryBuilder<T> groupBy(FieldReference<T, R> field) {
+    public <R> RegisterQueryBuilder<T> groupBy(Field<T, R> field) {
         groupByFields.add(resolveFieldName(field));
         return this;
     }
 
-    public <R> RegisterQueryBuilder<T> where(FieldReference<T, R> field, R value) {
+    public <R> RegisterQueryBuilder<T> where(Field<T, R> field, R value) {
         String fieldName = resolveFieldName(field);
         filters.put(fieldName, value);
         return this;
@@ -77,7 +78,7 @@ public class RegisterQueryBuilder<T extends AccumulationRecord> {
      * instead of fetching the whole slice and filtering in Java. An empty collection matches no
      * rows. Values may be raw column values or {@code Ref}s (unwrapped to their id).
      */
-    public <R> RegisterQueryBuilder<T> whereIn(FieldReference<T, R> field, Collection<R> values) {
+    public <R> RegisterQueryBuilder<T> whereIn(Field<T, R> field, Collection<R> values) {
         inFilters.put(resolveFieldName(field), values);
         return this;
     }
@@ -88,8 +89,8 @@ public class RegisterQueryBuilder<T extends AccumulationRecord> {
      * {@code Остатки(…, (dimA, dimB) В (…))}: fetch balances for exactly a document's
      * {@code (dimA, dimB)} pairs in one query. An empty collection matches no rows.
      */
-    public <A, B> RegisterQueryBuilder<T> whereIn(FieldReference<T, A> fieldA,
-                                                  FieldReference<T, B> fieldB,
+    public <A, B> RegisterQueryBuilder<T> whereIn(Field<T, A> fieldA,
+                                                  Field<T, B> fieldB,
                                                   Collection<? extends List<?>> tuples) {
         List<String> fieldNames = List.of(resolveFieldName(fieldA), resolveFieldName(fieldB));
         List<List<Object>> rows = new ArrayList<>();

@@ -25,6 +25,9 @@ public class SchemaModelBuilder {
         List<TableModel> tables = new ArrayList<>();
         tables.add(sequencesTable());
         tables.add(outboxTable());
+        tables.add(processInstancesTable());
+        tables.add(processWorkItemsTable());
+        tables.add(processTransitionsTable());
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
             tables.add(catalogTable(catalog));
         }
@@ -69,6 +72,53 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_created_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_published_at", "TIMESTAMP"),
                 ColumnModel.withDefault("_status", "VARCHAR(32)", "'NEW'").asNotNull()
+        ), List.of(), List.of());
+    }
+
+    static TableModel processInstancesTable() {
+        return new TableModel("onno_process_instances", List.of(
+                ColumnModel.primaryKey("_id", "UUID"),
+                ColumnModel.of("_definition_key", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_payload", "TEXT").asNotNull(),
+                ColumnModel.of("_current_step", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_started_by", "VARCHAR(255)"),
+                ColumnModel.of("_started_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_updated_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
+        ), List.of(), List.of());
+    }
+
+    static TableModel processWorkItemsTable() {
+        return new TableModel("onno_process_work_items", List.of(
+                ColumnModel.primaryKey("_id", "UUID"),
+                new ColumnModel("_instance_id", "UUID", false, true, null,
+                        "onno_process_instances(_id)", List.of()),
+                ColumnModel.of("_step_key", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_title", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_candidate_users", "TEXT"),
+                ColumnModel.of("_candidate_roles", "TEXT"),
+                ColumnModel.of("_assignee", "VARCHAR(255)"),
+                ColumnModel.of("_created_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_claimed_at", "TIMESTAMP"),
+                ColumnModel.of("_completed_at", "TIMESTAMP"),
+                ColumnModel.of("_outcome", "VARCHAR(255)"),
+                ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
+        ), List.of(), List.of());
+    }
+
+    static TableModel processTransitionsTable() {
+        return new TableModel("onno_process_transitions", List.of(
+                ColumnModel.primaryKey("_id", "UUID"),
+                new ColumnModel("_instance_id", "UUID", false, true, null,
+                        "onno_process_instances(_id)", List.of()),
+                ColumnModel.of("_from_step", "VARCHAR(255)"),
+                ColumnModel.of("_to_step", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_outcome", "VARCHAR(255)"),
+                ColumnModel.of("_actor", "VARCHAR(255)"),
+                ColumnModel.of("_occurred_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_sequence", "INTEGER").asNotNull()
         ), List.of(), List.of());
     }
 

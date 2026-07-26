@@ -9,22 +9,22 @@ import org.springframework.stereotype.Component;
 
 /** The categories catalog — the simplest view: a code and a name. */
 @Component
-public class BookCategoryView implements EntityView {
+public class BookCategoryView implements EntityView<BookCategory> {
 
     @Override
-    public Class<?> entity() {
+    public Class<BookCategory> entity() {
         return BookCategory.class;
     }
 
     @Override
-    public void list(ListSpec list) {
-        list.columns("code", "description")
-                .label("description", "Name")
-                .sortBy("description", false);
+    public void list(ListSpec<BookCategory> list) {
+        list.columns(BookCategory::getCode, BookCategory::getDescription)
+                .label(BookCategory::getDescription, "Name")
+                .sortBy(BookCategory::getDescription, false);
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("description").order(0).label("Name");
+    public void fields(EntityConfigBuilder<BookCategory> f) {
+        f.field(BookCategory::getDescription).order(0).label("Name");
     }
 }

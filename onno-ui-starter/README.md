@@ -227,7 +227,8 @@ Author it on the view (`list.feed(FeedMode.PAGED)`, `list.pageSize(25)`) or set 
 with `onno.ui.list.default-feed` (`infinite` | `paged`) and `onno.ui.list.page-size`. A register's
 report surface is always infinite (its movement log is depth-scrolled).
 
-**Grouping — backend `GROUP BY` with lazy expansion.** Declare `list.groupable("status", "date", …)`
+**Grouping — backend `GROUP BY` with lazy expansion.** Declare
+`list.groupable(Order::getStatus, Order::getDate)`
 and the toolbar gains a "Group by ▾" picker (None = the flat list). Picking a column swaps the flat
 table for collapsible group headers fetched from `/groups` (one per value; a date column offers a
 day/month/year granularity and buckets by period); each header shows the group's row count and any
@@ -235,7 +236,7 @@ day/month/year granularity and buckets by period); each header shows the group's
 rows through the **same** feed — the server hands each group the exact filter to replay — so grouping
 never double-counts and honours the active search/filters/sort. Group values that resolve to a
 ref/enum show their label (and enum colour); a null group is shown but not expandable.
-`list.defaultGroupBy("status")` opens the list already grouped by that column instead of flat — the
+`list.defaultGroupBy(Order::getStatus)` opens the list already grouped by that column instead of flat — the
 viewer can still switch grouping or back to "None". The default must also be declared `groupable`
 (and resolve to a real column), else it's ignored with a warning; a page-embedded list's
 `PageBuilder.list(entity, v -> v.groupBy(…))` default still wins over the view's.
@@ -249,10 +250,17 @@ tone ships under the row's `_style` and the grid renders it as a translucent the
 flat grid and expanded groups alike; a function that throws is treated as `null` for that row:
 
 ```java
-list.rowStyle(row -> row.bool("urgent") ? ListSpec.RowStyle.DANGER
-        : row.enumValue("status", Status.class) == Status.CANCELLED ? ListSpec.RowStyle.MUTED
+list.rowStyle(row -> row.bool(Order::getUrgent) ? ListSpec.RowStyle.DANGER
+        : row.enumValue(Order::getStatus, Status.class) == Status.CANCELLED ? ListSpec.RowStyle.MUTED
         : null);
 ```
+
+Use getter references throughout authored Java: `list.columns(Order::getNumber, Order::getStatus)`,
+`list.filter(Order::getStatus)`, `f.field(Order::getCustomer)`, related-list
+`via`/`display`/`columns`, widget field methods, and form-validation dependencies. These resolve to
+wire/storage names only at the metadata boundary. The string overloads remain for dynamic metadata
+and are deliberately unsafe; routes, labels, role/action/process keys, and filter-expression text
+remain strings because they are not Java field references.
 
 The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
 default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
@@ -550,7 +558,7 @@ description/number, and each String attribute — so a record is findable by a s
 disambiguate same-named records), name it on the ref field from the entity's `fields(...)`:
 
 ```java
-f.field("customer").refSecondary("phone");   // shows the customer's phone under the name in the picker
+f.refField(Order::getCustomer).refSecondary(Customer::getPhone);
 ```
 
 The named field is on the ref's **target** entity; the value already rides along in the picker
@@ -656,6 +664,45 @@ class SalesOpsPage implements Page {
   it: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
   `.catalog(...)`/`.document(...)`.
 
+### Process task inbox
+
+Durable business-process work is an ordinary page widget. Add a page and link it from a layout:
+
+```java
+@Component
+class TasksPage implements Page {
+    public String route() { return "/tasks"; }
+    public void compose(PageBuilder b) {
+        b.title("My tasks");
+        b.widget("Process tasks").type("tasks").width("full");
+    }
+}
+
+// Layout.configure:
+layout.section("Work").page("/tasks", "My tasks", "list-checks");
+```
+
+The widget calls authenticated `GET /api/tasks` and renders claim plus the active task's declared
+enum outcomes. Claim/complete writes are CSRF-protected. Visibility is computed from
+`HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
+its own actor or roles.
+
+Headless clients use the same boundary:
+
+```text
+GET  /api/process-definitions
+POST /api/processes/{definitionKey}
+GET  /api/processes/{instanceId}
+GET  /api/processes/{instanceId}/history
+GET  /api/tasks
+POST /api/tasks/{workItemId}/claim
+POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
+```
+
+The start body is converted to the definition's declared payload class and authorized through
+`ProcessDefinition.startAssignment(payload)`. Instance/history reads are limited to an `ADMIN`,
+the starter, a current task candidate/assignee, or an actor recorded in that instance's history.
+
 ## Dashboard widgets
 
 Widgets are authored on a `Page` (or `layout.widget(...)`) with the `WidgetBuilder` DSL and
@@ -694,6 +741,7 @@ to `1` for the old sequential behaviour.
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `geoField` (a `"lat,lng"` string) **or** `latField`+`lngField` for markers, and/or `geoJsonField` for shapes (paths/areas); features link to the record and label from `.titleField(...)`. |
+| `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
 
 > `stat`, `sparkline` and `gauge` read the same source + aggregate config as `chart`

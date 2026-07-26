@@ -80,26 +80,29 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 `@ScheduledJob`: `name` (required), `cron` (required). Plain Spring `@Scheduled` jobs also work
 (the example uses `@Scheduled(initialDelay=…, fixedDelay=…)`).
 
-## Typed business-process prototype (package `su.onno.process`)
+## Durable typed business processes (package `su.onno.process`)
 
 | Type | Purpose |
 | --- | --- |
 | `ProcessStepKey` | Implement on the step enum. `key()` defaults to the enum name and may be overridden with a stable persistence key. |
-| `HumanTask<P,O extends Enum<O>>` | Typed human work; `outcomeType()` declares the closed outcome set. |
-| `ProcessDefinition<P,S>` | Override `define(ProcessGraph<P,S>)`; `graph()` builds, validates, seals, and caches it. |
+| `HumanTask<P,O extends Enum<O>>` | Typed human work; declares `outcomeType()`, `assignment(payload)`, and optional `title(payload)`. |
+| `TaskAssignment` | Candidate `users(...)`, `roles(...)`, or both; `ADMIN` bypasses assignment checks. |
+| `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)`, declare `startAssignment(payload)`, and override `define(ProcessGraph<P,S>)`; `graph()` validates, seals, and caches it. |
 | `ProcessGraph<P,S>` | `start()`, `human(step, task)`, `end(step)`, `node(step)`, `nodes()`. |
 | `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
-| `InMemoryProcessEngine` | `start(definition,payload)`, `complete(instance,taskNode,outcome)`. Prototype only. |
-| `ProcessInstance<P,S>` | `id`, typed `payload`, `currentStep`, `status`, immutable history view. |
-| `ProcessTransition<S>` | `from`, `to`, typed enum outcome, timestamp. |
+| `ProcessEngine` | Durable `start`, `find`, role/user-scoped `inbox`, `claim`, and `complete`. |
+| `ProcessActor` | Authenticated username + normalized role set for a process command. |
+| `ProcessSnapshot` | Persisted instance id, definition/step keys, status, starter, timestamps, version. |
+| `ProcessWorkItem` | Durable task, candidates, assignee, timestamps, and allowed enum outcome names. |
 
 Graph validation rejects a missing start target, duplicate/blank stable keys, duplicate enum steps,
 cross-graph connections, unreachable nodes, duplicate outcome branches, and any unhandled constant
 of a task's outcome enum.
 
-**Prototype boundary:** instances and history are memory-only. There are no durable work items,
-assignees/candidates, claim/complete API, task inbox, timers, automatic/decision nodes, parallel
-fork/join, or subprocesses yet.
+The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
+UI starter exposes `GET /api/tasks`, claim/complete commands, and the built-in `tasks` page widget.
+Not yet implemented: timers, automatic/decision nodes, cancellation, parallel fork/join,
+subprocesses, and definition-version migration.
 
 ### `@DomainEvent` (repeatable; outbox)
 `name` (required), `when = EventTiming.AFTER_WRITE|AFTER_POST|AFTER_DELETE` (default `AFTER_WRITE`).
@@ -171,6 +174,13 @@ AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-
 `EQ,NE,GT,GTE,LT,LTE,BETWEEN,IN,LIKE,IS_NULL,IS_NOT_NULL`. `Row` (the untyped result) has coercing
 typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime(col)`, plus `has(col)`,
 `columns()`, `asMap()` — so you rarely cast a raw `Object`.
+
+The same `su.onno.fields.Field<E,V>` getter token is the preferred field API in UI authoring:
+`list.columns(Order::getNumber, Order::getStatus)`, `f.field(Order::getCustomer)`,
+`f.relatedList("orders", Order.class).via(Order::getCustomer)`, and
+`row.enumValue(Order::getStatus, OrderStatus.class)`. String overloads are unsafe escape hatches for
+dynamic metadata; routes, labels, role/action/process keys, and filter expressions remain strings
+because they are not Java field references.
 
 ## Repositories (package `su.onno.repository`)
 
