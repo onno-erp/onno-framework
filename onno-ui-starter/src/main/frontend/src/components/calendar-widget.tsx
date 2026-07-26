@@ -95,6 +95,31 @@ function pickField(row: EntityRecord, fields: string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Read-side optimistic values and write-side partial payload for a calendar drag/resize.
+ *
+ * A calendar may render a custom business field such as `starts_at` instead of the document's
+ * `_date`. The generic document endpoint still windows calendar reads by `_date`, so a move keeps
+ * both values aligned while also updating the configured end field.
+ */
+export function calendarMoveValues(
+  dateField: string,
+  endDateField: string | undefined,
+  startIso: string,
+  endIso: string | undefined
+): { optimistic: EntityRecord; payload: EntityRecord } {
+  const optimistic: EntityRecord = { _date: startIso, [dateField]: startIso };
+  const startWriteKey = dateField.replace(/^_/, "");
+  const payload: EntityRecord = { date: startIso };
+  if (startWriteKey !== "date") payload[startWriteKey] = startIso;
+
+  if (endDateField && endIso) {
+    optimistic[endDateField] = endIso;
+    payload[endDateField.replace(/^_/, "")] = endIso;
+  }
+  return { optimistic, payload };
+}
+
 export function CalendarWidget({ widget }: CalendarWidgetProps) {
   const navigate = useNavigate();
   const locale = useAppLocale();
@@ -389,22 +414,15 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
     const startIso = nextStart.toISOString();
     const endIso = nextEnd ? nextEnd.toISOString() : undefined;
     const name = toSnakeCase(widget.entityName);
+    const move = calendarMoveValues(dateField, endDateField, startIso, endIso);
     setItems((prev) =>
       prev.map((r) => {
         if (r._id !== id) return r;
-        const updated: EntityRecord = { ...r, _date: startIso };
-        if (endDateField && endIso) updated[endDateField] = endIso;
-        return updated;
+        return { ...r, ...move.optimistic };
       })
     );
     try {
-      const payload: EntityRecord = { date: startIso };
-      if (endDateField && endIso) {
-        // Strip leading underscore convention when writing back.
-        const writeKey = endDateField.replace(/^_/, "");
-        payload[writeKey] = endIso;
-      }
-      await api.updateDocument(name, id, payload);
+      await api.updateDocument(name, id, move.payload);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Move failed");
       revert();

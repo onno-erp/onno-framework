@@ -12,13 +12,17 @@ the modeling playbook in [AGENTS.md](../AGENTS.md) and the consumer guide in
 
 ## The core idea
 
-You describe a business as **typed Java metadata** — `@Catalog`, `@Document`, `@TabularSection`,
-`@AccumulationRegister`, `@InformationRegister`, `@Enumeration`, `@Constant`, scheduled jobs — and
+You describe persisted business data as **typed Java metadata** — `@Catalog`, `@Document`,
+`@TabularSection`, `@AccumulationRegister`, `@InformationRegister`, `@Enumeration`, `@Constant`,
+and scheduled jobs — and
 the framework generates everything downstream from that model: the database schema, repositories, a
 type-safe query layer, a generic REST API, a server-driven UI, an MCP tool surface for AI agents,
 and migration history. You do not hand-write tables, DTOs, or CRUD controllers. Behaviour that *is*
 code — posting rules, validation, lifecycle hooks, UI authoring — is plain, refactorable,
 compiler-checked Java, never string-mapped configuration.
+
+The `su.onno.process` prototype applies the same typed-Java principle to business-process routes,
+while deliberately stopping short of generated persistence or UI until its language is proven.
 
 Java packages are always `su.onno.*`. The published Maven group is `su.onno` (core,
 Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle plugin id is
@@ -28,7 +32,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 | Module | Group | Role |
 | --- | --- | --- |
-| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
+| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed business-process prototype, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, query engine, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
@@ -97,6 +101,55 @@ In brief:
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
+
+### Typed business-process prototype
+
+The `su.onno.process` package is an executable language spike for long-running coordination that
+does not belong in a document status field:
+
+- `ProcessDefinition<P,S>` owns one lazily built, validated route graph. `P` is the typed process
+  payload; `S` is an enum implementing `ProcessStepKey`.
+- `ProcessGraph<P,S>` creates `HumanTaskNode<P,S,O>` and `EndNode<P,S>` handles. Routes connect those
+  handles directly; no string node lookups or expression language are involved.
+- `HumanTask<P,O>` declares an enum outcome type. Definition validation requires every enum outcome
+  to have exactly one transition and rejects duplicate keys, cross-graph connections, missing start
+  targets, and unreachable nodes.
+- `InMemoryProcessEngine` proves start/complete semantics and records `ProcessTransition<S>`
+  history. Completing a task requires its typed node handle and its declared outcome enum.
+
+This is intentionally **not yet a production process runtime**. It does not persist process
+instances, generate durable work items, resolve assignees, expose an inbox/API/UI, run timers, or
+support automatic/decision/fork/join/subprocess nodes. Those contracts should be added only after
+the typed authoring language has been exercised. Documents remain business events and posting
+remains register movement; a process coordinates work across those objects over time.
+
+```java
+enum PurchaseStep implements ProcessStepKey {
+    MANAGER_APPROVAL, FINANCE_APPROVAL, COMPLETED, REJECTED
+}
+
+enum ApprovalOutcome { APPROVED, REJECTED }
+
+final class ApprovalTask implements HumanTask<PurchaseRequest, ApprovalOutcome> {
+    public Class<ApprovalOutcome> outcomeType() { return ApprovalOutcome.class; }
+}
+
+final class PurchaseApproval
+        extends ProcessDefinition<PurchaseRequest, PurchaseStep> {
+    protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
+        var manager = graph.human(PurchaseStep.MANAGER_APPROVAL, new ApprovalTask());
+        var finance = graph.human(PurchaseStep.FINANCE_APPROVAL, new ApprovalTask());
+        var completed = graph.end(PurchaseStep.COMPLETED);
+        var rejected = graph.end(PurchaseStep.REJECTED);
+
+        graph.start().to(manager);
+        manager.on(ApprovalOutcome.APPROVED).to(finance);
+        manager.on(ApprovalOutcome.REJECTED).to(rejected);
+        finance.on(ApprovalOutcome.APPROVED).to(completed);
+        finance.on(ApprovalOutcome.REJECTED).to(rejected);
+    }
+}
+```
 
 **Soft delete.** `deletionMark` on `CatalogObject`/`DocumentObject` is a tombstone, not a hard
 delete: "delete" sets it `true` and the row stays (the UI/REST read layer hides rows where

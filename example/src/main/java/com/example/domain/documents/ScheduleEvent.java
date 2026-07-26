@@ -24,7 +24,7 @@ import java.util.List;
  * early; {@link #rules()} still enforces the invariant on every write, including imports and direct
  * API clients.
  */
-@Document(name = "Schedule Events", title = "Staff schedule event", numberPrefix = "EV-", context = "People")
+@Document(name = "Schedule Events", title = "Team event", numberPrefix = "EV-", context = "People")
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter
 @Setter

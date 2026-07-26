@@ -1,8 +1,8 @@
 # Agent Guide: Modeling Businesses With onno Framework
 
-This project is a Java/Spring framework for modeling business processes as explicit business concepts:
-catalogs, documents, tabular sections, registers, constants, enumerations, background jobs, UI metadata,
-and future service boundaries.
+This project is a Java/Spring framework for modeling businesses as explicit concepts: catalogs,
+documents, tabular sections, registers, constants, enumerations, background jobs, typed process
+definitions, UI metadata, and future service boundaries.
 
 The goal is not to clone 1C. The goal is to give a modern Java team, or an AI agent working with one,
 a compact way to turn business documentation into a working, inspectable, evolvable application.
@@ -30,7 +30,7 @@ to future agents that may not have the full conversation context.
 
 | Path | Role |
 | --- | --- |
-| `onno-framework` | Core annotations, metadata, schema, posting, repository contracts, UI model, and shared types. |
+| `onno-framework` | Core annotations, metadata, schema, posting, typed process language prototype, repository contracts, UI model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
@@ -396,6 +396,61 @@ public class DailySalesReportJob implements BackgroundTask {
 }
 ```
 
+### Business Processes And Human Tasks (Prototype)
+
+Use a typed business process when work spans several people or business objects and must remember
+which step is active. Do not turn a document into a process merely because it has a status:
+documents record business events, posting changes registers, and processes coordinate durable work
+over time.
+
+The current `su.onno.process` package is an executable language prototype. Step identity is a Java
+enum implementing `ProcessStepKey`; task outcomes are enums; transitions connect typed node handles,
+never string names:
+
+```java
+enum PurchaseStep implements ProcessStepKey {
+    MANAGER_APPROVAL, FINANCE_APPROVAL, COMPLETED, REJECTED
+}
+
+enum ApprovalOutcome {
+    APPROVED, REJECTED
+}
+
+final class ApprovalTask implements HumanTask<PurchaseRequest, ApprovalOutcome> {
+    @Override
+    public Class<ApprovalOutcome> outcomeType() {
+        return ApprovalOutcome.class;
+    }
+}
+
+final class PurchaseApproval
+        extends ProcessDefinition<PurchaseRequest, PurchaseStep> {
+
+    @Override
+    protected void define(ProcessGraph<PurchaseRequest, PurchaseStep> graph) {
+        var manager = graph.human(PurchaseStep.MANAGER_APPROVAL, new ApprovalTask());
+        var finance = graph.human(PurchaseStep.FINANCE_APPROVAL, new ApprovalTask());
+        var completed = graph.end(PurchaseStep.COMPLETED);
+        var rejected = graph.end(PurchaseStep.REJECTED);
+
+        graph.start().to(manager);
+        manager.on(ApprovalOutcome.APPROVED).to(finance);
+        manager.on(ApprovalOutcome.REJECTED).to(rejected);
+        finance.on(ApprovalOutcome.APPROVED).to(completed);
+        finance.on(ApprovalOutcome.REJECTED).to(rejected);
+    }
+}
+```
+
+Calling `definition.graph()` validates the graph once and seals it. Validation rejects missing
+outcome branches, duplicate or blank persistent step keys, duplicate enum steps, cross-definition
+connections, a missing start target, and unreachable nodes. `InMemoryProcessEngine` can start a
+payload and complete typed task nodes while recording transition history.
+
+This prototype does **not** yet persist instances, create durable assignee work items, expose a task
+inbox, run timers, or implement automatic steps, decisions, parallel fork/join, or subprocesses.
+Do not present it as a production workflow engine until those pieces ship.
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.
@@ -559,6 +614,9 @@ If it stores historical facts by dimensions, use an information register.
 If it is one global setting, use a constant.
 
 If it happens later or repeatedly, use a background job.
+
+If it coordinates several human or automatic steps over time and must remember active work, use a
+typed business process. A document status alone is enough for a local entity lifecycle.
 
 If another team or service owns it, mark a context.
 

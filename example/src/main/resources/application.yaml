@@ -21,7 +21,9 @@ server:
         secure: ${ONNO_DEMO_COOKIE_SECURE:false}
 onno:
   ui:
-    locale: ru
+    # The business model and authored UI labels are English. Keeping the framework chrome on the
+    # same locale avoids a mixed English/Russian interface.
+    locale: en
     # One-tap demo logins on the sign-in screen (demo-only: passwords reach the browser). Each button
     # signs in as the matching in-memory user below, so an evaluator never types the email/password.
     login:

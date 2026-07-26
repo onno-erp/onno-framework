@@ -80,6 +80,27 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 `@ScheduledJob`: `name` (required), `cron` (required). Plain Spring `@Scheduled` jobs also work
 (the example uses `@Scheduled(initialDelay=…, fixedDelay=…)`).
 
+## Typed business-process prototype (package `su.onno.process`)
+
+| Type | Purpose |
+| --- | --- |
+| `ProcessStepKey` | Implement on the step enum. `key()` defaults to the enum name and may be overridden with a stable persistence key. |
+| `HumanTask<P,O extends Enum<O>>` | Typed human work; `outcomeType()` declares the closed outcome set. |
+| `ProcessDefinition<P,S>` | Override `define(ProcessGraph<P,S>)`; `graph()` builds, validates, seals, and caches it. |
+| `ProcessGraph<P,S>` | `start()`, `human(step, task)`, `end(step)`, `node(step)`, `nodes()`. |
+| `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
+| `InMemoryProcessEngine` | `start(definition,payload)`, `complete(instance,taskNode,outcome)`. Prototype only. |
+| `ProcessInstance<P,S>` | `id`, typed `payload`, `currentStep`, `status`, immutable history view. |
+| `ProcessTransition<S>` | `from`, `to`, typed enum outcome, timestamp. |
+
+Graph validation rejects a missing start target, duplicate/blank stable keys, duplicate enum steps,
+cross-graph connections, unreachable nodes, duplicate outcome branches, and any unhandled constant
+of a task's outcome enum.
+
+**Prototype boundary:** instances and history are memory-only. There are no durable work items,
+assignees/candidates, claim/complete API, task inbox, timers, automatic/decision nodes, parallel
+fork/join, or subprocesses yet.
+
 ### `@DomainEvent` (repeatable; outbox)
 `name` (required), `when = EventTiming.AFTER_WRITE|AFTER_POST|AFTER_DELETE` (default `AFTER_WRITE`).
 
