@@ -30,6 +30,8 @@ const BASE = "/api";
 const CSRF_COOKIE = "XSRF-TOKEN";
 const CSRF_HEADER = "X-XSRF-TOKEN";
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+/** Matches ActionController.BATCH_LIMIT: one HTTP request stays bounded; larger UI batches chunk. */
+const BATCH_REQUEST_LIMIT = 500;
 
 // A 401 on any data call means the session lapsed while the tab was open. The AuthProvider
 // registers a handler here so it can recover (silently re-auth via the IdP, or fall back to the
@@ -170,6 +172,44 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boo
   const text = await res.text();
   if (!text) return undefined as T;
   return JSON.parse(text);
+}
+
+/**
+ * Run an arbitrarily large UI batch through the server's bounded batch endpoint. Chunks are
+ * sequential because each request already fans out on the server; overlapping chunks would multiply
+ * database concurrency and defeat onno.ui.batch.parallelism. The caller still receives the original
+ * one-summary contract.
+ */
+async function fetchBatch(
+  url: string,
+  ids: string[],
+  body: (chunk: string[]) => Record<string, unknown>
+): Promise<BatchResult> {
+  // Preserve the endpoint's validation for an empty request, and avoid needless aggregation for the
+  // overwhelmingly common one-chunk case.
+  if (ids.length <= BATCH_REQUEST_LIMIT) {
+    return fetchJson<BatchResult>(url, {
+      method: "POST",
+      body: JSON.stringify(body(ids)),
+    });
+  }
+
+  const combined: BatchResult = { ok: 0, failed: [], total: 0 };
+  for (let offset = 0; offset < ids.length; offset += BATCH_REQUEST_LIMIT) {
+    const chunk = ids.slice(offset, offset + BATCH_REQUEST_LIMIT);
+    const result = await fetchJson<BatchResult>(url, {
+      method: "POST",
+      body: JSON.stringify(body(chunk)),
+    });
+    combined.ok += result.ok;
+    combined.failed.push(...result.failed);
+    combined.total += result.total;
+    if (!combined.feedback && result.feedback) {
+      combined.feedback = result.feedback;
+      combined.feedbackRejected = result.feedbackRejected;
+    }
+  }
+  return combined;
 }
 
 /** A stored-media reference returned by {@code POST /api/media} (see MediaController). */
@@ -551,21 +591,18 @@ export const api = {
       { method: "POST", body: JSON.stringify({ inputs: inputs ?? {} }) }
     ),
   /**
-   * Run a server action over many records in ONE request (the list's batch selection). The server
-   * invokes the handler per id sequentially and returns {ok, failed[], total} — per-id failures
-   * don't abort the batch. Capped server-side at 500 ids.
+   * Run a server action over many records. Each request is capped at 500 ids; larger selections are
+   * transparently chunked and folded back into one {ok, failed[], total} result.
    */
   runActionBatch: (kind: string, name: string, key: string, ids: string[], inputs?: ActionInputs) =>
-    fetchJson<BatchResult>(`${BASE}/actions/${kind}/${name}/${key}/batch`, {
-      method: "POST",
-      body: JSON.stringify({ ids, inputs: inputs ?? {} }),
-    }),
-  /** Soft-delete many records in one request; same {ok, failed[], total} contract as runActionBatch. */
+    fetchBatch(
+      `${BASE}/actions/${kind}/${name}/${key}/batch`,
+      ids,
+      (chunk) => ({ ids: chunk, inputs: inputs ?? {} })
+    ),
+  /** Soft-delete many records; chunks at 500 and returns one combined batch summary. */
   batchDelete: (kind: "catalogs" | "documents", name: string, ids: string[]) =>
-    fetchJson<BatchResult>(`${BASE}/${kind}/${name}/batch-delete`, {
-      method: "POST",
-      body: JSON.stringify({ ids }),
-    }),
+    fetchBatch(`${BASE}/${kind}/${name}/batch-delete`, ids, (chunk) => ({ ids: chunk })),
   // Page-level action button (PageBuilder.actions): POSTs to the server handler resolved by
   // re-composing the page at {route}, and returns its ActionResult. The page's profile rides
   // along so the same page variant resolves; data writes refresh embedded lists over SSE.

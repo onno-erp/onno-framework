@@ -1924,9 +1924,9 @@ export function EntityListWidget({
   // pending key still drives the disabled state of the menu items.
   const batchBusyRef = useRef(false);
 
-  // Run a custom server action over every selected row — ONE request: the server's batch endpoint
-  // invokes the handler per id and returns {ok, failed, total}, so a 200-row batch isn't 200 HTTP
-  // round-trips, survives the tab closing mid-run, and gets a single loading→summary toast here.
+  // Run a custom server action over every selected row. The API client chunks selections above the
+  // server's 500-id request ceiling and folds them into one {ok, failed, total}, so the island still
+  // owns one loading→summary toast and one refresh for the complete selection.
   // Per-result navigate doesn't apply — a batch can't open N panes.
   const runBatchAction = useCallback(
     async (action: ListAction, ids: string[], formInputs?: ActionFormValues, propagateFeedback = false) => {

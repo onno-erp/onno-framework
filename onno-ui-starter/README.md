@@ -508,7 +508,9 @@ infinite feed selects the rows loaded so far, not the whole server-side result (
 when more rows exist). Batch operations run as **one request** against the batch endpoints
 (`POST /api/actions/{kind}/{name}/{key}/batch`, `POST /api/{kind}/{name}/batch-delete`), with a
 loading → summary toast — a 200-row batch isn't 200 round-trips and survives the tab closing
-mid-run. Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
+mid-run. Each server request remains capped at 500 ids; the SPA transparently sends larger
+selections as sequential ≤500-id chunks and combines their tallies into the same single summary.
+Esc layers cleanly: an open menu takes the first press, the selection the next, the tab
 the last. Right-clicking a
 selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
 runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
