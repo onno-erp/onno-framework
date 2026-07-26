@@ -232,6 +232,8 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     private static final int ORDER_COUNT = 80;
     private static final int OPENING_STOCK_PER_BOOK = 150;
+    private static final String LEGACY_DEMO_AVATAR_PREFIX =
+            "https://api.dicebear.com/9.x/notionists-neutral/svg";
 
     private final BookCategoryRepository categories;
     private final SupplierRepository suppliers;
@@ -261,6 +263,7 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        upgradeLegacyDemoAvatars();
         if (books.count() > 0) {
             return; // already seeded
         }
@@ -349,6 +352,21 @@ public class BookstoreSeeder implements ApplicationRunner {
             }
             order(cust, seller, status, daysAgo, lines);
         }
+    }
+
+    /**
+     * Existing demo databases predate the Glass avatar style and contain generated Notionists URLs
+     * in the employee photo field. Upgrade only those known synthetic URLs; uploaded/custom photos
+     * remain untouched.
+     */
+    private void upgradeLegacyDemoAvatars() {
+        employees.findAllActive().stream()
+                .filter(employee -> employee.getAvatarUrl() != null
+                        && employee.getAvatarUrl().startsWith(LEGACY_DEMO_AVATAR_PREFIX))
+                .forEach(employee -> {
+                    employee.setAvatarUrl(avatarUrl(employee.getDescription()));
+                    employees.save(employee);
+                });
     }
 
     // --- helpers ----------------------------------------------------------------------------------
