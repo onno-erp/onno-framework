@@ -43,7 +43,7 @@ windowing, context menu, batch actions. Server search spans every non-secret col
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
 
-Avatars: dicebear `notionists-neutral` is the default (`presence-avatars.tsx#notionistsAvatar`);
+Avatars: DiceBear 10 `glass` is the default (`presence-avatars.tsx#glassAvatar`);
 avatars in lists and face-piles carry a thin `border border-border`.
 
 Colored pills: a cell renders as a pill whenever the row carries `{col}_color` (`enumPillStyle`,

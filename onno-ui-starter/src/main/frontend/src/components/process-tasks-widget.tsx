@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { initials, notionistsAvatar, tint } from "@/components/presence-avatars";
+import { glassAvatar, initials, tint } from "@/components/presence-avatars";
 import { toSnakeCase } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
 
@@ -621,7 +621,7 @@ function PersonAvatar({
   return (
     <Avatar className={`${size} border border-border`}>
       <AvatarImage
-        src={person?.avatarUrl || notionistsAvatar(seed)}
+        src={person?.avatarUrl || glassAvatar(seed)}
         alt={display}
       />
       <AvatarFallback

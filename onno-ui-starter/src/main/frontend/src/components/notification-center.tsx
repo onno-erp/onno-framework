@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { initials, notionistsAvatar, tint } from "@/components/presence-avatars";
+import { glassAvatar, initials, tint } from "@/components/presence-avatars";
 import { Segmented } from "@/components/ui/segmented";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
@@ -116,7 +116,7 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
     >
       {item.actorName ? (
         <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
-          <AvatarImage src={item.actorAvatar || notionistsAvatar(item.actorName)} alt={item.actorName} />
+          <AvatarImage src={item.actorAvatar || glassAvatar(item.actorName)} alt={item.actorName} />
           <AvatarFallback className="text-xs font-semibold text-white" style={{ backgroundColor: tint(item.actorName) }}>
             {initials(item.actorName)}
           </AvatarFallback>

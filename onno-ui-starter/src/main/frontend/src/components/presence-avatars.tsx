@@ -19,10 +19,10 @@ export function tint(userId: string): string {
   return `hsl(${Math.abs(hash) % 360} 55% 45%)`;
 }
 
-/** Deterministic Notionists avatar used when a user/person has no uploaded photo. */
-export function notionistsAvatar(seed: string | null | undefined): string {
+/** Deterministic DiceBear Glass avatar used when a user/person has no uploaded photo. */
+export function glassAvatar(seed: string | null | undefined): string {
   const safeSeed = encodeURIComponent((seed || "unknown").trim() || "unknown");
-  return `https://api.dicebear.com/9.x/notionists-neutral/svg?radius=50&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf,c8e6c9,f4d1b6&seed=${safeSeed}`;
+  return `https://api.dicebear.com/10.x/glass/svg?seed=${safeSeed}`;
 }
 
 /**
@@ -65,7 +65,7 @@ export function PresenceAvatars({
             <Tooltip key={v.userId}>
               <TooltipTrigger asChild>
                 <Avatar style={dim} className="border border-border">
-                  <AvatarImage src={v.avatarUrl || notionistsAvatar(v.userId || v.displayName)} alt={v.displayName} />
+                  <AvatarImage src={v.avatarUrl || glassAvatar(v.userId || v.displayName)} alt={v.displayName} />
                   <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
                     {initials(v.displayName)}
                   </AvatarFallback>
