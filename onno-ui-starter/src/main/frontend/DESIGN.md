@@ -133,6 +133,8 @@ mean “any interactive container.”
   the filled button; acknowledgement/dismiss controls use the quiet button. Prefer the server-side
   `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a
   title, explanation, or details.
+- The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
+  `shell.home`; only profiles that actually own a dashboard should land on `/`.
 - Esc closes the topmost layer only (overlay before page).
 - Keyboard shortcuts must work under non-Latin layouts (match on key position, not character).
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.

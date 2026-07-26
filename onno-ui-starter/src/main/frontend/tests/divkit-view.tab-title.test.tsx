@@ -1,10 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DivKitView } from "@/views/divkit-view";
 
 vi.mock("@divkitframework/react", () => ({
-  DivKit: ({ id }: { id: string }) => <div data-testid={`divkit-${id}`} />,
+  DivKit: ({
+    id,
+    onCustomAction,
+  }: {
+    id: string;
+    onCustomAction?: (action: { url: string }) => void;
+  }) => (
+    <div data-testid={`divkit-${id}`}>
+      {id.startsWith("nav:") ? (
+        <button type="button" onClick={() => onCustomAction?.({ url: "onno://" })}>
+          App logo
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("@divkitframework/divkit/client-hydratable", () => ({
@@ -56,12 +70,12 @@ vi.mock("sonner", () => ({
 
 // The shell payload carries a route-path → localized title map (built server-side from the same
 // nav the sidebar renders). The workspace tab titles itself from it.
-function mockShell() {
+function mockShell(home = "/") {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
       JSON.stringify({
         navStyle: "sidebar",
-        home: "/",
+        home,
         nav: { type: "nav" },
         account: { type: "account" },
         titles: { "/catalogs/customers": "Клиенты" },
@@ -89,6 +103,21 @@ describe("DivKitView tab titles", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("routes the logo home intent to a dashboard-less profile's real landing page", async () => {
+    mockShell("/documents/orders");
+    render(
+      <MemoryRouter initialEntries={["/tasks"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "App logo" }));
+
+    const orders = await screen.findByTestId("content-/documents/orders");
+    expect(orders.parentElement).toHaveStyle({ visibility: "visible" });
+    expect(screen.getByTestId("content-/").parentElement).toHaveStyle({ visibility: "hidden" });
   });
 
   it("titles a list tab from the shell's localized title map, not the URL segment", async () => {
@@ -147,4 +176,5 @@ describe("DivKitView tab titles", () => {
     expect(await screen.findByTitle("New Клиенты")).toBeInTheDocument();
     expect(screen.getByTestId("icon-users")).toBeInTheDocument();
   });
+
 });

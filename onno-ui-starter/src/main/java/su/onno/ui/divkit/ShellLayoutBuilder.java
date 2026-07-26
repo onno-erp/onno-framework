@@ -264,8 +264,9 @@ public final class ShellLayoutBuilder {
      * A branding logo as a {@code scale: fit} image so it renders uncropped at any
      * proportion. Width defaults to the intrinsic aspect ratio ({@code wrap_content})
      * and height to {@code defaultHeight}; a {@link Logo} may override either with a
-     * fixed dp size. The mark doubles as a home affordance — tapping it routes to "/"
-     * (an empty {@code onno://} path), the same landing the host resolves for the root.
+     * fixed dp size. The mark doubles as a home affordance — tapping it emits the generic
+     * empty {@code onno://} home intent, which the host resolves through the active shell's
+     * landing path (a dashboard when present, otherwise its first reachable nav surface).
      */
     private static Map<String, Object> logoImage(Logo logo, int defaultHeight) {
         Map<String, Object> img = Div.image(logo.url());
