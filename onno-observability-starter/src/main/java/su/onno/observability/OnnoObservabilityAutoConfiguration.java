@@ -1,6 +1,7 @@
 package su.onno.observability;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.OpenTelemetry;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -14,12 +15,13 @@ import org.springframework.context.annotation.Bean;
 @ConditionalOnProperty(prefix = "onno.telemetry", name = "enabled", havingValue = "true")
 public class OnnoObservabilityAutoConfiguration {
 
-    @Bean(destroyMethod = "close")
+    @Bean
     @ConditionalOnMissingBean(TelemetrySink.class)
-    public BufferedHttpTelemetrySink telemetrySink(
+    public TelemetrySink telemetrySink(
             TelemetryProperties properties,
-            ObjectMapper objectMapper) {
-        return new BufferedHttpTelemetrySink(properties, objectMapper);
+            org.springframework.beans.factory.ObjectProvider<OpenTelemetry> openTelemetry) {
+        return new OpenTelemetryTelemetrySink(
+                openTelemetry.getIfAvailable(GlobalOpenTelemetry::get), properties);
     }
 
     @Bean
