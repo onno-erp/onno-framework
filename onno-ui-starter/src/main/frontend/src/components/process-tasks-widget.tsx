@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { glassAvatar, initials, tint } from "@/components/presence-avatars";
+import { glassAvatar, initials, tint } from "@/lib/avatar-utils";
 import { toSnakeCase } from "@/lib/utils";
 import { withBasePath } from "@/lib/base-path";
 

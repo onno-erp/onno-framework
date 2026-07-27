@@ -1,0 +1,50 @@
+package su.onno.ui.collaboration;
+
+import su.onno.ui.divkit.Div;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * {@link CommentsDetailContributor#append} appends the {@code onno-comments} {@code div-custom} panel
+ * to a built detail surface, carrying the entity triple the React bridge loads the thread from — and
+ * leaves a surface without an {@code items} list untouched.
+ */
+class CommentsDetailContributorTest {
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void appendsCommentsPanelCarryingTheEntityTriple() {
+        Map<String, Object> content = Div.vertical(new ArrayList<>(List.of(Div.custom("x", Map.of()))));
+        Div.id(content, "onno-content");
+
+        CommentsDetailContributor.append(content, "documents", "Invoices", "abc-123");
+
+        List<Map<String, Object>> items = (List<Map<String, Object>>) content.get("items");
+        Map<String, Object> panel = items.get(items.size() - 1);
+        assertThat(panel.get("custom_type")).isEqualTo("onno-comments");
+        Map<String, Object> props = (Map<String, Object>) panel.get("custom_props");
+        Map<String, Object> payload = (Map<String, Object>) props.get("payload");
+        Map<String, Object> targetProp = (Map<String, Object>) payload.get("target");
+        assertThat(targetProp).containsEntry("kind", "documents")
+                .containsEntry("name", "Invoices")
+                .containsEntry("id", "abc-123");
+    }
+
+    @Test
+    void leavesContentWithoutItemsUntouched() {
+        Map<String, Object> content = new java.util.HashMap<>();
+        content.put("type", "text");
+
+        Map<String, Object> result = CommentsDetailContributor.append(
+                content, "catalogs", "Properties", "id");
+
+        assertThat(result).isSameAs(content);
+        assertThat(result).doesNotContainKey("items");
+    }
+}

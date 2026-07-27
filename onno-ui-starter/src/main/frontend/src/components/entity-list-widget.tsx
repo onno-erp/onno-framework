@@ -11,8 +11,10 @@ import {
 } from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
 import { initialFilterState, type FilterState } from "@/components/list-defaults";
-import { PresenceAvatars } from "@/components/presence-avatars";
-import { useViewersById } from "@/lib/presence-store";
+import {
+  hasUiFeatureRowAdornments,
+  UiFeatureRowAdornments,
+} from "@/lib/ui-feature-host";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -1256,8 +1258,6 @@ export function EntityListWidget({
   // offset pages. The two drive different server engines (cursor vs offset) — see loadInitial.
   const feedMode = list.feedMode === "paged" ? "paged" : "infinite";
   const t = useMessages();
-  // Ambient presence: other users viewing each row's record, looked up by row id at render time.
-  const viewersById = useViewersById();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gen = useRef(0); // bumped on each query so a stale window fetch is ignored
@@ -1557,11 +1557,10 @@ export function EntityListWidget({
       .concat(ACTION_COL_W ? [`${ACTION_COL_W}px`] : [])
       .join(" ");
 
-  // When any loaded row has viewers, widen the whole list's left padding so the presence face-pile sits
-  // in its own gutter instead of over the first column. Applied to the header too, so columns stay
-  // aligned; it collapses back when nobody is viewing (a rare, gentle shift).
-  const listHasPresence = openable && (pageRows ?? []).some((r) => r && viewersById.has(String(r._id)));
-  const leftPad = listHasPresence ? "pl-11 pr-4" : "px-4";
+  // Installed feature packs may decorate each row (collaboration uses this for presence).
+  // Reserve one stable gutter for their adornments so columns remain aligned.
+  const hasRowAdornments = openable && hasUiFeatureRowAdornments();
+  const leftPad = hasRowAdornments ? "pl-11 pr-4" : "px-4";
 
   // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
   // plus the action column, the 12px inter-column gaps and the 32px (px-4) row padding. When the
@@ -2904,7 +2903,6 @@ export function EntityListWidget({
                   const absIdx = startIdx + i;
                   const rowId = openable && row._id != null ? String(row._id) : null;
                   const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
-                  const rowViewers = openable ? viewersById.get(String(row._id)) : undefined;
                   const isSelected = rowId != null && selected.has(rowId);
                   return (
                     // Key by absolute row index: register (balance) rows have no _id, so an id-based
@@ -3007,9 +3005,9 @@ export function EntityListWidget({
                           <ListCell key={c.columnName} row={row} col={c} />
                         )
                       )}
-                      {rowViewers ? (
+                      {rowId && hasRowAdornments ? (
                         <div className="pointer-events-none absolute left-0 top-1/2 z-10 flex w-11 -translate-y-1/2 items-center justify-end pr-1.5">
-                          <PresenceAvatars viewers={rowViewers} size={16} max={3} overlap />
+                          <UiFeatureRowAdornments kind={kind} name={name} rowId={rowId} />
                         </div>
                       ) : null}
                       {rowButtonActions.length ? (

@@ -47,7 +47,7 @@ shared API client and folded into one batch summary; screens must not implement 
 The island owns padding only on standalone entity routes. When embedded with `PageBuilder.list`,
 it has no outer spacing; the surrounding page region owns sibling gaps and content insets.
 
-Avatars: DiceBear 10 `glass` is the default (`presence-avatars.tsx#glassAvatar`);
+Avatars: DiceBear 10 `glass` is the collaboration feature pack's default;
 avatars in lists and face-piles carry a thin `border border-border`.
 
 Colored pills: a cell renders as a pill whenever the row carries `{col}_color` (`enumPillStyle`,
@@ -87,7 +87,7 @@ of the row keeps the full context menu. Flat table view only.
 | `Select` | `components/ui/select.tsx` | No-search dropdown; auto-drawer on touch. |
 | `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. |
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |
-| `Avatar` / `PresenceAvatars` | `components/ui/avatar.tsx`, `components/presence-avatars.tsx` | Avatar primitive; face-pile + dicebear default. |
+| `Avatar` | `components/ui/avatar.tsx` | Generic avatar primitive; feature packs compose face-piles and fallbacks. |
 | `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |
 | `ContextMenu` | `components/ui/context-menu.tsx` | Right-click menus (list rows). |
 | `Attachment` | `components/ui/attachment.tsx` | File chips. |

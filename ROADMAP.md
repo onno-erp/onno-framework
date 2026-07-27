@@ -74,7 +74,8 @@ Good next slices:
 Recently shipped (formerly on this list): role-aware deny-by-default authorization
 (`@AccessControl`), OIDC/Keycloak production auth, diff-based migration with snapshots and model
 diffs, the server-driven DivKit UI layer, horizontal scale-out (`onno-cluster-starter`), and
-record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed).
+record-level presence markers (live "who else is viewing this record" avatars, cluster-relayed)
+as the optional `onno-collaboration-starter` feature pack.
 
 ## Auth Direction
 

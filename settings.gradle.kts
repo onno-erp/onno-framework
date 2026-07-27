@@ -15,6 +15,7 @@ include(
     "onno-framework",
     "onno-framework-starter",
     "onno-ui-starter",
+    "onno-collaboration-starter",
     "onno-auth-starter",
     "onno-mcp-starter",
     "onno-import-starter",

@@ -68,6 +68,7 @@ val publishedModules = mapOf(
     "onno-framework" to "Core domain model, JDBI persistence, and entity-change events for the onno ERP toolkit.",
     "onno-framework-starter" to "Spring Boot autoconfiguration for the onno core: datasource, JDBC repositories, and JobRunr background jobs.",
     "onno-ui-starter" to "Server-driven admin UI starter for onno — bundles the frontend and its Spring MVC endpoints.",
+    "onno-collaboration-starter" to "Opt-in comments, mentions, notifications, and live-presence feature pack with automatically registered React UI.",
     "onno-auth-starter" to "Authentication starter for onno: in-memory and OIDC / OAuth2 (Keycloak, Zitadel) single sign-on.",
     "onno-mcp-starter" to "Model Context Protocol (MCP) server starter exposing onno query and command services to AI agents.",
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
@@ -244,7 +245,8 @@ val configNotesDir = file("docs/_config")
 
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
-    "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
+    "onno-framework-starter", "onno-ui-starter", "onno-collaboration-starter",
+    "onno-auth-starter", "onno-mcp-starter",
     "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter",
     "onno-observability-starter", "onno-desktop-starter",
 )
@@ -268,7 +270,8 @@ configure(subprojects.filter { it.name in configModuleProjects }) {
 }
 val configModuleTitles = mapOf(
     "onno-framework-starter" to "Core — `onno-framework-starter` (`OnnoProperties`, prefix `onno`)",
-    "onno-ui-starter" to "UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)",
+    "onno-ui-starter" to "UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`)",
+    "onno-collaboration-starter" to "Collaboration — `onno-collaboration-starter` (`CollaborationProperties`, `CommentProperties`, `NotificationProperties`)",
     "onno-auth-starter" to "Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)",
     "onno-mcp-starter" to "MCP — `onno-mcp-starter` (`OnnoMcpProperties`, prefix `onno.mcp`)",
     "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",

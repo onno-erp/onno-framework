@@ -100,6 +100,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 | `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, durable typed process contracts/schema, UI layout model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
+| `onno-collaboration-starter` | Opt-in comments, mentions, notifications, live presence, and their auto-loaded React UI. |
 | `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry with a bounded HTTP exporter. |
 | `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
 | `onno-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |

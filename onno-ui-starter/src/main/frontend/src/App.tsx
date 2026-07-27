@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { injectPluginStyles, loadPlugins } from "@/lib/plugin-loader";
@@ -17,11 +17,8 @@ import { IconPortals } from "@/lib/icon-bridge";
 import { HintPortals } from "@/lib/hint-bridge";
 import { ActionsMenuPortals } from "@/lib/actions-menu-bridge";
 import { ActionsBarPortals } from "@/lib/actions-bar-bridge";
-import { CommentsPortals } from "@/lib/comments-bridge";
-import { NavPresencePortals } from "@/lib/nav-presence-bridge";
-import { NotificationIndicatorPortals } from "@/lib/notification-indicator-bridge";
 import { GeoPortals } from "@/lib/geo-bridge";
-import { NotificationCenter } from "@/components/notification-center";
+import { UiFeaturePortals, UiFeatureRoots } from "@/lib/ui-feature-host";
 import { UpdateNotice } from "@/components/update-notice";
 import { Toaster } from "@/components/ui/toast";
 import { BASE_PATH } from "@/lib/base-path";
@@ -32,6 +29,7 @@ function ProtectedApp() {
   const { user, loading } = useAuth();
   const location = useLocation();
   const t = useMessages();
+  const [pluginsReady, setPluginsReady] = useState(false);
 
   // Load consumer widget plugins once the authenticated shell mounts. Each plugin self-registers its
   // widget types with window.onno.registerWidget; the DivKit content then renders div-custom widgets
@@ -45,11 +43,14 @@ function ProtectedApp() {
         // Inject the widget stylesheet(s) first so a widget's own utility classes have CSS the moment
         // its module renders, then load the modules.
         injectPluginStyles(cfg?.pluginStyles);
-        void loadPlugins(cfg?.pluginScripts);
         configureTelemetry(cfg?.telemetry);
+        return loadPlugins(cfg?.pluginScripts).then(() => {
+          if (!cancelled) setPluginsReady(true);
+        });
       })
       .catch(() => {
         // No config / offline — the built-in widgets still work; custom ones stay unregistered.
+        if (!cancelled) setPluginsReady(true);
       });
     return () => {
       cancelled = true;
@@ -60,7 +61,7 @@ function ProtectedApp() {
     recordRouteView(location.pathname);
   }, [location.pathname]);
 
-  if (loading) {
+  if (loading || (user && !pluginsReady)) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-sm text-muted-foreground">
         {t("loading.workspace")}
@@ -78,7 +79,7 @@ function ProtectedApp() {
   return (
     <TimeRangeProvider>
       <UpdateNotice />
-      <NotificationCenter />
+      <UiFeatureRoots />
       <ActionFeedbackHost />
       <DivKitView />
       <WidgetPortals />
@@ -89,9 +90,7 @@ function ProtectedApp() {
       <HintPortals />
       <ActionsMenuPortals />
       <ActionsBarPortals />
-      <CommentsPortals />
-      <NavPresencePortals />
-      <NotificationIndicatorPortals />
+      <UiFeaturePortals />
       <GeoPortals />
     </TimeRangeProvider>
   );

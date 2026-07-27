@@ -140,7 +140,55 @@ export interface OnnoUi {
   SelectItem: import("react").ComponentType<any>;
   SelectTrigger: import("react").ComponentType<any>;
   SelectValue: import("react").ComponentType<any>;
+  Avatar: import("react").ComponentType<any>;
+  AvatarFallback: import("react").ComponentType<any>;
+  AvatarImage: import("react").ComponentType<any>;
+  Tooltip: import("react").ComponentType<any>;
+  TooltipContent: import("react").ComponentType<any>;
+  TooltipProvider: import("react").ComponentType<any>;
+  TooltipTrigger: import("react").ComponentType<any>;
+  Drawer: import("react").ComponentType<any>;
+  DrawerClose: import("react").ComponentType<any>;
+  DrawerContent: import("react").ComponentType<any>;
+  DrawerTitle: import("react").ComponentType<any>;
+  AnimatedNumber: import("react").ComponentType<any>;
+  NotificationBadgeMotion: import("react").ComponentType<any>;
 }
+
+export type UiFeatureRuntime = {
+  focusedPath: string;
+  navStyle: "topbar" | "sidebar" | "bottom_bar" | "unknown";
+};
+
+export type UiFeatureRegistration = {
+  id: string;
+  customComponents?: Record<
+    string,
+    import("react").ComponentType<{ payload?: unknown }>
+  >;
+  Root?: import("react").ComponentType<UiFeatureRuntime>;
+  TabAdornment?: import("react").ComponentType<{ path: string }>;
+  SidebarFooter?: import("react").ComponentType<{
+    background: string;
+    borderColor: string;
+  }>;
+  RowAdornment?: import("react").ComponentType<{
+    kind: string;
+    name: string;
+    rowId: string;
+  }>;
+  handleAction?: (url: string) => boolean;
+};
+
+export interface OnnoApiError extends Error {
+  status: number;
+  fieldErrors?: Record<string, string[]>;
+}
+
+export type Translate = (
+  key: string,
+  params?: Record<string, string | number>
+) => string;
 
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
@@ -150,8 +198,26 @@ export interface OnnoHost {
     widgetType: string,
     component: import("react").ComponentType<{ widget: DashboardWidgetMeta }>
   ) => void;
+  registerUiFeature: (feature: UiFeatureRegistration) => void;
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   api: OnnoReadApi;
+  request: <T>(
+    url: string,
+    init?: RequestInit,
+    opts?: { silent?: boolean }
+  ) => Promise<T>;
+  ApiError: new (...args: any[]) => OnnoApiError;
+  toast: {
+    (title: import("react").ReactNode, options?: any): string;
+    success(title: import("react").ReactNode, options?: any): string;
+    error(title: import("react").ReactNode, options?: any): string;
+    info(title: import("react").ReactNode, options?: any): string;
+    warning(title: import("react").ReactNode, options?: any): string;
+    loading(title: import("react").ReactNode, options?: any): string;
+    dismiss(id?: string | number): void;
+  };
+  useMessages: () => Translate;
+  cn: (...inputs: any[]) => string;
   /** The host's UI component primitives (see {@link OnnoUi}). Present from host contract v2. */
   ui: OnnoUi;
   version: number;

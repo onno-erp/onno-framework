@@ -14,6 +14,7 @@ dependencies {
     // (mcp/import/desktop) in the way. Add a starter here when you want to demo that module.
     implementation(project(":onno-framework-starter"))
     implementation(project(":onno-ui-starter"))
+    implementation(project(":onno-collaboration-starter"))
     implementation(project(":onno-auth-starter"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")

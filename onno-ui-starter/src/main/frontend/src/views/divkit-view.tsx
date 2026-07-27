@@ -21,33 +21,26 @@ import { clearFormDirty, isFormDirty } from "@/lib/dirty-forms";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
 import { DynamicLucide, ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
-import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
-import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
-import { startPresence } from "@/lib/presence-store";
-import { TabPresence } from "@/components/presence-surfaces";
-import { usePanePresence } from "@/lib/presence-store";
-import { NotificationTrigger } from "@/components/notification-center";
+import {
+  getUiFeatureCustomComponents,
+  handleUiFeatureAction,
+  setUiFeatureRuntime,
+  UiFeatureSidebarFooters,
+  UiFeatureTabAdornments,
+} from "@/lib/ui-feature-host";
 import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
 } from "@/components/ui/context-menu";
-import { openPanel as openNotificationPanel, setNotificationsNavStyle } from "@/lib/notification-store";
 import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "@/lib/keybindings";
 import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import "@divkitframework/divkit/dist/client.css";
 
-// The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
-// unread-notification dot on the bottom bar's More tab as React islands.
-const NAV_CARD_CUSTOM_COMPONENTS = new Map([
-  ...ICON_CUSTOM_COMPONENTS,
-  ...NAV_PRESENCE_CUSTOM_COMPONENTS,
-  ...NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS,
-]);
-
+// The shell nav/account cards render lucide icons and installed feature-pack blocks as React islands.
 /**
  * The authenticated app, rendered as DivKit cards: the chrome (/shell — top bar +
  * nav) paints instantly via the React wrapper, and the per-route content renders
@@ -327,14 +320,6 @@ function toSnake(name: string): string {
 // Does a server event touch a given surface (the path an island is showing)?
 function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!event || event.type === "ready") return false;
-  // Comment-thread changes live-sync through the comments widget's own listener; they never alter
-  // a list/detail/dashboard surface, so keep them off the content-pane refetch path — otherwise
-  // every comment post would needlessly refetch the home dashboard (which refreshes on any change).
-  if (event.entityType === "comment") return false;
-  // Likewise presence (collaboration-marker) pings: handled only by the presence bar's own listener.
-  // Without this, every heartbeat/join would refetch the open detail pane (and the home dashboard),
-  // remounting the bar, which re-enters and emits another ping — an endless refetch/flicker loop.
-  if (event.entityType === "presence") return false;
   // Home/dashboard widgets subscribe to the shared data-event fan-out and refresh their own
   // datasets. Remounting the whole page on every change resets charts and controls under load.
   if (pathname === "/" || pathname === "") return false;
@@ -383,11 +368,6 @@ export function DivKitView() {
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const wsRef = useRef(workspace);
   wsRef.current = workspace;
-  // A single, always-mounted presence driver for the focused pane's route. Feeding it by prop (not a
-  // per-pane mounted component) means closing/opening/Esc-ing panes only changes its `path` — the hook
-  // never remounts, so the "this tab's own route" marker moves old→new without flashing through null
-  // (the self-dot no longer blinks on rapid pane churn).
-  usePanePresence((workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0])?.activePath ?? "");
   // Right-click menu for a list row: screen position + the row's onno:// open url.
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
   // Right-click menu for a workspace tab: screen position + the tab's route path.
@@ -593,17 +573,6 @@ export function DivKitView() {
   }, []);
   useUiEvents(onUiEvent);
 
-  // Seed the ambient-presence store once and keep it live off the same SSE fan-out the islands consume.
-  useEffect(() => {
-    startPresence();
-  }, []);
-
-  // Tell the notification store which nav style the shell uses, so its floating fallback bell
-  // only appears on the topbar layout (bottom-bar layouts route through the More menu instead).
-  useEffect(() => {
-    setNotificationsNavStyle(shell?.navStyle ?? "unknown");
-  }, [shell?.navStyle]);
-
   useEffect(() => {
     const timers = refetchTimers.current;
     return () => {
@@ -746,6 +715,7 @@ export function DivKitView() {
     (action: ContentAction) => {
       const url = action?.url;
       if (!url || !url.startsWith("onno://")) return;
+      if (handleUiFeatureAction(url)) return;
       const rest = url.slice("onno://".length); // "logout" | "theme/toggle" | "app?profile=x" | "documents/foo/id"
       if (rest === "logout") {
         shellCache.clear();
@@ -754,11 +724,6 @@ export function DivKitView() {
       }
       if (rest === "theme/toggle") {
         setTheme(resolvedTheme === "dark" ? "light" : "dark");
-        return;
-      }
-      if (rest === "notifications") {
-        // The mobile menu's Notifications row — opens the client-owned panel, no route change.
-        openNotificationPanel();
         return;
       }
       if (rest === "") {
@@ -1481,6 +1446,20 @@ export function DivKitView() {
   const activeTabBg = brand.primarySoft ?? "hsl(var(--accent))";
   const activeTabText = brand.primary ?? "hsl(var(--accent-foreground))";
   const navStyle: NavStyle = shell?.navStyle ?? "topbar";
+  const focusedPath =
+    (workspace.panes.find((pane) => pane.id === workspace.focused) ?? workspace.panes[0])
+      ?.activePath ?? "";
+  useEffect(() => {
+    setUiFeatureRuntime({ focusedPath, navStyle });
+  }, [focusedPath, navStyle]);
+  const navCardCustomComponents = useMemo(
+    () =>
+      new Map([
+        ...ICON_CUSTOM_COMPONENTS,
+        ...getUiFeatureCustomComponents(),
+      ]),
+    []
+  );
 
   // Memoized so the element identity only changes when the card actually needs a re-render
   // (new shell JSON / theme / viewport). The DivKit wrapper destroys and re-creates its Svelte
@@ -1494,10 +1473,10 @@ export function DivKitView() {
         theme={resolvedTheme}
         globalVariablesController={navVars}
         onCustomAction={onShellAction as NonNullable<DivKitProps["onCustomAction"]>}
-        customComponents={NAV_CARD_CUSTOM_COMPONENTS}
+        customComponents={navCardCustomComponents}
       />
     ),
-    [resolvedTheme, viewport, onShellAction]
+    [resolvedTheme, viewport, onShellAction, navCardCustomComponents]
   );
 
   const navEl = useMemo(() => (shell ? shellCard(shell.nav, "nav") : null), [shell, shellCard]);
@@ -1827,15 +1806,12 @@ export function DivKitView() {
               </div>
             );
           })}
-          {/* Collaborator avatars for the focused pane's record — pinned right of the tabs. */}
           {showFocusedChrome && pane.activePath ? (
             <div className="ml-auto flex shrink-0 items-center pl-2 pr-1">
-              <TabPresence path={pane.activePath} />
+              <UiFeatureTabAdornments path={pane.activePath} />
             </div>
           ) : null}
         </div>
-        {/* Presence for the focused pane is driven once at the top of DivKitView (a single stable hook),
-            not per-pane — see usePanePresence(focused pane's activePath) there. */}
 
         {/* Every open tab stays mounted in its own scroll container; only the active
             one is shown. Keeping them alive preserves each tab's scroll position,
@@ -1933,7 +1909,7 @@ export function DivKitView() {
           >
             {navEl}
           </div>
-          <NotificationTrigger style={{ background: surfaceBg, borderColor }} />
+          <UiFeatureSidebarFooters background={surfaceBg} borderColor={borderColor} />
           {accountEl}
         </aside>
         <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-3 pr-3">

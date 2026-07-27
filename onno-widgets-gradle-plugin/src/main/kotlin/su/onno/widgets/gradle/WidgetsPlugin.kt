@@ -29,6 +29,9 @@ abstract class WidgetsExtension {
      * `@onno/widget-sdk` and `react` types. Default true; never overwrites an existing file.
      */
     abstract val generateIdeConfig: Property<Boolean>
+
+    /** Emitted stylesheet name. Must be unique when several feature packs ship widget CSS. */
+    abstract val stylesheetName: Property<String>
 }
 
 /**
@@ -52,6 +55,7 @@ class WidgetsPlugin : Plugin<Project> {
         ext.sourceDir.convention(project.layout.projectDirectory.dir("src/main/widgets"))
         ext.nodeVersion.convention(NODE_VERSION)
         ext.generateIdeConfig.convention(true)
+        ext.stylesheetName.convention("onno-widgets.css")
 
         val workDir = project.layout.buildDirectory.dir("onno-widgets")
         // Compiled bundles land under a generated resources root at onno-plugins/<name>.js; that root
@@ -91,9 +95,14 @@ class WidgetsPlugin : Plugin<Project> {
             dependsOn("npmInstall")
             script.set(workDir.map { d -> d.file("build.mjs") })
             args.set(project.provider {
-                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath)
+                listOf(
+                    ext.sourceDir.get().asFile.absolutePath,
+                    distDir.get().asFile.absolutePath,
+                    ext.stylesheetName.get()
+                )
             })
             inputs.dir(ext.sourceDir).optional().withPropertyName("widgetSources")
+            inputs.property("stylesheetName", ext.stylesheetName)
             outputs.dir(distDir)
             onlyIf { hasWidgets(ext.sourceDir.get().asFile) }
         }
@@ -104,7 +113,12 @@ class WidgetsPlugin : Plugin<Project> {
             dependsOn("npmInstall")
             script.set(workDir.map { d -> d.file("build.mjs") })
             args.set(project.provider {
-                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath, "--watch")
+                listOf(
+                    ext.sourceDir.get().asFile.absolutePath,
+                    distDir.get().asFile.absolutePath,
+                    ext.stylesheetName.get(),
+                    "--watch"
+                )
             })
         }
 
@@ -116,6 +130,12 @@ class WidgetsPlugin : Plugin<Project> {
                 project.extensions.findByType(SourceSetContainer::class.java)
                     ?.findByName("main")?.resources?.srcDir(resourcesRoot)
                 project.tasks.withType<ProcessResources>().configureEach { dependsOn(compile) }
+                // `withSourcesJar()` archives main.allSource, including generated resource dirs.
+                // Published widget/feature-pack projects therefore need the same producer edge as
+                // processResources or Gradle rightfully rejects the publication as order-dependent.
+                project.tasks.matching { it.name == "sourcesJar" }.configureEach {
+                    dependsOn(compile)
+                }
             }
         }
     }
@@ -178,7 +198,8 @@ class WidgetsPlugin : Plugin<Project> {
                   "@onno/widget-sdk": ["$sdk/src/index.ts"],
                   "@onno/widget-sdk/*": ["$sdk/*"],
                   "react": ["$nm/@types/react"],
-                  "react/*": ["$nm/@types/react/*"]
+                  "react/*": ["$nm/@types/react/*"],
+                  "lucide-react": ["$nm/lucide-react/dist/lucide-react.d.ts"]
                 }
               },
               "include": ["**/*.ts", "**/*.tsx", "**/*.jsx"]
@@ -198,7 +219,8 @@ class WidgetsPlugin : Plugin<Project> {
               "private": true,
               "type": "module",
               "dependencies": {
-                "@onno/widget-sdk": "file:./sdk"
+                "@onno/widget-sdk": "file:./sdk",
+                "lucide-react": "^0.469.0"
               },
               "devDependencies": {
                 "esbuild": "^0.24.0",
@@ -218,7 +240,7 @@ class WidgetsPlugin : Plugin<Project> {
             // the output ships with no React of its own. Resolution is rooted at this workspace so the
             // bundled @onno/widget-sdk resolves regardless of where the widget sources live.
             //
-            // It also runs Tailwind over the widget sources and emits <outDir>/onno-widgets.css, so
+            // It also runs Tailwind over the widget sources and emits the configured stylesheet, so
             // utility classes in a widget's own markup produce real CSS (utilities the host doesn't
             // itself emit are otherwise silently dropped — the widget compiles outside the host's
             // Tailwind build). The stylesheet is utilities-only with preflight OFF (no global reset)
@@ -239,7 +261,8 @@ class WidgetsPlugin : Plugin<Project> {
             const workDir = dirname(fileURLToPath(import.meta.url));
             const args = process.argv.slice(2);
             const watch = args.includes("--watch");
-            const [srcDir, outDir] = args.filter((a) => a !== "--watch");
+            const [srcDir, outDir, stylesheetName = "onno-widgets.css"] =
+              args.filter((a) => a !== "--watch");
 
             if (!srcDir || !existsSync(srcDir)) {
               console.log("[onno-widgets] no widget source dir: " + srcDir);
@@ -318,8 +341,8 @@ class WidgetsPlugin : Plugin<Project> {
               });
               let css = result.css;
               if (!watch) css = (await transform(css, { loader: "css", minify: true })).code;
-              writeFileSync(join(outDir, "onno-widgets.css"), css);
-              console.log("[onno-widgets] wrote onno-widgets.css (" + css.length + " bytes)");
+              writeFileSync(join(outDir, stylesheetName), css);
+              console.log("[onno-widgets] wrote " + stylesheetName + " (" + css.length + " bytes)");
             }
 
             if (watch) {

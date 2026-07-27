@@ -263,21 +263,8 @@ export interface UiEvent {
   entityName?: string;
   id?: string;
   timestamp?: string;
-  /** Present only on a `presence` event: the record's route kind ("catalogs"/"documents"). */
-  kind?: string;
-  /** Present only on a `presence` event: the current viewer set of the record. */
-  viewers?: { userId: string; displayName: string; avatarUrl?: string }[];
-  // Present only on a `notification` event (see UiEventPublisher.publishNotification). `id` carries the
-  // stored notification's id. The store prepends the delta optimistically; a peer-node event trimmed to
-  // fit the cluster payload cap arrives without `title`, which the store treats as "refetch the feed".
-  notificationType?: string;
-  title?: string;
-  body?: string;
-  link?: string;
-  actorName?: string;
-  actorAvatar?: string;
-  createdAt?: string;
-  unread?: boolean;
+  /** Feature packs may attach additional event fields; the base shell forwards them unchanged. */
+  [key: string]: unknown;
   // `tasks-changed` uses entityType "process-task" and carries only the affected instance id.
   // Candidate users/roles stay server-side; eligible clients refetch their authenticated inbox.
   // Present on the `ready` ack that opens each stream, and on the explicit dev `reload` push.

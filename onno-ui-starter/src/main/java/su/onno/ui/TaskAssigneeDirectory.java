@@ -3,7 +3,6 @@ package su.onno.ui;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.ui.comments.CommentAuthorAvatars;
 
 import java.security.Principal;
 import java.util.List;
@@ -22,14 +21,14 @@ public final class TaskAssigneeDirectory {
     private final CatalogQueryService catalogs;
     private final UiAccessService access;
     private final UiLayout layout;
-    private final CommentAuthorAvatars avatars;
+    private final UserAvatarResolver avatars;
 
     public TaskAssigneeDirectory(
             MetadataRegistry registry,
             CatalogQueryService catalogs,
             UiAccessService access,
             UiLayout layout,
-            CommentAuthorAvatars avatars
+            UserAvatarResolver avatars
     ) {
         this.registry = registry;
         this.catalogs = catalogs;

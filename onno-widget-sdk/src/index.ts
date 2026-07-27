@@ -1,5 +1,12 @@
 import type { ComponentType } from "react";
-import type { DashboardWidgetMeta, ListRendererProps, OnnoHost, OnnoReadApi, OnnoUi } from "./types";
+import type {
+  DashboardWidgetMeta,
+  ListRendererProps,
+  OnnoHost,
+  OnnoReadApi,
+  OnnoUi,
+  UiFeatureRegistration,
+} from "./types";
 
 export type {
   DashboardWidgetMeta,
@@ -10,6 +17,10 @@ export type {
   OnnoReadApi,
   OnnoHost,
   OnnoUi,
+  UiFeatureRegistration,
+  UiFeatureRuntime,
+  OnnoApiError,
+  Translate,
 } from "./types";
 
 /**
@@ -61,6 +72,7 @@ export const {
   useReducer,
   useContext,
   useLayoutEffect,
+  useSyncExternalStore,
 } = host.React;
 
 /**
@@ -71,6 +83,10 @@ export const registerWidget: (
   widgetType: string,
   component: ComponentType<{ widget: DashboardWidgetMeta }>
 ) => void = host.registerWidget;
+
+/** Register a trusted opt-in UI feature contributed by a starter on the classpath. */
+export const registerUiFeature = (feature: UiFeatureRegistration): void =>
+  host.registerUiFeature(feature);
 
 /**
  * Register the body renderer for a custom <em>list</em> view — the component an entity's
@@ -103,6 +119,11 @@ export const html = host.html;
 
 /** The read-only REST client (same-origin, session + CSRF handled by the host). */
 export const api: OnnoReadApi = host.api;
+export const request = host.request;
+export const ApiError = host.ApiError;
+export const toast = host.toast;
+export const useMessages = host.useMessages;
+export const cn = host.cn;
 
 /**
  * The host's UI primitives — the *real* design-system controls (Radix-backed `Select`/`Popover`,
@@ -160,6 +181,19 @@ export const {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerTitle,
+  AnimatedNumber,
+  NotificationBadgeMotion,
 } = ui;
 
 /** Props every registered widget receives. */

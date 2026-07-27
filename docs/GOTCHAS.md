@@ -99,7 +99,8 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   Tailwind over widget sources (utilities-only, preflight off, host tokens), but it scans only
   `src/main/widgets`, and runtime-concatenated class names (`` `text-${c}` ``) are invisible to
   it — use literal class strings, or inline `style` with `hsl(var(--primary))`.
-- **Plugin CSS must load before the host stylesheet.** `onno-widgets.css` is a second, unscoped
+- **Plugin CSS must load before the host stylesheet.** `onno-widgets.css` (or the feature pack's
+  unique `onnoWidgets.stylesheetName`) is a second, unscoped
   Tailwind utilities pass; its selectors tie with the host's on specificity, so document order
   decides every conflict. Appended after the host sheet, a plugin's bare utility (`.flex-col`)
   silently beats the host's responsive variant of the same property (`sm:flex-row`) on any host

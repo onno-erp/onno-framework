@@ -43,8 +43,13 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   (+ `CardHeader`/`CardTitle`/`CardDescription`/`CardContent`), `Popover`
   (+ `PopoverTrigger`/`PopoverContent`), and `Select`
   (+ `SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`/`SelectGroup`). They resolve to the
-  host's singletons at runtime (shared React instance, host-emitted classes). Requires host contract
-  v2+.
+  host's singletons at runtime (shared React instance, host-emitted classes). Feature-pack primitives
+  such as `Avatar`, `Tooltip`, `Drawer`, `AnimatedNumber`, and `NotificationBadgeMotion` require host
+  contract v3+.
+- `registerUiFeature(...)` (host contract v3+) — trusted starter feature packs can contribute custom
+  DivKit blocks, global React roots, tab/row/sidebar adornments, and `onno://` action handlers. The
+  same contract exposes authenticated same-origin `request`, `ApiError`, `toast`, `useMessages`, and
+  `cn`; ordinary dashboard widgets should continue to prefer the read-only `api`.
 - `html` — `htm` bound to the host `React.createElement`, for JSX-free markup.
 - `WidgetProps` — `{ widget: DashboardWidgetMeta }`, the props every widget receives. Read
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
@@ -53,8 +58,10 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 ## Styling
 
 The `su.onno.widgets` Gradle plugin runs **Tailwind over your widget sources** and ships the result as
-`onno-widgets.css`, which the host injects at boot — before its own stylesheet, so these unscoped
-utilities can never out-cascade the host's responsive variants on host markup. So Tailwind utility
+`onno-widgets.css` by default, which the host injects at boot — before its own stylesheet, so these unscoped
+utilities can never out-cascade the host's responsive variants on host markup. Feature-pack authors
+shipping several plugin artifacts must assign each one a unique
+`onnoWidgets.stylesheetName` to avoid classpath asset collisions. Tailwind utility
 classes in your widget's own
 markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`) the host never
 emits — now produce real CSS. The stylesheet is **utilities-only with preflight off** and carries the

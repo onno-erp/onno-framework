@@ -27,9 +27,6 @@ export type Metric = "count" | "sum";
 
 function eventMatchesWidget(event: UiEvent, widget: DashboardWidgetMeta): boolean {
   if (!event || event.type === "ready") return false;
-  if (event.entityType === "presence" || event.entityType === "comment" || event.entityType === "notification") {
-    return false;
-  }
   if (event.entityType === "register") {
     return widget.entityType === "register" && (!event.entityName || event.entityName === "*" || event.entityName === widget.entityName);
   }

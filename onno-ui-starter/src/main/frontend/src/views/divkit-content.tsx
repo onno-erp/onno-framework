@@ -14,16 +14,15 @@ import { ACTIONS_MENU_CUSTOM_COMPONENTS } from "@/lib/actions-menu-bridge";
 import { LIST_CUSTOM_COMPONENTS } from "@/lib/list-bridge";
 import { REGISTER_CUSTOM_COMPONENTS } from "@/lib/register-bridge";
 import { ACTIONS_BAR_CUSTOM_COMPONENTS } from "@/lib/actions-bar-bridge";
-import { COMMENTS_CUSTOM_COMPONENTS } from "@/lib/comments-bridge";
-import { NAV_PRESENCE_CUSTOM_COMPONENTS } from "@/lib/nav-presence-bridge";
-import { NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS } from "@/lib/notification-indicator-bridge";
 import { GEO_CUSTOM_COMPONENTS } from "@/lib/geo-bridge";
+import { getUiFeatureCustomComponents } from "@/lib/ui-feature-host";
 
 // All div-custom blocks the content can host: dashboard widgets, the entity form, the login
 // form, icons, help hints, the detail-header overflow menu, the virtualized list grid,
-// page-level action button sections, the detail-page comments thread, and the
-// read-only map for a .widget("map") field.
-const CUSTOM_COMPONENTS = new Map([
+// page-level action button sections, installed feature-pack blocks, and the read-only
+// map for a .widget("map") field.
+function customComponents() {
+  return new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
   ...FORM_CUSTOM_COMPONENTS,
   ...LOGIN_FORM_CUSTOM_COMPONENTS,
@@ -34,11 +33,10 @@ const CUSTOM_COMPONENTS = new Map([
   ...LIST_CUSTOM_COMPONENTS,
   ...REGISTER_CUSTOM_COMPONENTS,
   ...ACTIONS_BAR_CUSTOM_COMPONENTS,
-  ...COMMENTS_CUSTOM_COMPONENTS,
-  ...NAV_PRESENCE_CUSTOM_COMPONENTS,
-  ...NOTIFICATION_INDICATOR_CUSTOM_COMPONENTS,
+  ...getUiFeatureCustomComponents(),
   ...GEO_CUSTOM_COMPONENTS,
-]);
+  ]);
+}
 
 type DivJson = Parameters<typeof render>[0]["json"];
 type Instance = ReturnType<typeof render>;
@@ -212,7 +210,7 @@ export const DivKitContent = forwardRef<ContentHandle, {
       platform: "touch",
       globalVariablesController: ctrl,
       // Bridge div-custom blocks (charts, calendars, kanban, entity form) to React.
-      customComponents: CUSTOM_COMPONENTS,
+      customComponents: customComponents(),
       extensions: CONTENT_EXTENSIONS,
       onCustomAction: (action) => actionRef.current(action as ContentAction),
     });

@@ -826,12 +826,9 @@ onno-widget > * {
   overflow: visible !important;
 }
 
-/* Same clip problem, bigger overhang: the comments panel's typeahead and insert menus are absolutely
-   positioned dropdowns that extend past the panel's bottom edge, and the panel is usually the last
-   block on a detail page — so every DivKit clip box up the chain would cut the menu off. Lift the
-   clip on the whole ancestor chain of the comments block; these wrappers are layout plumbing, not
-   designed clipping surfaces. */
-.onno-surface :has(onno-comments) {
+/* Feature-pack islands can own dropdowns/popovers that extend beyond their DivKit custom block.
+   Lift clip on their layout wrappers; the feature host stamps the generic marker at mount. */
+.onno-surface :has([data-onno-ui-feature]) {
   overflow: visible !important;
 }
 

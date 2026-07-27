@@ -13,11 +13,8 @@ import su.onno.ui.divkit.PageDivBuilder;
 import su.onno.ui.divkit.Palette;
 import su.onno.ui.divkit.ShellLayoutBuilder;
 import su.onno.ui.divkit.SurfaceDivBuilder;
-import su.onno.ui.comments.CommentProperties;
-import su.onno.ui.notifications.NotificationProperties;
 
 import org.springframework.beans.factory.DisposableBean;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -77,12 +74,8 @@ public class DivKitController implements DisposableBean {
     // The resolved chrome strings (English defaults + onno.ui.messages overrides) for the
     // server-rendered DivKit chrome — login aside (that's LoginDivController's payload).
     private final UiMessages messages;
-    // Resolved per request (lazily): the comments module is wired after this controller, and is
-    // absent entirely when onno.comments.enabled=false. getIfAvailable() yields null in that case.
-    private final ObjectProvider<CommentProperties> commentProperties;
-    // Same lazy seam for notifications: absent when onno.notifications.enabled=false, in which
-    // case the mobile menu skips its Notifications row (the client bell hides itself off the 404).
-    private final ObjectProvider<NotificationProperties> notificationProperties;
+    private final List<EntityDetailUiContributor> detailContributors;
+    private final List<ShellUiContributor> shellContributors;
     // Resolves a dashboard's count/metric tiles concurrently (one SQL aggregate each), so a wide
     // dashboard doesn't pay N sequential round-trips. Bounded by onno.ui.dashboard.widget-parallelism
     // to stay under the JDBC pool; null when parallelism == 1 (resolve inline on the request thread).
@@ -103,8 +96,8 @@ public class DivKitController implements DisposableBean {
                             RelatedListReader relatedLists,
                             UiProperties uiProperties,
                             UiMessages messages,
-                            ObjectProvider<CommentProperties> commentProperties,
-                            ObjectProvider<NotificationProperties> notificationProperties) {
+                            List<EntityDetailUiContributor> detailContributors,
+                            List<ShellUiContributor> shellContributors) {
         this.layoutSet = layoutSet;
         // Base layout for viewport-independent concerns (profile resolution, branding).
         this.layout = layoutSet.forViewport(Viewport.DESKTOP);
@@ -123,8 +116,8 @@ public class DivKitController implements DisposableBean {
         this.relatedLists = relatedLists;
         this.uiProperties = uiProperties;
         this.messages = messages;
-        this.commentProperties = commentProperties;
-        this.notificationProperties = notificationProperties;
+        this.detailContributors = List.copyOf(detailContributors);
+        this.shellContributors = List.copyOf(shellContributors);
         int parallelism = Math.max(1, uiProperties.getDashboard().getWidgetParallelism());
         this.widgetPool = parallelism == 1 ? null : Executors.newFixedThreadPool(parallelism, r -> {
             Thread t = new Thread(r, "onno-dashboard-widget");
@@ -138,17 +131,6 @@ public class DivKitController implements DisposableBean {
         if (widgetPool != null) {
             widgetPool.shutdownNow();
         }
-    }
-
-    /** Whether the comments module is wired and enabled — decided per request (see the field). */
-    private boolean commentsEnabled() {
-        CommentProperties cp = commentProperties.getIfAvailable();
-        return cp != null && cp.isEnabled();
-    }
-
-    /** Whether the notifications module is wired — decided per request (see the field). */
-    private boolean notificationsEnabled() {
-        return notificationProperties.getIfAvailable() != null;
     }
 
     // ----- chrome (fast, no entity data) -----
@@ -186,7 +168,8 @@ public class DivKitController implements DisposableBean {
         // item, so a dashboard-less app opens on a real screen instead of a phantom one.
         out.put("home", landingPath(nav));
         out.put("nav", DivCard.of("onno-nav",
-                ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
+                ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages,
+                        shellContributors)));
         out.put("account", DivCard.of("onno-account",
                 ShellLayoutBuilder.account(user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(), p, messages)));
         // Flat route-path → label/icon maps, built from the same nav the sidebar renders. The web
@@ -247,7 +230,7 @@ public class DivKitController implements DisposableBean {
                 branding.logoFor(theme), branding.logoWidth(), branding.logoHeight());
         Map<String, Object> content = ShellLayoutBuilder.menu(
                 brand, logo, nav, user.displayName(), user.avatarUrl(), profileLinks, activeProfile.id(),
-                notificationsEnabled(), p, messages);
+                p, messages, shellContributors);
         Div.margins(content, 16, 16, 16, 16);
         return DivCard.of("onno-content", content);
     }
@@ -815,8 +798,10 @@ public class DivKitController implements DisposableBean {
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> content = SurfaceDivBuilder.catalogDetail(meta, row,
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
-        if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
-            content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
+        EntityDetailUiContributor.Context context = new EntityDetailUiContributor.Context(
+                "catalogs", name, id, desc.javaClass(), principal);
+        for (EntityDetailUiContributor contributor : detailContributors) {
+            content = contributor.contribute(context, content);
         }
         return DivCard.of("onno-content", content);
     }
@@ -932,8 +917,10 @@ public class DivKitController implements DisposableBean {
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row,
                 relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
-        if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
-            content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
+        EntityDetailUiContributor.Context context = new EntityDetailUiContributor.Context(
+                "documents", name, id, desc.javaClass(), principal);
+        for (EntityDetailUiContributor contributor : detailContributors) {
+            content = contributor.contribute(context, content);
         }
         return DivCard.of("onno-content", content);
     }
@@ -1170,8 +1157,8 @@ public class DivKitController implements DisposableBean {
     }
 
     /**
-     * The bare {@code onno-form} content (no DivCard wrapper), so a caller can chain
-     * {@link SurfaceDivBuilder#withComments} onto it. {@code readOnly} renders the form disabled
+     * The bare {@code onno-form} content (no DivCard wrapper), so optional detail contributors can
+     * append feature-owned panels. {@code readOnly} renders the form disabled
      * (a reader's view of the combined record surface); {@code actions} are the record-level
      * header actions (unpost/duplicate/delete + custom DETAIL actions) the form renders as the
      * same inline-buttons-plus-overflow cluster the old detail header used.

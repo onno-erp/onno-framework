@@ -26,26 +26,15 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.schema.mode` | `String` | `apply` | What to do about differences between the metadata model and the database at startup: `apply` (default — execute safe changes, report destructive ones), `plan` (log the plan, change nothing), `validate` (fail startup on any difference or unapplied migration), or `off`. |
 | `onno.security.secret-key` | `String` | — | Encryption key for `@Attribute(secret = true)` values. Any passphrase works (it is hashed to a 256-bit AES key). Required only when an entity declares a secret attribute; supply it from an environment variable, never hard-code it. |
 
-## UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`, `CommentProperties` prefix `onno.comments`)
+## UI — `onno-ui-starter` (`UiProperties` prefix `onno.ui`, `MediaProperties` prefix `onno.media`)
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `onno.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
-| `onno.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
-| `onno.comments.mentions.enabled` | `Boolean` | `true` | Whether `@`-mentions are parsed, resolved and offered in the compose typeahead. Turn it off to keep plain-text comments without touching `onno.comments.enabled`; existing mention tokens then degrade to their plain label text. |
-| `onno.comments.mentions.per-entity-limit` | `Integer` | `5` | Largest number of matches pulled from any one entity before the suggestions are merged and ranked, bounding the per-keystroke scan. Defaults to 5. |
-| `onno.comments.mentions.suggestion-limit` | `Integer` | `8` | Largest number of suggestions a single `/api/mentions` typeahead response returns across all readable entities. Defaults to 8. |
 | `onno.media.allowed-content-types` | `List<String>` | — | Content types the endpoint accepts. Entries may be exact (`image/png`) or a wildcard subtype (`image/*`). Empty means accept any type — fine for an authenticated admin endpoint; set it to lock uploads down to, say, images only. |
 | `onno.media.enabled` | `Boolean` | `true` | Whether the upload endpoint and the default filesystem storage are wired at all. |
 | `onno.media.filesystem.directory` | `String` | — | Directory the filesystem backend writes uploads beneath. Defaults to `onno-media` under the JVM temp dir; set an absolute, persistent path in production. |
 | `onno.media.max-file-size` | `DataSize` | `10MB` | Largest single upload accepted. Also raises Spring's 1&nbsp;MB multipart default to match, so uploads up to this size reach the controller instead of being rejected by the container. |
 | `onno.media.public-base-path` | `String` | `/api/media` | URL prefix the filesystem backend builds stored-media URLs from, and the path `GET /api/media/{key}` serves from. Other backends (e.g. S3) ignore it. |
-| `onno.notifications.assignments.enabled` | `Boolean` | `true` | Whether writing an AssigneeField pointing at a user raises a notification. |
-| `onno.notifications.enabled` | `Boolean` | `true` | Whether the notifications endpoint, its storage table, the built-in producers, and the shell's bell + timeline panel are wired at all. Turn it off to drop the feature entirely without touching the model. |
-| `onno.notifications.mentions.enabled` | `Boolean` | `true` | Whether comment `@`-mentions of a user raise a notification. |
-| `onno.notifications.page-size` | `Integer` | `30` | Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 30. |
-| `onno.notifications.replies.enabled` | `Boolean` | `true` | Whether replying to a user's comment raises a notification for that user. |
-| `onno.notifications.retention-days` | `Integer` | `90` | How many days a <em>read</em> notification is kept before the daily retention sweep deletes it. Unread notifications are never pruned. `0` disables pruning (keep read history forever). Defaults to 90. |
 | `onno.ui.batch.parallelism` | `Integer` | `4` | Maximum number of records a bulk action resolves in parallel per request. Each id runs its own transaction on a worker thread, so keep this comfortably below the datasource's `maximum-pool-size` or the fan-out will starve the JDBC pool. `1` forces the old sequential behaviour. Note that parallel document deletes reverse postings concurrently, which can contend on the same accumulation-register rows — lower this (or set `1`) if you hit lock timeouts on heavily-shared registers. |
 | `onno.ui.dashboard.widget-parallelism` | `Integer` | `8` | Maximum number of widget aggregates resolved in parallel per dashboard render. Bounded so a wide dashboard can't exhaust the JDBC connection pool — keep it comfortably below the datasource's `maximum-pool-size`. `1` forces the old sequential behaviour. |
 | `onno.ui.dev-mode` | `Boolean` | — | Live-reload dev mode. When on, the `ready` ack of the `/api/events` SSE stream marks the server as a development instance, and the web client answers a server restart (a changed `bootId` across a stream reconnect) with a full page reload — so a devtools restart cycle (recompile → context restart → schema re-diff → layout/page rebuild) ends with the browser refreshing itself: save a file, see the change. Unset (the default) auto-detects: dev mode turns on exactly when `spring-boot-devtools` is on the classpath — present under `bootRun`/exploded-classpath runs, absent from the production boot jar — so a plain deployment never reloads a user's page on redeploy. Set explicitly to force it either way (e.g. `true` for a hosted preview instance that rebuilds without devtools). |
@@ -66,6 +55,23 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.ui.update-check.initial-delay` | `Duration` | `1m` | Delay before the first check, so startup is never blocked on a network round-trip. |
 | `onno.ui.update-check.interval` | `Duration` | `24h` | How often to poll after the first check. Floored at 60s. |
 | `onno.ui.update-check.url` | `String` | `https://cloud.onno.su/releases/v1/latest` | The onno-cloud endpoint that announces the latest release (see onno-cloud's ReleaseController). |
+
+## Collaboration — `onno-collaboration-starter` (`CollaborationProperties`, `CommentProperties`, `NotificationProperties`)
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onno.collaboration.enabled` | `Boolean` | `true` | Enables collaboration server APIs and their automatically registered React UI. |
+| `onno.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
+| `onno.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
+| `onno.comments.mentions.enabled` | `Boolean` | `true` | Whether `@`-mentions are parsed, resolved and offered in the compose typeahead. Turn it off to keep plain-text comments without touching `onno.comments.enabled`; existing mention tokens then degrade to their plain label text. |
+| `onno.comments.mentions.per-entity-limit` | `Integer` | `5` | Largest number of matches pulled from any one entity before the suggestions are merged and ranked, bounding the per-keystroke scan. Defaults to 5. |
+| `onno.comments.mentions.suggestion-limit` | `Integer` | `8` | Largest number of suggestions a single `/api/mentions` typeahead response returns across all readable entities. Defaults to 8. |
+| `onno.notifications.assignments.enabled` | `Boolean` | `true` | Whether writing an AssigneeField pointing at a user raises a notification. |
+| `onno.notifications.enabled` | `Boolean` | `true` | Whether the notifications endpoint, its storage table, the built-in producers, and the shell's bell + timeline panel are wired at all. Turn it off to drop the feature entirely without touching the model. |
+| `onno.notifications.mentions.enabled` | `Boolean` | `true` | Whether comment `@`-mentions of a user raise a notification. |
+| `onno.notifications.page-size` | `Integer` | `30` | Rows fetched per timeline window (the bell panel scrolls these keyset windows). Defaults to 30. |
+| `onno.notifications.replies.enabled` | `Boolean` | `true` | Whether replying to a user's comment raises a notification for that user. |
+| `onno.notifications.retention-days` | `Integer` | `90` | How many days a <em>read</em> notification is kept before the daily retention sweep deletes it. Unread notifications are never pruned. `0` disables pruning (keep read history forever). Defaults to 90. |
 
 ## Auth — `onno-auth-starter` (`OnnoAuthProperties`, prefix `onno.auth`)
 

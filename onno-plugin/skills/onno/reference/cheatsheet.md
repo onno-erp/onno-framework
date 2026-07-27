@@ -410,6 +410,8 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 
 ## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
 
+- Requires the optional `su.onno:onno-collaboration-starter` artifact; the base UI only provides
+  the generic feature host and SSE transport.
 - Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
   Notifications row in the More menu on mobile — with unread badges and a dot on the More tab).
   Persisted in the framework-owned `onno_notifications` table; delivered live over the

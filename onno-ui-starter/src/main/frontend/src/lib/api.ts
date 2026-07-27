@@ -113,7 +113,11 @@ export async function streamUiEvents(
 // no cached response, hence no staleness (a later fetch always hits the network afresh).
 const inFlightGets = new Map<string, Promise<unknown>>();
 
-function fetchJson<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
+export function requestJson<T>(
+  url: string,
+  init?: RequestInit,
+  opts?: { silent?: boolean }
+): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   if (method !== "GET") return doFetch<T>(url, init, opts);
   const existing = inFlightGets.get(url);
@@ -122,6 +126,8 @@ function fetchJson<T>(url: string, init?: RequestInit, opts?: { silent?: boolean
   inFlightGets.set(url, p);
   return p;
 }
+
+const fetchJson = requestJson;
 
 async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
@@ -250,137 +256,6 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
     throw new ApiError(message, res.status);
   }
   return (await res.json()) as StoredMedia;
-}
-
-/**
- * A resolved {@code @} mention or {@code #} reference in a comment body (see MentionResolver). The body
- * carries it as a `@[Display](kind/name/id)` or `#[Display](kind/name/id)` token; this is the live resolution for the current viewer — display
- * and avatar reflect the record now, and `readable` is false when the viewer can't open it (the chip
- * then degrades to plain text rather than a broken link).
- */
-export interface CommentMention {
-  id: string;
-  kind: "catalogs" | "documents";
-  /** URL-safe route name (snake_case) — the `onno://kind/name/id` the chip navigates to. */
-  name: string;
-  /** The entity's display name, e.g. "Customers" (null when the viewer can't read it). */
-  entity: string | null;
-  /** The record's current display, e.g. "Acme Corp" / "INV-42" (null when unreadable or deleted). */
-  display: string | null;
-  avatarUrl: string | null;
-  readable: boolean;
-}
-
-/** A typeahead suggestion from `/api/mentions?q=&kind=` — one readable catalog/document record. */
-export interface MentionSuggestion {
-  kind: "catalogs" | "documents";
-  name: string;
-  entity: string;
-  id: string;
-  display: string;
-  avatarUrl: string | null;
-  /** Secondary line for the picker: a person's email, a document's yyyy-MM-dd date. */
-  hint?: string | null;
-}
-
-/** One `(kind, name, id)` triple resolved to its live display — see `/api/mentions/resolve`. */
-export interface ResolvedMentionTarget {
-  kind: "catalogs" | "documents";
-  name: string;
-  entity: string | null;
-  id: string;
-  display: string | null;
-  avatarUrl: string | null;
-  readable: boolean;
-  /** True when the record belongs to the identity catalog — paste renders it as `@`, else `#`. */
-  person?: boolean;
-}
-
-/** A grouped reaction on a comment bubble. `mine` is true when the current viewer has selected it. */
-export interface CommentReaction {
-  emoji: string;
-  count: number;
-  mine: boolean;
-}
-
-/** One comment in an entity's discussion thread (see CommentController). */
-export interface CommentView {
-  id: string;
-  authorName: string | null;
-  /** The author's avatar image URL when their account links to a record with an avatar; else null. */
-  authorAvatarUrl: string | null;
-  body: string;
-  /** Null for a top-level comment; set for replies. */
-  parentId: string | null;
-  /** The mentions/references in `body`, resolved live for the current viewer (empty when none/disabled). */
-  mentions: CommentMention[];
-  /** Grouped reactions for this comment. */
-  reactions: CommentReaction[];
-  /** ISO-8601 instant, zone-qualified ("…Z"); localize per viewer. `editedAt` is null until edited. */
-  createdAt: string | null;
-  editedAt: string | null;
-  /** True when the current user authored this comment. */
-  mine: boolean;
-  /** True when the current user may delete it (author or ADMIN). */
-  canDelete: boolean;
-}
-
-/** One user currently viewing a record (see PresenceController). */
-export interface PresenceViewer {
-  userId: string;
-  displayName: string;
-  /** The viewer's avatar image URL, when their identity record has one; absent → render initials. */
-  avatarUrl?: string;
-}
-
-/** The response to a presence ping: the record's current viewers plus the caller's own id. */
-export interface PresenceState {
-  /** The caller's own user id, so the client can omit itself from the markers. */
-  you: string;
-  viewers: PresenceViewer[];
-}
-
-/** One record currently being viewed, in the ambient-presence snapshot. */
-export interface PresenceRecord {
-  /** Route kind — "catalogs" | "documents". */
-  kind: string;
-  /** Route name (e.g. "properties"). */
-  name: string;
-  /** Record id (uuid). */
-  id: string;
-  viewers: PresenceViewer[];
-}
-
-/** The whole-app presence picture: every viewed record the caller may read, plus the caller's own id. */
-export interface PresenceSnapshot {
-  you: string;
-  records: PresenceRecord[];
-}
-
-/** One notification in the per-user timeline (see NotificationController). */
-export interface NotificationView {
-  id: string;
-  /** Source tag ("mention" | "assignment" | …) — the client maps it to an icon and a template. */
-  type: string;
-  title: string;
-  body?: string | null;
-  /** The "kind/name/id" route the row opens (an onno:// url body), or null for a non-navigating notice. */
-  link?: string | null;
-  actorName?: string | null;
-  actorAvatar?: string | null;
-  createdAt: string;
-  readAt?: string | null;
-  unread: boolean;
-}
-
-/** One newest-first window of the notification timeline, plus the badge's unread total. */
-export interface NotificationPage {
-  items: NotificationView[];
-  nextCursor: string | null;
-  hasMore: boolean;
-  unreadCount: number;
-  /** The distinct notification types this user has, most-recent-first — the panel's modular filter tabs. */
-  types: string[];
 }
 
 /**
@@ -612,86 +487,6 @@ export const api = {
     return fetchJson<ActionResult>(`${BASE}/divkit/page-action?${params.toString()}`, {
       method: "POST",
       body: JSON.stringify({ inputs: inputs ?? {} }),
-    });
-  },
-
-  // Comments — a discussion thread on any catalog/document detail (see CommentController). Reads
-  // and posts are gated server-side on read access to the owning entity; the author is stamped
-  // from the session, never sent by the client.
-  listComments: (kind: "catalogs" | "documents", name: string, id: string) =>
-    fetchJson<CommentView[]>(`${BASE}/comments/${kind}/${name}/${id}`),
-  addComment: (kind: "catalogs" | "documents", name: string, id: string, body: string, parentId?: string | null) =>
-    fetchJson<CommentView>(`${BASE}/comments/${kind}/${name}/${id}`, {
-      method: "POST",
-      body: JSON.stringify({ body, parentId: parentId ?? null }),
-    }),
-  deleteComment: (commentId: string) =>
-    fetchJson<void>(`${BASE}/comments/${commentId}`, { method: "DELETE" }),
-  toggleCommentReaction: (commentId: string, emoji: string) =>
-    fetchJson<CommentReaction[]>(`${BASE}/comments/${commentId}/reactions`, {
-      method: "POST",
-      body: JSON.stringify({ emoji }),
-    }),
-  // Cross-entity typeahead for the @ mention / # reference picker: matching readable records,
-  // ranked and capped server-side (see MentionController). `people` narrows to the identity
-  // catalog (falls back to all catalogs when the app has no Layout.identity link).
-  searchMentions: (q: string, kind?: "people" | "catalogs" | "documents") => {
-    const params = new URLSearchParams({ q });
-    if (kind) params.set("kind", kind);
-    return fetchJson<MentionSuggestion[]>(`${BASE}/mentions?${params.toString()}`);
-  },
-  // Resolve a pasted internal record URL to its live display so the compose box can swap the
-  // link for a mention. Unreadable/unknown records come back readable=false with no display.
-  resolveMention: (kind: "catalogs" | "documents", name: string, id: string) =>
-    fetchJson<ResolvedMentionTarget>(
-      `${BASE}/mentions/resolve?${new URLSearchParams({ kind, name, id }).toString()}`
-    ),
-
-  // Per-user notifications (see NotificationController). One newest-first window; `unread` restricts to
-  // unread rows, `cursor` (from a previous page's nextCursor) resumes. Marking read returns the fresh
-  // unread total so the badge updates without a refetch.
-  getNotifications: (opts?: { unread?: boolean; cursor?: string }) => {
-    const params = new URLSearchParams();
-    if (opts?.unread) params.set("unread", "true");
-    if (opts?.cursor) params.set("cursor", opts.cursor);
-    const qs = params.toString();
-    return fetchJson<NotificationPage>(`${BASE}/notifications${qs ? "?" + qs : ""}`);
-  },
-  markNotificationRead: (id: string) =>
-    fetchJson<{ unreadCount: number }>(`${BASE}/notifications/${id}/read`, { method: "POST" }),
-  markAllNotificationsRead: () =>
-    fetchJson<{ marked: number; unreadCount: number }>(`${BASE}/notifications/read-all`, {
-      method: "POST",
-    }),
-
-  // The ambient-presence snapshot: every viewed record the caller may read. Loaded once on startup;
-  // live `presence` SSE deltas keep the client store current after that.
-  getPresenceSnapshot: () => fetchJson<PresenceSnapshot>(`${BASE}/presence`),
-  // Presence — route-level collaboration markers (see PresenceController). Post the pane's route `path`;
-  // the server derives the presence identity (record / entity list / page). `enter` on open and a periodic
-  // `heartbeat` keep the viewer alive (the server expires them by TTL once heartbeats stop); both return the
-  // route's current viewers. Entity routes are gated server-side on read access; pages are visible to any
-  // signed-in user.
-  presence: (path: string, action: "enter" | "heartbeat") =>
-    fetchJson<PresenceState>(`${BASE}/presence`, {
-      method: "POST",
-      body: JSON.stringify({ path, action }),
-    }),
-  // Best-effort leave on page/island teardown: `keepalive` lets the request outlive the unloading
-  // document (and still carry the CSRF header, unlike sendBeacon). A dropped leave is harmless — the
-  // server's presence TTL reaps the viewer anyway; this just makes them vanish for others promptly.
-  leavePresence: (path: string) => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    const csrf = readCsrfToken();
-    if (csrf) headers[CSRF_HEADER] = csrf;
-    return fetch(`${BASE}/presence`, {
-      method: "POST",
-      credentials: "same-origin",
-      headers,
-      body: JSON.stringify({ path, action: "leave" }),
-      keepalive: true,
-    }).catch(() => {
-      /* best-effort; TTL backstops */
     });
   },
 

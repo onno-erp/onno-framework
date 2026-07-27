@@ -11,6 +11,7 @@ published Maven artifacts.
 | `onno-guesty-starter` | this repo, leaf (deps: framework, framework-starter) | `onno-enterprise` | **Easy** — clean leaf, no in-repo consumers |
 | `onno-hospedajes-starter` | this repo, leaf | `onno-enterprise` | **Easy** — only `example` consumes it |
 | `onno-auth-starter` (incl. OIDC/SSO) | this repo | **stays open source** | — |
+| `onno-collaboration-starter` | this repo | **stays open source** | — |
 | `example` (hospedajes integration) | this repo, depends on hospedajes | OSS demo drops the vertical integration | **Easy** |
 
 > **Scope note:** authentication — including OIDC / single sign-on and the resource-server mode —

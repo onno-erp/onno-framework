@@ -4,7 +4,6 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingService;
 import su.onno.spring.OnnoAutoConfiguration;
-import su.onno.ui.comments.CommentAuthorAvatars;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -136,9 +135,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             CatalogQueryService catalogQueryService,
             UiAccessService access,
             su.onno.ui.UiLayout uiLayout,
-            CommentAuthorAvatars commentAuthorAvatars) {
+            UserAvatarResolver userAvatarResolver) {
         return new TaskAssigneeDirectory(
-                registry, catalogQueryService, access, uiLayout, commentAuthorAvatars);
+                registry, catalogQueryService, access, uiLayout, userAvatarResolver);
     }
 
     @Bean
@@ -232,26 +231,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new ClusterUiBridge(clusterEventBus, publisher);
     }
 
-    /**
-     * Tracks who is viewing each record for record-level collaboration markers. It subscribes to the
-     * {@link su.onno.cluster.ClusterEventBus} for peer presence and pushes viewer-set changes onto the SSE
-     * stream. With the default no-op bus it is a single-node, in-memory registry.
-     */
-    @Bean
-    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public su.onno.ui.presence.PresenceRegistry presenceRegistry(su.onno.cluster.ClusterEventBus clusterEventBus,
-                                                                 UiEventPublisher publisher) {
-        return new su.onno.ui.presence.PresenceRegistry(clusterEventBus, publisher);
-    }
-
-    @Bean
-    public su.onno.ui.presence.PresenceController presenceController(su.onno.ui.presence.PresenceRegistry presenceRegistry,
-                                                                     UiAccessService access,
-                                                                     CurrentUserResolver currentUserResolver,
-                                                                     CommentAuthorAvatars authorAvatars) {
-        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver, authorAvatars);
-    }
-
     @Bean
     public FieldHintResolver fieldHintResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
@@ -260,13 +239,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     /**
      * Resolves a user's avatar image URL from the identity catalog's avatar/image-hinted column.
-     * Always-on (not gated on {@code onno.comments.enabled}) so both the comments panel and record-level
-     * presence markers render a viewer's photo from the one identity source.
+     * Shared by process task assignees and optional feature packs such as collaboration.
      */
     @Bean
-    public CommentAuthorAvatars commentAuthorAvatars(su.onno.ui.UiLayout uiLayout, MetadataRegistry registry,
-                                                     FieldHintResolver fieldHintResolver, Jdbi jdbi) {
-        return new CommentAuthorAvatars(uiLayout, registry, fieldHintResolver, jdbi);
+    public UserAvatarResolver userAvatarResolver(su.onno.ui.UiLayout uiLayout, MetadataRegistry registry,
+                                                 FieldHintResolver fieldHintResolver, Jdbi jdbi) {
+        return new UserAvatarResolver(uiLayout, registry, fieldHintResolver, jdbi);
     }
 
     @Bean
@@ -429,12 +407,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              RelatedListReader relatedListReader,
                                              UiProperties uiProperties,
                                              UiMessages uiMessages,
-                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
-                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties) {
+                                             org.springframework.beans.factory.ObjectProvider<EntityDetailUiContributor> detailContributors,
+                                             org.springframework.beans.factory.ObjectProvider<ShellUiContributor> shellContributors) {
         return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
                 resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties,
-                notificationProperties);
+                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages,
+                detailContributors.orderedStream().toList(), shellContributors.orderedStream().toList());
     }
 
 }

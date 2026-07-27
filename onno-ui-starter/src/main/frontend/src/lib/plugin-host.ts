@@ -2,7 +2,11 @@ import * as React from "react";
 import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
 import { registerWidget } from "./widget-bridge";
-import { api } from "./api";
+import { api, requestJson, ApiError } from "./api";
+import { registerUiFeature, type UiFeatureRegistration } from "./ui-feature-host";
+import { toast } from "@/components/ui/toast";
+import { useMessages } from "@/providers/messages-provider";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -14,6 +18,16 @@ import { Segmented } from "@/components/ui/segmented";
 import { DatePicker } from "@/components/date-picker";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Drawer, DrawerClose, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { NotificationBadgeMotion } from "@/components/ui/notification-badge-motion";
 import {
   Select,
   SelectContent,
@@ -66,6 +80,19 @@ export interface OnnoUi {
   SelectItem: typeof SelectItem;
   SelectTrigger: typeof SelectTrigger;
   SelectValue: typeof SelectValue;
+  Avatar: typeof Avatar;
+  AvatarFallback: typeof AvatarFallback;
+  AvatarImage: typeof AvatarImage;
+  Tooltip: typeof Tooltip;
+  TooltipContent: typeof TooltipContent;
+  TooltipProvider: typeof TooltipProvider;
+  TooltipTrigger: typeof TooltipTrigger;
+  Drawer: typeof Drawer;
+  DrawerClose: typeof DrawerClose;
+  DrawerContent: typeof DrawerContent;
+  DrawerTitle: typeof DrawerTitle;
+  AnimatedNumber: typeof AnimatedNumber;
+  NotificationBadgeMotion: typeof NotificationBadgeMotion;
 }
 
 export interface OnnoHost {
@@ -75,10 +102,18 @@ export interface OnnoHost {
   jsxRuntime: typeof ReactJSXRuntime;
   /** Register (or override) the renderer for a widget type; see {@link registerWidget}. */
   registerWidget: typeof registerWidget;
+  /** Register an opt-in UI feature (custom DivKit blocks, roots, adornments, actions). */
+  registerUiFeature: (feature: UiFeatureRegistration) => void;
   /** `htm` bound to `React.createElement` — JSX-like authoring with no build step (Tier-0). */
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   /** Read-only slice of the REST client — safe surface for first-party widgets. */
   api: OnnoReadApi;
+  /** Authenticated same-origin request surface for trusted feature packs. */
+  request: typeof requestJson;
+  ApiError: typeof ApiError;
+  toast: typeof toast;
+  useMessages: typeof useMessages;
+  cn: typeof cn;
   /** The host's UI component primitives (see {@link OnnoUi}) — the real design-system controls. */
   ui: OnnoUi;
   /** Host contract version; bump on a breaking change to this shape. */
@@ -135,6 +170,19 @@ const ui: OnnoUi = {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerTitle,
+  AnimatedNumber,
+  NotificationBadgeMotion,
 };
 
 const readApi: OnnoReadApi = {
@@ -159,11 +207,17 @@ export function installPluginHost(): OnnoHost {
     React,
     jsxRuntime: ReactJSXRuntime,
     registerWidget,
+    registerUiFeature,
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
+    request: requestJson,
+    ApiError,
+    toast,
+    useMessages,
+    cn,
     ui,
-    // v2: added `ui` (host UI primitives). Additive — existing widgets keep working.
-    version: 2,
+    // v3: feature-pack registration + trusted same-origin requests + collaboration primitives.
+    version: 3,
   });
   window.onno = host;
   return host;
