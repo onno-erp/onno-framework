@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The framework's binary ingestion endpoint. {@code POST /api/media} streams an uploaded file to the
@@ -33,6 +34,14 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/media")
 public class MediaController {
+
+    private static final String X_CONTENT_TYPE_OPTIONS = "X-Content-Type-Options";
+    private static final Set<String> SAFE_INLINE_CONTENT_TYPES = Set.of(
+            "image/avif",
+            "image/gif",
+            "image/jpeg",
+            "image/png",
+            "image/webp");
 
     private final MediaStorage storage;
     private final MediaProperties properties;
@@ -68,15 +77,18 @@ public class MediaController {
         LoadedMedia media = loaded.get();
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(media.contentType()))
+                .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
                 // Keys are immutable (uuid-named), so the bytes behind one never change.
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable());
         if (media.size() >= 0) {
             builder.contentLength(media.size());
         }
-        if (media.filename() != null) {
-            builder.header(HttpHeaders.CONTENT_DISPOSITION,
-                    "inline; filename=\"" + media.filename().replace("\"", "") + "\"");
-        }
+        String disposition = SAFE_INLINE_CONTENT_TYPES.contains(
+                normalizeContentType(media.contentType())) ? "inline" : "attachment";
+        String filename = media.filename() == null
+                ? ""
+                : "; filename=\"" + media.filename().replace("\"", "") + "\"";
+        builder.header(HttpHeaders.CONTENT_DISPOSITION, disposition + filename);
         return builder.body(media.resource());
     }
 
