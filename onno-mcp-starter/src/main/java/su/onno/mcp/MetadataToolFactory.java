@@ -40,7 +40,7 @@ import java.util.function.BiFunction;
  * here automatically, and a {@code describe_metadata} discovery tool lets the model learn
  * entity, field, and enum names at runtime.
  */
-public class MetadataToolFactory {
+public class MetadataToolFactory implements McpToolProvider {
 
     private final MetadataRegistry registry;
     private final UiAccessService access;
@@ -262,6 +262,11 @@ public class MetadataToolFactory {
         }
 
         return tools;
+    }
+
+    @Override
+    public List<SyncToolSpecification> tools() {
+        return build();
     }
 
     // ---- describe_metadata ------------------------------------------------------------

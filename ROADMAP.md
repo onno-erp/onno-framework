@@ -20,6 +20,7 @@ Implemented:
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint
+- Application-defined MCP tools via authenticated, role-scoped `@McpTool` Spring bean methods, with an SDK-level `McpToolProvider` extension point
 - Hierarchical catalog fields and generated schema
 - Configurable catalog/document autonumbering prefixes
 - Optimistic locking fields and generic UI conflict checks

@@ -6,12 +6,20 @@ description: >-
   catalog/document tools, register_balance/register_movements, create/update/delete tools,
   posting_preview/post_document/unpost_document, configuring onno.mcp.* properties, security,
   write/posting gates, or ensuring LLM tools obey the same RBAC as the UI.
+  Also use when adding application-specific @McpTool methods or McpToolProvider beans.
 ---
 
 # onno MCP
 
 MCP tools are generated from metadata and run as the authenticated user. The model gets no access a
 human user would not have.
+
+Application-specific tools are additive: annotate a public Spring bean method with `@McpTool` and
+its ordinary parameters with `@McpToolParam` where descriptions or schema overrides are needed.
+`Principal` or `McpToolContext` may be injected. Use `roles` for an any-of role allowlist and set
+`readOnly = false` for mutations so `onno.mcp.writes-enabled` gates them. Use an
+`McpToolProvider` bean only for direct MCP Java SDK specifications. Duplicate tool names fail
+startup.
 
 ## Tool Groups
 

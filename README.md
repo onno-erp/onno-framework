@@ -106,7 +106,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 | `onno-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
 | `onno-import-starter` | CSV import services and endpoints for catalogs. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out (pluggable bus; default Postgres LISTEN/NOTIFY). |
-| `onno-mcp-starter` | MCP server exposing metadata, CRUD, register queries, and posting as AI-agent tools. |
+| `onno-mcp-starter` | MCP server exposing generated business tools plus custom `@McpTool` methods. |
 | `onno-desktop-starter` | Desktop runtime support and packaged Tauri shell resources. |
 | `onno-desktop-gradle-plugin` | Gradle plugin for packaging a Spring Boot app as a native desktop bundle. |
 | `example` | Local example application. It is not intended to be published as a library. |
@@ -119,9 +119,9 @@ Commercial vertical connectors — `onno-guesty-starter` (Guesty Open API) and
 ## Extending onno
 
 The framework is built to be extended **without forking** — you ship a separate artifact the host
-app opts into. Four extension surfaces: **connectors** (wrap an external system), **SPI
+app opts into. Five extension surfaces: **connectors** (wrap an external system), **SPI
 implementations** (`MediaStorage`, `MailDispatcher`, custom auth, …), **UI** (widgets/pages/actions),
-and Claude **skills/plugins**. The full how-to — the starter shape, the naming/namespace conventions
+**MCP tools**, and Claude **skills/plugins**. The full how-to — the starter shape, the naming/namespace conventions
 that keep the `su.onno` and `su.onno.*` namespaces reserved, and a "definition of done"
 checklist — is in [docs/EXTENDING.md](docs/EXTENDING.md).
 
