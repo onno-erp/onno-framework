@@ -100,6 +100,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 | `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, durable typed process contracts/schema, UI layout model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
+| `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry with a bounded HTTP exporter. |
 | `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
 | `onno-print-starter` | Thymeleaf-based document rendering and PDF output support. |
 | `onno-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |

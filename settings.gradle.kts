@@ -22,6 +22,7 @@ include(
     "onno-kafka-starter",
     "onno-print-starter",
     "onno-mail-starter",
+    "onno-observability-starter",
     "onno-desktop-starter",
     "example"
 )

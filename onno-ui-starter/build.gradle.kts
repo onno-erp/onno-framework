@@ -51,6 +51,7 @@ tasks.named<ProcessResources>("processResources") {
 
 dependencies {
     api(project(":onno-framework"))
+    api(project(":onno-observability-starter"))
     implementation(project(":onno-framework-starter"))
 
     implementation(libs.spring.boot.autoconfigure)

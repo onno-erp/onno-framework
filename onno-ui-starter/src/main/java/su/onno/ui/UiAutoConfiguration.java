@@ -157,8 +157,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public ThemeController themeController(UiProperties properties, su.onno.ui.UiLayout uiLayout,
                                           UiMessages uiMessages,
                                           org.springframework.beans.factory.ObjectProvider<UpdateChecker> updateChecker,
-                                          org.springframework.beans.factory.ObjectProvider<WidgetPluginScanner> widgetPlugins) {
-        return new ThemeController(properties, uiLayout, uiMessages, updateChecker, widgetPlugins);
+                                          org.springframework.beans.factory.ObjectProvider<WidgetPluginScanner> widgetPlugins,
+                                          org.springframework.beans.factory.ObjectProvider<
+                                                  su.onno.observability.TelemetrySink> telemetrySink) {
+        return new ThemeController(properties, uiLayout, uiMessages, updateChecker, widgetPlugins, telemetrySink);
     }
 
     /**

@@ -187,6 +187,24 @@ Also reads Spring Boot's `spring.mail.*` (host/port/credentials) for the SMTP di
 | `onno.print.enabled` | `Boolean` | `true` | Master switch for the print starter (PDF rendering endpoints and services). |
 | `onno.print.encoding` | `String` | `UTF-8` | Character encoding used when rendering HTML templates. |
 
+## onno-observability-starter
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onno.telemetry.allowed-dimensions` | `Set<String>` | — | Low-cardinality dimension keys allowed to leave the application. |
+| `onno.telemetry.application-version` | `String` | — | Application/image version shown in deployment comparisons. |
+| `onno.telemetry.batch-size` | `Integer` | `100` | Maximum events delivered in one HTTP request. |
+| `onno.telemetry.browser-sample-rate` | `Double` | `1` | Fraction of browser sessions captured, from 0 through 1. |
+| `onno.telemetry.deployment-id` | `String` | — | Immutable cloud deployment id attached to every batch. |
+| `onno.telemetry.enabled` | `Boolean` | `false` | Master switch. Disabled by default; onno-cloud enables it through injected environment variables. |
+| `onno.telemetry.endpoint` | `String` | — | Collector base URL, for example `https://cloud.onno.su`. |
+| `onno.telemetry.flush-interval-ms` | `Long` | `5000` | Delay between delivery attempts in milliseconds. |
+| `onno.telemetry.framework-version` | `String` | — | onno-framework version used by this application. |
+| `onno.telemetry.queue-capacity` | `Integer` | `2000` | Maximum number of events held in memory while the collector is unavailable. |
+| `onno.telemetry.request-timeout-ms` | `Long` | `10000` | HTTP request timeout in milliseconds. |
+| `onno.telemetry.tenant` | `String` | — | Stable tenant slug understood by the collector. |
+| `onno.telemetry.token` | `String` | — | Server-side bearer credential. Never exposed to the browser. |
+
 ## Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)
 
 | Property | Type | Default | Meaning |

@@ -33,6 +33,7 @@ to future agents that may not have the full conversation context.
 | `onno-framework` | Core annotations, metadata, schema, posting, durable typed process contracts/schema, repository contracts, UI model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
+| `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |

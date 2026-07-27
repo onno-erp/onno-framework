@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { recordUiError } from "@/lib/telemetry";
 
 /**
  * Error boundary for React islands portaled into DivKit-owned host elements. Every
@@ -22,6 +23,7 @@ export class IslandErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    recordUiError(error.name || "render", this.props.label);
     console.error(
       `[onno] island "${this.props.label ?? "unknown"}" failed to render`,
       error,

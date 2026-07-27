@@ -16,6 +16,7 @@ Pick the one that matches what you're adding. Most "integrations" are **connecto
 | **Connector** | a binding to an external system (a PMS, a bank, a marketplace, an ERP) | a Spring Boot auto-configuration starter that exposes a typed client + sync service |
 | **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a custom `SecurityFilterChain`/`UserDetailsService`, a Kafka `EventHandler`) |
 | **UI** | a dashboard widget, page, or action | `Page`/`Layout`/`EntityView` beans and app-registered custom widgets/actions (see [onno-ui-starter/README.md](../onno-ui-starter/README.md)) |
+| **Observability** | a semantic business outcome or timed operation | inject `TelemetryRecorder`; keep names and dimensions low-cardinality and free of customer data (see [onno-observability-starter/README.md](../onno-observability-starter/README.md)) |
 | **MCP** | an agent-callable application or integration operation | `@McpTool` on a Spring bean method, or an `McpToolProvider` bean for direct SDK access (see [onno-mcp-starter/README.md](../onno-mcp-starter/README.md#custom-tools)) |
 | **Skill / plugin** | guidance that makes an AI agent good at your domain | a Claude skill published through a plugin marketplace (see [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)) |
 
