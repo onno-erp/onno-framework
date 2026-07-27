@@ -20,6 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * Pushes entity-change notifications to browser {@link SseEmitter}s for live UI updates. It is one
@@ -63,6 +64,7 @@ public class UiEventPublisher {
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final UiAccessService access;
+    private final Supplier<SseEmitter> emitterFactory;
 
     /**
      * Identifies this application-context incarnation. Regenerated whenever the context restarts (a
@@ -92,8 +94,13 @@ public class UiEventPublisher {
     }
 
     public UiEventPublisher(UiAccessService access, boolean devMode) {
+        this(access, devMode, () -> new SseEmitter(0L));
+    }
+
+    UiEventPublisher(UiAccessService access, boolean devMode, Supplier<SseEmitter> emitterFactory) {
         this.access = access;
         this.devMode = devMode;
+        this.emitterFactory = emitterFactory;
         keepalive.scheduleWithFixedDelay(this::ping,
                 KEEPALIVE_SECONDS, KEEPALIVE_SECONDS, TimeUnit.SECONDS);
     }
@@ -122,7 +129,7 @@ public class UiEventPublisher {
      * by {@code userId}; process task assignments route by the principal {@code username}.
      */
     public SseEmitter subscribe(Set<String> roles, String userId, String username) {
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = emitterFactory.get();
         Subscriber subscriber = new Subscriber(
                 emitter, roles == null ? Set.of() : Set.copyOf(roles), userId, username);
         subscribers.add(subscriber);
@@ -310,15 +317,12 @@ public class UiEventPublisher {
      * it just keeps the socket warm. A write that throws means the peer is gone, so we drop
      * the subscriber.
      */
-    private void ping() {
+    void ping() {
         for (Subscriber subscriber : subscribers) {
             try {
                 subscriber.emitter().send(SseEmitter.event().comment("keepalive"));
             } catch (IOException | IllegalStateException e) {
-                subscribers.remove(subscriber);
-                subscriber.emitter().completeWithError(e);
-                log.debug("Dropped dead SSE stream on keepalive ({} remaining): {}",
-                        subscribers.size(), e.getMessage());
+                drop(subscriber, "keepalive", e);
             }
         }
     }
@@ -327,11 +331,17 @@ public class UiEventPublisher {
         try {
             subscriber.emitter().send(SseEmitter.event().name(name).data(payload));
         } catch (IOException | IllegalStateException e) {
-            subscribers.remove(subscriber);
-            subscriber.emitter().completeWithError(e);
-            log.debug("Dropped dead SSE stream on send ({} remaining): {}",
-                    subscribers.size(), e.getMessage());
+            drop(subscriber, "send", e);
         }
+    }
+
+    private void drop(Subscriber subscriber, String operation, Exception error) {
+        subscribers.remove(subscriber);
+        // An IOException already causes the servlet container to dispatch and complete the async
+        // request; an IllegalStateException means the emitter is no longer usable. Completing either
+        // again can race the container after AsyncListener.onError has returned.
+        log.debug("Dropped dead SSE stream on {} ({} remaining): {}",
+                operation, subscribers.size(), error.getMessage());
     }
 
     @PreDestroy
