@@ -39,15 +39,15 @@ public class OnnoNamingStrategy implements NamingStrategy {
     public String getTableName(Class<?> type) {
         Catalog catalog = type.getAnnotation(Catalog.class);
         if (catalog != null) {
-            return delegate.catalogTable(catalog.name());
+            return delegate.catalogTable(storageKey(catalog.name(), catalog.tableName()));
         }
         Document document = type.getAnnotation(Document.class);
         if (document != null) {
-            return delegate.documentTable(document.name());
+            return delegate.documentTable(storageKey(document.name(), document.tableName()));
         }
         AccumulationRegister register = type.getAnnotation(AccumulationRegister.class);
         if (register != null) {
-            return delegate.registerTable(register.name());
+            return delegate.registerTable(storageKey(register.name(), register.tableName()));
         }
         // Tabular section rows are mapped to the schema generator's child table
         // (document_<doc>_<section>) via the metadata-derived registry.
@@ -56,6 +56,10 @@ public class OnnoNamingStrategy implements NamingStrategy {
             return tabularTable;
         }
         return NamingStrategy.super.getTableName(type);
+    }
+
+    private String storageKey(String logicalName, String tableName) {
+        return tableName.isEmpty() ? logicalName : tableName;
     }
 
     @Override
