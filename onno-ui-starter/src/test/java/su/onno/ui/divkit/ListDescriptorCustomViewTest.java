@@ -57,4 +57,15 @@ class ListDescriptorCustomViewTest {
 
         assertThat(v.customView()).isNull();
     }
+
+    @Test
+    void lateBoundActionsAdvertiseMenuRefresh_onlyWhenPresent() {
+        Map<String, Object> dynamic = SurfaceDivBuilder.listDescriptor(
+                view(null), "catalogs", "books", null, true, List.of(), List.of(), true);
+        Map<String, Object> staticOnly = SurfaceDivBuilder.listDescriptor(
+                view(null), "catalogs", "books", null, true, List.of(), List.of());
+
+        assertThat(dynamic).containsEntry("dynamicActions", true);
+        assertThat(staticOnly).doesNotContainKey("dynamicActions");
+    }
 }

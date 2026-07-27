@@ -675,7 +675,8 @@ public class DivKitController implements DisposableBean {
             boolean canWrite = access.canWrite(principal, cd);
             String newUrl = canWrite ? "onno://catalogs/" + name + "/new" : null;
             return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
-                    listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity));
+                    listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity),
+                    canWrite && actionResolver.hasDynamicActions(entity));
         }
         DocumentDescriptor dd = documentQuery.forClass(entity);
         if (dd != null) {
@@ -687,7 +688,8 @@ public class DivKitController implements DisposableBean {
             boolean canWrite = access.canWrite(principal, dd);
             String newUrl = canWrite ? "onno://documents/" + name + "/new" : null;
             return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
-                    listActions(entity, "documents", name), actionResolver.inputDescriptors(entity));
+                    listActions(entity, "documents", name), actionResolver.inputDescriptors(entity),
+                    canWrite && actionResolver.hasDynamicActions(entity));
         }
         return null;
     }
@@ -783,7 +785,8 @@ public class DivKitController implements DisposableBean {
         return DivCard.of("onno-content",
                 SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "catalogs", name),
-                        actionResolver.inputDescriptors(desc.javaClass())));
+                        actionResolver.inputDescriptors(desc.javaClass()),
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -868,7 +871,8 @@ public class DivKitController implements DisposableBean {
         return DivCard.of("onno-content",
                 SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "documents", name),
-                        actionResolver.inputDescriptors(desc.javaClass())));
+                        actionResolver.inputDescriptors(desc.javaClass()),
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
     }
 
     @GetMapping("/documents/{name}/{id}")

@@ -524,6 +524,37 @@ for (OrderStatus st : OrderStatus.values()) {
 }
 ```
 
+When those choices come from an editable catalog rather than a Java enum, declare them
+**late-bound** with `ActionSpec.dynamic(...)`:
+
+```java
+public void actions(ActionSpec actions) {
+    actions.dynamic(live -> {
+        for (Status status : statuses.all()) {
+            live.action("status-" + status.getId()).scope(ActionScope.ROW)
+                .menu("Change status")
+                .label(status.getDescription()).color(status.getColor())
+                .form(f -> f.input("note").label("Note"))
+                .handler(ctx -> setStatus(ctx.id(), status.getId(), ctx.input("note")));
+        }
+    });
+}
+```
+
+The provider is retained at startup, not evaluated there. A list carrying one is marked
+`dynamicActions`; on every ordinary row-menu or `ListSpec.cellMenu(...)` open the SPA requests
+`GET /api/actions/{kind}/{name}?id={rowId}` and replaces its transient action snapshot with the
+current descriptors and per-row state. Add, remove, rename, reorder, icon/color, and form
+changes therefore appear on the next open without a restart or browser reload. A failed refresh
+keeps the last successful snapshot and the next open retries; static-only entities omit the flag
+and make no menu-open request.
+
+Execution, dynamic form defaults, and batch execution resolve the key from a fresh provider
+evaluation too. If an item disappeared after the menu opened, the command returns the normal
+unknown-action `404`; handlers are never retained after their catalog entry disappears. Static and
+dynamic declarations merge in authored order with the existing first-view/first-key-wins rule.
+Providers should be read-only and fast enough for a menu-open request.
+
 `color("#059669")` gives context-menu entries a compact swatch, useful for enum/status submenus.
 `logo(url)` is also honored there, so an "Assign" submenu can show employee photos.
 

@@ -32,7 +32,16 @@ public final class SurfaceDivBuilder {
                                                   String newUrl, boolean canWrite,
                                                   List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs) {
-        Map<String, Object> descriptor = listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs);
+        return listSurface(view, kind, name, newUrl, canWrite, actions, inputs, false);
+    }
+
+    public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
+                                                  String newUrl, boolean canWrite,
+                                                  List<Map<String, Object>> actions,
+                                                  List<Map<String, Object>> inputs,
+                                                  boolean dynamicActions) {
+        Map<String, Object> descriptor =
+                listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions);
         Map<String, Object> custom = Div.custom("onno-list", Map.of("list", descriptor));
         Div.matchWidth(custom);
         Map<String, Object> root = Div.vertical(List.of(custom));
@@ -50,6 +59,14 @@ public final class SurfaceDivBuilder {
                                                      String newUrl, boolean canWrite,
                                                      List<Map<String, Object>> actions,
                                                      List<Map<String, Object>> inputs) {
+        return listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, false);
+    }
+
+    public static Map<String, Object> listDescriptor(ResolvedListView view, String kind, String name,
+                                                     String newUrl, boolean canWrite,
+                                                     List<Map<String, Object>> actions,
+                                                     List<Map<String, Object>> inputs,
+                                                     boolean dynamicActions) {
         List<Map<String, Object>> columns = new ArrayList<>();
         for (ResolvedListView.Column c : view.columns()) {
             Map<String, Object> col = new LinkedHashMap<>();
@@ -116,6 +133,11 @@ public final class SurfaceDivBuilder {
         // Edit/Duplicate/Delete, batch delete) for read-only viewers. REST enforces regardless.
         descriptor.put("canWrite", canWrite);
         descriptor.put("actions", actions == null ? List.of() : actions);
+        if (dynamicActions) {
+            // The SPA refetches the current descriptors on every context-menu open. Omit the flag
+            // entirely for static-only entities so their existing zero-request path stays intact.
+            descriptor.put("dynamicActions", true);
+        }
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
         // Keyset window size, resolved from the view over the global onno.ui.list.page-size.
         descriptor.put("pageSize", view.pageSize());

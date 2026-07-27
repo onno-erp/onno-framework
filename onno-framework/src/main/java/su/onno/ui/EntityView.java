@@ -48,7 +48,10 @@ public interface EntityView<E> {
     /**
      * Custom action buttons for this entity — on the list (toolbar / per-row) or the record
      * detail. Each runs arbitrary server logic ({@code .handler(...)}) or just navigates
-     * ({@code .navigate(...)}). Default: none.
+     * ({@code .navigate(...)}). Actions whose entries come from editable business data may be
+     * declared with {@link ActionSpec#dynamic(java.util.function.Consumer)}; those providers are
+     * evaluated on context-menu open and again on execution rather than frozen at startup.
+     * Default: none.
      *
      * <pre>
      * public void actions(ActionSpec a) {

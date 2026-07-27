@@ -18,6 +18,7 @@ import java.util.Set;
 public class UiActionResolver {
 
     private final Map<Class<?>, List<Action>> byEntity = new LinkedHashMap<>();
+    private final Map<Class<?>, List<ActionSpec>> specsByEntity = new LinkedHashMap<>();
     private final Map<Class<?>, List<InputField>> inputsByEntity = new LinkedHashMap<>();
 
     public UiActionResolver(List<EntityView> views) {
@@ -28,6 +29,9 @@ public class UiActionResolver {
             ActionSpec spec = new ActionSpec();
             view.actions(spec);
             List<Action> declared = spec.actions();
+            if (!declared.isEmpty() || spec.hasDynamicActions()) {
+                specsByEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>()).add(spec);
+            }
             if (!declared.isEmpty()) {
                 List<Action> bucket = byEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>());
                 // First view to declare a key wins (a profile-specific view can't clobber another's).
@@ -56,17 +60,47 @@ public class UiActionResolver {
         return byEntity.getOrDefault(entity, List.of());
     }
 
+    /**
+     * Static and late-bound actions in authored order, with the same first-view/key-wins merge as
+     * startup declarations. Static-only entities return the cached list without re-running view
+     * code or allocating a new collection.
+     */
+    public List<Action> resolvedForEntity(Class<?> entity) {
+        if (!hasDynamicActions(entity)) {
+            return forEntity(entity);
+        }
+        Map<String, Action> merged = new LinkedHashMap<>();
+        for (ActionSpec spec : specsByEntity.getOrDefault(entity, List.of())) {
+            for (Action action : spec.resolveActions()) {
+                merged.putIfAbsent(action.key(), action);
+            }
+        }
+        return List.copyOf(merged.values());
+    }
+
+    /** Whether the entity declares any provider that must be evaluated at menu/action time. */
+    public boolean hasDynamicActions(Class<?> entity) {
+        return specsByEntity.getOrDefault(entity, List.of()).stream()
+                .anyMatch(ActionSpec::hasDynamicActions);
+    }
+
     /** The action whose key matches, or {@code null}. */
     public Action find(Class<?> entity, String key) {
-        return forEntity(entity).stream().filter(a -> a.key().equals(key)).findFirst().orElse(null);
+        return resolvedForEntity(entity).stream()
+                .filter(a -> a.key().equals(key))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
      * Whether any row action of {@code entity} varies per row — the cheap guard the list-data feed
-     * checks before decorating rows. When false (the common case), rows ship untouched.
+     * checks before decorating rows. Late-bound providers are deliberately excluded: their state
+     * is resolved once for the clicked row by the menu endpoint, not once per row in the list feed.
+     * When false (the common case), rows ship untouched.
      */
     public boolean hasDynamicRowActions(Class<?> entity) {
-        return forEntity(entity).stream().anyMatch(a -> a.scope() == ActionScope.ROW && a.isDynamic());
+        return forEntity(entity).stream()
+                .anyMatch(a -> a.scope() == ActionScope.ROW && a.isDynamic());
     }
 
     /**
@@ -77,9 +111,22 @@ public class UiActionResolver {
      * (the descriptor value / visible+enabled) so one bad predicate can't break the list.
      */
     public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row) {
+        List<Action> current;
+        try {
+            current = resolvedForEntity(entity);
+        } catch (RuntimeException e) {
+            // A live provider must not take down the list feed. Menu-open/execution still surface
+            // the provider failure, while row decoration safely falls back to static state.
+            current = forEntity(entity);
+        }
+        return rowActionState(current, row);
+    }
+
+    /** Resolve per-row state from an already resolved action snapshot (one live-provider evaluation). */
+    public Map<String, Object> rowActionState(List<Action> actions, Map<String, Object> row) {
         ActionRow actionRow = new ActionRow(row);
         Map<String, Object> out = new LinkedHashMap<>();
-        for (Action a : forEntity(entity)) {
+        for (Action a : actions) {
             if (a.scope() != ActionScope.ROW || !a.isDynamic()) {
                 continue;
             }
@@ -225,8 +272,21 @@ public class UiActionResolver {
 
     /** Descriptor maps for actions in the given scopes — what the list/detail surfaces emit. */
     public List<Map<String, Object>> descriptors(Class<?> entity, Set<ActionScope> scopes) {
+        return descriptors(forEntity(entity), scopes);
+    }
+
+    /**
+     * Current descriptor maps including late-bound providers. Called by the dynamic menu endpoint;
+     * static list surfaces continue to use {@link #descriptors(Class, Set)} at zero extra cost.
+     */
+    public List<Map<String, Object>> resolvedDescriptors(Class<?> entity, Set<ActionScope> scopes) {
+        return descriptors(resolvedForEntity(entity), scopes);
+    }
+
+    /** Descriptor maps for an already resolved action snapshot. */
+    public static List<Map<String, Object>> descriptors(List<Action> actions, Set<ActionScope> scopes) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Action a : forEntity(entity)) {
+        for (Action a : actions) {
             if (!scopes.contains(a.scope())) {
                 continue;
             }

@@ -3,6 +3,7 @@ package su.onno.ui;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -71,17 +72,79 @@ import java.util.function.Predicate;
 public final class ActionSpec {
 
     private final List<ActionBuilder> builders = new ArrayList<>();
+    private final List<Declaration> declarations = new ArrayList<>();
 
     /** Start declaring an action with the given unique key. */
     public ActionBuilder action(String key) {
         ActionBuilder b = new ActionBuilder(key);
         builders.add(b);
+        declarations.add(new StaticDeclaration(b));
         return b;
     }
 
+    /**
+     * Declare actions whose keys and presentation come from live business data. The provider is
+     * retained at startup and evaluated when a dynamic entity menu opens and again when an action
+     * key executes; it is not a cache or an application-startup callback.
+     *
+     * <p>Use this for direct menu choices backed by an editable catalog (statuses, assignees,
+     * queues, and similar lists). Each evaluation receives a fresh {@code ActionSpec}, so declare
+     * ordinary actions with the same builder API, including forms, roles, per-row state, batch
+     * handlers, colors, logos, and navigation:</p>
+     *
+     * <pre>
+     * actions.dynamic(live -&gt; {
+     *     for (Status status : statuses.all()) {
+     *         live.action("setStatus_" + status.id())
+     *             .scope(ActionScope.ROW).menu("Change status")
+     *             .label(status.label()).color(status.color())
+     *             .handler(ctx -&gt; setStatus(ctx.id(), status.id()));
+     *     }
+     * });
+     * </pre>
+     *
+     * <p>The provider should be read-only and fast enough for a menu-open request. Declaration
+     * order is preserved, and the first declaration of a duplicate key still wins when static and
+     * dynamic actions from all views are merged.</p>
+     */
+    public ActionSpec dynamic(Consumer<ActionSpec> provider) {
+        declarations.add(new DynamicDeclaration(Objects.requireNonNull(provider, "provider")));
+        return this;
+    }
+
+    /** Static declarations only. Dynamic providers are deliberately not evaluated here. */
     public List<Action> actions() {
         return builders.stream().map(ActionBuilder::build).toList();
     }
+
+    /** Whether this spec contains at least one late-bound action provider. */
+    public boolean hasDynamicActions() {
+        return declarations.stream().anyMatch(DynamicDeclaration.class::isInstance);
+    }
+
+    /**
+     * Resolve static and late-bound declarations in authored order. Framework runtime code calls
+     * this per menu-open/action execution only when {@link #hasDynamicActions()} is true.
+     */
+    public List<Action> resolveActions() {
+        List<Action> out = new ArrayList<>();
+        for (Declaration declaration : declarations) {
+            if (declaration instanceof StaticDeclaration fixed) {
+                out.add(fixed.builder().build());
+            } else if (declaration instanceof DynamicDeclaration dynamic) {
+                ActionSpec live = new ActionSpec();
+                dynamic.provider().accept(live);
+                out.addAll(live.resolveActions());
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    private sealed interface Declaration permits StaticDeclaration, DynamicDeclaration {}
+
+    private record StaticDeclaration(ActionBuilder builder) implements Declaration {}
+
+    private record DynamicDeclaration(Consumer<ActionSpec> provider) implements Declaration {}
 
     /**
      * Values an action form opens with, computed server-side at open time by the

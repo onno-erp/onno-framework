@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { FacetSheet, SheetDoneButton, useFacetOverlay } from "@/components/ui/facet-sheet";
 import { RangeCalendar } from "@/components/ui/calendar";
 import { useAppLocale, useMessages } from "@/providers/messages-provider";
-import { presetLabel, sameRange, type RangePreset, type TimeRange } from "@/lib/time-range";
+import { presetLabel, resolveRange, sameRange, type RangePreset, type TimeRange } from "@/lib/time-range";
 
 /**
  * Shared faceted-filter chrome, used by both the list toolbar (search/filter facets) and the
@@ -196,6 +196,32 @@ export function DateRangePanel({
 
 /** A from/to bound the date-only calendar can display; a datetime bound (chart drag-zoom) can't. */
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 86_400_000;
+
+/**
+ * Turn a time range into the day-level selection the calendar can paint. Relative presets keep
+ * their rolling semantics for data queries; this is only their visual calendar projection. An
+ * inclusive calendar range needs one fewer subtraction, so "Last 7 days" shades exactly seven
+ * cells ending today rather than eight.
+ */
+export function calendarRangeForTimeRange(
+  range: TimeRange,
+  currentDay: CalendarDate = today(getLocalTimeZone())
+): { from: string; to: string } | null {
+  if (range.kind === "absolute") {
+    return range.from && range.to && DATE_ONLY.test(range.from) && DATE_ONLY.test(range.to)
+      ? { from: range.from, to: range.to }
+      : null;
+  }
+  if (range.kind === "all") return null;
+
+  const resolved = resolveRange(range, 0);
+  const days = Math.max(1, Math.ceil((resolved.to - resolved.from) / DAY_MS));
+  return {
+    from: currentDay.subtract({ days: days - 1 }).toString(),
+    to: currentDay.toString(),
+  };
+}
 
 /**
  * The dashboard's shared time-range control: the same facet chip as the list toolbar's date
@@ -221,6 +247,7 @@ export function TimeRangeFacet({
   const [open, setOpen] = useState(false);
   const abs = range.kind === "absolute" ? range : null;
   const dateOnly = !!abs && !!abs.from && !!abs.to && DATE_ONLY.test(abs.from) && DATE_ONLY.test(abs.to);
+  const calendarRange = calendarRangeForTimeRange(range);
   const activePreset = abs ? undefined : presets.find((p) => sameRange(p.range, range));
   // The chip's value: the humanized preset, the picked window, or "Custom" for a datetime window
   // (drag-zoom). Null only when a persisted selection no longer matches the configured presets.
@@ -275,8 +302,8 @@ export function TimeRangeFacet({
           >
             <DateRangePanel
               ariaLabel={label}
-              from={dateOnly ? abs!.from! : ""}
-              to={dateOnly ? abs!.to! : ""}
+              from={calendarRange?.from ?? ""}
+              to={calendarRange?.to ?? ""}
               onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
               onClose={() => setOpen(false)}
               presetItems={items}
@@ -294,8 +321,8 @@ export function TimeRangeFacet({
       <PopoverContent align="end" className="w-auto p-0">
         <DateRangePanel
           ariaLabel={label}
-          from={dateOnly ? abs!.from! : ""}
-          to={dateOnly ? abs!.to! : ""}
+          from={calendarRange?.from ?? ""}
+          to={calendarRange?.to ?? ""}
           onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
           onClose={() => setOpen(false)}
           presetItems={items}
