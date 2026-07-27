@@ -199,6 +199,56 @@ class PostingTest {
     }
 
     @Test
+    void post_alreadyPostedDocument_rejectsWithoutDuplicatingMovements() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+
+        engine.post(receipt);
+
+        assertThatThrownBy(() -> engine.post(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already posted");
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).hasSize(1);
+
+        List<Map<String, Object>> balance = stockPersistence.getBalance(Map.of(
+                "product", product, "warehouse", warehouse));
+        BigDecimal qty = (BigDecimal) balance.get(0).getOrDefault("QUANTITY",
+                balance.get(0).get("quantity"));
+        assertThat(qty).isEqualByComparingTo(new BigDecimal("10"));
+    }
+
+    @Test
+    void post_concurrentDuplicateRequests_onlyOneWritesMovements() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+
+        List<CompletableFuture<Boolean>> attempts = List.of(
+                CompletableFuture.supplyAsync(() -> tryPost(receipt)),
+                CompletableFuture.supplyAsync(() -> tryPost(receipt)));
+        List<Boolean> results = attempts.stream().map(CompletableFuture::join).toList();
+
+        assertThat(results).containsExactlyInAnyOrder(true, false);
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).hasSize(1);
+        List<Map<String, Object>> balance = stockPersistence.getBalance(Map.of(
+                "product", product, "warehouse", warehouse));
+        BigDecimal qty = (BigDecimal) balance.get(0).getOrDefault("QUANTITY",
+                balance.get(0).get("quantity"));
+        assertThat(qty).isEqualByComparingTo(new BigDecimal("10"));
+    }
+
+    private boolean tryPost(TestReceipt receipt) {
+        try {
+            engine.post(receipt);
+            return true;
+        } catch (IllegalStateException expected) {
+            assertThat(expected).hasMessageContaining("already posted");
+            return false;
+        }
+    }
+
+    @Test
     void post_defaultBalancePolicy_rejectsNegativeBalance() {
         TestReceipt receipt = createReceipt(
                 UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("-1"));

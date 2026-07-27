@@ -310,6 +310,8 @@ public class InventoryCostRegister extends AccumulationRecord {
 
 A backdated post/unpost reverses later affected documents and reposts them in date order in one
 serializable transaction. Keep `handlePosting` deterministic and free of external side effects.
+Posting atomically claims an existing unposted document before writing movements. A repeated
+`post(...)` call is rejected; unpost first when an intentional recalculation is required.
 
 Use `TURNOVER` when period totals matter but current balance does not.
 
