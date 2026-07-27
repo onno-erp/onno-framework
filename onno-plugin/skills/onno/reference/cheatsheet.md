@@ -23,7 +23,9 @@ if something looks off — the code wins, and you should fix this file if it has
 table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`.
 
 ### `@TabularSection` (on a `List<Row>` field of a document; `Row extends TabularSectionRow`)
-`name=""` (child table name; derived from the field name if empty).
+`name=""` (child table name; derived from the field name if empty). Each section must use a
+distinct concrete row class because Spring Data maps the class to one child table; startup rejects
+reuse across documents/sections. Share implementation through a base row class.
 
 ### `@Attribute` (on catalog/document scalar fields)
 | Element | Type | Default | Notes |
@@ -66,7 +68,8 @@ documents after a backdated post/unpost; use it for order-dependent calculations
 
 ### `@Dimension` / `@Resource` (register fields)
 `@Dimension`: `name=""`, `displayName=""`. `@Resource`: `name=""`, `displayName=""`, `precision=15`,
-`scale=2`.
+`scale=2`. An `@Enumeration` enum is supported as an accumulation-register dimension: movement and
+totals storage use its stable UUID, while typed filters/reads use the enum constant.
 
 ### `@Enumeration` (on a Java `enum`)
 `name` (required), `title=""` (display label for the type; falls back to `name`), `tableName=""`.
@@ -341,6 +344,10 @@ because they are not Java field references.
     Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
     `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
     (`id()`, `text(col)`, `enumValue(col,Type)`, `bool(col)`), evaluated as the list renders (#116).
+    A dynamic **server ROW** action should also declare a human-facing `label(String)`: batch
+    selection has no single row context, so its menu and progress messages use the fixed label and
+    otherwise fall back to the action key. If a mixed-state batch is not deterministic, declare
+    separate actions instead of a toggle.
     The **same functions apply to a `DETAIL` action**, evaluated against the loaded record as the
     record surface renders (#255) — a header button can hide/relabel/grey itself by the record's
     state (`visibleWhen` false drops it; `enabledWhen` false greys it); two DETAIL actions with

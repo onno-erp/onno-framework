@@ -6,6 +6,7 @@ import su.onno.model.AccumulationRecord;
 import su.onno.model.AccumulationType;
 import su.onno.model.MovementType;
 import su.onno.query.SqlRenderer;
+import su.onno.repository.EnumerationPersistence;
 import su.onno.schema.SqlDialect;
 import su.onno.types.Ref;
 import su.onno.types.PolyRef;
@@ -395,12 +396,12 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             if (fromDate != null) query.bind("fromDate", fromDate);
             if (toDate != null) query.bind("toDate", toDate);
             if (resolvedFilters != null) {
-                resolvedFilters.forEach((col, val) -> query.bind("f_" + col, unwrapRef(val)));
+                resolvedFilters.forEach((col, val) -> query.bind("f_" + col, toStoredValue(val)));
             }
             resolvedInFilters.forEach((col, values) -> {
                 int i = 0;
                 for (Object value : values) {
-                    query.bind("fin_" + col + "_" + i++, unwrapRef(value));
+                    query.bind("fin_" + col + "_" + i++, toStoredValue(value));
                 }
             });
             for (int t = 0; t < tupleFilters.size(); t++) {
@@ -408,7 +409,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 for (int r = 0; r < rows.size(); r++) {
                     List<Object> row = rows.get(r);
                     for (int c = 0; c < row.size(); c++) {
-                        query.bind("tup_" + t + "_" + r + "_" + c, unwrapRef(row.get(c)));
+                        query.bind("tup_" + t + "_" + r + "_" + c, toStoredValue(row.get(c)));
                     }
                 }
             }
@@ -488,6 +489,10 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                     field.set(record, raw == null ? null
                             : Ref.of(refTargetClass(field), UUID.fromString(raw)));
                 }
+            } else if (field.getType().isEnum()) {
+                String raw = rs.getString(dim.columnName());
+                field.set(record, raw == null ? null
+                        : EnumerationPersistence.resolveValue(field.getType(), UUID.fromString(raw)));
             } else {
                 field.set(record, rs.getObject(dim.columnName(), field.getType()));
             }
@@ -574,7 +579,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     }
 
     /** Binds {@link #filterClauses} parameters: scalar {@code :col}, or {@code :col_0, :col_1, …}
-     *  for each element of a collection. {@code Ref} values are unwrapped to their id. */
+     *  for each element of a collection. References and enums are converted to their stored form. */
     private void bindFilterValues(org.jdbi.v3.core.statement.SqlStatement<?> query,
                                   Map<String, Object> filters) {
         if (filters == null) return;
@@ -583,10 +588,10 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             if (entry.getValue() instanceof Collection<?> values) {
                 int i = 0;
                 for (Object value : values) {
-                    query.bind(col + "_" + i++, unwrapRef(value));
+                    query.bind(col + "_" + i++, toStoredValue(value));
                 }
             } else {
-                query.bind(col, unwrapRef(entry.getValue()));
+                query.bind(col, toStoredValue(entry.getValue()));
             }
         }
     }
@@ -621,9 +626,13 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         return "(" + String.join(", ", columns) + ") IN (" + rows + ")";
     }
 
-    private static Object unwrapRef(Object value) {
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object toStoredValue(Object value) {
         if (value instanceof Ref<?> ref) return ref.id();
         if (value instanceof PolyRef ref) return ref.externalForm();
+        if (value instanceof Enum<?> enumValue) {
+            return EnumerationPersistence.resolveId((Class) enumValue.getDeclaringClass(), enumValue);
+        }
         return value;
     }
 
@@ -675,13 +684,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 Field field = findField(record.getClass(), attr.fieldName());
                 field.setAccessible(true);
                 Object value = field.get(record);
-                if (attr.isRef() && value instanceof Ref<?> ref) {
-                    stmt.bind(attr.fieldName(), ref.id());
-                } else if (value instanceof PolyRef ref) {
-                    stmt.bind(attr.fieldName(), ref.externalForm());
-                } else {
-                    stmt.bind(attr.fieldName(), value);
-                }
+                stmt.bind(attr.fieldName(), toStoredValue(value));
             } catch (IllegalAccessException e) {
                 throw new RuntimeException("Failed to read field: " + attr.fieldName(), e);
             }

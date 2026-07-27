@@ -128,6 +128,9 @@ public class SalesOrderLine extends TabularSectionRow {
 
 Line rows are owned by the document. Do not create repositories for tabular section rows. If a line
 must live independently, it is probably a catalog or document of its own, not a tabular section.
+Give every `@TabularSection` a distinct concrete row class: Spring Data maps that class to one child
+table, and startup rejects reuse across documents or sections. Structurally similar rows can extend
+a shared base class.
 
 ## Repository
 
@@ -167,6 +170,8 @@ Examples:
 ## Common Mistakes
 
 - Putting `@TabularSection` on a catalog. Tabular sections belong to documents only.
+- Reusing one concrete `TabularSectionRow` class in multiple sections. Use distinct concrete
+  subclasses over a shared base row class.
 - Unconditionally resetting status/date in `onFilling`. It also runs for new instances saved through
   code, so guard on null.
 - Treating `number` and `date` as custom fields. They are inherited from `DocumentObject`.

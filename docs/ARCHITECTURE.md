@@ -85,12 +85,17 @@ In brief:
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).
 - **`@TabularSection`** — line-item collections on a document; rows extend `TabularSectionRow`.
+  Each section owns one distinct concrete row class because Spring Data JDBC maps that class to one
+  child table; startup rejects reuse across documents or sections before scan order can select the
+  wrong table. Common fields/behavior belong in a shared base row class.
 - **`@AccumulationRegister`** — ledgers, `type = BALANCE | TURNOVER`; `BALANCE` rejects negative
   resource totals by default and `allowNegative = true` opts a debt/overdraft register out;
   `postingOrder = CHRONOLOGICAL` makes a backdated post/unpost restore and repost later affected
   documents in date order;
   `@Dimension` keys and `@Resource` numbers; rows extend `AccumulationRecord` (`period`, `active`,
-  `documentRef`, `movementType = RECEIPT | EXPENSE`).
+  `documentRef`, `movementType = RECEIPT | EXPENSE`). Enum dimensions use the same deterministic
+  UUID representation as enum attributes throughout movement insertion, totals, filters, and typed
+  reads.
 - **`@InformationRegister`** — facts by dimension over time, `periodicity = NONE|DAY|MONTH|QUARTER|YEAR`;
   rows extend `InformationRecord`.
 - **`@Enumeration`** (on a Java `enum`; `title` for the type's display name, `@EnumLabel` on a

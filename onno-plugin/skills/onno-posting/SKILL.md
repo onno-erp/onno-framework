@@ -62,6 +62,10 @@ public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Va
 Use `addReceipt` and `addExpense` on the typed register repository returned by
 `context.movements(RegisterClass.class)`.
 
+An accumulation-register `@Dimension` may be an `@Enumeration` enum. Set the enum constant normally
+inside the movement callback; posting stores its deterministic UUID in both movement and totals
+tables, and register filters/typed reads convert it in both directions.
+
 ## Negative Balance Policy
 
 `@AccumulationRegister(type = BALANCE)` rejects a post if any resource total would become negative.

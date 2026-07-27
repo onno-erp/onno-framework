@@ -6,6 +6,7 @@ import su.onno.fixtures.TestRefStockRegister;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.Document;
+import su.onno.annotations.Enumeration;
 import su.onno.annotations.RefTargets;
 import su.onno.annotations.Resource;
 import su.onno.metadata.AccumulationRegisterDescriptor;
@@ -34,15 +35,44 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Issue #207: the typed register reads ({@code getBalance}/{@code getTurnover}) blew up on a
+ * Register dimensions whose Java values need conversion to/from their storage representation.
+ *
+ * <p>Issue #207: the typed register reads ({@code getBalance}/{@code getTurnover}) blew up on a
  * {@code Ref<T>} dimension — the row mapper asked JDBC to convert the stored UUID column straight
  * to {@code Ref} ("converting to class su.onno.types.Ref"). The mapper must rebuild the Ref from
- * the UUID against the field's declared target type, the way the write path unwraps it.
+ * the UUID against the field's declared target type, the way the write path unwraps it.</p>
+ *
+ * <p>Issue #288: enum dimensions scanned and generated as UUID columns but the posting binder sent
+ * the Java enum object. Movement/totals writes, filters, and typed reads must use the enum's stable
+ * UUID representation.</p>
  */
 class RegisterRefDimensionTest {
 
+    @Enumeration(name = "TestRegisterChannels")
+    public enum Channel {
+        RETAIL,
+        WHOLESALE
+    }
+
     @Document(name = "TestRegisterSources")
     public static class RegisterSource extends DocumentObject {
+    }
+
+    @AccumulationRegister(name = "TestChannelBalances", type = AccumulationType.BALANCE)
+    public static class ChannelBalance extends AccumulationRecord {
+        @Dimension
+        private Channel channel;
+
+        @Resource
+        private BigDecimal amount;
+
+        public Channel getChannel() {
+            return channel;
+        }
+
+        public BigDecimal getAmount() {
+            return amount;
+        }
     }
 
     @AccumulationRegister(name = "TestPolyBalances", type = AccumulationType.BALANCE)
@@ -191,6 +221,49 @@ class RegisterRefDimensionTest {
                 .satisfies(row -> {
                     assertThat(row.getOwner()).isEqualTo(documentOwner);
                     assertThat(row.getAmount()).isEqualByComparingTo("25");
+                });
+    }
+
+    @Test
+    void postingBindsEnumDimensionAsItsStableUuid() {
+        MetadataRegistry registry = new MetadataRegistry();
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        AccumulationRegisterDescriptor descriptor = scanner.scanRegister(ChannelBalance.class);
+        registry.registerEnumeration(scanner.scanEnumeration(Channel.class));
+        registry.registerAccumulation(descriptor);
+        new SchemaGenerator(registry).execute(jdbi);
+
+        RegisterPersistence<ChannelBalance> persistence = new RegisterPersistence<>(jdbi, descriptor);
+        ChannelBalance movement = new ChannelBalance();
+        movement.channel = Channel.RETAIL;
+        movement.amount = new BigDecimal("12.50");
+        movement.setMovementType(MovementType.RECEIPT);
+
+        UUID documentRef = UUID.randomUUID();
+        LocalDateTime period = LocalDateTime.of(2026, 1, 5, 8, 0);
+        jdbi.useHandle(handle -> {
+            persistence.insertRecords(handle, List.of(movement), documentRef, period);
+            persistence.updateTotals(handle, List.of(movement));
+        });
+
+        UUID expected = EnumerationPersistence.resolveId(Channel.class, Channel.RETAIL);
+        jdbi.useHandle(handle -> {
+            assertThat(handle.createQuery("SELECT channel FROM " + descriptor.tableName())
+                    .mapTo(UUID.class)
+                    .one()).isEqualTo(expected);
+            assertThat(handle.createQuery("SELECT channel FROM " + descriptor.totalsTableName())
+                    .mapTo(UUID.class)
+                    .one()).isEqualTo(expected);
+        });
+
+        RegisterRepositoryImpl<ChannelBalance> repository = new RegisterRepositoryImpl<>(
+                persistence, ChannelBalance.class);
+        assertThat(repository.getBalance(
+                filter -> filter.where(ChannelBalance::getChannel, Channel.RETAIL)))
+                .singleElement()
+                .satisfies(balance -> {
+                    assertThat(balance.getChannel()).isEqualTo(Channel.RETAIL);
+                    assertThat(balance.getAmount()).isEqualByComparingTo("12.50");
                 });
     }
 }

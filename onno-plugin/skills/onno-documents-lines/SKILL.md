@@ -18,7 +18,8 @@ payment, timesheet, work order, adjustment, or check-in.
 1. Identify the event, actor, date/number, status, and lifecycle.
 2. Put scalar header fields on the document.
 3. Put repeated owned rows in `@TabularSection List<Row>`.
-4. Extend `DocumentObject`; row classes extend `TabularSectionRow`.
+4. Extend `DocumentObject`; each section gets its own concrete `TabularSectionRow` subclass. Share
+   common row fields/behavior through a base class, never by reusing one concrete class.
 5. Seed defaults with `OnFillingHandler`.
 6. Compute totals in `BeforeWriteHandler`.
 7. Validate with `Validated`.

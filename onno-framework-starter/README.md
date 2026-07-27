@@ -59,12 +59,24 @@ tables are created with `CREATE TABLE IF NOT EXISTS` and migrations are **additi
 added; nothing is dropped or altered destructively). Enumeration rows are seeded here too. No
 Flyway/Liquibase scripts are needed for framework-managed tables.
 
+### One concrete row class per tabular section
+
+Each `@TabularSection` must declare a distinct concrete `TabularSectionRow` class. Spring Data JDBC
+maps the row class itself to one generated child table, so reusing it for another document or
+section would make one table mapping overwrite the other. The starter rejects that model at startup
+and reports both owners. Use separate concrete subclasses for each section; they may share fields
+and behavior through a common base row class.
+
 ### Enumerations persist as UUIDs
 
 Enums annotated as framework enumerations are first-class persisted values. They are stored as
 **UUID columns** through Spring Data JDBC converters registered in `userConverters()`
 (`EnumUuidConverters`), and their rows are seeded by the schema generator. If you find a seeder
 comment claiming enum-as-UUID is "not yet wired", that comment is stale — it works.
+
+The same representation applies to enum-valued accumulation-register dimensions. The JDBI posting
+path binds the stable UUID into movement and totals tables, converts enum filter values to that UUID,
+and restores the enum constant on typed reads.
 
 The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
 text**, not just a native `uuid` column. This makes an attribute that changed from `String` to an
