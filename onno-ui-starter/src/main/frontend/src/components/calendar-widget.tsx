@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { format, endOfMonth, startOfMonth, addMonths, subMonths } from "date-fns";
 import { ru } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { toSnakeCase, cn } from "@/lib/utils";
 import { formatAmount, resolveCurrency, toNumber } from "@/lib/format";

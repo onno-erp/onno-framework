@@ -1,14 +1,10 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { toast } from "sonner";
-import { AppToaster } from "@/components/ui/toaster";
+import { toast } from "@/components/ui/toast";
+import { Toaster } from "@/components/ui/toast";
 import { presentActionFeedback } from "@/lib/action-feedback";
 
-vi.mock("@/providers/theme-provider", () => ({
-  useTheme: () => ({ theme: "dark" }),
-}));
-
-describe("AppToaster Sonner integration", () => {
+describe("Base UI toast integration", () => {
   afterEach(async () => {
     await act(async () => {
       toast.dismiss();
@@ -16,7 +12,7 @@ describe("AppToaster Sonner integration", () => {
   });
 
   it("renders messages published through the shared toast API", async () => {
-    render(<AppToaster />);
+    render(<Toaster />);
 
     await act(async () => {
       toast.success("Saved cleanly");
@@ -26,7 +22,7 @@ describe("AppToaster Sonner integration", () => {
   });
 
   it("preserves typed title, message, details, and dismiss action hierarchy", async () => {
-    render(<AppToaster />);
+    render(<Toaster />);
 
     await act(async () => {
       presentActionFeedback({
@@ -43,6 +39,7 @@ describe("AppToaster Sonner integration", () => {
     expect(screen.getByText("Two lines need attention.")).toBeInTheDocument();
     expect(screen.getByText("Review quantities")).toBeInTheDocument();
     expect(screen.getByText("Create replenishment")).toBeInTheDocument();
+    fireEvent.mouseEnter(document.querySelector(".onno-toaster")!);
     expect(screen.getByRole("button", { name: "Dismiss" })).toHaveClass("onno-toast__cancel");
   });
 });

@@ -1,6 +1,9 @@
 <svg width="132" height="28" viewBox="0 0 132 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="2" y="4" width="20" height="20" rx="3" fill="#4F46E5"/>
-  <path d="M7 8.5h7.5a2.5 2.5 0 0 1 2.5 2.5v8.5H9.5A2.5 2.5 0 0 1 7 17V8.5Z" fill="#fff" opacity="0.95"/>
-  <path d="M12 8.5v11" stroke="#4F46E5" stroke-width="1.4"/>
-  <text x="30" y="19" font-family="-apple-system, Segoe UI, Roboto, sans-serif" font-size="16" font-weight="700" fill="#1F2937">Onno Books</text>
+  <title>Onno Books</title>
+  <path
+    transform="translate(2 4) scale(0.194175)"
+    d="M47.049 0.150391C66.0112 -1.31238 85.0313 7.93772 95.1754 25.5079C105.319 43.0779 103.82 64.1741 93.0719 79.8645L47.049 0.150391ZM53.8547 101.938C35.2644 102.962 16.7865 93.7344 6.84082 76.5079C-3.10498 59.2812 -1.85842 38.6642 8.32391 23.0766L53.8547 101.938Z"
+    fill="#171719"
+  />
+  <text x="30" y="19.5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="15" font-weight="600" fill="#1F2937">Onno Books</text>
 </svg>

@@ -260,64 +260,164 @@
   }
 
   /*
-   * Canonical Sonner treatment. Keep the surface monochrome and let only the icon communicate
-   * severity. Sonner exclusively owns transforms, stacking, insertion, and removal motion.
+   * Canonical Base UI toast treatment. Base UI owns the queue, focus, swipe state, stack
+   * measurements, and lifecycle attributes; these rules only compose its state into onno motion.
    */
-  .onno-toaster[data-theme="light"],
-  .onno-toaster[data-theme="dark"] {
-    --normal-text: hsl(var(--popover-foreground));
+  .onno-toaster {
+    --onno-toast-text: hsl(var(--popover-foreground));
     --onno-toast-muted: hsl(var(--muted-foreground));
     --onno-toast-accent: hsl(var(--chart-1));
     --onno-toast-accent-bg: hsl(var(--chart-1) / 0.12);
-  }
-
-  .onno-toaster[data-theme="light"] {
-    --normal-bg: hsl(var(--popover));
     --onno-toast-shadow:
       0 10px 32px hsl(0 0% 0% / 0.09),
       0 2px 8px hsl(0 0% 0% / 0.05);
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 100;
+    width: min(440px, calc(100vw - 40px));
+    height: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    outline: none;
   }
 
-  .onno-toaster[data-theme="dark"] {
-    --normal-bg: hsl(var(--secondary));
+  .dark .onno-toaster {
     --onno-toast-shadow:
       0 14px 38px hsl(0 0% 0% / 0.32),
       0 2px 10px hsl(0 0% 0% / 0.2);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] {
-    width: var(--width);
-    min-height: 88px;
-    padding: 1rem 1.125rem;
-    gap: 0.875rem;
-    align-items: flex-start;
+  .onno-toast {
+    --onno-toast-gap: 12px;
+    --onno-toast-peek: 12px;
+    --onno-toast-scale: calc(max(0, 1 - (var(--toast-index) * 0.04)));
+    --onno-toast-shrink: calc(1 - var(--onno-toast-scale));
+    --onno-toast-height: var(--toast-frontmost-height, var(--toast-height));
+    --onno-toast-offset-y: calc(
+      var(--toast-offset-y) * -1 +
+        (var(--toast-index) * var(--onno-toast-gap) * -1) +
+        var(--toast-swipe-movement-y)
+    );
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: calc(1000 - var(--toast-index));
+    box-sizing: border-box;
+    width: 100%;
+    height: var(--onno-toast-height);
     border: 0;
     border-radius: var(--radius-card);
     background: hsl(var(--popover));
-    color: var(--normal-text);
+    color: var(--onno-toast-text);
     box-shadow: var(--onno-toast-shadow);
     font-family: inherit;
     font-size: 14px;
     letter-spacing: -0.1px;
+    transform:
+      translateX(var(--toast-swipe-movement-x))
+      translateY(
+        calc(
+          var(--toast-swipe-movement-y) -
+            (var(--toast-index) * var(--onno-toast-peek)) -
+            (var(--onno-toast-shrink) * var(--onno-toast-height))
+        )
+      )
+      scale(var(--onno-toast-scale));
+    transform-origin: bottom right;
+    transition:
+      transform 500ms var(--ease-smooth-out),
+      opacity 500ms ease,
+      height 150ms ease;
+    will-change: transform, opacity, height;
   }
 
-  .onno-toaster[data-theme="dark"] [data-sonner-toast].onno-toast[data-styled="true"] {
+  .onno-toast::after {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    height: calc(var(--onno-toast-gap) + 1px);
+    content: "";
+  }
+
+  .dark .onno-toast {
     background: hsl(var(--secondary));
   }
 
-  .onno-toaster .onno-toast__content {
-    gap: 4px;
-    min-width: 0;
+  .onno-toast[data-expanded] {
+    height: var(--toast-height);
+    transform:
+      translateX(var(--toast-swipe-movement-x))
+      translateY(var(--onno-toast-offset-y));
   }
 
-  .onno-toaster .onno-toast__title {
-    color: var(--normal-text);
+  .onno-toast[data-starting-style],
+  .onno-toast[data-ending-style]:not([data-limited]):not([data-swipe-direction]) {
+    opacity: 0;
+    transform: translateX(calc(100% + 24px)) translateY(var(--onno-toast-offset-y));
+  }
+
+  .onno-toast[data-ending-style][data-swipe-direction="down"] {
+    transform:
+      translateX(var(--toast-swipe-movement-x))
+      translateY(calc(var(--toast-swipe-movement-y) + 120%))
+      scale(0.96);
+  }
+
+  .onno-toast[data-ending-style][data-swipe-direction="up"] {
+    transform: translateY(calc(var(--toast-swipe-movement-y) - 150%));
+  }
+
+  .onno-toast[data-ending-style][data-swipe-direction="left"] {
+    transform:
+      translateX(calc(var(--toast-swipe-movement-x) - 150%))
+      translateY(var(--onno-toast-offset-y));
+  }
+
+  .onno-toast[data-ending-style][data-swipe-direction="right"] {
+    transform:
+      translateX(calc(var(--toast-swipe-movement-x) + 150%))
+      translateY(var(--onno-toast-offset-y));
+  }
+
+  .onno-toast[data-limited] {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .onno-toast__content {
+    display: flex;
+    box-sizing: border-box;
+    height: 100%;
+    min-height: 88px;
+    align-items: flex-start;
+    gap: 0.875rem;
+    overflow: hidden;
+    padding: 1rem 1.125rem;
+    transition: opacity 200ms ease;
+  }
+
+  .onno-toast__content[data-behind]:not([data-expanded]) {
+    opacity: 0;
+  }
+
+  .onno-toast__copy {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 4px;
+  }
+
+  .onno-toast__title {
+    color: var(--onno-toast-text);
     font-size: 14px;
     font-weight: 500;
     line-height: 1.35;
   }
 
-  .onno-toaster .onno-toast__description {
+  .onno-toast__description {
     color: var(--onno-toast-muted);
     font-size: 12px;
     line-height: 1.5;
@@ -358,14 +458,14 @@
     background: var(--onno-toast-accent);
   }
 
-  .onno-toaster .onno-toast__icon {
-    display: inline-flex !important;
+  .onno-toast__icon {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: 0 0 38px;
     width: 38px;
     height: 38px;
-    margin: 0 !important;
+    margin: 0;
     padding: 0;
     border-radius: var(--radius-field);
     background: var(--onno-toast-accent-bg);
@@ -373,11 +473,11 @@
     line-height: 0;
   }
 
-  .onno-toaster .onno-toast__icon > * {
-    margin: 0 !important;
+  .onno-toast__icon > * {
+    margin: 0;
   }
 
-  .onno-toaster .onno-toast__icon svg {
+  .onno-toast__icon svg {
     display: block;
     width: 20px;
     height: 20px;
@@ -385,27 +485,28 @@
     stroke-width: 1.8;
   }
 
-  .onno-toaster [data-sonner-toast][data-type="success"] {
+  .onno-toast[data-type="success"] {
     --onno-toast-accent: hsl(var(--success));
     --onno-toast-accent-bg: hsl(var(--success) / 0.12);
   }
 
-  .onno-toaster [data-sonner-toast][data-type="info"] {
+  .onno-toast[data-type="info"],
+  .onno-toast[data-type="default"] {
     --onno-toast-accent: hsl(var(--chart-1));
     --onno-toast-accent-bg: hsl(var(--chart-1) / 0.12);
   }
 
-  .onno-toaster [data-sonner-toast][data-type="warning"] {
+  .onno-toast[data-type="warning"] {
     --onno-toast-accent: hsl(var(--warning));
     --onno-toast-accent-bg: hsl(var(--warning) / 0.12);
   }
 
-  .onno-toaster [data-sonner-toast][data-type="error"] {
+  .onno-toast[data-type="error"] {
     --onno-toast-accent: hsl(var(--destructive));
     --onno-toast-accent-bg: hsl(var(--destructive) / 0.12);
   }
 
-  .onno-toaster [data-sonner-toast][data-type="loading"] {
+  .onno-toast[data-type="loading"] {
     --onno-toast-accent: hsl(var(--muted-foreground));
     --onno-toast-accent-bg: hsl(var(--muted));
   }
@@ -420,8 +521,14 @@
     }
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action,
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel {
+  .onno-toast__actions {
+    display: flex;
+    align-self: center;
+    gap: 6px;
+  }
+
+  .onno-toast__action,
+  .onno-toast__cancel {
     align-self: center;
     height: 34px;
     padding: 0 14px;
@@ -440,18 +547,18 @@
       transform 150ms var(--ease-smooth-out);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action {
+  .onno-toast__action {
     background: hsl(var(--foreground));
     color: hsl(var(--background));
     box-shadow: 0 1px 2px hsl(0 0% 0% / 0.12);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel {
+  .onno-toast__cancel {
     background: hsl(var(--foreground) / 0.06);
-    color: var(--normal-text);
+    color: var(--onno-toast-text);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:hover {
+  .onno-toast__action:hover {
     background: color-mix(in srgb, hsl(var(--foreground)) 88%, transparent);
     box-shadow:
       0 2px 6px hsl(0 0% 0% / 0.16),
@@ -459,25 +566,48 @@
     transform: translateY(-1px);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:hover {
+  .onno-toast__cancel:hover {
     background: hsl(var(--foreground) / 0.12);
-    color: var(--normal-text);
+    color: var(--onno-toast-text);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:active,
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:active {
+  .onno-toast__action:active,
+  .onno-toast__cancel:active {
     transform: scale(0.97);
   }
 
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__action:focus-visible,
-  .onno-toaster [data-sonner-toast].onno-toast[data-styled="true"] .onno-toast__cancel:focus-visible {
+  .onno-toast__action:focus-visible,
+  .onno-toast__cancel:focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
 
+  .onno-drawer-overlay {
+    transition: opacity 300ms ease;
+  }
+
+  .onno-drawer-overlay[data-starting-style],
+  .onno-drawer-overlay[data-ending-style] {
+    opacity: 0;
+  }
+
+  .onno-drawer-popup {
+    transform: translateX(var(--drawer-swipe-movement-x));
+    transition: transform 300ms var(--ease-smooth-out);
+    will-change: transform;
+  }
+
+  .onno-drawer-popup[data-starting-style],
+  .onno-drawer-popup[data-ending-style] {
+    transform: translateX(calc(100% + 0.75rem + var(--drawer-swipe-movement-x)));
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .onno-toast,
     .onno-toast__action,
-    .onno-toast__cancel {
+    .onno-toast__cancel,
+    .onno-drawer-overlay,
+    .onno-drawer-popup {
       transition: none !important;
     }
 
@@ -487,8 +617,10 @@
   }
 
   @media (max-width: 600px) {
-    .onno-toaster[data-sonner-toaster] {
-      --width: calc(100vw - 24px) !important;
+    .onno-toaster {
+      right: 12px;
+      bottom: 12px;
+      width: calc(100vw - 24px);
     }
   }
 
@@ -551,6 +683,7 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    position: relative;
     font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     font-size: 14px;
     font-weight: 400;

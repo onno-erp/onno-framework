@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { ImagePlus, Loader2, Trash2, Upload, X } from "lucide-react";
 import { uploadMedia } from "@/lib/api";
 import { cn } from "@/lib/utils";

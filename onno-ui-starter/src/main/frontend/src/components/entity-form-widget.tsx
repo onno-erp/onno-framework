@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
 import { api, ApiError, type FormFeedback } from "@/lib/api";

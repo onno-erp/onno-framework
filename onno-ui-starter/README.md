@@ -1122,7 +1122,8 @@ resolved **live**, so renames and deletes stay correct on their own.
 
 ### Notifications — `/api/notifications`
 
-A **per-user notification center**: a top-right bell with an unread badge that opens a timeline drawer
+A **per-user notification center**: a top-right bell with an unread badge that opens the canonical
+shadcn-style Base UI timeline drawer
 of updates concerning the signed-in user. Like comments and presence it is framework infrastructure —
 rows live in the framework-owned `onno_notifications` table, never in a modelled entity — and it rides
 the same live plumbing: a new notification pushes over a `notification` SSE event routed to the

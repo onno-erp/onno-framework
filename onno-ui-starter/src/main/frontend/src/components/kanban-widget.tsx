@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { format } from "date-fns";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { useNavigate } from "react-router-dom";
 import {
   DragDropContext,

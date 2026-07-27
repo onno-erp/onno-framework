@@ -79,7 +79,8 @@ of the row keeps the full context menu. Flat table view only.
 | `Segmented` | `components/ui/segmented.tsx` | Every mutually-exclusive view/mode switcher. Documented exceptions: tool palettes, server-emitted DivKit form tab strips. |
 | `AnimatedNumber` | `components/ui/animated-number.tsx` | Formatted KPI/count/stat values that should replay the shared character pop-in when replaced. |
 | `NotificationBadgeMotion` | `components/ui/notification-badge-motion.tsx` | Unread dots/count pills that slide and pop when the unread count increases. |
-| `AppToaster` | `components/ui/toaster.tsx` | The single Sonner host: large themed toast surfaces, typed title/message/detail hierarchy, semantic icon wells, actions, and animated stack. |
+| `Toaster` / `toast` | `components/ui/toast.tsx` | The single shadcn-style Base UI toast host and global manager: large themed surfaces, typed title/message/detail hierarchy, semantic icon wells, actions, swipe dismissal, and an animated stack. |
+| `Drawer` | `components/ui/drawer.tsx` | The canonical shadcn-style Base UI drawer composition (portal, backdrop, viewport, popup, content); use it for notification and edge panels instead of hand-rolled fixed overlays. |
 | `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
@@ -126,11 +127,12 @@ mean “any interactive container.”
   primitives must retain their reduced-motion guards.
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
-- Toast calls use Sonner's `toast` API and render through `AppToaster`; do not mount another
-  `Toaster`, and do not override toast transforms or removal states—Sonner owns stack geometry and
-  motion. Keep the surface monochrome and borderless (the dark theme uses the raised `secondary`
-  surface); semantic status colour belongs to the icon well and detail markers. Actual actions use
-  the filled button; acknowledgement/dismiss controls use the quiet button. Prefer the server-side
+- Toast calls use the local `toast` API and render through the one Base UI `Toaster`; do not mount
+  another host. Base UI owns the manager, focus, swipe state, measurements, and lifecycle
+  attributes; `index.css` composes those attributes into the onno stack motion. Keep the surface
+  monochrome and borderless (the dark theme uses the raised `secondary` surface); semantic status
+  colour belongs to the icon well and detail markers. Actual actions use the filled button;
+  acknowledgement/dismiss controls use the quiet button. Prefer the server-side
   `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a
   title, explanation, or details.
 - The shell logo's empty `onno://` action is a semantic home intent. Resolve it through

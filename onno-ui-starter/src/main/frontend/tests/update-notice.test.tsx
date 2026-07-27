@@ -4,7 +4,7 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 // Hoisted so the vi.mock factories below (which run before module init) can close over them.
 const { toast, getConfig } = vi.hoisted(() => ({ toast: vi.fn(), getConfig: vi.fn() }));
 
-vi.mock("sonner", () => ({ toast }));
+vi.mock("@/components/ui/toast", () => ({ toast }));
 vi.mock("@/lib/api", () => ({ api: { getConfig } }));
 
 import { UpdateNotice } from "@/components/update-notice";
