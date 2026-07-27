@@ -90,9 +90,9 @@ public class EntityConfigBuilder<E> {
      * against the join catalog.</p>
      */
     @SuppressWarnings("unchecked")
-    public <J> RelatedListBuilder<E, J> relatedList(String name, Class<J> joinCatalog) {
+    public <J> RelatedListBuilder<E, J> relatedList(String name, Class<J> junction) {
         return (RelatedListBuilder<E, J>) relatedLists.computeIfAbsent(
-                name, n -> new RelatedListBuilder<>(this, n, joinCatalog));
+                name, n -> new RelatedListBuilder<>(this, n, junction));
     }
 
     /**

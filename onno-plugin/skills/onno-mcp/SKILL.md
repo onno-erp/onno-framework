@@ -31,5 +31,8 @@ startup.
   `update_document`, `delete_document`
 - Posting: `posting_preview`, `post_document`, `unpost_document`
 
+The two list tools return one keyset window as `{rows,nextCursor,hasMore}`. Replay the opaque
+`nextCursor`; do not assume an unbounded list or offset.
+
 Read [references/examples.md](references/examples.md) for dependency/config/client examples and
 agent workflow.

@@ -4,8 +4,8 @@ import { toFeatureCollection } from "@/lib/geo";
 import { MapView } from "@/components/map-view";
 
 /**
- * The read-only map for a detail field hinted {@code .widget("map")} or {@code .widget("geojson")}:
- * renders the stored value — a {@code "lat,lng"} point or any GeoJSON (points/paths/areas) — on the
+ * The read-only map for a detail field hinted {@code .widget("geojson")}: renders the stored
+ * GeoJSON (points/paths/areas) on the
  * theme-aware MapLibre basemap. Falls back to the raw text when the value isn't valid geometry, so a
  * stray string isn't swallowed into a blank map.
  */

@@ -215,7 +215,7 @@ class WriteLifecycleCommandServiceTest {
         assertThat(report.get("valid")).isEqualTo(false);
         assertThat((List<String>) report.get("formErrors"))
                 .anyMatch(m -> m.contains("needs a status"));
-        assertThat(documentQuery.list(orderDesc, null, null, null)).isEmpty();
+        assertThat(documentQuery.count(orderDesc)).isZero();
     }
 
     @Test

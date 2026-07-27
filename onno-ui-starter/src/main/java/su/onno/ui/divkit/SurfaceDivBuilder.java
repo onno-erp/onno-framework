@@ -117,10 +117,7 @@ public final class SurfaceDivBuilder {
         descriptor.put("canWrite", canWrite);
         descriptor.put("actions", actions == null ? List.of() : actions);
         descriptor.put("inputs", inputs == null ? List.of() : inputs);
-        // How the grid feeds rows: "infinite" (cursor/keyset scroll — the default) or "paged"
-        // (numbered offset pages), plus the window/page size. Both resolved from the view over the
-        // global onno.ui.list.* defaults (see UiViewResolver / ListSpec.feed).
-        descriptor.put("feedMode", view.feedMode());
+        // Keyset window size, resolved from the view over the global onno.ui.list.page-size.
         descriptor.put("pageSize", view.pageSize());
         // Grouping: the columns the "Group by ▾" picker offers, and the per-group subtotals to show.
         // A date column carries date:true so the picker offers a day/month/year granularity. Fetched
@@ -154,7 +151,6 @@ public final class SurfaceDivBuilder {
         if (view.mapView() != null) {
             ResolvedListView.MapView mv = view.mapView();
             Map<String, Object> map = new LinkedHashMap<>();
-            map.put("geoField", mv.geoField());
             map.put("latField", mv.latField());
             map.put("lngField", mv.lngField());
             map.put("geoJsonField", mv.geoJsonField());
@@ -274,7 +270,7 @@ public final class SurfaceDivBuilder {
 
     /**
      * One detail-header action. {@code tone} is {@code "primary"} (solid success —
-     * Post), {@code "accent"} (solid brand — the surface's main action, e.g. Edit),
+     * Post), {@code "accent"} (solid brand — the surface's main action),
      * {@code "danger"} (Delete) or {@code "normal"} (neutral); {@code placement} is
      * {@code "primary"} (inline button) or {@code "menu"} (overflow ⋯). {@code icon}
      * is a kebab-case lucide name. A null {@code url} drops the action.
@@ -287,27 +283,7 @@ public final class SurfaceDivBuilder {
      *  {@code GET /api/actions/{kind}/{name}/{key}/form} before rendering ({@code formDefaults}). */
     public record HeaderAction(String icon, String label, String tone, String url, String placement,
                                List<Map<String, Object>> form, Map<String, Object> formDialog,
-                               boolean disabled, boolean dynamicForm) {
-        public HeaderAction(String icon, String label, String tone, String url, String placement) {
-            this(icon, label, tone, url, placement, List.of(), Map.of(), false, false);
-        }
-
-        public HeaderAction(String icon, String label, String tone, String url, String placement,
-                            List<Map<String, Object>> form) {
-            this(icon, label, tone, url, placement, form, Map.of(), false, false);
-        }
-
-        public HeaderAction(String icon, String label, String tone, String url, String placement,
-                            List<Map<String, Object>> form, boolean disabled) {
-            this(icon, label, tone, url, placement, form, Map.of(), disabled, false);
-        }
-
-        /** Backward-compatible full constructor from before configurable dialog metadata. */
-        public HeaderAction(String icon, String label, String tone, String url, String placement,
-                            List<Map<String, Object>> form, boolean disabled, boolean dynamicForm) {
-            this(icon, label, tone, url, placement, form, Map.of(), disabled, dynamicForm);
-        }
-    }
+                               boolean disabled, boolean dynamicForm) {}
 
     /** Back-compat overload for surfaces with no related-list panels (e.g. unit tests). */
     public static Map<String, Object> documentDetail(Map<String, Object> meta, Map<String, Object> row,
@@ -323,7 +299,7 @@ public final class SurfaceDivBuilder {
     }
 
     /**
-     * A document's detail surface: header (+ posting/edit actions), a card of its visible system
+     * A document's detail surface: header (+ posting/record actions), a card of its visible system
      * columns and attributes, then a table per tabular section and finally a read-only table per
      * related-list panel. The related-list panels are the document-side parity with the catalog
      * detail (see {@link #catalogDetail}) — a booking can surface its guests (the reverse side of a
@@ -575,8 +551,7 @@ public final class SurfaceDivBuilder {
         d.put("canWrite", false);
         d.put("actions", List.of());
         d.put("inputs", List.of());
-        // A register's movement log / balance is append-heavy and depth-scrolled — cursor-stream it.
-        d.put("feedMode", "infinite");
+        // A register's movement log / balance is append-heavy and depth-scrolled.
         d.put("pageSize", 50);
         // Where the island fetches its windows from (a register has no /api/list/{kind}/{name} route).
         d.put("feed", feed);
@@ -917,9 +892,8 @@ public final class SurfaceDivBuilder {
 
     /**
      * A detail field row for an attribute: an inline image when the attribute is an image
-     * widget ({@code .widget("image"|"avatar")}) and holds a value, otherwise the usual
-     * label/value text row. The image source is the raw stored string — a {@code data:} URL
-     * from the picker or a plain {@code http(s)} URL.
+     * widget ({@code .widget("image"|"avatar")}) and holds a stored-media URL, otherwise the usual
+     * label/value text row.
      */
     private static Map<String, Object> fieldRowFor(Map<String, Object> a, Map<String, Object> row, Palette p) {
         String label = str(a.get("displayName"));
@@ -929,11 +903,13 @@ public final class SurfaceDivBuilder {
             if (!urls.isEmpty()) {
                 return Components.imageGalleryRow(label, urls, hint, p);
             }
+            return Components.fieldRow(label, "", hint, p);
         } else if (isImageWidget(a)) {
             String url = str(row.get(str(a.get("columnName"))));
-            if (!url.isBlank()) {
+            if (isStoredMediaUrl(url)) {
                 return Components.imageFieldRow(label, url, isAvatarWidget(a), hint, p);
             }
+            return Components.fieldRow(label, "", hint, p);
         } else if (isFileWidget(a)) {
             String url = str(row.get(str(a.get("columnName"))));
             if (!url.isBlank()) {
@@ -942,7 +918,7 @@ public final class SurfaceDivBuilder {
         } else if (isMapWidget(a)) {
             String value = str(row.get(str(a.get("columnName"))));
             if (!value.isBlank()) {
-                return Components.geoFieldRow(label, value, hint, p);
+                return Components.geoJsonFieldRow(label, value, hint, p);
             }
         }
         String refUrl = refUrlFor(a, row);
@@ -999,7 +975,7 @@ public final class SurfaceDivBuilder {
 
     private static boolean isImageWidget(Map<String, Object> a) {
         String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("image") || w.equalsIgnoreCase("photo") || isAvatarWidget(a);
+        return w.equalsIgnoreCase("image") || isAvatarWidget(a);
     }
 
     private static boolean isAvatarWidget(Map<String, Object> a) {
@@ -1011,29 +987,27 @@ public final class SurfaceDivBuilder {
         return "file".equalsIgnoreCase(str(a.get("widget")));
     }
 
-    /**
-     * A map widget ({@code .widget("map"|"geo"|"geolocation")} — a {@code "lat,lng"} point — or
-     * {@code .widget("geojson")} — GeoJSON points/paths/areas). Either renders read-only as a map.
-     */
+    /** A canonical {@code .widget("geojson")} value rendered read-only as a map. */
     private static boolean isMapWidget(Map<String, Object> a) {
-        String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("map") || w.equalsIgnoreCase("geo")
-                || w.equalsIgnoreCase("geolocation") || w.equalsIgnoreCase("geojson");
+        return "geojson".equalsIgnoreCase(str(a.get("widget")));
     }
 
     /** A multi-image widget ({@code .widget("images"|"gallery")}); value is newline-joined URLs. */
     private static boolean isGalleryWidget(Map<String, Object> a) {
         String w = str(a.get("widget"));
-        return w.equalsIgnoreCase("images") || w.equalsIgnoreCase("gallery") || w.equalsIgnoreCase("photos");
+        return w.equalsIgnoreCase("images") || w.equalsIgnoreCase("gallery");
     }
 
-    /** Split a gallery value into its image URLs. base64 data URLs hold no newline, so the
-     *  newline join is unambiguous (see GalleryPicker on the client). */
+    /** Split a gallery's newline-joined stored-media URLs. */
     private static List<String> splitGallery(String value) {
         if (value == null || value.isBlank()) {
             return List.of();
         }
-        return value.lines().map(String::trim).filter(s -> !s.isBlank()).toList();
+        return value.lines().map(String::trim).filter(SurfaceDivBuilder::isStoredMediaUrl).toList();
+    }
+
+    private static boolean isStoredMediaUrl(String value) {
+        return value != null && !value.isBlank() && !value.regionMatches(true, 0, "data:", 0, 5);
     }
 
     private static String str(Object value) {
@@ -1047,16 +1021,7 @@ public final class SurfaceDivBuilder {
     private static String maskSecret(Object value) {
         if (value == null) return "";
         if (su.onno.security.SecretRedactor.SET.equals(value)) return "•••• set";
-        // An image (or gallery) widget's value is a (potentially huge) data URL — or several,
-        // newline-joined; never dump it as text into a list cell or a fallback row. Show a
-        // compact placeholder. Detail surfaces render the actual image(s) (see fieldRowFor)
-        // before reaching here.
-        String s = value.toString();
-        if (s.startsWith("data:")) {
-            long n = s.lines().count();
-            return n > 1 ? "🖼 " + n + " images" : "🖼 Image";
-        }
-        return s;
+        return value.toString();
     }
 
     /**

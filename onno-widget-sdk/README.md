@@ -34,7 +34,8 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
 - `api` — a read-only REST client (`listCatalog`, `getCatalogItem`, `listDocuments`, `getDocument`,
-  `searchCatalog`, `searchDocument`, `getBalance`, `getTurnover`, `getMovements`). Same-origin,
+  `getBalance`, `getTurnover`, `getMovements`). List calls return one bounded keyset window.
+  Same-origin,
   session + CSRF handled by the host. No writes.
 - **UI primitives** — the host's real design-system controls, so a widget matches the product instead
   of shipping hand-rolled lookalikes. Import them **by name** (`import { DatePicker, Select, Button }

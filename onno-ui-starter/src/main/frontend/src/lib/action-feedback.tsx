@@ -55,12 +55,10 @@ export function presentActionFeedback(feedback: ActionFeedback) {
 /** Apply the common ActionResult contract at every action entry point. */
 export function applyActionResult(
   result: ActionResult | undefined,
-  callbacks: { navigate?: (url: string) => void; refresh?: () => void } = {}
+  callbacks: { refresh?: () => void } = {}
 ) {
   if (!result) return;
   if (result.feedback) presentActionFeedback(result.feedback);
-  else if (result.message) toast.success(result.message);
-  if (result.navigate) callbacks.navigate?.(result.navigate);
   if (result.refresh) callbacks.refresh?.();
 }
 

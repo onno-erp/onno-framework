@@ -86,7 +86,8 @@ class DocumentRelatedListMetadataTest {
         Map<String, Object> rl = related.get(0);
         assertThat(rl.get("name")).isEqualTo("clients");
         assertThat(rl.get("label")).isEqualTo("Clients");
-        assertThat(rl.get("joinCatalog")).isEqualTo("RlBookingClient");
+        assertThat(rl.get("sourceName")).isEqualTo("RlBookingClient");
+        assertThat(rl).doesNotContainKey("joinCatalog");
         // A join-catalog junction is editable (the form can add/remove join rows).
         assertThat(rl.get("sourceKind")).isEqualTo("catalog");
         assertThat(rl.get("readOnly")).isEqualTo(false);
@@ -113,7 +114,7 @@ class DocumentRelatedListMetadataTest {
         // write yet) — the client renders rows without add/remove.
         assertThat(rl.get("sourceKind")).isEqualTo("register");
         assertThat(rl.get("readOnly")).isEqualTo(true);
-        assertThat(rl.get("joinCatalog")).isEqualTo("RlBookingClientReg");
+        assertThat(rl.get("sourceName")).isEqualTo("RlBookingClientReg");
         assertThat(rl.get("viaField")).isEqualTo("booking");
         assertThat(rl.get("displayField")).isEqualTo("client");
         assertThat(rl.get("target")).isEqualTo("RlClients");

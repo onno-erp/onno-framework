@@ -7,8 +7,6 @@ import su.onno.query.Cursor;
 import su.onno.query.Keyset;
 
 import org.jdbi.v3.core.Jdbi;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -25,8 +23,6 @@ import java.util.UUID;
  * access — access control stays with the callers.
  */
 public class DocumentQueryService {
-
-    private static final Logger log = LoggerFactory.getLogger(DocumentQueryService.class);
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
@@ -53,45 +49,6 @@ public class DocumentQueryService {
                 .filter(d -> d.javaClass().equals(clazz))
                 .findFirst()
                 .orElse(null);
-    }
-
-    public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to) {
-        return list(desc, from, to, null);
-    }
-
-    /**
-     * The full document list, optionally narrowed by an authored {@link WidgetFilter} predicate (the
-     * same {@code config("filter", …)} a dashboard card uses). The un-paged endpoint that chart/list
-     * widgets fetch from goes through here, so passing the predicate makes those widgets honor the
-     * filter consistently with the server-aggregated count tiles. A null/blank/invalid predicate is
-     * simply no filter.
-     */
-    public List<Map<String, Object>> list(DocumentDescriptor desc, String from, String to, String filter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames());
-        StringBuilder sql = new StringBuilder(
-                "SELECT * FROM " + desc.tableName() + " WHERE _deletion_mark = false");
-        if (from != null) sql.append(" AND _date >= CAST(:from AS TIMESTAMP)");
-        if (to != null) sql.append(" AND _date <= CAST(:to AS TIMESTAMP)");
-        if (!wf.isEmpty()) sql.append(" AND (").append(wf.sql()).append(")");
-        sql.append(" ORDER BY _date DESC LIMIT :rowCap");
-
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString())
-                    .bind("rowCap", CatalogQueryService.MAX_LIST_ROWS + 1);
-            if (from != null) query.bind("from", from);
-            if (to != null) query.bind("to", to);
-            wf.bindings().forEach(query::bind);
-            return query.mapToMap().list();
-        });
-        if (rows.size() > CatalogQueryService.MAX_LIST_ROWS) {
-            log.warn("Document '{}' has more than {} live records in range; the un-paged list API "
-                    + "truncated the result. Use the paged list endpoint or a date range for "
-                    + "complete data.", desc.logicalName(), CatalogQueryService.MAX_LIST_ROWS);
-            rows = rows.subList(0, CatalogQueryService.MAX_LIST_ROWS);
-        }
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
-        return rows;
     }
 
     /**
@@ -158,54 +115,10 @@ public class DocumentQueryService {
     }
 
     /**
-     * One page of a document list — server-side sorted, filtered, optionally date-ranged. The
-     * engine behind the virtualized/paged list grid. {@code sortColumn} is validated against the
-     * entity's columns; {@code search} matches case-insensitively across the text columns.
-     *
-     * <p>{@code widgetFilter} is an optional authored {@link WidgetFilter} predicate (the same
-     * {@code config("filter", …)} a dashboard card uses) — it lets a chart/list/calendar widget
-     * scope its rows to, say, {@code "status != 'DRAFT'"} server-side, on top of any user-driven
-     * column filters.
-     */
-    public List<Map<String, Object>> page(DocumentDescriptor desc, int offset, int limit,
-                                          String sortColumn, boolean descending, String search,
-                                          String from, String to,
-                                          List<String> eq, List<String> in, List<String> like,
-                                          List<String> prefix, List<String> ge, List<String> le,
-                                          String widgetFilter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        boolean defaultSort = surface.isDefaultSort(sortColumn);
-        String orderBy = surface.safeSort(sortColumn);
-        boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
-        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
-        if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
-        if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
-        if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
-        if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
-                    " WHERE " + where +
-                    " ORDER BY " + orderBy + (dirDesc ? " DESC" : " ASC") +
-                    " LIMIT :limit OFFSET :offset")
-                    .bind("limit", limit).bind("offset", Math.max(0, offset));
-            EntityQuerySupport.bindSearch(q, search);
-            if (from != null) q.bind("from", from);
-            if (to != null) q.bind("to", to);
-            filter.bindings().forEach(q::bind);
-            wf.bindings().forEach(q::bind);
-            return q.mapToMap().list();
-        });
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
-        return rows;
-    }
-
-    /**
      * One keyset-paginated window of a document list — the constant-time default for the list grid.
      * Seeks past {@code cursorToken} (null/blank for the first window) instead of counting past an
-     * offset, so deep paging stays O(window). Honors the same sort/search/date-range/filters as
-     * {@link #page}; fetches one extra row for {@code hasMore} (no COUNT) and mints the next cursor
+     * offset, so deep paging stays O(window). Honors sort/search/date-range/filters, fetches one
+     * extra row for {@code hasMore} (no COUNT), and mints the next cursor
      * from the last row. The default newest-first order seeks on {@code (_date, _id)}.
      */
     public KeysetPage keysetPage(DocumentDescriptor desc, String cursorToken, int limit,
@@ -277,7 +190,7 @@ public class DocumentQueryService {
     }
 
     /**
-     * Fetch specific live documents by id, decorated exactly like {@link #page} (refs resolved,
+     * Fetch specific live documents by id, decorated like keyset rows (refs resolved,
      * secrets redacted) so the list island can refresh just the rows that changed instead of
      * re-paging the whole window. Returns only the rows that still exist and aren't deletion-marked.
      */

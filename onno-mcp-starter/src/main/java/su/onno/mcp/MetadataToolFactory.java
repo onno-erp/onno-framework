@@ -12,6 +12,7 @@ import su.onno.ui.CatalogCommandService;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentCommandService;
 import su.onno.ui.DocumentQueryService;
+import su.onno.ui.KeysetPage;
 import su.onno.ui.RegisterQueryService;
 import su.onno.ui.UiAccessService;
 
@@ -102,22 +103,22 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("list_catalog",
                 "List catalog records",
-                "Lists records of a catalog by its logical name. Provide 'query' and/or 'limit' for a "
-                        + "capped, case-insensitive search over code/description; otherwise all live records are returned.",
+                "Returns one keyset-paginated window of a catalog by logical name. Replay the opaque "
+                        + "'nextCursor' while 'hasMore' is true. Optional 'query' searches code/description.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Catalog logical name (see describe_metadata).\"},"
                         + "\"query\":{\"type\":\"string\",\"description\":\"Optional search text.\"},"
-                        + "\"limit\":{\"type\":\"integer\",\"description\":\"Optional max rows (1-200).\"}}}",
+                        + "\"cursor\":{\"type\":\"string\",\"description\":\"Opaque nextCursor from the prior result.\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"description\":\"Window size (1-500, default 100).\"}}}",
                 (exchange, args) -> {
                     CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
                     access.requireRead(principal(exchange), desc);
-                    String q = optString(args, "query");
                     Integer limit = optInt(args, "limit");
-                    if (q != null || limit != null) {
-                        int cap = limit == null ? 50 : Math.max(1, Math.min(limit, 200));
-                        return ok(catalogQuery.search(desc, q, cap));
-                    }
-                    return ok(catalogQuery.list(desc));
+                    KeysetPage page = catalogQuery.keysetPage(
+                            desc, optString(args, "cursor"), limit == null ? 100 : limit,
+                            null, false, optString(args, "query"),
+                            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null);
+                    return ok(pageResult(page));
                 }));
 
         tools.add(readTool("get_catalog",
@@ -132,16 +133,25 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("list_documents",
                 "List documents",
-                "Lists documents of a given type by logical name, optionally filtered by an inclusive "
-                        + "date range (ISO-8601 strings), newest first.",
+                "Returns one newest-first keyset window of a document type. Replay the opaque "
+                        + "'nextCursor' while 'hasMore' is true; optionally search or filter by date.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Document logical name (see describe_metadata).\"},"
+                        + "\"query\":{\"type\":\"string\",\"description\":\"Optional search text.\"},"
                         + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start date/time (ISO-8601).\"},"
-                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end date/time (ISO-8601).\"}}}",
+                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end date/time (ISO-8601).\"},"
+                        + "\"cursor\":{\"type\":\"string\",\"description\":\"Opaque nextCursor from the prior result.\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"description\":\"Window size (1-500, default 100).\"}}}",
                 (exchange, args) -> {
                     DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
                     access.requireRead(principal(exchange), desc);
-                    return ok(documentQuery.list(desc, optString(args, "from"), optString(args, "to")));
+                    Integer limit = optInt(args, "limit");
+                    KeysetPage page = documentQuery.keysetPage(
+                            desc, optString(args, "cursor"), limit == null ? 100 : limit,
+                            null, true, optString(args, "query"),
+                            optString(args, "from"), optString(args, "to"),
+                            List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null);
+                    return ok(pageResult(page));
                 }));
 
         tools.add(readTool("get_document",
@@ -447,6 +457,14 @@ public class MetadataToolFactory implements McpToolProvider {
     }
 
     // ---- result + argument helpers ----------------------------------------------------
+
+    private static Map<String, Object> pageResult(KeysetPage page) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rows", page.rows());
+        result.put("nextCursor", page.nextCursor());
+        result.put("hasMore", page.hasMore());
+        return result;
+    }
 
     private CallToolResult ok(Object value) {
         try {

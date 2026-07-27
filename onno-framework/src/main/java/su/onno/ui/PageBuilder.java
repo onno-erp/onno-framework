@@ -79,9 +79,9 @@ public final class PageBuilder {
      * <pre>
      * b.actions("Reports", a -> {
      *     a.action("createDrafts").label("Create draft reports").icon("file-plus")
-     *      .handler(ctx -> { reports.createDrafts(); return ActionResult.refresh("Drafts created"); });
+     *      .handler(ctx -> { reports.createDrafts(); return ActionResult.refresh(ActionToast.success("Drafts created")); });
      *     a.action("postPending").label("Post pending drafts").icon("send")
-     *      .handler(ctx -> { reports.postPending(); return ActionResult.message("Posted"); });
+     *      .handler(ctx -> { reports.postPending(); return ActionResult.toast(ActionToast.success("Posted")); });
      * });
      * </pre>
      *

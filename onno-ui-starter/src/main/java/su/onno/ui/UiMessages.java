@@ -73,7 +73,6 @@ public final class UiMessages {
         d.put("action.post", "Post");
         d.put("action.repost", "Re-post");
         d.put("action.unpost", "Unpost");
-        d.put("action.edit", "Edit");
         d.put("action.duplicate", "Duplicate");
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
@@ -122,9 +121,8 @@ public final class UiMessages {
         d.put("status.draft", "Draft");
 
         // Workspace tab titles. The list tab reads the entity's localized title directly (from the
-        // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+        // shell's path→title map); these template the new/duplicate record tabs around it.
         d.put("tab.new", "New {entity}");
-        d.put("tab.edit", "Edit {entity}");
         d.put("tab.duplicate", "Duplicate {entity}");
 
         // Navigation. The home/dashboard nav item (and its open-tab chip) falls back to this when no
@@ -165,7 +163,7 @@ public final class UiMessages {
         d.put("register.receipt", "Receipt");
         d.put("register.expense", "Expense");
 
-        // List grid: toolbar count, search, sort, view toggle, and the pager footer.
+        // List grid: toolbar count, search, sort, view toggle, and keyset loading.
         d.put("list.count", "{count} rows");
         d.put("list.search", "Search…");
         d.put("list.searchLabel", "Search");
@@ -175,10 +173,6 @@ public final class UiMessages {
         d.put("list.mapView", "Map");
         // Fallback toggle label for a custom list renderer (ListSpec.custom) without a .label(...).
         d.put("list.customView", "Cards");
-        d.put("list.pageRange", "{from}–{to} of {total}");
-        d.put("list.pageOf", "Page {page} of {pages}");
-        d.put("list.prev", "Prev");
-        d.put("list.next", "Next");
         d.put("list.loadingMore", "Loading more…");
         // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The
         // selection count itself reuses "list.selected" below (shared with the filter badge).

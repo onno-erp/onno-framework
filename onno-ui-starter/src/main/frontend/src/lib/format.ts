@@ -104,13 +104,11 @@ export function formatNumber(value: number, opts: NumberFormatOptions = {}): str
 }
 
 /**
- * Format a money amount with graceful fallback: a configured/per-row currency renders
- * via {@link formatNumber}; with no currency it keeps the legacy `$` + 2-decimals so
- * existing dashboards are unchanged.
+ * Format an amount using the configured currency/unit. Without either, it is a plain grouped
+ * decimal; the UI no longer guesses USD for an unconfigured business.
  */
 export function formatAmount(value: number, opts: NumberFormatOptions = {}): string {
-  if (opts.unit?.trim() || opts.currency) return formatNumber(value, opts);
-  return `$${value.toFixed(2)}`;
+  return formatNumber(value, opts);
 }
 
 /** Split a comma-separated config value ("a, b ,c") into trimmed field names. */

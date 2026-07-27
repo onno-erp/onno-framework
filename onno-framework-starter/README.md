@@ -53,11 +53,11 @@ This is the only property the starter exposes. Everything else is derived from y
 
 ### Schema generation
 
-On startup `SchemaInitializer` (an `InitializingBean`) re-scans the same packages, builds a
-`MetadataRegistry`, and runs `SchemaGenerator` against the `DataSource`. This is **idempotent**:
-tables are created with `CREATE TABLE IF NOT EXISTS` and migrations are **additive** (new columns are
-added; nothing is dropped or altered destructively). Enumeration rows are seeded here too. No
-Flyway/Liquibase scripts are needed for framework-managed tables.
+On startup `SchemaInitializer` (an `InitializingBean`) re-scans the same packages and builds a
+`MetadataRegistry`. `SchemaGenerator` bootstraps an empty database; `SchemaUpgrader` exclusively
+diffs and evolves an existing runtime schema according to `onno.schema.mode`. Versioned
+`AppMigration` beans handle application data reshaping. Enumeration rows are seeded as part of
+initialization. No Flyway/Liquibase scripts are needed for framework-managed tables.
 
 ### One concrete row class per tabular section
 
@@ -79,11 +79,8 @@ path binds the stable UUID into movement and totals tables, converts enum filter
 and restores the enum constant on typed reads.
 
 The converters also read enums (and `Ref<T>`) back from a **`varchar` column that holds the UUID as
-text**, not just a native `uuid` column. This makes an attribute that changed from `String` to an
-`@Enumeration`/`Ref<T>` across deploys resilient: the column may still be `varchar` from when it
-held free text, yet onno keeps writing the value's UUID and reads it back correctly instead of
-throwing `Enum.valueOf(<uuid string>)` (issue #168). A value that is a bare enum `name()` (truly
-legacy data from before onno used UUIDs) still resolves by name.
+text**, not just a native `uuid` column. Enum constant names are not a persisted format in 2.0;
+convert old rows with `Ui2MigrationTool.migrateEnumNames(...)` before upgrading.
 
 ## Usage
 

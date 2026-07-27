@@ -48,7 +48,6 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.post": "Post",
   "action.repost": "Re-post",
   "action.unpost": "Unpost",
-  "action.edit": "Edit",
   "action.duplicate": "Duplicate",
   "action.delete": "Delete",
   "action.open": "Open",
@@ -97,9 +96,8 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "status.draft": "Draft",
 
   // Workspace tab titles. The list tab reads the entity's localized title directly (from the
-  // shell's path→title map); these template the new/edit/duplicate record tabs around it.
+  // shell's path→title map); these template the new/duplicate record tabs around it.
   "tab.new": "New {entity}",
-  "tab.edit": "Edit {entity}",
   "tab.duplicate": "Duplicate {entity}",
 
   // Navigation. The home/dashboard nav item (and its open-tab chip) falls back to this when no
@@ -139,7 +137,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "register.receipt": "Receipt",
   "register.expense": "Expense",
 
-  // List grid: toolbar count, search, sort, view toggle, and the pager footer.
+  // List grid: toolbar count, search, sort, view toggle, and keyset loading.
   "list.count": "{count} rows",
   "list.search": "Search…",
   "list.searchLabel": "Search",
@@ -148,10 +146,6 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.tableView": "Table",
   "list.mapView": "Map",
   "list.customView": "Cards",
-  "list.pageRange": "{from}–{to} of {total}",
-  "list.pageOf": "Page {page} of {pages}",
-  "list.prev": "Prev",
-  "list.next": "Next",
   "list.loadingMore": "Loading more…",
   // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The selection
   // count itself reuses "list.selected" below (shared with the multi-select filter badge).

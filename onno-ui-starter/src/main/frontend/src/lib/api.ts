@@ -457,25 +457,18 @@ export const api = {
       body: JSON.stringify({ outcome }),
     }),
 
-  // Catalog CRUD
-  // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
-  // server-side — lets a dashboard widget scope its rows, e.g. "status != 'DRAFT'".
+  // Catalog CRUD. Row-shaped widgets use the bounded keyset list feed; the old unbounded
+  // GET /api/catalogs/{name} collection route no longer exists.
   listCatalog: (name: string, filter?: string) => {
     // Normalize the entity name (PascalCase → snake_case) so every caller — the built-in widgets
     // (which pre-snake) and SDK-authored custom widgets (which pass the raw `entityName`) — hits the
     // same URL and shares the in-flight GET dedup instead of double-fetching the same rows.
     name = toSnakeCase(name);
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ limit: "500" });
     if (filter) params.set("filter", filter);
-    const qs = params.toString();
-    return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}${qs ? "?" + qs : ""}`);
-  },
-  // Server-side typeahead for ref pickers: capped, case-insensitive code/description match.
-  // `filter` is a resolved refFilter predicate — the cascading picker's server-side narrowing.
-  searchCatalog: (name: string, q: string, limit = 30, filter?: string) => {
-    const params = new URLSearchParams({ q, limit: String(limit) });
-    if (filter) params.set("filter", filter);
-    return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${name}?${params.toString()}`);
+    return fetchJson<{ rows?: EntityRecord[] }>(
+      `${BASE}/list/catalogs/${name}?${params.toString()}`
+    ).then((page) => page.rows ?? []);
   },
   searchRefOptions: (request: RefOptionSearch) =>
     fetchJson<EntityRecord[]>(`${BASE}/ref-options/search`, {
@@ -504,28 +497,20 @@ export const api = {
   getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string) =>
     fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`),
 
-  // Document CRUD
-  // `filter` is an optional WidgetFilter predicate (a widget's config("filter", …)) applied
-  // server-side — lets a chart/list/calendar widget scope its rows, e.g. "status != 'DRAFT'".
+  // Document CRUD. Date-ranged widgets read one bounded keyset window from the list feed.
   listDocuments: (name: string, from?: string, to?: string, filter?: string) => {
     // See listCatalog: normalize so built-in and SDK custom widgets share one fetch.
     name = toSnakeCase(name);
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ limit: "500" });
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (filter) params.set("filter", filter);
-    const qs = params.toString();
-    return fetchJson<EntityRecord[]>(`${BASE}/documents/${name}${qs ? "?" + qs : ""}`);
+    return fetchJson<{ rows?: EntityRecord[] }>(
+      `${BASE}/list/documents/${name}?${params.toString()}`
+    ).then((page) => page.rows ?? []);
   },
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
-  // Server-side typeahead for document ref pickers: capped, case-insensitive _number match.
-  // `filter` is a resolved refFilter predicate — the cascading picker's server-side narrowing.
-  searchDocument: (name: string, q: string, limit = 30, filter?: string) => {
-    const params = new URLSearchParams({ q, limit: String(limit) });
-    if (filter) params.set("filter", filter);
-    return fetchJson<EntityRecord[]>(`${BASE}/documents/${name}?${params.toString()}`);
-  },
   createDocument: (name: string, data: EntityRecord) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}`, {
       method: "POST",

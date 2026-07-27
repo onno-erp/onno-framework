@@ -6,8 +6,21 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UiLayoutBuilderTest {
+
+    @Test
+    void rejectsLegacyGeoAndImplicitCurrencyHints() {
+        EntityConfigBuilder<Object> fields = new EntityConfigBuilder<>();
+
+        assertThatThrownBy(() -> fields.field("location").widget("map"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("GeoJSON");
+        assertThatThrownBy(() -> fields.field("amount").format("currency"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("currency:USD");
+    }
 
     @Test
     void catalogWithoutConfigurer_hasEmptyFieldHints() {

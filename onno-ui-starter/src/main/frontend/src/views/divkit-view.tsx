@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
-import { Copy, ExternalLink, Link2, Pencil, Trash2, X, type LucideIcon } from "lucide-react";
+import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import {
   createGlobalVariablesController,
@@ -166,7 +166,6 @@ function tabForPath(pathname: string): WorkspaceTab {
   const entity = name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page");
 
   if (detail === "new") return { path, title: `New ${entity}` };
-  if (action === "edit") return { path, title: `Edit ${entity}` };
   if (action === "duplicate") return { path, title: `Duplicate ${entity}` };
   if (detail) return { path, title: `${entity} ${decodeSegment(detail).slice(0, 8)}` };
   return { path, title: entity };
@@ -176,7 +175,7 @@ function tabForPath(pathname: string): WorkspaceTab {
 // title map — which loads async after the first tab is already open — and the active chrome
 // language. Prefers the entity's localized title from {@code titles}; falls back to the
 // humanized route token when the entity isn't in the nav (a directly-routed, unlisted entity)
-// or the shell hasn't loaded yet. The new/edit/duplicate verbs come from UiMessages so the
+// or the shell hasn't loaded yet. The new/duplicate verbs come from UiMessages so the
 // whole tab localizes, not just the entity name.
 function titleForPath(
   pathname: string,
@@ -192,7 +191,6 @@ function titleForPath(
     titles?.[basePath] ?? (name ? humanizeRouteToken(name) : humanizeRouteToken(kind ?? "Page"));
 
   if (detail === "new") return t("tab.new", { entity });
-  if (action === "edit") return t("tab.edit", { entity });
   if (action === "duplicate") return t("tab.duplicate", { entity });
   if (detail) return `${entity} ${decodeSegment(detail).slice(0, 8)}`;
   return entity;
@@ -213,24 +211,15 @@ function iconForPath(pathname: string, icons: Record<string, string> | undefined
   return "panel-top";
 }
 
-// A record surface opened from a list — a document/catalog detail or a "new" form
-// (3 segments). These open in their own island beside the list, master-detail style;
-// 2-segment lists and 4-segment edit forms stay in the focused island.
+// A record surface opened from a list — a document/catalog record or a "new" form (3 segments).
+// These open in their own island beside the list, master-detail style.
 function isRecordDetail(pathname: string): boolean {
   const seg = stripQuery(pathname).split("/").filter(Boolean);
   return seg.length === 3 && (seg[0] === "documents" || seg[0] === "catalogs");
 }
 
-function editBasePath(pathname: string): string | null {
-  const seg = stripQuery(pathname).split("/").filter(Boolean);
-  if (seg.length === 4 && (seg[0] === "documents" || seg[0] === "catalogs") && seg[3] === "edit") {
-    return `/${seg[0]}/${seg[1]}/${seg[2]}`;
-  }
-  return null;
-}
-
 function recordBasePath(pathname: string): string | null {
-  return editBasePath(pathname) ?? (isRecordDetail(pathname) ? stripQuery(pathname) : null);
+  return isRecordDetail(pathname) ? stripQuery(pathname) : null;
 }
 
 function sameRecordTab(a: string, b: string): boolean {
@@ -345,10 +334,10 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!kind || !name) return false;
   const ename = event.entityName ?? "";
 
-  // Create/edit/duplicate forms are user-owned state. Live events should refresh lists,
-  // dashboards, and read-only detail, but never remount a form while someone is working in it:
+  // Create/record/duplicate forms are user-owned state. Live events should refresh lists and
+  // dashboards, but never remount a form while someone is working in it:
   // that closes open dropdowns, resets scroll, and can discard in-flight UI state.
-  if (seg.length >= 3 && (seg[2] === "new" || seg[3] === "edit" || seg[3] === "duplicate")) return false;
+  if ((kind === "catalogs" || kind === "documents") && seg.length >= 3) return false;
 
   // A 2-segment catalog/document/register path is a list surface — now the self-refreshing
   // onno-list island (it reloads its own window via the "onno:dataevent" fan-out), so the DivKit
@@ -696,34 +685,14 @@ export function DivKitView() {
     [location.pathname, navigate]
   );
 
-  // Close a tab by its path wherever it lives (e.g. an edit form after saving). Repoints
-  // focus to what remains in that island and follows it with the URL.
+  // Close a tab by its path wherever it lives. Repoints focus to what remains in that island and
+  // follows it with the URL.
   const closePath = useCallback(
     (path: string) => {
       // Programmatic close (post-save, post-delete): the initiator owns the data outcome, so any
       // dirty flag is stale by definition — drop it rather than asking to discard.
       clearFormDirty(path);
       const ws = wsRef.current;
-      const base = editBasePath(path);
-      const editPane = base
-        ? ws.panes.find((p) => p.tabs.some((t) => t.path === path))
-        : undefined;
-      if (base && editPane) {
-        setWorkspace((current) => ({
-          ...current,
-          focused: editPane.id,
-          panes: current.panes.map((p) => {
-            if (p.id !== editPane.id) return p;
-            return {
-              ...p,
-              tabs: tabsWithRecordPath(p.tabs, base),
-              activePath: base,
-            };
-          }),
-        }));
-        if (base !== location.pathname) navigate(base);
-        return;
-      }
       if (!ws.panes.some((p) => p.tabs.some((t) => t.path === path))) return;
       const next = detachTab(ws, path);
       setWorkspace(next);
@@ -804,10 +773,8 @@ export function DivKitView() {
         // back to the list (the SSE "deleted" event patches any other open list live).
         const [kind, name, id] = rest.slice("delete/".length).split("/");
         if (!name || !id) return;
-        // After deleting, close the record's pane (and any open edit pane) and let the
-        // list refresh over SSE — don't navigate the list into the detail column.
+        // After deleting, close the record pane and let the list refresh over SSE.
         const after = () => {
-          closePath("/" + kind + "/" + name + "/" + id + "/edit");
           closePath("/" + kind + "/" + name + "/" + id);
         };
         if (kind === "documents") {
@@ -841,7 +808,7 @@ export function DivKitView() {
           .runAction(kind, name, key, id)
           .then((result) => {
             toast.dismiss(loadingId);
-            applyActionResult(result, { navigate: (url) => onCustomAction({ url }) });
+            applyActionResult(result);
             // A "refresh" result re-renders via the same SSE data stream the handler's writes
             // emit; the detail surface reloads itself, so no manual navigation is needed here.
           })
@@ -962,12 +929,13 @@ export function DivKitView() {
         },
       },
       {
+        // The record route is the editable object form, so the edit shortcut opens it directly.
         key: "e",
         mod: true,
         run: () => {
           if (rowMenuOpenRef.current || confirmOpenRef.current) return;
           const url = hoveredRowUrl();
-          if (url && hoveredRowWritable()) onCustomAction({ url: `${url}/edit` });
+          if (url && hoveredRowWritable()) onCustomAction({ url });
         },
       },
       {
@@ -1579,12 +1547,6 @@ export function DivKitView() {
           },
           ...(rowMenu.writable
             ? [
-                {
-                  label: t("action.edit"),
-                  icon: Pencil,
-                  run: () => onCustomAction({ url: rowMenu.url + "/edit" }),
-                  shortcut: shortcutLabel({ key: "e", mod: true }),
-                },
                 {
                   label: t("action.duplicate"),
                   icon: Copy,

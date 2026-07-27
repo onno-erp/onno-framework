@@ -14,7 +14,7 @@ import java.util.function.Predicate;
  * record detail. It does one of two things when clicked:</p>
  * <ul>
  *   <li>a <b>server handler</b> — {@code .handler(ctx -> ...)} runs arbitrary backend logic and
- *       returns an {@link ActionResult} (toast / refresh / navigate); or</li>
+ *       returns an {@link ActionResult} (typed feedback and/or refresh); or</li>
  *   <li>a <b>navigation</b> — {@code .navigate("onno://...")} just routes the client (a
  *       {@code {id}} placeholder is filled with the row/record id).</li>
  * </ul>
@@ -22,7 +22,7 @@ import java.util.function.Predicate;
  * <pre>
  * public void actions(ActionSpec a) {
  *     a.action("archive").label("Archive").icon("archive").scope(ActionScope.ROW)
- *      .handler(ctx -> { repo.archive(ctx.id()); return ActionResult.refresh("Archived"); });
+ *      .handler(ctx -> { repo.archive(ctx.id()); return ActionResult.refresh(ActionToast.success("Archived")); });
  *     a.action("report").label("Open report").icon("file-text").scope(ActionScope.TOOLBAR)
  *      .navigate("onno://reports/occupancy");
  * }
@@ -39,7 +39,7 @@ import java.util.function.Predicate;
  *  .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
  *  .icon(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
  *  .visibleWhen(row -> row.enumValue("status", Status.class) != Status.ARCHIVED)
- *  .handler(ctx -> { service.toggle(ctx.id()); return ActionResult.refresh(); });
+ *  .handler(ctx -> { service.toggle(ctx.id()); return ActionResult.reload(); });
  * </pre>
  *
  * <p>The per-record functions apply to {@link ActionScope#ROW} actions (evaluated against each row
@@ -64,7 +64,8 @@ import java.util.function.Predicate;
  * a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.DETAIL)
  *  .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA)
  *              .placeholder("Why is this order cancelled?").required())
- *  .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
+ *  .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason"));
+ *                    return ActionResult.refresh(ActionToast.success("Cancelled")); });
  * </pre>
  */
 public final class ActionSpec {
@@ -128,17 +129,6 @@ public final class ActionSpec {
                          InputSpec.ActionFormDialog formDialog,
                          Function<ActionContext, FormDefaults> formDefaultsFn,
                          List<String> roles) {
-
-        /** Backward-compatible constructor for applications that instantiate resolved actions. */
-        public Action(String key, String label, String icon, String logo, String color, ActionScope scope,
-                      String menu, String navigateUrl, Function<ActionContext, ActionResult> handler,
-                      Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
-                      Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
-                      List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
-                      Function<ActionContext, FormDefaults> formDefaultsFn, List<String> roles) {
-            this(key, label, icon, logo, color, scope, menu, navigateUrl, handler, iconFn, labelFn,
-                    visibleFn, enabledFn, form, formGroups, null, formDefaultsFn, roles);
-        }
 
         public boolean isServer() {
             return handler != null;

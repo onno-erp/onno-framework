@@ -33,7 +33,6 @@ public final class ListSpec<E> {
     private final List<FilterBuilder> filters = new ArrayList<>();
     private MapSpec map;
     private CustomSpec custom;
-    private FeedMode feedMode;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
     private final Map<String, String> cellMenus = new LinkedHashMap<>();
@@ -181,20 +180,19 @@ public final class ListSpec<E> {
 
     /**
      * Enable a map view for this list: a Table ⇄ Map toggle in the toolbar that plots the records as
-     * markers over OpenStreetMap tiles. Returns a {@link MapSpec}; tell it where each record's point
-     * comes from — a single {@code "lat,lng"} string field via {@link MapSpec#field}, or a numeric
-     * latitude/longitude pair via {@link MapSpec#lat}/{@link MapSpec#lng} — and optionally a
-     * {@link MapSpec#label} field for the marker popup and {@link MapSpec#defaultView} to open on the
-     * map. Field names are entity field names, like the column/sort/filter ones.
+     * markers over OpenStreetMap tiles. Returns a {@link MapSpec}; tell it where each record's
+     * geometry comes from — a numeric latitude/longitude pair via {@link MapSpec#lat}/{@link
+     * MapSpec#lng}, a GeoJSON field via {@link MapSpec#geoJson}, or both — and optionally a {@link
+     * MapSpec#label} field for the marker popup and {@link MapSpec#defaultView} to open on the map.
+     * Field names are entity field names, like the column/sort/filter ones.
      *
      * <p>Calling {@code map()} more than once returns the same spec (so chained calls accumulate).
      * A map whose geo field(s) don't resolve to real columns degrades to "no map view" rather than
      * failing the list.</p>
      *
      * <pre>
-     * list.map().field("location").label("name");          // "lat,lng" string field
      * list.map().lat("latitude").lng("longitude");          // split numeric fields
-     * list.map().field("location").defaultView();           // open on the map, not the table
+     * list.map().geoJson("location").defaultView();         // GeoJSON; open on the map
      * </pre>
      */
     public MapSpec map() {
@@ -208,8 +206,8 @@ public final class ListSpec<E> {
      * Delegate the list's <em>body</em> to a custom renderer registered in the UI's widget registry
      * (a consumer plugin's {@code registerListRenderer("type", Component)} via
      * {@code @onno/widget-sdk}) — tiles, cards, a gallery, whatever the component draws. The
-     * framework keeps owning the chrome: search, declarative filters, sorting, the feed
-     * (infinite/paged), live refresh and the toolbar all still work and drive the rows the renderer
+     * framework keeps owning the chrome: search, declarative filters, sorting, the keyset feed,
+     * live refresh and the toolbar all still work and drive the rows the renderer
      * receives. Returns a {@link CustomSpec}; optionally set the toggle {@link CustomSpec#label} and
      * {@link CustomSpec#defaultView} to open on the custom view (a Table ⇄ custom toggle appears in
      * the toolbar, like {@link #map()}).
@@ -233,25 +231,9 @@ public final class ListSpec<E> {
     }
 
     /**
-     * How this list feeds rows to the grid: {@link FeedMode#INFINITE} streams a cursor-scrolled
-     * (keyset) window that loads more as you scroll — fast at any depth, no total — or
-     * {@link FeedMode#PAGED} shows discrete numbered pages with a Prev/Next pager and an exact
-     * total. Left unset, the list inherits the global default ({@code onno.ui.list.default-feed},
-     * itself {@code INFINITE} out of the box).
-     *
-     * <pre>
-     * list.feed(FeedMode.PAGED);   // numbered pages for this entity, whatever the global default
-     * </pre>
-     */
-    public ListSpec feed(FeedMode mode) {
-        this.feedMode = mode;
-        return this;
-    }
-
-    /**
-     * Rows fetched per window (infinite) or per page (paged). Left unset (or {@code <= 0}) the list
-     * inherits the global default ({@code onno.ui.list.page-size}, itself {@code 50}). Clamped to the
-     * server's list ceiling.
+     * Rows fetched per keyset window. Left unset (or {@code <= 0}) the list inherits the global
+     * default ({@code onno.ui.list.page-size}, itself {@code 50}). Clamped to the server's list
+     * ceiling.
      */
     public ListSpec pageSize(int pageSize) {
         this.pageSize = pageSize;
@@ -398,9 +380,6 @@ public final class ListSpec<E> {
 
     public boolean sortDescending() { return sortDescending; }
 
-    /** The authored feed mode, or {@code null} to inherit the global {@code onno.ui.list.default-feed}. */
-    public FeedMode feedMode() { return feedMode; }
-
     /** The authored page size, or {@code 0} to inherit the global {@code onno.ui.list.page-size}. */
     public int pageSize() { return pageSize; }
 
@@ -463,14 +442,12 @@ public final class ListSpec<E> {
     }
 
     /**
-     * Where a list's map geometry comes from, and how it reads. A marker point comes from either a
-     * single combined {@link #field} ({@code "lat,lng"} string) or a {@link #lat}/{@link #lng} pair;
-     * arbitrary shapes (points/paths/areas) come from a {@link #geoJson} field (a GeoJSON string). A
-     * record may use any combination. {@link #label} names the field shown in a feature's popup;
-     * {@link #defaultView} opens the list on the map rather than the table.
+     * Where a list's map geometry comes from, and how it reads. A marker point may come from a
+     * {@link #lat}/{@link #lng} numeric pair; arbitrary geometry (including a Point) comes from a
+     * {@link #geoJson} field. A record may use both. {@link #label} names the field shown in a
+     * feature's popup; {@link #defaultView} opens the list on the map rather than the table.
      */
     public static final class MapSpec {
-        private String field;
         private String latField;
         private String lngField;
         private String geoJsonField;
@@ -478,12 +455,6 @@ public final class ListSpec<E> {
         private boolean defaultView = false;
 
         MapSpec() {}
-
-        /** A single {@code "lat,lng"} string field for a marker point (what {@code .widget("map")} writes). */
-        public MapSpec field(String field) {
-            this.field = field;
-            return this;
-        }
 
         /** The latitude field, when the point is stored as a numeric lat/lng pair. */
         public MapSpec lat(String latField) {
@@ -530,8 +501,6 @@ public final class ListSpec<E> {
             return this;
         }
 
-        public String field() { return field; }
-
         public String latField() { return latField; }
 
         public String lngField() { return lngField; }
@@ -541,23 +510,6 @@ public final class ListSpec<E> {
         public String labelField() { return labelField; }
 
         public boolean isDefaultView() { return defaultView; }
-    }
-
-    /** How a list feeds its rows to the grid (and which pagination engine it drives). */
-    public enum FeedMode {
-        /**
-         * Cursor (keyset) pagination: the grid loads a window, then more as you scroll, seeking each
-         * next window with an indexed comparison — so a list stays fast at any depth and rows are
-         * never skipped/duplicated when data shifts mid-scroll. No exact total (a cheap estimate is
-         * shown). The default, and the natural fit for large, append-heavy lists.
-         */
-        INFINITE,
-        /**
-         * Offset pagination: discrete numbered pages with a Prev/Next pager and an exact total.
-         * Familiar and jump-to-page, but a deep page costs a scan — best for small or well-filtered
-         * lists where the total matters more than depth performance.
-         */
-        PAGED
     }
 
     /** A per-group subtotal function (row count is always present and needs no declaration). */

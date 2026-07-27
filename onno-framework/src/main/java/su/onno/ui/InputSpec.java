@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  *          .column("qty", c -> c.label("Qty").type(InputType.NUMBER).required())))
  *  .handler(ctx -> {
  *      for (var row : ctx.inputRows("lines")) receive(row.get("product"), row.get("qty"));
- *      return ActionResult.refresh("Received");
+ *      return ActionResult.refresh(ActionToast.success("Received"));
  *  });
  * </pre>
  *

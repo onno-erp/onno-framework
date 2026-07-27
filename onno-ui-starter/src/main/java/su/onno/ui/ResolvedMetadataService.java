@@ -78,7 +78,7 @@ public class ResolvedMetadataService {
     private List<Map<String, Object>> describeRelatedLists(Class<?> parentClass, String parentLogicalName) {
         List<Map<String, Object>> out = new java.util.ArrayList<>();
         for (RelatedList rl : fieldHints.relatedListsFor(parentClass)) {
-            Junctions.Junction junction = Junctions.resolve(registry, rl.joinCatalog());
+            Junctions.Junction junction = Junctions.resolve(registry, rl.junction());
             if (junction == null) {
                 continue;
             }
@@ -118,10 +118,8 @@ public class ResolvedMetadataService {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("name", rl.name());
             m.put("label", rl.label());
-            // The junction the panel reads (and, for a catalog, writes) — its logical name. Kept
-            // under "joinCatalog" for back-compat (catalog add/remove keys off it); "sourceKind"
-            // tells the client whether it's a catalog or an information register.
-            m.put("joinCatalog", junction.logicalName());
+            // The junction the panel reads (and, for a catalog, writes) — its logical name.
+            m.put("sourceName", junction.logicalName());
             m.put("sourceKind", junction.isRegister() ? "register" : "catalog");
             // Register-backed junctions are read-only (no generic info-register write yet); the
             // form widget hides add/remove for these and renders the rows only.
@@ -160,14 +158,13 @@ public class ResolvedMetadataService {
         // decide whether to offer Post / Re-post / Unpost actions; a non-postable document
         // only ever gets a plain Save.
         map.put("postable", su.onno.lifecycle.Postable.class.isAssignableFrom(d.javaClass()));
-        // Detail-header action placement. Default mirrors 1C: Post is the primary
-        // button, Unpost/Edit/Delete live in the overflow (⋯) menu. A view overrides
+        // Record-form action placement. Post is the primary button; Unpost/Delete live in the
+        // overflow (⋯) menu. A view overrides
         // per action via f.action("...").primary()/.inMenu()/.hidden().
         Map<String, String> actionOverrides = fieldHints.actionsFor(d.javaClass());
         Map<String, Object> actions = new LinkedHashMap<>();
         actions.put("post", actionOverrides.getOrDefault("post", "primary"));
         actions.put("unpost", actionOverrides.getOrDefault("unpost", "menu"));
-        actions.put("edit", actionOverrides.getOrDefault("edit", "menu"));
         actions.put("delete", actionOverrides.getOrDefault("delete", "menu"));
         map.put("actions", actions);
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
@@ -209,7 +206,7 @@ public class ResolvedMetadataService {
      * Raw per-action placement overrides authored on an entity's view via
      * {@code f.action(key).primary()/inMenu()/hidden()} — keyed by action key, valued
      * {@code primary|menu|hidden}. Unlike the {@code "actions"} map baked into
-     * {@link #describeDocument} (which only carries the built-in post/unpost/edit/delete defaults),
+     * {@link #describeDocument} (which only carries the built-in post/unpost/delete defaults),
      * this includes <em>custom</em> DETAIL action keys, so {@code DivKitController.detailActions}
      * can honor a placement override on a custom action too (issue #183).
      */
@@ -384,7 +381,6 @@ public class ResolvedMetadataService {
                         .filter(e -> e.javaClass().equals(a.javaType()))
                         .findFirst().orElse(null);
                 if (enumDesc != null) {
-                    map.put("enumName", enumDesc.logicalName());
                     map.put("enumTitle", enumDesc.displayTitle());
                     map.put("enumValues", enumDesc.values().stream().map(v -> {
                         Map<String, Object> vm = new LinkedHashMap<>();

@@ -13,12 +13,12 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 ## Endpoints
 
 ```text
-GET /api/catalogs/{name}                 list (live rows only)
 GET /api/catalogs/{name}/{id}            one catalog row
 GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs)
 GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays
-GET /api/documents/{name}?from=&to=      list (optional date range)
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
+GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
+GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -47,7 +47,7 @@ Only a claimed task's current assignee (or `ADMIN`) may delegate it; a nonblank 
 and the transfer is durable. `GET /api/task-assignees?q=` searches the configured layout identity
 catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
 UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
-catalog has an attribute configured with the `avatar`, `image`, or `photo` field widget.
+catalog has an attribute configured with the `avatar` or `image` field widget.
 
 Definition responses include `{key,title,version,payloadType,graph}`. `graph.startStepKey` and each
 node's `{stepKey,type,routes}` are safe structural metadata; payload-dependent assignments are not
@@ -78,10 +78,11 @@ token mappings fail atomically.
 }]
 ```
 
-Action handlers use a typed write-response contract. Existing successful results remain
-`{message, navigate, refresh}`; `ActionResult.feedback(...)` additionally returns `feedback` with
-`severity` (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). An expected
-`ActionRejectedException` is HTTP 422 whose body is the feedback object itself:
+Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
+(`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
+`ActionToast`, `ActionDialog`, or `ActionFeedback`; navigation is static action declaration
+metadata, not a handler response. An expected `ActionRejectedException` is HTTP 422 whose body is
+the feedback object itself:
 
 ```json
 {
@@ -97,14 +98,11 @@ Action handlers use a typed write-response contract. Existing successful results
 }
 ```
 
-Both list endpoints also accept `?q=<text>&limit=<n>` to switch to a capped typeahead search (used by
-ref pickers); without either parameter you get the full list, **capped at 1000 rows** as a safety
-limit (catalogs ordered by `_code`, documents newest first). Past the cap the server logs a warning
-and truncates; consumers that need everything should page the **keyset list feed**
-(`GET /api/list/catalogs/{name}?cursor=&limit=` / `/api/list/documents/{name}?cursor=&limit=`,
-returning `{ rows, nextCursor, hasMore }` — loop while `nextCursor` is non-null) or, for documents,
-narrow the date range. See [onno-ui-starter/README](../onno-ui-starter/README.md) for the full
-keyset contract.
+Catalog and document collections are available only through the keyset list feed. It returns
+`{rows, nextCursor, hasMore}`; start without a cursor and replay each opaque `nextCursor` until
+`hasMore` is false. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
+context-aware search input. There is no unbounded collection or offset-paging endpoint. See
+[onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
 ## Response shape
 
@@ -201,8 +199,8 @@ the snake_case read key to the camelCase write field:
 }
 ```
 
-`list` returns a JSON array and does **not** inline tabular sections; `get` returns a single object
-and **does**. `get` returns `404` when the id is unknown.
+List-feed rows do **not** inline tabular sections; single-document reads do. A single-record read
+returns `404` when the id is unknown.
 
 ## Reference & enum expansion
 

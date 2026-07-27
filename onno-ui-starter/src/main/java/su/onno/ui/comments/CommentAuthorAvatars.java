@@ -22,15 +22,15 @@ import java.util.UUID;
 /**
  * Resolves comment authors' avatar image URLs, live, from the identity catalog — the one the login
  * links to via {@link UiIdentityLink} (e.g. {@code Employee}) — using whichever of its attributes is
- * marked with an avatar/image field-hint widget ({@code .widget("avatar")}/{@code "image"}/
- * {@code "photo"}). Resolution is best-effort and read-only: when there is no identity link, no
+ * marked with an avatar/image field-hint widget ({@code .widget("avatar")}/{@code "image"}).
+ * Resolution is best-effort and read-only: when there is no identity link, no
  * avatar-hinted attribute, or no stored value, it returns nothing and the comments panel falls back
  * to the author's initials. Resolving live (rather than snapshotting onto the comment row) keeps the
  * feed showing each author's current photo and avoids a column migration on {@code onno_comments}.
  */
 public class CommentAuthorAvatars {
 
-    private static final Set<String> AVATAR_WIDGETS = Set.of("avatar", "image", "photo");
+    private static final Set<String> AVATAR_WIDGETS = Set.of("avatar", "image");
 
     private final Jdbi jdbi;
     /** The identity catalog's table + avatar column, or null when avatars can't be shown. */

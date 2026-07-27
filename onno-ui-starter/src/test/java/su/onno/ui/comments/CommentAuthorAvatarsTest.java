@@ -82,7 +82,8 @@ class CommentAuthorAvatarsTest {
     }
 
     private UiLayout linkedLayout() {
-        return new UiLayout(List.of(), List.of(), List.of(), new UiIdentityLink(Employee.class, "email"));
+        return new UiLayout(List.of(), List.of(), List.of(),
+                new UiIdentityLink(Employee.class, "email"), null);
     }
 
     @Test
@@ -107,7 +108,8 @@ class CommentAuthorAvatarsTest {
 
     @Test
     void noAvatarWhenThereIsNoIdentityLink() {
-        CommentAuthorAvatars avatars = resolver(new UiLayout(List.of()), new EmployeeView());
+        CommentAuthorAvatars avatars = resolver(
+                new UiLayout(List.of(), List.of(), List.of(), null, null), new EmployeeView());
 
         assertThat(avatars.avatarsFor(List.of(withAvatar.toString()))).isEmpty();
         assertThat(avatars.avatarFor(withAvatar.toString())).isNull();

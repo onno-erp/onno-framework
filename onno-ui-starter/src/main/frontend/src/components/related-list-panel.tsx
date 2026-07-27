@@ -81,7 +81,7 @@ export function RelatedListPanel({
     if (!parentId || !targetId) return;
     setBusy(true);
     try {
-      await api.createCatalogItem(meta.joinCatalog, {
+      await api.createCatalogItem(meta.sourceName, {
         [meta.viaField]: parentId,
         [meta.displayField]: targetId,
       });
@@ -97,7 +97,7 @@ export function RelatedListPanel({
   const remove = async (rowId: string) => {
     setBusy(true);
     try {
-      await api.deleteCatalogItem(meta.joinCatalog, rowId);
+      await api.deleteCatalogItem(meta.sourceName, rowId);
       await reload();
     } catch (e) {
       toast.error(`Couldn't remove: ${e instanceof Error ? e.message : String(e)}`);

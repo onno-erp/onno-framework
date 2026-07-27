@@ -18,7 +18,7 @@ import java.util.Set;
  * username when no link is configured or no record matches.
  *
  * <p>When the identity catalog carries an avatar/image-hinted attribute
- * ({@code .widget("avatar")}/{@code "image"}/{@code "photo"}, the same rule the
+ * ({@code .widget("avatar")}/{@code "image"}, the same rule the
  * comments panel uses), the resolver also reads that column so the shell can
  * paint the signed-in user's photo. Best-effort: no link, no avatar-hinted
  * column, or no stored value leaves {@code avatarUrl} null and the shell falls
@@ -27,7 +27,7 @@ import java.util.Set;
 public class CurrentUserResolver {
 
     /** Field-hint widgets that mark an attribute as an avatar/photo image URL. */
-    private static final Set<String> AVATAR_WIDGETS = Set.of("avatar", "image", "photo");
+    private static final Set<String> AVATAR_WIDGETS = Set.of("avatar", "image");
 
     private final UiLayout layout;
     private final MetadataRegistry registry;

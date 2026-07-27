@@ -297,9 +297,8 @@ because they are not Java field references.
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `hide(...)`, `feed(FeedMode.INFINITE|PAGED)`
-    (INFINITE = cursor/keyset scroll, the default; PAGED = numbered offset pages — else inherits
-    `onno.ui.list.default-feed`), `pageSize(n)` (rows per window/page; else `onno.ui.list.page-size`),
+    `column(field,label)`, `label(field,label)`, `hide(...)`, `pageSize(n)` (rows per keyset window;
+    else `onno.ui.list.page-size`; lists are always cursor/keyset-scrolled),
     `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
     day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
     (per-group subtotal on each header) + `defaultGroupBy(field)` (open the list already grouped by
@@ -315,7 +314,7 @@ because they are not Java field references.
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
-    `field("lat,lng")` or `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
+    `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
     (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
@@ -341,7 +340,9 @@ because they are not Java field references.
     typed feedback); `fieldError`/`formError` keep the form open with its entered values. A no-form
     rejection defaults to an error dialog. `ActionResult.toast(ActionToast…)` is the structured
     transient-feedback path and `ActionResult.dialog(ActionDialog…)` is the successful
-    acknowledgement-dialog path; `message`/`refresh` remain compact success-toast shortcuts. A form field can be a **reference picker** of another entity via
+    acknowledgement-dialog path; `reload()` and `refresh(ActionToast|ActionDialog)` add refresh
+    intent. Handler results contain only `{refresh,feedback}`; navigation is declared statically on
+    the action. A form field can be a **reference picker** of another entity via
     `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
     and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an
     add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
@@ -385,15 +386,15 @@ because they are not Java field references.
     `delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
     on REST), #185 — the record surface is the editable form itself (no separate detail/edit
     pages), so `post` is the form's built-in Post button (`.hidden()` hides it) and there is no
-    `edit` action anymore; `relatedList(name, joinCatalog)` → `RelatedListBuilder` renders an inline
+    `edit` action anymore; `relatedList(name, sourceEntity)` → `RelatedListBuilder` renders an inline
     related-rows panel on a catalog (the catalog analogue of a document `@TabularSection`) —
     `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
   - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
     card with that heading on the edit form), `width(String)` (`half`/`1/2` = half a row on wide
     screens; else full), `widget(String)` (`switch`,
-    `textarea`; media: `image`/`photo`/`avatar`/`images`/`gallery`/`photos`/`file` — streamed to
-    `POST /api/media`, the attribute stores the returned URL; `map`/`geo`), `placeholder`, `format`
+    `textarea`; media: `image`/`avatar`/`images`/`gallery`/`file` — streamed to
+    `POST /api/media`, the attribute stores the returned URL; `geojson`), `placeholder`, `format`
     (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
     `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each
     Ref-picker option to disambiguate same-named records, #185), `refOptions(Decorator.class)`

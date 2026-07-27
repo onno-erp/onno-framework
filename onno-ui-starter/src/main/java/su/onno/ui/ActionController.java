@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Runs a custom {@link ActionSpec} server handler for an entity. The button on the list (toolbar /
  * row) or detail surface posts here with the action key and (for row/detail actions) the record id;
  * we resolve the entity, enforce write access, invoke the handler bean, and return its
- * {@link ActionResult} so the client can toast / refresh / navigate. Navigation-only actions never
+ * {@link ActionResult} so the client can show typed feedback and/or refresh. Navigation-only actions never
  * reach the server — the client routes them directly.
  */
 @RestController

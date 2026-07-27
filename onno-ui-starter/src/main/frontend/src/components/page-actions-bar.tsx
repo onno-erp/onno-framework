@@ -66,7 +66,7 @@ export function PageActionsBar({
     return api
       .runPageAction(route, b.key, profile, inputs)
       .then((result: ActionResult) => {
-        applyActionResult(result, { navigate: dispatchAction });
+        applyActionResult(result);
         // result.refresh needs no work here: the data the handler wrote fans out over SSE,
         // so any embedded onno-list on this page reloads its own window.
       })

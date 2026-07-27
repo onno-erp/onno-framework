@@ -710,8 +710,7 @@ Follow this order.
 7. Implement constants, jobs, and integrations.
 8. Run tests.
 9. Verify the model is coherent against the running app — see [Verification](#verification) for the
-   real authenticated endpoints (`/api/catalogs/{name}`, `/api/documents/{name}`, etc.); there is no
-   anonymous manifest endpoint.
+   real authenticated record and keyset-list endpoints; there is no anonymous manifest endpoint.
 10. Summarize what was modeled and what assumptions were made.
 
 ## Classification Heuristics
@@ -1038,8 +1037,8 @@ curl -sc cookies.txt -H 'Content-Type: application/json' \
      -d '{"username":"admin","password":"…"}' http://localhost:8080/api/auth/login
 
 # 2. Reads just need the session cookie:
-curl -sb cookies.txt http://localhost:8080/api/catalogs/Properties
-curl -sb cookies.txt http://localhost:8080/api/documents/Reservations
+curl -sb cookies.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50'
+curl -sb cookies.txt 'http://localhost:8080/api/list/documents/Reservations?limit=50'
 
 # 3. Mutations also need the CSRF header (value taken from the XSRF-TOKEN cookie):
 XSRF=$(awk '/XSRF-TOKEN/{print $7}' cookies.txt)
@@ -1051,12 +1050,12 @@ curl -sb cookies.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json
 name (`Property` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onno-ui-starter`):
 
 ```text
-GET    /api/catalogs/{name}                       list
+GET    /api/list/catalogs/{name}?cursor=&limit=    collection window
 GET    /api/catalogs/{name}/{id}                   one
 POST   /api/catalogs/{name}                        create        (CSRF)
 PUT    /api/catalogs/{name}/{id}                   update        (CSRF)
 DELETE /api/catalogs/{name}/{id}                                 (CSRF)
-GET    /api/documents/{name}                       list
+GET    /api/list/documents/{name}?cursor=&limit=   collection window
 GET    /api/documents/{name}/{id}                  one
 POST   /api/documents/{name}                       create        (CSRF)
 POST   /api/documents/{name}/{id}/post             post          (CSRF)

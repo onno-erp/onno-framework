@@ -14,11 +14,6 @@ public record ShellConfig(NavStyle nav, BrandingConfig branding) {
         branding = branding == null ? BrandingConfig.defaults() : branding;
     }
 
-    /** Back-compat: a shell with just a nav style and default (empty) branding. */
-    public ShellConfig(NavStyle nav) {
-        this(nav, BrandingConfig.defaults());
-    }
-
     public static ShellConfig defaults() {
         return new ShellConfig(null, BrandingConfig.defaults());
     }

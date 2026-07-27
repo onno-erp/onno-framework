@@ -10,14 +10,13 @@ import { HintIcon } from "@/components/ui/hint-icon";
 
 /**
  * The {@code map} dashboard widget: plots an entity's records on a themed MapLibre map. Each record
- * contributes a marker from its point field ({@code geoField} or {@code latField}/{@code lngField})
- * and/or a shape (points/paths/areas) from a {@code geoJsonField} (see {@link geoSourceFrom}); rows
+ * contributes a marker from {@code latField}/{@code lngField} and/or geometry from a
+ * {@code geoJsonField} (see {@link geoSourceFrom}); rows
  * with no geometry are skipped. A feature's popup shows the {@code titleField} and links to the record.
  *
  * <pre>
  *   b.widget("Stores").type("map").width("full").catalog(Store.class)
- *     .config("geoField", "location")        // marker point ("lat,lng")
- *     .config("geoJsonField", "service_area") // optional shape (GeoJSON)
+ *     .config("geoJsonField", "service_area") // GeoJSON point/path/area
  *     .titleField("name");
  * </pre>
  */
@@ -72,8 +71,8 @@ export function MapWidget({ widget }: { widget: DashboardWidgetMeta }) {
       <CardContent className="p-4 pt-0">
         {misconfigured ? (
           <div className="flex h-[210px] items-center justify-center px-4 text-center text-xs text-muted-foreground">
-            Set a geo source: <code className="mx-1 font-mono">.config("geoField", "…")</code>, a
-            <code className="mx-1 font-mono">latField</code>/<code className="font-mono">lngField</code> pair, or a
+            Set a geo source: a <code className="mx-1 font-mono">latField</code>/
+            <code className="font-mono">lngField</code> pair or a
             <code className="ml-1 font-mono">geoJsonField</code>.
           </div>
         ) : features.length === 0 ? (

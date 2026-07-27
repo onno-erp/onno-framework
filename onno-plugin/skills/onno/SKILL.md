@@ -249,7 +249,7 @@ formatting. Close that gap in the same pass you model the business, not "later":
 
 - **Author field hints — don't hand back an auto-dumped form.** In `fields(EntityConfigBuilder)`, set
   `.order()`/`.group()`/`.width()` for layout, `.widget()` (`switch`, `textarea`, `avatar`/`gallery`,
-  `map`), `.format()` (`currency:EUR`, `dd-MM-yyyy`, `percent`), `.placeholder()`/`.hint()`, and
+  `geojson`), `.format()` (`currency:EUR`, `dd-MM-yyyy`, `percent`), `.placeholder()`/`.hint()`, and
   `hideInList/Form/Detail()` to suppress noise. A money column rendered as a bare number, or a status
   shown as a dropdown of UUIDs, reads as unfinished.
 

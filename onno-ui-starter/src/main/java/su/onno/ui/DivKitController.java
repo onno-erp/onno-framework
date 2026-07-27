@@ -536,7 +536,7 @@ public class DivKitController implements DisposableBean {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> panel = (Map<String, Object>) raw;
                     if (!Boolean.TRUE.equals(panel.get("readOnly"))
-                            && !access.canWrite(principal, "catalog", str(panel.get("joinCatalog")))) {
+                            && !access.canWrite(principal, "catalog", str(panel.get("sourceName")))) {
                         panel.put("readOnly", true);
                     }
                 }
@@ -723,7 +723,7 @@ public class DivKitController implements DisposableBean {
 
     /**
      * Custom DETAIL-scope action buttons for an entity's detail header. Each honors the same
-     * placement override the built-in post/edit/delete actions do — {@code f.action(key).primary()}
+     * placement override the built-in post/unpost/delete actions do — {@code f.action(key).primary()}
      * surfaces it as a prominent inline button, {@code .inMenu()} (the default) tucks it into the
      * overflow ⋯ menu, {@code .hidden()} drops it (the caller removes hidden entries). Issue #183.
      *
@@ -789,7 +789,6 @@ public class DivKitController implements DisposableBean {
     @GetMapping("/catalogs/{name}/{id}")
     public Map<String, Object> catalogDetail(@PathVariable String name, @PathVariable UUID id,
                                              @RequestParam(required = false) String profile,
-                                             @RequestParam(required = false) String theme,
                                              Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
@@ -801,20 +800,23 @@ public class DivKitController implements DisposableBean {
         Map<String, Object> row = catalogQuery.get(desc, id);
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
-                    "onno://catalogs/" + name + "/" + id + "/edit", "primary"));
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
-                    "onno://catalogs/" + name + "/" + id + "/duplicate", "menu"));
+                    "onno://catalogs/" + name + "/" + id + "/duplicate", "menu",
+                    List.of(), Map.of(), false, false));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
-                    "onno://delete/catalogs/" + name + "/" + id, "menu"));
+                    "onno://delete/catalogs/" + name + "/" + id, "menu",
+                    List.of(), Map.of(), false, false));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
             actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
                     resolvedMetadata.actionOverrides(desc.javaClass()), row));
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> content = SurfaceDivBuilder.catalogDetail(meta, row,
-                relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
+        String label = str(row.get("_description"));
+        if (label.isBlank()) label = str(row.get("_code"));
+        if (label.isBlank()) label = str(meta.get("name"));
+        Map<String, Object> content = entityFormBody("catalogs", name, id, label,
+                messages.get("action.save"), meta, row, false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -832,25 +834,6 @@ public class DivKitController implements DisposableBean {
         // overlay onto that seed as initial field values.
         return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
                 meta, catalogQuery.newDraft(desc, formPrefill(params)));
-    }
-
-    @GetMapping("/catalogs/{name}/{id}/edit")
-    public Map<String, Object> catalogEdit(@PathVariable String name, @PathVariable UUID id,
-                                           @RequestParam(required = false) String profile,
-                                           Principal principal) {
-        CatalogDescriptor desc = catalogQuery.require(name);
-        access.requireWrite(principal, desc);
-        if (uiProperties.isReadOnly()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
-        }
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
-        Map<String, Object> row = catalogQuery.get(desc, id);
-        String label = str(row.get("_description"));
-        if (label.isBlank()) label = str(row.get("_code"));
-        if (label.isBlank()) label = str(meta.get("name"));
-        return DivCard.of("onno-content", entityFormBody("catalogs", name, id, label,
-                messages.get("action.save"), meta, row, false, false, List.of()));
     }
 
     @GetMapping("/catalogs/{name}/{id}/duplicate")
@@ -891,7 +874,6 @@ public class DivKitController implements DisposableBean {
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
                                               @RequestParam(required = false) String profile,
-                                              @RequestParam(required = false) String theme,
                                               Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
@@ -905,23 +887,20 @@ public class DivKitController implements DisposableBean {
         Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
-        if (canWrite) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("pencil", messages.get("action.edit"), "accent",
-                    "onno://documents/" + name + "/" + id + "/edit", str(placement.getOrDefault("edit", "menu"))));
-        }
-        if (canWrite && postable && !posted) {
-            actions.add(new SurfaceDivBuilder.HeaderAction("circle-check", messages.get("action.post"), "primary",
-                    "onno://post/" + name + "/" + id, str(placement.getOrDefault("post", "primary"))));
-        }
         if (canWrite && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
-                    "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu"))));
+                    "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu")),
+                    List.of(), Map.of(), false, false));
         }
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
-                    "onno://documents/" + name + "/" + id + "/duplicate", str(placement.getOrDefault("duplicate", "menu"))));
+                    "onno://documents/" + name + "/" + id + "/duplicate",
+                    str(placement.getOrDefault("duplicate", "menu")),
+                    List.of(), Map.of(), false, false));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
-                    "onno://delete/documents/" + name + "/" + id, str(placement.getOrDefault("delete", "menu"))));
+                    "onno://delete/documents/" + name + "/" + id,
+                    str(placement.getOrDefault("delete", "menu")),
+                    List.of(), Map.of(), false, false));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183),
             // the same override map the built-in unpost/duplicate/delete actions read above. Their
             // per-record functions evaluate against the loaded row (#255).
@@ -930,8 +909,9 @@ public class DivKitController implements DisposableBean {
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
-        Map<String, Object> content = SurfaceDivBuilder.documentDetail(meta, row,
-                relatedLists.preloadForDetail(desc.javaClass(), id, principal), actions, palette(theme), messages);
+        Map<String, Object> content = entityFormBody("documents", name, id,
+                str(meta.get("name")) + " " + str(row.get("_number")),
+                messages.get("action.save"), meta, row, false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -956,23 +936,6 @@ public class DivKitController implements DisposableBean {
         Map<String, String> prefill = new LinkedHashMap<>(params);
         prefill.keySet().removeAll(Set.of("viewport", "theme", "profile"));
         return prefill;
-    }
-
-    @GetMapping("/documents/{name}/{id}/edit")
-    public Map<String, Object> documentEdit(@PathVariable String name, @PathVariable UUID id,
-                                            @RequestParam(required = false) String profile,
-                                            Principal principal) {
-        DocumentDescriptor desc = documentQuery.require(name);
-        access.requireWrite(principal, desc);
-        if (uiProperties.isReadOnly()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
-        }
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
-        Map<String, Object> row = documentQuery.get(desc, id);
-        return DivCard.of("onno-content", entityFormBody("documents", name, id,
-                str(meta.get("name")) + " " + str(row.get("_number")),
-                messages.get("action.save"), meta, row, false, false, List.of()));
     }
 
     @GetMapping("/documents/{name}/{id}/duplicate")

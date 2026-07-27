@@ -274,34 +274,11 @@ public class UiProperties {
         }
     }
 
-    /**
-     * List/table grid defaults, applied to every entity list unless its {@link EntityView} overrides
-     * them via {@link ListSpec#feed}/{@link ListSpec#pageSize}. Two knobs: which pagination engine a
-     * list uses by default, and how many rows it fetches per window/page.
-     */
+    /** List/table grid defaults, applied unless an {@link EntityView} overrides the window size. */
     public static class ListView {
 
-        /**
-         * Default feed mode for lists that don't declare one. {@code INFINITE} (the out-of-the-box
-         * default) cursor-scrolls a keyset stream — fast at any depth, no exact total; {@code PAGED}
-         * shows numbered offset pages with a Prev/Next pager and an exact total. Bind from config as
-         * {@code onno.ui.list.default-feed: paged} (relaxed/case-insensitive).
-         */
-        private ListSpec.FeedMode defaultFeed = ListSpec.FeedMode.INFINITE;
-
-        /**
-         * Default rows fetched per window (infinite) or per page (paged), for lists that don't set
-         * their own. Clamped to the server's list ceiling (500). Default {@code 50}.
-         */
+        /** Default rows fetched per keyset window. Clamped to the server ceiling (500). */
         private int pageSize = 50;
-
-        public ListSpec.FeedMode getDefaultFeed() {
-            return defaultFeed;
-        }
-
-        public void setDefaultFeed(ListSpec.FeedMode defaultFeed) {
-            this.defaultFeed = defaultFeed;
-        }
 
         public int getPageSize() {
             return pageSize;

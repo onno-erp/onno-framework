@@ -22,7 +22,7 @@ import { GEO_CUSTOM_COMPONENTS } from "@/lib/geo-bridge";
 // All div-custom blocks the content can host: dashboard widgets, the entity form, the login
 // form, icons, help hints, the detail-header overflow menu, the virtualized list grid,
 // page-level action button sections, the detail-page comments thread, and the
-// read-only map for a .widget("map") field.
+// read-only map for a .widget("geojson") field.
 const CUSTOM_COMPONENTS = new Map([
   ...WIDGET_CUSTOM_COMPONENTS,
   ...FORM_CUSTOM_COMPONENTS,

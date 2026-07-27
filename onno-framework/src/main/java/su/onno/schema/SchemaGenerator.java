@@ -30,9 +30,9 @@ import java.util.UUID;
  * Table layouts come from {@link SchemaModelBuilder}, the shared source of truth also used
  * by {@link SchemaDiffEngine}/{@link SchemaUpgrader} for evolving existing databases.
  *
- * <p>{@link #execute(Jdbi)} is the simple bootstrap path: create what is missing, then add
- * missing columns. For the full lifecycle (renames, type changes, history, destructive-change
- * gating) use {@link SchemaUpgrader}.
+ * <p>{@link #execute(Jdbi)} is a fresh-database bootstrap convenience. Existing database
+ * evolution belongs exclusively to {@link SchemaUpgrader}, which handles additions, renames,
+ * type changes, history, and destructive-change gating.
  */
 public class SchemaGenerator {
 
@@ -81,10 +81,7 @@ public class SchemaGenerator {
                 handle.execute(statement);
             }
         });
-        new SchemaMigrator(registry).executeAdditive(jdbi);
-        ProcessSchemaBackfill.run(jdbi);
-        // Indexes go last: a ref column added by the additive migration above must exist
-        // before its index is created.
+        // Indexes go last so every freshly created column exists before it is indexed.
         jdbi.useHandle(handle -> {
             for (String statement : generateIndexDDL()) {
                 handle.execute(statement);
@@ -97,8 +94,9 @@ public class SchemaGenerator {
      * Index statements for every generated table, covering the columns the framework
      * itself queries by: ref columns (auto-joins and reference expansion), catalog
      * hierarchy parents, document dates, tabular-section owners, register periods,
-     * document refs, and dimensions. Statements use {@code IF NOT EXISTS} and run after
-     * the additive column migration, so existing databases pick them up on next boot.
+     * document refs, and dimensions. Statements use {@code IF NOT EXISTS}; the
+     * {@link SchemaUpgrader} re-asserts them after applying its migration plan so existing
+     * databases pick them up on next boot.
      */
     public List<String> generateIndexDDL() {
         List<String> statements = new ArrayList<>();

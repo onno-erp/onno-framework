@@ -2,6 +2,7 @@ package su.onno.schema;
 
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
+import su.onno.fixtures.TestSecretAccount;
 import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
@@ -146,6 +147,26 @@ class SchemaUpgraderTest {
     }
 
     @Test
+    void secretAttribute_addedToExistingTable_usesUnboundedText() {
+        Jdbi jdbi = h2("upg_secret_add");
+        jdbi.useHandle(handle -> handle.execute("""
+                CREATE TABLE catalog_test_secret_accounts (
+                    _id UUID PRIMARY KEY,
+                    _code VARCHAR(9),
+                    _description VARCHAR(255),
+                    _deletion_mark BOOLEAN DEFAULT FALSE
+                )
+                """));
+
+        apply(jdbi, TestSecretAccount.class);
+
+        assertThat(columns(jdbi, "catalog_test_secret_accounts"))
+                .contains("USERNAME", "WS_PASSWORD");
+        assertThat(varcharLength(jdbi, "catalog_test_secret_accounts", "ws_password"))
+                .isGreaterThan(65_535);
+    }
+
+    @Test
     void renamedAttribute_renamesColumnKeepingData() {
         Jdbi jdbi = h2("upg_rename_col");
         apply(jdbi, ProductV1.class);
@@ -241,6 +262,54 @@ class SchemaUpgraderTest {
         String status = jdbi.withHandle(h -> h.createQuery("SELECT status FROM " + TABLE)
                 .mapTo(String.class).one());
         assertThat(status).isEqualTo("");
+    }
+
+    @Test
+    void applyMode_backfillsExecutionTokenForLegacyActiveProcess() {
+        Jdbi jdbi = h2("upg_process_token_backfill");
+
+        jdbi.useHandle(handle -> {
+            handle.execute(DdlRenderer.createTable(SchemaModelBuilder.processInstancesTable()));
+            handle.execute("""
+                    create table onno_process_work_items (
+                        _id UUID primary key,
+                        _instance_id UUID references onno_process_instances(_id) not null,
+                        _step_key VARCHAR(255) not null,
+                        _title VARCHAR(255) not null,
+                        _status VARCHAR(32) not null,
+                        _created_at TIMESTAMP not null,
+                        _version INTEGER default 0 not null
+                    )
+                    """);
+            UUID instanceId = UUID.randomUUID();
+            UUID workItemId = UUID.randomUUID();
+            handle.createUpdate("""
+                    insert into onno_process_instances
+                        (_id, _definition_key, _definition_version, _payload, _current_step,
+                         _status, _started_at, _updated_at, _version)
+                    values (:id, 'legacy', 1, '{}', 'review', 'ACTIVE',
+                            current_timestamp, current_timestamp, 0)
+                    """).bind("id", instanceId).execute();
+            handle.createUpdate("""
+                    insert into onno_process_work_items
+                        (_id, _instance_id, _step_key, _title, _status,
+                         _created_at, _version)
+                    values (:id, :instance, 'review', 'Review', 'OPEN',
+                            current_timestamp, 0)
+                    """).bind("id", workItemId).bind("instance", instanceId).execute();
+        });
+
+        apply(jdbi);
+
+        int tokenCount = jdbi.withHandle(handle -> handle.createQuery("""
+                        select count(*) from onno_process_tokens
+                         where _status = 'WAITING_HUMAN' and _step_key = 'review'
+                        """).mapTo(Integer.class).one());
+        int linkedWorkItemCount = jdbi.withHandle(handle -> handle.createQuery("""
+                        select count(*) from onno_process_work_items where _token_id is not null
+                        """).mapTo(Integer.class).one());
+        assertThat(tokenCount).isEqualTo(1);
+        assertThat(linkedWorkItemCount).isEqualTo(1);
     }
 
     @Test

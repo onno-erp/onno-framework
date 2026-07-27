@@ -247,7 +247,7 @@ public class OrderView implements EntityView<Order> {
         var payload = new OrderApprovalProcess.Payload(
                 orderId, order.getNumber(), order.getTotal(), order.getAssignedTo());
         processes.start(orderApproval, payload, new ProcessActor(username, java.util.Set.of()));
-        return ActionResult.message("Approval task created");
+        return ActionResult.toast(ActionToast.success("Approval task created"));
     }
 
     private ActionResult bulkReceive(su.onno.ui.ActionContext ctx) {
@@ -262,7 +262,8 @@ public class OrderView implements EntityView<Order> {
                     }
                 })
                 .sum();
-        return ActionResult.message(lines.size() + " line(s), " + total + " item(s) received");
+        return ActionResult.toast(ActionToast.success(
+                lines.size() + " line(s), " + total + " item(s) received"));
     }
 
     private ActionResult feedbackDemo(su.onno.ui.ActionContext ctx) {
@@ -318,24 +319,24 @@ public class OrderView implements EntityView<Order> {
             OrderStatus to = o.getStatus() == null ? OrderStatus.CONFIRMED : next(o.getStatus());
             o.setStatus(to);
             orders.save(o);
-            return ActionResult.refresh("Status → " + to.name());
-        }).orElseGet(() -> ActionResult.message("Order not found"));
+            return ActionResult.refresh(ActionToast.success("Status → " + to.name()));
+        }).orElseGet(() -> ActionResult.toast(ActionToast.warning("Order not found")));
     }
 
     private ActionResult setStatus(UUID id, OrderStatus to) {
         return orders.findById(id).map(o -> {
             o.setStatus(to);
             orders.save(o);
-            return ActionResult.refresh("Status → " + to.name());
-        }).orElseGet(() -> ActionResult.message("Order not found"));
+            return ActionResult.refresh(ActionToast.success("Status → " + to.name()));
+        }).orElseGet(() -> ActionResult.toast(ActionToast.warning("Order not found")));
     }
 
     private ActionResult assign(UUID id, UUID employeeId, String label) {
         return orders.findById(id).map(o -> {
             o.setAssignedTo(Ref.of(Employee.class, employeeId));
             orders.save(o);
-            return ActionResult.refresh("Assigned to " + label);
-        }).orElseGet(() -> ActionResult.message("Order not found"));
+            return ActionResult.refresh(ActionToast.success("Assigned to " + label));
+        }).orElseGet(() -> ActionResult.toast(ActionToast.warning("Order not found")));
     }
 
     private List<ListSpec.Option> employeeFilterOptions() {
@@ -383,8 +384,8 @@ public class OrderView implements EntityView<Order> {
                 o.setNote((note == null || note.isBlank() ? "" : note + "\n") + "Cancelled: " + reason);
             }
             orders.save(o);
-            return ActionResult.refresh("Order cancelled");
-        }).orElseGet(() -> ActionResult.message("Order not found"));
+            return ActionResult.refresh(ActionToast.success("Order cancelled"));
+        }).orElseGet(() -> ActionResult.toast(ActionToast.warning("Order not found")));
     }
 
     private static OrderStatus next(OrderStatus s) {

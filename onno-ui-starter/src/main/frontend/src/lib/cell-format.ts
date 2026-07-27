@@ -8,24 +8,24 @@ import { format as formatWithPattern, parseISO, isValid } from "date-fns";
 
 /** Does this column render its value as an image thumbnail rather than text? */
 export function isImageWidget(widget?: string): boolean {
-  return /^(image|photo|avatar)$/i.test(widget ?? "");
+  return /^(image|avatar)$/i.test(widget ?? "");
 }
 
 export function isAvatarWidget(widget?: string): boolean {
   return /^avatar$/i.test(widget ?? "");
 }
 
-/** A value that can be shown as an <img>: a data: URL or an http(s) URL. */
+/** A canonical stored-media/object URL that can be shown as an image. */
 export function looksLikeImageUrl(value: string): boolean {
-  return value.startsWith("data:") || /^https?:\/\//i.test(value);
+  return value.startsWith("/") || /^https?:\/\//i.test(value);
 }
 
-const NUMBER_KEYWORD = /^(integer|decimal|percent|currency(:[a-zA-Z]{3})?)$/;
+const NUMBER_KEYWORD = /^(integer|decimal|percent|currency:[a-zA-Z]{3})$/;
 
 /**
  * Apply a `.format(...)` hint to a raw value string. Returns the formatted text, or null when the
  * hint is blank or the value doesn't fit the spec (so the caller keeps the raw text). The hint is
- * interpreted by shape: a number spec ("integer" | "decimal" | "percent" | "currency[:EUR]" | a
+ * interpreted by shape: a number spec ("integer" | "decimal" | "percent" | "currency:EUR" | a
  * "#,##0.00" pattern), otherwise a date pattern ("dd-MM-yy").
  */
 export function applyFormat(raw: string, format?: string): string | null {
@@ -70,8 +70,8 @@ function formatNumber(raw: string, fmt: string): string | null {
     if (lower === "percent") {
       return new Intl.NumberFormat(undefined, { style: "percent", maximumFractionDigits: 2 }).format(n);
     }
-    if (lower.startsWith("currency")) {
-      const code = lower.includes(":") ? fmt.slice(fmt.indexOf(":") + 1).trim().toUpperCase() : "USD";
+    if (lower.startsWith("currency:")) {
+      const code = fmt.slice(fmt.indexOf(":") + 1).trim().toUpperCase();
       try {
         return new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(n);
       } catch {

@@ -44,11 +44,11 @@ export type EntityRecord = Record<string, unknown>;
  * the UI.
  */
 export interface OnnoReadApi {
+  /** The first bounded keyset window (at most 500 rows), never an unbounded collection read. */
   listCatalog(name: string, filter?: string): Promise<EntityRecord[]>;
-  searchCatalog(name: string, q: string, limit?: number): Promise<EntityRecord[]>;
   getCatalogItem(name: string, id: string): Promise<EntityRecord>;
+  /** The first bounded keyset window (at most 500 rows), optionally narrowed by date/filter. */
   listDocuments(name: string, from?: string, to?: string, filter?: string): Promise<EntityRecord[]>;
-  searchDocument(name: string, q: string, limit?: number): Promise<EntityRecord[]>;
   getDocument(name: string, id: string): Promise<EntityRecord>;
   getBalance(name: string, filters?: Record<string, string>): Promise<unknown>;
   getTurnover(name: string, from: string, to: string, filters?: Record<string, string>): Promise<unknown>;
@@ -87,11 +87,11 @@ export interface ListRendererDescriptor {
 
 /**
  * The props a custom list-body renderer receives (see {@code registerListRenderer}). The framework
- * keeps the toolbar (search, filters, sort) and the feed (infinite scroll / pages, live refresh);
+ * keeps the toolbar (search, filters, sort) and keyset feed (infinite scroll, live refresh);
  * the renderer only draws the current window of rows and opens records through the callback.
  */
 export interface ListRendererProps {
-  /** The rows of the current window (all loaded rows in infinite mode; the page in paged mode). */
+  /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   list: ListRendererDescriptor;
   /** Open a record's detail pane (no-op for rows without an id). */

@@ -16,7 +16,6 @@ vi.mock("@/components/ref-select", () => ({ RefSelect: () => null }));
 vi.mock("@/components/date-picker", () => ({
   DatePicker: ({ value }: { value?: string }) => <span data-testid="date-value">{value}</span>,
 }));
-vi.mock("@/components/geo-picker", () => ({ GeoPicker: () => null }));
 vi.mock("@/components/map-editor", () => ({ MapEditor: () => null }));
 vi.mock("@/components/image-picker", () => ({ ImagePicker: () => null, GalleryPicker: () => null }));
 vi.mock("@/components/file-picker", () => ({ FilePicker: () => null }));

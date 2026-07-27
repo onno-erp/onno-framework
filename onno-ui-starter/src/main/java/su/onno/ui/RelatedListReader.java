@@ -54,7 +54,7 @@ public class RelatedListReader {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "No related list '" + relatedName + "' on " + parentLogicalName);
         }
-        Junctions.Junction junction = Junctions.resolve(registry, rl.joinCatalog());
+        Junctions.Junction junction = Junctions.resolve(registry, rl.junction());
         if (junction == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Related list '" + relatedName + "' points at an unregistered catalog or register");
@@ -81,7 +81,7 @@ public class RelatedListReader {
             if (rl.hideInDetail()) {
                 continue;
             }
-            Junctions.Junction junction = Junctions.resolve(registry, rl.joinCatalog());
+            Junctions.Junction junction = Junctions.resolve(registry, rl.junction());
             if (junction == null) {
                 continue;
             }
