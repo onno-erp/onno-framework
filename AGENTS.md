@@ -38,8 +38,6 @@ to future agents that may not have the full conversation context.
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
-| `onno-print-starter` | Print/PDF rendering support (`@PrintTemplate`, Thymeleaf + Flying Saucer). |
-| `onno-mail-starter` | Mail templates, dispatchers, preview endpoints, and outbox relay. |
 | `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
 | `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
 | `onno-desktop-gradle-plugin` | Gradle plugin for native desktop packaging. |
@@ -972,7 +970,6 @@ For narrow Java changes, run the owning module's tests:
 
 ```bash
 ./gradlew :onno-framework:test
-./gradlew :onno-mail-starter:test
 ```
 
 For changes that affect public artifacts, starter wiring, frontend packaging, or the example app, run:

@@ -1123,7 +1123,7 @@ resolved **live**, so renames and deletes stay correct on their own.
 - **Notifications.** Each readable `@` mention in a freshly posted comment publishes an
   [`EntityMentionedEvent`](src/main/java/su/onno/ui/comments/EntityMentionedEvent.java). The
   notifications feature (below) consumes it out of the box to notify the mentioned user; you can add
-  further delivery (`onno-mail-starter`, etc.) by registering your own Spring `@EventListener`.
+  further delivery by registering your own Spring `@EventListener`.
 - **Config.** `onno.comments.mentions.enabled` (default true) gates the whole feature;
   `onno.comments.mentions.suggestion-limit` / `…per-entity-limit` cap the typeahead.
 

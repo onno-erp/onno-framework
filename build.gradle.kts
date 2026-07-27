@@ -73,8 +73,6 @@ val publishedModules = mapOf(
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
-    "onno-print-starter" to "PDF / printing starter for onno using Thymeleaf templates and Flying Saucer.",
-    "onno-mail-starter" to "Email starter for onno: SMTP and HTTP dispatch with Thymeleaf-templated bodies.",
     "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome telemetry with a replaceable sink and buffered cloud exporter.",
     "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
@@ -247,8 +245,8 @@ val configNotesDir = file("docs/_config")
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
     "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
-    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter", "onno-mail-starter",
-    "onno-print-starter", "onno-observability-starter", "onno-desktop-starter",
+    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter",
+    "onno-observability-starter", "onno-desktop-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each
@@ -276,8 +274,6 @@ val configModuleTitles = mapOf(
     "onno-import-starter" to "Import — `onno-import-starter` (`OnnoImportProperties`, prefix `onno.import`)",
     "onno-cluster-starter" to "Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)",
     "onno-kafka-starter" to "Kafka — `onno-kafka-starter` (`OnnoKafkaProperties`, prefix `onno.kafka`)",
-    "onno-mail-starter" to "Mail — `onno-mail-starter` (`MailProperties`, prefix `onno.mail`)",
-    "onno-print-starter" to "Print — `onno-print-starter` (`PrintProperties`, prefix `onno.print`)",
     "onno-desktop-starter" to "Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)",
 )
 

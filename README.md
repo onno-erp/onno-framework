@@ -102,8 +102,6 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
 | `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry with a bounded HTTP exporter. |
 | `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
-| `onno-print-starter` | Thymeleaf-based document rendering and PDF output support. |
-| `onno-mail-starter` | Mail templates, dispatchers, suppression, preview endpoints, and outbox relay support. |
 | `onno-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
 | `onno-import-starter` | CSV import services and endpoints for catalogs. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out (pluggable bus; default Postgres LISTEN/NOTIFY). |

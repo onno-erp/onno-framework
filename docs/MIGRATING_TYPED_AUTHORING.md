@@ -74,11 +74,10 @@ Java getter and therefore remains an explicit string.
 ## Queries and registers
 
 Import `su.onno.fields.Field` for reusable field tokens. The old
-`su.onno.repository.FieldReference` is only a deprecated alias. `Q`, `RegisterQueryBuilder`, and
+`su.onno.repository.FieldReference` is only a deprecated alias. `RegisterQueryBuilder` and
 `RegisterFilter` use the shared field type:
 
 ```java
-Q.eq(Order::getStatus, OrderStatus.NEW);
 query.groupBy(Stock::getWarehouse).where(Stock::getProduct, product);
 ```
 
