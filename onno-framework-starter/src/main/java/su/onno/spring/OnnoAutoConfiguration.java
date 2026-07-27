@@ -49,18 +49,41 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     /**
      * Maps each tabular-section row class to the child table the schema generator creates
      * ({@code document_<doc>_<section>}), so {@link OnnoNamingStrategy} can give Spring Data JDBC
-     * the same table name when it persists a document's {@code @TabularSection List<Row>}.
+     * the same table name when it persists a document's {@code @TabularSection List<Row>}. Rejects
+     * a concrete row class owned by more than one section because a class can map to only one table.
      */
     static Map<Class<?>, String> buildTabularSectionTables(List<String> scanPackages) {
-        Map<Class<?>, String> map = new HashMap<>();
+        Map<Class<?>, String> map = new LinkedHashMap<>();
+        Map<Class<?>, TabularSectionOwner> owners = new HashMap<>();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         for (Class<?> clazz : new DocumentScanner().scan(scanPackages)) {
             DocumentDescriptor doc = scanner.scanDocument(clazz);
             for (TabularSectionDescriptor ts : doc.tabularSections()) {
-                map.put(ts.rowClass(), ts.tableName());
+                TabularSectionOwner owner = new TabularSectionOwner(
+                        doc.javaClass(), ts.fieldName(), ts.name(), ts.tableName());
+                TabularSectionOwner existing = owners.putIfAbsent(ts.rowClass(), owner);
+                if (existing != null && !existing.equals(owner)) {
+                    throw new IllegalStateException(
+                            "Tabular section row class " + ts.rowClass().getName()
+                                    + " is reused by " + existing.describe() + " and " + owner.describe()
+                                    + ". Each @TabularSection must use a distinct concrete row class"
+                                    + " because Spring Data JDBC maps one row class to one child table."
+                                    + " Create one concrete row class per section; share fields or"
+                                    + " behavior through a common base class.");
+                }
+                map.putIfAbsent(ts.rowClass(), ts.tableName());
             }
         }
         return map;
+    }
+
+    private record TabularSectionOwner(
+            Class<?> documentClass, String fieldName, String sectionName, String tableName) {
+
+        String describe() {
+            return documentClass.getName() + "#" + fieldName
+                    + " (@TabularSection(name=\"" + sectionName + "\"), table=\"" + tableName + "\")";
+        }
     }
 
     @Override

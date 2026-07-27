@@ -354,13 +354,21 @@ row flipping to a `play` "Resume" once stopped, or a button shown only where it 
 ```java
 public void actions(ActionSpec a) {
     a.action("toggle").scope(ActionScope.ROW)
-     .icon(row  -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
+     .label("Change running state")
      .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
+     .icon(row  -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
      .visibleWhen(row -> row.enumValue("status", Status.class) != Status.ARCHIVED)
      .enabledWhen(row -> row.canToggle())            // any predicate over the row
      .handler(ctx -> { svc.toggle(ctx.id()); return ActionResult.refresh("Toggled"); });
 }
 ```
+
+The two label overloads are intentional. A dynamic **server ROW** action is exposed to batch
+selection, but the batch menu and its progress/summary toasts have no single `ActionRow`; they use
+the static `.label(String)`. Always provide that human-facing fallback alongside
+`.label(row -> ...)`, or batch surfaces display the action key. If applying one action to a
+mixed-state selection is ambiguous or unsafe, declare separate deterministic actions such as
+`suspend` and `resume` and enforce each action's preconditions in its handler.
 
 Any action (entity or page) may declare `.roles("ACCOUNTANT", "MANAGER")` — the server then rejects
 callers holding none of them (`ADMIN` always passes). For an entity action this is a finer gate *on
@@ -542,7 +550,8 @@ the last. Right-clicking a
 selected row switches the menu to batch mode: every custom **server** row action (flat or submenu)
 runs over each selected id sequentially with a summary toast, and Delete becomes a two-step
 "Delete N". Navigation actions and per-row visibility overrides don't apply in batch mode — the
-handler decides per record.
+handler decides per record. Batch action names and progress messages use the action's static
+`.label(String)`, not its per-row dynamic label.
 
 **⌘C / ⌘V on rows.** Copy (the selection, else the hovered row) writes two clipboard flavours:
 `text/plain` TSV of the visible columns exactly as rendered — pastes straight into a text file or

@@ -35,8 +35,9 @@ import java.util.function.Predicate;
  *
  * <pre>
  * a.action("suspend").scope(ActionScope.ROW)
- *  .icon(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
+ *  .label("Change running state")
  *  .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
+ *  .icon(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
  *  .visibleWhen(row -> row.enumValue("status", Status.class) != Status.ARCHIVED)
  *  .handler(ctx -> { service.toggle(ctx.id()); return ActionResult.refresh(); });
  * </pre>
@@ -46,6 +47,13 @@ import java.util.function.Predicate;
  * record as the detail surface renders) — so one detail-header button can hide, relabel or disable
  * itself by the record's state, mirroring the row button. On {@link ActionScope#TOOLBAR} they're
  * ignored in favour of the fixed icon/label (a toolbar has no record context).</p>
+ *
+ * <p>A server {@link ActionScope#ROW} action is also available to batch selection. Because the
+ * batch menu and its progress messages have no single row context, they use the fixed
+ * {@link ActionBuilder#label(String) label}; when a dynamic label is declared, provide a
+ * human-facing fixed label as well or those surfaces fall back to the action key. If applying one
+ * action to a mixed-state selection would be ambiguous, declare separate deterministic actions
+ * (for example, "Suspend" and "Resume") instead of a state-toggling batch action.</p>
  *
  * <p>A server action may also declare a <b>form</b> — the click then opens a modal dialog that
  * collects the declared fields before the handler runs; the values arrive as
@@ -177,6 +185,11 @@ public final class ActionSpec {
             this.key = key;
         }
 
+        /**
+         * Set the fixed human-facing label. Surfaces without a record context, including the batch
+         * menu and batch progress messages, use this value; it is also the fallback for a dynamic
+         * {@link #label(Function)}. If omitted, the fixed label defaults to the action key.
+         */
         public ActionBuilder label(String label) {
             this.label = label;
             return this;
@@ -299,7 +312,9 @@ public final class ActionSpec {
 
         /**
          * Pick the label per record ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
-         * Overrides the fixed {@link #label(String)}.
+         * Overrides the fixed {@link #label(String)}. For a server row action exposed to batch
+         * selection, also set a fixed human-facing label because batch surfaces have no single
+         * record context.
          */
         public ActionBuilder label(Function<ActionRow, String> label) {
             this.labelFn = label;

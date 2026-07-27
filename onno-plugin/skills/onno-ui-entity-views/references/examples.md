@@ -109,6 +109,11 @@ public class SalesOrderView implements EntityView {
 }
 ```
 
+The fixed `.label("Advance")` on the row action is deliberate: the dynamic overload supplies each
+row's label, while batch selection uses the fixed label for its menu and progress messages. Without
+the fixed overload, those batch surfaces show the action key. If advancing a mixed-state selection
+is not a well-defined operation, model separate deterministic actions instead.
+
 ## Field Hints
 
 Use field hints to make generated forms feel authored:

@@ -22,7 +22,9 @@ the period?", or "what fact was effective on this date?"
 | facts over time by dimensions | `@InformationRegister` |
 
 Use `@Dimension` for the keys you group/filter by. Use `@Resource` for numeric values that
-accumulate or are stored as facts.
+accumulate or are stored as facts. An `@Enumeration` enum is a supported dimension: accumulation
+register posting and totals store its stable UUID, while typed filters and reads use the enum
+constant.
 
 ## Read The Examples
 

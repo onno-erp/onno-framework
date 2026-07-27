@@ -269,6 +269,11 @@ public class SalesOrderLine extends TabularSectionRow {
 }
 ```
 
+Each `@TabularSection` must use its own concrete `TabularSectionRow` class. Spring Data JDBC maps a
+row class to one generated child table, so startup rejects the same concrete row class reused by
+another document or section. Share common fields and behavior through a base row class, then create
+a distinct concrete subclass for each section.
+
 ### Accumulation Registers
 
 Accumulation registers are ledgers for quantities, money, or other accumulated balances and turnovers.
@@ -333,6 +338,10 @@ public class StockRegister extends AccumulationRecord {
     private BigDecimal quantity;
 }
 ```
+
+An `@Enumeration` enum may be an accumulation-register `@Dimension`. Posting stores its
+deterministic UUID in both movement and totals tables; typed filters and reads accept/return the enum
+constant.
 
 Use `Ref<T>` when a field has one target type. If the business meaning genuinely permits several
 catalog/document types in the same field, use `PolyRef` with an explicit target allowlist:

@@ -32,6 +32,8 @@ public class StockRegister extends AccumulationRecord {
 
 A balance register rejects posting movements that would make the resulting balance negative.
 Use this for stock, cash, reservations, loyalty points, and open obligations.
+Dimensions may also use an `@Enumeration` enum. Set the enum constant on the movement; onno stores
+its stable UUID in movement and totals tables and maps it back for typed filters and reads.
 
 ## Turnover Register
 

@@ -21,4 +21,9 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
   related lists, action placement.
 - `actions(ActionSpec)` for toolbar, row, and detail buttons.
 
+For a server row action with `label(row -> ...)`, also set a human-facing `label(String)`. Batch
+selection has no single `ActionRow`, so its menu and progress messages use the static label and
+otherwise fall back to the action key. If one operation is not deterministic across mixed record
+states, expose separate actions instead of a toggle.
+
 Read [references/examples.md](references/examples.md) for a full view with actions and forms.
