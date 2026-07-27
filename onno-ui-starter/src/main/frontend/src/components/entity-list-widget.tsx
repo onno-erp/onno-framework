@@ -199,6 +199,11 @@ export type ListDescriptor = {
    */
   canWrite?: boolean;
   actions?: ListAction[];
+  /**
+   * True when EntityView.actions contains a late-bound provider. The island then refreshes action
+   * descriptors on each context-menu open; absent/false keeps static entities request-free.
+   */
+  dynamicActions?: boolean;
   inputs?: ListInput[];
   filters?: ListFilterControl[];
   /** When set, the toolbar offers a Table ⇄ Map toggle that plots the rows as markers. */
@@ -1388,7 +1393,16 @@ export function EntityListWidget({
   // over the viewport height and scrolls internally; embedded flows with the host page.
   const surfaceMode = !list.embedded;
 
-  const allActions = list.actions ?? [];
+  // Last successfully resolved late-bound descriptors. A failed menu-open refresh deliberately
+  // keeps this snapshot (or the startup static descriptors before the first success).
+  const [resolvedActions, setResolvedActions] = useState<ListAction[] | null>(null);
+  const [resolvedActionStates, setResolvedActionStates] =
+    useState<Record<string, Record<string, RowActionState>>>({});
+  useEffect(() => {
+    setResolvedActions(null);
+    setResolvedActionStates({});
+  }, [kind, name, list.dynamicActions]);
+  const allActions = resolvedActions ?? list.actions ?? [];
   const toolbarActions = allActions.filter((a) => a.scope === "toolbar");
   const rowActions = allActions.filter((a) => a.scope === "row");
   // Only actions without a .menu("…") placement render as inline row icon buttons; the rest live in
@@ -1857,8 +1871,22 @@ export function EntityListWidget({
       if (selected.size && !selected.has(menu.id)) clearSelection();
       setArmedDelete(false);
       setRowMenu(menu);
+      if (list.dynamicActions) {
+        // Fetch on every open: additions, removals, labels, order, icons/colors, forms and handlers
+        // are all live. Failure is intentionally swallowed — the currently rendered descriptors
+        // remain a last-known fallback and the next open retries.
+        void api.getEntityActions<ListAction, RowActionState>(kind, name, menu.id)
+          .then((response) => {
+            setResolvedActions(response.actions);
+            setResolvedActionStates((current) => ({
+              ...current,
+              [menu.id]: response.rowActions ?? {},
+            }));
+          })
+          .catch(() => {});
+      }
     },
-    [selected, clearSelection]
+    [selected, clearSelection, list.dynamicActions, kind, name]
   );
 
   // A changed query invalidates the selection's row set — indices shift, rows drop out.
@@ -2234,7 +2262,9 @@ export function EntityListWidget({
           .filter((g) => g.actions.length);
         // Cell-menu mode (ListSpec.cellMenu): just the named submenu's entries, flat — the status
         // pill's right-click IS the status list.
-        const onlyMenu = rowMenu.only ? submenus.find((g) => g.label === rowMenu.only) : undefined;
+        const onlyMenuActions = rowMenu.only
+          ? (submenus.find((g) => g.label === rowMenu.only)?.actions ?? [])
+          : null;
         const close = () => {
           setRowMenu(null);
           setArmedDelete(false);
@@ -2244,7 +2274,8 @@ export function EntityListWidget({
           // static descriptor (each row's own visibility is the handler's business).
           const st = batch
             ? undefined
-            : (rowMenu.row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+            : resolvedActionStates[rowMenu.id]?.[a.key]
+              ?? (rowMenu.row._actions as Record<string, RowActionState> | undefined)?.[a.key];
           if (!batch && st?.visible === false) return null;
           const disabled = (!batch && st?.enabled === false) || pending.has(`batch:${a.key}`);
           return (
@@ -2274,8 +2305,8 @@ export function EntityListWidget({
         };
         // Built-ins: batch = label + open + delete; single = open/duplicate/copy-link/delete — minus
         // the write items (edit, dup, delete) when the viewer can't write the entity.
-        const itemCount = onlyMenu
-          ? onlyMenu.actions.length
+        const itemCount = onlyMenuActions
+          ? onlyMenuActions.length
           : (batch ? (canWrite ? 3 : 2) : canWrite ? 5 : 2) + flatCustom.length + submenus.length;
         return (
           <ContextMenuContent
@@ -2287,9 +2318,9 @@ export function EntityListWidget({
             width={216}
             estimatedHeight={itemCount * 38 + 24}
           >
-            {onlyMenu ? (
+            {onlyMenuActions ? (
               // Cell-menu mode: the pill's right-click IS the choice list — nothing else.
-              onlyMenu.actions.map(actionItem)
+              onlyMenuActions.map(actionItem)
             ) : (
               <>
             {batch ? (
@@ -2865,7 +2896,7 @@ export function EntityListWidget({
                         e.preventDefault();
                         if (selected.size && !selected.has(rowId)) clearSelection();
                         setArmedDelete(false);
-                        setRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
+                        openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
                       }}
                       className={cn(
                         // Hover highlight is owned by the [data-onno-row]:hover rule in index.css.
@@ -2893,7 +2924,7 @@ export function EntityListWidget({
                               e.preventDefault();
                               e.stopPropagation();
                               const rid = String(row._id);
-                              setRowMenu({
+                              openRowMenu({
                                 x: e.clientX,
                                 y: e.clientY,
                                 id: rid,
@@ -2919,7 +2950,9 @@ export function EntityListWidget({
                           {rowButtonActions.map((a) => {
                             // State-aware row actions: the server attaches a per-row override
                             // (icon/label/visible/enabled) under `_actions`, computed from the row's data.
-                            const st = (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+                            const st =
+                              resolvedActionStates[String(row._id)]?.[a.key]
+                              ?? (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
                             if (st?.visible === false) return null;
                             const icon = st?.icon ?? a.icon;
                             const label = st?.label ?? a.label;

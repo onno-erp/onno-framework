@@ -32,6 +32,7 @@ function monthNames(locale?: string): string[] {
 const baseCellCls = cn(
   "relative inline-flex h-9 w-9 cursor-pointer items-center justify-center text-sm rounded-lg outline-none transition-colors",
   "data-[outside-month]:text-muted-foreground/50",
+  "data-[today]:after:pointer-events-none data-[today]:after:absolute data-[today]:after:bottom-1 data-[today]:after:h-1 data-[today]:after:w-1 data-[today]:after:rounded-full data-[today]:after:bg-primary data-[today]:after:content-['']",
   "data-[hovered]:bg-accent data-[hovered]:text-accent-foreground",
   "data-[focus-visible]:ring-2 data-[focus-visible]:ring-ring/50",
   "data-[unavailable]:line-through data-[unavailable]:opacity-60",
@@ -40,7 +41,8 @@ const baseCellCls = cn(
 
 const singleCellCls = cn(
   baseCellCls,
-  "data-[selected]:bg-primary data-[selected]:text-primary-foreground"
+  "data-[selected]:bg-primary data-[selected]:text-primary-foreground",
+  "[&[data-today][data-selected]]:after:bg-primary-foreground"
 );
 
 const rangeCellCls = cn(
@@ -52,6 +54,8 @@ const rangeCellCls = cn(
   // Edges
   "data-[selection-start]:bg-primary data-[selection-start]:text-primary-foreground data-[selection-start]:rounded-r-none",
   "data-[selection-end]:bg-primary data-[selection-end]:text-primary-foreground data-[selection-end]:rounded-l-none",
+  "[&[data-today][data-selection-start]]:after:bg-primary-foreground",
+  "[&[data-today][data-selection-end]]:after:bg-primary-foreground",
   // Same-day range
   "[&[data-selection-start][data-selection-end]]:rounded-md"
 );

@@ -330,7 +330,14 @@ because they are not Java field references.
     action (`ADMIN` always passes; #227): on an entity action it's a finer gate on top of the
     entity's write roles, on a page action (which has no entity to gate on) it's the only
     authorization and the button is hidden from callers who lack it. Server actions honour
-    `onno.ui.read-only` (page actions too). `form(f→…)` makes the click open a **modal input
+    `onno.ui.read-only` (page actions too). `dynamic(live→…)` declares late-bound actions backed by
+    editable business data: the provider is retained (not evaluated) at startup, then resolved on
+    every row/cell context-menu open and again for execution/form/batch key lookup. Current
+    add/remove/rename/order/icon/color changes appear on the next open; a failed refresh keeps the
+    last-known client snapshot; a removed key executes as the normal unknown-action `404`.
+    Static-only entities make no menu-open request. Providers are read-only and should be fast;
+    static + dynamic declarations preserve authored order and first-view/first-key wins.
+    `form(f→…)` makes the click open a **modal input
     dialog** first (same DSL as toolbar inputs, plus `.required()` and `InputType.TEXTAREA`); the
     submitted values reach the handler as `ctx.input(key)` — the "Cancel with a reason" idiom. Works
     on every scope (row/toolbar/detail, context menu, batch — a batch collects once and applies to

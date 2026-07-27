@@ -567,6 +567,16 @@ export const api = {
     fetchJson<{ values: Record<string, string>; rows: Record<string, Record<string, string>[]> }>(
       `${BASE}/actions/${kind}/${name}/${key}/form${id ? `?id=${encodeURIComponent(id)}` : ""}`
     ),
+  /**
+   * Current late-bound EntityView action descriptors. Dynamic lists call this on every context-menu
+   * open; the request is silent so a transient failure can keep the last-known/static menu intact.
+   */
+  getEntityActions: <T, S>(kind: string, name: string, id: string) =>
+    fetchJson<{ actions: T[]; rowActions: Record<string, S> }>(
+      `${BASE}/actions/${kind}/${name}?id=${encodeURIComponent(id)}`,
+      undefined,
+      { silent: true }
+    ),
   // Custom EntityView action: POSTs to the server handler and returns its ActionResult. A
   // toolbar action passes no id; a row/detail action passes the record id. The current toolbar
   // input values (if any) ride along in the body and reach the handler via ActionContext.

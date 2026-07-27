@@ -71,6 +71,7 @@ dependencies {
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    testImplementation(libs.mockito.core)
     testImplementation(libs.spring.security.core)
     // Context-runner assertions for the auto-configuration gating tests.
     testImplementation(libs.spring.boot.test)

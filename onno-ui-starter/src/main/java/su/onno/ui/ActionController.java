@@ -84,6 +84,38 @@ public class ActionController {
         return action;
     }
 
+    /**
+     * Current toolbar/row descriptors for an entity with late-bound actions. The list descriptor
+     * advertises whether this request is needed; static-only entities never call it. Dynamic
+     * providers are evaluated for every menu open, so catalog-backed add/remove/rename/reorder and
+     * presentation changes appear without a restart or page reload.
+     */
+    @GetMapping("/{kind}/{name}")
+    public Map<String, Object> descriptors(@PathVariable String kind, @PathVariable String name,
+                                           @RequestParam(required = false) UUID id,
+                                           Principal principal) {
+        Class<?> entity = resolveAndAuthorize(kind, name, principal);
+        List<Action> current = actions.resolvedForEntity(entity);
+        List<Map<String, Object>> out = UiActionResolver.descriptors(current,
+                java.util.EnumSet.of(ActionScope.TOOLBAR, ActionScope.ROW));
+        for (Map<String, Object> action : out) {
+            action.put("kind", kind);
+            action.put("name", name);
+        }
+        Map<String, Object> rowState = id == null
+                ? Map.of()
+                : actions.rowActionState(current, actionRow(kind, name, id));
+        return Map.of("actions", out, "rowActions", rowState);
+    }
+
+    private Map<String, Object> actionRow(String kind, String name, UUID id) {
+        return switch (kind) {
+            case "catalogs" -> catalogQuery.get(catalogQuery.require(name), id);
+            case "documents" -> documentQuery.get(documentQuery.require(name), id);
+            default -> Map.of();
+        };
+    }
+
     @PostMapping("/{kind}/{name}/{key}")
     public ActionResult run(@PathVariable String kind, @PathVariable String name, @PathVariable String key,
                             @RequestParam(required = false) UUID id,
