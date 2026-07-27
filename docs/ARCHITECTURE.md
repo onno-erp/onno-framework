@@ -257,8 +257,10 @@ public void handlePosting(PostingContext context) {
 
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
 `beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
-inserts movements, updates register totals, rejects negative `BALANCE` results unless that register
-declares `allowNegative = true`, writes back computed fields, and sets `_posted = true`. After commit
+atomically claims an existing unposted document, inserts movements, updates register totals, rejects
+negative `BALANCE` results unless that register declares `allowNegative = true`, and writes back
+computed fields. Posting a missing or already-posted document is rejected before any movement is
+persisted, so retries cannot double-count registers. After commit
 it emits `@DomainEvent` outbox rows, calls `afterPost`, and publishes a Spring
 `DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
 
@@ -274,6 +276,8 @@ Two semantics that bite every integration:
 - **Posting is its own transaction**, not enlisted in an ambient `@Transactional`. Save the document
   (let it commit), *then* post. Wrapping save+post in one `@Transactional` silently leaves
   `_posted = false`.
+- **Posting an already-posted document is rejected.** Unpost it before intentionally recalculating
+  its movements; a repeated core `post(...)` call never duplicates register totals.
 - **React to a post with a Spring `@EventListener` on `DocumentPostedEvent`** (full DI), not from
   inside `handlePosting`. The domain `AfterPostHandler.afterPost()` hook has no Spring access.
 

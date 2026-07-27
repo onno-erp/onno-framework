@@ -143,6 +143,7 @@ public class PostingEngine {
         }
 
         OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
+            claimUnpostedDocument(handle, docDescriptor, document.getId());
             persistPosting(handle, docDescriptor, document, context);
         }));
 
@@ -242,6 +243,11 @@ public class PostingEngine {
         OnnoPerformance.record("onno.document.restore-sequence", 1,
                 () -> jdbi.useTransaction(TransactionIsolationLevel.SERIALIZABLE, handle ->
                         withBoundRegisterReads(handle, () -> {
+                            DocumentDescriptor requestedDescriptor =
+                                    registry.getDocumentDescriptor(requested.getClass());
+                            if (!unpostRequested) {
+                                claimUnpostedDocument(handle, requestedDescriptor, requested.getId());
+                            }
                             List<DocumentObject> laterDocuments =
                                     loadLaterDocuments(handle, requested, chronologicalRegisters);
                             List<DocumentObject> reverse = new ArrayList<>(laterDocuments);
@@ -250,8 +256,6 @@ public class PostingEngine {
                                 unpostMovements(handle, later.getId());
                             }
 
-                            DocumentDescriptor requestedDescriptor =
-                                    registry.getDocumentDescriptor(requested.getClass());
                             if (unpostRequested) {
                                 unpostInTransaction(handle, requestedDescriptor, requested.getId());
                             } else {
@@ -300,10 +304,19 @@ public class PostingEngine {
             checkNonNegativeBalances(handle, repo.getPersistence().getDescriptor());
         }
         writeBackDocument(handle, descriptor, document);
-        handle.createUpdate("UPDATE " + descriptor.tableName() +
-                        " SET _posted = TRUE WHERE _id = :id")
-                .bind("id", document.getId())
+    }
+
+    private void claimUnpostedDocument(Handle handle,
+                                       DocumentDescriptor descriptor,
+                                       UUID documentId) {
+        int updated = handle.createUpdate("UPDATE " + descriptor.tableName() +
+                        " SET _posted = TRUE WHERE _id = :id AND _posted = FALSE")
+                .bind("id", documentId)
                 .execute();
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Document " + documentId + " does not exist or is already posted");
+        }
     }
 
     private void unpostInTransaction(Handle handle,

@@ -16,6 +16,8 @@ Posting is typed Java. There is no string-mapped posting rule or validation expr
 
 - Save the document and let it commit, then post. Do not wrap save + post in one Spring
   `@Transactional` method.
+- Posting atomically claims an existing unposted document. A repeated `post(...)` is rejected before
+  movements are persisted; unpost first when an intentional recalculation is required.
 - `handlePosting(PostingContext)` should only write register movements.
 - For external APIs, notifications, or other bean-backed side effects, listen for
   `DocumentPostedEvent` / `DocumentUnpostedEvent` with a Spring `@EventListener`.

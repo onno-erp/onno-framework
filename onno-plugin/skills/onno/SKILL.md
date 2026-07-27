@@ -147,6 +147,8 @@ running app (see below). Summarize what you modeled and your assumptions.
 - **Posting runs in its own JDBI transaction**, not enlisted in an ambient Spring `@Transactional`.
   **Save the document (let it commit), then post.** Wrapping save+post in one `@Transactional`
   method silently leaves register movements written but `_posted = false`.
+- **Posting an already-posted document is rejected before movements are persisted.** Unpost first
+  when an intentional recalculation is required; retrying `post(...)` cannot double-count totals.
 - **React to a post with a Spring `@EventListener` on `DocumentPostedEvent`** (full DI), not from
   inside `handlePosting` (that runs in the posting transaction and should only write movements). The
   domain `AfterPostHandler.afterPost()` hook exists but has no Spring access — prefer the event for
