@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { DivKitView } from "@/views/divkit-view";
 
 vi.mock("@divkitframework/react", () => ({
@@ -53,7 +53,7 @@ vi.mock("@/lib/icon-bridge", () => ({
   DynamicLucide: ({ name }: { name: string }) => <svg data-testid={`icon-${name}`} />,
 }));
 
-vi.mock("sonner", () => ({
+vi.mock("@/components/ui/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() },
 }));
 

@@ -1,7 +1,7 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ActionFormDialog,

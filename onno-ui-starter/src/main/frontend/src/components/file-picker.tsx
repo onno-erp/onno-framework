@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { FileUp, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
 import {
   Attachment,

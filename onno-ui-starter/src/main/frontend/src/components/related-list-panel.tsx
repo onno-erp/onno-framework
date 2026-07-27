@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Plus, Trash2 } from "lucide-react";
 import type { AttributeMeta, EntityRecord, RelatedListMeta } from "@/lib/types";
 import { api } from "@/lib/api";

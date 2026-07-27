@@ -5,6 +5,12 @@ import { glassAvatar, initials, tint } from "@/components/presence-avatars";
 import { Segmented } from "@/components/ui/segmented";
 import { NotificationBadgeMotion } from "@/components/ui/notification-badge-motion";
 import { AnimatedNumber } from "@/components/ui/animated-number";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 import { useMessages } from "@/providers/messages-provider";
 import type { Translate } from "@/lib/messages";
 import { cn } from "@/lib/utils";
@@ -250,16 +256,6 @@ export function NotificationCenter() {
     startNotifications();
   }, []);
 
-  // Esc closes the panel.
-  useEffect(() => {
-    if (!panelOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closePanel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [panelOpen]);
-
   if (!available) return null;
 
   const items = filteredItems(store);
@@ -302,43 +298,21 @@ export function NotificationCenter() {
         </button>
       ) : null}
 
-      {/* Backdrop — a black scrim (not bg-foreground, which is near-white in dark theme and washes the
-          app out); dims consistently in both light and dark. */}
-      <div
-        onClick={closePanel}
-        className={cn(
-          "fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300",
-          panelOpen ? "opacity-100" : "pointer-events-none opacity-0"
-        )}
-        aria-hidden
-      />
-
-      {/* Slide-over panel */}
-      <aside
-        role="dialog"
-        // Only advertise the modal role while open: the panel is position:fixed at all times, so
-        // isInteractiveLayerOpen() (which treats fixed nodes as visible) would otherwise always see
-        // it and permanently swallow the page-close Escape. Gated on panelOpen, it lets the
-        // divkit-view Esc handler bail only when the panel is actually up.
-        aria-modal={panelOpen ? "true" : undefined}
-        aria-label={t("notifications.title")}
-        className={cn(
-          // A floating island on every viewport: inset from the edges with a gap, rounded + bordered.
-          // On phones max-w keeps the same island shape at nearly full width.
-          "fixed right-3 top-3 bottom-3 z-50 flex w-[400px] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-card border border-border bg-background shadow-2xl ease-out",
-          // Mobile: fade + gentle scale in place — no slide, the island just appears over the scrim.
-          "transition-[opacity,transform] duration-200",
-          panelOpen ? "opacity-100 scale-100" : "pointer-events-none opacity-0 scale-95",
-          // Desktop/tablet: the slide-over — fully past the right edge (100% + the island's 0.75rem
-          // gap) so it never peeks when closed; opacity/scale pinned so only the slide animates.
-          "sm:scale-100 sm:opacity-100 sm:transition-transform sm:duration-300",
-          panelOpen ? "sm:translate-x-0" : "sm:translate-x-[calc(100%+0.75rem)]"
-        )}
+      <Drawer
+        open={panelOpen}
+        onOpenChange={(open) => {
+          if (open) openPanel();
+          else closePanel();
+        }}
+        swipeDirection="right"
       >
+        <DrawerContent className="right-3 top-3 bottom-3 w-[400px] max-w-[calc(100vw-1.5rem)] rounded-card">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pb-4 pt-5">
           <div className="flex items-center gap-2.5">
-            <h2 className="text-base font-semibold text-foreground">{t("notifications.title")}</h2>
+            <DrawerTitle className="text-base font-semibold text-foreground">
+              {t("notifications.title")}
+            </DrawerTitle>
             {unreadCount > 0 ? (
               <AnimatedNumber
                 value={String(unreadCount)}
@@ -357,14 +331,12 @@ export function NotificationCenter() {
                 {t("notifications.markAllRead")}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={closePanel}
+            <DrawerClose
               aria-label={t("action.cancel")}
               className="flex h-7 w-7 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <X className="h-4 w-4" />
-            </button>
+            </DrawerClose>
           </div>
         </div>
 
@@ -402,7 +374,8 @@ export function NotificationCenter() {
             })
           )}
         </div>
-      </aside>
+        </DrawerContent>
+      </Drawer>
     </>
   );
 }

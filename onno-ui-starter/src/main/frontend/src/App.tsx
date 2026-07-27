@@ -23,7 +23,7 @@ import { NotificationIndicatorPortals } from "@/lib/notification-indicator-bridg
 import { GeoPortals } from "@/lib/geo-bridge";
 import { NotificationCenter } from "@/components/notification-center";
 import { UpdateNotice } from "@/components/update-notice";
-import { AppToaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toast";
 import { BASE_PATH } from "@/lib/base-path";
 import { ActionFeedbackHost } from "@/lib/action-feedback";
 
@@ -98,7 +98,7 @@ function WorkspaceProviders({ children }: { children: ReactNode }) {
         <MessagesProvider>
           <AuthProvider>
             {children}
-            <AppToaster />
+            <Toaster />
           </AuthProvider>
         </MessagesProvider>
       </BrandingProvider>

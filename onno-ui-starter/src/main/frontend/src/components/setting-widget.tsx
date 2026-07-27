@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Check } from "lucide-react";
 import { api } from "@/lib/api";
 import type { DashboardWidgetMeta, SettingMeta } from "@/lib/types";

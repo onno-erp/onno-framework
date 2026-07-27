@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
 import {
   api,

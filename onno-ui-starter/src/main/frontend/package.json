@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@divkitframework/divkit": "^32.51.0",
     "@divkitframework/react": "^2.0.0",
     "@fullcalendar/core": "^6.1.20",
@@ -38,7 +39,6 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.1",
     "recharts": "^3.8.1",
-    "sonner": "^1.7.2",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^1.1.2"

@@ -49,8 +49,8 @@ public class MainLayout implements Layout {
         layout.shell()
                 .nav(NavStyle.SIDEBAR)
                 .brand("Onno Books")
-                // Two variants: the logo is served as an <img>, so its text can't inherit the shell's
-                // color — each file sets its own (dark wordmark for light mode, light for dark mode).
+                // The compact onno mark keeps the demo shell recognizable without crowding its name.
+                // Two files keep the mark and label legible in both shell themes.
                 .logo("/branding/logo.svg", "/branding/logo-dark.svg")
                 .favicon("/branding/favicon.svg")
                 .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))

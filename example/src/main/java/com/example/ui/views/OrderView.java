@@ -191,7 +191,7 @@ public class OrderView implements EntityView<Order> {
                 .handler(this::feedbackDemo);
 
         // One-click visual QA for the canonical toast. Repeated clicks cycle through all semantic
-        // tones, so the Sonner stack, hierarchy, actions, and light/dark colors are easy to inspect.
+        // tones, so the Base UI stack, hierarchy, actions, and light/dark colors are easy to inspect.
         a.action("toastDemo").scope(ActionScope.TOOLBAR).icon("bell-ring").label("Toast demo")
                 .handler(ctx -> toastDemo());
 

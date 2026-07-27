@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import type {
   DashboardWidgetMeta,
