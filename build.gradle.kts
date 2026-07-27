@@ -73,7 +73,7 @@ val publishedModules = mapOf(
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
-    "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome telemetry with a replaceable sink and buffered cloud exporter.",
+    "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome instrumentation exported through OpenTelemetry.",
     "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
 
