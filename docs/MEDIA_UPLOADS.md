@@ -23,6 +23,10 @@ require an authenticated session; `POST` is CSRF-protected like every other muta
 `GET /api/media/{key}` serves bytes for backends the framework streams (the filesystem default).
 Backends that hand out their own public URLs (e.g. a public S3 bucket) don't implement
 `MediaStorage.load`, and the persisted `url` points straight at them instead.
+The response always sends `X-Content-Type-Options: nosniff`. Known safe raster image types
+(`png`, `jpeg`, `gif`, `webp`, and `avif`) render inline; every other type, including HTML and SVG,
+uses `Content-Disposition: attachment` so an uploaded active document cannot execute in the
+application origin.
 
 ## Admin UI widgets
 

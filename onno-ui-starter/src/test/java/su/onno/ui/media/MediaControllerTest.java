@@ -3,6 +3,7 @@ package su.onno.ui.media;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
@@ -51,6 +52,9 @@ class MediaControllerTest {
         assertThat(served.getBody()).isNotNull();
         assertThat(served.getBody().getContentAsByteArray()).isEqualTo(bytes);
         assertThat(served.getHeaders().getContentType()).hasToString("image/png");
+        assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .startsWith("inline;");
+        assertThat(served.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
     }
 
     @Test
@@ -100,6 +104,20 @@ class MediaControllerTest {
 
         // The ";charset=..." parameter is dropped, so validation and storage see the bare type.
         assertThat(stored.contentType()).isEqualTo("text/plain");
+    }
+
+    @Test
+    void activeContentIsDownloadedAndCannotBeMimeSniffed(@TempDir Path dir) throws Exception {
+        MediaController controller = controller(dir, List.of());
+        StoredMedia stored = controller.upload(file(
+                "payload.html", "text/html",
+                "<script>alert(document.cookie)</script>".getBytes(StandardCharsets.UTF_8)));
+
+        ResponseEntity<Resource> served = controller.serve("/" + stored.key());
+
+        assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
+                .startsWith("attachment;");
+        assertThat(served.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
     }
 
     /** A minimal {@link MultipartFile} over an in-memory byte array. */
