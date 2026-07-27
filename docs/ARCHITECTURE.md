@@ -435,8 +435,10 @@ superuser. Override the whole thing by setting `onno.auth.enabled=false` and sup
   the web UI), exposing tools generated from the registry and gated by RBAC: `describe_metadata`,
   `list_catalog`/`get_catalog`, `list_documents`/`get_document`, `register_balance`/`register_movements`,
   `create_*`/`update_*`/`delete_*` (gated by `onno.mcp.writes-enabled`), `posting_preview`,
-  `post_document`/`unpost_document` (gated by `onno.mcp.posting-enabled`). This is the
-  agent-readable model surface that replaced the old idea of an HTTP manifest.
+  `post_document`/`unpost_document` (gated by `onno.mcp.posting-enabled`). Applications add
+  authenticated, role-scoped tools with `@McpTool` methods; `McpToolProvider` is the lower-level
+  SDK extension point. Custom tools compose with generated tools and duplicate names fail startup.
+  This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes
   `CREATE_ONLY` / `UPSERT_BY_CODE` (catalogs) / `UPSERT_BY_NUMBER` (documents), dotted mapping keys
@@ -546,11 +548,12 @@ are in [docs/licensing/MODULE-SPLIT-PLAN.md](licensing/MODULE-SPLIT-PLAN.md).
 ## Community extensions
 
 The same starter mechanism is open to anyone — community extensions are first-class, not a fork.
-There are four extension surfaces: **connectors** (auto-config starters wrapping an external
+There are five extension surfaces: **connectors** (auto-config starters wrapping an external
 system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, an additive
 `AuthMethodsContributor` login button, custom `SecurityFilterChain`/`UserDetailsService`, Kafka
-`EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom widgets/actions), and Claude
-**skills/plugins** (via [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
+`EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom widgets/actions), **MCP**
+(`@McpTool` methods and `McpToolProvider` beans), and Claude **skills/plugins** (via
+[.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
 
 The contributor-facing how-to — the starter shape, the conventions that keep `su.onno`
 and the `su.onno.*` packages reserved, and a definition of done — is in

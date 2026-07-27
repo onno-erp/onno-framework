@@ -6,6 +6,7 @@
 - Client Connection
 - Agent Workflow
 - Safety Gates
+- Custom Tools
 - Debugging
 
 ## Dependency And Config
@@ -66,6 +67,24 @@ Do not guess route/entity names from Java classes. Use metadata.
 - `onno.mcp.posting-enabled=false` removes post/unpost/preview tools.
 - Entity `@AccessControl` still gates every operation.
 - A null or anonymous principal is denied everything.
+
+## Custom Tools
+
+```java
+@Component
+class ShippingTools {
+    @McpTool(name = "quote_shipping", description = "Quote a shipment", roles = "SALES")
+    public ShippingQuote quote(
+            @McpToolParam(description = "Destination postal code") String postalCode,
+            Principal caller) {
+        return shipping.quote(postalCode, caller.getName());
+    }
+}
+```
+
+Ordinary parameters become typed inputs. `Principal`, `McpToolContext`, and
+`McpSyncServerExchange` are injected. For mutations set `readOnly = false`; those tools disappear
+when `onno.mcp.writes-enabled=false`. Use an `McpToolProvider` bean for direct SDK specifications.
 
 ## Debugging
 

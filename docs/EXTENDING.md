@@ -7,7 +7,7 @@ modeling playbook in [AGENTS.md](../AGENTS.md).
 
 > Built something? Jump to [Get your extension listed](#get-your-extension-listed).
 
-## The four extension surfaces
+## The five extension surfaces
 
 Pick the one that matches what you're adding. Most "integrations" are **connectors**.
 
@@ -16,6 +16,7 @@ Pick the one that matches what you're adding. Most "integrations" are **connecto
 | **Connector** | a binding to an external system (a PMS, a bank, a marketplace, an ERP) | a Spring Boot auto-configuration starter that exposes a typed client + sync service |
 | **SPI** | a pluggable implementation of a framework contract | a `@Bean` implementing an SPI interface (`MediaStorage`, `MailDispatcher`, `MailEventVerifier`, an additive `AuthMethodsContributor` login button, a custom `SecurityFilterChain`/`UserDetailsService`, a Kafka `EventHandler`) |
 | **UI** | a dashboard widget, page, or action | `Page`/`Layout`/`EntityView` beans and app-registered custom widgets/actions (see [onno-ui-starter/README.md](../onno-ui-starter/README.md)) |
+| **MCP** | an agent-callable application or integration operation | `@McpTool` on a Spring bean method, or an `McpToolProvider` bean for direct SDK access (see [onno-mcp-starter/README.md](../onno-mcp-starter/README.md#custom-tools)) |
 | **Skill / plugin** | guidance that makes an AI agent good at your domain | a Claude skill published through a plugin marketplace (see [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)) |
 
 A connector and an SPI both ship as a starter; the difference is whether you wrap an outside system
@@ -120,6 +121,10 @@ in depth in [ARCHITECTURE.md](ARCHITECTURE.md):
 - **Async external workflows are usually submit-then-reconcile.** If the external system doesn't push
   webhooks, model a submit call plus a scheduled reconcile job, and keep an idempotency ledger
   (a starter may own its own `onno_`-prefixed table).
+- **Expose a focused agent operation with `@McpTool`.** Put it on a public Spring bean method,
+  describe inputs with `@McpToolParam`, restrict roles where needed, and mark writes with
+  `readOnly = false` so the global MCP write gate applies. Use `McpToolProvider` only when direct
+  MCP Java SDK control is required.
 
 ## Definition of done
 

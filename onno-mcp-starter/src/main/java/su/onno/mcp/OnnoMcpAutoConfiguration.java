@@ -15,6 +15,7 @@ import su.onno.ui.UiAutoConfiguration;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
@@ -26,8 +27,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Auto-configuration for the onno MCP server.
@@ -75,6 +81,12 @@ public class OnnoMcpAutoConfiguration {
     }
 
     @Bean
+    public McpToolProvider annotatedMcpToolProvider(ConfigurableListableBeanFactory beanFactory,
+                                                   OnnoMcpProperties properties, McpJsonMapper json) {
+        return new AnnotatedMcpToolProvider(beanFactory, properties, json);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     public HttpServletStreamableServerTransportProvider onnoMcpTransportProvider(McpJsonMapper json,
                                                                                  OnnoMcpProperties properties) {
@@ -99,19 +111,34 @@ public class OnnoMcpAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public McpSyncServer onnoMcpServer(HttpServletStreamableServerTransportProvider provider,
-                                       MetadataToolFactory toolFactory, OnnoMcpProperties properties,
-                                       McpJsonMapper json) {
+                                       List<McpToolProvider> toolProviders,
+                                       OnnoMcpProperties properties) {
         String instructions = properties.getInstructions() == null || properties.getInstructions().isBlank()
                 ? "Tools to read and edit this onno business application (catalogs, documents, registers). "
                 + "Call describe_metadata first to learn entity and field names. All access is enforced by "
                 + "the connecting user's roles."
                 : properties.getInstructions();
 
+        List<SyncToolSpecification> tools = mergeTools(toolProviders);
+
         return McpServer.sync(provider)
                 .serverInfo(properties.getServerName(), properties.getServerVersion())
                 .capabilities(ServerCapabilities.builder().tools(true).build())
                 .instructions(instructions)
-                .tools(toolFactory.build())
+                .tools(tools)
                 .build();
+    }
+
+    static List<SyncToolSpecification> mergeTools(List<McpToolProvider> providers) {
+        Map<String, SyncToolSpecification> tools = new LinkedHashMap<>();
+        for (McpToolProvider provider : providers) {
+            for (var tool : provider.tools()) {
+                String name = tool.tool().name();
+                if (tools.putIfAbsent(name, tool) != null) {
+                    throw new IllegalStateException("Duplicate MCP tool name: " + name);
+                }
+            }
+        }
+        return List.copyOf(tools.values());
     }
 }

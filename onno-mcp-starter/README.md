@@ -64,6 +64,47 @@ Point an MCP client at `http(s)://<host>/mcp` using **streamable HTTP** transpor
 HTTP Basic credentials for an application user. The user's roles determine which entities
 and operations are visible.
 
+### Custom tools
+
+Add `@McpTool` to a public instance method on any Spring bean. Ordinary parameters become
+JSON-schema inputs and are converted to their declared Java types. `Principal`,
+`McpToolContext`, and `McpSyncServerExchange` parameters are injected and do not appear in the
+schema.
+
+```java
+@Component
+class ShippingTools {
+
+    @McpTool(
+        name = "quote_shipping",
+        title = "Quote shipping",
+        description = "Returns a shipping quote for the current user",
+        roles = "SALES",
+        readOnly = true
+    )
+    public ShippingQuote quote(
+            @McpToolParam(description = "Destination postal code") String postalCode,
+            @McpToolParam(required = false) Optional<ShippingSpeed> speed,
+            Principal caller) {
+        return shipping.quote(postalCode, speed.orElse(ShippingSpeed.STANDARD), caller.getName());
+    }
+}
+```
+
+`@McpToolParam` can override the input name, description, required flag, or its complete JSON
+Schema. Scalars, enums, arrays, collections, maps, and object parameters receive a basic inferred
+schema. `@McpTool` also exposes MCP's `readOnly`, `destructive`, `idempotent`, `openWorld`, and
+optional output-schema metadata.
+
+Custom tools are additive to the generated onno tools. Tool names must be unique across all
+contributors; duplicates fail startup. Calls require an authenticated user, and `roles` is an
+any-of allowlist with `ADMIN` as superuser. A custom tool with `readOnly = false` is omitted when
+`onno.mcp.writes-enabled=false`.
+
+For an SDK-level tool, register an `McpToolProvider` bean returning
+`SyncToolSpecification` values. Applications no longer need to replace `MetadataToolFactory` to
+add tools.
+
 ## Security notes
 
 - Identity is bridged from Spring Security into the tool call by `McpPrincipalContext`:
