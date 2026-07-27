@@ -5,6 +5,7 @@ import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.model.InformationRecord;
 import su.onno.model.Periodicity;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Update;
@@ -243,6 +244,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
             Object value = entry.getValue();
             if (value instanceof Ref<?> ref) {
                 stmt.bind("filter_" + entry.getKey(), ref.id());
+            } else if (value instanceof PolyRef ref) {
+                stmt.bind("filter_" + entry.getKey(), ref.externalForm());
             } else {
                 stmt.bind("filter_" + entry.getKey(), value);
             }
@@ -304,6 +307,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
         } else if (Ref.class.isAssignableFrom(type)) {
             String val = rs.getString(col);
             return val != null ? new Ref<>(Object.class, UUID.fromString(val)) : null;
+        } else if (PolyRef.class.isAssignableFrom(type)) {
+            return PolyRef.parse(rs.getString(col));
         }
         return rs.getObject(col);
     }
@@ -318,6 +323,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
 
                 if (value instanceof Ref<?> ref) {
                     stmt.bind(attr.fieldName(), ref.id());
+                } else if (value instanceof PolyRef ref) {
+                    stmt.bind(attr.fieldName(), ref.externalForm());
                 } else {
                     stmt.bind(attr.fieldName(), value);
                 }

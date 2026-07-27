@@ -29,6 +29,13 @@ export interface AttributeMeta {
   required: boolean;
   isRef: boolean;
   refTarget?: string;
+  isPolymorphicRef?: boolean;
+  refTargets?: Array<{
+    kind: "catalog" | "document";
+    name: string;
+    title: string;
+    javaType: string;
+  }>;
   /** Whether refTarget names a catalog or a document (set only when isRef). */
   refKind?: "catalog" | "document";
   /**

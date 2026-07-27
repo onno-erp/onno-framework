@@ -39,6 +39,13 @@ final class Searching {
      */
     static String term(MetadataRegistry registry, AttributeDescriptor a, String search) {
         String col = a.columnName();
+        if (a.isPolymorphicRef()) {
+            List<String> targets = a.refTargets().stream()
+                    .map(target -> polymorphicRefTerm(registry, col, target))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            return targets.isEmpty() ? likeVarchar(col) : "(" + String.join(" OR ", targets) + ")";
+        }
         if (a.isRef() && a.refTarget() != null) {
             RefTarget rt = refTarget(registry, a.refTarget());
             if (rt == null) {
@@ -68,6 +75,21 @@ final class Searching {
     }
 
     private record RefTarget(String table, List<String> displayCols) {}
+
+    private static String polymorphicRefTerm(
+            MetadataRegistry registry,
+            String column,
+            su.onno.metadata.ReferenceTargetDescriptor target) {
+        RefTarget resolved = refTarget(registry, target.logicalName());
+        if (resolved == null) return null;
+        String display = resolved.displayCols().stream()
+                .map(dc -> "LOWER(CAST(t." + dc + " AS VARCHAR)) LIKE :search")
+                .collect(Collectors.joining(" OR "));
+        String typePrefix = target.javaTypeName().replace("'", "''") + "|";
+        return "EXISTS (SELECT 1 FROM " + resolved.table()
+                + " t WHERE " + column + " = '" + typePrefix
+                + "' || CAST(t._id AS VARCHAR) AND (" + display + "))";
+    }
 
     /** Resolve a ref's registered logical name to its table + the column(s) shown for a target row. */
     private static RefTarget refTarget(MetadataRegistry registry, String logicalName) {

@@ -11,6 +11,7 @@ public record AttributeDescriptor(
         boolean required,
         boolean isRef,
         String refTarget,
+        List<ReferenceTargetDescriptor> refTargets,
         int precision,
         int scale,
         boolean visibleInList,
@@ -25,6 +26,18 @@ public record AttributeDescriptor(
         List<String> previousNames
 ) {
 
+    /** Backward-compatible full constructor for callers predating polymorphic references. */
+    public AttributeDescriptor(
+            String fieldName, String displayName, String columnName, Class<?> javaType,
+            int length, boolean required, boolean isRef, String refTarget,
+            int precision, int scale, boolean visibleInList, boolean visibleInForm,
+            boolean visibleInDetail, int order, String group, String widthHint,
+            String widget, Constraints constraints, boolean secret, List<String> previousNames) {
+        this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
+                List.of(), precision, scale, visibleInList, visibleInForm, visibleInDetail, order,
+                group, widthHint, widget, constraints, secret, previousNames);
+    }
+
     /** Backward-compatible constructor for callers predating {@code previousNames}. */
     public AttributeDescriptor(
             String fieldName, String displayName, String columnName, Class<?> javaType,
@@ -33,8 +46,12 @@ public record AttributeDescriptor(
             boolean visibleInDetail, int order, String group, String widthHint,
             String widget, Constraints constraints, boolean secret) {
         this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
-                precision, scale, visibleInList, visibleInForm, visibleInDetail, order, group,
+                List.of(), precision, scale, visibleInList, visibleInForm, visibleInDetail, order, group,
                 widthHint, widget, constraints, secret, List.of());
+    }
+
+    public boolean isPolymorphicRef() {
+        return !refTargets.isEmpty();
     }
 
     /**

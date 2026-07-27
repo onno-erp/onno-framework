@@ -12,6 +12,7 @@ import su.onno.posting.PostingPreview;
 import su.onno.posting.PostingService;
 import su.onno.security.SecretCipher;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 import su.onno.validation.AttributeValidator;
 import su.onno.validation.ValidationErrors;
 
@@ -512,7 +513,10 @@ public class DocumentCommandService {
 
         Class<?> fieldType = field.getType();
 
-        if (Ref.class.isAssignableFrom(fieldType)) {
+        if (PolyRef.class.isAssignableFrom(fieldType)) {
+            field.set(target, value instanceof PolyRef ref
+                    ? ref : PolyRef.parse(value.toString()));
+        } else if (Ref.class.isAssignableFrom(fieldType)) {
             java.lang.reflect.Type genericType = field.getGenericType();
             if (genericType instanceof ParameterizedType pt) {
                 Class<?> refTargetClass = (Class<?>) pt.getActualTypeArguments()[0];

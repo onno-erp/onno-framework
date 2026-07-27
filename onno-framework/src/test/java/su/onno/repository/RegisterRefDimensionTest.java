@@ -3,13 +3,22 @@ package su.onno.repository;
 import su.onno.fixtures.TestProduct;
 import su.onno.fixtures.TestRefSalesRegister;
 import su.onno.fixtures.TestRefStockRegister;
+import su.onno.annotations.AccumulationRegister;
+import su.onno.annotations.Dimension;
+import su.onno.annotations.Document;
+import su.onno.annotations.RefTargets;
+import su.onno.annotations.Resource;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.DefaultNamingStrategy;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
+import su.onno.model.AccumulationRecord;
+import su.onno.model.AccumulationType;
+import su.onno.model.DocumentObject;
 import su.onno.model.MovementType;
 import su.onno.posting.RegisterPersistence;
 import su.onno.schema.SchemaGenerator;
+import su.onno.types.PolyRef;
 import su.onno.types.Ref;
 
 import org.h2.jdbcx.JdbcDataSource;
@@ -31,6 +40,28 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the UUID against the field's declared target type, the way the write path unwraps it.
  */
 class RegisterRefDimensionTest {
+
+    @Document(name = "TestRegisterSources")
+    public static class RegisterSource extends DocumentObject {
+    }
+
+    @AccumulationRegister(name = "TestPolyBalances", type = AccumulationType.BALANCE)
+    public static class PolyBalance extends AccumulationRecord {
+        @Dimension
+        @RefTargets({TestProduct.class, RegisterSource.class})
+        private PolyRef owner;
+
+        @Resource
+        private BigDecimal amount;
+
+        public PolyRef getOwner() {
+            return owner;
+        }
+
+        public BigDecimal getAmount() {
+            return amount;
+        }
+    }
 
     private Jdbi jdbi;
     private RegisterRepositoryImpl<TestRefStockRegister> stock;
@@ -123,5 +154,43 @@ class RegisterRefDimensionTest {
             assertThat(r.getProduct()).isEqualTo(Ref.of(TestProduct.class, productA));
             assertThat(r.getAmount()).isEqualByComparingTo("150");
         });
+    }
+
+    @Test
+    void getBalance_mapsAndFiltersPolymorphicDimension() {
+        MetadataRegistry registry = new MetadataRegistry();
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        AccumulationRegisterDescriptor descriptor = scanner.scanRegister(PolyBalance.class);
+        registry.registerAccumulation(descriptor);
+        new SchemaGenerator(registry).execute(jdbi);
+        RegisterRepositoryImpl<PolyBalance> repository = new RegisterRepositoryImpl<>(
+                new RegisterPersistence<>(jdbi, descriptor), PolyBalance.class);
+        PolyRef productOwner = PolyRef.of(TestProduct.class, productA);
+        PolyRef documentOwner = PolyRef.of(RegisterSource.class, UUID.randomUUID());
+
+        for (PolyRef owner : List.of(productOwner, documentOwner)) {
+            jdbi.useHandle(h -> h.createUpdate(
+                            "INSERT INTO register_test_poly_balances "
+                                    + "(_id, _period, _active, _document_ref, _movement_type, owner, amount) "
+                                    + "VALUES (:id, :period, TRUE, :doc, :type, :owner, :amount)")
+                    .bind("id", UUID.randomUUID())
+                    .bind("period", LocalDateTime.of(2026, 1, 5, 8, 0))
+                    .bind("doc", UUID.randomUUID())
+                    .bind("type", MovementType.RECEIPT.name())
+                    .bind("owner", owner.externalForm())
+                    .bind("amount", new BigDecimal("25"))
+                    .execute());
+        }
+        repository.rebuildTotals();
+
+        assertThat(repository.getBalance())
+                .extracting(PolyBalance::getOwner)
+                .containsExactlyInAnyOrder(productOwner, documentOwner);
+        assertThat(repository.getBalance(f -> f.where(PolyBalance::getOwner, documentOwner)))
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.getOwner()).isEqualTo(documentOwner);
+                    assertThat(row.getAmount()).isEqualByComparingTo("25");
+                });
     }
 }

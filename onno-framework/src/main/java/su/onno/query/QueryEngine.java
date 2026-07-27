@@ -2,6 +2,7 @@ package su.onno.query;
 
 import su.onno.metadata.MetadataRegistry;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Query;
@@ -138,6 +139,8 @@ public final class QueryEngine {
 
     /** A {@code Ref} operand binds as its UUID, mirroring how Ref columns are stored. */
     private static Object unwrap(Object value) {
-        return value instanceof Ref<?> ref ? ref.id() : value;
+        if (value instanceof Ref<?> ref) return ref.id();
+        if (value instanceof PolyRef ref) return ref.externalForm();
+        return value;
     }
 }

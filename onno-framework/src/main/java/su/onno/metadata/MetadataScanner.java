@@ -9,6 +9,7 @@ import su.onno.model.InformationRecord;
 import su.onno.model.Periodicity;
 import su.onno.model.TabularSectionRow;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -111,7 +112,8 @@ public class MetadataScanner {
         List<AttributeDescriptor> resources = scanResources(clazz, AccumulationRecord.class);
 
         return new AccumulationRegisterDescriptor(
-                logicalName, displayTitle, tableName, totalsTableName, clazz, type, reg.context(),
+                logicalName, displayTitle, tableName, totalsTableName, clazz, type,
+                reg.allowNegative(), reg.postingOrder(), reg.context(),
                 readRoles(clazz), writeRoles(clazz), dimensions, resources);
     }
 
@@ -243,14 +245,17 @@ public class MetadataScanner {
                         ? humanize(fieldName) : dim.displayName();
                 String columnName = naming.column(dim.name().isEmpty() ? fieldName : dim.name());
                 Class<?> javaType = field.getType();
-                boolean isRef = Ref.class.isAssignableFrom(javaType);
+                boolean isRef = Ref.class.isAssignableFrom(javaType)
+                        || PolyRef.class.isAssignableFrom(javaType);
+                List<ReferenceTargetDescriptor> refTargets = scanRefTargets(field, javaType);
 
                 result.add(new AttributeDescriptor(
-                        fieldName, displayName, columnName, javaType, 255, false, isRef,
-                        isRef ? extractRefTargetName(field) : null, 0, 0,
+                        fieldName, displayName, columnName, javaType,
+                        PolyRef.class.isAssignableFrom(javaType) ? 512 : 255, false, isRef,
+                        isRef ? extractRefTargetName(field) : null, refTargets, 0, 0,
                         true, true, true, 0, "", "", "",
                         AttributeDescriptor.Constraints.NONE,
-                        false));
+                        false, List.of()));
             }
             current = current.getSuperclass();
         }
@@ -303,17 +308,21 @@ public class MetadataScanner {
                         attr.name().isEmpty() ? fieldName : attr.name()
                 );
                 Class<?> javaType = field.getType();
-                boolean isRef = Ref.class.isAssignableFrom(javaType);
+                boolean isRef = Ref.class.isAssignableFrom(javaType)
+                        || PolyRef.class.isAssignableFrom(javaType);
+                List<ReferenceTargetDescriptor> refTargets = scanRefTargets(field, javaType);
 
                 result.add(new AttributeDescriptor(
                         fieldName,
                         displayName,
                         columnName,
                         javaType,
-                        attr.length(),
+                        PolyRef.class.isAssignableFrom(javaType)
+                                ? Math.max(attr.length(), 512) : attr.length(),
                         attr.required(),
                         isRef,
                         isRef ? extractRefTargetName(field) : null,
+                        refTargets,
                         attr.precision(),
                         attr.scale(),
                         true,
@@ -399,6 +408,7 @@ public class MetadataScanner {
     }
 
     private String extractRefTargetName(Field field) {
+        if (PolyRef.class.isAssignableFrom(field.getType())) return null;
         Type genericType = field.getGenericType();
         if (!(genericType instanceof ParameterizedType paramType)) return null;
         Type[] typeArgs = paramType.getActualTypeArguments();
@@ -411,6 +421,56 @@ public class MetadataScanner {
         Document document = targetClass.getAnnotation(Document.class);
         if (document != null) return document.name();
         return targetClass.getSimpleName();
+    }
+
+    private List<ReferenceTargetDescriptor> scanRefTargets(Field field, Class<?> javaType) {
+        RefTargets declared = field.getAnnotation(RefTargets.class);
+        boolean polymorphic = PolyRef.class.isAssignableFrom(javaType);
+        if (!polymorphic) {
+            if (declared != null) {
+                throw new IllegalArgumentException(
+                        "@RefTargets requires PolyRef field " + field.getDeclaringClass().getName()
+                                + "." + field.getName());
+            }
+            return List.of();
+        }
+        if (declared == null || declared.value().length == 0) {
+            throw new IllegalArgumentException(
+                    "PolyRef field " + field.getDeclaringClass().getName() + "." + field.getName()
+                            + " must declare @RefTargets");
+        }
+        List<ReferenceTargetDescriptor> targets = new ArrayList<>();
+        for (Class<?> target : declared.value()) {
+            Catalog catalog = target.getAnnotation(Catalog.class);
+            if (catalog != null) {
+                targets.add(new ReferenceTargetDescriptor(
+                        "catalog", catalog.name(),
+                        catalog.title().isEmpty() ? catalog.name() : catalog.title(),
+                        target.getName()));
+                continue;
+            }
+            Document document = target.getAnnotation(Document.class);
+            if (document != null) {
+                targets.add(new ReferenceTargetDescriptor(
+                        "document", document.name(),
+                        document.title().isEmpty() ? document.name() : document.title(),
+                        target.getName()));
+                continue;
+            }
+            throw new IllegalArgumentException(
+                    "@RefTargets type " + target.getName()
+                            + " must be annotated with @Catalog or @Document");
+        }
+        long distinct = targets.stream()
+                .map(ReferenceTargetDescriptor::javaTypeName)
+                .distinct()
+                .count();
+        if (distinct != targets.size()) {
+            throw new IllegalArgumentException(
+                    "PolyRef field " + field.getDeclaringClass().getName() + "." + field.getName()
+                            + " declares duplicate @RefTargets");
+        }
+        return List.copyOf(targets);
     }
 
     private Class<?> extractRowClass(Field field) {

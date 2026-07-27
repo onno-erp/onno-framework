@@ -223,6 +223,8 @@ public class ResolvedMetadataService {
         map.put("title", d.displayTitle());
         map.put("tableName", d.tableName());
         map.put("type", d.accumulationType().name());
+        map.put("allowNegative", d.allowNegative());
+        map.put("postingOrder", d.postingOrder().name());
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
@@ -299,6 +301,15 @@ public class ResolvedMetadataService {
             map.put("required", a.required());
             map.put("isRef", a.isRef());
             map.put("refTarget", a.refTarget());
+            map.put("isPolymorphicRef", a.isPolymorphicRef());
+            if (a.isPolymorphicRef()) {
+                map.put("refTargets", a.refTargets().stream().map(target -> Map.of(
+                        "kind", target.kind(),
+                        "name", target.logicalName(),
+                        "title", target.displayTitle(),
+                        "javaType", target.javaTypeName()
+                )).toList());
+            }
             // Tell the UI whether a ref points at a catalog or a document so the picker
             // can hit the right endpoints. refTarget is the registered logical name, so a
             // matching document means it's a document ref; otherwise treat it as a catalog.

@@ -312,6 +312,8 @@ public class MetadataToolFactory {
                 Map<String, Object> e = new LinkedHashMap<>();
                 e.put("name", d.logicalName());
                 e.put("type", d.accumulationType() == null ? null : d.accumulationType().name());
+                e.put("allowNegative", d.allowNegative());
+                e.put("postingOrder", d.postingOrder().name());
                 e.put("dimensions", fields(d.dimensions()));
                 e.put("resources", fields(d.resources()));
                 registers.add(e);
@@ -344,6 +346,14 @@ public class MetadataToolFactory {
             f.put("type", a.isRef() ? "ref" : a.javaType().getSimpleName());
             if (a.isRef() && a.refTarget() != null && !a.refTarget().isBlank()) {
                 f.put("refTarget", a.refTarget());
+            }
+            if (a.isPolymorphicRef()) {
+                f.put("type", "polymorphic-ref");
+                f.put("refTargets", a.refTargets().stream().map(target -> Map.of(
+                        "kind", target.kind(),
+                        "name", target.logicalName(),
+                        "javaType", target.javaTypeName()
+                )).toList());
             }
             if (a.required()) f.put("required", true);
             out.add(f);

@@ -2,6 +2,7 @@ package su.onno.spring;
 
 import su.onno.types.Ref;
 import su.onno.types.RefResolver;
+import su.onno.types.PolyRef;
 
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
@@ -56,5 +57,15 @@ public class SpringRefResolver implements RefResolver, SmartInitializingSingleto
                     "No repository found for type " + ref.type().getName());
         }
         return (Optional<T>) repo.findById(ref.id());
+    }
+
+    @Override
+    public Optional<?> resolve(PolyRef ref) {
+        CrudRepository<?, UUID> repo = repositoryMap.get(ref.type());
+        if (repo == null) {
+            throw new IllegalArgumentException(
+                    "No repository found for type " + ref.type().getName());
+        }
+        return repo.findById(ref.id());
     }
 }

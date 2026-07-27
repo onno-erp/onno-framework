@@ -3,6 +3,7 @@ package su.onno.spring;
 import su.onno.metadata.EnumerationDescriptor;
 import su.onno.repository.EnumerationPersistence;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.springframework.core.convert.TypeDescriptor;
 import org.springframework.core.convert.converter.Converter;
@@ -38,6 +39,8 @@ public final class EnumUuidConverters {
         converters.add(new RefToUuid());
         converters.add(new UuidToRef());
         converters.add(new StringToRef());
+        converters.add(new PolyRefToString());
+        converters.add(new StringToPolyRef());
         return converters;
     }
 
@@ -196,6 +199,24 @@ public final class EnumUuidConverters {
                 targetGeneric = Object.class;
             }
             return Ref.of((Class) targetGeneric, id);
+        }
+    }
+
+    @WritingConverter
+    public static final class PolyRefToString implements Converter<PolyRef, String> {
+        @Override
+        @Nullable
+        public String convert(PolyRef source) {
+            return source == null ? null : source.externalForm();
+        }
+    }
+
+    @ReadingConverter
+    public static final class StringToPolyRef implements Converter<String, PolyRef> {
+        @Override
+        @Nullable
+        public PolyRef convert(String source) {
+            return PolyRef.parse(source);
         }
     }
 

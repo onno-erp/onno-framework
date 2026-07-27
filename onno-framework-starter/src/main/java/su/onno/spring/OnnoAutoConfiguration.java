@@ -317,13 +317,22 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(su.onno.posting.PostedDocumentLoader.class)
+    public su.onno.posting.PostedDocumentLoader postedDocumentLoader(
+            MetadataRegistry registry, ApplicationContext context) {
+        return new SpringPostedDocumentLoader(registry, context);
+    }
+
+    @Bean
     public PostingService postingService(Jdbi jdbi, MetadataRegistry registry,
                                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryImplMap,
                                          OutboxWriter outboxWriter,
                                          su.onno.posting.PostEventPublisher postEventPublisher,
+                                         su.onno.posting.PostedDocumentLoader postedDocumentLoader,
                                          OnnoMetrics metrics) {
         PostingEngine engine = new PostingEngine(
-                jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher);
+                jdbi, registry, repositoryImplMap, outboxWriter, postEventPublisher,
+                postedDocumentLoader);
         return new TimedPostingService(engine, metrics);
     }
 

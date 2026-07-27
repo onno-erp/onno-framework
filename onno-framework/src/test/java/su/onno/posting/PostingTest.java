@@ -1,9 +1,14 @@
 package su.onno.posting;
 
 import su.onno.fixtures.TestDeclarativeReceipt;
+import su.onno.fixtures.TestCostIssue;
+import su.onno.fixtures.TestCostReceipt;
+import su.onno.fixtures.TestCostRegister;
+import su.onno.fixtures.TestOverdraftRegister;
 import su.onno.fixtures.TestReceipt;
 import su.onno.fixtures.TestReceiptLine;
 import su.onno.fixtures.TestStockRegister;
+import su.onno.fixtures.TestWithdrawal;
 import su.onno.metadata.*;
 import su.onno.model.DocumentObject;
 import su.onno.repository.RegisterRepositoryImpl;
@@ -29,6 +34,8 @@ class PostingTest {
     private Jdbi jdbi;
     private PostingEngine engine;
     private RegisterPersistence<TestStockRegister> stockPersistence;
+    private RegisterPersistence<TestOverdraftRegister> overdraftPersistence;
+    private RegisterPersistence<TestCostRegister> costPersistence;
     private MetadataRegistry registry;
 
     @BeforeEach
@@ -42,19 +49,35 @@ class PostingTest {
 
         registry.registerDocument(scanner.scanDocument(TestReceipt.class));
         registry.registerDocument(scanner.scanDocument(TestDeclarativeReceipt.class));
+        registry.registerDocument(scanner.scanDocument(TestWithdrawal.class));
+        registry.registerDocument(scanner.scanDocument(TestCostReceipt.class));
+        registry.registerDocument(scanner.scanDocument(TestCostIssue.class));
         registry.registerAccumulation(scanner.scanRegister(TestStockRegister.class));
+        registry.registerAccumulation(scanner.scanRegister(TestOverdraftRegister.class));
+        registry.registerAccumulation(scanner.scanRegister(TestCostRegister.class));
 
         SchemaGenerator schema = new SchemaGenerator(registry);
         schema.execute(jdbi);
 
         AccumulationRegisterDescriptor stockDesc = registry.getRegisterDescriptor(TestStockRegister.class);
         stockPersistence = new RegisterPersistence<>(jdbi, stockDesc);
+        AccumulationRegisterDescriptor overdraftDesc =
+                registry.getRegisterDescriptor(TestOverdraftRegister.class);
+        overdraftPersistence = new RegisterPersistence<>(jdbi, overdraftDesc);
+        AccumulationRegisterDescriptor costDesc =
+                registry.getRegisterDescriptor(TestCostRegister.class);
+        costPersistence = new RegisterPersistence<>(jdbi, costDesc);
 
         RegisterRepositoryImpl<TestStockRegister> stockRepo =
                 new RegisterRepositoryImpl<>(stockPersistence, TestStockRegister.class);
+        RegisterRepositoryImpl<TestOverdraftRegister> overdraftRepo =
+                new RegisterRepositoryImpl<>(overdraftPersistence, TestOverdraftRegister.class);
 
         Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap = new HashMap<>();
         repositoryMap.put(TestStockRegister.class, stockRepo);
+        repositoryMap.put(TestOverdraftRegister.class, overdraftRepo);
+        repositoryMap.put(TestCostRegister.class,
+                new RegisterRepositoryImpl<>(costPersistence, TestCostRegister.class));
 
         engine = new PostingEngine(jdbi, registry, repositoryMap);
     }
@@ -176,6 +199,100 @@ class PostingTest {
     }
 
     @Test
+    void post_defaultBalancePolicy_rejectsNegativeBalance() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("-1"));
+
+        assertThatThrownBy(() -> engine.post(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("negative balance");
+        assertThat(receipt.isPosted()).isFalse();
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).isEmpty();
+    }
+
+    @Test
+    void post_allowNegativeBalancePolicy_permitsOverdraft() {
+        TestWithdrawal withdrawal = createWithdrawal(
+                UUID.randomUUID(), new BigDecimal("125.50"));
+
+        engine.post(withdrawal);
+
+        List<Map<String, Object>> balance =
+                overdraftPersistence.getBalance(Map.of("account", withdrawal.getAccount()));
+        assertThat(balance).hasSize(1);
+        BigDecimal amount = (BigDecimal) balance.get(0).getOrDefault(
+                "AMOUNT", balance.get(0).get("amount"));
+        assertThat(amount).isEqualByComparingTo(new BigDecimal("-125.50"));
+        assertThat(withdrawal.isPosted()).isTrue();
+    }
+
+    @Test
+    void post_backdatedChronologicalRegister_repostsLaterDocumentsAtRepairedAverageCost() {
+        UUID product = UUID.randomUUID();
+        Map<UUID, DocumentObject> persisted = new HashMap<>();
+        PostingEngine chronologicalEngine = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, null,
+                ids -> ids.stream().map(persisted::get).filter(Objects::nonNull).toList());
+
+        TestCostReceipt opening = createCostReceipt(
+                "CR-OPEN", LocalDateTime.of(2026, 1, 1, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("100"));
+        chronologicalEngine.post(opening);
+
+        TestCostIssue issue = createCostIssue(
+                "CI-001", LocalDateTime.of(2026, 1, 3, 10, 0),
+                product, new BigDecimal("5"));
+        chronologicalEngine.post(issue);
+        persisted.put(issue.getId(), issue);
+        assertThat(issue.getCost()).isEqualByComparingTo("50.00");
+
+        TestCostReceipt backdated = createCostReceipt(
+                "CR-BACK", LocalDateTime.of(2026, 1, 2, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("300"));
+        chronologicalEngine.post(backdated);
+
+        assertThat(issue.getCost()).isEqualByComparingTo("100.00");
+        assertCostBalance(product, "15", "300.00");
+
+        BigDecimal storedCost = jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT cost FROM document_test_cost_issues WHERE _id = :id")
+                .bind("id", issue.getId())
+                .mapTo(BigDecimal.class)
+                .one());
+        assertThat(storedCost).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void unpost_backdatedChronologicalRegister_restoresLaterDocumentsWithoutRemovedMovement() {
+        UUID product = UUID.randomUUID();
+        Map<UUID, DocumentObject> persisted = new HashMap<>();
+        PostingEngine chronologicalEngine = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, null,
+                ids -> ids.stream().map(persisted::get).filter(Objects::nonNull).toList());
+
+        TestCostReceipt opening = createCostReceipt(
+                "CR-OPEN", LocalDateTime.of(2026, 1, 1, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("100"));
+        chronologicalEngine.post(opening);
+        TestCostReceipt backdated = createCostReceipt(
+                "CR-BACK", LocalDateTime.of(2026, 1, 2, 10, 0),
+                product, new BigDecimal("10"), new BigDecimal("300"));
+        chronologicalEngine.post(backdated);
+        TestCostIssue issue = createCostIssue(
+                "CI-001", LocalDateTime.of(2026, 1, 3, 10, 0),
+                product, new BigDecimal("5"));
+        chronologicalEngine.post(issue);
+        persisted.put(issue.getId(), issue);
+        assertThat(issue.getCost()).isEqualByComparingTo("100.00");
+
+        chronologicalEngine.unpost(backdated);
+
+        assertThat(backdated.isPosted()).isFalse();
+        assertThat(issue.getCost()).isEqualByComparingTo("50.00");
+        assertCostBalance(product, "5", "50.00");
+    }
+
+    @Test
     void post_setsDocumentPostedTrue() {
         UUID product = UUID.randomUUID();
         UUID warehouse = UUID.randomUUID();
@@ -276,7 +393,94 @@ class PostingTest {
                 new RegisterRepositoryImpl<>(stockPersistence, TestStockRegister.class);
         Map<Class<?>, RegisterRepositoryImpl<?>> map = new HashMap<>();
         map.put(TestStockRegister.class, stockRepo);
+        map.put(TestOverdraftRegister.class,
+                new RegisterRepositoryImpl<>(overdraftPersistence, TestOverdraftRegister.class));
+        map.put(TestCostRegister.class,
+                new RegisterRepositoryImpl<>(costPersistence, TestCostRegister.class));
         return map;
+    }
+
+    private TestCostReceipt createCostReceipt(String number,
+                                              LocalDateTime date,
+                                              UUID product,
+                                              BigDecimal quantity,
+                                              BigDecimal amount) {
+        TestCostReceipt receipt = new TestCostReceipt();
+        receipt.setId(UUID.randomUUID());
+        receipt.setNumber(number);
+        receipt.setDate(date);
+        receipt.setProduct(product);
+        receipt.setQuantity(quantity);
+        receipt.setAmount(amount);
+        insertCostDocument(receipt, product, quantity, amount);
+        return receipt;
+    }
+
+    private TestCostIssue createCostIssue(String number,
+                                          LocalDateTime date,
+                                          UUID product,
+                                          BigDecimal quantity) {
+        TestCostIssue issue = new TestCostIssue();
+        issue.setId(UUID.randomUUID());
+        issue.setNumber(number);
+        issue.setDate(date);
+        issue.setProduct(product);
+        issue.setQuantity(quantity);
+        insertCostDocument(issue, product, quantity, null);
+        return issue;
+    }
+
+    private void insertCostDocument(DocumentObject document,
+                                    UUID product,
+                                    BigDecimal quantity,
+                                    BigDecimal amountOrCost) {
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(document.getClass());
+        String amountColumn = document instanceof TestCostReceipt ? "amount" : "cost";
+        jdbi.useHandle(handle -> handle.createUpdate(
+                        "INSERT INTO " + descriptor.tableName() +
+                                " (_id, _number, _date, _posted, _deletion_mark, product, quantity, " +
+                                amountColumn + ") VALUES " +
+                                "(:id, :number, :date, FALSE, FALSE, :product, :quantity, :amount)")
+                .bind("id", document.getId())
+                .bind("number", document.getNumber())
+                .bind("date", document.getDate())
+                .bind("product", product)
+                .bind("quantity", quantity)
+                .bind("amount", amountOrCost)
+                .execute());
+    }
+
+    private void assertCostBalance(UUID product, String quantity, String amount) {
+        List<Map<String, Object>> balance =
+                costPersistence.getBalance(Map.of("product", product));
+        assertThat(balance).hasSize(1);
+        Map<String, Object> row = balance.get(0);
+        assertThat((BigDecimal) row.getOrDefault("QUANTITY", row.get("quantity")))
+                .isEqualByComparingTo(quantity);
+        assertThat((BigDecimal) row.getOrDefault("AMOUNT", row.get("amount")))
+                .isEqualByComparingTo(amount);
+    }
+
+    private TestWithdrawal createWithdrawal(UUID account, BigDecimal amount) {
+        TestWithdrawal withdrawal = new TestWithdrawal();
+        withdrawal.setId(UUID.randomUUID());
+        withdrawal.setNumber("WD-001");
+        withdrawal.setDate(LocalDateTime.of(2026, 3, 15, 11, 0));
+        withdrawal.setAccount(account);
+        withdrawal.setAmount(amount);
+
+        DocumentDescriptor docDesc = registry.getDocumentDescriptor(TestWithdrawal.class);
+        jdbi.useHandle(h -> h.createUpdate(
+                        "INSERT INTO " + docDesc.tableName() +
+                                " (_id, _number, _date, _posted, _deletion_mark, account, amount) " +
+                                "VALUES (:id, :number, :date, FALSE, FALSE, :account, :amount)")
+                .bind("id", withdrawal.getId())
+                .bind("number", withdrawal.getNumber())
+                .bind("date", withdrawal.getDate())
+                .bind("account", withdrawal.getAccount())
+                .bind("amount", withdrawal.getAmount())
+                .execute());
+        return withdrawal;
     }
 
     @Test

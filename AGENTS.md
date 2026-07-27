@@ -282,6 +282,36 @@ Examples:
 - Loyalty points
 - Open reservations
 
+Balance registers reject posting when any resource total would become negative. For balances where
+debt or overdrafts are valid, opt that register out explicitly with `allowNegative = true`:
+
+```java
+@AccumulationRegister(
+        name = "Cash",
+        type = AccumulationType.BALANCE,
+        allowNegative = true,
+        context = "Finance")
+public class CashRegister extends AccumulationRecord {
+    // dimensions and resources
+}
+```
+
+For order-dependent ledgers such as moving-average inventory cost, opt into chronological
+restoration explicitly:
+
+```java
+@AccumulationRegister(
+        name = "InventoryCost",
+        type = AccumulationType.BALANCE,
+        postingOrder = PostingOrder.CHRONOLOGICAL,
+        context = "Inventory")
+public class InventoryCostRegister extends AccumulationRecord {
+}
+```
+
+A backdated post/unpost reverses later affected documents and reposts them in date order in one
+serializable transaction. Keep `handlePosting` deterministic and free of external side effects.
+
 Use `TURNOVER` when period totals matter but current balance does not.
 
 Examples:
@@ -302,6 +332,18 @@ public class StockRegister extends AccumulationRecord {
     private BigDecimal quantity;
 }
 ```
+
+Use `Ref<T>` when a field has one target type. If the business meaning genuinely permits several
+catalog/document types in the same field, use `PolyRef` with an explicit target allowlist:
+
+```java
+@Attribute(required = true)
+@RefTargets({BankAccount.class, CashAccount.class, Payment.class})
+private PolyRef settlementTarget;
+```
+
+The generated schema stores the concrete target type and UUID in one column; generated metadata,
+forms, search, display resolution, and links preserve the selected type.
 
 ### Information Registers
 

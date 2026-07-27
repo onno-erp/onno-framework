@@ -57,7 +57,7 @@ when a user asks you to model a business.
 | a fixed list controlled by code (OrderStatus) | `@Enumeration` (on a Java `enum`) | — |
 | a business event with a date + number (Invoice, Shipment) | `@Document` | `DocumentObject` |
 | a repeated line inside a document (invoice lines) | `@TabularSection` field | row `extends TabularSectionRow` |
-| a current balance that must not go negative (Stock, Cash) | `@AccumulationRegister(type = BALANCE)` | `AccumulationRecord` |
+| a current balance (Stock, Cash) | `@AccumulationRegister(type = BALANCE)` | `AccumulationRecord` |
 | period activity totals (Revenue, Hours) | `@AccumulationRegister(type = TURNOVER)` | `AccumulationRecord` |
 | historical facts by dimension over time (Prices by date) | `@InformationRegister` | `InformationRecord` |
 | one global setting (CompanyName) | `@Constant` | plain class with one field |
@@ -67,6 +67,13 @@ when a user asks you to model a business.
 
 A reference to another entity is `Ref<T>` (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)`,
 stored as a UUID column, resolved with `RefResolver`. Use it instead of embedding whole objects.
+When one field legitimately targets several entity types, use `PolyRef` with an explicit
+`@RefTargets({BankAccount.class, CashAccount.class, Payment.class})` allowlist. Do not replace a
+single-target `Ref<T>` with `PolyRef`.
+`BALANCE` registers reject negative resource totals by default; declare `allowNegative = true` only
+for a balance whose domain permits debt or overdrafts. Set `postingOrder = CHRONOLOGICAL` only on
+registers whose later documents must be restored after a backdated post/unpost (for example
+moving-average inventory cost).
 
 The exact attributes and defaults of every annotation, the fields each base class carries, and all
 lifecycle interfaces are in [reference/cheatsheet.md](reference/cheatsheet.md). Read it before

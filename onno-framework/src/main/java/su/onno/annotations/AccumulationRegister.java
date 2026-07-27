@@ -1,6 +1,7 @@
 package su.onno.annotations;
 
 import su.onno.model.AccumulationType;
+import su.onno.model.PostingOrder;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -25,6 +26,21 @@ public @interface AccumulationRegister {
     String tableName() default "";
 
     AccumulationType type() default AccumulationType.BALANCE;
+
+    /**
+     * Whether a {@link AccumulationType#BALANCE} register may retain negative resource totals.
+     * Keep this disabled for constrained balances such as inventory; enable it for balances
+     * whose domain permits debt or overdrafts, such as cash or credit accounts.
+     * Ignored for {@link AccumulationType#TURNOVER} registers.
+     */
+    boolean allowNegative() default false;
+
+    /**
+     * Controls whether a backdated post/unpost restores later documents that wrote to this register.
+     * Use {@link PostingOrder#CHRONOLOGICAL} when later posting calculations depend on earlier
+     * register state, such as moving-average inventory cost.
+     */
+    PostingOrder postingOrder() default PostingOrder.INDEPENDENT;
 
     String context() default "";
 }
