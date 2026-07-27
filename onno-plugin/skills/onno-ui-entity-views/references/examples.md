@@ -123,6 +123,7 @@ f.field("code").label("Code")
  .field("description").label("Name")
  .field("phone").placeholder("+1 555 0100").hint("Shown in the customer picker.")
  .field("avatarUrl").widget("avatar")
+ .field("color").widget("color")
  .field("notes").widget("textarea").width("full")
  .field("internalFlag").hideInList().hideInForm().hideInDetail();
 ```

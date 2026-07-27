@@ -11,7 +11,7 @@ import type {
   EventDropArg,
 } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { format, endOfMonth, startOfMonth, addMonths, subMonths } from "date-fns";
 import { ru } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Lock } from "lucide-react";

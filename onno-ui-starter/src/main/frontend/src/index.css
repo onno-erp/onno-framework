@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* react-colorful supplies pointer/keyboard color mechanics; the host owns its dimensions and shape. */
+.onno-color-picker .react-colorful {
+  width: 220px;
+  height: 180px;
+}
+
+.onno-color-picker .react-colorful__saturation {
+  border-radius: var(--radius-field) var(--radius-field) 0 0;
+}
+
+.onno-color-picker .react-colorful__hue {
+  border-radius: 0 0 var(--radius-field) var(--radius-field);
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

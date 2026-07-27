@@ -393,7 +393,8 @@ because they are not Java field references.
   - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
     card with that heading on the edit form), `width(String)` (`half`/`1/2` = half a row on wide
     screens; else full), `widget(String)` (`switch`,
-    `textarea`; media: `image`/`avatar`/`images`/`gallery`/`file` — streamed to
+    `textarea`; `color` (visual picker + `#RRGGBB` input); media:
+    `image`/`avatar`/`images`/`gallery`/`file` — streamed to
     `POST /api/media`, the attribute stores the returned URL; `geojson`), `placeholder`, `format`
     (`currency:EUR`, `integer`/`decimal`/`percent`, date patterns `dd-MM-yy`/`dd/MM/yyyy HH:mm`, …),
     `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each

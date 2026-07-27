@@ -675,7 +675,13 @@ function ChartTooltipContent({
  * DivKit portals — it reads a 0 size before layout settles and never recovers. Measuring ourselves is
  * reliable, and skipping its internal observer is marginally cheaper.
  */
-function ResponsiveChart({ height, children }: { height: number; children: ReactElement }) {
+function ResponsiveChart({
+  height,
+  children,
+}: {
+  height: number;
+  children: ReactElement<any>;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {

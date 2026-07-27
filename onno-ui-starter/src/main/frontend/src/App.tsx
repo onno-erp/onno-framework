@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
 import { api } from "@/lib/api";
 import { injectPluginStyles, loadPlugins } from "@/lib/plugin-loader";
 import { ThemeProvider } from "@/providers/theme-provider";

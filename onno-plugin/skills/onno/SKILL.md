@@ -277,7 +277,7 @@ cookie echoed in `X-XSRF-TOKEN`:
 curl -c jar.txt http://localhost:8080/api/config                       # get XSRF-TOKEN cookie
 curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}'
-curl -b jar.txt http://localhost:8080/api/catalogs/Properties          # reads need the session
+curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50' # reads need the session
 XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)                        # mutations need the token
 curl -b jar.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
   -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Properties

@@ -61,8 +61,8 @@ curl -fsS -c "$jar" "$base/api/config" >/dev/null
 curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"admin"}' >/dev/null
-curl -fsS -b "$jar" "$base/api/catalogs/Books" | jq .
-curl -fsS -b "$jar" "$base/api/documents/Orders" | jq .
+curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=50" | jq .
+curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=50" | jq .
 ```
 
 Use API routes for smoke tests. Browser routes can fall through to SPA HTML with status 200.

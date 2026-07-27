@@ -20,7 +20,7 @@ to future agents that may not have the full conversation context.
   are still `su.onno.*` and the desktop plugin id is `su.onno.desktop` — only the publish
   coordinate changed. Releases are tag-driven (`vX.Y.Z`); the latest is in the git tags.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
-- `onno-ui-starter` builds a bundled frontend with Node 20 via Gradle.
+- `onno-ui-starter` builds a bundled frontend with Node 22.22 via Gradle.
 - The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onno.*`
   property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); hands-on playbooks live in the
   [`onno` skills](onno-plugin/skills/onno/SKILL.md), with focused entries for modeling, UI, posting,

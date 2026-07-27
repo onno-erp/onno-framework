@@ -6,7 +6,7 @@ plugins {
 node {
     nodeProjectDir.set(file("src/main/frontend"))
     download.set(true)
-    version.set("20.18.0")
+    version.set("22.22.0")
 }
 
 val buildFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {

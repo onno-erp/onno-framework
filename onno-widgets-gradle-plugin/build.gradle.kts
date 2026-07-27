@@ -11,7 +11,7 @@ group = "su.onno"
 // widgets plugin releases in lockstep with the framework and the bundled SDK.
 version = providers.gradleProperty("releaseVersion")
     .orElse(providers.environmentVariable("RELEASE_VERSION"))
-    .orElse("0.1.0-SNAPSHOT")
+    .orElse("2.0.0-SNAPSHOT")
     .get()
 
 repositories {

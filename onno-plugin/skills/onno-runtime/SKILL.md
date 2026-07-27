@@ -28,7 +28,7 @@ curl -c jar.txt http://localhost:8080/api/config
 curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}'
 
-curl -b jar.txt http://localhost:8080/api/catalogs/Properties
+curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50'
 
 XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)
 curl -b jar.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \

@@ -268,6 +268,8 @@ public final class UiMessages {
         d.put("form.select", "Select {name}…");
         d.put("form.clearSelection", "Clear selection");
         d.put("form.noSelection", "No selection");
+        d.put("form.hexColor", "Hex color");
+        d.put("form.chooseColor", "Choose color");
         d.put("ref.selectedElsewhere", "Selected in another row");
         d.put("ref.alreadySelected", "Already selected");
         // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
@@ -284,6 +286,7 @@ public final class UiMessages {
         d.put("validation.minLength", "{field} must be at least {n} characters");
         d.put("validation.pattern", "{field} is not in the expected format");
         d.put("validation.email", "{field} must be a valid email address");
+        d.put("validation.hexColor", "{field} must be a hex color such as #AABBCC");
         d.put("validation.min", "{field} must be at least {n}");
         d.put("validation.max", "{field} must be at most {n}");
 

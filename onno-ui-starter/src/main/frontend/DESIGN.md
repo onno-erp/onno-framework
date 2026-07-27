@@ -84,6 +84,7 @@ of the row keeps the full context menu. Flat table view only.
 | `FacetSheet` / `useFacetOverlay` | `components/ui/facet-sheet.tsx` | Responsive overlay: bottom sheet (phone) / modal (tablet) / popover (desktop). |
 | `Popover`, `Tooltip`, `HintIcon` | `components/ui/*` | Anchored overlays; `HintIcon` is the authored "?" help glyph. |
 | `Button`, `Input`, `Textarea`, `Checkbox`, `Switch`, `Label`, `Badge` | `components/ui/*` | Form controls & pills. |
+| `ColorPicker` | `components/color-picker.tsx` | Hex color fields: canonical text input plus `react-colorful` popover. |
 | `Select` | `components/ui/select.tsx` | No-search dropdown; auto-drawer on touch. |
 | `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. |
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |

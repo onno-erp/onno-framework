@@ -155,9 +155,20 @@ public class BookstoreSeeder implements ApplicationRunner {
         {"Citizen", "Claudia Rankine", "Poetry", "10.50"},
     };
 
-    private static final String[] CATEGORIES = {
-        "Fiction", "Children's", "Science", "History", "Biography", "Mystery & Thriller",
-        "Science Fiction", "Fantasy", "Self-Help", "Business", "Cooking", "Poetry"
+    /** Categories: {name, color}. */
+    private static final String[][] CATEGORIES = {
+        {"Fiction", "#C2410C"},
+        {"Children's", "#DB2777"},
+        {"Science", "#0891B2"},
+        {"History", "#A16207"},
+        {"Biography", "#7C3AED"},
+        {"Mystery & Thriller", "#334155"},
+        {"Science Fiction", "#2563EB"},
+        {"Fantasy", "#9333EA"},
+        {"Self-Help", "#16A34A"},
+        {"Business", "#0F766E"},
+        {"Cooking", "#EA580C"},
+        {"Poetry", "#BE123C"}
     };
 
     private static final String[][] SUPPLIERS = {
@@ -271,8 +282,8 @@ public class BookstoreSeeder implements ApplicationRunner {
 
         // --- Master data --------------------------------------------------------------------------
         Map<String, Ref<BookCategory>> categoryRefs = new LinkedHashMap<>();
-        for (String name : CATEGORIES) {
-            categoryRefs.put(name, category(name));
+        for (String[] category : CATEGORIES) {
+            categoryRefs.put(category[0], category(category[0], category[1]));
         }
 
         List<Ref<Supplier>> supplierRefs = new ArrayList<>();
@@ -371,9 +382,10 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     // --- helpers ----------------------------------------------------------------------------------
 
-    private Ref<BookCategory> category(String name) {
+    private Ref<BookCategory> category(String name, String color) {
         BookCategory c = new BookCategory();
         c.setDescription(name);
+        c.setColor(color);
         return Ref.of(BookCategory.class, categories.save(c).getId());
     }
 

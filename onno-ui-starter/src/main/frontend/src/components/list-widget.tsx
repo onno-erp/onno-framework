@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { toSnakeCase } from "@/lib/utils";
 import { useWidgetLiveVersion } from "@/lib/widget-data";
 import {

@@ -1,6 +1,6 @@
 {
   "name": "@onno/widget-sdk",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Author custom React widgets for the onno server-driven UI.",
   "license": "Apache-2.0",
   "type": "module",
@@ -17,10 +17,10 @@
     "shims"
   ],
   "peerDependencies": {
-    "react": "^18.3.1"
+    "react": "^19.2.7"
   },
   "devDependencies": {
-    "@types/react": "^18.3.18",
+    "@types/react": "^19.2.17",
     "typescript": "~5.6.2"
   }
 }

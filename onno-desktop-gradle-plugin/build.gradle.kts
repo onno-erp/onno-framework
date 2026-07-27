@@ -11,7 +11,7 @@ group = "su.onno"
 // Defaults to -SNAPSHOT locally so a HEAD build never shadows a released tag in mavenLocal.
 version = providers.gradleProperty("releaseVersion")
     .orElse(providers.environmentVariable("RELEASE_VERSION"))
-    .orElse("0.1.0-SNAPSHOT")
+    .orElse("2.0.0-SNAPSHOT")
     .get()
 
 repositories {
