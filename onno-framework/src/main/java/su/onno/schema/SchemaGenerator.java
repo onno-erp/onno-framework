@@ -10,6 +10,7 @@ import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
@@ -293,6 +294,8 @@ public class SchemaGenerator {
             return "DATE";
         } else if (javaType == LocalDateTime.class) {
             return "TIMESTAMP";
+        } else if (PolyRef.class.isAssignableFrom(javaType)) {
+            return "VARCHAR(" + Math.max(length, 512) + ")";
         } else if (Ref.class.isAssignableFrom(javaType)) {
             return "UUID";
         } else if (javaType.isEnum()) {
@@ -303,6 +306,6 @@ public class SchemaGenerator {
                         + (fieldContext == null ? "" : " for column '" + fieldContext + "'")
                         + ". Supported types: String, int/Integer, long/Long, boolean/Boolean, "
                         + "double/Double, float/Float, BigDecimal, UUID, LocalDate, LocalDateTime, "
-                        + "enums, and Ref subtypes.");
+                        + "enums, Ref subtypes, and PolyRef.");
     }
 }

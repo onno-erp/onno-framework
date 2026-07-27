@@ -973,12 +973,16 @@ public final class SurfaceDivBuilder {
         if (!(refObj instanceof Map)) {
             return null;
         }
-        Object id = ((Map<String, Object>) refObj).get("id");
-        String target = str(a.get("refTarget"));
+        Map<String, Object> ref = (Map<String, Object>) refObj;
+        Object id = ref.get("id");
+        String target = str(ref.get("type"));
+        if (target.isBlank()) target = str(a.get("refTarget"));
         if (id == null || target.isBlank()) {
             return null;
         }
-        String kind = "document".equals(str(a.get("refKind"))) ? "documents" : "catalogs";
+        String targetKind = str(ref.get("kind"));
+        if (targetKind.isBlank()) targetKind = str(a.get("refKind"));
+        String kind = "document".equals(targetKind) ? "documents" : "catalogs";
         return "onno://" + kind + "/" + routeNameOf(target) + "/" + id;
     }
 

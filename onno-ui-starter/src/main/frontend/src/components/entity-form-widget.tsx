@@ -1219,6 +1219,16 @@ function AttrControl({
     return <FilePicker value={value as string | undefined} onChange={onChange} />;
   }
 
+  if (attr.isPolymorphicRef && attr.refTargets?.length) {
+    return (
+      <PolymorphicRefInput
+        attr={attr}
+        value={value as string | undefined}
+        onChange={onChange}
+      />
+    );
+  }
+
   if (attr.isRef && attr.refTarget) {
     return (
       <RefSelect
@@ -1333,5 +1343,66 @@ function AttrControl({
       value={(value as string) ?? ""}
       onChange={(e) => onChange(numeric ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value)}
     />
+  );
+}
+
+function PolymorphicRefInput({
+  attr,
+  value,
+  onChange,
+}: {
+  attr: AttributeMeta;
+  value?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const t = useMessages();
+  const targets = attr.refTargets ?? [];
+  const separator = value?.lastIndexOf("|") ?? -1;
+  const encodedType = separator > 0 ? value!.slice(0, separator) : "";
+  const encodedId = separator > 0 ? value!.slice(separator + 1) : undefined;
+  const [targetType, setTargetType] = useState(
+    targets.some((target) => target.javaType === encodedType)
+      ? encodedType
+      : targets[0]?.javaType ?? ""
+  );
+
+  useEffect(() => {
+    if (encodedType && encodedType !== targetType) {
+      setTargetType(encodedType);
+    }
+  }, [encodedType, targetType]);
+
+  const target = targets.find((candidate) => candidate.javaType === targetType) ?? targets[0];
+  if (!target) return null;
+
+  return (
+    <div className="grid min-w-0 grid-cols-[minmax(8rem,0.75fr)_minmax(0,1.25fr)] gap-2">
+      <Select
+        value={target.javaType}
+        onValueChange={(next) => {
+          setTargetType(next);
+          onChange(null);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder={t("form.select", { name: attr.displayName })} />
+        </SelectTrigger>
+        <SelectContent>
+          {targets.map((candidate) => (
+            <SelectItem key={candidate.javaType} value={candidate.javaType}>
+              {candidate.title || candidate.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <RefSelect
+        key={target.javaType}
+        targetName={target.name}
+        refKind={target.kind}
+        value={encodedType === target.javaType ? encodedId : undefined}
+        clearable={!attr.required}
+        onChange={(id) => onChange(id ? `${target.javaType}|${id}` : null)}
+      />
+    </div>
   );
 }

@@ -10,6 +10,7 @@ import su.onno.rules.BusinessRuleValidator;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretRedactor;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 import su.onno.validation.ValidationErrors;
 
 import java.lang.reflect.Field;
@@ -144,7 +145,10 @@ class WriteLifecycle {
                 return;
             }
 
-            if (Ref.class.isAssignableFrom(type)) {
+            if (PolyRef.class.isAssignableFrom(type)) {
+                field.set(target, value instanceof PolyRef ref
+                        ? ref : PolyRef.parse(value.toString()));
+            } else if (Ref.class.isAssignableFrom(type)) {
                 if (field.getGenericType() instanceof ParameterizedType pt) {
                     Class<?> refTarget = (Class<?>) pt.getActualTypeArguments()[0];
                     field.set(target, Ref.of(refTarget, toUuid(value)));
@@ -199,6 +203,9 @@ class WriteLifecycle {
         }
         if (value instanceof Ref<?> ref) {
             return ref.id();
+        }
+        if (value instanceof PolyRef ref) {
+            return ref.externalForm();
         }
         if (value instanceof Enum<?> constant) {
             return enumId(constant);

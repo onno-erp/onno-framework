@@ -60,6 +60,43 @@ public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Va
 Use `addReceipt` and `addExpense` on the typed register repository returned by
 `context.movements(RegisterClass.class)`.
 
+## Negative Balance Policy
+
+`@AccumulationRegister(type = BALANCE)` rejects a post if any resource total would become negative.
+This safe default fits inventory and other constrained balances. Declare `allowNegative = true` on
+an individual balance register when its domain permits debt or overdrafts:
+
+```java
+@AccumulationRegister(
+        name = "Cash",
+        type = AccumulationType.BALANCE,
+        allowNegative = true)
+class CashRegister extends AccumulationRecord {
+}
+```
+
+The policy is per register and is ignored for `TURNOVER` registers.
+
+## Chronological Restoration
+
+Use `postingOrder = PostingOrder.CHRONOLOGICAL` when a movement depends on balances produced by all
+earlier movements, such as moving-average inventory cost:
+
+```java
+@AccumulationRegister(
+        name = "InventoryCost",
+        type = AccumulationType.BALANCE,
+        postingOrder = PostingOrder.CHRONOLOGICAL)
+class InventoryCost extends AccumulationRecord {
+}
+```
+
+A backdated post/unpost then reverses later affected documents newest-first and reposts them
+oldest-first in one serializable transaction. Balance queries performed from `handlePosting` see the
+restoration transaction. The dependency closure crosses other chronological registers touched by
+those documents. Keep posting deterministic and free of external side effects; restored documents
+do not re-emit `DocumentPostedEvent`.
+
 ## Rules And Defaults
 
 `Validated.rules()` runs before write and before posting. Use named `BusinessRule`s with clear user

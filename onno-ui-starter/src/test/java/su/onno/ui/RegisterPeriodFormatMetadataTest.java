@@ -67,6 +67,8 @@ class RegisterPeriodFormatMetadataTest {
 
     @Test
     void noView_periodFormatBlank() {
-        assertThat(describe().get("periodFormat")).isEqualTo("");
+        Map<String, Object> reg = describe();
+        assertThat(reg.get("periodFormat")).isEqualTo("");
+        assertThat(reg.get("allowNegative")).isEqualTo(false);
     }
 }

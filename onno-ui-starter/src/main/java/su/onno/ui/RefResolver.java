@@ -1,6 +1,7 @@
 package su.onno.ui;
 
 import su.onno.metadata.*;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Jdbi;
 
@@ -34,13 +35,103 @@ public class RefResolver {
 
     public void resolveAttributes(List<Map<String, Object>> rows, List<AttributeDescriptor> attributes) {
         for (AttributeDescriptor attr : attributes) {
-            if (attr.isRef() && attr.refTarget() != null) {
+            if (attr.isPolymorphicRef()) {
+                resolvePolymorphicRefColumn(rows, attr);
+            } else if (attr.isRef() && attr.refTarget() != null) {
                 resolveRefColumn(rows, attr);
             } else if (attr.javaType().isEnum()) {
                 resolveEnumColumn(rows, attr);
             }
         }
     }
+
+    private void resolvePolymorphicRefColumn(List<Map<String, Object>> rows,
+                                             AttributeDescriptor attr) {
+        Map<String, ReferenceTargetDescriptor> allowed = new HashMap<>();
+        for (ReferenceTargetDescriptor target : attr.refTargets()) {
+            allowed.put(target.javaTypeName(), target);
+        }
+        Map<ReferenceTargetDescriptor, Set<UUID>> idsByTarget = new LinkedHashMap<>();
+        Map<Map<String, Object>, PolyRef> refsByRow = new IdentityHashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object raw = value(row, attr.columnName());
+            if (raw == null) continue;
+            try {
+                PolyRef ref = raw instanceof PolyRef poly
+                        ? poly : PolyRef.parse(raw.toString());
+                ReferenceTargetDescriptor target = allowed.get(ref.type().getName());
+                if (target == null) continue;
+                refsByRow.put(row, ref);
+                idsByTarget.computeIfAbsent(target, ignored -> new LinkedHashSet<>()).add(ref.id());
+            } catch (IllegalArgumentException invalidStoredReference) {
+                // Preserve the raw value; malformed legacy data remains visible rather than
+                // breaking the entire list response.
+            }
+        }
+        Map<PolyRefKey, String> displays = new HashMap<>();
+        for (Map.Entry<ReferenceTargetDescriptor, Set<UUID>> entry : idsByTarget.entrySet()) {
+            ReferenceTargetDescriptor target = entry.getKey();
+            if ("document".equals(target.kind())) {
+                DocumentDescriptor document = registry.allDocuments().stream()
+                        .filter(d -> d.logicalName().equals(target.logicalName()))
+                        .findFirst().orElse(null);
+                if (document == null) continue;
+                jdbi.withHandle(handle -> {
+                    List<Map.Entry<PolyRefKey, String>> resolved = handle.createQuery(
+                                    "SELECT _id, _number FROM " + document.tableName()
+                                            + " WHERE _id IN (<ids>)")
+                            .bindList("ids", entry.getValue())
+                            .map((rs, ctx) -> Map.entry(
+                                    new PolyRefKey(target.javaTypeName(), rs.getObject("_id", UUID.class)),
+                                    Objects.toString(rs.getString("_number"), "")))
+                            .list();
+                    resolved.forEach(value -> displays.put(value.getKey(), value.getValue()));
+                    return null;
+                });
+            } else {
+                CatalogDescriptor catalog = registry.allCatalogs().stream()
+                        .filter(c -> c.logicalName().equals(target.logicalName()))
+                        .findFirst().orElse(null);
+                if (catalog == null) continue;
+                jdbi.withHandle(handle -> {
+                    List<Map.Entry<PolyRefKey, String>> resolved = handle.createQuery(
+                                    "SELECT _id, _code, _description FROM " + catalog.tableName()
+                                            + " WHERE _id IN (<ids>)")
+                            .bindList("ids", entry.getValue())
+                            .map((rs, ctx) -> {
+                                String description = rs.getString("_description");
+                                String code = rs.getString("_code");
+                                return Map.entry(
+                                        new PolyRefKey(
+                                                target.javaTypeName(),
+                                                rs.getObject("_id", UUID.class)),
+                                        description != null && !description.isBlank()
+                                                ? description : Objects.toString(code, ""));
+                            })
+                            .list();
+                    resolved.forEach(value -> displays.put(value.getKey(), value.getValue()));
+                    return null;
+                });
+            }
+        }
+        for (Map.Entry<Map<String, Object>, PolyRef> entry : refsByRow.entrySet()) {
+            Map<String, Object> row = entry.getKey();
+            PolyRef ref = entry.getValue();
+            ReferenceTargetDescriptor target = allowed.get(ref.type().getName());
+            String display = displays.getOrDefault(
+                    new PolyRefKey(target.javaTypeName(), ref.id()), ref.id().toString());
+            row.put(attr.columnName() + "_display", display);
+            Map<String, Object> refMap = new LinkedHashMap<>();
+            refMap.put("id", ref.id().toString());
+            refMap.put("type", target.logicalName());
+            refMap.put("kind", target.kind());
+            refMap.put("javaType", target.javaTypeName());
+            refMap.put("display", display);
+            row.put(attr.columnName() + "_ref", refMap);
+        }
+    }
+
+    private record PolyRefKey(String javaType, UUID id) {}
 
     private void resolveRefColumn(List<Map<String, Object>> rows, AttributeDescriptor attr) {
         Set<UUID> ids = new HashSet<>();

@@ -108,9 +108,9 @@ Reading `description` (no underscore) or a camelCase `taxId` returns `undefined`
 | `_version` | catalog, document | optimistic-lock version |
 | `_parent_id`, `_line_number` | tabular-section row | back-reference to the document / 1-based ordinal |
 | `_period`, `_active` | register rows | period / active flag |
-| `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is stored as its UUID |
-| `<col>_display` | `Ref<>` & enum attrs | resolved human label |
-| `<col>_ref` | `Ref<>` attrs | `{ id, type, display, code?, avatarUrl?, color? }` |
+| `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
+| `<col>_display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
+| `<col>_ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }` |
 | `<col>_code` | catalog-`Ref<>` attrs only | the target's code |
 | `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
 | `<col>_color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
@@ -205,7 +205,9 @@ two sibling keys so the client need not make a second call:
   is what lets a user-editable status *catalog* keep the colored pills a status enum had. Absent
   when there is no colour.
 
-The raw `{column}` value remains the UUID, so writers can round-trip it unchanged.
+The raw `{column}` value remains the UUID for `Ref<>`, or `fully.qualified.JavaType|UUID` for a
+`PolyRef`, so writers can round-trip it unchanged. A polymorphic `_ref` also includes `kind`
+(`catalog`/`document`) and `javaType`; its `type` is the selected target's logical name.
 
 ## Secrets
 
@@ -221,6 +223,8 @@ Writes are the mirror image of reads, and two things surprise people:
   `tax_id` / `region_display`, but you write `{ "taxId": "…" }`. System fields are the logical names
   too: catalog `code` / `description` / `folder` / `parent` / `version`; document `number` / `date` /
   `version` (`_version` is also accepted). A `Ref<>`/enum is written as its bare UUID string.
+  A `PolyRef` accepts its raw `JavaType|UUID` string or `{ "type": "<logical-name-or-Java-type>",
+  "id": "<uuid>" }`; the declared `@RefTargets` allowlist is enforced.
 - **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
   in the body — omitted fields keep their stored value, and an empty body is a no-op. So a
   `PUT { "startsAt": "…" }` moves just that field and does **not** null the rest. Validation follows

@@ -15,21 +15,31 @@ import su.onno.messaging.OutboxWriter;
 import su.onno.model.AccumulationRecord;
 import su.onno.model.AccumulationType;
 import su.onno.model.DocumentObject;
+import su.onno.model.PostingOrder;
 import su.onno.model.TabularSectionRow;
 import su.onno.performance.OnnoPerformance;
 import su.onno.repository.RegisterRepositoryImpl;
 import su.onno.rules.BusinessRuleValidator;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.transaction.TransactionIsolationLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -61,6 +71,7 @@ public class PostingEngine {
     private final BusinessRuleValidator businessRuleValidator = new BusinessRuleValidator();
     private final OutboxWriter outboxWriter;
     private final PostEventPublisher eventPublisher;
+    private final PostedDocumentLoader documentLoader;
 
     public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap) {
@@ -77,11 +88,20 @@ public class PostingEngine {
                          Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap,
                          OutboxWriter outboxWriter,
                          PostEventPublisher eventPublisher) {
+        this(jdbi, registry, repositoryMap, outboxWriter, eventPublisher, null);
+    }
+
+    public PostingEngine(Jdbi jdbi, MetadataRegistry registry,
+                         Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMap,
+                         OutboxWriter outboxWriter,
+                         PostEventPublisher eventPublisher,
+                         PostedDocumentLoader documentLoader) {
         this.jdbi = jdbi;
         this.registry = registry;
         this.repositoryMap = repositoryMap;
         this.outboxWriter = outboxWriter;
         this.eventPublisher = eventPublisher;
+        this.documentLoader = documentLoader;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -115,38 +135,18 @@ public class PostingEngine {
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
 
         PostingContext context = buildPostingContext(document);
-
-        OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
-            for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
-                RegisterPersistence persistence = repo.getPersistence();
-                persistence.insertRecords(handle, repo.getPendingMovements(),
-                        document.getId(), document.getDate());
-                persistence.updateTotals(handle, repo.getPendingMovements());
-                repo.clearPending();
-            }
-
-            // Check that no BALANCE register went negative
-            for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
-                checkNonNegativeBalances(handle, repo.getPersistence().getDescriptor());
-            }
-
-            // Write back computed fields from beforeWrite()
-            writeBackDocument(handle, docDescriptor, document);
-
-            handle.createUpdate("UPDATE " + docDescriptor.tableName() +
-                            " SET _posted = TRUE WHERE _id = :id")
-                    .bind("id", document.getId())
-                    .execute();
-        }));
-
-        document.setPosted(true);
-        publishDomainEvents(document, EventTiming.AFTER_POST);
-
-        if (document instanceof AfterPostHandler handler) {
-            OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
+        Set<Class<?>> chronologicalRegisters = chronologicalRegisters(context.touchedRepositories());
+        if (!chronologicalRegisters.isEmpty()) {
+            restoreChronologically(document, context, chronologicalRegisters, false);
+            afterSuccessfulPost(document);
+            return;
         }
 
-        publishApplicationEvent(new DocumentPostedEvent(document));
+        OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
+            persistPosting(handle, docDescriptor, document, context);
+        }));
+
+        afterSuccessfulPost(document);
     }
 
     public PostingPreview preview(DocumentObject document) {
@@ -207,18 +207,16 @@ public class PostingEngine {
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doUnpost(DocumentObject document) {
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
+        Set<Class<?>> chronologicalRegisters = chronologicalRegistersForDocument(document.getId());
+        if (!chronologicalRegisters.isEmpty()) {
+            restoreChronologically(document, null, chronologicalRegisters, true);
+            document.setPosted(false);
+            publishApplicationEvent(new DocumentUnpostedEvent(document));
+            return;
+        }
 
         OnnoPerformance.record("onno.document.unpost.transaction", 1, () -> jdbi.useTransaction(handle -> {
-            for (RegisterRepositoryImpl<?> repo : repositoryMap.values()) {
-                RegisterPersistence persistence = repo.getPersistence();
-                persistence.reverseTotals(handle, document.getId());
-                persistence.deactivateRecords(handle, document.getId());
-            }
-
-            handle.createUpdate("UPDATE " + docDescriptor.tableName() +
-                            " SET _posted = FALSE WHERE _id = :id")
-                    .bind("id", document.getId())
-                    .execute();
+            unpostInTransaction(handle, docDescriptor, document.getId());
         }));
 
         document.setPosted(false);
@@ -226,9 +224,221 @@ public class PostingEngine {
         publishApplicationEvent(new DocumentUnpostedEvent(document));
     }
 
+    private void afterSuccessfulPost(DocumentObject document) {
+        document.setPosted(true);
+        publishDomainEvents(document, EventTiming.AFTER_POST);
+
+        if (document instanceof AfterPostHandler handler) {
+            OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
+        }
+
+        publishApplicationEvent(new DocumentPostedEvent(document));
+    }
+
+    private void restoreChronologically(DocumentObject requested,
+                                        PostingContext requestedContext,
+                                        Set<Class<?>> chronologicalRegisters,
+                                        boolean unpostRequested) {
+        OnnoPerformance.record("onno.document.restore-sequence", 1,
+                () -> jdbi.useTransaction(TransactionIsolationLevel.SERIALIZABLE, handle ->
+                        withBoundRegisterReads(handle, () -> {
+                            List<DocumentObject> laterDocuments =
+                                    loadLaterDocuments(handle, requested, chronologicalRegisters);
+                            List<DocumentObject> reverse = new ArrayList<>(laterDocuments);
+                            reverse.sort(documentOrder().reversed());
+                            for (DocumentObject later : reverse) {
+                                unpostMovements(handle, later.getId());
+                            }
+
+                            DocumentDescriptor requestedDescriptor =
+                                    registry.getDocumentDescriptor(requested.getClass());
+                            if (unpostRequested) {
+                                unpostInTransaction(handle, requestedDescriptor, requested.getId());
+                            } else {
+                                persistPosting(handle, requestedDescriptor, requested, requestedContext);
+                            }
+
+                            for (DocumentObject later : laterDocuments) {
+                                PostingContext context = preparePosting(later);
+                                DocumentDescriptor descriptor =
+                                        registry.getDocumentDescriptor(later.getClass());
+                                persistPosting(handle, descriptor, later, context);
+                                later.setPosted(true);
+                            }
+                        })));
+    }
+
+    private PostingContext preparePosting(DocumentObject document) {
+        if (!(document instanceof Postable)) {
+            throw new IllegalArgumentException(
+                    document.getClass().getName() + " does not implement Postable");
+        }
+        if (document instanceof BeforeWriteHandler writer) {
+            OnnoPerformance.record("onno.document.before-write", 1, writer::beforeWrite);
+        }
+        if (document instanceof BeforePostHandler handler) {
+            OnnoPerformance.record("onno.document.before-post", 1, handler::beforePost);
+        }
+        OnnoPerformance.record("onno.document.validate", 1,
+                () -> businessRuleValidator.validate(document));
+        return buildPostingContext(document);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void persistPosting(Handle handle,
+                                DocumentDescriptor descriptor,
+                                DocumentObject document,
+                                PostingContext context) {
+        for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
+            RegisterPersistence persistence = repo.getPersistence();
+            persistence.insertRecords(handle, repo.getPendingMovements(),
+                    document.getId(), document.getDate());
+            persistence.updateTotals(handle, repo.getPendingMovements());
+            repo.clearPending();
+        }
+        for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
+            checkNonNegativeBalances(handle, repo.getPersistence().getDescriptor());
+        }
+        writeBackDocument(handle, descriptor, document);
+        handle.createUpdate("UPDATE " + descriptor.tableName() +
+                        " SET _posted = TRUE WHERE _id = :id")
+                .bind("id", document.getId())
+                .execute();
+    }
+
+    private void unpostInTransaction(Handle handle,
+                                     DocumentDescriptor descriptor,
+                                     UUID documentId) {
+        unpostMovements(handle, documentId);
+        handle.createUpdate("UPDATE " + descriptor.tableName() +
+                        " SET _posted = FALSE WHERE _id = :id")
+                .bind("id", documentId)
+                .execute();
+    }
+
+    private void unpostMovements(Handle handle, UUID documentId) {
+        for (RegisterRepositoryImpl<?> repo : repositoryMap.values()) {
+            RegisterPersistence<?> persistence = repo.getPersistence();
+            persistence.reverseTotals(handle, documentId);
+            persistence.deactivateRecords(handle, documentId);
+        }
+    }
+
+    private Set<Class<?>> chronologicalRegisters(
+            Collection<RegisterRepositoryImpl<?>> repositories) {
+        Set<Class<?>> result = new LinkedHashSet<>();
+        for (RegisterRepositoryImpl<?> repository : repositories) {
+            AccumulationRegisterDescriptor descriptor =
+                    repository.getPersistence().getDescriptor();
+            if (descriptor.postingOrder() == PostingOrder.CHRONOLOGICAL) {
+                result.add(descriptor.javaClass());
+            }
+        }
+        return result;
+    }
+
+    private Set<Class<?>> chronologicalRegistersForDocument(UUID documentId) {
+        Set<Class<?>> result = new LinkedHashSet<>();
+        for (AccumulationRegisterDescriptor descriptor : registry.allRegisters()) {
+            if (descriptor.postingOrder() != PostingOrder.CHRONOLOGICAL) continue;
+            boolean touched = jdbi.withHandle(handle -> handle.createQuery(
+                            "SELECT COUNT(*) FROM " + descriptor.tableName() +
+                                    " WHERE _document_ref = :documentId AND _active = TRUE")
+                    .bind("documentId", documentId)
+                    .mapTo(Integer.class)
+                    .one() > 0);
+            if (touched) result.add(descriptor.javaClass());
+        }
+        return result;
+    }
+
+    private List<DocumentObject> loadLaterDocuments(Handle handle,
+                                                     DocumentObject requested,
+                                                     Set<Class<?>> initialRegisters) {
+        if (initialRegisters.isEmpty()) return List.of();
+        Set<Class<?>> affectedRegisters = new LinkedHashSet<>(initialRegisters);
+        Set<UUID> documentIds = new LinkedHashSet<>();
+
+        boolean changed;
+        do {
+            changed = false;
+            for (Class<?> registerClass : List.copyOf(affectedRegisters)) {
+                AccumulationRegisterDescriptor descriptor =
+                        registry.getRegisterDescriptor(registerClass);
+                List<UUID> ids = handle.createQuery(
+                                "SELECT DISTINCT _document_ref FROM " + descriptor.tableName()
+                                        + " WHERE _active = TRUE AND _period > :cutoff"
+                                        + " AND _document_ref <> :requestedId")
+                        .bind("cutoff", requested.getDate())
+                        .bind("requestedId", requested.getId())
+                        .mapTo(UUID.class)
+                        .list();
+                if (documentIds.addAll(ids)) changed = true;
+            }
+            if (!documentIds.isEmpty()) {
+                for (AccumulationRegisterDescriptor descriptor : registry.allRegisters()) {
+                    if (descriptor.postingOrder() != PostingOrder.CHRONOLOGICAL
+                            || affectedRegisters.contains(descriptor.javaClass())) {
+                        continue;
+                    }
+                    boolean linked = handle.createQuery(
+                                    "SELECT COUNT(*) FROM " + descriptor.tableName()
+                                            + " WHERE _active = TRUE AND _document_ref IN (<ids>)")
+                            .bindList("ids", documentIds)
+                            .mapTo(Integer.class)
+                            .one() > 0;
+                    if (linked && affectedRegisters.add(descriptor.javaClass())) changed = true;
+                }
+            }
+        } while (changed);
+
+        if (documentIds.isEmpty()) return List.of();
+        if (documentLoader == null) {
+            throw new IllegalStateException(
+                    "Chronological posting found later documents, but no PostedDocumentLoader is configured");
+        }
+        List<DocumentObject> loaded = documentLoader.load(documentIds);
+        Set<UUID> loadedIds = new HashSet<>();
+        List<DocumentObject> result = loaded.stream()
+                .filter(doc -> documentIds.contains(doc.getId()))
+                .filter(DocumentObject::isPosted)
+                .filter(doc -> !doc.isDeletionMark())
+                .filter(doc -> doc.getDate() != null && doc.getDate().isAfter(requested.getDate()))
+                .sorted(documentOrder())
+                .peek(doc -> loadedIds.add(doc.getId()))
+                .toList();
+        Set<UUID> missing = new LinkedHashSet<>(documentIds);
+        missing.removeAll(loadedIds);
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException(
+                    "Could not load posted documents required for chronological restoration: " + missing);
+        }
+        return result;
+    }
+
+    private Comparator<DocumentObject> documentOrder() {
+        return Comparator.comparing(DocumentObject::getDate)
+                .thenComparing(DocumentObject::getId);
+    }
+
+    private void withBoundRegisterReads(Handle handle, Runnable action) {
+        Map<RegisterPersistence<?>, Handle> previous = new HashMap<>();
+        try {
+            for (RegisterRepositoryImpl<?> repository : repositoryMap.values()) {
+                RegisterPersistence<?> persistence = repository.getPersistence();
+                previous.put(persistence, persistence.bindHandle(handle));
+            }
+            action.run();
+        } finally {
+            for (Map.Entry<RegisterPersistence<?>, Handle> entry : previous.entrySet()) {
+                entry.getKey().restoreHandle(entry.getValue());
+            }
+        }
+    }
+
     private void checkNonNegativeBalances(Handle handle,
                                            AccumulationRegisterDescriptor desc) {
-        if (desc.accumulationType() != AccumulationType.BALANCE) return;
+        if (desc.accumulationType() != AccumulationType.BALANCE || desc.allowNegative()) return;
 
         for (AttributeDescriptor res : desc.resources()) {
             String sql = "SELECT COUNT(*) FROM " + desc.totalsTableName() +
@@ -340,6 +550,7 @@ public class PostingEngine {
     private Object convertForDb(Object val) {
         if (val == null) return null;
         if (val instanceof Ref<?> ref) return ref.id();
+        if (val instanceof PolyRef ref) return ref.externalForm();
         if (val instanceof Enum<?> e) {
             var enumDesc = registry.allEnumerations().stream()
                     .filter(ed -> ed.javaClass().equals(e.getClass()))

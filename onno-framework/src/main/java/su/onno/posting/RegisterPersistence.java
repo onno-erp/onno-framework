@@ -8,6 +8,7 @@ import su.onno.model.MovementType;
 import su.onno.query.SqlRenderer;
 import su.onno.schema.SqlDialect;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
@@ -17,12 +18,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class RegisterPersistence<T extends AccumulationRecord> {
 
     private final Jdbi jdbi;
     private final AccumulationRegisterDescriptor descriptor;
+    private final ThreadLocal<Handle> boundHandle = new ThreadLocal<>();
 
     public RegisterPersistence(Jdbi jdbi, AccumulationRegisterDescriptor descriptor) {
         this.jdbi = jdbi;
@@ -200,7 +203,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     @SuppressWarnings("unchecked")
     public List<T> getRecordsByDocument(UUID documentRef) {
         String sql = "SELECT * FROM " + descriptor.tableName() + " WHERE _document_ref = :ref";
-        return jdbi.withHandle(handle ->
+        return withHandle(handle ->
                 handle.createQuery(sql)
                         .bind("ref", documentRef)
                         .map((rs, ctx) -> {
@@ -212,16 +215,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                                 record.setDocumentRef(rs.getObject("_document_ref", UUID.class));
                                 record.setMovementType(MovementType.valueOf(rs.getString("_movement_type")));
 
-                                for (AttributeDescriptor dim : descriptor.dimensions()) {
-                                    Field field = findField(descriptor.javaClass(), dim.fieldName());
-                                    field.setAccessible(true);
-                                    field.set(record, rs.getObject(dim.columnName(), field.getType()));
-                                }
-                                for (AttributeDescriptor res : descriptor.resources()) {
-                                    Field field = findField(descriptor.javaClass(), res.fieldName());
-                                    field.setAccessible(true);
-                                    field.set(record, rs.getObject(res.columnName(), BigDecimal.class));
-                                }
+                                mapDimensionsAndResources(record, rs);
                                 return record;
                             } catch (Exception e) {
                                 throw new RuntimeException("Failed to map register record", e);
@@ -229,6 +223,20 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                         })
                         .list()
         );
+    }
+
+    Handle bindHandle(Handle handle) {
+        Handle previous = boundHandle.get();
+        boundHandle.set(handle);
+        return previous;
+    }
+
+    void restoreHandle(Handle previous) {
+        if (previous == null) {
+            boundHandle.remove();
+        } else {
+            boundHandle.set(previous);
+        }
     }
 
     // --- Totals management ---
@@ -471,10 +479,15 @@ public class RegisterPersistence<T extends AccumulationRecord> {
             Field field = findField(descriptor.javaClass(), dim.fieldName());
             field.setAccessible(true);
             if (dim.isRef()) {
-                // A Ref dimension is stored as a bare UUID column; JDBC can't materialize a Ref
-                // itself (#207), so rebuild it against the field's declared target type.
                 String raw = rs.getString(dim.columnName());
-                field.set(record, raw == null ? null : Ref.of(refTargetClass(field), UUID.fromString(raw)));
+                if (PolyRef.class.isAssignableFrom(field.getType())) {
+                    field.set(record, PolyRef.parse(raw));
+                } else {
+                    // A Ref dimension is stored as a bare UUID column; JDBC can't materialize a Ref
+                    // itself (#207), so rebuild it against the field's declared target type.
+                    field.set(record, raw == null ? null
+                            : Ref.of(refTargetClass(field), UUID.fromString(raw)));
+                }
             } else {
                 field.set(record, rs.getObject(dim.columnName(), field.getType()));
             }
@@ -609,11 +622,13 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     }
 
     private static Object unwrapRef(Object value) {
-        return value instanceof Ref<?> ref ? ref.id() : value;
+        if (value instanceof Ref<?> ref) return ref.id();
+        if (value instanceof PolyRef ref) return ref.externalForm();
+        return value;
     }
 
     private List<Map<String, Object>> queryMap(String sql, Consumer<org.jdbi.v3.core.statement.Query> binder) {
-        return jdbi.withHandle(handle -> {
+        return withHandle(handle -> {
             var query = handle.createQuery(sql);
             binder.accept(query);
             return query.mapToMap().list();
@@ -621,7 +636,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     }
 
     private List<T> queryRecords(String sql, Consumer<org.jdbi.v3.core.statement.Query> binder) {
-        return jdbi.withHandle(handle -> {
+        return withHandle(handle -> {
             var query = handle.createQuery(sql);
             binder.accept(query);
             return query.map((rs, ctx) -> {
@@ -634,6 +649,11 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 return record;
             }).list();
         });
+    }
+
+    private <R> R withHandle(Function<Handle, R> callback) {
+        Handle handle = boundHandle.get();
+        return handle == null ? jdbi.withHandle(callback::apply) : callback.apply(handle);
     }
 
     @SuppressWarnings("unchecked")
@@ -657,6 +677,8 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                 Object value = field.get(record);
                 if (attr.isRef() && value instanceof Ref<?> ref) {
                     stmt.bind(attr.fieldName(), ref.id());
+                } else if (value instanceof PolyRef ref) {
+                    stmt.bind(attr.fieldName(), ref.externalForm());
                 } else {
                     stmt.bind(attr.fieldName(), value);
                 }

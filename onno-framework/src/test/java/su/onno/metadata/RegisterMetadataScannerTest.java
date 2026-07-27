@@ -1,9 +1,12 @@
 package su.onno.metadata;
 
 import su.onno.fixtures.NotARegister;
+import su.onno.fixtures.TestOverdraftRegister;
+import su.onno.fixtures.TestCostRegister;
 import su.onno.fixtures.TestStockRegister;
 import su.onno.fixtures.TestSalesRegister;
 import su.onno.model.AccumulationType;
+import su.onno.model.PostingOrder;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +31,8 @@ class RegisterMetadataScannerTest {
         assertThat(desc.totalsTableName()).isEqualTo("register_test_stock_totals");
         assertThat(desc.javaClass()).isEqualTo(TestStockRegister.class);
         assertThat(desc.accumulationType()).isEqualTo(AccumulationType.BALANCE);
+        assertThat(desc.allowNegative()).isFalse();
+        assertThat(desc.postingOrder()).isEqualTo(PostingOrder.INDEPENDENT);
     }
 
     @Test
@@ -56,6 +61,21 @@ class RegisterMetadataScannerTest {
         assertThat(desc.accumulationType()).isEqualTo(AccumulationType.TURNOVER);
         assertThat(desc.dimensions()).hasSize(1);
         assertThat(desc.resources()).hasSize(2);
+    }
+
+    @Test
+    void scanRegister_negativeBalancePolicy() {
+        AccumulationRegisterDescriptor desc = scanner.scanRegister(TestOverdraftRegister.class);
+
+        assertThat(desc.accumulationType()).isEqualTo(AccumulationType.BALANCE);
+        assertThat(desc.allowNegative()).isTrue();
+    }
+
+    @Test
+    void scanRegister_chronologicalPostingPolicy() {
+        AccumulationRegisterDescriptor desc = scanner.scanRegister(TestCostRegister.class);
+
+        assertThat(desc.postingOrder()).isEqualTo(PostingOrder.CHRONOLOGICAL);
     }
 
     @Test

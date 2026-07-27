@@ -87,9 +87,12 @@ In brief:
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).
 - **`@TabularSection`** — line-item collections on a document; rows extend `TabularSectionRow`.
-- **`@AccumulationRegister`** — ledgers, `type = BALANCE | TURNOVER`; `@Dimension` keys and
-  `@Resource` numbers; rows extend `AccumulationRecord` (`period`, `active`, `documentRef`,
-  `movementType = RECEIPT | EXPENSE`).
+- **`@AccumulationRegister`** — ledgers, `type = BALANCE | TURNOVER`; `BALANCE` rejects negative
+  resource totals by default and `allowNegative = true` opts a debt/overdraft register out;
+  `postingOrder = CHRONOLOGICAL` makes a backdated post/unpost restore and repost later affected
+  documents in date order;
+  `@Dimension` keys and `@Resource` numbers; rows extend `AccumulationRecord` (`period`, `active`,
+  `documentRef`, `movementType = RECEIPT | EXPENSE`).
 - **`@InformationRegister`** — facts by dimension over time, `periodicity = NONE|DAY|MONTH|QUARTER|YEAR`;
   rows extend `InformationRecord`.
 - **`@Enumeration`** (on a Java `enum`; `title` for the type's display name, `@EnumLabel` on a
@@ -101,6 +104,9 @@ In brief:
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
+- **`PolyRef` + `@RefTargets`** — an explicitly allowlisted reference to one of several catalog or
+  document types. It is stored as `fully.qualified.JavaType|UUID`; metadata and read responses retain
+  the concrete target so generated forms can select and link the right entity type.
 
 ### Durable typed business processes
 
@@ -253,9 +259,17 @@ public void handlePosting(PostingContext context) {
 
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
 `beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
-inserts movements, updates register totals, rejects negative `BALANCE` results, writes back computed
-fields, and sets `_posted = true`. After commit it emits `@DomainEvent` outbox rows, calls
-`afterPost`, and publishes a Spring `DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
+inserts movements, updates register totals, rejects negative `BALANCE` results unless that register
+declares `allowNegative = true`, writes back computed fields, and sets `_posted = true`. After commit
+it emits `@DomainEvent` outbox rows, calls `afterPost`, and publishes a Spring
+`DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
+
+For a register declared with `postingOrder = PostingOrder.CHRONOLOGICAL`, posting or unposting a
+backdated document discovers later active documents through that register (including documents
+linked through other chronological registers), reverses them newest-first, applies the requested
+change, and reposts them oldest-first. The restoration uses one serializable JDBI transaction, and
+register balance reads made by `handlePosting` see that same transaction. Restored documents do not
+emit duplicate external post events; only the requested command does.
 
 Two semantics that bite every integration:
 

@@ -54,7 +54,11 @@ posts the browser's percent-encoded route path, which previously made presence/S
 
 ### `@AccumulationRegister` (on a class extending `AccumulationRecord`)
 `name` (required), `title=""`, `tableName=""`, `type = AccumulationType.BALANCE|TURNOVER` (default
-`BALANCE`), `context=""`. Fields are `@Dimension` (grouping keys) and `@Resource` (numbers).
+`BALANCE`), `allowNegative=false`, `postingOrder=PostingOrder.INDEPENDENT`, `context=""`. Fields are `@Dimension` (grouping keys) and
+`@Resource` (numbers). Posting rejects a negative resource total in a `BALANCE` register by default;
+set `allowNegative=true` only for a balance whose domain permits debt or overdrafts. The policy is
+ignored for `TURNOVER` registers. `postingOrder=CHRONOLOGICAL` reverses and reposts later affected
+documents after a backdated post/unpost; use it for order-dependent calculations such as average cost.
 
 ### `@InformationRegister` (on a class extending `InformationRecord`)
 `name` (required), `tableName=""`, `periodicity = Periodicity.NONE|DAY|MONTH|QUARTER|YEAR` (default
@@ -134,9 +138,11 @@ UI is authored via `Layout`/`Page`/`EntityView` beans, not domain annotations.
 | `AccumulationRecord` | `UUID id`, `LocalDateTime period`, `boolean active=true`, `UUID documentRef`, `MovementType movementType=RECEIPT`, `isNew=true`. |
 | `InformationRecord` | `UUID id`, `LocalDateTime period`. |
 | `Ref<T>` | `record Ref(Class<T> type, UUID id)`; `Ref.of(type, id)`. Stored as UUID column; resolve via `RefResolver`. |
+| `PolyRef` | `record PolyRef(Class<?> type, UUID id)`; declare an explicit `@RefTargets({...})` on each field. Stored as `fully.qualified.JavaType|UUID`; use only when several catalog/document types are valid. |
 
 Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER,YEAR}`,
-`MovementType{RECEIPT,EXPENSE}`, `EventTiming{AFTER_WRITE,AFTER_POST,AFTER_DELETE}`.
+`MovementType{RECEIPT,EXPENSE}`, `PostingOrder{INDEPENDENT,CHRONOLOGICAL}`,
+`EventTiming{AFTER_WRITE,AFTER_POST,AFTER_DELETE}`.
 
 ## Lifecycle & rules (packages `su.onno.lifecycle`, `su.onno.rules`)
 
@@ -169,8 +175,9 @@ Constructors: `new BusinessRule(name, message, condition)` (cross-field) and
   call `addReceipt(Consumer<T>)` / `addExpense(Consumer<T>)` to stage movements.
 - Events: `DocumentPostedEvent(document)`, `DocumentUnpostedEvent(document)` (Spring events, after commit).
 - `PostingEngine` runs `beforeWrite → beforePost → rules` then, in its own JDBI transaction, inserts
-  movements, updates totals, rejects negative BALANCE results, writes back computed fields, sets
-  `_posted=true`. **Save then post — never wrap both in one `@Transactional`.**
+  movements, updates totals, rejects negative BALANCE results unless the register declares
+  `allowNegative=true`, writes back computed fields, sets `_posted=true`. **Save then post — never
+  wrap both in one `@Transactional`.**
 
 ## Query engine (package `su.onno.query`)
 

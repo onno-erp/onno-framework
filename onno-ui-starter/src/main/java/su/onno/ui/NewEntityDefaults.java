@@ -5,6 +5,7 @@ import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.EnumerationValueDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.types.Ref;
+import su.onno.types.PolyRef;
 
 import java.lang.reflect.Field;
 import java.time.LocalDate;
@@ -86,7 +87,13 @@ final class NewEntityDefaults {
                 continue;
             }
             Object coerced;
-            if (attr.isRef() || attr.javaType().isEnum()) {
+            if (attr.isPolymorphicRef()) {
+                try {
+                    coerced = PolyRef.parse(value.trim()).externalForm();
+                } catch (IllegalArgumentException invalidRef) {
+                    continue;
+                }
+            } else if (attr.isRef() || attr.javaType().isEnum()) {
                 try {
                     coerced = UUID.fromString(value.trim());
                 } catch (IllegalArgumentException notAUuid) {
@@ -118,6 +125,9 @@ final class NewEntityDefaults {
         }
         if (value instanceof Ref<?> ref) {
             return ref.id();
+        }
+        if (value instanceof PolyRef ref) {
+            return ref.externalForm();
         }
         if (value instanceof Enum<?> constant) {
             return enumId(constant, registry);
