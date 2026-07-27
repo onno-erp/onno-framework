@@ -36,6 +36,7 @@ export default defineConfig({
           { text: 'Consuming releases', link: '/CONSUMING' },
           { text: 'Gotchas', link: '/GOTCHAS' },
           { text: 'Extending onno', link: '/EXTENDING' },
+          { text: 'Migrating to 2.0', link: '/MIGRATING_TO_2_0' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
           {
@@ -70,6 +71,7 @@ export default defineConfig({
           { text: 'Consuming releases', link: '/CONSUMING' },
           { text: 'Gotchas', link: '/GOTCHAS' },
           { text: 'Extending onno', link: '/EXTENDING' },
+          { text: 'Migrating to 2.0', link: '/MIGRATING_TO_2_0' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
         ],

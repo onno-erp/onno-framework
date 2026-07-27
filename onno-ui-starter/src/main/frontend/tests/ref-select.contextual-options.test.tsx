@@ -2,14 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-const { searchCatalog, searchRefOptions } = vi.hoisted(() => ({
-  searchCatalog: vi.fn(),
+const { searchRefOptions } = vi.hoisted(() => ({
   searchRefOptions: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
   api: {
-    searchCatalog,
     searchRefOptions,
   },
 }));
@@ -40,7 +38,6 @@ const unavailable = {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  searchCatalog.mockReset();
   searchRefOptions.mockReset();
 });
 
@@ -89,7 +86,7 @@ describe("RefSelect contextual options (#272)", () => {
   });
 
   it("immediately disables a sibling-row selection while leaving other options active", async () => {
-    searchCatalog.mockResolvedValue([
+    searchRefOptions.mockResolvedValue([
       available,
       { _id: "employee-2", _description: "Sam Lee" },
     ]);

@@ -53,16 +53,29 @@ public class FieldHintBuilder<O, T> {
 
     /**
      * Override the control used to edit this field. Built-in hints include {@code "switch"}/
-     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "map"}/{@code "geo"} (a single point
-     * stored as a "lat,lng" string), {@code "geojson"} (the full geometry editor — draw points,
-     * paths, and areas, stored as a GeoJSON string), and the media widgets {@code "image"}/
-     * {@code "photo"}, {@code "avatar"} (small round), {@code "images"}/{@code "gallery"}/
-     * {@code "photos"} (several), and {@code "file"} (any type). The map widgets render on a
+     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "geojson"} (the geometry editor —
+     * draw points, paths, and areas, stored as GeoJSON), and the media widgets {@code "image"},
+     * {@code "avatar"} (small round), {@code "images"}/{@code "gallery"} (several), and
+     * {@code "file"} (any type). The map widgets render on a
      * theme-aware MapLibre basemap; the media widgets stream the chosen file to {@code POST /api/media}
      * and store only the returned reference URL, so a plain String attribute holds it — see
      * {@code su.onno.ui.media}.
      */
     public FieldHintBuilder<O, T> widget(String widget) {
+        if (widget != null && (widget.equalsIgnoreCase("map")
+                || widget.equalsIgnoreCase("geo")
+                || widget.equalsIgnoreCase("geolocation"))) {
+            throw new IllegalArgumentException(
+                    "Legacy point widget '" + widget + "' is not supported; migrate values to GeoJSON "
+                            + "and use widget(\"geojson\")");
+        }
+        if (widget != null && (widget.equalsIgnoreCase("photo")
+                || widget.equalsIgnoreCase("photos"))) {
+            throw new IllegalArgumentException(
+                    "Legacy media widget '" + widget + "' is not supported; use "
+                            + (widget.equalsIgnoreCase("photo")
+                            ? "widget(\"image\")" : "widget(\"images\")"));
+        }
         this.widget = widget;
         return this;
     }
@@ -80,12 +93,16 @@ public class FieldHintBuilder<O, T> {
      *   <li><b>Dates / date-times</b> — a date pattern, e.g. {@code "dd-MM-yy"},
      *       {@code "dd/MM/yyyy HH:mm"} (uppercase {@code D}/{@code Y} are accepted as day/year).</li>
      *   <li><b>Numbers</b> — {@code "integer"}, {@code "decimal"}, {@code "percent"},
-     *       {@code "currency"} (or {@code "currency:EUR"}), or a decimal pattern like
+     *       an explicit ISO currency such as {@code "currency:EUR"}, or a decimal pattern like
      *       {@code "#,##0.00"}.</li>
      * </ul>
      * It does not affect the edit form's input control (use {@link #widget(String)} for that).
      */
     public FieldHintBuilder<O, T> format(String format) {
+        if (format != null && format.trim().equalsIgnoreCase("currency")) {
+            throw new IllegalArgumentException(
+                    "Currency format requires an ISO 4217 code, for example currency:USD");
+        }
         this.format = format;
         return this;
     }

@@ -463,8 +463,8 @@ final class Components {
 
     /**
      * A detail field row whose value is an image (an image-widget attribute): the label on the
-     * left, a bordered thumbnail on the right. {@code url} is a {@code data:} URL from the image
-     * picker or a plain {@code http(s)} URL. An {@code avatar} renders smaller and circular.
+     * left, a bordered thumbnail on the right. {@code url} is a stored-media or remote URL.
+     * An {@code avatar} renders smaller and circular.
      */
     static Map<String, Object> imageFieldRow(String label, String url, boolean avatar, Palette p) {
         return imageFieldRow(label, url, avatar, null, p);
@@ -556,7 +556,7 @@ final class Components {
     /**
      * A detail field row for a multi-image (gallery) attribute: the label on the left, a
      * horizontally-scrolling strip of square thumbnails on the right. Each {@code url} is a
-     * {@code data:} or {@code http(s)} URL (see GalleryPicker).
+     * stored-media or remote URL.
      */
     static Map<String, Object> imageGalleryRow(String label, List<String> urls, Palette p) {
         return imageGalleryRow(label, urls, null, p);
@@ -587,13 +587,13 @@ final class Components {
     }
 
     /**
-     * A detail field row for a geolocation attribute ({@code .widget("map")}): the label above a
-     * small read-only map pinned at the stored {@code "lat,lng"} value. The map is an
+     * A detail field row for a GeoJSON attribute ({@code .widget("geojson")}): the label above a
+     * small read-only map rendering the stored geometry. The map is an
      * {@code onno-geo} custom block (a Leaflet island the web client portals in; a non-web DivKit
      * client can register its own {@code onno-geo} renderer). A height is reserved so DivKit lays
      * out the box before the island — which is portaled in after layout — fills it.
      */
-    static Map<String, Object> geoFieldRow(String label, String value, String hint, Palette p) {
+    static Map<String, Object> geoJsonFieldRow(String label, String value, String hint, Palette p) {
         List<Map<String, Object>> labelParts = new ArrayList<>();
         labelParts.add(Div.color(Div.text(label, 13, "regular"), p.muted()));
         Map<String, Object> glyph = hint(hint, p.muted(), 14);

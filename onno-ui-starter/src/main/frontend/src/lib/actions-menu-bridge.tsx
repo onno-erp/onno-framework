@@ -152,7 +152,7 @@ async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
   }
   const [, kind, name, key, id] = r.split("/"); // [action, kind, name, key, id]
   const result = await api.runAction(kind, name, key, id, inputs);
-  applyActionResult(result, { navigate: fire });
+  applyActionResult(result);
 }
 
 // Exported so the combined record surface (EntityFormWidget) can render the same cluster

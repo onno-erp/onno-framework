@@ -18,7 +18,7 @@ class UiProfileResolverTest {
                 .section("Tasks").document(TestProduct.class);
         b.profile("manager").roles("MANAGER").priority(20).title("Manager")
                 .section("Overview").catalog(TestProduct.class);
-        return new UiLayout(b.build(), b.buildWidgets(), b.buildProfiles());
+        return new UiLayout(b.build(), b.buildWidgets(), b.buildProfiles(), null, null);
     }
 
     @Test
@@ -74,7 +74,7 @@ class UiProfileResolverTest {
         UiLayoutBuilder b = new UiLayoutBuilder();
         b.section("Home").catalog(TestProduct.class);
         b.profile("cleaning").roles("ROLE_cleaner").section("Tasks").document(TestProduct.class);
-        UiLayout layout = new UiLayout(b.build(), b.buildWidgets(), b.buildProfiles());
+        UiLayout layout = new UiLayout(b.build(), b.buildWidgets(), b.buildProfiles(), null, null);
 
         assertThat(resolver.resolve(layout, Set.of("CLEANER")).profile().id()).isEqualTo("cleaning");
     }

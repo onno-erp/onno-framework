@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.repository.EnumerationPersistence;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -37,21 +39,26 @@ class UiActionResolverRecordStateTest {
 
     private final UiActionResolver resolver = new UiActionResolver(List.of(new OrderView()));
 
+    private static Map<String, Object> row(Status status) {
+        return Map.of("status", EnumerationPersistence.resolveId(Status.class, status),
+                "status_display", status.name());
+    }
+
     @Test
     void dynamicDetailAction_resolvesPerRecord() {
         ActionSpec.Action advance = resolver.find(Status.class, "advance");
 
-        var onNew = UiActionResolver.recordActionState(advance, Map.of("status_display", "NEW"));
+        var onNew = UiActionResolver.recordActionState(advance, row(Status.NEW));
         assertThat(onNew.visible()).isTrue();
         assertThat(onNew.enabled()).isTrue();
         assertThat(onNew.label()).isEqualTo("→ NEW");
         assertThat(onNew.icon()).isEqualTo("arrow-right");
 
-        var onDownloaded = UiActionResolver.recordActionState(advance, Map.of("status_display", "DOWNLOADED"));
+        var onDownloaded = UiActionResolver.recordActionState(advance, row(Status.DOWNLOADED));
         assertThat(onDownloaded.visible()).isTrue();
         assertThat(onDownloaded.enabled()).as("enabledWhen requires NEW").isFalse();
 
-        var onDone = UiActionResolver.recordActionState(advance, Map.of("status_display", "DONE"));
+        var onDone = UiActionResolver.recordActionState(advance, row(Status.DONE));
         assertThat(onDone.visible()).as("visibleWhen hides the action at DONE").isFalse();
     }
 

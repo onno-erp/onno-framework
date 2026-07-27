@@ -1,6 +1,7 @@
 package su.onno.ui;
 
 import org.junit.jupiter.api.Test;
+import su.onno.repository.EnumerationPersistence;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,7 +22,7 @@ class ActionRowAndDynamicActionTest {
         UUID id = UUID.randomUUID();
         Map<String, Object> data = new HashMap<>();
         data.put("_id", id.toString());
-        data.put("status", UUID.randomUUID().toString());   // raw enum column is a UUID…
+        data.put("status", EnumerationPersistence.resolveId(Status.class, Status.STOPPED).toString());
         data.put("status_display", "STOPPED");              // …resolved to the constant name
         data.put("name", "Acme");
 
@@ -32,6 +33,14 @@ class ActionRowAndDynamicActionTest {
         assertThat(row.text("name")).isEqualTo("Acme");
         assertThat(row.text("missing")).isEmpty();
         assertThat(row.enumValue("missing", Status.class)).isNull();
+    }
+
+    @Test
+    void enumValue_rejectsLegacyConstantNamesAndDisplayLabels() {
+        assertThat(new ActionRow(Map.of("status", "STOPPED"))
+                .enumValue("status", Status.class)).isNull();
+        assertThat(new ActionRow(Map.of("status_display", "STOPPED"))
+                .enumValue("status", Status.class)).isNull();
     }
 
     @Test
@@ -59,8 +68,10 @@ class ActionRowAndDynamicActionTest {
         ActionSpec.Action a = spec.actions().get(0);
         assertThat(a.isDynamic()).isTrue();
 
-        ActionRow stopped = new ActionRow(Map.of("status_display", "STOPPED"));
-        ActionRow running = new ActionRow(Map.of("status_display", "RUNNING"));
+        ActionRow stopped = new ActionRow(Map.of(
+                "status", EnumerationPersistence.resolveId(Status.class, Status.STOPPED)));
+        ActionRow running = new ActionRow(Map.of(
+                "status", EnumerationPersistence.resolveId(Status.class, Status.RUNNING)));
         assertThat(a.iconFn().apply(stopped)).isEqualTo("play");
         assertThat(a.iconFn().apply(running)).isEqualTo("pause");
         assertThat(a.labelFn().apply(stopped)).isEqualTo("Resume");

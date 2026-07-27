@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Pencil, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "@/components/ui/toast";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -56,7 +56,7 @@ import type { Translate } from "@/lib/messages";
  * surface emits only a descriptor (columns, sort, searchability, the open/New routes); this
  * island fetches windows of rows from {@code /api/list/...} as you scroll, sorts and searches
  * on the server, and renders only the visible rows — so a 10k-row entity stays smooth. Rows carry
- * {@code data-onno-row} so the existing right-click Open/Edit/Duplicate menu keeps working.
+ * {@code data-onno-row} so the existing right-click Open/Duplicate menu keeps working.
  */
 
 export type ListColumn = {
@@ -166,11 +166,11 @@ export type ListCustomConfig = { type: string; label?: string; defaultView?: boo
 /**
  * The props a custom list-body renderer receives (registered via {@code registerListRenderer} from
  * {@code @onno/widget-sdk}, or {@code registerWidget} host-side). The framework keeps the toolbar
- * (search, filters, sort, group-by) and the feed (infinite/paged, live refresh) — the renderer only
+ * (search, filters, sort, group-by) and the keyset feed/live refresh — the renderer only
  * draws the rows it's handed and opens a record through the callback.
  */
 export type ListRendererProps = {
-  /** The rows of the current window (all loaded rows in infinite mode; the page in paged mode). */
+  /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   /** The list's descriptor slice: entity route, title, resolved columns (labels/widgets/formats), write access. */
   list: { kind: string; name: string; title: string; columns: ListColumn[]; canWrite: boolean };
@@ -193,7 +193,7 @@ export type ListDescriptor = {
   newUrl: string | null;
   /**
    * The viewer's write access on the entity (server-stamped from RBAC). When false the island
-   * hides its write affordances — row Edit/Duplicate/Delete, batch delete — and stamps rows
+   * hides its write affordances — row Duplicate/Delete and batch delete — and stamps rows
    * data-onno-row-writable="0" so the shell's fallback row menu and shortcuts hide theirs too.
    * Absent (old server) means unknown; treat as writable, REST enforces regardless.
    */
@@ -205,12 +205,6 @@ export type ListDescriptor = {
   map?: ListMapConfig;
   /** When set (and the type is registered), the toolbar offers a Table ⇄ custom-view toggle. */
   custom?: ListCustomConfig;
-  /**
-   * How the grid feeds rows. "infinite" (default) cursor-scrolls a keyset stream — it loads a
-   * window, then more as you scroll, and never counts an exact total. "paged" shows discrete
-   * numbered offset pages with a Prev/Next pager and an exact total. Absent → "infinite".
-   */
-  feedMode?: "infinite" | "paged";
   /** Columns offered in the "Group by ▾" picker; a `date` column buckets by day/month/year. */
   groupable?: GroupableColumn[];
   // Default view presets from PageBuilder.list(entity, v -> …). `baseFilter` is a server-side feed
@@ -292,7 +286,6 @@ function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string 
  */
 function displayCellValue(raw: string, col: ListColumn): string {
   if (raw === "__SECRET_SET__") return "•••• set";
-  if (raw.startsWith("data:")) return "🖼 Image"; // a non-image column keeps the placeholder
   return applyFormat(raw, col.format) ?? formatTimestampDefault(raw) ?? raw;
 }
 
@@ -300,21 +293,24 @@ function displayCellValue(raw: string, col: ListColumn): string {
 export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
   const t = useMessages();
   const raw = rawCellValue(row, col, t);
-  if (isImageWidget(col.widget) && raw && looksLikeImageUrl(raw)) {
-    const avatar = isAvatarWidget(col.widget);
-    return (
-      <span className="flex items-center">
-        <img
-          src={raw}
-          alt=""
-          loading="lazy"
-          className={cn(
-            "h-7 shrink-0 border border-border object-cover",
-            avatar ? "w-7 rounded-control" : "w-10 rounded"
-          )}
-        />
-      </span>
-    );
+  if (isImageWidget(col.widget) && raw) {
+    if (looksLikeImageUrl(raw)) {
+      const avatar = isAvatarWidget(col.widget);
+      return (
+        <span className="flex items-center">
+          <img
+            src={raw}
+            alt=""
+            loading="lazy"
+            className={cn(
+              "h-7 shrink-0 border border-border object-cover",
+              avatar ? "w-7 rounded-control" : "w-10 rounded"
+            )}
+          />
+        </span>
+      );
+    }
+    return <span className="text-xs text-destructive">Invalid media URL</span>;
   }
   // A Ref column whose target carries an avatar (resolved into {col}_avatar by the read API): show
   // the photo as a small round avatar beside the display text (issue #182). The data is already
@@ -1252,9 +1248,6 @@ export function EntityListWidget({
   headerExtra?: ReactNode;
 }) {
   const { kind, name, columns, pageSize } = list;
-  // Feed mode: "infinite" cursor-scrolls a keyset stream (the default); "paged" shows numbered
-  // offset pages. The two drive different server engines (cursor vs offset) — see loadInitial.
-  const feedMode = list.feedMode === "paged" ? "paged" : "infinite";
   const t = useMessages();
   // Ambient presence: other users viewing each row's record, looked up by row id at render time.
   const viewersById = useViewersById();
@@ -1276,18 +1269,13 @@ export function EntityListWidget({
     []
   );
 
-  // The currently displayed rows (null = first load, still blank). In paged mode this is exactly the
-  // active page; in infinite mode windows are appended here as you scroll.
+  // The currently displayed rows (null = first load, still blank). Keyset windows append as you scroll.
   const [pageRows, setPageRows] = useState<EntityRecord[] | null>(null);
   const rowsRef = useRef<EntityRecord[] | null>(null);
   rowsRef.current = pageRows;
-  // The exact total (paged; also a cheap estimate in infinite mode when the server can supply one),
-  // or null when unknown — infinite mode never blocks on a COUNT.
+  // The exact total when requested, or null when unknown.
   const [total, setTotal] = useState<number | null>(null);
-  const [page, setPage] = useState(0); // paged mode only
-  const pageRef = useRef(0);
-  pageRef.current = page;
-  // Infinite mode: the opaque cursor for the next window, whether more remain, and whether a
+  // The opaque cursor for the next window, whether more remain, and whether a
   // load-more is in flight (the ref guards against firing a second fetch before the first lands).
   const cursorRef = useRef<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -1390,7 +1378,7 @@ export function EntityListWidget({
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
   // so they aren't clickable. Also gates the single-row live patch (registers have no row identity).
   const openable = kind === "catalogs" || kind === "documents";
-  // RBAC write access (see ListDescriptor.canWrite): gates the row menu's Edit/Duplicate/Delete
+  // RBAC write access (see ListDescriptor.canWrite): gates the row menu's Duplicate/Delete
   // and batch delete. Absent flag (old server) stays permissive; REST enforces regardless.
   const canWrite = list.canWrite !== false;
   // Where windows are fetched from: a register points the island at its own feed; others use the
@@ -1582,8 +1570,8 @@ export function EntityListWidget({
     return () => window.clearTimeout(t);
   }, [query]);
 
-  // Build the shared query params (sort + search + declarative filters). The pagination params
-  // (offset/limit or cursor/limit) are added by the caller, since they differ per feed mode.
+  // Build the shared query params (sort + search + declarative filters). The keyset cursor/limit
+  // parameters are added by the caller.
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
     // A default-view base filter (PageBuilder.list) is a server-side constraint applied on top of the
@@ -1620,32 +1608,16 @@ export function EntityListWidget({
   // string so its effects can depend on it.
   const groupParamsBase = useMemo(() => buildParams().toString(), [buildParams]);
 
-  // Load the first window (infinite) or the active page (paged). Bumps the generation so a slow
-  // fetch that lands after a newer query is discarded. A hard load blanks to the skeleton; a soft
-  // load (live refresh) keeps the current rows on screen and swaps them in place when data lands.
+  // Load the first keyset window. Bumps the generation so a slow fetch that lands after a newer
+  // query is discarded. A hard load blanks to the skeleton; a soft live refresh keeps the current
+  // rows on screen and swaps them in place when data lands.
   const loadInitial = useCallback(
     (soft = false) => {
       const myGen = ++gen.current;
       loadingMoreRef.current = false;
       if (!soft) setPageRows(null);
       const params = buildParams();
-      if (feedMode === "paged") {
-        params.set("offset", String(pageRef.current * pageSize));
-        params.set("limit", String(pageSize));
-        fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-          .then((data: { total: number; offset: number; rows: EntityRecord[] }) => {
-            if (myGen !== gen.current) return; // a newer query/page superseded this fetch
-            setTotal(data.total);
-            setPageRows(data.rows);
-            if (!soft && scrollRef.current) scrollRef.current.scrollTop = 0;
-          })
-          .catch(() => {
-            if (myGen === gen.current) setPageRows([]);
-          });
-        return;
-      }
-      // Infinite: a soft reload re-fetches everything already loaded in one window (so a live change
+      // A soft reload re-fetches everything already loaded in one window (so a live change
       // doesn't yank the user back to the top); a hard load fetches just the first window.
       const loaded = rowsRef.current?.length ?? 0;
       const want = soft ? Math.min(MAX_WINDOW, Math.max(pageSize, loaded)) : pageSize;
@@ -1665,13 +1637,13 @@ export function EntityListWidget({
           if (myGen === gen.current) setPageRows([]);
         });
     },
-    [feedMode, feedBase, pageSize, buildParams]
+    [feedBase, pageSize, buildParams]
   );
 
-  // Infinite mode: append the next window, seeking from the current cursor. Guarded so only one
+  // Append the next window, seeking from the current cursor. Guarded so only one
   // load-more runs at a time and a window from a superseded query is dropped.
   const loadMore = useCallback(() => {
-    if (feedMode !== "infinite" || loadingMoreRef.current || !cursorRef.current) return;
+    if (loadingMoreRef.current || !cursorRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     const myGen = gen.current;
@@ -1691,23 +1663,16 @@ export function EntityListWidget({
         loadingMoreRef.current = false;
         if (myGen === gen.current) setLoadingMore(false);
       });
-  }, [feedMode, feedBase, pageSize, buildParams]);
+  }, [feedBase, pageSize, buildParams]);
 
-  // Snap back to the first page whenever the sort, the (debounced) search, or a filter changes
-  // (paged mode; infinite mode stays at page 0 and resets via the load effect below).
-  useEffect(() => {
-    setPage(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sort.column, sort.descending, debounced, filterSig]);
-
-  // Load the initial window/page: on first mount, on any query change, and (paged) on a page turn.
-  // Reset the infinite cursor so a query change re-seeks from the top rather than an old cursor.
+  // Load the initial window on first mount or query change. Reset the cursor so the query re-seeks
+  // from the top rather than an old position.
   useEffect(() => {
     cursorRef.current = null;
     setHasMore(true);
     loadInitial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedMode, feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, page]);
+  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig]);
 
   // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
@@ -1767,10 +1732,7 @@ export function EntityListWidget({
   }, [surfaceMode]);
 
   // Embedded mode only: cap the scroll body at the space to the visible bottom of the enclosing
-  // scroller so a big in-page list scrolls internally rather than stretching the host page. Paged
-  // feeds reserve room for the pager footer below the card; an infinite feed has no pager, so
-  // reserving it left a dead band under every page-embedded infinite list ("the board is cut
-  // short") — it only keeps the card's border + the root's bottom padding visible.
+  // scroller so a big in-page list scrolls internally rather than stretching the host page.
   useLayoutEffect(() => {
     if (surfaceMode) return;
     const measure = () => {
@@ -1781,7 +1743,7 @@ export function EntityListWidget({
       const bottom = sc
         ? sc.getBoundingClientRect().top + sc.clientTop + sc.clientHeight
         : window.innerHeight;
-      setMaxBodyH(Math.max(160, Math.floor(bottom - top - (feedMode === "paged" ? 72 : 20))));
+      setMaxBodyH(Math.max(160, Math.floor(bottom - top - 20)));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -1794,7 +1756,7 @@ export function EntityListWidget({
     // grouped/mapMode/customMode: the observed body remounts when those views swap back to the
     // table — re-run so the observer isn't left holding the unmounted element (see the viewport
     // effect).
-  }, [surfaceMode, grouped, mapMode, customMode, feedMode]);
+  }, [surfaceMode, grouped, mapMode, customMode]);
 
   // Keep the virtual-window viewport height in sync with the body's client height. Keyed on the
   // view toggles too: the grouped/map views unmount the table body, and unmount delivers a final
@@ -1814,20 +1776,19 @@ export function EntityListWidget({
     return () => ro.disconnect();
   }, [surfaceMode, grouped, mapMode, customMode]);
 
-  // Body scroll: drive the virtual window, and (infinite) fetch the next window as the end nears.
+  // Body scroll: drive the virtual window and fetch the next keyset window as the end nears.
   const onScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     setScrollTop(el.scrollTop);
     if (
-      feedMode === "infinite" &&
       hasMore &&
       !loadingMoreRef.current &&
       el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_H * OVERSCAN
     ) {
       loadMore();
     }
-  }, [feedMode, hasMore, loadMore]);
+  }, [hasMore, loadMore]);
 
   // Re-fetch the loaded rows in place (after a server action or a live event) — a soft refresh that
   // keeps the visible rows until the new data lands, so it never flashes the skeleton.
@@ -1865,7 +1826,7 @@ export function EntityListWidget({
       return api
         .runAction(action.kind, action.name, action.key, id, { ...inputValuesRef.current, ...formInputs })
         .then((result) => {
-          applyActionResult(result, { navigate: dispatchAction, refresh: reload });
+          applyActionResult(result, { refresh: reload });
         })
         .catch((error) => {
           if (propagateError) throw error;
@@ -2009,14 +1970,14 @@ export function EntityListWidget({
   );
 
   // Surgically refresh a single changed row in place: fetch just that id (same decorated shape as a
-  // page) and swap it where it sits — no cache wipe, no skeleton flash, no scroll jump. If the row
+  // window) and swap it where it sits — no cache wipe, no skeleton flash, no scroll jump. If the row
   // isn't in the loaded window we ignore it (it'll load fresh on scroll); if it has left the result
   // set (e.g. deletion-marked via an update) we fall back to a window reload.
   const patchRow = useCallback(
     (id: string) => {
       setPageRows((current) => {
-        if (!current || !current.some((r) => r && String(r._id) === id)) return current; // not on this page
-        // Fetch just this row (same decorated shape as a page) and splice it in place.
+        if (!current || !current.some((r) => r && String(r._id) === id)) return current;
+        // Fetch just this row (same decorated shape as a keyset row) and splice it in place.
         fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
           .then((data: { rows: EntityRecord[] }) => {
@@ -2026,7 +1987,7 @@ export function EntityListWidget({
                 rows ? rows.map((r) => (String(r._id) === id ? fresh : r)) : rows
               );
             } else {
-              reload(); // row dropped out of the set — refresh the page
+              reload(); // row dropped out of the set — refresh the loaded window
             }
           })
           .catch(() => {});
@@ -2059,25 +2020,14 @@ export function EntityListWidget({
     return () => window.removeEventListener("onno:dataevent", onData);
   }, [kind, name, openable, reload, patchRow]);
 
-  // Pager math (paged mode): how many pages, and the 1-based "from–to of total" range for the page.
-  const paged = feedMode === "paged";
-  const pageCount = total == null ? 1 : Math.max(1, Math.ceil(total / pageSize));
-  const rangeFrom = total ? page * pageSize + 1 : 0;
-  const rangeTo = total == null ? 0 : Math.min(total, page * pageSize + pageSize);
-  // Clamp the page if the row count shrank under us (a filter/delete) and left us past the last page.
-  useEffect(() => {
-    if (paged && total != null && page > 0 && page > pageCount - 1) setPage(pageCount - 1);
-  }, [paged, total, page, pageCount]);
-
-  // Rows currently loaded, and — the header count — the exact/estimated total when known, else the
-  // loaded count (infinite mode without a server estimate, e.g. on H2).
+  // Rows currently loaded, and — the header count — the exact total when known, else the loaded
+  // count.
   const loadedRows = pageRows ?? [];
   const countValue = total ?? (pageRows == null ? null : loadedRows.length);
 
-  // Virtual window (infinite mode): render only the rows overlapping the viewport (± overscan),
-  // padding the scroller above/below with the height of the rows not drawn. Paged mode renders the
-  // whole page (it's small), so the window spans everything.
-  const virtual = feedMode === "infinite" && pageRows != null;
+  // Virtual window: render only rows overlapping the viewport (± overscan), padding the scroller
+  // above/below with the height of rows not drawn.
+  const virtual = pageRows != null;
   const startIdx = virtual ? Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN) : 0;
   const endIdx = virtual
     ? Math.min(loadedRows.length, Math.ceil((scrollTop + viewportH) / ROW_H) + OVERSCAN)
@@ -2265,7 +2215,7 @@ export function EntityListWidget({
     return () => window.removeEventListener("keydown", onKey);
   }, [openable, kind, name, selected, loadedRows, total, t]);
 
-  // The row right-click menu: built-ins (Open/Edit/Duplicate/Copy link/Delete) plus the entity's
+  // The row right-click menu: built-ins (Open/Duplicate/Copy link/Delete) plus the entity's
   // custom row actions — flat ones as top-level items, .menu("…")-grouped ones as submenus. With a
   // multi-row selection (and the click landing on a selected row) it switches to batch mode:
   // server actions run over every selected id, and Delete becomes a two-step "Delete N".
@@ -2322,7 +2272,7 @@ export function EntityListWidget({
             </ContextMenuItem>
           );
         };
-        // Built-ins: batch = label + open + delete; single = open/edit/dup/copyLink/delete — minus
+        // Built-ins: batch = label + open + delete; single = open/duplicate/copy-link/delete — minus
         // the write items (edit, dup, delete) when the viewer can't write the entity.
         const itemCount = onlyMenu
           ? onlyMenu.actions.length
@@ -2369,16 +2319,6 @@ export function EntityListWidget({
                 </ContextMenuItem>
                 {canWrite ? (
                   <>
-                    <ContextMenuItem
-                      onSelect={() => {
-                        dispatchAction(rowMenu.url + "/edit");
-                        close();
-                      }}
-                    >
-                      <Pencil className="text-muted-foreground" aria-hidden="true" />
-                      <span>{t("action.edit")}</span>
-                      <ContextMenuShortcut>{shortcutLabel({ key: "e", mod: true })}</ContextMenuShortcut>
-                    </ContextMenuItem>
                     <ContextMenuItem
                       onSelect={() => {
                         dispatchAction(rowMenu.url + "/duplicate");
@@ -2464,38 +2404,6 @@ export function EntityListWidget({
         );
       })()
     : null;
-
-  // Pager footer — paged mode only, when there's more than one page (infinite mode scrolls for
-  // more; the toolbar already shows the count). Shared by the table card and a custom body.
-  const pagerEl =
-    paged && total != null && total > pageSize ? (
-      <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-2.5 text-xs text-muted-foreground">
-        <span className="tabular-nums">{t("list.pageRange", { from: rangeFrom, to: rangeTo, total })}</span>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            disabled={page <= 0}
-            onClick={() => setPage((p) => Math.max(0, p - 1))}
-            className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={t("list.prev")}
-          >
-            <ChevronLeft className="size-4" />
-            {compact ? null : t("list.prev")}
-          </button>
-          <span className="px-1.5 tabular-nums">{t("list.pageOf", { page: page + 1, pages: pageCount })}</span>
-          <button
-            type="button"
-            disabled={page >= pageCount - 1}
-            onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-            className="inline-flex h-8 items-center gap-1 rounded-control border border-input bg-card px-2.5 font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={t("list.next")}
-          >
-            {compact ? null : t("list.next")}
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-      </div>
-    ) : null;
 
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
@@ -2759,9 +2667,8 @@ export function EntityListWidget({
         </div>
       ) : customMode && CustomRenderer ? (
         // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps
-        // the toolbar (search, filters, sort) and the feed — the same scroller drives infinite
-        // load-more, and paged mode keeps the pager below. No card chrome: the renderer owns its
-        // own look.
+        // the toolbar (search, filters, sort) and keyset feed. No card chrome: the renderer owns
+        // its own look.
         <div className={cn("flex flex-col", surfaceMode && "min-h-0 flex-1")}>
           <div
             ref={scrollRef}
@@ -2781,16 +2688,13 @@ export function EntityListWidget({
             ) : (
               <CustomRenderer rows={loadedRows} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl} />
             )}
-            {feedMode === "infinite" && loadingMore ? (
+            {loadingMore ? (
               <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}
               </div>
             ) : null}
           </div>
-          {pagerEl ? (
-            <div className="mt-3 shrink-0 overflow-hidden rounded-card border border-border">{pagerEl}</div>
-          ) : null}
         </div>
       ) : grouped ? (
         // Grouped view: collapsible GROUP BY headers with subtotals; a group's rows lazily load
@@ -2876,8 +2780,7 @@ export function EntityListWidget({
               {rowButtonActions.length ? <span aria-hidden="true" /> : null}
             </div>
 
-            {/* body — the virtual window in infinite mode (spacers stand in for off-screen rows);
-                the whole page in paged mode. */}
+            {/* body — a virtual window, with spacers standing in for off-screen rows. */}
             {pageRows != null && loadedRows.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
@@ -2897,8 +2800,7 @@ export function EntityListWidget({
                 </div>
               ))
             ) : (
-              // Pad above/below with the height of the rows outside the window (infinite mode);
-              // paged mode renders every row (padTop/padBottom are 0).
+              // Pad above/below with the height of rows outside the virtual window.
               <div style={{ paddingTop: padTop, paddingBottom: padBottom }}>
                 {visibleRows.map((row, i) => {
                   const absIdx = startIdx + i;
@@ -3053,8 +2955,8 @@ export function EntityListWidget({
                 })}
               </div>
             )}
-            {/* infinite mode: a slim "loading more" row while the next window is in flight */}
-            {feedMode === "infinite" && loadingMore ? (
+            {/* A slim "loading more" row while the next keyset window is in flight. */}
+            {loadingMore ? (
               <div className="flex items-center justify-center gap-2 border-t border-border/50 py-3 text-xs text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}
@@ -3062,7 +2964,6 @@ export function EntityListWidget({
             ) : null}
           </div>
         </div>
-        {pagerEl}
       </div>
       )}
       {rowMenuEl}

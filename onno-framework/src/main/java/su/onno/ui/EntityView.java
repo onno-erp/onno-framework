@@ -53,7 +53,7 @@ public interface EntityView<E> {
      * <pre>
      * public void actions(ActionSpec a) {
      *     a.action("recalc").label("Recalculate").icon("calculator").scope(ActionScope.DETAIL)
-     *      .handler(ctx -&gt; { service.recalc(ctx.id()); return ActionResult.refresh("Recalculated"); });
+     *      .handler(ctx -&gt; { service.recalc(ctx.id()); return ActionResult.refresh(ActionToast.success("Recalculated")); });
      * }
      * </pre>
      */
@@ -71,7 +71,7 @@ public interface EntityView<E> {
      * }
      * public void actions(ActionSpec a) {
      *     a.action("report").label("Report").scope(ActionScope.TOOLBAR)
-     *      .handler(ctx -&gt; ActionResult.message("Report as of " + ctx.input("asOf")));
+     *      .handler(ctx -&gt; ActionResult.toast(ActionToast.success("Report as of " + ctx.input("asOf"))));
      * }
      * </pre>
      */

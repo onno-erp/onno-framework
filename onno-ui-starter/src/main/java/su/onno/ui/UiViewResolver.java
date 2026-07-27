@@ -23,8 +23,7 @@ public class UiViewResolver {
     private static final String DEFAULT = "";
 
     private final ResolvedMetadataService metadata;
-    // Global fallbacks for lists that don't author their own feed mode / page size.
-    private final ListSpec.FeedMode defaultFeed;
+    // Global fallback for lists that don't author their own keyset window size.
     private final int defaultPageSize;
     // entity -> (profile id | "" for default) -> view
     private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
@@ -33,15 +32,14 @@ public class UiViewResolver {
     private final Map<Class<?>, java.util.Optional<java.util.function.Function<ActionRow, ListSpec.RowStyle>>>
             rowStyles = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** Back-compat: resolver with the built-in defaults (infinite feed, 50 rows). */
+    /** Resolver with the built-in 50-row keyset window. */
     public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews) {
-        this(metadata, entityViews, ListSpec.FeedMode.INFINITE, 50);
+        this(metadata, entityViews, 50);
     }
 
     public UiViewResolver(ResolvedMetadataService metadata, List<EntityView> entityViews,
-                          ListSpec.FeedMode defaultFeed, int defaultPageSize) {
+                          int defaultPageSize) {
         this.metadata = metadata;
-        this.defaultFeed = defaultFeed == null ? ListSpec.FeedMode.INFINITE : defaultFeed;
         this.defaultPageSize = defaultPageSize <= 0 ? 50 : defaultPageSize;
         for (EntityView view : entityViews) {
             if (view.entity() == null) {
@@ -200,9 +198,7 @@ public class UiViewResolver {
                         : new ResolvedListView.CustomView(
                                 customSpec.type(), customSpec.label(), customSpec.isDefaultView());
 
-        // Feed mode + page size: the authored value wins, else the global default. Carried to the
-        // renderer as the lowercase token the grid keys off ("infinite" / "paged").
-        ListSpec.FeedMode feed = spec.feedMode() != null ? spec.feedMode() : defaultFeed;
+        // Keyset window size: the authored value wins, else the global default.
         int pageSize = spec.pageSize() > 0 ? spec.pageSize() : defaultPageSize;
 
         // Grouping: resolve each groupable field + each subtotal's field to its data column
@@ -244,13 +240,13 @@ public class UiViewResolver {
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,
-                feed.name().toLowerCase(java.util.Locale.ROOT), pageSize, grouping, customView);
+                pageSize, grouping, customView);
     }
 
     /**
      * Resolve a declared map spec's field names to data columns (validated against the available
-     * columns), or null when there's no usable geo source — a combined field that doesn't resolve,
-     * or a lat/lng pair where either side is missing/unknown — so a misconfigured map degrades to
+     * columns), or null when there's no usable geo source — a lat/lng pair where either side is
+     * missing/unknown — so a misconfigured map degrades to
      * "no map view" rather than a broken toggle.
      */
     private static ResolvedListView.MapView resolveMap(ListSpec.MapSpec spec,
@@ -258,16 +254,15 @@ public class UiViewResolver {
         if (spec == null) {
             return null;
         }
-        String geo = columnOf(spec.field(), available);
         String lat = columnOf(spec.latField(), available);
         String lng = columnOf(spec.lngField(), available);
         String geoJson = columnOf(spec.geoJsonField(), available);
         String label = columnOf(spec.labelField(), available);
-        boolean hasGeo = !geo.isEmpty() || (!lat.isEmpty() && !lng.isEmpty()) || !geoJson.isEmpty();
+        boolean hasGeo = (!lat.isEmpty() && !lng.isEmpty()) || !geoJson.isEmpty();
         if (!hasGeo) {
             return null;
         }
-        return new ResolvedListView.MapView(geo, lat, lng, geoJson, label, spec.isDefaultView());
+        return new ResolvedListView.MapView(lat, lng, geoJson, label, spec.isDefaultView());
     }
 
     /** Resolve a field name to its data column, or "" when the name is blank/unknown. */
@@ -310,7 +305,7 @@ public class UiViewResolver {
         if (f.options().isEmpty()) {
             return enumValues.stream()
                     .map(v -> new ResolvedListView.Option(
-                            str(v.get("id")), str(v.get("label")), str(v.get("color"))))
+                            str(v.get("id")), str(v.get("label")), str(v.get("color")), ""))
                     .toList();
         }
         return f.options().stream().map(o -> {
@@ -321,7 +316,8 @@ public class UiViewResolver {
             // An option that isn't a known constant passes through untranslated (e.g. an id).
             return match == null
                     ? new ResolvedListView.Option(o.value(), o.label(), "", o.avatarUrl())
-                    : new ResolvedListView.Option(str(match.get("id")), o.label(), str(match.get("color")));
+                    : new ResolvedListView.Option(
+                            str(match.get("id")), o.label(), str(match.get("color")), "");
         }).toList();
     }
 

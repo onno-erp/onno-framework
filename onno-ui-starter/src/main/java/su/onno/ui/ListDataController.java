@@ -27,16 +27,12 @@ import java.util.UUID;
  * opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner figure), since the
  * scroller needs {@code hasMore}, not a live total, to keep loading.
  *
- * <p><b>Legacy offset mode</b> is retained for back-compat: passing {@code ?offset=N} switches to
- * {@code LIMIT/OFFSET} with the old {@code {total, offset, rows}} envelope. New clients omit
- * {@code offset}. Both honour the same server-side sort, case-insensitive search, and column
- * filters; the descriptor (columns, labels, sort, actions) comes from the DivKit list surface.
+ * Sort, case-insensitive search, and column filters are applied server-side; the descriptor
+ * (columns, labels, sort, actions) comes from the DivKit list surface.
  */
 @RestController
 @RequestMapping("/api/list")
 public class ListDataController {
-
-    private static final int MAX_PAGE = 500;
 
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
@@ -56,7 +52,6 @@ public class ListDataController {
 
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogPage(@PathVariable String name,
-                                           @RequestParam(defaultValue = "0") int offset,
                                            @RequestParam(defaultValue = "100") int limit,
                                            @RequestParam(required = false) String sort,
                                            @RequestParam(required = false) String dir,
@@ -74,7 +69,7 @@ public class ListDataController {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(desc, ids);
             decorateRowActions(desc.javaClass(), picked);
-            return page(picked.size(), 0, picked);
+            return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
         // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
@@ -84,14 +79,6 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        // Legacy offset mode: served only when the client explicitly passes ?offset (the current
-        // grid still does). Everyone else gets keyset by default — see classdoc.
-        if (request.getParameter("offset") != null) {
-            List<Map<String, Object>> rows = catalogQuery.page(desc, offset, clamp(limit), sort,
-                    descending(dir), q, eq, in, like, prefix, ge, le, filter);
-            decorateRowActions(desc.javaClass(), rows);
-            return page(catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter), offset, rows);
-        }
         KeysetPage kp = catalogQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
@@ -104,7 +91,6 @@ public class ListDataController {
 
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentPage(@PathVariable String name,
-                                            @RequestParam(defaultValue = "0") int offset,
                                             @RequestParam(defaultValue = "100") int limit,
                                             @RequestParam(required = false) String sort,
                                             @RequestParam(required = false) String dir,
@@ -121,7 +107,7 @@ public class ListDataController {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(desc, ids);
             decorateRowActions(desc.javaClass(), picked);
-            return page(picked.size(), 0, picked);
+            return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
         List<String> eq = multi(request, "eq");
@@ -130,13 +116,6 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        // Legacy offset mode: only when ?offset is explicitly present (see catalogPage).
-        if (request.getParameter("offset") != null) {
-            List<Map<String, Object>> rows = documentQuery.page(desc, offset, clamp(limit), sort,
-                    descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
-            decorateRowActions(desc.javaClass(), rows);
-            return page(documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter), offset, rows);
-        }
         KeysetPage kp = documentQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
@@ -325,14 +304,6 @@ public class ListDataController {
         return out;
     }
 
-    private static Map<String, Object> page(long total, int offset, List<Map<String, Object>> rows) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("total", total);
-        out.put("offset", offset);
-        out.put("rows", rows);
-        return out;
-    }
-
     /**
      * The keyset envelope: rows + the opaque {@code nextCursor} to fetch the next window and a
      * {@code hasMore} flag. {@code total} is included only when the client opted into a count
@@ -377,9 +348,5 @@ public class ListDataController {
 
     private static boolean descending(String dir) {
         return dir == null || dir.isBlank() || dir.equalsIgnoreCase("desc");
-    }
-
-    private static int clamp(int limit) {
-        return Math.max(1, Math.min(limit, MAX_PAGE));
     }
 }

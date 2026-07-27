@@ -139,19 +139,17 @@ class ListSpecTest {
     }
 
     @Test
-    void feedModeAndPageSizeUnsetByDefault() {
+    void pageSizeIsUnsetByDefault() {
         ListSpec<Object> spec = new ListSpec<>();
-        // Unset → null / 0, so the resolver falls back to the global onno.ui.list.* defaults.
-        assertThat(spec.feedMode()).isNull();
+        // Unset → 0, so the resolver falls back to onno.ui.list.page-size.
         assertThat(spec.pageSize()).isZero();
     }
 
     @Test
-    void feedModeAndPageSizeAreAuthored() {
+    void pageSizeIsAuthored() {
         ListSpec<Object> spec = new ListSpec<>();
-        spec.feed(ListSpec.FeedMode.PAGED).pageSize(25);
+        spec.pageSize(25);
 
-        assertThat(spec.feedMode()).isEqualTo(ListSpec.FeedMode.PAGED);
         assertThat(spec.pageSize()).isEqualTo(25);
     }
 

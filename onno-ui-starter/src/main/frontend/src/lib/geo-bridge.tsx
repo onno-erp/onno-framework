@@ -5,9 +5,9 @@ import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 /**
  * Bridges DivKit's {@code div-custom} block of type {@code onno-geo} to the React {@link GeoView}.
- * The detail surface emits a read-only map for a {@code .widget("map")} field as this custom block
- * (carrying the stored {@code "lat,lng"} value + a label); the bridge portals the Leaflet map into
- * it, exactly like the other detail islands (form, list, comments). See {@code SurfaceDivBuilder}.
+ * The detail surface emits a read-only map for a {@code .widget("geojson")} field as this custom
+ * block (carrying the stored GeoJSON value + a label); the bridge portals the Leaflet map into it,
+ * exactly like the other detail islands (form, list, comments). See {@code SurfaceDivBuilder}.
  */
 
 type GeoProps = { value?: string; label?: string };

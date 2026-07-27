@@ -73,6 +73,6 @@ class BrandingConfigTest {
         assertThat(ShellConfig.defaults().branding()).isNotNull();
         assertThat(ShellConfig.defaults().branding().light().isEmpty()).isTrue();
         // The back-compat single-arg constructor also fills in empty branding.
-        assertThat(new ShellConfig(NavStyle.SIDEBAR).branding()).isNotNull();
+        assertThat(new ShellConfig(NavStyle.SIDEBAR, BrandingConfig.defaults()).branding()).isNotNull();
     }
 }

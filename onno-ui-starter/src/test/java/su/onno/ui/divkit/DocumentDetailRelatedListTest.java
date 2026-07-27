@@ -39,7 +39,7 @@ class DocumentDetailRelatedListTest {
         Map<String, Object> rl = new LinkedHashMap<>();
         rl.put("name", "clients");
         rl.put("label", "Related clients");
-        rl.put("joinCatalog", "BookingClient");
+        rl.put("sourceName", "BookingClient");
         rl.put("sourceKind", "catalog");
         rl.put("viaField", "booking");
         rl.put("displayField", "client");

@@ -42,7 +42,7 @@ class MentionNotificationSourceTest {
         registry.registerCatalog(new CatalogDescriptor("Employees", "Employees", "employees",
                 IdentityEntity.class, 9, false, true, "E", "HR", List.of(), List.of(), List.of()));
         UiLayout layout = new UiLayout(List.of(), List.of(), List.of(),
-                new UiIdentityLink(IdentityEntity.class, "email"));
+                new UiIdentityLink(IdentityEntity.class, "email"), null);
         service = new CapturingService();
         source = new MentionNotificationSource(service, layout, registry);
     }

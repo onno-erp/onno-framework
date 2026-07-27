@@ -90,11 +90,11 @@ class DocumentWidgetFilterPostgresIT {
     }
 
     @Test
-    void page_excludesDraftAndCancelled_andScopesToSeason() {
+    void keysetWindow_excludesDraftAndCancelled_andScopesToSeason() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
         List<Map<String, Object>> rows =
-                documentQuery.page(stayDesc, 0, 100, null, false, null, null, null,
-                        NONE, NONE, NONE, NONE, NONE, NONE, filter);
+                documentQuery.keysetPage(stayDesc, null, 100, null, false, null, null, null,
+                        NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
 
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> {
@@ -104,7 +104,7 @@ class DocumentWidgetFilterPostgresIT {
     }
 
     @Test
-    void count_matchesTheFilteredPage() {
+    void count_matchesTheFilteredWindow() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
         long n = documentQuery.count(stayDesc, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, filter);
@@ -119,9 +119,11 @@ class DocumentWidgetFilterPostgresIT {
     }
 
     @Test
-    void list_appliesWidgetFilter() {
+    void keysetWindow_appliesWidgetFilter() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
-        List<Map<String, Object>> rows = documentQuery.list(stayDesc, null, null, filter);
+        List<Map<String, Object>> rows =
+                documentQuery.keysetPage(stayDesc, null, 100, null, false, null, null, null,
+                        NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
 
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> {
@@ -131,8 +133,10 @@ class DocumentWidgetFilterPostgresIT {
     }
 
     @Test
-    void list_noFilter_returnsEveryLiveRow() {
-        assertThat(documentQuery.list(stayDesc, null, null, null)).hasSize(5);
+    void keysetWindow_noFilter_returnsEveryLiveRow() {
+        assertThat(documentQuery.keysetPage(
+                stayDesc, null, 100, null, false, null, null, null,
+                NONE, NONE, NONE, NONE, NONE, NONE, null).rows()).hasSize(5);
     }
 
     private void stay(String status, String season) {

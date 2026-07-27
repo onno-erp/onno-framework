@@ -127,24 +127,20 @@ export function RefSelect({
     setLoading(true);
     const t = setTimeout(() => {
       let cancelled = false;
-      const run = optionDecorator
-        ? api.searchRefOptions({
-            targetKind: isDocument ? "document" : "catalog",
-            targetName,
-            decorator: optionDecorator,
-            query,
-            limit: 30,
-            filter,
-            fieldPath: optionContext?.fieldPath ?? "",
-            formValues: optionContext?.formValues ?? {},
-            section: optionContext?.section,
-            rowIndex: optionContext?.rowIndex,
-            rowValues: optionContext?.rowValues,
-            documentId: optionContext?.documentId,
-          })
-        : isDocument
-          ? api.searchDocument(name, query, 30, filter)
-          : api.searchCatalog(name, query, 30, filter);
+      const run = api.searchRefOptions({
+        targetKind: isDocument ? "document" : "catalog",
+        targetName,
+        decorator: optionDecorator ?? "",
+        query,
+        limit: 30,
+        filter,
+        fieldPath: optionContext?.fieldPath ?? "",
+        formValues: optionContext?.formValues ?? {},
+        section: optionContext?.section,
+        rowIndex: optionContext?.rowIndex,
+        rowValues: optionContext?.rowValues,
+        documentId: optionContext?.documentId,
+      });
       run
         .then((r) => !cancelled && setItems(r))
         .catch(() => {})

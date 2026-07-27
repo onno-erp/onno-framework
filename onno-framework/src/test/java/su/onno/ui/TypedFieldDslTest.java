@@ -1,6 +1,7 @@
 package su.onno.ui;
 
 import org.junit.jupiter.api.Test;
+import su.onno.repository.EnumerationPersistence;
 import su.onno.types.Ref;
 
 import java.util.List;
@@ -41,7 +42,8 @@ class TypedFieldDslTest {
     @Test
     void actionRowsAcceptTypedFields() {
         ActionRow row = new ActionRow(java.util.Map.of(
-                "status_display", "APPROVED", "active", true));
+                "status", EnumerationPersistence.resolveId(Status.class, Status.APPROVED),
+                "active", true));
         assertThat(row.enumValue(Order::getStatus, Status.class)).isEqualTo(Status.APPROVED);
         assertThat(row.bool(Order::getActive)).isTrue();
     }

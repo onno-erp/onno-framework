@@ -18,8 +18,9 @@ class ListDescriptorDefaultGroupByTest {
 
     private static ResolvedListView view(ResolvedListView.Grouping grouping) {
         return new ResolvedListView("Books",
-                List.of(new ResolvedListView.Column("Title", "_description", "")),
-                true, null, false, List.of(), null, "infinite", 50, grouping, null);
+                List.of(new ResolvedListView.Column(
+                        "Title", "_description", "", "", "", "", "")),
+                true, null, false, List.of(), null, 50, grouping, null);
     }
 
     @Test
@@ -38,7 +39,7 @@ class ListDescriptorDefaultGroupByTest {
     void noDefaultGroupingEmitsNoKey() {
         var grouping = new ResolvedListView.Grouping(
                 List.of(new ResolvedListView.GroupColumn("type_label", "Type", false)),
-                List.of());
+                List.of(), "");
 
         Map<String, Object> descriptor = SurfaceDivBuilder.listDescriptor(
                 view(grouping), "catalogs", "books", null, true, List.of(), List.of());

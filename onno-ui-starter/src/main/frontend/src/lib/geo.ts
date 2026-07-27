@@ -4,13 +4,8 @@ import type { EntityRecord } from "@/lib/types";
 /**
  * Shared geolocation plumbing for every map surface: the field editor, the dashboard map widget,
  * the list map view, and the read-only detail map. One place that parses a stored value into
- * GeoJSON, so every surface agrees on the format and the bounds.
- *
- * <p>A geometry can be stored two ways: as a single {@code "lat,lng"} string (a Point — what the
- * simple picker writes, and the legacy format) or as a GeoJSON string (a {@code Feature},
- * {@code FeatureCollection}, or bare geometry — points, paths, and areas, what the geometry editor
- * writes). {@link toFeatureCollection} reads either; {@link extractLatLng} keeps the point-only
- * fast path the marker plotting uses.</p>
+ * GeoJSON, so every surface agrees on the format and the bounds. Geometry values are GeoJSON; a
+ * marker-only source may alternatively use a numeric latitude/longitude field pair.
  */
 
 export type LatLng = [number, number];
@@ -27,27 +22,12 @@ function num(value: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-/** Parse a stored {@code "lat,lng"} string into a validated [lat, lng], or null if malformed/out of range. */
-export function parseLatLng(value: unknown): LatLng | null {
-  if (typeof value !== "string") return null;
-  const parts = value.split(",").map((s) => Number(s.trim()));
-  if (parts.length !== 2 || parts.some((n) => Number.isNaN(n))) return null;
-  return inRange(parts[0], parts[1]);
-}
-
-/** Format a coordinate pair back to the stored {@code "lat,lng"} string (6 dp ≈ 0.1 m). */
-export function formatLatLng(lat: number, lng: number): string {
-  return `${lat.toFixed(6)},${lng.toFixed(6)}`;
-}
-
 /**
- * How a record's geometry is sourced. Markers come from a combined {@code geoField}
- * ({@code "lat,lng"} string) or a {@code latField}/{@code lngField} pair; arbitrary shapes
- * (points/paths/areas) come from a {@code geoJsonField} (a GeoJSON string). A record may use any
- * combination — the marker and the shape are both plotted.
+ * How a record's geometry is sourced. Markers may come from a numeric
+ * {@code latField}/{@code lngField} pair; arbitrary geometry comes from a
+ * {@code geoJsonField}. A record may use both.
  */
 export interface GeoSource {
-  geoField?: string;
   latField?: string;
   lngField?: string;
   geoJsonField?: string;
@@ -55,10 +35,6 @@ export interface GeoSource {
 
 /** Extract a record's point [lat, lng] per the configured {@link GeoSource}, or null when it has none. */
 export function extractLatLng(row: EntityRecord, src: GeoSource): LatLng | null {
-  if (src.geoField) {
-    const point = parseLatLng(row[src.geoField]);
-    if (point) return point;
-  }
   if (src.latField && src.lngField) {
     const lat = num(row[src.latField]);
     const lng = num(row[src.lngField]);
@@ -68,7 +44,7 @@ export function extractLatLng(row: EntityRecord, src: GeoSource): LatLng | null 
 }
 
 /**
- * Read a {@link GeoSource} from a config bag (the {@code geoField}/{@code latField}/{@code lngField}/
+ * Read a {@link GeoSource} from a config bag (the {@code latField}/{@code lngField}/
  * {@code geoJsonField} keys). Accepts any bag — a widget's {@code extraConfig} or a list's map config
  * — taking only the non-blank string entries.
  */
@@ -76,7 +52,6 @@ export function geoSourceFrom(cfg: Record<string, unknown> | undefined): GeoSour
   const c = cfg ?? {};
   const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   return {
-    geoField: str(c.geoField),
     latField: str(c.latField),
     lngField: str(c.lngField),
     geoJsonField: str(c.geoJsonField),
@@ -85,7 +60,7 @@ export function geoSourceFrom(cfg: Record<string, unknown> | undefined): GeoSour
 
 /** Whether a config bag names at least one usable geometry source (a point pair or a GeoJSON field). */
 export function hasGeoSource(src: GeoSource): boolean {
-  return !!src.geoField || !!(src.latField && src.lngField) || !!src.geoJsonField;
+  return !!(src.latField && src.lngField) || !!src.geoJsonField;
 }
 
 /** An empty FeatureCollection — the canonical "nothing drawn" value. */
@@ -123,16 +98,14 @@ function normalize(obj: unknown): FeatureCollection | null {
 }
 
 /**
- * Parse a stored geometry value into a normalized {@link FeatureCollection}, or null when empty. Accepts
- * a {@code "lat,lng"} string (→ a Point), a GeoJSON string, or an already-parsed GeoJSON object.
+ * Parse a stored GeoJSON value into a normalized {@link FeatureCollection}, or null when empty.
+ * Accepts a JSON string or an already-parsed GeoJSON object.
  */
 export function toFeatureCollection(value: unknown): FeatureCollection | null {
   if (value == null || value === "") return null;
-  const point = parseLatLng(value);
-  if (point) return pointFeatureCollection(point[0], point[1]);
   if (typeof value === "string") {
     const trimmed = value.trim();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
+    if (!trimmed.startsWith("{")) return null;
     try {
       return normalize(JSON.parse(trimmed));
     } catch {

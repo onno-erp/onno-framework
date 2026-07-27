@@ -34,14 +34,16 @@ Set a field hint on an `EntityView` field; the admin form then streams the file 
 stores the returned URL:
 
 ```java
-f.field("photo").widget("image")      // single image
+f.field("avatarUrl").widget("image")  // single image
  .field("avatar").widget("avatar")    // small round image
  .field("gallery").widget("gallery")  // several images, newline-joined URLs
  .field("contract").widget("file");   // any file type
 ```
 
-Legacy records that still hold a base64 `data:` URL keep rendering, so the switch from base64 to
-binary upload is backward compatible — no migration required.
+2.0 no longer renders base64 `data:` image values or accepts the old `photo`/`photos` widget names.
+Before upgrading, convert stored values with
+`Ui2MigrationTool.migrateDataUrlImages(...)` and rename those widgets to `image`/`images`. See
+[Migrating an application to onno 2.0](MIGRATING_TO_2_0.md).
 
 ## Configuration (`onno.media.*`)
 

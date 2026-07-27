@@ -13,24 +13,6 @@ public record UiLayout(List<Section> sections,
         shell = shell == null ? ShellConfig.defaults() : shell;
     }
 
-    public UiLayout(List<Section> sections) {
-        this(sections, List.of(), List.of(), null, null);
-    }
-
-    public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets) {
-        this(sections, widgets, List.of(), null, null);
-    }
-
-    public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets,
-                    List<Profile> profiles) {
-        this(sections, widgets, profiles, null, null);
-    }
-
-    public UiLayout(List<Section> sections, List<UiLayoutBuilder.WidgetConfig> widgets,
-                    List<Profile> profiles, UiIdentityLink identity) {
-        this(sections, widgets, profiles, identity, null);
-    }
-
     /**
      * The implicit "default" persona: the top-level sections and widgets, served
      * to any user who matches no named {@link Profile}. Curation layer only —
@@ -81,11 +63,6 @@ public record UiLayout(List<Section> sections,
             pageRefs = pageRefs == null ? List.of() : List.copyOf(pageRefs);
         }
 
-        /** Back-compat: a section of entities with no authored-page links. */
-        public Section(String name, int order, String icon, Placement placement,
-                       List<UiLayoutBuilder.EntityRef> entityRefs) {
-            this(name, order, icon, placement, entityRefs, List.of());
-        }
     }
 
     /**
@@ -121,11 +98,6 @@ public record UiLayout(List<Section> sections,
             icon = icon == null ? "" : icon;
             // The display label defaults to the URL-safe name when no title is set.
             title = (title == null || title.isBlank()) ? name : title;
-        }
-
-        /** Back-compat constructor for items with no explicit title/icon (both resolved heuristically). */
-        public ResolvedItem(String name, String type, String href, Class<?> javaClass) {
-            this(name, name, type, href, javaClass, "");
         }
     }
 }

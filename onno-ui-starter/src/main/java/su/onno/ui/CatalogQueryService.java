@@ -6,8 +6,6 @@ import su.onno.query.Cursor;
 import su.onno.query.Keyset;
 
 import org.jdbi.v3.core.Jdbi;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -26,15 +24,6 @@ import java.util.UUID;
  * control stays with the callers.
  */
 public class CatalogQueryService {
-
-    private static final Logger log = LoggerFactory.getLogger(CatalogQueryService.class);
-
-    /**
-     * Hard safety cap for the un-paged list APIs, so one request can never pull an
-     * entire large table (and ref-resolve every row) into memory. Callers that need
-     * more rows should use the paged/searched variants.
-     */
-    static final int MAX_LIST_ROWS = 1000;
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
@@ -61,38 +50,6 @@ public class CatalogQueryService {
                 .filter(d -> d.javaClass().equals(clazz))
                 .findFirst()
                 .orElse(null);
-    }
-
-    public List<Map<String, Object>> list(CatalogDescriptor desc) {
-        return list(desc, null);
-    }
-
-    /**
-     * The full catalog list, optionally narrowed by an authored {@link WidgetFilter} predicate (the
-     * same {@code config("filter", …)} a dashboard card uses). The un-paged endpoint that chart/list
-     * widgets fetch from goes through here, so passing the predicate makes those widgets honor the
-     * filter consistently with the server-aggregated count tiles. A null/blank/invalid predicate is
-     * simply no filter.
-     */
-    public List<Map<String, Object>> list(CatalogDescriptor desc, String filter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames());
-        String where = "_deletion_mark = false" + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")");
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
-                            " WHERE " + where + " ORDER BY _code LIMIT :limit")
-                    .bind("limit", MAX_LIST_ROWS + 1);
-            wf.bindings().forEach(q::bind);
-            return q.mapToMap().list();
-        });
-        if (rows.size() > MAX_LIST_ROWS) {
-            log.warn("Catalog '{}' has more than {} live records; the un-paged list API truncated "
-                    + "the result. Use the paged list endpoint for complete data.",
-                    desc.logicalName(), MAX_LIST_ROWS);
-            rows = rows.subList(0, MAX_LIST_ROWS);
-        }
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
-        return rows;
     }
 
     /**
@@ -176,55 +133,11 @@ public class CatalogQueryService {
         return EntityQuerySupport.aggregateBuckets(jdbi, refResolver, surface(desc), request);
     }
 
-    public List<Map<String, Object>> list(CatalogDescriptor desc, int offset, int limit) {
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE _deletion_mark = false ORDER BY _code LIMIT :limit OFFSET :offset")
-                        .bind("limit", limit)
-                        .bind("offset", offset)
-                        .mapToMap()
-                        .list()
-        );
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
-        return rows;
-    }
-
-    /**
-     * One page of a catalog list, server-side sorted and filtered — the engine behind the
-     * virtualized/paged list grid. {@code sortColumn} must be one of the entity's real columns
-     * (validated by the caller via {@link #sortableColumns}); {@code search} matches case-insensitively
-     * across the text columns. Live records only.
-     */
-    public List<Map<String, Object>> page(CatalogDescriptor desc, int offset, int limit,
-                                           String sortColumn, boolean descending, String search,
-                                           List<String> eq, List<String> in, List<String> like,
-                                           List<String> prefix, List<String> ge, List<String> le,
-                                           String widgetFilter) {
-        EntitySurfaceDescriptor surface = surface(desc);
-        String orderBy = surface.safeSort(sortColumn);
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
-        String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
-                    " WHERE " + where +
-                    " ORDER BY " + orderBy + (descending ? " DESC" : " ASC") +
-                    " LIMIT :limit OFFSET :offset")
-                    .bind("limit", limit).bind("offset", Math.max(0, offset));
-            EntityQuerySupport.bindSearch(q, search);
-            filter.bindings().forEach(q::bind);
-            wf.bindings().forEach(q::bind);
-            return q.mapToMap().list();
-        });
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
-        return rows;
-    }
-
     /**
      * One keyset-paginated window — the constant-time default for the list grid. Seeks past
      * {@code cursorToken} (null/blank for the first window) instead of counting past an offset, so
-     * page 1 and page 10 000 cost the same. Same server-side sort/search/filters as {@link #page};
-     * fetches one extra row to report {@code hasMore} without a COUNT, and mints the next cursor from
+     * page 1 and page 10 000 cost the same. Applies server-side sort/search/filters, fetches one
+     * extra row to report {@code hasMore} without a COUNT, and mints the next cursor from
      * the last row. A cursor minted for a different sort is ignored (paging restarts), and a sort by
      * a column the framework doesn't keep populated uses the NULL-safe seek shape.
      */
@@ -289,7 +202,7 @@ public class CatalogQueryService {
     }
 
     /**
-     * Fetch specific live rows by id, decorated exactly like {@link #page} (refs resolved, secrets
+     * Fetch specific live rows by id, decorated like keyset rows (refs resolved, secrets
      * redacted) so a client can refresh just the rows that changed without re-paging the whole
      * window. Drives the list island's surgical single-row live patch. Returns only the rows that
      * still exist and aren't deletion-marked, in no particular order; an empty/blank input yields an

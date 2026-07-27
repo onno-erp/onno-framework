@@ -138,7 +138,7 @@ public class UiLayoutResolver {
         for (String key : List.of(
                 "endDateField", "durationField", "secondaryField", "amountField",
                 "currencyField", "metricField", "field2", "groupBy", "seriesBy",
-                "latField", "lngField", "geoField", "geoJsonField")) {
+                "latField", "lngField", "geoJsonField")) {
             String value = resolved.get(key);
             if (value == null || value.isBlank() || value.contains(",")) {
                 continue;

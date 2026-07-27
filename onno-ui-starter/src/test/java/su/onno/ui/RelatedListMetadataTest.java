@@ -75,7 +75,8 @@ class RelatedListMetadataTest {
         Map<String, Object> rl = related.get(0);
         assertThat(rl.get("name")).isEqualTo("doctors");
         assertThat(rl.get("label")).isEqualTo("Doctors");
-        assertThat(rl.get("joinCatalog")).isEqualTo("RlClinicDoctor");
+        assertThat(rl.get("sourceName")).isEqualTo("RlClinicDoctor");
+        assertThat(rl).doesNotContainKey("joinCatalog");
         assertThat(rl.get("viaField")).isEqualTo("clinic");
         assertThat(rl.get("displayField")).isEqualTo("doctor");
         assertThat(rl.get("target")).isEqualTo("RlDoctors");

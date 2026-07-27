@@ -67,7 +67,9 @@ deterministic actions. Configure an action form's canonical dialog inside `.form
 open form retains its values and shows corrective feedback. Use
 `ActionResult.toast(ActionToast.success(title).message(...).detail(...))` for structured,
 severity-aware transient feedback and `ActionResult.dialog(ActionDialog…)` for a successful outcome
-that needs acknowledgement; legacy `message`/`refresh` stay compact success-toast shortcuts.
+that needs acknowledgement. Use `reload()` or `refresh(ActionToast|ActionDialog)` when the surface
+must refetch. Handler results contain only refresh intent and structured feedback; put static
+navigation on the action declaration with `.navigate(...)`.
 
 ## Custom Widgets
 

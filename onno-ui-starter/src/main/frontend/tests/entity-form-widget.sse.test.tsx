@@ -14,7 +14,6 @@ vi.mock("@/lib/api", () => ({
 // them so the test stays focused on the live-refresh logic (and doesn't drag in leaflet/react-aria).
 vi.mock("@/components/ref-select", () => ({ RefSelect: () => null }));
 vi.mock("@/components/date-picker", () => ({ DatePicker: () => null }));
-vi.mock("@/components/geo-picker", () => ({ GeoPicker: () => null }));
 vi.mock("@/components/map-editor", () => ({ MapEditor: () => null }));
 vi.mock("@/components/image-picker", () => ({ ImagePicker: () => null, GalleryPicker: () => null }));
 vi.mock("@/components/file-picker", () => ({ FilePicker: () => null }));

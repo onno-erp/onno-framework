@@ -9,8 +9,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,13 +23,11 @@ import java.util.Map;
  * so its movement log (and, for BALANCE registers, its balances) page through here instead of
  * shipping whole: the island fetches one window at a time as the user scrolls.
  *
- * <p>The island scrolls registers in infinite mode, so the default response is the same
- * {@code {rows, nextCursor, hasMore, total}} envelope as {@link ListDataController} — the cursor is
- * simply the next window's offset (a register list re-sorts freely, so a true keyset seek doesn't
- * apply; the opaque-cursor contract lets the engine change later without touching the client).
- * Passing {@code ?offset=N} explicitly keeps the legacy {@code {total, offset, rows}} page.</p>
+ * <p>The island scrolls registers through the same
+ * {@code {rows, nextCursor, hasMore, total}} envelope as {@link ListDataController} — the opaque
+ * cursor identifies the next window because a register list re-sorts freely.</p>
  *
- * <p>Both feeds honor the grid's declarative filter params ({@code eq}/{@code in}/{@code like}/
+ * <p>The feed honors the grid's declarative filter params ({@code eq}/{@code in}/{@code like}/
  * {@code prefix}/{@code ge}/{@code le}, compiled by {@link ListFilter} against the register's own
  * columns) — the movements tab filters by period range and movement type, and any dimension or
  * resource column is fair game for an authored filter.</p>
@@ -37,6 +37,7 @@ import java.util.Map;
 public class RegisterListController {
 
     private static final int MAX_PAGE = 500;
+    private static final String CURSOR_PREFIX = "register:";
 
     /** Movement-type pill colors ({@code _movement_type_color}): receipt green, expense red. */
     private static final String RECEIPT_COLOR = "#16a34a";
@@ -66,11 +67,11 @@ public class RegisterListController {
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.movementFilterColumns(desc));
         long total = query.movementsCount(desc, from, to, filters);
-        int offset = offsetOf(request);
-        List<Map<String, Object>> rows = query.movementsPage(desc, from, to, filters,
-                sort, descending(dir), offset, lim);
+        int rowPosition = rowPosition(request);
+        List<Map<String, Object>> rows = query.movementsWindow(desc, from, to, filters,
+                sort, descending(dir), rowPosition, lim);
         decorateMovementType(rows);
-        return envelope(request, total, offset, rows);
+        return envelope(total, rowPosition, rows);
     }
 
     @GetMapping("/{name}/balance")
@@ -85,10 +86,10 @@ public class RegisterListController {
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc));
         long total = query.balanceCount(desc, filters);
-        int offset = offsetOf(request);
-        List<Map<String, Object>> rows = query.balancePage(desc, filters,
-                sort, descending(dir), offset, lim);
-        return envelope(request, total, offset, rows);
+        int rowPosition = rowPosition(request);
+        List<Map<String, Object>> rows = query.balanceWindow(desc, filters,
+                sort, descending(dir), rowPosition, lim);
+        return envelope(total, rowPosition, rows);
     }
 
     /**
@@ -106,38 +107,37 @@ public class RegisterListController {
         return values == null ? List.of() : Arrays.asList(values);
     }
 
-    /** The window start: an explicit {@code ?offset=N} (legacy page), else the echoed cursor, else 0. */
-    private static int offsetOf(HttpServletRequest request) {
-        String offset = request.getParameter("offset");
+    /** The window start encoded by the opaque cursor, or zero for the first window. */
+    private static int rowPosition(HttpServletRequest request) {
         String cursor = request.getParameter("cursor");
         try {
-            if (offset != null) return Math.max(0, Integer.parseInt(offset));
-            if (cursor != null) return Math.max(0, Integer.parseInt(cursor));
-        } catch (NumberFormatException ignored) {
+            if (cursor != null) {
+                String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+                if (decoded.startsWith(CURSOR_PREFIX)) {
+                    return Math.max(0, Integer.parseInt(decoded.substring(CURSOR_PREFIX.length())));
+                }
+            }
+        } catch (IllegalArgumentException ignored) {
             // A stale/foreign cursor restarts from the top rather than erroring the whole list.
         }
         return 0;
     }
 
-    /**
-     * Legacy offset page when the client explicitly paged with {@code ?offset}; otherwise the
-     * infinite-scroll envelope with the next window's offset riding as the opaque cursor.
-     */
-    private static Map<String, Object> envelope(HttpServletRequest request, long total, int offset,
-                                                List<Map<String, Object>> rows) {
+    /** Keyset-style envelope whose cursor keeps the register's implementation position opaque. */
+    private static Map<String, Object> envelope(long total, int rowPosition, List<Map<String, Object>> rows) {
         Map<String, Object> out = new LinkedHashMap<>();
-        if (request.getParameter("offset") != null) {
-            out.put("total", total);
-            out.put("offset", offset);
-            out.put("rows", rows);
-            return out;
-        }
-        boolean hasMore = offset + rows.size() < total;
+        int nextPosition = rowPosition + rows.size();
+        boolean hasMore = !rows.isEmpty() && nextPosition < total;
         out.put("rows", rows);
-        out.put("nextCursor", hasMore ? String.valueOf(offset + rows.size()) : null);
+        out.put("nextCursor", hasMore ? cursorFor(nextPosition) : null);
         out.put("hasMore", hasMore);
         out.put("total", total);
         return out;
+    }
+
+    private static String cursorFor(int rowPosition) {
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString((CURSOR_PREFIX + rowPosition).getBytes(StandardCharsets.UTF_8));
     }
 
     /**

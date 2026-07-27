@@ -39,7 +39,7 @@ class CatalogDetailRelatedListTest {
         Map<String, Object> rl = new LinkedHashMap<>();
         rl.put("name", "doctors");
         rl.put("label", "Doctors");
-        rl.put("joinCatalog", "ClinicDoctor");
+        rl.put("sourceName", "ClinicDoctor");
         rl.put("viaField", "clinic");
         rl.put("displayField", "doctor");
         rl.put("showInDetail", showInDetail);

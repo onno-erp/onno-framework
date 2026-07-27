@@ -7,15 +7,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ActionFeedbackTest {
 
     @Test
-    void legacyActionResultConstructorAndFactoriesRemainCompatible() {
-        ActionResult direct = new ActionResult("Done", "onno://catalogs/items", true);
+    void actionResultCarriesOnlyRefreshAndTypedFeedback() {
+        assertThat(ActionResult.ok()).isEqualTo(new ActionResult(false, null));
+        assertThat(ActionResult.reload()).isEqualTo(new ActionResult(true, null));
 
-        assertThat(direct.message()).isEqualTo("Done");
-        assertThat(direct.navigate()).isEqualTo("onno://catalogs/items");
-        assertThat(direct.refresh()).isTrue();
-        assertThat(direct.feedback()).isNull();
-        assertThat(ActionResult.message("Saved").message()).isEqualTo("Saved");
-        assertThat(ActionResult.refresh("Saved").refresh()).isTrue();
+        ActionResult result = ActionResult.refresh(ActionToast.success("Saved"));
+        assertThat(result.refresh()).isTrue();
+        assertThat(result.feedback().title()).isEqualTo("Saved");
+        assertThat(result.feedback().presentation()).isEqualTo(ActionPresentation.TOAST);
     }
 
     @Test

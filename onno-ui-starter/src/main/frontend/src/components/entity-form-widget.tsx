@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { RefSelect } from "@/components/ref-select";
 import { DatePicker } from "@/components/date-picker";
-import { GeoPicker } from "@/components/geo-picker";
 import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
@@ -276,8 +275,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const isDuplicate = form.duplicate === true;
   const isEdit = id != null && !isDuplicate;
   const readOnly = form.readOnly === true;
-  const recordPath = isEdit && id ? `/${kind}/${name}/${id}` : null;
-  const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? `${id}/edit` : "new"}`;
+  const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? id : "new"}`;
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
   // description; both then list the visible-in-form attributes by their order hint.
@@ -650,10 +648,11 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       }
       clearFormDirty(formPath); // saved — nothing left for the discard guard to protect
       if (isEdit) {
-        // Editing is a separate stage: after saving, return to the read-only detail surface.
+        // The record route is the form: keep it open and re-seed from the authoritative saved row.
+        applyRecord(saved);
+        if (thenPost && kind === "documents") await refetch();
         toast.success(t("toast.saved"));
-        if (recordPath) dispatchAction(`onno://${kind}/${name}/${id}`);
-        dispatchClose(formPath);
+        setSaving(false);
         return;
       }
       // A create that a ref picker is waiting on ("+ New" quick-create) hands the id back to
@@ -682,8 +681,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     // Cancel is an explicit discard — clear the dirty flag first so nothing asks "discard?".
     clearFormDirty(formPath);
     if (isEdit) {
-      if (recordPath) dispatchAction(`onno://${kind}/${name}/${id}`);
-      dispatchClose(formPath);
+      if (record) applyRecord(record);
       return;
     }
     // Cancelling a create also cancels any ref-picker quick-create waiting on it.
@@ -1193,23 +1191,19 @@ function AttrControl({
     );
   }
 
-  // A custom widget hint (.field(...).widget("map"|"geojson")) wins over the type-based control.
-  // "map"/"geo" is a single point stored as a "lat,lng" string; "geojson" is the full geometry
-  // editor (points/paths/areas) stored as a GeoJSON string. Both live on a String attribute.
+  // A GeoJSON widget hint wins over the type-based control. The editor stores a FeatureCollection
+  // containing points, paths, or areas in a String attribute.
   if (/^geojson$/i.test(attr.widget ?? "")) {
     return <MapEditor value={value as string | undefined} onChange={onChange} />;
-  }
-  if (/^(map|geo|geolocation)$/i.test(attr.widget ?? "")) {
-    return <GeoPicker value={value as string | undefined} onChange={onChange} />;
   }
 
   // Media widgets stream the chosen file to POST /api/media and store only the returned reference
   // URL — so a plain String attribute holds it (no base64-sized TEXT). "avatar" is a small round
   // image variant; "images"/"gallery" stores several URLs newline-joined; "file" takes any type.
-  if (/^(images|gallery|photos)$/i.test(attr.widget ?? "")) {
+  if (/^(images|gallery)$/i.test(attr.widget ?? "")) {
     return <GalleryPicker value={value as string | undefined} onChange={onChange} />;
   }
-  if (/^(image|photo)$/i.test(attr.widget ?? "")) {
+  if (/^image$/i.test(attr.widget ?? "")) {
     return <ImagePicker value={value as string | undefined} onChange={onChange} />;
   }
   if (/^avatar$/i.test(attr.widget ?? "")) {

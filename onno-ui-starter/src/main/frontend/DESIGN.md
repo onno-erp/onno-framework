@@ -38,7 +38,7 @@ island scrolls internally (virtualized), the page body does not scroll horizonta
 ## Lists
 
 `components/entity-list-widget.tsx` is *the* list island: framework-owned toolbar (search, filters,
-sort, group-by), keyset infinite scroll by default (`feedMode: "paged"` is the opt-out), virtual
+sort, group-by), keyset infinite scroll, virtual
 windowing, context menu, batch actions. Server search spans every non-secret column — scalars as
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.

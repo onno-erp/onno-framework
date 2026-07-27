@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.repository.EnumerationPersistence;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -35,6 +37,11 @@ class UiActionResolverRowStateTest {
 
     private final UiActionResolver resolver = new UiActionResolver(List.of(new InstanceView()));
 
+    private static Map<String, Object> row(Status status) {
+        return Map.of("status", EnumerationPersistence.resolveId(Status.class, status),
+                "status_display", status.name());
+    }
+
     @Test
     void hasDynamicRowActions_trueWhenAnyRowActionVariesPerRow() {
         assertThat(resolver.hasDynamicRowActions(Status.class)).isTrue();
@@ -43,14 +50,14 @@ class UiActionResolverRowStateTest {
 
     @Test
     void rowActionState_resolvesDynamicAction_perRow_andOmitsStaticOnes() {
-        Map<String, Object> stopped = resolver.rowActionState(Status.class, Map.of("status_display", "STOPPED"));
+        Map<String, Object> stopped = resolver.rowActionState(Status.class, row(Status.STOPPED));
         assertThat(stopped).containsOnlyKeys("toggle"); // static "ping" is not included
         @SuppressWarnings("unchecked")
         Map<String, Object> toggle = (Map<String, Object>) stopped.get("toggle");
         assertThat(toggle).containsEntry("icon", "play").containsEntry("label", "Resume")
                 .containsEntry("visible", true).containsEntry("enabled", false); // disabled when not RUNNING
 
-        Map<String, Object> running = resolver.rowActionState(Status.class, Map.of("status_display", "RUNNING"));
+        Map<String, Object> running = resolver.rowActionState(Status.class, row(Status.RUNNING));
         @SuppressWarnings("unchecked")
         Map<String, Object> t2 = (Map<String, Object>) running.get("toggle");
         assertThat(t2).containsEntry("icon", "pause").containsEntry("label", "Suspend")

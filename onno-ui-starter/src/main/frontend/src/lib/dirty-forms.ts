@@ -1,6 +1,6 @@
 /**
- * Which open form routes have unsaved edits, keyed by their tab path ("/catalogs/suppliers/{id}/edit",
- * ".../new", ".../duplicate"). The form widget marks/clears; the workspace shell consults it before
+ * Which open form routes have unsaved edits, keyed by their canonical tab path
+ * ("/catalogs/suppliers/{id}", ".../new", ".../duplicate"). The form widget marks/clears; the shell consults it before
  * closing a tab (and before an SSE refetch remounts a surface) so a stray X / Esc / server push
  * can't silently discard typed input.
  *

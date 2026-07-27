@@ -8,6 +8,9 @@ metadata, with no per-entity controller to write.
 The same DivKit contract drives the React web client today and is intended to drive a native
 (Flutter) client later, so screen layout, RBAC and theming are resolved server-side.
 
+Upgrading an existing application? Run the one-time data conversions and update clients/metadata
+before switching dependencies; see [Migrating an application to onno 2.0](../docs/MIGRATING_TO_2_0.md).
+
 ## Enabling
 
 Auto-configuration kicks in when `onno-ui-starter` is on the classpath, a `MetadataRegistry` bean
@@ -162,7 +165,6 @@ name returns `404`.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}` | Full list. With `?q=` and/or `?limit=` switches to a capped typeahead (default cap 50, max 200) for ref pickers. |
 | GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. |
 | GET | `/{name}/tree` | Full nested tree (hierarchical only). |
 | GET | `/{name}/{id}` | Single item. |
@@ -176,7 +178,6 @@ name returns `404`.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}?from=&to=` | List, optionally filtered by date range. |
 | GET | `/{name}/{id}` | Single document. |
 | POST | `/{name}` | Create. Body carries header fields + tabular-section arrays keyed by section name. Number auto-generated when omitted and the document auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. Optimistic locking via `version`/`_version` (`409` on conflict). |
@@ -217,22 +218,8 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 - **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
   and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
   `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
-- **Offset mode.** Passing `?offset=N` switches to `LIMIT/OFFSET` with the `{ total, offset, rows }`
-  envelope. The grid uses this for **paged** lists (numbered pages need a total and jump-to-page,
-  which a cursor can't give); **infinite** lists send `cursor` instead.
-
-**Feed mode — infinite scroll vs numbered pages.** The grid renders one of two ways, chosen per
-entity and defaulted globally:
-
-- **`INFINITE`** (default) — cursor-scrolls the keyset stream above: loads a window, then more as you
-  scroll, virtualized so the DOM stays small; header shows a cheap `?count=estimate` (or the loaded
-  count). The natural fit for large, append-heavy lists.
-- **`PAGED`** — numbered offset pages with a Prev/Next pager and an exact total. Best for small or
-  well-filtered lists where jump-to-page and a precise count matter more than depth performance.
-
-Author it on the view (`list.feed(FeedMode.PAGED)`, `list.pageSize(25)`) or set the app-wide default
-with `onno.ui.list.default-feed` (`infinite` | `paged`) and `onno.ui.list.page-size`. A register's
-report surface is always infinite (its movement log is depth-scrolled).
+Lists always use infinite keyset scrolling. Author the window size with `list.pageSize(25)` or set
+the app-wide `onno.ui.list.page-size`. There is no offset mode or numbered-page feed in 2.0.
 
 **Grouping — backend `GROUP BY` with lazy expansion.** Declare
 `list.groupable(Order::getStatus, Order::getDate)`
@@ -277,9 +264,8 @@ and are deliberately unsafe; routes, labels, role/action/process keys, and filte
 remain strings because they are not Java field references.
 
 The register **report surface** is likewise fed window-by-window (newest-first, server-sorted). Its
-default response is the same `{rows, nextCursor, hasMore, total}` envelope as the entity feeds (the
-cursor is the next window's offset, treated as opaque by the client); passing `?offset=` explicitly
-keeps the legacy `{total, offset, rows}` page. Both feeds honor the grid's declarative filter params
+response is `{rows, nextCursor, hasMore, total}`; the cursor is opaque to clients. Both feeds honor
+the grid's declarative filter params
 (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's own columns) — the movements
 tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, and
 movement rows carry a localized `_movement_type_display` + `_movement_type_color` so the type renders
@@ -301,8 +287,8 @@ data-bearing surfaces.
 | `GET /shell` | Nav + account chrome. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
-| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. `/{id}/edit` remains as a back-compat alias for `/{id}`. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
-| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new` | Document list, record surface and create form — same combined form; `/{id}/edit` is a back-compat alias. An authored `Page` at `/documents/{name}` overrides the default list. |
+| `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
+| `GET /documents/{name}`, `/documents/{name}/{id}`, `/documents/{name}/new` | Document list, record surface and create form — same combined form. An authored `Page` at `/documents/{name}` overrides the default list. |
 | `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. An authored `Page` at `/registers/{name}` overrides it with a curated report (register-backed widgets; `b.list(...)` embeds catalog/document lists, not a register's log). |
 | `GET /{*route}` | Catch-all page endpoint: any other route with a registered `Page` bean (a custom dashboard/report at `/ops`, `/reports`, …); `404` when no page is registered. |
 
@@ -359,7 +345,10 @@ public void actions(ActionSpec a) {
      .icon(row  -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
      .visibleWhen(row -> row.enumValue("status", Status.class) != Status.ARCHIVED)
      .enabledWhen(row -> row.canToggle())            // any predicate over the row
-     .handler(ctx -> { svc.toggle(ctx.id()); return ActionResult.refresh("Toggled"); });
+     .handler(ctx -> {
+         svc.toggle(ctx.id());
+         return ActionResult.refresh(ActionToast.success("Toggled"));
+     });
 }
 ```
 
@@ -416,7 +405,10 @@ a.action("cancel").label("Cancel order").icon("ban").scope(ActionScope.ROW)
              .tone(ActionSeverity.WARNING).size(DialogSize.MD)
              .input("reason").label("Reason").type(InputType.TEXTAREA)
              .placeholder("Why is this order cancelled?").required())
- .handler(ctx -> { service.cancel(ctx.id(), ctx.input("reason")); return ActionResult.refresh("Cancelled"); });
+ .handler(ctx -> {
+     service.cancel(ctx.id(), ctx.input("reason"));
+     return ActionResult.refresh(ActionToast.success("Cancelled"));
+ });
 ```
 
 Works on every scope and placement — row button, toolbar, detail header, the row context menu, and
@@ -466,7 +458,7 @@ the picked record's id, read back with `ActionContext.input(key)`:
 ```java
 a.action("reassign").label("Reassign").scope(ActionScope.ROW)
  .form(f -> f.input("owner").label("New owner").reference(Employee.class).required())
- .handler(ctx -> { service.reassign(ctx.id(), ctx.input("owner")); return ActionResult.refresh(); });
+ .handler(ctx -> { service.reassign(ctx.id(), ctx.input("owner")); return ActionResult.reload(); });
 ```
 
 **Repeatable row groups** — a form can collect transient *tabular* input: `.group(key, g -> …)`
@@ -481,7 +473,7 @@ a.action("receive").label("Receive shipment").scope(ActionScope.TOOLBAR)
          .column("qty", c -> c.label("Qty").type(InputType.NUMBER).required())))
  .handler(ctx -> {
      for (var row : ctx.inputRows("lines")) receive(row.get("book"), row.get("qty"));
-     return ActionResult.refresh("Received");
+     return ActionResult.refresh(ActionToast.success("Received"));
  });
 ```
 
@@ -809,7 +801,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `calendar` | FullCalendar | Documents only; drag-to-reschedule. |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
-| `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `geoField` (a `"lat,lng"` string) **or** `latField`+`lngField` for markers, and/or `geoJsonField` for shapes (paths/areas); features link to the record and label from `.titleField(...)`. |
+| `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `latField`+`lngField` for points and/or `geoJsonField` for points, paths, and areas; features link to the record and label from `.titleField(...)`. |
 | `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
 
@@ -839,9 +831,8 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
 | `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
 | `dateField` | list, calendar | API column for the date (also `.dateField(...)` on the builder), e.g. `starts_at`. For a document calendar, dragging an event updates this field and the document's built-in `date` together, so custom business timestamps remain aligned with calendar windowing. |
-| `geoField` | map | Field holding a `"lat,lng"` string marker point (what `.widget("map")` writes). |
 | `latField`, `lngField` | map | Numeric latitude/longitude fields, when the point is stored split (used when `geoField` is unset). |
-| `geoJsonField` | map | Field holding GeoJSON geometry — points, paths, areas (what `.widget("geojson")` writes). Plotted alongside any marker point. |
+| `geoJsonField` | map | Field holding GeoJSON geometry — points, paths, and areas (what `.widget("geojson")` writes). |
 
 > A register-backed `metric`/`chart` sums a register **resource** over its turnover; `metricField`
 > must name a resource column, and `filter` may reference its **dimensions**.
@@ -989,9 +980,8 @@ Geolocation renders on **MapLibre GL** over a minimal **monochrome basemap that 
 with the app theme** — no API key, no billing, and a collapsed ⓘ attribution. Data geometry is
 tinted with the brand color (`--primary`). Two storage shapes, both on a plain String attribute:
 
-- a **point** — a single `"lat,lng"` string (the simple picker / legacy format), or a numeric
-  `lat`/`lng` pair on the read surfaces;
-- **geometry** — a GeoJSON string holding points, paths (lines), and areas (polygons).
+- a numeric `lat`/`lng` pair on read surfaces; or
+- a GeoJSON string holding points, paths (lines), and areas (polygons).
 
 The built-in basemap is the keyless CARTO monochrome raster; apps that want a fully recolored vector
 basemap or an **offline self-hosted Protomaps** style can pass a style override to the map components.
@@ -999,8 +989,7 @@ basemap or an **offline self-hosted Protomaps** style can pass a style override 
 **1. Field inputs.** Opt a String attribute into a map control from the entity's `fields(...)`:
 
 ```java
-f.field("location").widget("map");        // single point → "lat,lng" (click/drag a marker, or type)
-f.field("serviceArea").widget("geojson"); // geometry editor → draw points/lines/polygons (GeoJSON)
+f.field("location").widget("geojson");    // draw points/lines/polygons as GeoJSON
 ```
 
 The geometry editor has Point / Line / Area tools: click to add vertices, double-click or **Finish**
@@ -1011,18 +1000,16 @@ detail/read view of either field renders the stored geometry as a small map auto
 
 ```java
 b.widget("Stores").type("map").width("full").catalog(Store.class)
- .config("geoField", "location")          // marker point ("lat,lng"); or latField/lngField
- .config("geoJsonField", "service_area")  // optional shape (GeoJSON) — paths/areas
+ .config("geoJsonField", "location")      // GeoJSON points/paths/areas
  .titleField("name");                      // popup label (falls back to a system identifier)
 ```
 
 **3. List map view** — add a Table ⇄ Map toggle to an entity's list, from its `list(ListSpec)`:
 
 ```java
-spec.map().field("location").label("name");            // "lat,lng" marker
 spec.map().lat("latitude").lng("longitude");           // split numeric fields
-spec.map().geoJson("serviceArea");                     // GeoJSON shapes (combine with a point if you like)
-spec.map().field("location").defaultView();            // open on the map, not the table
+spec.map().geoJson("location").label("name");          // GeoJSON points/paths/areas
+spec.map().geoJson("location").defaultView();          // open on the map, not the table
 ```
 
 Features in the widget and list views link back to the record; records with no geometry are skipped.
@@ -1051,14 +1038,6 @@ restrict who may run it — the endpoint rejects other callers **and the button 
 rendered page**; `ADMIN` always passes, like entity `@AccessControl`. Without `.roles(...)`, any
 authenticated user may run it and the handler self-authorizes via `ctx.user()`.
 
-```java
-b.actions("Connected accounts", a ->
-    a.action("connect-tochka")
-     .label("Connect Tochka Bank")
-     .logo("https://enter.tochka.com/favicon.ico")   // brand image, shown instead of a lucide icon
-     .handler(ctx -> ActionResult.redirect(oauth.beginConnect("tochka"))));
-```
-
 Button face — set **one**:
 
 | Builder | Renders |
@@ -1071,17 +1050,15 @@ Button face — set **one**:
 | Factory | Effect |
 |---------|--------|
 | `ok()` | acknowledge, nothing observable |
-| `message(text)` | success toast |
-| `refresh(text)` | toast + reload the current surface |
+| `reload()` | reload the current surface without feedback |
 | `toast(ActionToast.success(title).message(text).detail(detail))` | structured typed toast with an explicit severity and hierarchy |
 | `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
 | `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
-| `navigate("onno://…")` | route the client (internal `onno://` scheme; `{id}` is filled for row actions) |
-| `open(url)` | open an external URL in a new tab |
-| `redirect(url)` | **full-page** navigation of the top-level browser to an external `url` (e.g. an OAuth consent screen that redirects back) — emitted as the `onno://redirect/<url>` scheme |
+| `refresh(ActionToast)` / `refresh(ActionDialog)` | structured feedback + reload the current surface |
 
-`redirect(...)` differs from `navigate("onno://open/<url>")`, which opens a **new tab** (for viewing
-files); `redirect` replaces the current page so a provider round-trip lands back in the app.
+Navigation is declaration metadata, not a handler response: use
+`a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
+only refresh intent and structured feedback.
 
 ### Comments — `/api/comments`
 

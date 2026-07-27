@@ -20,7 +20,7 @@ public class RelatedListBuilder<E, J> {
 
     private final EntityConfigBuilder<E> parent;
     private final String name;
-    private final Class<?> joinCatalog;
+    private final Class<?> junction;
 
     private String via;
     private String display;
@@ -28,14 +28,14 @@ public class RelatedListBuilder<E, J> {
     private String label = "";
     private boolean hideInDetail = false;
 
-    RelatedListBuilder(EntityConfigBuilder<E> parent, String name, Class<J> joinCatalog) {
+    RelatedListBuilder(EntityConfigBuilder<E> parent, String name, Class<J> junction) {
         this.parent = parent;
         this.name = name;
-        this.joinCatalog = joinCatalog;
+        this.junction = junction;
     }
 
     /**
-     * The {@code Ref} field on the join catalog that scopes rows to the record being edited —
+     * The {@code Ref} field on the junction that scopes rows to the record being edited —
      * the back-reference to this catalog. Required.
      */
     public RelatedListBuilder<E, J> via(String field) {
@@ -49,7 +49,7 @@ public class RelatedListBuilder<E, J> {
     }
 
     /**
-     * The {@code Ref} field on the join catalog shown (and picked) per row — the "other side" of
+     * The {@code Ref} field on the junction shown (and picked) per row — the "other side" of
      * the relationship. Resolved to its description for display and used as the add-row picker's
      * target catalog. Required.
      */
@@ -65,11 +65,11 @@ public class RelatedListBuilder<E, J> {
 
     /**
      * Extra join-row fields to render as columns (e.g. a {@code role} or {@code sortOrder}
-     * attribute on the join catalog). When unset, the panel shows just the {@link #display} ref.
+     * attribute on the junction). When unset, the panel shows just the {@link #display} ref.
      * The {@link #display} ref is always rendered as the row's primary (name) column whether or
      * not it appears here, so an explicit list adds columns on top of the name rather than
      * replacing it; listing the display field is fine and is not duplicated. A field name that
-     * matches no attribute on the join catalog (a typo, or a field on a different catalog) is
+     * matches no attribute on the junction (a typo, or a field on a different entity) is
      * dropped with a {@code WARN} at metadata resolution.
      */
     public RelatedListBuilder<E, J> columns(String... fields) {
@@ -110,8 +110,8 @@ public class RelatedListBuilder<E, J> {
     }
 
     /** Add another related-list panel on the same entity. */
-    public <K> RelatedListBuilder<E, K> relatedList(String name, Class<K> joinCatalog) {
-        return parent.relatedList(name, joinCatalog);
+    public <K> RelatedListBuilder<E, K> relatedList(String name, Class<K> junction) {
+        return parent.relatedList(name, junction);
     }
 
     /** Switch back to configuring a plain field on the same entity. */
@@ -125,6 +125,6 @@ public class RelatedListBuilder<E, J> {
     }
 
     RelatedList build() {
-        return new RelatedList(name, joinCatalog, via, display, List.copyOf(columns), label, hideInDetail);
+        return new RelatedList(name, junction, via, display, List.copyOf(columns), label, hideInDetail);
     }
 }

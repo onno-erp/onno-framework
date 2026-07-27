@@ -10,6 +10,7 @@ import su.onno.metadata.PageWidgetDescriptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -114,6 +115,6 @@ class UiLayoutResolverTest {
     }
 
     private static UiLayout buildLayout(UiLayoutBuilder builder) {
-        return new UiLayout(builder.build(), builder.buildWidgets());
+        return new UiLayout(builder.build(), builder.buildWidgets(), List.of(), null, null);
     }
 }

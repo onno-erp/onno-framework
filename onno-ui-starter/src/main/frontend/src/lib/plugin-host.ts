@@ -93,10 +93,8 @@ export interface OnnoHost {
 export type OnnoReadApi = Pick<
   typeof api,
   | "listCatalog"
-  | "searchCatalog"
   | "getCatalogItem"
   | "listDocuments"
-  | "searchDocument"
   | "getDocument"
   | "getBalance"
   | "getTurnover"
@@ -139,10 +137,8 @@ const ui: OnnoUi = {
 
 const readApi: OnnoReadApi = {
   listCatalog: api.listCatalog,
-  searchCatalog: api.searchCatalog,
   getCatalogItem: api.getCatalogItem,
   listDocuments: api.listDocuments,
-  searchDocument: api.searchDocument,
   getDocument: api.getDocument,
   getBalance: api.getBalance,
   getTurnover: api.getTurnover,

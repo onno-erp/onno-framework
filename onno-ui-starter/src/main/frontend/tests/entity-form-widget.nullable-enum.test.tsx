@@ -15,7 +15,6 @@ vi.mock("@/lib/api", () => ({
 }));
 
 vi.mock("@/components/date-picker", () => ({ DatePicker: () => null }));
-vi.mock("@/components/geo-picker", () => ({ GeoPicker: () => null }));
 vi.mock("@/components/map-editor", () => ({ MapEditor: () => null }));
 vi.mock("@/components/image-picker", () => ({ ImagePicker: () => null, GalleryPicker: () => null }));
 vi.mock("@/components/file-picker", () => ({ FilePicker: () => null }));

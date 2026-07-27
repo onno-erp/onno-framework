@@ -404,7 +404,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                          org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews,
                                          UiProperties properties) {
         return new UiViewResolver(resolvedMetadata, entityViews.orderedStream().toList(),
-                properties.getList().getDefaultFeed(), properties.getList().getPageSize());
+                properties.getList().getPageSize());
     }
 
     @Bean

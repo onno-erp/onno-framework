@@ -1,6 +1,5 @@
 package su.onno.ui;
 
-import su.onno.annotations.EnumLabel;
 import su.onno.fields.Field;
 import su.onno.fields.Fields;
 import su.onno.repository.EnumerationPersistence;
@@ -118,11 +117,8 @@ public final class ActionRow {
 
     /**
      * {@code column} resolved back to a constant of {@code enumType}, or {@code null} if
-     * empty/unmatched. The raw stored value (the constant's deterministic UUID) is matched first —
-     * the reliable path, independent of labelling. The display string is only a fallback, matched
-     * against the constant name (exact then case-insensitive) and the {@code @EnumLabel} value —
-     * for a labelled enum the {@code {column}_display} carries the label ("Completed"), not the
-     * constant name ("COMPLETED"), which is why a plain {@code Enum.valueOf} isn't enough.
+     * empty/unmatched. Enum fields are stored as deterministic UUIDs; display labels and legacy
+     * constant-name strings are deliberately not accepted as storage identities.
      */
     public <E extends Enum<E>> E enumValue(String column, Class<E> enumType) {
         // 1) Raw UUID — how an enum value is actually stored (see EnumerationPersistence).
@@ -134,7 +130,7 @@ public final class ActionRow {
             try {
                 id = UUID.fromString(raw.toString());
             } catch (IllegalArgumentException ignored) {
-                // not a UUID — fall through to the text paths
+                return null;
             }
         }
         if (id != null) {
@@ -144,27 +140,6 @@ public final class ActionRow {
                 }
             }
         }
-        // 2) Display text: constant name (exact, then case-insensitive), then the @EnumLabel value.
-        String name = text(column);
-        if (name.isEmpty()) {
-            return null;
-        }
-        try {
-            return Enum.valueOf(enumType, name);
-        } catch (IllegalArgumentException ignored) {
-            // keep matching below
-        }
-        for (E constant : enumType.getEnumConstants()) {
-            if (constant.name().equalsIgnoreCase(name)) {
-                return constant;
-            }
-        }
-        for (E constant : enumType.getEnumConstants()) {
-            EnumLabel label = labelOf(enumType, constant);
-            if (label != null && label.value().equalsIgnoreCase(name)) {
-                return constant;
-            }
-        }
         return null;
     }
 
@@ -172,15 +147,6 @@ public final class ActionRow {
     public <T, E extends Enum<E>> E enumValue(Field<T, E> field, Class<E> enumType) {
         return enumValue(Fields.name(field), enumType);
     }
-
-    private static <E extends Enum<E>> EnumLabel labelOf(Class<E> enumType, E constant) {
-        try {
-            return enumType.getField(constant.name()).getAnnotation(EnumLabel.class);
-        } catch (NoSuchFieldException e) {
-            return null;
-        }
-    }
-
     /** The underlying row map (resolved values keyed by column) — an escape hatch for ad-hoc reads. */
     public Map<String, Object> values() {
         return data;

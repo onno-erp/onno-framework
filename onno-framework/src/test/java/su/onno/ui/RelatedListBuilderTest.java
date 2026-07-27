@@ -28,7 +28,7 @@ class RelatedListBuilderTest {
         assertThat(lists).hasSize(1);
         RelatedList rl = lists.get(0);
         assertThat(rl.name()).isEqualTo("doctors");
-        assertThat(rl.joinCatalog()).isEqualTo(Join.class);
+        assertThat(rl.junction()).isEqualTo(Join.class);
         assertThat(rl.via()).isEqualTo("clinic");
         assertThat(rl.display()).isEqualTo("doctor");
         assertThat(rl.columns()).containsExactly("doctor", "role");

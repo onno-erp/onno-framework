@@ -58,8 +58,7 @@ export interface AttributeMeta {
   /** Disable values selected in sibling rows of this tabular section. */
   uniqueWithinSection?: boolean;
   isEnum: boolean;
-  enumName?: string;
-  /** Display title of the enumeration type (from @Enumeration.title); falls back to enumName. */
+  /** Display title of the enumeration type (from @Enumeration.title). */
   enumTitle?: string;
   enumValues?: EnumValue[];
   /** Sensitive attribute: write-only, rendered as a password control, masked in views. */
@@ -139,7 +138,7 @@ export interface RelatedListMeta {
   /** Heading; blank means derive one from {@link name}. */
   label: string;
   /** Logical name of the junction the panel reads (and, for a catalog, writes). */
-  joinCatalog: string;
+  sourceName: string;
   /** Whether the junction is a join catalog or an information register. Defaults to "catalog". */
   sourceKind?: "catalog" | "register";
   /** Whether the panel is read-only (no inline add/remove) — true for register-backed junctions. */
@@ -409,13 +408,8 @@ export interface ProcessSnapshot {
   version: number;
 }
 
-/**
- * The result of a custom EntityView action ({@link ActionSpec} handler): an optional success
- * toast, an optional {@code onno://} route to navigate to, and whether to refresh the surface.
- */
+/** Typed feedback and refresh intent returned by a custom EntityView action handler. */
 export interface ActionResult {
-  message?: string | null;
-  navigate?: string | null;
   refresh?: boolean;
   feedback?: ActionFeedback | null;
 }

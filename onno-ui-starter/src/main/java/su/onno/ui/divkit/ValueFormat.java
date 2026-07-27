@@ -18,7 +18,7 @@ import java.util.Locale;
  * <p>The hint is interpreted by the value's shape:</p>
  * <ul>
  *   <li><b>Numbers</b> — {@code "integer"}, {@code "decimal"}, {@code "percent"},
- *       {@code "currency"} (or {@code "currency:EUR"}), or a {@link DecimalFormat} pattern such as
+ *       an explicit ISO currency such as {@code "currency:EUR"}, or a {@link DecimalFormat} pattern such as
  *       {@code "#,##0.00"}.</li>
  *   <li><b>Dates / date-times</b> — a date pattern, e.g. {@code "dd-MM-yy"}; uppercase {@code D}/{@code Y}
  *       are normalized to day/year so {@code "DD-MM-YYYY"} works as written.</li>
@@ -47,7 +47,7 @@ final class ValueFormat {
     private static boolean isNumberSpec(String fmt) {
         String l = fmt.toLowerCase(Locale.ROOT);
         return l.equals("integer") || l.equals("decimal") || l.equals("percent")
-                || l.startsWith("currency") || fmt.matches(".*[#0].*");
+                || l.matches("currency:[a-z]{3}") || fmt.matches(".*[#0].*");
     }
 
     private static String number(String raw, String fmt) {
@@ -70,14 +70,13 @@ final class ValueFormat {
                 pf.setMaximumFractionDigits(2);
                 return pf.format(n);
             }
-            if (l.startsWith("currency")) {
+            if (l.startsWith("currency:")) {
                 NumberFormat cf = NumberFormat.getCurrencyInstance();
-                int colon = fmt.indexOf(':');
-                String code = colon >= 0 ? fmt.substring(colon + 1).trim().toUpperCase(Locale.ROOT) : "USD";
+                String code = fmt.substring(fmt.indexOf(':') + 1).trim().toUpperCase(Locale.ROOT);
                 try {
                     cf.setCurrency(Currency.getInstance(code));
-                } catch (RuntimeException ignored) {
-                    // Unknown code — keep the locale's default currency.
+                } catch (RuntimeException invalidCurrency) {
+                    return null;
                 }
                 return cf.format(n);
             }

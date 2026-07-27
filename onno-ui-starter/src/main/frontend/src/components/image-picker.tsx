@@ -2,14 +2,14 @@ import { useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { ImagePlus, Loader2, Trash2, Upload, X } from "lucide-react";
 import { uploadMedia } from "@/lib/api";
+import { looksLikeImageUrl } from "@/lib/cell-format";
 import { cn } from "@/lib/utils";
 
 /**
  * An image input for an attribute whose field hint sets {@code .widget("image")} (or
  * {@code "avatar"} for a small round variant). The chosen file is streamed to {@code POST /api/media}
  * (see MediaController) and only the returned reference URL is stored in the attribute — so a plain
- * String column holds it, no base64-sized TEXT needed. Legacy {@code data:} base64 values still
- * render fine, so older records keep working.
+ * String column holds it, no base64-sized TEXT needed.
  */
 
 // Client-side guard mirroring the server's onno.media.max-file-size default (10 MB). The server
@@ -48,7 +48,7 @@ export function ImagePicker({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const avatar = variant === "avatar";
-  const hasImage = typeof value === "string" && value.length > 0;
+  const hasImage = typeof value === "string" && looksLikeImageUrl(value);
 
   const accept = async (file: File | undefined | null) => {
     if (!file || busy) return;
@@ -152,9 +152,7 @@ export function ImagePicker({
   );
 }
 
-// Several images are stored newline-joined in one String attribute. Stored-media URLs (and legacy
-// base64 data URLs) contain no newline, so the join is unambiguous and the server splits on it too
-// (SurfaceDivBuilder).
+// Several stored-media URLs are newline-joined in one String attribute.
 const GALLERY_SEP = "\n";
 
 /**
@@ -176,7 +174,7 @@ export function GalleryPicker({
   const urls = (value ?? "")
     .split(GALLERY_SEP)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((url) => !!url && looksLikeImageUrl(url));
 
   const addFiles = async (files: FileList | File[] | null | undefined) => {
     if (!files) return;

@@ -25,38 +25,19 @@ type IconLoader = () => Promise<{ default: ComponentType<IconProps> }>;
 const IMPORTS = dynamicIconImports as unknown as Record<string, IconLoader>;
 const lazyCache = new Map<string, ComponentType<IconProps>>();
 
-// lucide renamed many icons; the old names are still what most people (and our older
-// layouts/docs) type, but they aren't keys in dynamicIconImports — so without this they'd
-// silently fall back to the circle. Map the well-known deprecated names to current ones.
-const ALIASES: Record<string, string> = {
-  home: "house",
-  "bar-chart": "chart-column",
-  "bar-chart-2": "chart-column",
-  "bar-chart-3": "chart-column",
-  "bar-chart-4": "chart-column",
-  "bar-chart-horizontal": "chart-bar",
-  "pie-chart": "chart-pie",
-  "line-chart": "chart-line",
-  "area-chart": "chart-area",
-  "scatter-chart": "chart-scatter",
-  "candlestick-chart": "chart-candlestick",
-  "gantt-chart": "chart-gantt",
-};
-
 function lucideFor(name: string): ComponentType<IconProps> | null {
-  const key = ALIASES[name] ?? name;
-  const loader = IMPORTS[key];
+  const loader = IMPORTS[name];
   if (!loader) return null;
-  let Component = lazyCache.get(key);
+  let Component = lazyCache.get(name);
   if (!Component) {
     Component = lazy(loader);
-    lazyCache.set(key, Component);
+    lazyCache.set(name, Component);
   }
   return Component;
 }
 
 /**
- * Renders a lucide icon by its kebab-case {@code name} (e.g. {@code "bar-chart"}).
+ * Renders a lucide icon by its kebab-case {@code name} (e.g. {@code "chart-column"}).
  * Unknown names fall back to a circle so an icon is never blank. The Suspense fallback
  * is a same-size spacer, so the async load doesn't shift surrounding layout.
  */

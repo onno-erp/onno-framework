@@ -10,8 +10,8 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
 /**
  * The map alternative to the list grid (see {@link EntityListWidget}): fetches the entity's rows and
  * plots the ones with geometry as clustered markers/shapes on a themed MapLibre map. The geo columns
- * come from the list's resolved map config — a point ({@code geoField} or {@code latField}/
- * {@code lngField}) and/or a {@code geoJsonField} (see {@link geoSourceFrom}). Features link back to
+ * come from the list's resolved map config — a numeric {@code latField}/{@code lngField} pair
+ * and/or a {@code geoJsonField} (see {@link geoSourceFrom}). Features link back to
  * each record; live data events refetch.
  *
  * <p>Rows are pulled in server-page-sized batches (the list endpoint clamps {@code limit} to 500)
@@ -24,7 +24,6 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
  */
 
 export type ListMapConfig = {
-  geoField?: string;
   latField?: string;
   lngField?: string;
   geoJsonField?: string;
@@ -98,17 +97,26 @@ export function ListMapView({
     (async () => {
       const all: EntityRecord[] = [];
       let totalRows = 0;
+      let cursor: string | null = null;
       try {
         while (all.length < CAP) {
-          const params = new URLSearchParams({ limit: String(PAGE), offset: String(all.length) });
+          const params = new URLSearchParams({ limit: String(PAGE) });
+          if (cursor) params.set("cursor", cursor);
           const r = await fetch(`/api/list/${kind}/${name}?${params.toString()}`, { credentials: "include" });
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const data: { total: number; rows: EntityRecord[] } = await r.json();
+          const data: {
+            total?: number;
+            rows: EntityRecord[];
+            nextCursor?: string | null;
+            hasMore?: boolean;
+          } = await r.json();
           if (!alive) return;
           const batch = data.rows ?? [];
           all.push(...batch);
           totalRows = data.total ?? all.length;
-          if (batch.length < PAGE || all.length >= totalRows) break;
+          const nextCursor = data.nextCursor ?? null;
+          if (!data.hasMore || !nextCursor || nextCursor === cursor || all.length >= CAP) break;
+          cursor = nextCursor;
         }
       } catch {
         // Fall through with whatever loaded — an empty map beats a spinner that never resolves.

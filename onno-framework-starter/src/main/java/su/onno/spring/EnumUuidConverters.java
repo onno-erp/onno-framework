@@ -105,9 +105,8 @@ public final class EnumUuidConverters {
      * {@link String}. Without this converter Spring Data falls through to {@code Enum.valueOf(<uuid
      * string>)} and throws {@code IllegalArgumentException: No enum constant ...} (issue #168).
      *
-     * <p>The value is parsed as a UUID and resolved through {@link EnumerationPersistence}; if it is
-     * not a UUID (truly legacy data persisted as the enum's {@code name()} before onno used UUIDs)
-     * it falls back to {@link Enum#valueOf}, preserving the historical behaviour.
+     * <p>The value must be a UUID and is resolved through {@link EnumerationPersistence}. Legacy
+     * enum-name values must be converted with the 2.0 migration tool before this reader runs.
      */
     @ReadingConverter
     public static final class StringToEnum implements GenericConverter {
@@ -133,11 +132,8 @@ public final class EnumUuidConverters {
             if (source == null) return null;
             String text = ((String) source).trim();
             if (text.isEmpty()) return null;
-            UUID id = tryParseUuid(text);
-            if (id != null) {
-                return EnumerationPersistence.resolveValue(targetType.getType(), id);
-            }
-            return Enum.valueOf((Class) targetType.getType(), text);
+            UUID id = UUID.fromString(text);
+            return EnumerationPersistence.resolveValue(targetType.getType(), id);
         }
     }
 
