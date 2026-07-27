@@ -514,7 +514,11 @@ public class PostingEngine {
     @SuppressWarnings("unchecked")
     private void writeBackDocument(Handle handle, DocumentDescriptor desc, DocumentObject document) {
         // Update document-level attributes
-        List<AttributeDescriptor> attrs = desc.attributes();
+        // Secret attributes are encrypted by the repository save path. The domain object holds
+        // plaintext after loading, so binding them here would overwrite the ciphertext.
+        List<AttributeDescriptor> attrs = desc.attributes().stream()
+                .filter(attr -> !attr.secret())
+                .toList();
         if (!attrs.isEmpty()) {
             String setClauses = attrs.stream()
                     .map(a -> a.columnName() + " = :" + a.columnName())
@@ -540,7 +544,9 @@ public class PostingEngine {
                 if (!(rowObj instanceof TabularSectionRow row)) continue;
                 if (row.getId() == null) continue;
 
-                List<AttributeDescriptor> rowAttrs = ts.attributes();
+                List<AttributeDescriptor> rowAttrs = ts.attributes().stream()
+                        .filter(attr -> !attr.secret())
+                        .toList();
                 if (rowAttrs.isEmpty()) continue;
 
                 String rowSetClauses = rowAttrs.stream()
