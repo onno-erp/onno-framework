@@ -22,10 +22,14 @@ GET /api/documents/{name}/{id}           one document, with tabular sections inl
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
-GET /api/process-definitions                 registered stable keys and payload classes
+GET /api/process-definitions                 latest versions plus typed graph descriptors
+GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
 GET /api/processes/{instanceId}              durable process snapshot
 GET /api/processes/{instanceId}/history      append-only transition audit trail
+GET /api/processes/{instanceId}/executions   execution tokens, waits, timers, and child links
+POST /api/processes/{instanceId}/cancel      body: {"reason":"…"}
+POST /api/processes/{instanceId}/migrate     migrate through registered definition versions
 GET /api/tasks                               caller's candidate/assigned open work
 POST /api/tasks/{workItemId}/claim
 GET /api/tasks/{workItemId}/history       ordered task audit trail
@@ -44,6 +48,19 @@ and the transfer is durable. `GET /api/task-assignees?q=` searches the configure
 catalog and returns `{actorId, username, display, avatarUrl}`. `actorId` is the stable catalog record
 UUID; username/display/avatar are live presentation data. `avatarUrl` is present when the identity
 catalog has an attribute configured with the `avatar`, `image`, or `photo` field widget.
+
+Definition responses include `{key,title,version,payloadType,graph}`. `graph.startStepKey` and each
+node's `{stepKey,type,routes}` are safe structural metadata; payload-dependent assignments are not
+exposed. Instance snapshots retain `currentStep` as compatibility sugar, but `activeSteps` is the
+authority when parallel branches exist. They also carry `definitionVersion`, root/parent links,
+completion/cancellation timestamps, and the required cancellation reason. Execution rows identify
+the durable token, parent branch token, node type/status, due time, and child instance.
+
+Cancellation is authorized by the definition's typed `cancellationAssignment(payload)` (plus the
+starter and `ADMIN`); it cancels descendants and all live work. Migration is explicit: the
+application must keep the stored and target definition versions registered and supply a
+`ProcessDefinitionMigration` that maps every active token. Missing versions, migration edges, or
+token mappings fail atomically.
 
 ```jsonc
 // GET /api/tasks

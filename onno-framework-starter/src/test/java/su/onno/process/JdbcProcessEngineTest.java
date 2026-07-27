@@ -46,7 +46,8 @@ class JdbcProcessEngineTest {
         engine = new JdbcProcessEngine(
                 jdbi, new ProcessDefinitions(List.of(definition)),
                 registry,
-                new ObjectMapper().findAndRegisterModules(),
+                new JacksonProcessPayloadCodec(
+                        new ObjectMapper().findAndRegisterModules()),
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 events::add);
     }

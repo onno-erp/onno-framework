@@ -23,7 +23,8 @@ startup.
 
 ## Tool Groups
 
-- Discovery: `describe_metadata`
+- Discovery: `describe_metadata` (readable entities/enums plus latest versioned typed process
+  graph descriptors; no payload-dependent task assignments)
 - Reads: `list_catalog`, `get_catalog`, `list_documents`, `get_document`
 - Registers: `register_balance`, `register_movements`
 - Writes: `create_catalog`, `update_catalog`, `delete_catalog`, `create_document`,

@@ -26,11 +26,13 @@ Implemented:
 - Durable outbox table and core outbox writer
 - Kafka starter foundation with CloudEvent relay, service registry, and remote reference client
 - Typed-Java posting (`Postable.handlePosting`) writing document-to-register movements
-- Durable typed business processes: stable definition/step keys, typed payloads and human-task
-  outcome enums, node-handle transitions, structural validation, persisted instances/transitions,
-  role/user candidate work items, claim/delegate/complete commands, durable task audit, authenticated
-  task API, stable identity-record ownership, typed task-to-domain links, employee-backed
-  delegation picker, and live task widget
+- Complete durable typed business processes: version-pinned definitions and explicit typed
+  migrations; human, automatic, decision, timer, structured parallel fork/join, subprocess, and
+  terminal nodes; token-based execution with nested branches; cancellation; persisted
+  instances/tokens/transitions; role/user candidate work items; claim/delegate/complete commands;
+  durable task audit; authenticated process/task APIs; stable identity-record ownership; typed
+  task-to-domain links; employee-backed delegation picker; background timer/subprocess advancement;
+  and the live task widget
 - Shared typed field tokens across queries and UI authoring: getter references for list columns,
   filters, field hints, related lists, form dependencies, state-aware rows, and widget field config
 - Declarative business rule metadata (`Validated` / `BusinessRule`) and lightweight validation
@@ -62,8 +64,6 @@ It should remain friendly to normal Java:
 ## Near-Term Next Work
 
 Good next slices:
-- Add timers, automatic steps, typed decisions, cancellation, definition-version migration,
-  parallel fork/join, and subprocess nodes to the process graph
 - UI widgets for hierarchy browsing and posting-preview inspection
 - Richer live collaboration signals, such as record-level locks and stale-record banners (record-level **presence markers** now ship — see below)
 - Auto-scheduled / retrying Kafka outbox relay (today `OutboxRelay.relayPending()` is driven by the app's own `@Scheduled` bean)

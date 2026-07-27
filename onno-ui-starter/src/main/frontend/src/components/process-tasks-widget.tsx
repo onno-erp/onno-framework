@@ -70,6 +70,8 @@ const historyEventText = (event: ProcessWorkItemEvent) => {
     }
     case "COMPLETED":
       return event.actor ? `${actor} completed the task` : "Task completed";
+    case "CANCELLED":
+      return event.actor ? `${actor} cancelled the task` : "Task cancelled";
   }
 };
 
@@ -129,6 +131,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       await reload();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : "Could not claim task");
+      await reload();
     } finally {
       setBusy(null);
     }
@@ -143,6 +146,8 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       await reload();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : "Could not complete task");
+      setCompleting(null);
+      await reload();
     } finally {
       setBusy(null);
     }

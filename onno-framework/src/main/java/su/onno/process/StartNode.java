@@ -19,4 +19,9 @@ public final class StartNode<P, S extends Enum<S> & ProcessStepKey> extends Proc
     ProcessNode<P, S> target() {
         return target;
     }
+
+    @Override
+    public ProcessNodeType type() {
+        return ProcessNodeType.START;
+    }
 }

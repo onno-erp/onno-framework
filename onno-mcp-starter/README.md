@@ -6,8 +6,8 @@ Exposes an onno application's business model to LLM clients over the
 Because onno is metadata-driven, the tools are **generated generically** from the
 `MetadataRegistry` — there is no per-entity code. Adding a `@Catalog`, `@Document`, or
 `@AccumulationRegister` to your app makes it reachable over MCP automatically, and a
-`describe_metadata` discovery tool lets the model learn the exact entity, field, and enum
-names at runtime.
+`describe_metadata` discovery tool lets the model learn the exact entity, field, enum, and latest
+typed process-graph names at runtime.
 
 Every tool call runs **as the authenticated user** and is enforced through the same
 `UiAccessService` deny-by-default role model as the web UI. The LLM is just another
@@ -24,7 +24,7 @@ security filter chain scoped to that endpoint that reuses your existing
 
 | Tool | Kind | Purpose |
 | --- | --- | --- |
-| `describe_metadata` | read | List readable catalogs/documents/registers with fields and enum values. |
+| `describe_metadata` | read | List readable catalogs/documents/registers plus versioned typed process graph descriptors, fields, and enum values. |
 | `list_catalog`, `get_catalog` | read | Query catalog records (search or full list; single record). |
 | `list_documents`, `get_document` | read | Query documents (optional date range; single document with tabular sections). |
 | `register_balance`, `register_movements` | read | Accumulation register balances and movements. |

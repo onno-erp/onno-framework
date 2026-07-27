@@ -22,17 +22,18 @@ class SchemaGeneratorTest {
         SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
-        assertThat(ddl).hasSize(7);
+        assertThat(ddl).hasSize(8);
         assertThat(ddl.get(1)).contains("CREATE TABLE IF NOT EXISTS onno_outbox");
-        assertThat(ddl.get(3))
+        assertThat(ddl.get(3)).contains("CREATE TABLE IF NOT EXISTS onno_process_tokens");
+        assertThat(ddl.get(4))
                 .contains("_assignee_display VARCHAR(255)")
                 .contains("_subject_kind VARCHAR(32)")
                 .contains("_subject_entity VARCHAR(255)")
                 .contains("_subject_id UUID")
                 .contains("_subject_label VARCHAR(255)");
-        assertThat(ddl.get(4)).contains("CREATE TABLE IF NOT EXISTS onno_process_work_item_events");
+        assertThat(ddl.get(5)).contains("CREATE TABLE IF NOT EXISTS onno_process_work_item_events");
 
-        String sql = ddl.get(6);
+        String sql = ddl.get(7);
         assertThat(sql).contains("CREATE TABLE IF NOT EXISTS catalog_test_products");
         assertThat(sql).contains("_id UUID PRIMARY KEY");
         assertThat(sql).contains("_code VARCHAR(9)");
@@ -95,5 +96,56 @@ class SchemaGeneratorTest {
                 .list());
 
         assertThat(columns).contains("_IS_FOLDER", "_PARENT", "_VERSION", "FULL_NAME", "UNIT_PRICE", "UNIT");
+    }
+
+    @Test
+    void execute_backfillsExecutionTokenForLegacyActiveProcess() {
+        MetadataRegistry registry = new MetadataRegistry();
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:mem:process-token-backfill;DB_CLOSE_DELAY=-1");
+        Jdbi jdbi = Jdbi.create(ds);
+
+        jdbi.useHandle(handle -> {
+            handle.execute(DdlRenderer.createTable(SchemaModelBuilder.processInstancesTable()));
+            handle.execute("""
+                    create table onno_process_work_items (
+                        _id UUID primary key,
+                        _instance_id UUID references onno_process_instances(_id) not null,
+                        _step_key VARCHAR(255) not null,
+                        _title VARCHAR(255) not null,
+                        _status VARCHAR(32) not null,
+                        _created_at TIMESTAMP not null,
+                        _version INTEGER default 0 not null
+                    )
+                    """);
+            java.util.UUID instanceId = java.util.UUID.randomUUID();
+            java.util.UUID workItemId = java.util.UUID.randomUUID();
+            handle.createUpdate("""
+                    insert into onno_process_instances
+                        (_id, _definition_key, _definition_version, _payload, _current_step,
+                         _status, _started_at, _updated_at, _version)
+                    values (:id, 'legacy', 1, '{}', 'review', 'ACTIVE',
+                            current_timestamp, current_timestamp, 0)
+                    """).bind("id", instanceId).execute();
+            handle.createUpdate("""
+                    insert into onno_process_work_items
+                        (_id, _instance_id, _step_key, _title, _status,
+                         _created_at, _version)
+                    values (:id, :instance, 'review', 'Review', 'OPEN',
+                            current_timestamp, 0)
+                    """).bind("id", workItemId).bind("instance", instanceId).execute();
+        });
+
+        new SchemaGenerator(registry).execute(jdbi);
+
+        int tokenCount = jdbi.withHandle(handle -> handle.createQuery("""
+                        select count(*) from onno_process_tokens
+                         where _status = 'WAITING_HUMAN' and _step_key = 'review'
+                        """).mapTo(Integer.class).one());
+        int linkedWorkItemCount = jdbi.withHandle(handle -> handle.createQuery("""
+                        select count(*) from onno_process_work_items where _token_id is not null
+                        """).mapTo(Integer.class).one());
+        assertThat(tokenCount).isEqualTo(1);
+        assertThat(linkedWorkItemCount).isEqualTo(1);
     }
 }

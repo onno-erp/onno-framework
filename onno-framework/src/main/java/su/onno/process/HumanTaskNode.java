@@ -48,6 +48,11 @@ public final class HumanTaskNode<P, S extends Enum<S> & ProcessStepKey, O extend
         return Map.copyOf(transitions);
     }
 
+    @Override
+    public ProcessNodeType type() {
+        return ProcessNodeType.HUMAN_TASK;
+    }
+
     /** A typed, not-yet-connected task outcome. */
     public static final class OutcomeTransition<
             P, S extends Enum<S> & ProcessStepKey, O extends Enum<O>> {

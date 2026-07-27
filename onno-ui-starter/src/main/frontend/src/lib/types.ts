@@ -345,7 +345,9 @@ export type ProcessWorkItemStatus = "OPEN" | "CLAIMED" | "COMPLETED" | "CANCELLE
 export interface ProcessWorkItem {
   id: string;
   instanceId: string;
+  tokenId?: string | null;
   definitionKey: string;
+  definitionVersion: number;
   stepKey: string;
   title: string;
   status: ProcessWorkItemStatus;
@@ -375,7 +377,7 @@ export interface ProcessWorkItemEvent {
   id: string;
   workItemId: string;
   instanceId: string;
-  type: "CREATED" | "CLAIMED" | "DELEGATED" | "COMPLETED";
+  type: "CREATED" | "CLAIMED" | "DELEGATED" | "COMPLETED" | "CANCELLED";
   actorId?: string | null;
   actor?: string | null;
   fromAssigneeId?: string | null;
@@ -390,12 +392,20 @@ export interface ProcessWorkItemEvent {
 export interface ProcessSnapshot {
   id: string;
   definitionKey: string;
-  currentStep: string;
+  definitionVersion: number;
+  currentStep?: string | null;
+  activeSteps: string[];
   status: "ACTIVE" | "COMPLETED" | "CANCELLED";
+  rootInstanceId: string;
+  parentInstanceId?: string | null;
+  parentTokenId?: string | null;
   startedById: string;
   startedBy: string;
   startedAt: string;
   updatedAt: string;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
   version: number;
 }
 

@@ -32,8 +32,8 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 | Module | Group | Role |
 | --- | --- | --- |
-| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed process contracts/schema, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
-| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, number generation, secret cipher, background jobs. |
+| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, complete typed process graph/runtime/schema, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
+| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the UI starter but disabled by default. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
@@ -116,25 +116,31 @@ In brief:
 The `su.onno.process` package models long-running coordination that does not belong in a document
 status field:
 
-- `ProcessDefinition<P,S>` is an application Spring bean with a stable persisted key, a declared
-  payload class, and one lazily built, validated route graph. `P` is the typed payload; `S` is an
-  enum implementing `ProcessStepKey`.
-- `ProcessGraph<P,S>` creates `HumanTaskNode<P,S,O>` and `EndNode<P,S>` handles. Routes connect those
-  handles directly; no string node lookups or expression language are involved.
+- `ProcessDefinition<P,S>` is an application Spring bean with a stable persisted key, positive
+  version, declared payload class, and one lazily built, validated route graph. `P` is the typed
+  payload; `S` is an enum implementing `ProcessStepKey`. Instances pin the exact version they
+  started on.
+- `ProcessGraph<P,S>` creates typed human, automatic, decision, timer, structured parallel
+  fork/join, subprocess, and end-node handles. Routes connect those handles directly; no string
+  node lookups or expression language are involved. `descriptor()` exposes a safe structural view
+  for generic clients.
 - `HumanTask<P,O>` declares an enum outcome type, a payload-dependent title, and a
   `TaskAssignment` of candidate stable identities/roles. `TaskAssignment.identities(Ref<?>...)`
   keeps employee routing typed and stable across login/email changes. Optional `subject(payload)`
   returns a typed catalog/document `Ref<T>` that becomes a durable task-to-record link;
   `subjectLabel(payload)` stores its human-readable snapshot for the inbox.
-  Definition validation requires every enum outcome to
-  have a transition and rejects duplicate keys, cross-graph connections, missing start targets,
-  and unreachable nodes.
-- `JdbcProcessEngine` persists payload JSON, instances, work items, transition history, and ordered
-  task audit events in the framework-managed `onno_process_*` tables. Claim, delegate, and complete
-  use row locks plus optimistic
+  Definition validation requires every enum outcome to have a transition and rejects duplicate
+  keys, cross-graph connections, missing start targets, unreachable nodes, incomplete typed
+  branches, unstructured joins, and immediate-only cycles.
+- Core `JdbcProcessEngine` persists payload JSON, version-pinned instances, execution tokens,
+  timers, parent/child links, work items, transition history, and ordered task audit events in the
+  framework-managed `onno_process_*` tables. Parent-token ancestry makes nested fork/join durable.
+  Claim, delegate, complete, cancel, migrate, and token advancement use row locks plus optimistic
   versions. A claimed item is private to its assignee; `ADMIN` bypasses candidate/assignee checks.
 - `ProcessController` is the authenticated boundary: definitions/start/instance reads plus a
-  role-scoped task inbox and claim/delegate/history/complete commands. The `tasks` page widget
+  role-scoped task inbox and claim/delegate/history/complete commands. It also exposes versioned
+  graph metadata, the caller's instances, execution tokens, cancellation, and migration. The
+  `tasks` page widget
   resolves delegation targets and their live avatar/photo through the layout identity catalog,
   opens typed task subjects in the shell's adjacent detail pane, and provides the same loop to
   humans. `JdbcProcessEngine` publishes `ProcessTasksChangedEvent` only after its JDBI
@@ -146,11 +152,23 @@ service and return `TaskAssignment.identities(selectedEmployeeRef)`. The employe
 the stable task owner; login and display name are mutable snapshots only. The authenticated
 principal is resolved through `Layout.identity(...)` to that same UUID.
 
-The typed Java definition remains the source of truth. Stable definition/step keys are persisted;
-HTTP outcomes are enum constant names validated against the active task's declared enum. Timers,
-automatic/decision/fork/join/subprocess nodes, cancellation, and definition-version migration remain
-future work. Documents still record business events and posting still writes register movements; a
-process coordinates work across them.
+The typed Java definition remains the source of truth. Stable definition/step keys and the exact
+definition version are persisted; HTTP outcomes are enum constant names validated against the
+active task's declared enum. `AutomaticStep` returns the payload to persist and receives a stable
+execution idempotency key; external side effects belong in an outbox. `ProcessTimer` stores an
+absolute due time. A paired typed parallel fork/join creates one branch token per enum value.
+`SubprocessCall` maps parent payload to a version-pinned child and merges a completed child payload
+back into the parent. JobRunr only wakes the durable timer/subprocess poller; database state decides
+what can advance.
+
+Definition evolution is explicit. Keep old and new `ProcessDefinition` beans registered under the
+same key with different versions, register a forward `ProcessDefinitionMigration`, then invoke
+`ProcessEngine.migrate`. Each migration maps every active token id to a typed target step and may
+transform the payload; missing mappings roll the transaction back. Cancellation similarly closes
+all live tokens, work items, timers, and descendants in one audited operation. Documents still
+record business events and posting still writes register movements; a process coordinates work
+across them. Authenticated MCP `describe_metadata` includes the latest safe process graph
+descriptors alongside entity metadata; it never exposes payload-dependent candidate assignments.
 
 ```java
 enum PurchaseStep implements ProcessStepKey {
@@ -314,10 +332,11 @@ model via the real generated endpoints below or the MCP `describe_metadata` tool
 contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET__` redaction) is in
 [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
 
-Durable process routes are `GET /api/process-definitions`,
-`POST /api/processes/{definitionKey}`, `GET /api/processes/{id}` plus `/history`, and
-`GET /api/tasks` with task claim, delegate, history, and complete endpoints. Start authorization comes from
-`ProcessDefinition.startAssignment(payload)`; inbox/task authorization comes from each
+Durable process routes are `GET /api/process-definitions`, `GET /api/processes`,
+`POST /api/processes/{definitionKey}`, `GET /api/processes/{id}` plus `/history` and `/executions`,
+`POST /api/processes/{id}/cancel|migrate`, and `GET /api/tasks` with task claim, delegate, history,
+and complete endpoints. Start authorization comes from `ProcessDefinition.startAssignment(payload)`;
+cancellation comes from `cancellationAssignment(payload)`; inbox/task authorization comes from each
 `HumanTask.assignment(payload)`. Actors always come from the authenticated principal.
 
 | Area | Endpoints (served by) |
