@@ -201,6 +201,12 @@ export interface AppConfig {
   // Absolute URLs of stylesheets the widget build emitted (Tailwind over the widget sources). The SPA
   // injects a <link> for each before loading the modules, so a widget's own utility classes get CSS.
   pluginStyles?: string[];
+  // Present only when an observability sink is configured server-side. The bearer credential never
+  // reaches the browser; events post to the authenticated same-origin relay.
+  telemetry?: {
+    enabled: boolean;
+    sampleRate: number;
+  };
 }
 
 // The result of the server's framework-version check (see UpdateChecker / ReleaseController).

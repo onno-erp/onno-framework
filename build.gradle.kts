@@ -73,6 +73,7 @@ val publishedModules = mapOf(
     "onno-cluster-starter" to "Cross-node delivery of onno entity-change events for horizontal scale-out via a pluggable bus (default Postgres LISTEN/NOTIFY).",
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
+    "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome telemetry with a replaceable sink and buffered cloud exporter.",
     "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
 
@@ -244,7 +245,8 @@ val configNotesDir = file("docs/_config")
 // Render order + human section titles. One entry per published starter that owns `onno.*` props.
 val configModuleProjects = listOf(
     "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
-    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter", "onno-desktop-starter",
+    "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter",
+    "onno-observability-starter", "onno-desktop-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each

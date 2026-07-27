@@ -26,6 +26,13 @@ DivKit emitters (`/api/divkit/**`), the theme/config endpoints, an SSE event str
 controller, and a static-resource handler that serves the bundled frontend from
 `classpath:/static/ui/`.
 
+The UI starter also includes `onno-observability-starter` transitively. Telemetry remains disabled
+unless `onno.telemetry.enabled=true`; when enabled, the browser records sampled route views,
+normalized `/api/**` timing/outcomes, and error types through the authenticated same-origin
+`POST /api/telemetry/events` endpoint. The collector token is used only by the backend exporter and
+is never returned by `/api/config` or sent to the browser. See
+[onno-observability-starter](../onno-observability-starter/README.md).
+
 > The frontend is packaged into the jar by Gradle (`buildFrontend` → `processResources` copies
 > `src/main/frontend/dist` to `static/ui/`). `static/ui/` is not committed; build the module to
 > produce it.

@@ -26,6 +26,7 @@ import { UpdateNotice } from "@/components/update-notice";
 import { Toaster } from "@/components/ui/toast";
 import { BASE_PATH } from "@/lib/base-path";
 import { ActionFeedbackHost } from "@/lib/action-feedback";
+import { configureTelemetry, recordRouteView } from "@/lib/telemetry";
 
 function ProtectedApp() {
   const { user, loading } = useAuth();
@@ -45,6 +46,7 @@ function ProtectedApp() {
         // its module renders, then load the modules.
         injectPluginStyles(cfg?.pluginStyles);
         void loadPlugins(cfg?.pluginScripts);
+        configureTelemetry(cfg?.telemetry);
       })
       .catch(() => {
         // No config / offline — the built-in widgets still work; custom ones stay unregistered.
@@ -53,6 +55,10 @@ function ProtectedApp() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    recordRouteView(location.pathname);
+  }, [location.pathname]);
 
   if (loading) {
     return (

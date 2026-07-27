@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import su.onno.observability.TelemetrySink;
 
 @RestController
 @RequestMapping("/api")
@@ -20,15 +21,18 @@ public class ThemeController {
     private final UiMessages messages;
     private final ObjectProvider<UpdateChecker> updateChecker;
     private final ObjectProvider<WidgetPluginScanner> widgetPlugins;
+    private final ObjectProvider<TelemetrySink> telemetrySink;
 
     public ThemeController(UiProperties properties, UiLayout layout, UiMessages messages,
                           ObjectProvider<UpdateChecker> updateChecker,
-                          ObjectProvider<WidgetPluginScanner> widgetPlugins) {
+                          ObjectProvider<WidgetPluginScanner> widgetPlugins,
+                          ObjectProvider<TelemetrySink> telemetrySink) {
         this.properties = properties;
         this.branding = layout.shell().branding();
         this.messages = messages;
         this.updateChecker = updateChecker;
         this.widgetPlugins = widgetPlugins;
+        this.telemetrySink = telemetrySink;
     }
 
     @GetMapping("/theme")
@@ -70,6 +74,12 @@ public class ThemeController {
         List<String> pluginStyles = pluginStyles();
         if (!pluginStyles.isEmpty()) {
             out.put("pluginStyles", pluginStyles);
+        }
+        TelemetrySink sink = telemetrySink.getIfAvailable();
+        if (sink != null) {
+            out.put("telemetry", Map.of(
+                    "enabled", true,
+                    "sampleRate", sink.browserSampleRate()));
         }
         return out;
     }

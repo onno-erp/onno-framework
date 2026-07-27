@@ -20,6 +20,7 @@ include(
     "onno-import-starter",
     "onno-cluster-starter",
     "onno-kafka-starter",
+    "onno-observability-starter",
     "onno-desktop-starter",
     "example"
 )
