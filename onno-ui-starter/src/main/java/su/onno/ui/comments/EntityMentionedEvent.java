@@ -5,7 +5,7 @@ import su.onno.ui.CurrentUserResolver.CurrentUser;
 /**
  * Published once for every readable entity mention in a freshly posted comment — the mention
  * counterpart of {@link su.onno.posting.DocumentPostedEvent}. It deliberately ships with <em>no
- * consumers</em>: delivery (in-app notifications, the cross-node event bus, {@code onno-mail-starter})
+ * consumers</em>: delivery (in-app notifications, the cross-node event bus, application integrations)
  * is purely additive and can be added later by registering a Spring {@code @EventListener}, the same
  * decoupling the framework prescribes for posting:
  *

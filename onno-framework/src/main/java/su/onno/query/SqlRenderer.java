@@ -3,15 +3,13 @@ package su.onno.query;
 import java.util.List;
 
 /**
- * The shared {@code SELECT … FROM … JOIN … WHERE … GROUP BY … ORDER BY} assembler. Both
- * the general query engine and the register virtual tables build a {@link RenderModel}
- * of already-resolved SQL fragments and hand it here, so there is exactly one place that
- * stitches a query string together. Parameter binding stays with the caller (it owns the
- * value map); this class only concerns itself with the SQL text.
+ * The {@code SELECT … FROM … JOIN … WHERE … GROUP BY … ORDER BY} assembler used by
+ * register virtual tables. {@code RegisterPersistence} builds a {@link RenderModel} of
+ * already-resolved SQL fragments and hands it here. Parameter binding stays with the
+ * caller (it owns the value map); this class only concerns itself with the SQL text.
  *
- * <p>It deliberately knows nothing about descriptors, refs, or register semantics &mdash;
- * those live in {@link JoinWalker} / {@code QueryEngine} and {@code RegisterPersistence}
- * respectively. Fragments arrive pre-rendered (e.g. a select item is already
+ * <p>It deliberately knows nothing about descriptors, refs, or register semantics.
+ * Fragments arrive pre-rendered (e.g. a select item is already
  * {@code "SUM(qty) AS qty"}, a where clause already {@code "_active = TRUE"}).
  */
 public final class SqlRenderer {

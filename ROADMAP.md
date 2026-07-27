@@ -11,7 +11,6 @@ Implemented:
 - Catalogs, documents, tabular sections, accumulation registers
 - Information registers, enumerations, constants, background jobs
 - JDBI-based schema generation and persistence primitives
-- Unified type-safe query layer (`QueryEngine`) over catalogs, documents, and registers, with `Ref`-navigation auto-joins, a declarative `QuerySpec` AST, a fluent builder, and a shared `SqlRenderer` that also backs register virtual tables
 - Spring Boot starter auto-configuration
 - React/Vite UI starter with generic metadata, catalog, document, and register APIs
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
@@ -40,7 +39,7 @@ Implemented:
 - Dry-run posting previews
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
-- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Kafka outbox relay (`onno-kafka-starter`), transactional mail (`onno-mail-starter`), PDF/print (`onno-print-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
+- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
 - UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration.

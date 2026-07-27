@@ -14,8 +14,6 @@ slf4j = "2.0.16"
 jdbi = "3.45.4"
 micrometer = "1.14.5"
 jackson = "2.18.3"
-thymeleaf = "3.1.2.RELEASE"
-flying-saucer = "9.4.0"
 testcontainers = "1.20.4"
 postgresql = "42.7.5"
 jobrunr = "7.3.2"
@@ -28,7 +26,6 @@ spring-boot-configuration-processor = { module = "org.springframework.boot:sprin
 spring-boot-autoconfigure = { module = "org.springframework.boot:spring-boot-autoconfigure", version.ref = "spring-boot" }
 spring-boot-starter-web = { module = "org.springframework.boot:spring-boot-starter-web", version.ref = "spring-boot" }
 spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security", version.ref = "spring-boot" }
-spring-boot-starter-mail = { module = "org.springframework.boot:spring-boot-starter-mail", version.ref = "spring-boot" }
 spring-boot-starter-test = { module = "org.springframework.boot:spring-boot-starter-test", version.ref = "spring-boot" }
 spring-boot-starter-oauth2-resource-server = { module = "org.springframework.boot:spring-boot-starter-oauth2-resource-server", version.ref = "spring-boot" }
 spring-boot-starter-oauth2-client = { module = "org.springframework.boot:spring-boot-starter-oauth2-client", version.ref = "spring-boot" }
@@ -63,8 +60,6 @@ lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 micrometer-core = { module = "io.micrometer:micrometer-core", version.ref = "micrometer" }
-thymeleaf = { module = "org.thymeleaf:thymeleaf", version.ref = "thymeleaf" }
-flying-saucer-pdf-openpdf = { module = "org.xhtmlrenderer:flying-saucer-pdf-openpdf", version.ref = "flying-saucer" }
 jobrunr-spring-boot3-starter = { module = "org.jobrunr:jobrunr-spring-boot-3-starter", version.ref = "jobrunr" }
 commons-csv = { module = "org.apache.commons:commons-csv", version.ref = "commons-csv" }
 mcp-bom = { module = "io.modelcontextprotocol.sdk:mcp-bom", version.ref = "mcp" }

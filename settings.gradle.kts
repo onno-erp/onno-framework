@@ -20,8 +20,6 @@ include(
     "onno-import-starter",
     "onno-cluster-starter",
     "onno-kafka-starter",
-    "onno-print-starter",
-    "onno-mail-starter",
     "onno-desktop-starter",
     "example"
 )

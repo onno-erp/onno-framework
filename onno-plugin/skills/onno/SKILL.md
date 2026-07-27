@@ -16,7 +16,7 @@ description: >-
 # onno-framework
 
 `onno-framework` models a business as **typed Java metadata** and generates the rest: database
-schema, repositories, a type-safe query layer, a generic REST API, a server-driven (DivKit) UI, an
+schema, repositories, a generic REST API, a server-driven (DivKit) UI, an
 MCP tool surface for AI agents, and migration history. You never hand-write tables, DTOs, or CRUD
 controllers. Behaviour that *is* code — posting, validation, lifecycle hooks, UI authoring — is
 plain, compiler-checked Java, never string-mapped config.
@@ -315,15 +315,15 @@ the JSON read contract (`{col}_display`/`{col}_ref`, `__SECRET_SET__` redaction,
 
 Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-ui-starter`, `onno-auth-starter`,
 `onno-mcp-starter`, `onno-import-starter`, `onno-cluster-starter` (cross-node live-UI sync for
-horizontal scale-out), `onno-kafka-starter`, `onno-mail-starter`, `onno-print-starter`,
-`onno-desktop-starter` (+ Gradle plugin). Each integration starter is gated by
+horizontal scale-out), `onno-kafka-starter`, `onno-desktop-starter` (+ Gradle plugin). Each
+integration starter is gated by
 `onno.<module>.enabled` (default on). The full module map is in
 [docs/ARCHITECTURE.md](https://github.com/onno-erp/onno-framework/blob/main/docs/ARCHITECTURE.md); every `onno.*` property is in
 [docs/CONFIGURATION.md](https://github.com/onno-erp/onno-framework/blob/main/docs/CONFIGURATION.md).
 
 Minimal app config: point the scan at your packages (or rely on the `@SpringBootApplication`
-package), give it a datasource, and seed a user. The core scan property is **`onno.scan-packages`**,
-not `onno.base-packages` (that name only exists for mail/print template scanning).
+package), give it a datasource, and seed a user. The core scan property is
+**`onno.scan-packages`**, not `onno.base-packages`.
 
 ```yaml
 spring:
