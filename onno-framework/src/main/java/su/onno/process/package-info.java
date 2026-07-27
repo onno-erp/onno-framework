@@ -1,9 +1,11 @@
 /**
  * Typed business-process definition language and durable process runtime contracts.
  *
- * <p>The public API models route structure with Java enum step keys, typed node handles, and enum
- * task outcomes. The framework starter supplies durable process/work-item persistence and
- * candidate/assignee routing; the UI starter supplies the authenticated inbox. Timers,
- * automatic/decision nodes, cancellation, and parallel/subprocess execution are future work.</p>
+ * <p>The public API models route structure with Java enum step keys; typed human, automatic,
+ * decision, timer, structured parallel fork/join, subprocess, and terminal handles; explicit
+ * version migrations; and enum outcomes. Core supplies token-based durable process/work-item
+ * persistence, cancellation, timers, and candidate/assignee routing. The Spring starter supplies
+ * JSON and JobRunr wiring; the UI starter supplies inspectable process APIs and the authenticated
+ * inbox.</p>
  */
 package su.onno.process;

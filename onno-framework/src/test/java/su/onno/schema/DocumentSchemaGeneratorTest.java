@@ -22,9 +22,9 @@ class DocumentSchemaGeneratorTest {
         SchemaGenerator generator = new SchemaGenerator(registry);
         List<String> ddl = generator.generateDDL();
 
-        assertThat(ddl).hasSize(8);
+        assertThat(ddl).hasSize(9);
 
-        String docDDL = ddl.get(6);
+        String docDDL = ddl.get(7);
         assertThat(docDDL).contains("CREATE TABLE IF NOT EXISTS document_test_invoices");
         assertThat(docDDL).contains("_id UUID PRIMARY KEY");
         assertThat(docDDL).contains("_number VARCHAR(11)");
@@ -34,7 +34,7 @@ class DocumentSchemaGeneratorTest {
         assertThat(docDDL).contains("_version INTEGER DEFAULT 0");
         assertThat(docDDL).contains("counterparty VARCHAR(200)");
 
-        String tsDDL = ddl.get(7);
+        String tsDDL = ddl.get(8);
         assertThat(tsDDL).contains("CREATE TABLE IF NOT EXISTS document_test_invoices_items");
         assertThat(tsDDL).contains("_parent_id UUID REFERENCES document_test_invoices(_id)");
         assertThat(tsDDL).contains("_line_number INTEGER");

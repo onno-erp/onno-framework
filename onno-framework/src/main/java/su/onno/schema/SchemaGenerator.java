@@ -82,6 +82,7 @@ public class SchemaGenerator {
             }
         });
         new SchemaMigrator(registry).executeAdditive(jdbi);
+        ProcessSchemaBackfill.run(jdbi);
         // Indexes go last: a ref column added by the additive migration above must exist
         // before its index is created.
         jdbi.useHandle(handle -> {
@@ -102,6 +103,17 @@ public class SchemaGenerator {
     public List<String> generateIndexDDL() {
         List<String> statements = new ArrayList<>();
         statements.add(index("onno_outbox", "_status"));
+        statements.add(index(
+                "onno_process_instances", "_definition_key", "_definition_version", "_status"));
+        statements.add(index("onno_process_instances", "_parent_instance_id"));
+        statements.add(index("onno_process_tokens", "_instance_id", "_status"));
+        statements.add(index("onno_process_tokens", "_status", "_due_at"));
+        statements.add(index("onno_process_tokens", "_parent_token_id", "_branch_key"));
+        statements.add(index("onno_process_work_items", "_instance_id", "_status"));
+        statements.add(index("onno_process_work_items", "_token_id"));
+        statements.add(index("onno_process_work_items", "_status", "_created_at"));
+        statements.add(index("onno_process_transitions", "_instance_id", "_sequence"));
+        statements.add(index("onno_process_work_item_events", "_work_item_id", "_sequence"));
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
             // Keyset pagination seeks by (sortKey, _id); the composite lets the database satisfy both
             // the default list order (_code) and the ref-picker order (_description) — plus their seek

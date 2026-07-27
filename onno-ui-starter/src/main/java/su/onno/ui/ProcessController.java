@@ -15,7 +15,9 @@ import su.onno.process.ProcessIdentity;
 import su.onno.process.ProcessDefinition;
 import su.onno.process.ProcessDefinitions;
 import su.onno.process.ProcessEngine;
+import su.onno.process.ProcessGraphDescriptor;
 import su.onno.process.ProcessSnapshot;
+import su.onno.process.ProcessTokenSnapshot;
 import su.onno.process.ProcessTransitionSnapshot;
 import su.onno.process.ProcessWorkItem;
 import su.onno.process.ProcessWorkItemEventSnapshot;
@@ -67,7 +69,11 @@ public final class ProcessController {
     public List<DefinitionView> definitions() {
         return definitions.all().stream()
                 .map(definition -> new DefinitionView(
-                        definition.key(), definition.title(), definition.payloadType().getName()))
+                        definition.key(),
+                        definition.title(),
+                        definition.version(),
+                        definition.payloadType().getName(),
+                        definition.graph().descriptor()))
                 .toList();
     }
 
@@ -86,17 +92,18 @@ public final class ProcessController {
         }
     }
 
+    @GetMapping("/processes")
+    public List<ProcessSnapshot> instances(Principal principal) {
+        return engine.instances(actor(principal));
+    }
+
     @GetMapping("/processes/{instanceId}")
     public ProcessSnapshot get(@PathVariable UUID instanceId, Principal principal) {
         ProcessSnapshot snapshot = engine.find(instanceId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Unknown process instance: " + instanceId));
-        ProcessActor actor = actor(principal);
-        boolean allowed = actor.roles().contains("ADMIN")
-                || actor.id().equals(snapshot.startedById())
-                || engine.inbox(actor).stream().anyMatch(item -> item.instanceId().equals(instanceId))
-                || engine.history(instanceId).stream()
-                    .anyMatch(transition -> actor.id().equals(transition.actorId()));
+        boolean allowed = engine.instances(actor(principal)).stream()
+                .anyMatch(instance -> instance.id().equals(instanceId));
         if (!allowed) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "Current user cannot access process " + instanceId);
@@ -111,6 +118,43 @@ public final class ProcessController {
     ) {
         get(instanceId, principal);
         return engine.history(instanceId);
+    }
+
+    @GetMapping("/processes/{instanceId}/executions")
+    public List<ProcessTokenSnapshot> executions(
+            @PathVariable UUID instanceId,
+            Principal principal
+    ) {
+        get(instanceId, principal);
+        return engine.tokens(instanceId);
+    }
+
+    @PostMapping("/processes/{instanceId}/cancel")
+    public ProcessSnapshot cancel(
+            @PathVariable UUID instanceId,
+            @RequestBody CancelProcessRequest request,
+            Principal principal
+    ) {
+        if (request == null || request.reason() == null || request.reason().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "reason is required");
+        }
+        try {
+            return engine.cancel(instanceId, request.reason(), actor(principal));
+        } catch (RuntimeException exception) {
+            throw operationFailure(exception);
+        }
+    }
+
+    @PostMapping("/processes/{instanceId}/migrate")
+    public ProcessSnapshot migrate(
+            @PathVariable UUID instanceId,
+            Principal principal
+    ) {
+        try {
+            return engine.migrate(instanceId, actor(principal));
+        } catch (RuntimeException exception) {
+            throw operationFailure(exception);
+        }
     }
 
     @GetMapping("/tasks")
@@ -243,6 +287,15 @@ public final class ProcessController {
     public record DelegateTaskRequest(String targetActorId, String reason) {
     }
 
-    public record DefinitionView(String key, String title, String payloadType) {
+    public record CancelProcessRequest(String reason) {
+    }
+
+    public record DefinitionView(
+            String key,
+            String title,
+            int version,
+            String payloadType,
+            ProcessGraphDescriptor graph
+    ) {
     }
 }

@@ -12,7 +12,13 @@ public interface ProcessEngine {
 
     Optional<ProcessSnapshot> find(UUID instanceId);
 
+    /** Process instances visible to an actor through start, participation, or administration. */
+    List<ProcessSnapshot> instances(ProcessActor actor);
+
     List<ProcessTransitionSnapshot> history(UUID instanceId);
+
+    /** Active and historical execution tokens for an inspectable process timeline. */
+    List<ProcessTokenSnapshot> tokens(UUID instanceId);
 
     List<ProcessWorkItem> inbox(ProcessActor actor);
 
@@ -45,4 +51,20 @@ public interface ProcessEngine {
 
     /** Dynamic/transport boundary used when an enum constant arrives as JSON text. */
     ProcessSnapshot complete(UUID workItemId, String outcome, ProcessActor actor);
+
+    /**
+     * Cancel an active process and all of its live tasks, timers, branches, and subprocesses.
+     */
+    ProcessSnapshot cancel(UUID instanceId, String reason, ProcessActor actor);
+
+    /** Apply the registered definition-migration chain to the latest definition version. */
+    ProcessSnapshot migrate(UUID instanceId, ProcessActor actor);
+
+    /**
+     * Advance due timers and completed/cancelled subprocess waits.
+     *
+     * <p>The starter invokes this from its durable background-job scheduler. Calling it from
+     * application code is safe; row locks and token state make duplicate polls no-ops.</p>
+     */
+    int runPending(int limit);
 }

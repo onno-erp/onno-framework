@@ -26,6 +26,7 @@ public class SchemaModelBuilder {
         tables.add(sequencesTable());
         tables.add(outboxTable());
         tables.add(processInstancesTable());
+        tables.add(processTokensTable());
         tables.add(processWorkItemsTable());
         tables.add(processWorkItemEventsTable());
         tables.add(processTransitionsTable());
@@ -80,13 +81,42 @@ public class SchemaModelBuilder {
         return new TableModel("onno_process_instances", List.of(
                 ColumnModel.primaryKey("_id", "UUID"),
                 ColumnModel.of("_definition_key", "VARCHAR(255)").asNotNull(),
+                ColumnModel.withDefault("_definition_version", "INTEGER", "1").asNotNull(),
+                ColumnModel.of("_definition_fingerprint", "VARCHAR(64)"),
                 ColumnModel.of("_payload", "TEXT").asNotNull(),
                 ColumnModel.of("_current_step", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_root_instance_id", "UUID"),
+                ColumnModel.of("_parent_instance_id", "UUID"),
+                // This is intentionally not a database FK: process instances own tokens,
+                // while a subprocess instance also points back to its parent token.
+                ColumnModel.of("_parent_token_id", "UUID"),
                 ColumnModel.of("_started_by", "VARCHAR(255)"),
                 ColumnModel.of("_started_by_display", "VARCHAR(255)"),
                 ColumnModel.of("_started_at", "TIMESTAMP").asNotNull(),
                 ColumnModel.of("_updated_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_completed_at", "TIMESTAMP"),
+                ColumnModel.of("_cancelled_at", "TIMESTAMP"),
+                ColumnModel.of("_cancel_reason", "TEXT"),
+                ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
+        ), List.of(), List.of());
+    }
+
+    static TableModel processTokensTable() {
+        return new TableModel("onno_process_tokens", List.of(
+                ColumnModel.primaryKey("_id", "UUID"),
+                new ColumnModel("_instance_id", "UUID", false, true, null,
+                        "onno_process_instances(_id)", List.of()),
+                ColumnModel.of("_parent_token_id", "UUID"),
+                ColumnModel.of("_branch_key", "VARCHAR(255)"),
+                ColumnModel.of("_step_key", "VARCHAR(255)").asNotNull(),
+                ColumnModel.of("_node_type", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
+                ColumnModel.of("_due_at", "TIMESTAMP"),
+                ColumnModel.of("_child_instance_id", "UUID"),
+                ColumnModel.of("_entered_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.of("_updated_at", "TIMESTAMP").asNotNull(),
+                ColumnModel.withDefault("_attempt", "INTEGER", "0").asNotNull(),
                 ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
         ), List.of(), List.of());
     }
@@ -96,6 +126,8 @@ public class SchemaModelBuilder {
                 ColumnModel.primaryKey("_id", "UUID"),
                 new ColumnModel("_instance_id", "UUID", false, true, null,
                         "onno_process_instances(_id)", List.of()),
+                new ColumnModel("_token_id", "UUID", false, false, null,
+                        "onno_process_tokens(_id)", List.of()),
                 ColumnModel.of("_step_key", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_title", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
@@ -120,6 +152,10 @@ public class SchemaModelBuilder {
                 ColumnModel.primaryKey("_id", "UUID"),
                 new ColumnModel("_instance_id", "UUID", false, true, null,
                         "onno_process_instances(_id)", List.of()),
+                new ColumnModel("_token_id", "UUID", false, false, null,
+                        "onno_process_tokens(_id)", List.of()),
+                ColumnModel.withDefault("_definition_version", "INTEGER", "1").asNotNull(),
+                ColumnModel.withDefault("_transition_type", "VARCHAR(32)", "'HUMAN_TASK'").asNotNull(),
                 ColumnModel.of("_from_step", "VARCHAR(255)"),
                 ColumnModel.of("_to_step", "VARCHAR(255)").asNotNull(),
                 ColumnModel.of("_outcome", "VARCHAR(255)"),

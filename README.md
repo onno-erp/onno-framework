@@ -97,7 +97,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 
 | Module | Purpose |
 | --- | --- |
-| `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, durable typed process contracts/schema, UI layout model, and shared types. |
+| `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, complete token-based typed process graph/runtime/schema, UI layout model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
 | `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry with a bounded HTTP exporter. |

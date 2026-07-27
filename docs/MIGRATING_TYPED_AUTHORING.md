@@ -83,8 +83,9 @@ query.groupBy(Stock::getWarehouse).where(Stock::getProduct, product);
 
 ## Business processes
 
-Make each process definition a Spring bean with stable persisted keys, an explicit payload class,
-and explicit start authorization:
+Make each process definition a Spring bean with a stable persisted key, positive definition
+version, explicit payload class, and explicit start authorization. The legacy constructor below is
+version 1:
 
 ```java
 @Component
@@ -141,6 +142,43 @@ completions are durable. A claimed task's assignee can call
 `b.widget("My tasks").type("tasks")` on a page for the human inbox. Headless clients use
 `/api/processes/**` and `/api/tasks/**`; only the JSON completion boundary uses an enum constant
 name string.
+
+The graph now also supports:
+
+```java
+var prepare = graph.automatic(Step.PREPARE, (payload, execution) -> service.prepare(payload));
+var route = graph.decision(Step.ROUTE, new TypedDecision<Payload, Route>() {
+    public Class<Route> outcomeType() { return Route.class; }
+    public Route decide(Payload payload) { return policy.route(payload); }
+});
+var timeout = graph.timer(Step.WAIT, ProcessTimer.after(Duration.ofHours(2)));
+var parallel = graph.parallel(Step.FORK, Branch.class, Step.JOIN);
+var child = graph.subprocess(Step.CHILD, childCall);
+```
+
+Automatic steps must return a non-null payload. They execute transactionally and receive a stable
+idempotency key; use an outbox for non-idempotent external calls. Decisions and parallel branches
+must route every enum constant. Every parallel path must reach `parallel.join()`. A subprocess must
+route every child ending plus `onCancellation()`.
+
+Do not change a persisted graph under the same version. Keep the old bean, add the new version with
+`super("order-approval", 2, NewPayload.class)`, and register a
+`ProcessDefinitionMigration<OldPayload,OldStep,NewPayload,NewStep>` bean. Its result must map every
+active source token id:
+
+```java
+return new ProcessMigrationResult<>(
+        migratePayload(state.payload()),
+        state.tokens().stream().collect(toMap(
+                ProcessMigrationToken::tokenId,
+                token -> NewStep.valueOf(token.step().name()))));
+```
+
+Then call `engine.migrate(instanceId, actor)` (or the authenticated migrate endpoint). Migration
+is atomic and preserves branch ancestry. An active parallel coordinator must map to a parallel
+fork with the same branch enum keys; finish or cancel the instance before changing branch
+cardinality. `engine.cancel(instanceId, reason, actor)` closes live human work, timers, parallel
+tokens, and subprocess descendants with an audit trail.
 
 ## Strings that intentionally remain
 

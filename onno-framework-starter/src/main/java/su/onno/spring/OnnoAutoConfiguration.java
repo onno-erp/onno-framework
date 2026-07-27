@@ -275,8 +275,21 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     /** Validates and indexes every application-provided typed process definition. */
     @Bean
     public su.onno.process.ProcessDefinitions processDefinitions(
-            ObjectProvider<su.onno.process.ProcessDefinition<?, ?>> definitions) {
-        return new su.onno.process.ProcessDefinitions(definitions.orderedStream().toList());
+            ObjectProvider<su.onno.process.ProcessDefinition<?, ?>> definitions,
+            ObjectProvider<su.onno.process.ProcessDefinitionMigration<?, ?, ?, ?>> migrations) {
+        return new su.onno.process.ProcessDefinitions(
+                definitions.orderedStream().toList(),
+                migrations.orderedStream().toList());
+    }
+
+    /** Application-configured Jackson boundary used by the core durable process runtime. */
+    @Bean
+    @ConditionalOnMissingBean(su.onno.process.ProcessPayloadCodec.class)
+    public su.onno.process.ProcessPayloadCodec processPayloadCodec(
+            ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper) {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = objectMapper.getIfAvailable(
+                () -> new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
+        return new su.onno.process.JacksonProcessPayloadCodec(mapper);
     }
 
     /** Durable transactional process runtime backed by the framework-managed process tables. */
@@ -286,12 +299,10 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
             Jdbi jdbi,
             su.onno.process.ProcessDefinitions definitions,
             MetadataRegistry metadataRegistry,
-            ObjectProvider<com.fasterxml.jackson.databind.ObjectMapper> objectMapper,
+            su.onno.process.ProcessPayloadCodec payloadCodec,
             su.onno.process.ProcessEventPublisher events) {
-        com.fasterxml.jackson.databind.ObjectMapper mapper = objectMapper.getIfAvailable(
-                () -> new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
         return new su.onno.process.JdbcProcessEngine(
-                jdbi, definitions, metadataRegistry, mapper, events);
+                jdbi, definitions, metadataRegistry, payloadCodec, events);
     }
 
     @Bean
@@ -381,6 +392,15 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     public ScheduledJobRegistrar scheduledJobRegistrar(ApplicationContext applicationContext,
                                                         JobScheduler jobScheduler) {
         return new ScheduledJobRegistrar(applicationContext, jobScheduler);
+    }
+
+    /** Durable wake-up for due process timers and completed subprocess waits. */
+    @Bean
+    @ConditionalOnBean(JobScheduler.class)
+    public ProcessPendingWorkRegistrar processPendingWorkRegistrar(
+            su.onno.process.ProcessEngine processEngine,
+            JobScheduler jobScheduler) {
+        return new ProcessPendingWorkRegistrar(processEngine, jobScheduler);
     }
 
     @Bean

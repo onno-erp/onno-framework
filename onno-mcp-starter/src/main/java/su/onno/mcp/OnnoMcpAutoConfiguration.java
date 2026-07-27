@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.process.ProcessDefinitions;
 import su.onno.ui.CatalogCommandService;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentCommandService;
@@ -69,14 +70,18 @@ public class OnnoMcpAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public MetadataToolFactory metadataToolFactory(MetadataRegistry registry, UiAccessService access,
+    public MetadataToolFactory metadataToolFactory(
+                                                   MetadataRegistry registry,
+                                                   ProcessDefinitions processDefinitions,
+                                                   UiAccessService access,
                                                    CatalogQueryService catalogQuery,
                                                    DocumentQueryService documentQuery,
                                                    RegisterQueryService registerQuery,
                                                    CatalogCommandService catalogCommands,
                                                    DocumentCommandService documentCommands,
                                                    OnnoMcpProperties properties, McpJsonMapper json) {
-        return new MetadataToolFactory(registry, access, catalogQuery, documentQuery, registerQuery,
+        return new MetadataToolFactory(registry, processDefinitions, access,
+                catalogQuery, documentQuery, registerQuery,
                 catalogCommands, documentCommands, properties, json);
     }
 

@@ -95,18 +95,20 @@ as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain 
 | `HumanTask<P,O extends Enum<O>>` | Typed human work; declares `outcomeType()`, `assignment(payload)`, and optional `title(payload)`. |
 | `ProcessActorId` / `ProcessIdentity` | Stable task-owner id plus mutable login/display snapshots. A linked Employee record UUID is the normal id. |
 | `TaskAssignment` | Candidate `identities(Ref<?>...)`, `actors(ProcessActorId...)`, `roles(...)`, or both; `ADMIN` bypasses assignment checks. |
-| `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)`, declare `startAssignment(payload)`, and override `define(ProcessGraph<P,S>)`; `graph()` validates, seals, and caches it. |
-| `ProcessGraph<P,S>` | `start()`, `human(step, task)`, `end(step)`, `node(step)`, `nodes()`. |
+| `ProcessDefinition<P,S>` | Call `super(stableKey, Payload.class)` for v1 or `super(stableKey, version, Payload.class)`, declare start/cancellation assignment, and override `define`; instances pin the exact version. |
+| `ProcessGraph<P,S>` | `start`, `human`, `automatic`, `decision`, `timer`, typed `parallel(fork, Branch.class, join)`, `subprocess`, `end`, and inspectable `descriptor()`. |
 | `HumanTaskNode<P,S,O>` | `on(outcome).to(node)`; the outcome and target types are compiler-checked. |
-| `ProcessEngine` | Durable `start`, `find`, role/user-scoped `inbox`, `claim`, `delegate`, task `workItemHistory`, and `complete`. |
+| `ProcessDefinitionMigration` | Explicit forward payload migration plus a typed target step for every active token id. |
+| `ProcessEngine` | Durable `start`, visible `instances`, `find`/`tokens`/history, inbox, claim/delegate/complete, `cancel`, `migrate`, and background `runPending`. |
 | `ProcessActor` | Authenticated username + normalized role set for a process command. |
-| `ProcessSnapshot` | Persisted instance id, definition/step keys, status, starter, timestamps, version. |
-| `ProcessWorkItem` | Durable task, stable assignee id/display snapshot, optional domain `subject`, timestamps, and allowed enum outcome names. |
-| `ProcessWorkItemEventSnapshot` | Ordered `CREATED`/`CLAIMED`/`DELEGATED`/`COMPLETED` task audit entry. |
+| `ProcessSnapshot` | Definition version, compatibility `currentStep`, authoritative `activeSteps`, root/parent links, status, starter, lifecycle timestamps, cancellation reason, optimistic version. |
+| `ProcessTokenSnapshot` | Durable branch/wait execution with parent token, node type/status, due time, and child instance link. |
+| `ProcessWorkItem` | Durable task, token/definition version, stable assignee id/display snapshot, optional domain `subject`, timestamps, and allowed enum outcome names. |
+| `ProcessWorkItemEventSnapshot` | Ordered `CREATED`/`CLAIMED`/`DELEGATED`/`COMPLETED`/`CANCELLED` task audit entry. |
 
 Graph validation rejects a missing start target, duplicate/blank stable keys, duplicate enum steps,
-cross-graph connections, unreachable nodes, duplicate outcome branches, and any unhandled constant
-of a task's outcome enum.
+cross-graph connections, unreachable nodes, incomplete task/decision/fork/subprocess routes,
+parallel branches that bypass their paired join, and immediate-only cycles.
 
 The starter persists instances, work items, and transitions in `onno_process_*`. The authenticated
 UI starter exposes the inbox plus claim/delegate/history/complete commands and the built-in `tasks`
@@ -119,8 +121,11 @@ record in the shell's adjacent detail pane while retaining an ordinary deep-link
 Every committed task mutation publishes `ProcessTasksChangedEvent`; eligible browser inboxes receive
 the audience-scoped, payload-free `tasks-changed` SSE event and refetch automatically (also across
 nodes through `ClusterEvent.ProcessTasksChanged`).
-Not yet implemented: timers, automatic/decision nodes, cancellation, parallel fork/join,
-subprocesses, and definition-version migration.
+Automatic steps return the next payload and receive `ProcessExecutionContext.idempotencyKey()`; keep
+them deterministic and use an outbox for external effects. JobRunr wakes durable timer and
+subprocess waits. Cancellation closes descendants and work atomically. Evolving an active graph
+requires a new definition version plus a registered `ProcessDefinitionMigration`; never reinterpret
+stored instances under a changed same-version graph.
 
 ### `@DomainEvent` (repeatable; outbox)
 `name` (required), `when = EventTiming.AFTER_WRITE|AFTER_POST|AFTER_DELETE` (default `AFTER_WRITE`).
@@ -445,7 +450,8 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 
 ## MCP tools (onno-mcp-starter, served at `/mcp`)
 
-`describe_metadata`, `list_catalog`, `get_catalog`, `list_documents`, `get_document`,
+`describe_metadata` (including latest typed process graph descriptors), `list_catalog`,
+`get_catalog`, `list_documents`, `get_document`,
 `register_balance`, `register_movements`, `posting_preview` (reads); `create_catalog`,
 `update_catalog`, `delete_catalog`, `create_document`, `update_document`, `delete_document` (writes,
 gated by `onno.mcp.writes-enabled`); `post_document`, `unpost_document` (gated by

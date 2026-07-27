@@ -55,6 +55,7 @@ const task = {
   id: "task-1",
   instanceId: "instance-1",
   definitionKey: "order-approval",
+  definitionVersion: 1,
   stepKey: "review",
   title: "Review order O-42",
   status: "OPEN",

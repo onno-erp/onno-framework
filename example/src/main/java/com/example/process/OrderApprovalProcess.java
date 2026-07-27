@@ -34,12 +34,17 @@ public final class OrderApprovalProcess
 
     @Override
     protected void define(ProcessGraph<Payload, Step> graph) {
+        var route = graph.decision(Step.ROUTE, new OrderRoute());
         var review = graph.human(Step.REVIEW, new ReviewTask());
+        var finalize = graph.automatic(Step.FINALIZE, (payload, execution) -> payload);
         var approved = graph.end(Step.APPROVED);
         var rejected = graph.end(Step.REJECTED);
-        graph.start().to(review);
-        review.on(Outcome.APPROVE).to(approved);
+        graph.start().to(route);
+        route.on(Route.REVIEW).to(review);
+        route.on(Route.REJECT_INVALID).to(rejected);
+        review.on(Outcome.APPROVE).to(finalize);
         review.on(Outcome.REJECT).to(rejected);
+        finalize.to(approved);
     }
 
     public record Payload(
@@ -51,8 +56,14 @@ public final class OrderApprovalProcess
     }
 
     public enum Step implements ProcessStepKey {
+        ROUTE {
+            @Override public String key() { return "route"; }
+        },
         REVIEW {
             @Override public String key() { return "review"; }
+        },
+        FINALIZE {
+            @Override public String key() { return "finalize"; }
         },
         APPROVED {
             @Override public String key() { return "approved"; }
@@ -65,6 +76,25 @@ public final class OrderApprovalProcess
     public enum Outcome {
         APPROVE,
         REJECT
+    }
+
+    public enum Route {
+        REVIEW,
+        REJECT_INVALID
+    }
+
+    private static final class OrderRoute
+            implements su.onno.process.TypedDecision<Payload, Route> {
+        @Override
+        public Class<Route> outcomeType() {
+            return Route.class;
+        }
+
+        @Override
+        public Route decide(Payload payload) {
+            return payload.total() != null && payload.total().signum() > 0
+                    ? Route.REVIEW : Route.REJECT_INVALID;
+        }
     }
 
     private static final class ReviewTask implements HumanTask<Payload, Outcome> {

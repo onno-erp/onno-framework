@@ -5,11 +5,13 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Executable prototype runtime for typed process definitions.
+ * Legacy single-token graph test helper.
  *
- * <p>This engine intentionally does not persist instances or create user inbox tasks. It proves the
- * public route language and transition semantics before those storage and UI contracts are fixed.</p>
+ * <p>This helper supports the original human-task/end subset only. Production code and tests for
+ * automatic, decision, timer, parallel, subprocess, cancellation, and migration behavior should
+ * use the core {@link JdbcProcessEngine} with an in-memory H2 database.</p>
  */
+@Deprecated
 public final class InMemoryProcessEngine {
 
     private final Clock clock;

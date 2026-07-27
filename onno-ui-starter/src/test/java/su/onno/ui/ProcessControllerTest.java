@@ -10,6 +10,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.process.HumanTask;
+import su.onno.process.JacksonProcessPayloadCodec;
 import su.onno.process.JdbcProcessEngine;
 import su.onno.process.ProcessDefinition;
 import su.onno.process.ProcessDefinitions;
@@ -43,7 +44,8 @@ class ProcessControllerTest {
         json = new ObjectMapper().findAndRegisterModules();
         controller = new ProcessController(
                 new JdbcProcessEngine(
-                        jdbi, definitions, new MetadataRegistry(), json, ignored -> { }),
+                        jdbi, definitions, new MetadataRegistry(),
+                        new JacksonProcessPayloadCodec(json), ignored -> { }),
                 definitions,
                 json,
                 new UiAccessService(new MetadataRegistry()));
@@ -110,6 +112,37 @@ class ProcessControllerTest {
                         su.onno.process.WorkItemEventType.CREATED,
                         su.onno.process.WorkItemEventType.CLAIMED,
                         su.onno.process.WorkItemEventType.DELEGATED);
+    }
+
+    @Test
+    void exposesDefinitionExecutionsAndCancellationAsFirstClassProcessApis() {
+        var definition = controller.definitions().getFirst();
+
+        assertThat(definition.key()).isEqualTo("approval");
+        assertThat(definition.version()).isEqualTo(1);
+        assertThat(definition.graph().startStepKey()).isEqualTo(Step.REVIEW.key());
+
+        var started = controller.start(
+                "approval", Map.of("number", "O-46"), manager);
+
+        assertThat(controller.instances(manager))
+                .extracting(su.onno.process.ProcessSnapshot::id)
+                .containsExactly(started.id());
+        assertThat(controller.executions(started.id(), manager))
+                .extracting(su.onno.process.ProcessTokenSnapshot::status)
+                .containsExactly(su.onno.process.ProcessTokenStatus.WAITING_HUMAN);
+
+        var cancelled = controller.cancel(
+                started.id(),
+                new ProcessController.CancelProcessRequest("Order withdrawn"),
+                manager);
+
+        assertThat(cancelled.status()).isEqualTo(ProcessStatus.CANCELLED);
+        assertThat(cancelled.cancelReason()).isEqualTo("Order withdrawn");
+        assertThat(controller.history(started.id(), manager))
+                .extracting(su.onno.process.ProcessTransitionSnapshot::type)
+                .contains(su.onno.process.ProcessTransitionType.CANCELLATION);
+        assertThat(controller.inbox(manager)).isEmpty();
     }
 
     record Payload(String number) {

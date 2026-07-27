@@ -739,8 +739,10 @@ switcher, hint, and search; task rows live in a separate island below it. Keep t
 header disabled when the task widget is the page's primary surface.
 Visibility is computed from
 `HumanTask.assignment(payload)` candidate users/roles on the server; the browser cannot nominate
-its own actor or roles. The inbox is live: every committed start, claim, delegation, or completion emits an
-audience-scoped `tasks-changed` SSE event and the widget refetches automatically. Candidate details
+its own actor or roles. The inbox is live: every committed start, claim, delegation, completion,
+cancellation, timer, fork/join, or subprocess advance emits an
+audience-scoped `tasks-changed` SSE event when visible work changes, and the widget refetches
+automatically. Candidate details
 stay server-side; the event contains only an invalidation. A Retry control appears only after a
 failed read—there is no normal-state refresh button.
 
@@ -748,9 +750,13 @@ Headless clients use the same boundary:
 
 ```text
 GET  /api/process-definitions
+GET  /api/processes
 POST /api/processes/{definitionKey}
 GET  /api/processes/{instanceId}
 GET  /api/processes/{instanceId}/history
+GET  /api/processes/{instanceId}/executions
+POST /api/processes/{instanceId}/cancel    {"reason":"…"}
+POST /api/processes/{instanceId}/migrate
 GET  /api/tasks
 POST /api/tasks/{workItemId}/claim
 GET  /api/tasks/{workItemId}/history
@@ -758,9 +764,12 @@ POST /api/tasks/{workItemId}/delegate   {"targetActorId":"identity-record-uuid",
 POST /api/tasks/{workItemId}/complete   {"outcome":"ENUM_CONSTANT"}
 ```
 
-The start body is converted to the definition's declared payload class and authorized through
-`ProcessDefinition.startAssignment(payload)`. Instance/history reads are limited to an `ADMIN`,
-the starter, a current task candidate/assignee, or an actor recorded in that instance's history.
+The start body is converted to the latest definition's declared payload class and authorized through
+`ProcessDefinition.startAssignment(payload)`. Definition discovery includes its version and safe
+typed graph descriptor. Instance/history/execution reads are limited to an `ADMIN`, the starter, a
+current task candidate/assignee, or an actor recorded in that instance's history. Cancellation uses
+`cancellationAssignment(payload)` and a required reason; migration follows only registered typed
+definition-migration edges.
 
 ## Dashboard widgets
 

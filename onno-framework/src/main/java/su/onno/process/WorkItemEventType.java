@@ -5,5 +5,6 @@ public enum WorkItemEventType {
     CREATED,
     CLAIMED,
     DELEGATED,
-    COMPLETED
+    COMPLETED,
+    CANCELLED
 }

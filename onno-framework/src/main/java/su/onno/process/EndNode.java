@@ -6,4 +6,9 @@ public final class EndNode<P, S extends Enum<S> & ProcessStepKey> extends Proces
     EndNode(ProcessGraph<P, S> graph, S step) {
         super(graph, step);
     }
+
+    @Override
+    public ProcessNodeType type() {
+        return ProcessNodeType.END;
+    }
 }

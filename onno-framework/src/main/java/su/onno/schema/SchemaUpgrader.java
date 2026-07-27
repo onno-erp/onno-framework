@@ -96,6 +96,7 @@ public class SchemaUpgrader {
                 }
             }
         });
+        ProcessSchemaBackfill.run(jdbi);
 
         // Indexes are an idempotent overlay (CREATE INDEX IF NOT EXISTS) rather than part of
         // the diffed plan: they carry no data, so re-asserting them after the plan ran is

@@ -30,7 +30,7 @@ to future agents that may not have the full conversation context.
 
 | Path | Role |
 | --- | --- |
-| `onno-framework` | Core annotations, metadata, schema, posting, durable typed process contracts/schema, repository contracts, UI model, and shared types. |
+| `onno-framework` | Core annotations, metadata, schema, posting, complete durable typed process graph/runtime/schema, repository contracts, UI model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
@@ -460,9 +460,10 @@ starter turns it into an audience-scoped `tasks-changed` SSE invalidation, and t
 inbox refetches automatically. Publish process changes through `ProcessEngine`, not a controller-only
 side channel, so programmatic starts/completions stay live too.
 
-Step identity is a Java enum implementing `ProcessStepKey`; task outcomes are enums; transitions
-connect typed node handles, never string names. Definitions are Spring beans with an explicit stable
-key and payload type:
+Step identity is a Java enum implementing `ProcessStepKey`; task, decision, and parallel outcomes
+are enums; transitions connect typed node handles, never string names. Definitions are Spring beans
+with an explicit stable key, positive version, and payload type. The two-argument constructor
+defaults to version 1; use `super("stable-key", 2, Payload.class)` when an active definition evolves:
 
 ```java
 enum PurchaseStep implements ProcessStepKey {
@@ -516,8 +517,10 @@ final class PurchaseApproval
 
 Calling `definition.graph()` validates the graph once and seals it. Validation rejects missing
 outcome branches, duplicate or blank persistent step keys, duplicate enum steps, cross-definition
-connections, a missing start target, and unreachable nodes. The auto-configured `ProcessEngine`
-persists JSON payloads, instances, transitions, and human work items in framework-managed tables.
+connections, a missing start target, unreachable nodes, incomplete decision/fork/subprocess routes,
+parallel branches that bypass their paired join, and cycles made only of immediate nodes. The
+auto-configured `ProcessEngine` persists JSON payloads, version-pinned instances, execution tokens,
+transitions, timers, subprocess links, and human work items in framework-managed tables.
 Start work from ordinary Java with
 `processes.start(definition, payload, new ProcessActor(username, roles))`. Candidates come from
 `TaskAssignment.identities(Ref<?>...)` / `.actors(ProcessActorId...)` / `.roles(...)`; `ADMIN` is
@@ -552,8 +555,22 @@ and the built-in `type("tasks")` page widget. A claimed task may be delegated by
 of asking for a raw username. Application Java still owns the typed graph; the HTTP boundary accepts
 an enum constant name because JSON has no Java enum type.
 
-Timers, automatic steps, typed decisions, parallel fork/join, subprocesses, cancellation, and
-definition-version migration are not implemented yet.
+Use `graph.automatic(...)` for deterministic Java work that returns the next immutable payload,
+`graph.decision(...)` for an exhaustive typed choice, `graph.timer(...)` for a durable wait,
+`graph.parallel(forkStep, Branch.class, joinStep)` for structured fork/join, and
+`graph.subprocess(...)` for a version-pinned typed child process. Automatic steps run in the process
+transaction and receive a stable `ProcessExecutionContext.idempotencyKey()`; keep them deterministic
+and write external effects through an outbox. The starter's JobRunr worker advances due timers and
+completed subprocess waits; the database remains the source of truth.
+
+`processes.cancel(instanceId, reason, actor)` atomically cancels live tokens, timers, descendants,
+and open/claimed work. The caller policy comes from `cancellationAssignment(payload)` and `ADMIN`
+remains the superuser. Never edit a graph in place while its instances are active: retain the old
+definition bean, register the new version plus a `ProcessDefinitionMigration`, and call
+`processes.migrate(instanceId, actor)`. A migration transforms the payload and maps every active
+token id to a typed target step, so parallel work cannot be silently dropped. While parallel
+branches are active, map their coordinator to a parallel fork with the same branch enum keys;
+finish or cancel the instance before changing branch cardinality.
 
 ### Contexts And Future Services
 

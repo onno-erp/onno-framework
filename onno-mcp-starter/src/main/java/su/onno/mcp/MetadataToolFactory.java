@@ -7,6 +7,7 @@ import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
+import su.onno.process.ProcessDefinitions;
 import su.onno.ui.CatalogCommandService;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentCommandService;
@@ -43,6 +44,7 @@ import java.util.function.BiFunction;
 public class MetadataToolFactory implements McpToolProvider {
 
     private final MetadataRegistry registry;
+    private final ProcessDefinitions processDefinitions;
     private final UiAccessService access;
     private final CatalogQueryService catalogQuery;
     private final DocumentQueryService documentQuery;
@@ -57,7 +59,24 @@ public class MetadataToolFactory implements McpToolProvider {
                                RegisterQueryService registerQuery, CatalogCommandService catalogCommands,
                                DocumentCommandService documentCommands, OnnoMcpProperties properties,
                                McpJsonMapper json) {
+        this(registry, null, access, catalogQuery, documentQuery, registerQuery,
+                catalogCommands, documentCommands, properties, json);
+    }
+
+    public MetadataToolFactory(
+            MetadataRegistry registry,
+            ProcessDefinitions processDefinitions,
+            UiAccessService access,
+            CatalogQueryService catalogQuery,
+            DocumentQueryService documentQuery,
+            RegisterQueryService registerQuery,
+            CatalogCommandService catalogCommands,
+            DocumentCommandService documentCommands,
+            OnnoMcpProperties properties,
+            McpJsonMapper json
+    ) {
         this.registry = registry;
+        this.processDefinitions = processDefinitions;
         this.access = access;
         this.catalogQuery = catalogQuery;
         this.documentQuery = documentQuery;
@@ -73,11 +92,11 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("describe_metadata",
                 "Describe the business model",
-                "Lists the catalogs, documents and accumulation registers the current user may read, "
-                        + "with their fields and enum values. Call this first to discover the exact entity "
-                        + "names and field names to pass to the other tools.",
+                "Lists readable catalogs, documents and accumulation registers plus versioned typed "
+                        + "process graphs, with fields and enum values. Call this first to discover the "
+                        + "exact entity, field, and process names.",
                 "{\"type\":\"object\",\"properties\":{"
-                        + "\"kind\":{\"type\":\"string\",\"enum\":[\"catalog\",\"document\",\"register\",\"all\"],"
+                        + "\"kind\":{\"type\":\"string\",\"enum\":[\"catalog\",\"document\",\"register\",\"process\",\"all\"],"
                         + "\"description\":\"Restrict the description to one entity kind. Defaults to all.\"}}}",
                 (exchange, args) -> describeMetadata(principal(exchange), optString(args, "kind"))));
 
@@ -324,6 +343,22 @@ public class MetadataToolFactory implements McpToolProvider {
                 registers.add(e);
             }
             out.put("registers", registers);
+        }
+
+        if ((k.equals("all") || k.equals("process"))
+                && processDefinitions != null
+                && principal != null) {
+            List<Map<String, Object>> processes = new ArrayList<>();
+            processDefinitions.all().forEach(definition -> {
+                Map<String, Object> process = new LinkedHashMap<>();
+                process.put("key", definition.key());
+                process.put("title", definition.title());
+                process.put("version", definition.version());
+                process.put("payloadType", definition.payloadType().getName());
+                process.put("graph", definition.graph().descriptor());
+                processes.add(process);
+            });
+            out.put("processes", processes);
         }
 
         if (k.equals("all")) {

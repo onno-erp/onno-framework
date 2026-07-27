@@ -4,7 +4,8 @@ import java.util.Objects;
 
 /** A typed node owned by a {@link ProcessGraph}. */
 public abstract sealed class ProcessNode<P, S extends Enum<S> & ProcessStepKey>
-        permits StartNode, HumanTaskNode, EndNode {
+        permits StartNode, HumanTaskNode, AutomaticNode, DecisionNode, TimerNode,
+                ParallelForkNode, ParallelJoinNode, SubprocessNode, EndNode {
 
     private final ProcessGraph<P, S> graph;
     private final S step;
@@ -24,4 +25,7 @@ public abstract sealed class ProcessNode<P, S extends Enum<S> & ProcessStepKey>
     public final S step() {
         return step;
     }
+
+    /** Stable node kind for runtime dispatch and graph inspection. */
+    public abstract ProcessNodeType type();
 }

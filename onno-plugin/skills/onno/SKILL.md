@@ -80,10 +80,10 @@ lifecycle interfaces are in [reference/cheatsheet.md](reference/cheatsheet.md). 
 writing model classes — guessing an attribute name or default wastes a build cycle.
 
 The `su.onno.process` API uses enum step keys and outcomes, typed node handles, exhaustive route
-validation, and stable definition/step keys. The starter persists instances, transitions, and
-candidate/assigned work items; the UI starter exposes the authenticated inbox, claim, and complete
-loop. Timers, automatic/decision nodes, cancellation, definition migration, and
-parallel/subprocess execution are not implemented yet.
+validation, stable versioned definitions/step keys, and explicit typed migrations. Core persists
+token-based instances, timers, nested parallel fork/join, subprocess links, transitions, and
+candidate/assigned work items; the UI starter exposes inspectable definitions/instances plus the
+authenticated inbox, claim, delegate, complete, cancel, and migrate loop.
 
 ## Canonical vertical slice
 
