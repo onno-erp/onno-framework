@@ -7,12 +7,15 @@ import su.onno.fixtures.TestCostRegister;
 import su.onno.fixtures.TestOverdraftRegister;
 import su.onno.fixtures.TestReceipt;
 import su.onno.fixtures.TestReceiptLine;
+import su.onno.fixtures.TestSecretDocument;
+import su.onno.fixtures.TestSecretLine;
 import su.onno.fixtures.TestStockRegister;
 import su.onno.fixtures.TestWithdrawal;
 import su.onno.metadata.*;
 import su.onno.model.DocumentObject;
 import su.onno.repository.RegisterRepositoryImpl;
 import su.onno.schema.SchemaGenerator;
+import su.onno.security.SecretCipher;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -52,6 +55,7 @@ class PostingTest {
         registry.registerDocument(scanner.scanDocument(TestWithdrawal.class));
         registry.registerDocument(scanner.scanDocument(TestCostReceipt.class));
         registry.registerDocument(scanner.scanDocument(TestCostIssue.class));
+        registry.registerDocument(scanner.scanDocument(TestSecretDocument.class));
         registry.registerAccumulation(scanner.scanRegister(TestStockRegister.class));
         registry.registerAccumulation(scanner.scanRegister(TestOverdraftRegister.class));
         registry.registerAccumulation(scanner.scanRegister(TestCostRegister.class));
@@ -171,6 +175,41 @@ class PostingTest {
         assertThat(preview.registers()).hasSize(1);
         assertThat(preview.registers().get(0).movements()).hasSize(1);
         assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).isEmpty();
+    }
+
+    @Test
+    void post_preservesEncryptedSecretAttributesInDocumentAndRows() {
+        SecretCipher cipher = new SecretCipher("posting-secret-test-key");
+        TestSecretDocument document = createSecretDocument(cipher);
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(TestSecretDocument.class);
+        TabularSectionDescriptor lines = descriptor.tabularSections().getFirst();
+        String documentSecretColumn = descriptor.attributes().stream()
+                .filter(AttributeDescriptor::secret)
+                .findFirst()
+                .orElseThrow()
+                .columnName();
+        String rowSecretColumn = lines.attributes().stream()
+                .filter(AttributeDescriptor::secret)
+                .findFirst()
+                .orElseThrow()
+                .columnName();
+
+        String encryptedApiKeyBeforePosting = rawString(
+                descriptor.tableName(), documentSecretColumn, document.getId());
+        TestSecretLine line = document.getLines().getFirst();
+        String encryptedNoteBeforePosting = rawString(
+                lines.tableName(), rowSecretColumn, line.getId());
+
+        engine.post(document);
+
+        String encryptedApiKeyAfterPosting = rawString(
+                descriptor.tableName(), documentSecretColumn, document.getId());
+        String encryptedNoteAfterPosting = rawString(
+                lines.tableName(), rowSecretColumn, line.getId());
+        assertThat(encryptedApiKeyAfterPosting).isEqualTo(encryptedApiKeyBeforePosting);
+        assertThat(encryptedNoteAfterPosting).isEqualTo(encryptedNoteBeforePosting);
+        assertThat(cipher.decrypt(encryptedApiKeyAfterPosting)).isEqualTo(document.getApiKey());
+        assertThat(cipher.decrypt(encryptedNoteAfterPosting)).isEqualTo(line.getNote());
     }
 
     @Test
@@ -448,6 +487,62 @@ class PostingTest {
         map.put(TestCostRegister.class,
                 new RegisterRepositoryImpl<>(costPersistence, TestCostRegister.class));
         return map;
+    }
+
+    private TestSecretDocument createSecretDocument(SecretCipher cipher) {
+        TestSecretDocument document = new TestSecretDocument();
+        document.setId(UUID.randomUUID());
+        document.setNumber("SECRET-001");
+        document.setDate(LocalDateTime.of(2026, 3, 15, 10, 0));
+        document.setApiKey("document-plaintext-secret");
+
+        TestSecretLine line = new TestSecretLine();
+        line.setId(UUID.randomUUID());
+        line.setLineNumber(1);
+        line.setNote("row-plaintext-secret");
+        document.getLines().add(line);
+
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(TestSecretDocument.class);
+        AttributeDescriptor documentSecret = descriptor.attributes().stream()
+                .filter(AttributeDescriptor::secret)
+                .findFirst()
+                .orElseThrow();
+        TabularSectionDescriptor lines = descriptor.tabularSections().getFirst();
+        AttributeDescriptor rowSecret = lines.attributes().stream()
+                .filter(AttributeDescriptor::secret)
+                .findFirst()
+                .orElseThrow();
+
+        jdbi.useHandle(handle -> {
+            handle.createUpdate(
+                            "INSERT INTO " + descriptor.tableName() +
+                                    " (_id, _number, _date, _posted, _deletion_mark, " +
+                                    documentSecret.columnName() + ") VALUES " +
+                                    "(:id, :number, :date, FALSE, FALSE, :secret)")
+                    .bind("id", document.getId())
+                    .bind("number", document.getNumber())
+                    .bind("date", document.getDate())
+                    .bind("secret", cipher.encrypt(document.getApiKey()))
+                    .execute();
+            handle.createUpdate(
+                            "INSERT INTO " + lines.tableName() +
+                                    " (_id, _parent_id, _line_number, " + rowSecret.columnName() +
+                                    ") VALUES (:id, :parentId, :lineNumber, :secret)")
+                    .bind("id", line.getId())
+                    .bind("parentId", document.getId())
+                    .bind("lineNumber", line.getLineNumber())
+                    .bind("secret", cipher.encrypt(line.getNote()))
+                    .execute();
+        });
+        return document;
+    }
+
+    private String rawString(String table, String column, UUID id) {
+        return jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT " + column + " FROM " + table + " WHERE _id = :id")
+                .bind("id", id)
+                .mapTo(String.class)
+                .one());
     }
 
     private TestCostReceipt createCostReceipt(String number,
