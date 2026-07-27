@@ -271,16 +271,6 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                 jdbi, definitions, metadataRegistry, mapper, events);
     }
 
-    /**
-     * The unified type-safe query layer: a {@link su.onno.query.QueryEngine} over
-     * catalogs, documents, and registers with {@code Ref}-navigation joins. Apps inject
-     * it to run {@code query.from(...).select(...).where(...).fetch()} queries.
-     */
-    @Bean
-    public su.onno.query.QueryEngine queryEngine(Jdbi jdbi, MetadataRegistry metadataRegistry) {
-        return new su.onno.query.QueryEngine(jdbi, metadataRegistry);
-    }
-
     @Bean
     public OutboxWriter outboxWriter(Jdbi jdbi) {
         return new OutboxWriter(jdbi);

@@ -16,7 +16,7 @@ You describe persisted business data as **typed Java metadata** — `@Catalog`, 
 `@TabularSection`, `@AccumulationRegister`, `@InformationRegister`, `@Enumeration`, `@Constant`,
 and scheduled jobs — and
 the framework generates everything downstream from that model: the database schema, repositories, a
-type-safe query layer, a generic REST API, a server-driven UI, an MCP tool surface for AI agents,
+generic REST API, a server-driven UI, an MCP tool surface for AI agents,
 and migration history. You do not hand-write tables, DTOs, or CRUD controllers. Behaviour that *is*
 code — posting rules, validation, lifecycle hooks, UI authoring — is plain, refactorable,
 compiler-checked Java, never string-mapped configuration.
@@ -32,16 +32,14 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 | Module | Group | Role |
 | --- | --- | --- |
-| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed process contracts/schema, `QueryEngine`, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
-| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, query engine, number generation, secret cipher, background jobs. |
+| `onno-framework` | `su.onno` | Core: annotations, metadata scanners + registry, schema diff/migration, JDBI persistence, posting engine, typed process contracts/schema, repository contracts, events, outbox, UI model (`Layout`/`Page`/`EntityView`). |
+| `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting service, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
-| `onno-mail-starter` | `su.onno` | `@MailTemplate` Thymeleaf rendering, pluggable dispatchers (SMTP/HTTP/file/log/failover), outbox + suppression + preview. |
-| `onno-print-starter` | `su.onno` | `@PrintTemplate` Thymeleaf → HTML/PDF (Flying Saucer / OpenPDF) document rendering. |
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
@@ -57,8 +55,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 
 1. **Resolve scan packages.** `onno.scan-packages` if set, otherwise Spring Boot's
    auto-configuration base packages (the package of your `@SpringBootApplication`). There is **no**
-   `onno.base-packages` for the core scan — that name belongs only to `onno.mail.base-packages` /
-   `onno.print.base-packages`.
+   `onno.base-packages` property.
 2. **Scan metadata.** Reflection scanners read the annotations and build immutable descriptors
    (`CatalogDescriptor`, `DocumentDescriptor`, `AccumulationRegisterDescriptor`, …) into the
    `MetadataRegistry` (`onno-framework/src/main/java/su/onno/metadata/`).
@@ -66,7 +63,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
    it against the live database + the last snapshot in `onno_schema_history`, and applies/plans/
    validates per `onno.schema.mode`. Versioned `AppMigration` beans run once each, in version order.
 4. **Wire persistence + behaviour.** JDBI, Spring Data JDBC repositories, register persistence,
-   `PostingService`, `QueryEngine`, `NumberGenerator`, `SecretCipher`, callbacks (id generation,
+   `PostingService`, `NumberGenerator`, `SecretCipher`, callbacks (id generation,
    numbering, secret encryption, change-event publishing, `isNew` reset), background jobs, and the
    `Layout`/`Page`/`EntityView` UI model beans.
 5. **Layer on optional starters.** `onno-ui-starter` adds the REST + DivKit + SPA surface;
@@ -282,14 +279,14 @@ Two semantics that bite every integration:
 `GET /api/documents/{name}/{id}/posting-preview` (and the MCP `posting_preview` tool) dry-run the
 movements without writing them.
 
-## Query engine
+## Query paths
 
-`QueryEngine` (`onno-framework/src/main/java/su/onno/query/`) is a type-safe query layer over
-catalogs, documents, and registers with `Ref`-navigation auto-joins. A declarative `QuerySpec` AST
-(`select`/`where`/`groupBy`/`orderBy`/`totals`/`limit`/`offset`) is assembled by a fluent
-`QueryBuilder`, rendered by a shared `SqlRenderer` (which also backs register virtual tables), and
-executed via JDBI into untyped `Row`s or mapped DTOs. The `Q` helper builds type-safe paths from
-method references, e.g. `Q.ref(SalesOrder::getCustomer, Customer::getName)` emits the join.
+There is no universal query DSL. Catalog and document API reads use the UI starter's dedicated
+`CatalogQueryService` and `DocumentQueryService`, including keyset pagination and display-value
+resolution. Typed business reads of accumulation registers use `RegisterRepository.query()`;
+generic UI and MCP register projections use `RegisterQueryService`. The small
+`su.onno.query` package contains only shared cursor/keyset and SQL-rendering utilities used by those
+runtime paths.
 
 ## Generic REST API
 
@@ -460,12 +457,6 @@ superuser. Override the whole thing by setting `onno.auth.enabled=false` and sup
 - **Kafka** (`onno-kafka-starter`) — drains the `onno_outbox` to a Kafka topic as CloudEvents via
   `OutboxRelay.relayPending()` (call it from your own `@Scheduled`); optional de-duplicating inbox
   dispatches to `EventHandler` beans; `RemoteRefClient` resolves references against other services.
-- **Mail** (`onno-mail-starter`) — `@MailTemplate` on a domain class, rendered by Thymeleaf,
-  dispatched by a pluggable `MailDispatcher` (smtp/http/file/log/failover), optionally queued in
-  `onno_mail_outbox` with scheduled relay, retry/backoff, and per-recipient suppression.
-- **Print** (`onno-print-starter`) — `@PrintTemplate` → `PrintService.render(...)` returns
-  HTML/PDF bytes (Flying Saucer / OpenPDF; PDF templates must be valid XHTML). No endpoint; expose
-  the bytes from your own controller.
 - **Desktop** (`onno-desktop-starter` + `onno-desktop-gradle-plugin`) — a `DesktopApp` bean
   declares the window (config-as-code); the starter serves `/api/desktop/{ready,manifest}` and
   relocates the H2 file + session store under the per-user home; the Gradle plugin

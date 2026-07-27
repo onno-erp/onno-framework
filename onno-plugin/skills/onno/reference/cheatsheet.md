@@ -179,21 +179,13 @@ Constructors: `new BusinessRule(name, message, condition)` (cross-field) and
   `allowNegative=true`, writes back computed fields, sets `_posted=true`. **Save then post — never
   wrap both in one `@Transactional`.**
 
-## Query engine (package `su.onno.query`)
+## Runtime query paths
 
-`QueryEngine.from(Class).select(…).where(…).groupBy(…).orderBy(…).limit(n).fetch()` →
-`List<Row>` (case-insensitive keys) or `.fetchInto(Dto.class)`. Built on an immutable `QuerySpec`
-AST, a fluent `QueryBuilder`, and a shared `SqlRenderer`. `Ref`-navigation auto-joins via `Path`.
+There is no universal query DSL. Use `CatalogRepository` / `DocumentRepository` for typed business
+reads and `RegisterRepository.query()` for typed balance/turnover reads. The generated REST, UI, and
+MCP surfaces use dedicated metadata-driven catalog, document, and register query services.
 
-`Q` static helpers build type-safe paths from method references:
-`Q.col(SalesOrder::getNumber)`, `Q.ref(SalesOrder::getCustomer, Customer::getName)` (emits the join),
-`Q.count()/sum/avg/min/max`, predicates `Q.eq/ne/gt/gte/lt/lte/between/like/in/isNull/isNotNull`,
-`Q.as(item, alias)`, ordering `Q.asc(ref)/Q.desc(ref)`. Predicate ops:
-`EQ,NE,GT,GTE,LT,LTE,BETWEEN,IN,LIKE,IS_NULL,IS_NOT_NULL`. `Row` (the untyped result) has coercing
-typed accessors — `getUuid/getBigDecimal/getLong/getInt/getBoolean/getDateTime(col)`, plus `has(col)`,
-`columns()`, `asMap()` — so you rarely cast a raw `Object`.
-
-The same `su.onno.fields.Field<E,V>` getter token is the preferred field API in UI authoring:
+The `su.onno.fields.Field<E,V>` getter token is the preferred field API in UI authoring:
 `list.columns(Order::getNumber, Order::getStatus)`, `f.field(Order::getCustomer)`,
 `f.relatedList("orders", Order.class).via(Order::getCustomer)`, and
 `row.enumValue(Order::getStatus, OrderStatus.class)`. String overloads are unsafe escape hatches for

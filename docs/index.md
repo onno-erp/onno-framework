@@ -24,7 +24,7 @@ features:
     details: Catalogs, documents, tabular sections, accumulation/information registers, enumerations, and constants — all typed Java, compiler-checked. No tables or DTOs by hand.
   - icon: ⚙️
     title: Generated, not hand-written
-    details: Schema, repositories, a type-safe query layer, the generic REST API, and migration history are all derived from the model at boot.
+    details: Schema, repositories, generated query services, the generic REST API, and migration history are all derived from the model at boot.
   - icon: 🖥️
     title: Server-driven UI + MCP
     details: A DivKit admin UI and a Model Context Protocol tool surface for AI agents, both generated from the same metadata and gated by the same RBAC.

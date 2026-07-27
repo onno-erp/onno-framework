@@ -149,44 +149,6 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 The outbound relay is **not** auto-scheduled — call `OutboxRelay.relayPending()` from your own
 `@Scheduled` bean. Requires a `KafkaTemplate` and an `OutboxWriter` (from the core).
 
-## Mail — `onno-mail-starter` (`MailProperties`, prefix `onno.mail`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.mail.base-packages` | `List<String>` | — | Packages scanned for `MailTemplate`. Defaults to the application's base packages. |
-| `onno.mail.default-from` | `String` | — | Default From: address when a MailMessage doesn't set one. |
-| `onno.mail.derive-plain-text` | `Boolean` | `true` | When true and a template renders HTML only, a plain-text alternative is derived so mail is multipart. |
-| `onno.mail.enabled` | `Boolean` | `true` | Master switch for the mail starter. |
-| `onno.mail.encoding` | `String` | `UTF-8` | Charset used when rendering templates and building the MIME message. |
-| `onno.mail.failover.providers` | `List<String>` | — | Ordered provider names to try, e.g. `[ses, smtp]`. Active when `provider=failover`. |
-| `onno.mail.file.directory` | `String` | `build/mail` | Directory where `.eml` files are written. |
-| `onno.mail.http.body-template` | `String` | — | Thymeleaf body template producing the provider-specific JSON payload. Resolved by the resource loader; the MailMessage is exposed as `msg`. Example: `classpath:/mail/http/sendgrid.json`. |
-| `onno.mail.http.headers` | `Map<String,String>` | — | Static headers added to every request, e.g. `Authorization: Bearer xxx`. |
-| `onno.mail.http.method` | `String` | `POST` | HTTP method (defaults to POST). |
-| `onno.mail.http.success-status-max` | `Integer` | `299` | Highest HTTP status (inclusive) still treated as success. |
-| `onno.mail.http.url` | `String` | — | Endpoint URL the message is POSTed to. |
-| `onno.mail.preview.enabled` | `Boolean` | `false` | Enables the dev-only template preview endpoints. Off by default. |
-| `onno.mail.preview.path` | `String` | `/onno/mail/preview` | Base path for the preview endpoints. |
-| `onno.mail.provider` | `String` | `smtp` | Selects which `MailDispatcher` bean is active by its `name()`. |
-| `onno.mail.relay-batch-size` | `Integer` | `50` | Outbox relay batch size. |
-| `onno.mail.relay.enabled` | `Boolean` | `true` | Whether the scheduled relay is active. Requires an outbox (DataSource). |
-| `onno.mail.relay.interval-ms` | `Long` | `30000` | Delay between relay runs, in milliseconds. |
-| `onno.mail.relay.lease-timeout-ms` | `Long` | `300000` | How long a message claimed by a relay may stay in `SENDING` before another worker reclaims it. Guards against a worker that crashed mid-send; set comfortably above the slowest provider send time. |
-| `onno.mail.relay.max-attempts` | `Integer` | `5` | Max delivery attempts before a message is marked FAILED. |
-| `onno.mail.use-outbox` | `Boolean` | `true` | Whether `MailService.queue(...)` writes to the outbox (true) or dispatches synchronously (false). |
-| `onno.mail.webhook.enabled` | `Boolean` | `false` | Enables the inbound delivery-event webhook that feeds the suppression list. Off by default. |
-| `onno.mail.webhook.path` | `String` | `/onno/mail/events` | Path the provider posts delivery events to. |
-
-Also reads Spring Boot's `spring.mail.*` (host/port/credentials) for the SMTP dispatcher.
-
-## Print — `onno-print-starter` (`PrintProperties`, prefix `onno.print`)
-
-| Property | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `onno.print.base-packages` | `List<String>` | — | Packages scanned for PrintTemplate. Defaults to the application's base packages. |
-| `onno.print.enabled` | `Boolean` | `true` | Master switch for the print starter (PDF rendering endpoints and services). |
-| `onno.print.encoding` | `String` | `UTF-8` | Character encoding used when rendering HTML templates. |
-
 ## Desktop — `onno-desktop-starter` (`DesktopProperties`, prefix `onno.desktop`)
 
 | Property | Type | Default | Meaning |

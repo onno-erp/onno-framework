@@ -10,8 +10,8 @@ plugins {
 dependencies {
     // Core only. The example deliberately depends on framework + UI + auth and nothing else, so the
     // "simple features" (catalogs, documents, posting, the generated REST API and DivKit UI, role
-    // profiles) are shown working end-to-end without the optional starters (mcp/import/mail/print/
-    // desktop) in the way. Add a starter back here when you want to demo that module.
+    // profiles) are shown working end-to-end without the optional starters
+    // (mcp/import/desktop) in the way. Add a starter here when you want to demo that module.
     implementation(project(":onno-framework-starter"))
     implementation(project(":onno-ui-starter"))
     implementation(project(":onno-auth-starter"))

@@ -67,8 +67,6 @@ Optional starters (same group and `$onnoVersion`):
 implementation("su.onno:onno-auth-starter:$onnoVersion")    // security: in-memory, OIDC/SSO, JWT
 implementation("su.onno:onno-mcp-starter:$onnoVersion")     // MCP server for AI agents
 implementation("su.onno:onno-import-starter:$onnoVersion")  // CSV import
-implementation("su.onno:onno-print-starter:$onnoVersion")   // PDF / print
-implementation("su.onno:onno-mail-starter:$onnoVersion")    // transactional email
 implementation("su.onno:onno-kafka-starter:$onnoVersion")   // outbox → Kafka
 implementation("su.onno:onno-desktop-starter:$onnoVersion") // native desktop
 ```
