@@ -23,6 +23,7 @@ by [`.github/workflows/docs.yml`](.github/workflows/docs.yml)).
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the framework fits together: boot pipeline, each subsystem, the full endpoint catalog, open-core boundary. |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every `onno.*` configuration property, by module, with defaults. **Generated** from the `@ConfigurationProperties` Javadoc — see below. |
 | [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md) | JSON response contract for the generic read API. |
+| [docs/RELEASE_NOTES_2_0.md](docs/RELEASE_NOTES_2_0.md) | 2.0 highlights, breaking changes, release gate, and upgrade order. |
 | [docs/MIGRATING_TO_2_0.md](docs/MIGRATING_TO_2_0.md) | One-time data/source/client migration for the compatibility APIs removed in 2.0. |
 | [docs/MIGRATING_TYPED_AUTHORING.md](docs/MIGRATING_TYPED_AUTHORING.md) | Agent-ready migration checklist for typed fields and durable processes. |
 | [docs/MEDIA_UPLOADS.md](docs/MEDIA_UPLOADS.md) | Binary upload endpoint and the `MediaStorage` SPI. |
@@ -101,7 +102,7 @@ The canonical copies live under [`onno-plugin/skills/`](onno-plugin/skills/onno/
 | `onno-framework` | Core annotations, metadata scanners, repository contracts, schema generation, posting, complete token-based typed process graph/runtime/schema, UI layout model, and shared types. |
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework and repositories. |
 | `onno-ui-starter` | Generic web UI controllers and packaged frontend assets. |
-| `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry with a bounded HTTP exporter. |
+| `onno-observability-starter` | Privacy-safe business, reliability, and UX telemetry through the process-wide OpenTelemetry API. |
 | `onno-auth-starter` | Basic Spring Security auto-configuration and auth API endpoints. |
 | `onno-kafka-starter` | Kafka event publishing, inbox routing, service registry, and remote reference helpers. |
 | `onno-import-starter` | CSV import services and endpoints for catalogs. |
@@ -134,7 +135,7 @@ open a PR (see [CONTRIBUTING.md](CONTRIBUTING.md#listing-a-community-integration
 - Java 21
 - Gradle wrapper from this repository
 - Spring Boot 3.4.x in consuming applications
-- Node 20 is downloaded automatically when building `onno-ui-starter`
+- Node 22.22 is downloaded automatically when building `onno-ui-starter`
 
 ## Local Development
 
@@ -159,8 +160,8 @@ repositories {
 }
 
 dependencies {
-    implementation("su.onno:onno-framework-starter:0.1.0-SNAPSHOT")
-    implementation("su.onno:onno-ui-starter:0.1.0-SNAPSHOT")
+    implementation("su.onno:onno-framework-starter:2.0.0-SNAPSHOT")
+    implementation("su.onno:onno-ui-starter:2.0.0-SNAPSHOT")
 }
 ```
 

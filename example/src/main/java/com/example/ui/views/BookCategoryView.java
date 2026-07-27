@@ -7,7 +7,7 @@ import su.onno.ui.ListSpec;
 
 import org.springframework.stereotype.Component;
 
-/** The categories catalog — the simplest view: a code and a name. */
+/** The categories catalog, including an editable colour used by category references. */
 @Component
 public class BookCategoryView implements EntityView<BookCategory> {
 
@@ -18,7 +18,7 @@ public class BookCategoryView implements EntityView<BookCategory> {
 
     @Override
     public void list(ListSpec<BookCategory> list) {
-        list.columns(BookCategory::getCode, BookCategory::getDescription)
+        list.columns(BookCategory::getCode, BookCategory::getDescription, BookCategory::getColor)
                 .label(BookCategory::getDescription, "Name")
                 .sortBy(BookCategory::getDescription, false);
     }
@@ -26,5 +26,10 @@ public class BookCategoryView implements EntityView<BookCategory> {
     @Override
     public void fields(EntityConfigBuilder<BookCategory> f) {
         f.field(BookCategory::getDescription).order(0).label("Name");
+        f.field(BookCategory::getColor)
+                .order(1)
+                .label("Color")
+                .widget("color")
+                .placeholder("#RRGGBB");
     }
 }

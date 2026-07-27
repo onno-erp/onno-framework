@@ -56,6 +56,33 @@ full-reloads when the `ready` event's `bootId` changes while `devMode` is on). T
 without a code change, touch the trigger file: `touch .onno-reload` (path configurable via
 `onno.ui.dev-reload-trigger`; polled every 500 ms, no HTTP/auth involved).
 
+## Run a release smoke test
+
+Use an isolated in-memory database so an existing example process or file lock cannot affect the
+result:
+
+```bash
+./gradlew :example:bootRun \
+  --args='--server.port=8090 --spring.datasource.url=jdbc:h2:mem:onno_smoke;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE'
+```
+
+Then verify a real authenticated collection read from another shell:
+
+```bash
+base=http://localhost:8090
+jar=$(mktemp)
+curl -fsS -c "$jar" "$base/api/config" | jq '.update.current'
+curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin@onnobooks.local","password":"admin"}' >/dev/null
+curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=5" |
+  jq -e '.rows | type == "array"'
+```
+
+Spring Boot devtools starts the application context on a restart thread. A context failure there can
+leave the Gradle `bootRun` task reporting success, so a zero process exit is not a sufficient smoke
+test: require the HTTP probes above to pass.
+
 ## Verify what is actually running
 
 "I redeployed but still see the old page" is almost always a stale process or cached bundle. Check

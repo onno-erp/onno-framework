@@ -17,7 +17,7 @@ plugins {
 // back to the registry.
 val releaseVersion = providers.gradleProperty("releaseVersion")
     .orElse(providers.environmentVariable("RELEASE_VERSION"))
-    .orElse("0.1.0-SNAPSHOT")
+    .orElse("2.0.0-SNAPSHOT")
 
 allprojects {
     // Maven coordinate group. Artifacts publish to Maven Central under the `su.onno` namespace,

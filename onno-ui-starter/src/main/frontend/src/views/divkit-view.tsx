@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
 import { Copy, ExternalLink, Link2, Trash2, X, type LucideIcon } from "lucide-react";
 import { toast } from "@/components/ui/toast";

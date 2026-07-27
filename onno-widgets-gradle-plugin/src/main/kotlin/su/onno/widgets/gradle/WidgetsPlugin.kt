@@ -21,7 +21,7 @@ abstract class WidgetsExtension {
     /** Directory of widget sources (`*.tsx` / `*.jsx`). Default `src/main/widgets`. */
     abstract val sourceDir: DirectoryProperty
 
-    /** Managed Node version used to run esbuild. Default `20.18.0` (matches the framework's build). */
+    /** Managed Node version used to run esbuild. Default `22.22.0` (matches the framework's build). */
     abstract val nodeVersion: Property<String>
 
     /**
@@ -189,7 +189,7 @@ class WidgetsPlugin : Plugin<Project> {
 
     companion object {
         private const val GROUP = "onno widgets"
-        private const val NODE_VERSION = "20.18.0"
+        private const val NODE_VERSION = "22.22.0"
         private val WIDGET_EXT = Regex(".*\\.(tsx|jsx)$")
 
         private val WORKSPACE_PACKAGE_JSON = """
@@ -201,10 +201,10 @@ class WidgetsPlugin : Plugin<Project> {
                 "@onno/widget-sdk": "file:./sdk"
               },
               "devDependencies": {
-                "esbuild": "^0.24.0",
+                "esbuild": "^0.28.1",
                 "typescript": "~5.6.2",
-                "@types/react": "^18.3.18",
-                "react": "^18.3.1",
+                "@types/react": "^19.2.17",
+                "react": "^19.2.7",
                 "tailwindcss": "^3.4.17",
                 "postcss": "^8.4.49",
                 "tailwindcss-animate": "^1.0.7"

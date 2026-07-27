@@ -616,6 +616,8 @@ The generic edit form honors the `FieldHintBuilder` layout hints:
   (dates, amounts, refs) sit side by side. Anything else spans the full row.
 - `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
   unbounded) gets a textarea automatically even without the hint.
+- `.widget("color")` — a React color popover plus a text input that stores canonical
+  `#RRGGBB`; the generated form rejects invalid hex values before save.
 - `.refOptions(MyDecorator.class)` — delegates a Ref picker's result page to a Spring
   `RefOptionDecorator`. It receives the live header, section row/index, sibling-independent
   document id and may add badges/colors, disable an option with a reason, or filter it out with

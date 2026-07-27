@@ -53,10 +53,11 @@ public class FieldHintBuilder<O, T> {
 
     /**
      * Override the control used to edit this field. Built-in hints include {@code "switch"}/
-     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "geojson"} (the geometry editor —
-     * draw points, paths, and areas, stored as GeoJSON), and the media widgets {@code "image"},
-     * {@code "avatar"} (small round), {@code "images"}/{@code "gallery"} (several), and
-     * {@code "file"} (any type). The map widgets render on a
+     * {@code "toggle"} (boolean), {@code "textarea"}, {@code "color"} (a visual picker plus
+     * {@code #RRGGBB} input), {@code "geojson"} (the geometry editor — draw points, paths, and
+     * areas, stored as GeoJSON), and the media widgets {@code "image"}, {@code "avatar"} (small
+     * round), {@code "images"}/{@code "gallery"} (several), and {@code "file"} (any type). The map
+     * widgets render on a
      * theme-aware MapLibre basemap; the media widgets stream the chosen file to {@code POST /api/media}
      * and store only the returned reference URL, so a plain String attribute holds it — see
      * {@code su.onno.ui.media}.

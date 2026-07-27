@@ -21,6 +21,7 @@ import { DatePicker } from "@/components/date-picker";
 import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
+import { ColorPicker } from "@/components/color-picker";
 import { RelatedListPanel } from "@/components/related-list-panel";
 import { Textarea } from "@/components/ui/textarea";
 import { useMessages } from "@/providers/messages-provider";
@@ -183,6 +184,7 @@ function recordEventMatches(event: UiEvent, kind: string, name: string, id: stri
 }
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 const MAX_VARCHAR = 65535;
 
 function fmtNum(n: number): string {
@@ -200,6 +202,10 @@ function validateField(attr: AttributeMeta, value: unknown, t: Translate): strin
     value == null || value === "" || (typeof value === "string" && value.trim() === "");
   if (attr.required && empty) return t("validation.required", { field });
   if (empty) return null;
+
+  if (/^color$/i.test(attr.widget ?? "") && !HEX_COLOR_RE.test(String(value))) {
+    return t("validation.hexColor", { field });
+  }
 
   if (typeof value === "string") {
     if (attr.length > 0 && attr.length <= MAX_VARCHAR && value.length > attr.length) {
@@ -1211,6 +1217,16 @@ function AttrControl({
   }
   if (/^(file|upload|attachment)$/i.test(attr.widget ?? "")) {
     return <FilePicker value={value as string | undefined} onChange={onChange} />;
+  }
+  if (/^color$/i.test(attr.widget ?? "")) {
+    return (
+      <ColorPicker
+        value={(value as string | undefined) ?? ""}
+        onChange={onChange}
+        invalid={invalid}
+        placeholder={placeholder}
+      />
+    );
   }
 
   if (attr.isPolymorphicRef && attr.refTargets?.length) {

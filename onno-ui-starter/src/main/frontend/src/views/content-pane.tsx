@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { Lock, LogIn, SearchX, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMessages } from "@/providers/messages-provider";
@@ -11,7 +19,7 @@ import {
 } from "@/views/divkit-content";
 // Routes served as native React pages rather than server-driven DivKit surfaces. Settings is not
 // here — it's an ordinary authored DivKit Page now (see DivKitController.settings).
-const REACT_PAGES: Record<string, () => JSX.Element> = {};
+const REACT_PAGES: Record<string, () => ReactElement> = {};
 
 // Catalog/document LIST surfaces (2 path segments) have a targeted delta endpoint
 // (rows div-patch + count variable). Home, detail, and registers don't — they patch

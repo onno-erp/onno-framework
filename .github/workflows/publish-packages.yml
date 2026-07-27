@@ -56,8 +56,35 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.22.0"
+          cache: npm
+          cache-dependency-path: |
+            docs/package-lock.json
+            onno-ui-starter/src/main/frontend/package-lock.json
+
+      - name: Audit frontend dependencies
+        run: npm ci && npm audit
+        working-directory: onno-ui-starter/src/main/frontend
+
+      - name: Build and audit documentation
+        run: npm ci && npm audit && npm run docs:build
+        working-directory: docs
+
       - name: Check
         run: ./gradlew clean check -PreleaseVersion="${{ steps.version.outputs.release_version }}"
+
+      - name: Audit generated widget toolchain
+        run: npm audit --prefix example/build/onno-widgets
+
+      - name: Verify local publication and Javadoc
+        env:
+          # Release versions activate artifact signing, including Maven-local verification.
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: ./gradlew publishToMavenLocal aggregateJavadoc -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
       - name: Publish to Maven Central
         # Uploads a signed deployment to the Central Portal. SONATYPE_AUTOMATIC_RELEASE=true
