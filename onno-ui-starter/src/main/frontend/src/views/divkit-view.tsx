@@ -1889,11 +1889,18 @@ export function DivKitView() {
     return (
       <div className="flex h-screen w-full overflow-hidden" style={{ background: pageBg }}>
         <aside className="flex h-screen w-64 shrink-0 flex-col gap-3 p-3">
+          {/* The rounded border and the scrolling live on SEPARATE elements on purpose: a classic
+              (space-occupying) scrollbar is painted as browser chrome in the scroller's own gutter,
+              and `border-radius` on that same element does NOT clip it — the bar runs through both
+              right-hand corner arcs. Clipping it takes an ancestor, so the radius sits on this
+              wrapper with overflow-hidden and the scroller inside is plain. Machines with overlay
+              scrollbars (macOS default) render both forms identically, so don't "simplify" this
+              back into one element on the strength of how it looks there. */}
           <div
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-card border"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border"
             style={{ background: surfaceBg, borderColor }}
           >
-            {navEl}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{navEl}</div>
           </div>
           <NotificationTrigger style={{ background: surfaceBg, borderColor }} />
           {accountEl}
