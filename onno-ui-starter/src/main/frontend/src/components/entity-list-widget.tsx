@@ -2758,9 +2758,15 @@ export function EntityListWidget({
          scroll when the card is narrower than the columns need. On a route surface the card sizes
          to its rows and only shrinks (min-h-0, no grow) when they overflow the island's remaining
          height — a short list ends at its last row instead of dragging an empty card to the window
-         bottom; embedded, it caps at maxBodyH. */
+         bottom; embedded, it caps at maxBodyH.
+
+         The card chrome (radius, border, background) sits on THIS element rather than on the
+         scroller below, so the rounded overflow-hidden box clips the scroller's chrome. A classic,
+         space-occupying scrollbar is painted in the scroller's own gutter and `border-radius` on
+         that same element does not clip it, so carrying both on one element squares off the corners
+         the bar runs past. Overlay scrollbars (macOS default) hide the difference. */
       <div className={cn(
-        "flex flex-col",
+        "flex flex-col overflow-hidden rounded-card border border-border bg-card",
         surfaceMode && "min-h-0"
       )}>
         {/* the body scroller — the only thing that scrolls. Header sticks to its top; the inner
@@ -2769,7 +2775,7 @@ export function EntityListWidget({
           ref={scrollRef}
           onScroll={onScroll}
           className={cn(
-            "overflow-auto overscroll-contain rounded-card border border-border bg-card",
+            "overflow-auto overscroll-contain",
             surfaceMode && "min-h-0 flex-1"
           )}
           style={surfaceMode ? undefined : { maxHeight: maxBodyH }}

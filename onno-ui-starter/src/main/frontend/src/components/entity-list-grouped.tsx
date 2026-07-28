@@ -254,13 +254,17 @@ export function GroupedList({
       className={cn(
         // On a route surface the card sizes to its groups and only shrinks (min-h-0, no grow)
         // when they overflow — a short list ends at its last row, not the window bottom.
-        "flex flex-col",
+        // The card chrome sits here, not on the scroller below: a classic, space-occupying
+        // scrollbar is painted in the scroller's own gutter and `border-radius` on that same
+        // element does not clip it, so the bar squares off the corners it runs past. Clipping
+        // takes an ancestor, hence rounded + overflow-hidden here and a plain scroller inside.
+        "flex flex-col overflow-hidden rounded-card border border-border bg-card",
         surfaceMode && "min-h-0"
       )}
     >
       <div
         className={cn(
-          "overflow-auto overscroll-contain rounded-card border border-border bg-card",
+          "overflow-auto overscroll-contain",
           surfaceMode && "min-h-0 flex-1"
         )}
         style={surfaceMode ? undefined : { maxHeight: scrollCap }}
