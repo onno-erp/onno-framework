@@ -75,11 +75,25 @@ public class CurrentUserResolver {
         String avatarColumn = avatarColumn(desc);
 
         // Column names come from the descriptor (trusted); the login value is bound.
+        //
+        // The comparison is case-INSENSITIVE. Logins are case-insensitive identifiers everywhere a
+        // user types one, and an SSO principal arrives with whatever casing the provider reports —
+        // Telegram, for instance, stamps the @username exactly as its owner set it. Matching those
+        // with SQL `=` means a stored login that differs only in case silently resolves to nobody:
+        // the person stays signed in, but loses their record id, and with it their display name,
+        // their photo, comment authorship and presence identity. Lower-casing in Java rather than
+        // via `lower(:login)` keeps the bound parameter a plain string, so PostgreSQL never has to
+        // infer a type for it.
+        //
+        // Rows differing only in case are a data error, not a lookup error, so this orders by id and
+        // takes the first rather than failing the request for everyone involved.
         String avatarSelect = avatarColumn == null ? "" : ", " + avatarColumn + " AS _avatar";
         String sql = "SELECT _id, _description" + avatarSelect + " FROM " + desc.tableName()
-                + " WHERE " + loginAttr.columnName() + " = :login AND _deletion_mark = false";
+                + " WHERE lower(" + loginAttr.columnName() + ") = :login AND _deletion_mark = false"
+                + " ORDER BY _id";
         Map<String, Object> row = jdbi.withHandle(h ->
-                h.createQuery(sql).bind("login", username).mapToMap().findOne().orElse(null));
+                h.createQuery(sql).bind("login", username.toLowerCase(Locale.ROOT))
+                        .mapToMap().findFirst().orElse(null));
 
         if (row == null) {
             return new CurrentUser(username, username, null, desc.logicalName(), null);
