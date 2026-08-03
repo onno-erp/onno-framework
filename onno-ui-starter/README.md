@@ -161,6 +161,12 @@ with spaces and underscores stripped and lower-cased. A catalog declared
 `Properties`, `propert_ies` all resolve too) — **not** by its class name `Property`. An unknown
 name returns `404`.
 
+Catalog/document entity responses use the logical camelCase vocabulary by default: `id`,
+`description`, `taxId`, `customerDisplay`, and so on. The same writable names are accepted by
+`POST`/`PUT`, so values can round-trip without renaming. Legacy clients may request
+`?representation=storage`; writes accept both logical and storage aliases, rejecting unequal
+duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md).
+
 ### Catalogs — `/api/catalogs`
 
 | Method | Path | Notes |
@@ -203,7 +209,7 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
-| GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`_date`). |
+| GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`date`; `_date` is also accepted). |
 | GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
 | GET | `/api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` | The **widget aggregate** read behind `chart`/`stat`/`sparkline`/`gauge` (#199): a server-side `GROUP BY groupBy[, seriesBy]` (`groupByDate` = `minute`…`month` buckets a timestamp via `DATE_TRUNC`; `dateField`+`from`/`to` window the rows) returning `{ buckets: [{ key, label?, series?, seriesLabel?, value, value2? }], truncated, span? }` — O(buckets) instead of the whole table. Blank `groupBy` → one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/`Ref` buckets carry a resolved `label`; buckets cap at 1000 (`truncated: true`). Date-bucketed axes always **zero-fill empty periods** over the window (or between first/last data, unbounded) with `{ key, value: 0 }` fillers (#246); the filled spine honors the same 1000 cap. |
 
@@ -250,7 +256,7 @@ for a base constraint that must always apply.
 runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware
 row actions use) and returns a semantic `ListSpec.RowStyle` tone — `DANGER` (red), `WARNING`
 (amber), `SUCCESS` (green), `ACCENT` (brand), `MUTED` (faded) — or `null` for the default look. The
-tone ships under the row's `_style` and the grid renders it as a translucent theme-aware wash
+tone ships under the logical row's `style` and the grid renders it as a translucent theme-aware wash
 (selection and hover still read over it; it replaces the zebra stripe on tinted rows). Works in the
 flat grid and expanded groups alike; a function that throws is treated as `null` for that row:
 
@@ -263,7 +269,8 @@ list.rowStyle(row -> row.bool(Order::getUrgent) ? ListSpec.RowStyle.DANGER
 Use getter references throughout authored Java: `list.columns(Order::getNumber, Order::getStatus)`,
 `list.filter(Order::getStatus)`, `f.field(Order::getCustomer)`, related-list
 `via`/`display`/`columns`, widget field methods, and form-validation dependencies. These resolve to
-wire/storage names only at the metadata boundary. The string overloads remain for dynamic metadata
+logical response fields at the UI boundary and validated storage names inside query services. The
+string overloads remain for dynamic metadata
 and are deliberately unsafe; routes, labels, role/action/process keys, and filter-expression text
 remain strings because they are not Java field references.
 
@@ -376,7 +383,7 @@ Each function receives an `ActionRow` — a read-only view of the record's resol
 `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, `bool(col)`,
 or `get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list
 page is served (no extra query — the row is already in hand) and shipped to the grid under each
-row's `_actions`; the button falls back to the static `icon`/`label` when a function isn't set. A
+row's `actions`; the button falls back to the static `icon`/`label` when a function isn't set. A
 static row action (no functions) costs nothing: the list ships its rows untouched.
 
 The same per-record functions apply to **`DETAIL` actions**, evaluated against the loaded record as
@@ -637,7 +644,7 @@ payload, so this only tells the client which extra line to render.
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
 attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list
-cells into colored pills (`{col}_color` — the catalog counterpart of `@EnumLabel(color=…)`). A
+cells into colored pills (`FieldColor` — the catalog counterpart of `@EnumLabel(color=…)`). A
 user-editable status *catalog* therefore keeps the colored status pills a status enum had.
 
 The picker's pinned **"+ New"** row opens the target's full create form in a side pane; when that
@@ -725,7 +732,7 @@ class SalesOpsPage implements Page {
               .config("metric", "sum").config("metricField", "total").config("currency", "USD");
           side.widget("Total").type("count").document(Order.class);
           side.widget("By status").type("chart").document(Order.class)
-              .config("kind", "pie").config("groupBy", "status_display").config("metric", "count");
+              .config("kind", "pie").config("groupBy", "statusDisplay").config("metric", "count");
       });
   });
   ```
@@ -857,7 +864,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 |-----|-----------|--------|
 | `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
 | `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
-| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND _posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
+| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Logical field names are preferred and legacy storage names remain accepted. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
 | `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
@@ -869,7 +876,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
 | `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |
 | `target` | gauge | The 100% mark the ring fills toward; with none, the gauge shows the bare value in a full ring. |
-| `titleTemplate` | list | `"{guest_name} — {property_display}"`; unknown fields render empty. |
+| `titleTemplate` | list | `"{guestName} — {propertyDisplay}"`; unknown fields render empty. |
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |
 | `amountField` | list, calendar | Column for the trailing money figure (defaults to `total`/`gross`-style fields). |
 | `dateField` | list, calendar | API column for the date (also `.dateField(...)` on the builder), e.g. `starts_at`. For a document calendar, dragging an event updates this field and the document's built-in `date` together, so custom business timestamps remain aligned with calendar windowing. |
@@ -902,7 +909,7 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
      const [rows, setRows] = useState<any[]>([]);
      useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
      return <ul className="text-sm text-foreground">{rows.map((r) =>
-       <li key={String(r.id)}>{String(r._date)} — {String(r._number)}</li>)}</ul>;
+       <li key={String(r.id)}>{String(r.date)} — {String(r.number)}</li>)}</ul>;
    }
    registerWidget("eventLog", EventLog);
    ```
@@ -996,7 +1003,7 @@ function BookTiles({ rows, list, open }: ListRendererProps) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
       {rows.map((r) => (
-        <button key={String(r._id)} onClick={() => open(r)}>{String(r._description)}</button>
+        <button key={String(r.id)} onClick={() => open(r)}>{String(r.description)}</button>
       ))}
     </div>
   );

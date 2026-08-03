@@ -25,6 +25,7 @@ import { HintIcon } from "@/components/ui/hint-icon";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { useAppLocale, useMessages } from "@/providers/messages-provider";
+import { logicalEntityKey } from "@/lib/entity-keys";
 import "./calendar-widget.css";
 
 interface CalendarWidgetProps {
@@ -74,9 +75,9 @@ function hashHue(input: string | undefined | null): number | null {
 
 function pickAvatar(row: EntityRecord): { url?: string; label?: string } {
   for (const key of Object.keys(row)) {
-    if (key.endsWith("_avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
-      const base = key.slice(0, -"_avatar".length);
-      const label = row[`${base}_display`];
+    if (key.endsWith("Avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
+      const base = key.slice(0, -"Avatar".length);
+      const label = row[`${base}Display`];
       return {
         url: row[key] as string,
         label: typeof label === "string" ? label : undefined,
@@ -98,8 +99,8 @@ function pickField(row: EntityRecord, fields: string[]): string | undefined {
 /**
  * Read-side optimistic values and write-side partial payload for a calendar drag/resize.
  *
- * A calendar may render a custom business field such as `starts_at` instead of the document's
- * `_date`. The generic document endpoint still windows calendar reads by `_date`, so a move keeps
+ * A calendar may render a custom business field such as `startsAt` instead of the document's
+ * `date`. The generic document endpoint still windows calendar reads by its date system field, so a move keeps
  * both values aligned while also updating the configured end field.
  */
 export function calendarMoveValues(
@@ -108,14 +109,15 @@ export function calendarMoveValues(
   startIso: string,
   endIso: string | undefined
 ): { optimistic: EntityRecord; payload: EntityRecord } {
-  const optimistic: EntityRecord = { _date: startIso, [dateField]: startIso };
-  const startWriteKey = dateField.replace(/^_/, "");
+  const startWriteKey = logicalEntityKey(dateField);
+  const optimistic: EntityRecord = { date: startIso, [startWriteKey]: startIso };
   const payload: EntityRecord = { date: startIso };
   if (startWriteKey !== "date") payload[startWriteKey] = startIso;
 
   if (endDateField && endIso) {
-    optimistic[endDateField] = endIso;
-    payload[endDateField.replace(/^_/, "")] = endIso;
+    const endWriteKey = logicalEntityKey(endDateField);
+    optimistic[endWriteKey] = endIso;
+    payload[endWriteKey] = endIso;
   }
   return { optimistic, payload };
 }
@@ -164,12 +166,18 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
     }
   }, [widget, range]);
 
-  const dateField = widget.dateField || "_date";
-  const titleField = widget.titleField || "_number";
-  const endDateField = widget.extraConfig?.endDateField; // e.g. "_end_date" or "checkout"
-  const durationField = widget.extraConfig?.durationField; // e.g. "duration_days"
-  const colorByField = widget.extraConfig?.colorBy;
-  const amountField = widget.extraConfig?.amountField || "total";
+  const dateField = widget.dateField || "date";
+  const titleField = widget.titleField || "number";
+  const endDateField = widget.extraConfig?.endDateField
+    ? logicalEntityKey(widget.extraConfig.endDateField)
+    : undefined;
+  const durationField = widget.extraConfig?.durationField
+    ? logicalEntityKey(widget.extraConfig.durationField)
+    : undefined;
+  const colorByField = widget.extraConfig?.colorBy
+    ? logicalEntityKey(widget.extraConfig.colorBy)
+    : undefined;
+  const amountField = logicalEntityKey(widget.extraConfig?.amountField || "total");
   const allDayCfg = widget.extraConfig?.allDay;
   // Booking-style widgets (those with an end date or duration) default to all-day so
   // events render as continuous bars and can be resized day-by-day in month view.
@@ -180,14 +188,14 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
       : isBookingLike;
   const secondaryFieldList = useMemo(() => {
     const cfg = widget.extraConfig?.secondaryField;
-    if (cfg) return cfg.split(",").map((s) => s.trim()).filter(Boolean);
+    if (cfg) return cfg.split(",").map((s) => logicalEntityKey(s.trim())).filter(Boolean);
     // sensible defaults: client/property/warehouse display names
     return [
-      "customer_display",
-      "client_display",
-      "property_display",
-      "warehouse_display",
-      "_description",
+      "customerDisplay",
+      "clientDisplay",
+      "propertyDisplay",
+      "warehouseDisplay",
+      "description",
       "name",
     ];
   }, [widget]);
@@ -214,8 +222,8 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
       items.flatMap<EventInput>((item) => {
         const dateValue = item[dateField] as string | undefined;
         if (!dateValue) return [];
-        const id = String(item._id ?? "");
-        const primary = String(item[titleField] ?? item._number ?? "");
+        const id = String(item.id ?? "");
+        const primary = String(item[titleField] ?? item.number ?? "");
         const secondary = pickField(item, secondaryFieldList);
         const amount = toNumber(item[amountField]) ?? undefined;
         const currency = resolveCurrency(item, widget.extraConfig?.currencyField, widget.extraConfig?.currency);
@@ -225,9 +233,9 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
         const hue = hashHue(colorKey);
         const styled = hue != null
           ? {
-              backgroundColor: `hsl(${hue} 70% ${item._posted ? "45%" : "92%"})`,
-              borderColor: `hsl(${hue} 70% ${item._posted ? "35%" : "70%"})`,
-              textColor: item._posted ? "white" : `hsl(${hue} 50% 25%)`,
+              backgroundColor: `hsl(${hue} 70% ${item.posted ? "45%" : "92%"})`,
+              borderColor: `hsl(${hue} 70% ${item.posted ? "35%" : "70%"})`,
+              textColor: item.posted ? "white" : `hsl(${hue} 50% 25%)`,
             }
           : {};
         return [{
@@ -238,7 +246,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
           allDay,
           ...styled,
           extendedProps: {
-            posted: Boolean(item._posted),
+            posted: Boolean(item.posted),
             primary,
             secondary,
             amount,
@@ -247,7 +255,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
             avatarUrl: avatar.url,
             avatarLabel: avatar.label,
           } satisfies EventExtendedProps,
-          classNames: hue != null ? [] : item._posted ? ["fc-onno-posted"] : ["fc-onno-draft"],
+          classNames: hue != null ? [] : item.posted ? ["fc-onno-posted"] : ["fc-onno-draft"],
         }];
       }),
     [items, dateField, titleField, secondaryFieldList, endDateField, durationField, allDay, colorByField, amountField]
@@ -417,7 +425,7 @@ export function CalendarWidget({ widget }: CalendarWidgetProps) {
     const move = calendarMoveValues(dateField, endDateField, startIso, endIso);
     setItems((prev) =>
       prev.map((r) => {
-        if (r._id !== id) return r;
+        if (r.id !== id) return r;
         return { ...r, ...move.optimistic };
       })
     );

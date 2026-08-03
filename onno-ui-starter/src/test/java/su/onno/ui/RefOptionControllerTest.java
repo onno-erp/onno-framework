@@ -78,7 +78,7 @@ class RefOptionControllerTest {
 
         assertThat(result).hasSize(2);
         Map<String, Object> decorated = result.stream()
-                .filter(item -> unavailable.equals(item.get("_id")))
+                .filter(item -> unavailable.equals(item.get("id")))
                 .findFirst().orElseThrow();
         assertThat(decorated)
                 .containsEntry("_optionBadge", "Unavailable")
@@ -95,7 +95,16 @@ class RefOptionControllerTest {
         assertThat(context.rowIndex()).isEqualTo(1);
         assertThat(context.rowValues()).containsEntry("role", "HOST");
         assertThat(context.documentId()).isEqualTo(documentId);
-        assertThat(decorated).containsEntry("email", null);
+        assertThat(decorated)
+                .containsEntry("email", null)
+                .containsEntry("description", "Sam")
+                .doesNotContainKey("_description");
+
+        List<Map<String, Object>> storage = controller.search(request, "storage", principal);
+        assertThat(storage).anySatisfy(item -> assertThat(item)
+                .containsEntry("_id", unavailable)
+                .containsEntry("_description", "Sam")
+                .doesNotContainKey("description"));
     }
 
     @Test

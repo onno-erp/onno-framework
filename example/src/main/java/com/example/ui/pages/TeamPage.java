@@ -41,7 +41,7 @@ public class TeamPage implements Page {
                     .titleField(ScheduleEvent::getSubject)
                     .endDateField(ScheduleEvent::getEndsAt)
                     .config("allDay", "false")
-                    .config("secondaryField", "_number")
+                    .config("secondaryField", "number")
                     .hint("Open an event to manage participants; drag it to reschedule."));
             body.col("1/3", staff -> staff.list(Employee.class));
         });

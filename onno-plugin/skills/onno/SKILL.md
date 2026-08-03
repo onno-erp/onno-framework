@@ -298,7 +298,8 @@ curl -b jar.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
 
 The real endpoints (auth `/api/auth/login|logout|me`, catalogs/documents/registers, posting,
 media, import, MCP, etc.) are cataloged in [docs/ARCHITECTURE.md](https://github.com/onno-erp/onno-framework/blob/main/docs/ARCHITECTURE.md);
-the JSON read contract (`{col}_display`/`{col}_ref`, `__SECRET_SET__` redaction, list vs get) is in
+the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage compatibility,
+`__SECRET_SET__` redaction, list vs get) is in
 [docs/HEADLESS_READ_API.md](https://github.com/onno-erp/onno-framework/blob/main/docs/HEADLESS_READ_API.md).
 
 ## Three behaviours you will hit

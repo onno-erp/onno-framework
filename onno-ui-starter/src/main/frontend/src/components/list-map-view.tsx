@@ -38,10 +38,10 @@ const PAGE = 500;
 /** A record's feature label: the configured label column, else a system identifier. */
 function labelFor(row: EntityRecord, labelField?: string): string {
   const candidates = [
-    labelField && (row[`${labelField}_display`] ?? row[labelField]),
-    row._description,
-    row._number,
-    row._code,
+    labelField && (row[`${labelField}Display`] ?? row[labelField]),
+    row.description,
+    row.number,
+    row.code,
   ];
   for (const c of candidates) {
     if (c != null && String(c).trim() !== "") return String(c);
@@ -51,7 +51,7 @@ function labelFor(row: EntityRecord, labelField?: string): string {
 
 /** A secondary popup line: the record's code/number, unless it already serves as the label. */
 function sublabelFor(row: EntityRecord, label: string): string | undefined {
-  for (const c of [row._code, row._number]) {
+  for (const c of [row.code, row.number]) {
     const s = c != null ? String(c).trim() : "";
     if (s && s !== label) return s;
   }
@@ -142,7 +142,7 @@ export function ListMapView({
     if (!rows) return [];
     const out: Feature[] = [];
     for (const row of rows) {
-      const href = row._id ? `onno://${kind}/${name}/${row._id}` : undefined;
+      const href = row.id ? `onno://${kind}/${name}/${row.id}` : undefined;
       const label = labelFor(row, config.labelField);
       out.push(...featuresFromRow(row, source, { label, sublabel: sublabelFor(row, label), href }));
     }

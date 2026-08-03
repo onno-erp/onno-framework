@@ -33,14 +33,14 @@ CSRF is disabled, and `/api/auth/login` returns `409`.
 ```bash
 curl -fsS -b "$jar" "$base/api/list/catalogs/Products?limit=25" | jq -e '.rows'
 
-product_id=$(curl -fsS -b "$jar" "$base/api/list/catalogs/Products?limit=1" | jq -er '.rows[0]._id')
-curl -fsS -b "$jar" "$base/api/catalogs/Products/$product_id" | jq -e '._id'
+product_id=$(curl -fsS -b "$jar" "$base/api/list/catalogs/Products?limit=1" | jq -er '.rows[0].id')
+curl -fsS -b "$jar" "$base/api/catalogs/Products/$product_id" | jq -e '.id'
 
 created=$(curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
   -X POST "$base/api/catalogs/Products" \
   -d '{"description":"Widget","name":"Widget","price":12.50}')
-created_id=$(jq -r ._id <<<"$created")
-version=$(jq -r ._version <<<"$created")
+created_id=$(jq -r .id <<<"$created")
+version=$(jq -r .version <<<"$created")
 
 curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
   -X PUT "$base/api/catalogs/Products/$created_id" \
@@ -50,16 +50,16 @@ curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" \
   -X DELETE "$base/api/catalogs/Products/$created_id" -o /dev/null
 ```
 
-Names in the URL are annotation display names (`@Catalog(name = "Products")`). If a name has spaces,
+Names in the URL are annotation logical names (`@Catalog(name = "Products")`). If a name has spaces,
 use the exact route segment the UI uses or URL-encode it.
 
 ## Document Posting
 
 ```bash
 curl -fsS -b "$jar" "$base/api/list/documents/SalesOrders?limit=25" | jq -e '.rows'
-order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/SalesOrders?limit=1" | jq -er '.rows[0]._id')
+order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/SalesOrders?limit=1" | jq -er '.rows[0].id')
 
-curl -fsS -b "$jar" "$base/api/documents/SalesOrders/$order_id" | jq -e '._id'
+curl -fsS -b "$jar" "$base/api/documents/SalesOrders/$order_id" | jq -e '.id'
 curl -fsS -b "$jar" "$base/api/documents/SalesOrders/$order_id/posting-preview" | jq -e '.registers'
 
 curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" \
@@ -75,8 +75,8 @@ Document create/update/delete use the same command shapes:
 order=$(curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
   -d "{\"customer\":\"$customer_id\",\"items\":[{\"product\":\"$product_id\",\"quantity\":1}]}" \
   "$base/api/documents/SalesOrders")
-new_order_id=$(jq -r ._id <<<"$order")
-order_version=$(jq -r ._version <<<"$order")
+new_order_id=$(jq -r .id <<<"$order")
+order_version=$(jq -r .version <<<"$order")
 
 curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
   -X PUT -d "{\"comment\":\"checked\",\"version\":$order_version}" \
@@ -104,7 +104,7 @@ curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H "Content-Type: application/json" 
 # {"valid":false,"fieldErrors":{"customer":["Customer is required"]},"formErrors":["Choose a customer"]}
 ```
 
-Posting writes register movements and marks `_posted=true`. Preview should be used before destructive
+Posting writes register movements and returns `posted=true`. Preview should be used before destructive
 or high-value tests.
 
 ## Register Reads
@@ -121,27 +121,28 @@ wins over stale docs.
 
 ## Response Shape
 
-List/get responses include storage values and display companions:
+Catalog/document list/get responses default to logical values and display companions:
 
 ```json
 {
-  "_id": "5d3...",
+  "id": "5d3...",
   "customer": "9a1...",
-  "customer_display": "Acme LLC",
-  "customer_ref": {
+  "customerDisplay": "Acme LLC",
+  "customerRef": {
     "type": "Customers",
     "id": "9a1..."
   },
-  "status": "6c6f...",
-  "status_display": "Confirmed",
-  "status_color": "#2563EB",
-  "api_key": "__SECRET_SET__"
+  "status": "7f4...",
+  "statusDisplay": "Confirmed",
+  "statusColor": "#2563EB",
+  "apiKey": "__SECRET_SET__"
 }
 ```
 
-Use raw values for writes and filters. Use `*_display` and `*_color` for headless UI rendering.
-Do not echo a read row back as a write: reads use snake_case storage columns while writes use
-camelCase field names.
+Use raw values for writes and `*Display` / `*Color` for headless UI rendering. Writable values from
+the default response can be submitted to `PUT` without renaming. Add `?representation=storage` for
+the legacy `_description` / `customer_display` response; storage aliases are also accepted on
+writes, and conflicting logical/storage values return `400`.
 
 Temporals are ISO wall-clock strings. `LocalDate` is `2026-06-04`; `LocalDateTime` reads canonically
 as offset-free `2026-06-04T10:00:00`. An offset-bearing write such as

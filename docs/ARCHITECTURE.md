@@ -240,8 +240,9 @@ Authored Java uses the shared serializable `Field<E,V>` getter token wherever a 
 model field. `ListSpec<E>`, `EntityConfigBuilder<E>`, widget field methods, related lists,
 form-validation dependencies, `ActionRow`, register queries, and `Q` all accept method references
 such as `Order::getStatus`. `Fields.name(...)` resolves the JavaBean property and boundary resolvers
-map it to the physical API/storage column. This keeps Java source compiler-checked while preserving
-string metadata on the wire. String overloads are unsafe compatibility/dynamic escape hatches.
+map it to the logical API field used by catalog/document widgets, then query services translate it
+to the physical storage column. This keeps Java source compiler-checked while preserving validated
+SQL identifiers internally. String overloads are unsafe compatibility/dynamic escape hatches.
 Strings remain correct for semantic identifiers (routes, roles, action/process keys, labels) and
 for intentionally parsed expression text such as a widget filter.
 
@@ -332,18 +333,21 @@ runtime paths.
 
 ## Generic REST API
 
-Read rows use snake_case storage columns; writes use camelCase model field names and are partial
-(full contract: [HEADLESS_READ_API.md](HEADLESS_READ_API.md)). Temporal values are normalized at the
-read/write boundary: `LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time.
-Offset-bearing inputs are accepted without shifting their local fields. This keeps PostgreSQL,
-H2, generated forms, and headless clients on one round-trip-safe representation.
+Catalog/document reads default to logical camelCase names, matching the partial-write vocabulary;
+the prior storage-shaped response remains available explicitly with `?representation=storage`
+(full contract: [HEADLESS_READ_API.md](HEADLESS_READ_API.md)). Writes accept both logical and storage
+aliases and reject unequal duplicates. Temporal values are normalized at the read/write boundary:
+`LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time. Offset-bearing inputs
+are accepted without shifting their local fields. This keeps PostgreSQL, H2, the bundled forms, and
+headless clients on one round-trip-safe preferred representation.
 
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is
-the entity's **display/logical name** (e.g. `Properties`, not the class `Property`), matched
+the entity's annotation **logical name** (e.g. `Properties`, not the class `Property` or a localized title), matched
 case-insensitively with spaces/underscores stripped. **There is no anonymous manifest endpoint** —
 the only `/manifest` route is the desktop shell's `/api/desktop/manifest`; agents introspect the
 model via the real generated endpoints below or the MCP `describe_metadata` tool. The read-response
-contract (column-name keys, `{col}_display`/`{col}_ref` expansion, `__SECRET_SET__` redaction) is in
+contract (logical keys, `FieldDisplay`/`FieldRef` expansion, storage compatibility, and
+`__SECRET_SET__` redaction) is in
 [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
 
 Durable process routes are `GET /api/process-definitions`, `GET /api/processes`,

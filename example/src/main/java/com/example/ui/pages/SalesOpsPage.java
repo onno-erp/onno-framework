@@ -39,11 +39,11 @@ public class SalesOpsPage implements Page {
                     .hint("Orders not yet completed or cancelled.");
                 side.widget("Posted revenue").type("count").document(Order.class)
                     .config("metric", "sum").metricField(Order::getTotal)
-                    .config("filter", "_posted = true").config("currency", "USD");
+                    .config("filter", "posted = true").config("currency", "USD");
                 side.widget("Total orders").type("count").document(Order.class)
                     .config("metric", "count");
                 side.widget("Orders by status").type("chart").document(Order.class)
-                    .config("kind", "pie").config("groupBy", "status_display").config("metric", "count")
+                    .config("kind", "pie").config("groupBy", "statusDisplay").config("metric", "count")
                     .hint("Where orders sit in the lifecycle.");
             });
         });

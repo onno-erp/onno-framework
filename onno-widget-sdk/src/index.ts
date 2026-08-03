@@ -29,7 +29,7 @@ export type {
  *     useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
  *     return (
  *       <ul className="text-sm text-foreground">
- *         {rows.map((r) => <li key={String(r._id)}>{String(r._date)} — {String(r._description)}</li>)}
+ *         {rows.map((r) => <li key={String(r.id)}>{String(r.date)} — {String(r.description)}</li>)}
  *       </ul>
  *     );
  *   }
@@ -84,7 +84,7 @@ export const registerWidget: (
  *
  *   function BookTiles({ rows, open }: ListRendererProps) {
  *     return <div className="grid grid-cols-4 gap-3">{rows.map((r) => (
- *       <button key={String(r._id)} onClick={() => open(r)}>{String(r._description)}</button>
+ *       <button key={String(r.id)} onClick={() => open(r)}>{String(r.description)}</button>
  *     ))}</div>;
  *   }
  *   registerListRenderer("bookTiles", BookTiles);

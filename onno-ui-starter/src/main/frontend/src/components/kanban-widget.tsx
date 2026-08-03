@@ -16,12 +16,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { logicalEntityKey } from "@/lib/entity-keys";
 
 function pickAvatar(row: EntityRecord): { url?: string; label?: string } {
   for (const key of Object.keys(row)) {
-    if (key.endsWith("_avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
-      const base = key.slice(0, -"_avatar".length);
-      const label = row[`${base}_display`];
+    if (key.endsWith("Avatar") && typeof row[key] === "string" && (row[key] as string).trim()) {
+      const base = key.slice(0, -"Avatar".length);
+      const label = row[`${base}Display`];
       return {
         url: row[key] as string,
         label: typeof label === "string" ? label : undefined,
@@ -45,23 +46,23 @@ interface Column {
 }
 
 function defaultColumns(widget: DashboardWidgetMeta): Column[] {
-  const groupBy = widget.extraConfig?.groupBy ?? "_posted";
-  if (groupBy === "_posted" && widget.entityType === "document") {
+  const groupBy = logicalEntityKey(widget.extraConfig?.groupBy ?? "posted");
+  if (groupBy === "posted" && widget.entityType === "document") {
     return [
       {
         key: "draft",
         label: "Draft",
-        match: (r) => !r._posted,
-        apply: (name, row) => api.unpostDocument(toSnakeCase(name), row._id as string),
-        optimistic: (row) => ({ ...row, _posted: false }),
+        match: (r) => !r.posted,
+        apply: (name, row) => api.unpostDocument(toSnakeCase(name), row.id as string),
+        optimistic: (row) => ({ ...row, posted: false }),
         variant: "secondary",
       },
       {
         key: "posted",
         label: "Posted",
-        match: (r) => Boolean(r._posted),
-        apply: (name, row) => api.postDocument(toSnakeCase(name), row._id as string),
-        optimistic: (row) => ({ ...row, _posted: true }),
+        match: (r) => Boolean(r.posted),
+        apply: (name, row) => api.postDocument(toSnakeCase(name), row.id as string),
+        optimistic: (row) => ({ ...row, posted: true }),
         variant: "success",
       },
     ];
@@ -87,7 +88,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
     load();
   }, [load]);
 
-  const titleField = widget.titleField || "_number";
+  const titleField = widget.titleField || "number";
   const columns = useMemo(() => defaultColumns(widget), [widget]);
   const draggable = columns.length > 0;
   // RBAC: the server stamps canWrite=false when the viewer may not write the entity — cards
@@ -119,11 +120,11 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
     const target = columns.find((c) => c.key === destination.droppableId);
     if (!target) return;
 
-    const row = items.find((r) => r._id === draggableId);
+    const row = items.find((r) => r.id === draggableId);
     if (!row || target.match(row)) return;
 
     const optimistic = target.optimistic(row);
-    setItems((prev) => prev.map((r) => (r._id === row._id ? optimistic : r)));
+    setItems((prev) => prev.map((r) => (r.id === row.id ? optimistic : r)));
 
     try {
       await target.apply(widget.entityName, row);
@@ -142,7 +143,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-muted-foreground">
-            Kanban grouping <code>{widget.extraConfig?.groupBy ?? "_posted"}</code> is not supported.
+            Kanban grouping <code>{widget.extraConfig?.groupBy ?? "posted"}</code> is not supported.
           </p>
         </CardContent>
       </Card>
@@ -199,19 +200,19 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                           </div>
                         )}
                         {cards.map((row, index) => {
-                          const id = String(row._id);
+                          const id = String(row.id);
                           const avatar = pickAvatar(row);
-                          const number = String(row[titleField] ?? row._number ?? row._code ?? "");
+                          const number = String(row[titleField] ?? row.number ?? row.code ?? "");
                           const primaryDisplay = String(
-                            row.customer_display ??
-                              row.client_display ??
-                              row.primary_client_display ??
-                              row._description ??
+                            row.customerDisplay ??
+                              row.clientDisplay ??
+                              row.primaryClientDisplay ??
+                              row.description ??
                               row.name ??
                               ""
                           );
                           const secondaryDisplay = String(
-                            row.property_display ?? row.warehouse_display ?? ""
+                            row.propertyDisplay ?? row.warehouseDisplay ?? ""
                           );
                           const handleOpen = () => {
                             if (widget.entityType === "document") {
@@ -243,9 +244,9 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                                     <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
                                       {number}
                                     </span>
-                                    {typeof row._date === "string" && row._date && (
+                                    {typeof row.date === "string" && row.date && (
                                       <span className="text-[10px] text-muted-foreground tabular-nums">
-                                        {format(new Date(row._date), "MMM d")}
+                                        {format(new Date(row.date), "MMM d")}
                                       </span>
                                     )}
                                   </div>

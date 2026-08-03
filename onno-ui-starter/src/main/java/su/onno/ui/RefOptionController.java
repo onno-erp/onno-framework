@@ -6,6 +6,7 @@ import su.onno.metadata.DocumentDescriptor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
@@ -37,20 +38,33 @@ public final class RefOptionController {
     }
 
     @PostMapping("/search")
-    public List<Map<String, Object>> search(@RequestBody SearchRequest request, Principal principal) {
+    public List<Map<String, Object>> search(@RequestBody SearchRequest request,
+                                             @RequestParam(defaultValue = "logical") String representation,
+                                             Principal principal) {
         int cap = request.limit() == null ? 30 : Math.max(1, Math.min(request.limit(), 200));
         String kind = "document".equalsIgnoreCase(request.targetKind()) ? "document" : "catalog";
-        List<Map<String, Object>> rows;
+        EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
         if ("document".equals(kind)) {
             DocumentDescriptor target = documents.require(request.targetName());
             access.requireRead(principal, target);
-            rows = documents.search(target, request.query(), cap, request.filter());
+            List<Map<String, Object>> rows = documents.search(target, request.query(), cap, request.filter());
+            return EntityJsonRepresentation.documents(target,
+                    options.decorate(request.decorator(), context(request, kind), rows), mode);
         } else {
             CatalogDescriptor target = catalogs.require(request.targetName());
             access.requireRead(principal, target);
-            rows = catalogs.search(target, request.query(), cap, request.filter());
+            List<Map<String, Object>> rows = catalogs.search(target, request.query(), cap, request.filter());
+            return EntityJsonRepresentation.catalogs(target,
+                    options.decorate(request.decorator(), context(request, kind), rows), mode);
         }
-        RefOptionContext context = new RefOptionContext(
+    }
+
+    List<Map<String, Object>> search(SearchRequest request, Principal principal) {
+        return search(request, "logical", principal);
+    }
+
+    private static RefOptionContext context(SearchRequest request, String kind) {
+        return new RefOptionContext(
                 kind,
                 request.targetName(),
                 request.fieldPath(),
@@ -59,7 +73,6 @@ public final class RefOptionController {
                 request.rowIndex(),
                 request.rowValues(),
                 request.documentId());
-        return options.decorate(request.decorator(), context, rows);
     }
 
     public record SearchRequest(

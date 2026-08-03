@@ -103,7 +103,7 @@ function valueAtDependency(values: EntityRecord, path: string): unknown {
 
 // One editable field: either a catalog system field (code/description) or an attribute.
 type Field =
-  | { kind: "system"; key: string; label: string; column: string }
+  | { kind: "system"; key: string; label: string }
   | { kind: "attr"; key: string; label: string; attr: AttributeMeta };
 
 function isNumeric(javaType: string): boolean {
@@ -127,7 +127,7 @@ function canonicalTemporalSeed(value: unknown, javaType: string): unknown {
 }
 
 // Seed the top-level field state from a loaded record. Secret fields are write-only — never seeded
-// (see the form's save path). Records arrive keyed by column name; the form keys by field name.
+// (see the form's save path). Logical entity responses already use the form's field names.
 // Module-scope + record-parameterised so a live SSE refetch can re-seed from a fresh record with the
 // exact same rules as the initial mount.
 function seedDataFrom(record: EntityRecord | null, fields: Field[]): EntityRecord {
@@ -135,16 +135,15 @@ function seedDataFrom(record: EntityRecord | null, fields: Field[]): EntityRecor
   if (!record) return seed;
   for (const f of fields) {
     if (f.kind === "attr" && f.attr.secret) continue;
-    const col = f.kind === "system" ? f.column : f.attr.columnName;
-    if (record[col] != null) {
+    if (record[f.key] != null) {
       const javaType = f.kind === "attr" ? f.attr.javaType : f.key === "date" ? "LocalDateTime" : "";
-      seed[f.key] = canonicalTemporalSeed(record[col], javaType);
+      seed[f.key] = canonicalTemporalSeed(record[f.key], javaType);
     }
   }
   return seed;
 }
 
-// Seed the tabular-section rows from a loaded record (same column→field asymmetry as seedDataFrom).
+// Seed tabular-section rows from the same logical field vocabulary as the document header.
 function seedRowsFrom(
   record: EntityRecord | null,
   sections: TabularSectionMeta[]
@@ -157,8 +156,8 @@ function seedRowsFrom(
           const row: EntityRecord = {};
           for (const attr of ts.attributes) {
             if (attr.secret) continue; // write-only — see seedDataFrom
-            if (r[attr.columnName] != null) {
-              row[attr.fieldName] = canonicalTemporalSeed(r[attr.columnName], attr.javaType);
+            if (r[attr.fieldName] != null) {
+              row[attr.fieldName] = canonicalTemporalSeed(r[attr.fieldName], attr.javaType);
             }
           }
           return row;
@@ -293,13 +292,12 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       meta.systemColumns?.find((c) => c.fieldName === fieldName)?.displayName || fallback;
     if (kind === "catalogs") {
       if (!meta.autoNumber) {
-        out.push({ kind: "system", key: "code", label: sysLabel("code", "Code"), column: "_code" });
+        out.push({ kind: "system", key: "code", label: sysLabel("code", "Code") });
       }
       out.push({
         kind: "system",
         key: "description",
         label: sysLabel("description", "Description"),
-        column: "_description",
       });
     }
     const attrs = meta.attributes
@@ -346,13 +344,12 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const [record, setRecord] = useState<EntityRecord | null>(initial);
 
   const postable = kind === "documents" && meta.postable === true;
-  const wasPosted = Boolean(record?._posted);
+  const wasPosted = Boolean(record?.posted);
 
   const [data, setData] = useState<EntityRecord>(() => seedDataFrom(initial, fields));
 
-  // Rows per section, keyed by attribute fieldName. Loaded rows arrive keyed by column name
-  // (with resolved *_display labels); seedRowsFrom handles the same column→field asymmetry the
-  // top-level fields do. All attributes are seeded (not just the visible ones) so hidden columns
+  // Rows per section are keyed by attribute fieldName. All attributes are seeded (not just the
+  // visible ones) so hidden columns
   // survive the delete-and-reinsert.
   const [rowsBySection, setRowsBySection] = useState<Record<string, EntityRecord[]>>(() =>
     seedRowsFrom(initial, sections)
@@ -639,7 +636,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           ? await api.updateCatalogItem(name, id!, payload)
           : await api.createCatalogItem(name, payload);
       }
-      const savedId = String(isEdit ? id : saved._id);
+      const savedId = String(isEdit ? id : saved.id);
       // Post after a successful save when requested. The document is already persisted, so
       // a posting failure (e.g. a validation/balance error) surfaces a toast but the saved
       // record still opens — the user can fix it and re-post. api.postDocument re-posts a
@@ -699,7 +696,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // always knows *which* supplier/order they're deep inside of. A posted document shows its
   // status pill — re-posting an already-posted document is a different mental act than posting.
   const subtitleParts = isEdit
-    ? [record?._code, record?._number, record?._description].filter(
+    ? [record?.code, record?.number, record?.description].filter(
         (v): v is string =>
           typeof v === "string" &&
           v.trim() !== "" &&

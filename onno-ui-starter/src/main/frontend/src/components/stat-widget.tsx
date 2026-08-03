@@ -20,6 +20,7 @@ import { HintIcon } from "@/components/ui/hint-icon";
 import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/animated-number";
+import { logicalEntityKey } from "@/lib/entity-keys";
 
 /**
  * A KPI tile with momentum: the headline figure (the same aggregate the `metric` card shows),
@@ -54,8 +55,9 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
   // hand useWidgetRows an entityType it ignores on the bucket path (the hook must still be called).
   const isRegister = widget.entityType === "register";
   const isDocument = widget.entityType === "document";
+  const fieldKey = isRegister ? (key: string) => key : logicalEntityKey;
   const rowsWidget = useMemo(() => (isRegister ? widget : { ...widget, entityType: "" }), [isRegister, widget]);
-  const windowField = widget.dateField || (isRegister ? "_period" : "_date");
+  const windowField = fieldKey(widget.dateField || (isRegister ? "_period" : "date"));
   const windowRange = useMemo(() => resolveRange(range), [range]);
   const registerTurnoverRange = useMemo(
     () =>
@@ -90,14 +92,16 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
   );
 
   const metric = (cfg.metric as Metric) ?? "count";
-  const metricField = cfg.metricField;
-  const groupBy = cfg.groupBy ?? "_date";
+  const metricField = cfg.metricField ? fieldKey(cfg.metricField) : undefined;
+  const groupBy = fieldKey(
+    cfg.groupBy ?? (isRegister ? "_period" : "date")
+  );
   // Default to monthly buckets for the trend — a day-over-day delta on a long series is noise.
   const groupByDate =
     (cfg.groupByDate as GroupByDate | undefined) ??
-    (groupBy === "_date" || !cfg.groupBy ? "month" : undefined);
+    (groupBy === "date" || groupBy === "_period" ? "month" : undefined);
   const spanDays = useMemo(() => rangeSpanDays(range, 365), [range]);
-  const effGroupByDate = showTrend && (groupBy === "_date" || groupBy === "_period")
+  const effGroupByDate = showTrend && (groupBy === "date" || groupBy === "_period")
     ? granularityForStat(spanDays)
     : groupByDate;
   const color = resolveColor(cfg.colors);
@@ -115,23 +119,22 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
     return showTrend ? formatCompact(n, options) : formatNumber(n, options);
   };
 
-  // The bucket request: same measure/grouping as the row path, with the authored "_display" suffix
-  // stripped — the server groups the real column and resolves labels itself. Catalogs have no _date
-  // column, so a defaulted "_date" grouping degrades to the endpoint's single grand-total bucket.
+  // The bucket request groups by the real field; the server resolves display labels itself.
+  // Catalogs have no date system field, so the default degrades to one grand-total bucket.
   const params = useMemo(() => {
     if (isRegister) return null;
     const p: Record<string, string> = { metric };
     if (metricField) p.field = metricField;
-    const group = groupBy.replace(/_display$/, "");
+    const group = groupBy.replace(/(?:_display|Display)$/, "");
     // A headline-only stat must be one grand-total bucket. Besides avoiding unnecessary rows, this
     // matters for non-additive measures such as avg/max: summing daily averages is not the overall
     // average. Trend cards retain their time buckets for the sparkline.
-    if (showTrend && (widget.entityType === "document" || group !== "_date")) {
+    if (showTrend && (widget.entityType === "document" || group !== "date")) {
       p.groupBy = group;
       if (effGroupByDate) p.groupByDate = effGroupByDate;
     }
     if (cfg.filter) p.filter = cfg.filter;
-    if (isDocument || windowField !== "_date") {
+    if (isDocument || windowField !== "date") {
       p.dateField = windowField;
       if (windowRange.from !== -Infinity) p.from = toLocalIso(windowRange.from);
       if (windowRange.to !== Infinity) p.to = toLocalIso(windowRange.to);
@@ -142,12 +145,12 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
   const secondaryParams = useMemo(() => {
     if (calculation !== "ratio" || !params) return null;
     const p: Record<string, string> = { ...params, metric: cfg.secondaryMetric ?? "count" };
-    if (cfg.secondaryMetricField) p.field = cfg.secondaryMetricField;
+    if (cfg.secondaryMetricField) p.field = fieldKey(cfg.secondaryMetricField);
     else delete p.field;
     if (cfg.secondaryFilter) p.filter = cfg.secondaryFilter;
     else delete p.filter;
     return p;
-  }, [calculation, params, cfg.secondaryMetric, cfg.secondaryMetricField, cfg.secondaryFilter]);
+  }, [calculation, params, cfg.secondaryMetric, cfg.secondaryMetricField, cfg.secondaryFilter, fieldKey]);
   const secondaryResp = useWidgetBuckets(widget, secondaryParams);
   const previousParams = useMemo(() => {
     if (isRegister || !params || !previousRange) return null;

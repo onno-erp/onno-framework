@@ -81,11 +81,13 @@ record EntitySurfaceDescriptor(
     }
 
     String safeSort(String sortColumn) {
-        return sortColumn != null && sortableColumns.contains(sortColumn) ? sortColumn : defaultSortColumn;
+        String storage = storageColumn(sortColumn);
+        return storage != null && sortableColumns.contains(storage) ? storage : defaultSortColumn;
     }
 
     boolean isDefaultSort(String sortColumn) {
-        return sortColumn == null || !sortableColumns.contains(sortColumn);
+        String storage = storageColumn(sortColumn);
+        return storage == null || !sortableColumns.contains(storage);
     }
 
     boolean isNonNullableSort(String column) {
@@ -93,5 +95,42 @@ record EntitySurfaceDescriptor(
             return true;
         }
         return attributes.stream().anyMatch(a -> a.columnName().equals(column) && a.required());
+    }
+
+    /** Resolve a preferred logical API field or a legacy storage column to the SQL column. */
+    String storageColumn(String field) {
+        if (field == null || field.isBlank()) {
+            return field;
+        }
+        String system = switch (kind) {
+            case "catalog" -> switch (field) {
+                case "id", "_id" -> "_id";
+                case "code", "_code" -> "_code";
+                case "description", "_description" -> "_description";
+                case "deletionMark", "_deletion_mark" -> "_deletion_mark";
+                case "folder", "_is_folder" -> "_is_folder";
+                case "parent", "_parent" -> "_parent";
+                case "version", "_version" -> "_version";
+                default -> null;
+            };
+            case "document" -> switch (field) {
+                case "id", "_id" -> "_id";
+                case "number", "_number" -> "_number";
+                case "date", "_date" -> "_date";
+                case "posted", "_posted" -> "_posted";
+                case "deletionMark", "_deletion_mark" -> "_deletion_mark";
+                case "version", "_version" -> "_version";
+                default -> null;
+            };
+            default -> null;
+        };
+        if (system != null) {
+            return system;
+        }
+        return attributes.stream()
+                .filter(a -> a.fieldName().equals(field) || a.columnName().equals(field))
+                .findFirst()
+                .map(AttributeDescriptor::columnName)
+                .orElse(field);
     }
 }

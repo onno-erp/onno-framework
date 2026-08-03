@@ -48,7 +48,8 @@ public class RelatedListReader {
      * controller before this is called.
      */
     public List<Map<String, Object>> rows(Class<?> parentClass, String parentLogicalName,
-                                           String relatedName, UUID parentId, Principal principal) {
+                                           String relatedName, UUID parentId, Principal principal,
+                                           EntityJsonRepresentation.Mode representation) {
         RelatedList rl = fieldHints.relatedList(parentClass, relatedName);
         if (rl == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -65,7 +66,10 @@ public class RelatedListReader {
                     "Related list '" + relatedName + "' has no via ref '" + rl.via() + "'");
         }
         requireRead(principal, junction);
-        return read(junction, via.columnName(), parentId);
+        List<Map<String, Object>> rows = read(junction, via.columnName(), parentId);
+        return junction.isRegister()
+                ? rows
+                : EntityJsonRepresentation.catalogs(junction.catalog(), rows, representation);
     }
 
     /**

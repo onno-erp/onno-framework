@@ -42,8 +42,8 @@ public class InventoryPage implements Page {
         b.widget("Recent receipts").type("list").width("full").order(2)
                 .document(GoodsReceipt.class)
                 .maxItems(20)
-                .config("titleTemplate", "{_number}")
-                .config("secondaryField", "_date");
+                .config("titleTemplate", "{number}")
+                .config("secondaryField", "date");
     }
 }
 ```
@@ -54,9 +54,9 @@ public class InventoryPage implements Page {
 b.widget("Recent activity").type("eventLog").width("full").order(20)
         .document(SalesOrder.class)
         .maxItems(10)
-        .config("dateField", "_date")
-        .config("titleField", "_number")
-        .config("secondaryDisplay", "customer_display")
+        .config("dateField", "date")
+        .config("titleField", "number")
+        .config("secondaryDisplay", "customerDisplay")
         .config("amountField", "total")
         .config("currency", "USD")
         .hint("Custom widget compiled from src/main/widgets/EventLog.tsx");
@@ -84,8 +84,8 @@ import {
 function EventLog({ widget }: WidgetProps) {
   const [all, setAll] = useState<EntityRecord[]>([]);
   const cfg = widget.extraConfig ?? {};
-  const dateField = cfg.dateField || "_date";
-  const titleField = cfg.titleField || "_number";
+  const dateField = cfg.dateField || "date";
+  const titleField = cfg.titleField || "number";
   const max = widget.maxItems > 0 ? widget.maxItems : 10;
 
   const load = useCallback(async () => {
@@ -109,7 +109,7 @@ function EventLog({ widget }: WidgetProps) {
       </div>
       <div className="mt-3 space-y-2">
         {rows.map((row, index) => (
-          <div key={String(row._id ?? index)} className="flex items-center gap-2">
+          <div key={String(row.id ?? index)} className="flex items-center gap-2">
             <Badge>{String(row[dateField] ?? "")}</Badge>
             <span>{String(row[titleField] ?? "")}</span>
           </div>

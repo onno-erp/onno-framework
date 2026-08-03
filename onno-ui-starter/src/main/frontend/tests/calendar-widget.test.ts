@@ -11,14 +11,14 @@ describe("calendarMoveValues", () => {
     );
 
     expect(move.optimistic).toEqual({
-      _date: "2026-07-27T10:00:00.000Z",
-      starts_at: "2026-07-27T10:00:00.000Z",
-      ends_at: "2026-07-27T12:00:00.000Z",
+      date: "2026-07-27T10:00:00.000Z",
+      startsAt: "2026-07-27T10:00:00.000Z",
+      endsAt: "2026-07-27T12:00:00.000Z",
     });
     expect(move.payload).toEqual({
       date: "2026-07-27T10:00:00.000Z",
-      starts_at: "2026-07-27T10:00:00.000Z",
-      ends_at: "2026-07-27T12:00:00.000Z",
+      startsAt: "2026-07-27T10:00:00.000Z",
+      endsAt: "2026-07-27T12:00:00.000Z",
     });
   });
 
@@ -26,7 +26,7 @@ describe("calendarMoveValues", () => {
     expect(calendarMoveValues("_date", undefined, "2026-07-27T10:00:00.000Z", undefined))
       .toEqual({
         optimistic: {
-          _date: "2026-07-27T10:00:00.000Z",
+          date: "2026-07-27T10:00:00.000Z",
         },
         payload: {
           date: "2026-07-27T10:00:00.000Z",

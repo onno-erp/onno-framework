@@ -52,22 +52,22 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 ## Wire contract
 
-- **Reads are snake_case, writes are camelCase and partial.** Reads carry system columns (`_id`,
-  `_code`, `_description`, `_posted`, …) and sidecars (`{col}_display`, `{col}_ref`, `{col}_code`,
-  `{col}_color`); writes use the attribute `fieldName` and touch only the keys you send. Do not
-  echo a read payload back as a write. Full tables in
-  [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
+- **Logical entity JSON is the default; storage JSON is an explicit compatibility mode.**
+  Catalog/document reads and writes use `id`, `description`, `posted`, attribute `fieldName`s, and
+  sidecars such as `customerDisplay`. Add `?representation=storage` only for a legacy read client.
+  Writes also accept storage aliases during migration, but conflicting logical/storage values are
+  `400`; updates remain partial. Full tables are in [HEADLESS_READ_API.md](HEADLESS_READ_API.md).
 - **An enum value is its deterministic UUID, never the constant name.** The UUID is derived from
   `FQCN.CONSTANT`, so it is stable across databases; the write path rejects `"NEW"` where it
-  expects the UUID. Display strings/colors come from `@EnumLabel` and ride the `{col}_display` /
-  `{col}_color` sidecars.
+  expects the UUID. Display strings/colors come from `@EnumLabel` and ride the `FieldDisplay` /
+  `FieldColor` sidecars (`{col}_display` / `{col}_color` in storage compatibility mode).
 - **Temporal reads and writes are ISO-8601 wall-clock values.** `LocalDate` reads/writes as
   `yyyy-MM-dd`; `LocalDateTime` reads/writes as offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]`.
   Since `LocalDateTime` has no zone, an accepted transport offset (`Z`, `+03:00`) is ignored without
   shifting the local fields: `2026-06-04T10:00+03:00` persists as `2026-06-04T10:00`. Since v1.11.1
   the read API normalizes PostgreSQL/JDBC timestamp representations and the bundled form normalizes
-  loaded values before resubmitting them. Headless clients must still map snake_case read columns
-  to camelCase write fields; do not echo the full read object as a write.
+  loaded values before resubmitting them. Default logical reads can round-trip writable values
+  without renaming keys; display/ref/color companions are read-only and ignored by partial writes.
 
 ## SPA & static assets
 

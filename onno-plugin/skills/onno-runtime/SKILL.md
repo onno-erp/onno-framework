@@ -21,8 +21,9 @@ mutations are CSRF-protected. Resource-server mode uses bearer tokens and disabl
 - Detect optional starters before testing them. The canonical example does not include MCP/import.
 - Separate read-only probes, dry-run validation, and mutations. Use isolated storage/database for
   seeders, uploads, imports, posting, and CRUD.
-- List/get JSON expands refs and enums with companion keys such as `{col}_display`, `{col}_ref`, and
-  `{col}_color`; secrets read as `__SECRET_SET__`.
+- Catalog/document list/get JSON defaults to logical keys and expands refs/enums with companions
+  such as `FieldDisplay`, `FieldRef`, and `FieldColor`; add `?representation=storage` for the legacy
+  column-shaped response. Secrets read as `__SECRET_SET__`.
 
 ## Curl Recipe
 
@@ -35,10 +36,10 @@ curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
   -d '{"username":"manager@onnobooks.local","password":"manager"}' | jq -e '.authenticated'
 
 csrf=$(curl -fsS -b "$jar" -c "$jar" "$base/api/auth/csrf" | jq -er .token)
-book_id=$(curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=1" | jq -er '.rows[0]._id')
-curl -fsS -b "$jar" "$base/api/catalogs/Books/$book_id" | jq -e '._id'
+book_id=$(curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=1" | jq -er '.rows[0].id')
+curl -fsS -b "$jar" "$base/api/catalogs/Books/$book_id" | jq -e '.id'
 
-order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=1" | jq -er '.rows[0]._id')
+order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=1" | jq -er '.rows[0].id')
 curl -fsS -b "$jar" "$base/api/documents/Orders/$order_id" | jq -e '.items'
 curl -fsS -b "$jar" "$base/api/registers/Book%20Stock/balance" | jq -e .
 curl -fsS -b "$jar" "$base/api/divkit/shell" | jq -e '.nav'

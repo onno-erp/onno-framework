@@ -14,17 +14,18 @@ import {
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
+import { logicalEntityKey } from "@/lib/entity-keys";
 
 interface ListWidgetProps {
   widget: DashboardWidgetMeta;
 }
 
 // Identity fields tried for the headline when no titleField/titleTemplate is authored.
-const TITLE_FALLBACKS = ["_number", "_code", "_description", "name"];
-// Default secondary line: the first *_display reference label we find (client, property…).
-const DEFAULT_SECONDARY = ["client_display", "primary_client_display", "property_display", "customer_display"];
+const TITLE_FALLBACKS = ["number", "code", "description", "name"];
+// Default secondary line: common logical reference-display companions.
+const DEFAULT_SECONDARY = ["clientDisplay", "primaryClientDisplay", "propertyDisplay", "customerDisplay"];
 // Default trailing amount: the usual document money fields.
-const DEFAULT_AMOUNT = ["total", "total_gross", "amount", "_sum"];
+const DEFAULT_AMOUNT = ["total", "totalGross", "amount", "sum"];
 
 export function ListWidget({ widget }: ListWidgetProps) {
   const navigate = useNavigate();
@@ -33,11 +34,14 @@ export function ListWidget({ widget }: ListWidgetProps) {
   const liveVersion = useWidgetLiveVersion(widget);
 
   // Authored field config (FR-2/6/7) — falls back to the built-in conventions.
-  const titleTemplate = cfg.titleTemplate;
-  const titleFields = splitFields(widget.titleField);
-  const secondaryFields = splitFields(cfg.secondaryField);
-  const amountFields = cfg.amountField ? [cfg.amountField] : DEFAULT_AMOUNT;
-  const dateField = widget.dateField || cfg.dateField || "_date";
+  const titleTemplate = cfg.titleTemplate?.replace(
+    /\{([^}]+)\}/g,
+    (_, field: string) => `{${logicalEntityKey(field.trim())}}`
+  );
+  const titleFields = splitFields(widget.titleField).map(logicalEntityKey);
+  const secondaryFields = splitFields(cfg.secondaryField).map(logicalEntityKey);
+  const amountFields = cfg.amountField ? [logicalEntityKey(cfg.amountField)] : DEFAULT_AMOUNT;
+  const dateField = logicalEntityKey(widget.dateField || cfg.dateField || "date");
   const locale = cfg.locale;
 
   const headline = (row: EntityRecord): string =>
@@ -48,7 +52,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
     const preferred = pickField(row, DEFAULT_SECONDARY);
     if (preferred) return preferred;
     for (const key of Object.keys(row)) {
-      if (key.endsWith("_display") && typeof row[key] === "string" && (row[key] as string).trim()) {
+      if (key.endsWith("Display") && typeof row[key] === "string" && (row[key] as string).trim()) {
         return row[key] as string;
       }
     }
@@ -109,7 +113,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
   }, [items, widget.maxItems, dateField]);
 
   const open = (row: EntityRecord) => {
-    const id = String(row._id ?? "");
+    const id = String(row.id ?? "");
     if (!id) return;
     const name = toSnakeCase(widget.entityName);
     navigate(`/${widget.entityType}s/${name}/${id}`);
@@ -134,7 +138,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
               const money = amount(row);
               const date = when(row);
               return (
-                <li key={String(row._id)}>
+                <li key={String(row.id)}>
                   <button
                     type="button"
                     onClick={() => open(row)}

@@ -403,10 +403,10 @@ public enum OrderStatus {
 ```
 
 Give the type a display `title` and each value a human/localized label with `@EnumLabel` — surfaced
-in list cells, the dropdown, and `{col}_display` — **without** renaming the constants (their names
+in list cells, the dropdown, and `FieldDisplay` — **without** renaming the constants (their names
 key the stored UUIDs and any importers/filters that map to them). An optional `color` paints the
 value as a **status pill** (the colour of the spreadsheet cell it replaces) in list cells and the
-form dropdown; it rides the read API as `{col}_color` and `enumValues[].color`, and
+form dropdown; it rides the logical read API as `FieldColor` and `enumValues[].color`, and
 the client derives a readable dark/light text colour from it:
 
 ```java
@@ -1078,8 +1078,8 @@ GET    /api/auth/me                                current principal (handy auth
 The generated API and screens should read like the business domain. If they don't, improve names,
 contexts, required fields, refs, and register semantics before adding more code.
 
-For the exact JSON the read endpoints return — column-name keys, `*_display`/`*_ref` expansion,
-secret redaction, list vs get, inlined tabular sections — see
+For the exact JSON the read endpoints return — logical keys, `FieldDisplay`/`FieldRef` expansion,
+storage compatibility, secret redaction, list vs get, inlined tabular sections — see
 [docs/HEADLESS_READ_API.md](docs/HEADLESS_READ_API.md).
 
 ### Writing sync / import code (upsert + posting)

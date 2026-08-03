@@ -61,6 +61,8 @@ import type { Translate } from "@/lib/messages";
 
 export type ListColumn = {
   columnName: string;
+  /** Logical field key used by catalog/document entity responses; query operations use columnName. */
+  fieldName?: string;
   label: string;
   width: string;
   /** Display hint: "image"/"avatar" renders the cell value as a thumbnail. */
@@ -72,6 +74,23 @@ export type ListColumn = {
   /** A row-action submenu label this cell opens directly on right-click (ListSpec.cellMenu). */
   cellMenu?: string;
 };
+
+function responseKey(col: ListColumn): string {
+  return col.fieldName || col.columnName;
+}
+
+export function entityRowId(row: EntityRecord): string | null {
+  const value = row.id ?? row._id;
+  return value == null ? null : String(value);
+}
+
+function rowActionState(row: EntityRecord): Record<string, RowActionState> | undefined {
+  return (row.actions ?? row._actions) as Record<string, RowActionState> | undefined;
+}
+
+export function entityRowTone(row: EntityRecord): unknown {
+  return row.style ?? row._style;
+}
 /**
  * A custom action button declared by an EntityView. {@code scope} is "toolbar" (list-level) or
  * "row" (per-record); a {@code server} action POSTs to /api/actions and applies the returned
@@ -110,7 +129,7 @@ export type ListAction = {
 };
 /**
  * Per-row override for a state-aware row action, computed server-side from the row's data and
- * carried on the row under {@code _actions} (keyed by action key). Lets one control vary by row:
+ * carried on the logical row under {@code actions} (keyed by action key). Lets one control vary by row:
  * a different {@code icon}/{@code label} (e.g. pause→play), or {@code visible}/{@code enabled} false
  * to hide/grey it on rows it doesn't apply to. Any field absent falls back to the static descriptor
  * (icon/label) or the default (visible/enabled = true).
@@ -279,8 +298,11 @@ function nearestScrollAncestor(el: HTMLElement): HTMLElement | null {
 
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
 function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string {
-  if (col.columnName === "_posted") return t(row["_posted"] === true ? "status.posted" : "status.draft");
-  const v = row[`${col.columnName}_display`] ?? row[col.columnName];
+  const key = responseKey(col);
+  if (key === "posted" || col.columnName === "_posted") {
+    return t(row[key] === true ? "status.posted" : "status.draft");
+  }
+  const v = row[`${key}Display`] ?? row[`${col.columnName}_display`] ?? row[key];
   return v == null ? "" : String(v);
 }
 
@@ -317,10 +339,11 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
     }
     return <span className="text-xs text-destructive">Invalid media URL</span>;
   }
-  // A Ref column whose target carries an avatar (resolved into {col}_avatar by the read API): show
+  // A Ref column whose target carries an avatar (resolved into FieldAvatar by logical reads): show
   // the photo as a small round avatar beside the display text (issue #182). The data is already
   // here; only image/avatar-widget columns drew it before, so a plain Ref cell stayed text-only.
-  const refAvatar = row[`${col.columnName}_avatar`];
+  const key = responseKey(col);
+  const refAvatar = row[`${key}Avatar`] ?? row[`${col.columnName}_avatar`];
   if (typeof refAvatar === "string" && looksLikeImageUrl(refAvatar)) {
     return (
       <span className="flex min-w-0 items-center gap-2">
@@ -334,9 +357,9 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
       </span>
     );
   }
-  // A status-coloured enum value: the @EnumLabel(color = …) hex rides as {col}_color (RefResolver),
+  // A status-coloured enum value: the @EnumLabel(color = …) hex rides as FieldColor,
   // so paint the label as a pill the colour of the spreadsheet cell it replaces.
-  const pill = enumPillStyle(row[`${col.columnName}_color`] as string | undefined);
+  const pill = enumPillStyle((row[`${key}Color`] ?? row[`${col.columnName}_color`]) as string | undefined);
   if (pill && raw) {
     return (
       <span className="flex min-w-0">
@@ -1562,7 +1585,10 @@ export function EntityListWidget({
   // When any loaded row has viewers, widen the whole list's left padding so the presence face-pile sits
   // in its own gutter instead of over the first column. Applied to the header too, so columns stay
   // aligned; it collapses back when nobody is viewing (a rare, gentle shift).
-  const listHasPresence = openable && (pageRows ?? []).some((r) => r && viewersById.has(String(r._id)));
+  const listHasPresence = openable && (pageRows ?? []).some((r) => {
+    const id = r ? entityRowId(r) : null;
+    return id != null && viewersById.has(id);
+  });
   const leftPad = listHasPresence ? "pl-11 pr-4" : "px-4";
 
   // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
@@ -2004,7 +2030,7 @@ export function EntityListWidget({
   const patchRow = useCallback(
     (id: string) => {
       setPageRows((current) => {
-        if (!current || !current.some((r) => r && String(r._id) === id)) return current;
+        if (!current || !current.some((r) => r && entityRowId(r) === id)) return current;
         // Fetch just this row (same decorated shape as a keyset row) and splice it in place.
         fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -2012,7 +2038,7 @@ export function EntityListWidget({
             const fresh = data.rows?.[0];
             if (fresh) {
               setPageRows((rows) =>
-                rows ? rows.map((r) => (String(r._id) === id ? fresh : r)) : rows
+                rows ? rows.map((r) => (entityRowId(r) === id ? fresh : r)) : rows
               );
             } else {
               reload(); // row dropped out of the set — refresh the loaded window
@@ -2071,12 +2097,12 @@ export function EntityListWidget({
     [kind, name, list.title, columns, canWrite]
   );
   const rendererOpenUrl = useCallback(
-    (row: EntityRecord) => (openable && row._id != null ? `onno://${kind}/${name}/${row._id}` : null),
+    (row: EntityRecord) => (openable && entityRowId(row) ? `onno://${kind}/${name}/${entityRowId(row)}` : null),
     [openable, kind, name]
   );
   const rendererOpen = useCallback(
     (row: EntityRecord) => {
-      const url = openable && row._id != null ? `onno://${kind}/${name}/${row._id}` : null;
+      const url = openable && entityRowId(row) ? `onno://${kind}/${name}/${entityRowId(row)}` : null;
       if (url) dispatchAction(url);
     },
     [openable, kind, name]
@@ -2108,10 +2134,13 @@ export function EntityListWidget({
       // The selection, else the hovered row — and only a row of THIS list.
       let rows: EntityRecord[];
       if (selected.size) {
-        rows = loadedRows.filter((r) => r._id != null && selected.has(String(r._id)));
+        rows = loadedRows.filter((r) => {
+          const id = entityRowId(r);
+          return id != null && selected.has(id);
+        });
       } else {
         const id = hoveredRowId(kind, name);
-        const row = id ? loadedRows.find((r) => String(r._id) === id) : undefined;
+        const row = id ? loadedRows.find((r) => entityRowId(r) === id) : undefined;
         if (!row) return;
         rows = [row];
       }
@@ -2123,7 +2152,7 @@ export function EntityListWidget({
       e.clipboardData.setData("text/plain", tsv);
       e.clipboardData.setData(
         "application/x-onno-rows",
-        JSON.stringify({ kind, name, ids: rows.map((r) => String(r._id)) })
+        JSON.stringify({ kind, name, ids: rows.map((r) => entityRowId(r)!) })
       );
       toast.success(t("clipboard.copied", { count: rows.length }));
     };
@@ -2198,7 +2227,8 @@ export function EntityListWidget({
         const out: string[] = [];
         for (let i = Math.max(0, from); i <= Math.min(loadedRows.length - 1, to); i++) {
           const r = loadedRows[i];
-          if (r?._id != null) out.push(String(r._id));
+          const id = r ? entityRowId(r) : null;
+          if (id) out.push(id);
         }
         return out;
       };
@@ -2219,13 +2249,14 @@ export function EntityListWidget({
       // selection's nearest edge in the direction of travel.
       let pivot: number | null = selAnchorRef.current;
       if (pivot == null && hoverId != null) {
-        const i = loadedRows.findIndex((r) => String(r._id) === hoverId);
+        const i = loadedRows.findIndex((r) => entityRowId(r) === hoverId);
         pivot = i >= 0 ? i : null;
       }
       if (pivot == null) {
         const idxs: number[] = [];
         loadedRows.forEach((r, i) => {
-          if (r._id != null && selected.has(String(r._id))) idxs.push(i);
+          const id = entityRowId(r);
+          if (id && selected.has(id)) idxs.push(i);
         });
         if (!idxs.length) return;
         pivot = e.key === "ArrowDown" ? idxs[0] : idxs[idxs.length - 1];
@@ -2275,7 +2306,7 @@ export function EntityListWidget({
           const st = batch
             ? undefined
             : resolvedActionStates[rowMenu.id]?.[a.key]
-              ?? (rowMenu.row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+              ?? rowActionState(rowMenu.row)?.[a.key];
           if (!batch && st?.visible === false) return null;
           const disabled = (!batch && st?.enabled === false) || pending.has(`batch:${a.key}`);
           return (
@@ -2841,10 +2872,10 @@ export function EntityListWidget({
               <div style={{ paddingTop: padTop, paddingBottom: padBottom }}>
                 {visibleRows.map((row, i) => {
                   const absIdx = startIdx + i;
-                  const rowId = openable && row._id != null ? String(row._id) : null;
-                  const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
-                  const rowViewers = openable ? viewersById.get(String(row._id)) : undefined;
-                  const isSelected = rowId != null && selected.has(rowId);
+                  const recordId = openable ? entityRowId(row) : null;
+                  const url = recordId ? `onno://${kind}/${name}/${recordId}` : undefined;
+                  const rowViewers = recordId ? viewersById.get(recordId) : undefined;
+                  const isSelected = recordId != null && selected.has(recordId);
                   return (
                     // Key by absolute row index: register (balance) rows have no _id, so an id-based
                     // key collides to the same value for every row and React mis-reconciles into
@@ -2859,13 +2890,13 @@ export function EntityListWidget({
                       data-onno-row-writable={canWrite ? undefined : "0"}
                       // Shift-click extends the selection — suppress the browser's text-range drag.
                       onMouseDown={(e) => {
-                        if (e.shiftKey && rowId) e.preventDefault();
+                        if (e.shiftKey && recordId) e.preventDefault();
                       }}
                       onClick={(e) => {
                         // ⌘/Ctrl toggles a row in and out; Shift selects the range from the last
                         // toggled row. Plain click opens the record — or, mid-selection, just
                         // drops the selection (so a stray click can't navigate away from it).
-                        if (rowId && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                        if (recordId && (e.metaKey || e.ctrlKey || e.shiftKey)) {
                           e.preventDefault();
                           setSelected((prev) => {
                             const next = new Set(prev);
@@ -2874,11 +2905,12 @@ export function EntityListWidget({
                               const hi = Math.max(selAnchorRef.current, absIdx);
                               for (let j = lo; j <= hi; j++) {
                                 const r = loadedRows[j];
-                                if (r?._id != null) next.add(String(r._id));
+                                const id = r ? entityRowId(r) : null;
+                                if (id) next.add(id);
                               }
                             } else {
-                              if (next.has(rowId)) next.delete(rowId);
-                              else next.add(rowId);
+                              if (next.has(recordId)) next.delete(recordId);
+                              else next.add(recordId);
                               selAnchorRef.current = absIdx;
                             }
                             return next;
@@ -2893,16 +2925,16 @@ export function EntityListWidget({
                         if (url) dispatchAction(url);
                       }}
                       onContextMenu={(e) => {
-                        if (!url || !rowId) return; // register rows: keep the browser menu
+                        if (!url || !recordId) return; // register rows: keep the browser menu
                         // Yield to an active text selection, like the global row menu does.
                         const sel = window.getSelection();
                         if (sel && !sel.isCollapsed && sel.toString().trim()) return;
                         // preventDefault also marks the native event, so divkit-view's
                         // DOM-sniffing fallback menu skips this row.
                         e.preventDefault();
-                        if (selected.size && !selected.has(rowId)) clearSelection();
+                        if (selected.size && !selected.has(recordId)) clearSelection();
                         setArmedDelete(false);
-                        openRowMenu({ x: e.clientX, y: e.clientY, id: rowId, url, row });
+                        openRowMenu({ x: e.clientX, y: e.clientY, id: recordId, url, row });
                       }}
                       className={cn(
                         // Hover highlight is owned by the [data-onno-row]:hover rule in index.css.
@@ -2910,10 +2942,11 @@ export function EntityListWidget({
                         "relative grid items-center gap-3 border-b border-border/50 text-sm",
                         url && "cursor-pointer",
                         leftPad,
-                        // Conditional formatting (`_style`, from ListSpec.rowStyle) replaces the
+                        // Conditional formatting (`style`, `_style` for register compatibility)
+                        // replaces the
                         // zebra stripe on tinted rows; selection still wins over both.
-                        !isSelected && rowStyleClass(row._style),
-                        absIdx % 2 === 1 && !isSelected && !rowStyleClass(row._style) && "bg-muted/20",
+                        !isSelected && rowStyleClass(entityRowTone(row)),
+                        absIdx % 2 === 1 && !isSelected && !rowStyleClass(entityRowTone(row)) && "bg-muted/20",
                         isSelected && "bg-primary/10"
                       )}
                       style={{ minHeight: ROW_H, gridTemplateColumns: template }}
@@ -2929,7 +2962,7 @@ export function EntityListWidget({
                             onContextMenu={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              const rid = String(row._id);
+                              const rid = entityRowId(row)!;
                               openRowMenu({
                                 x: e.clientX,
                                 y: e.clientY,
@@ -2955,14 +2988,14 @@ export function EntityListWidget({
                         <div className="flex items-center justify-end gap-1">
                           {rowButtonActions.map((a) => {
                             // State-aware row actions: the server attaches a per-row override
-                            // (icon/label/visible/enabled) under `_actions`, computed from the row's data.
+                            // (icon/label/visible/enabled) under `actions`, computed from the row's data.
                             const st =
-                              resolvedActionStates[String(row._id)]?.[a.key]
-                              ?? (row._actions as Record<string, RowActionState> | undefined)?.[a.key];
+                              resolvedActionStates[entityRowId(row) ?? ""]?.[a.key]
+                              ?? rowActionState(row)?.[a.key];
                             if (st?.visible === false) return null;
                             const icon = st?.icon ?? a.icon;
                             const label = st?.label ?? a.label;
-                            const busy = pending.has(`${a.key}:${row._id}`);
+                            const busy = pending.has(`${a.key}:${entityRowId(row)}`);
                             const disabled = busy || st?.enabled === false;
                             return (
                               <button
@@ -2971,7 +3004,7 @@ export function EntityListWidget({
                                 disabled={disabled}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  runAction(a, String(row._id));
+                                  runAction(a, entityRowId(row)!);
                                 }}
                                 className="inline-flex size-7 items-center justify-center rounded-control text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
                                 title={label}

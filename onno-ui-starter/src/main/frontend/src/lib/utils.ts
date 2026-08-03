@@ -66,7 +66,7 @@ export function enumPillStyle(
 }
 
 /**
- * The row-tint classes for a server-computed conditional row style — the `_style` the list feed
+ * The row-tint classes for a server-computed conditional row style — `style` in logical entity rows
  * attaches per row (`ListSpec.rowStyle`, a semantic tone the theme maps, not a raw color). A
  * translucent wash so hover/selection still read over it; an unknown tone returns `null` (no tint).
  */
@@ -90,16 +90,16 @@ export function rowStyleClass(style: unknown): string | null {
 export function displayValue(attr: AttributeMeta, raw: unknown, row?: Record<string, unknown>): string {
   // Secrets are write-only: the server returns a "set" sentinel or null, never the value.
   if (attr.secret) {
-    const stored = row ? row[attr.columnName] : raw;
+    const stored = row ? row[attr.fieldName] : raw;
     return stored === SECRET_SET || (stored != null && stored !== "") ? "•••• set" : "Not set";
   }
   // Prefer server-resolved display value
   if (row) {
-    const ref = row[attr.columnName + "_ref"];
+    const ref = row[attr.fieldName + "Ref"];
     if (ref && typeof ref === "object" && "display" in ref) {
       return String((ref as { display?: unknown }).display ?? "");
     }
-    const display = row[attr.columnName + "_display"];
+    const display = row[attr.fieldName + "Display"];
     if (display != null) return String(display);
   }
   if (raw == null) return "";

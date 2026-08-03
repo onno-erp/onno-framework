@@ -148,7 +148,7 @@ public class UiViewResolver {
                     continue;
                 }
                 columns.add(new ResolvedListView.Column(
-                        spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.width(),
+                        spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.fieldName(), cm.width(),
                         cm.widget(), cm.format(), cm.hint(),
                         spec.cellMenus().getOrDefault(field, "")));
             }
@@ -160,7 +160,7 @@ public class UiViewResolver {
                     .sorted(Comparator.comparingInt(e -> e.getValue().order()))
                     .forEach(e -> columns.add(new ResolvedListView.Column(
                             spec.labels().getOrDefault(e.getKey(), e.getValue().label()),
-                            e.getValue().columnName(), e.getValue().width(),
+                            e.getValue().columnName(), e.getValue().fieldName(), e.getValue().width(),
                             e.getValue().widget(), e.getValue().format(), e.getValue().hint(),
                             spec.cellMenus().getOrDefault(e.getKey(), ""))));
         }
@@ -254,10 +254,10 @@ public class UiViewResolver {
         if (spec == null) {
             return null;
         }
-        String lat = columnOf(spec.latField(), available);
-        String lng = columnOf(spec.lngField(), available);
-        String geoJson = columnOf(spec.geoJsonField(), available);
-        String label = columnOf(spec.labelField(), available);
+        String lat = fieldOf(spec.latField(), available);
+        String lng = fieldOf(spec.lngField(), available);
+        String geoJson = fieldOf(spec.geoJsonField(), available);
+        String label = fieldOf(spec.labelField(), available);
         boolean hasGeo = (!lat.isEmpty() && !lng.isEmpty()) || !geoJson.isEmpty();
         if (!hasGeo) {
             return null;
@@ -272,6 +272,15 @@ public class UiViewResolver {
         }
         ColumnMeta cm = available.get(field);
         return cm == null ? "" : cm.columnName();
+    }
+
+    /** Resolve a field name to the logical response key used by the list's entity rows. */
+    private static String fieldOf(String field, Map<String, ColumnMeta> available) {
+        if (field == null || field.isBlank()) {
+            return "";
+        }
+        ColumnMeta cm = available.get(field);
+        return cm == null ? "" : cm.fieldName();
     }
 
     /** The renderer-neutral control name the island keys off (see {@link ResolvedListView.Filter}). */
@@ -321,7 +330,8 @@ public class UiViewResolver {
         }).toList();
     }
 
-    private record ColumnMeta(String label, String columnName, boolean visibleInList, int order,
+    private record ColumnMeta(String label, String columnName, String fieldName,
+                              boolean visibleInList, int order,
                               String width, String widget, String format, String hint, String javaType,
                               List<Map<String, Object>> enumValues) {
         @SuppressWarnings("unchecked")
@@ -329,7 +339,7 @@ public class UiViewResolver {
             Object order = m.get("order");
             Object enumValues = m.get("enumValues");
             return new ColumnMeta(
-                    str(m.get("displayName")), str(m.get("columnName")),
+                    str(m.get("displayName")), str(m.get("columnName")), str(m.get("fieldName")),
                     Boolean.TRUE.equals(m.get("visibleInList")),
                     order == null ? 0 : ((Number) order).intValue(),
                     str(m.get("widthHint")), str(m.get("widget")), str(m.get("format")),

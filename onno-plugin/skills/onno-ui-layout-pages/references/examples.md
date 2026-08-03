@@ -104,13 +104,13 @@ public class SalesDashboard implements Page {
                 .document(SalesOrder.class)
                 .config("metric", "sum")
                 .config("metricField", "total")
-                .config("filter", "_posted = true")
+                .config("filter", "posted = true")
                 .hint("Sum of posted order totals.");
 
         b.widget("Orders by status").type("chart").width("1/3").order(2)
                 .document(SalesOrder.class)
                 .config("kind", "pie")
-                .config("groupBy", "status_display")
+                .config("groupBy", "statusDisplay")
                 .config("metric", "count");
 
         b.list(SalesOrder.class, v -> v

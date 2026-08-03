@@ -60,6 +60,7 @@ import { HintIcon } from "@/components/ui/hint-icon";
 import { TimeRangeFacet } from "@/components/date-range-facet";
 import { cn } from "@/lib/utils";
 import { useMessages } from "@/providers/messages-provider";
+import { logicalEntityKey } from "@/lib/entity-keys";
 
 interface ChartWidgetProps {
   widget: DashboardWidgetMeta;
@@ -94,6 +95,7 @@ interface ChartConfig {
 
 function readConfig(widget: DashboardWidgetMeta): ChartConfig {
   const cfg = widget.extraConfig ?? {};
+  const fieldKey = widget.entityType === "register" ? (key: string) => key : logicalEntityKey;
   const explicit = (cfg.kind as ChartKind | undefined) ?? "bar";
   let kind: ChartKind = explicit;
   if (!CHART_KINDS.includes(explicit)) {
@@ -103,14 +105,17 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
   }
   const metric = (cfg.metric as Metric) ?? "count";
   const secondaryMetric = cfg.measure2 as Metric | undefined; // presence turns the chart into a combo
+  const groupBy = fieldKey(
+    cfg.groupBy ?? (widget.entityType === "register" ? "_period" : "date")
+  );
   return {
-    groupBy: cfg.groupBy ?? "_date",
+    groupBy,
     groupByDate:
       (cfg.groupByDate as GroupByDate | undefined) ??
-      (cfg.groupBy === "_date" || !cfg.groupBy ? "day" : undefined),
-    seriesBy: cfg.seriesBy || undefined,
+      (groupBy === "date" || groupBy === "_period" ? "day" : undefined),
+    seriesBy: cfg.seriesBy ? fieldKey(cfg.seriesBy) : undefined,
     metric,
-    metricField: cfg.metricField,
+    metricField: cfg.metricField ? fieldKey(cfg.metricField) : undefined,
     kind,
     stacked: cfg.stacked === "true",
     colors: cfg.colors,
@@ -122,7 +127,7 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
     locale: cfg.locale,
     combo: !!secondaryMetric,
     secondaryMetric: secondaryMetric ?? "count",
-    secondaryField: cfg.field2,
+    secondaryField: cfg.field2 ? fieldKey(cfg.field2) : undefined,
     secondaryKind: ((cfg.kind2 as ChartKind) ?? "bar"),
     primaryLabel: cfg.label ?? widget.title ?? "Primary",
     secondaryLabel: cfg.label2 ?? "Secondary",
@@ -361,10 +366,9 @@ function granularityForSpan(days: number): GroupByDate {
   return "minute";
 }
 
-// Existing dashboards author config("groupBy", "status_display") because the old row path read the
-// ref-resolved display column off each row. The aggregate endpoint groups by the REAL column and
-// resolves labels itself, so the suffix is stripped from the request only (configs stay authored as-is).
-const stripDisplay = (column: string) => column.replace(/_display$/, "");
+// Existing dashboards may still author status_display; logical metadata emits statusDisplay.
+// The aggregate endpoint groups by the real field and resolves labels itself.
+const stripDisplay = (column: string) => column.replace(/(?:_display|Display)$/, "");
 
 /** Epoch millis → the ISO local-datetime the aggregate endpoint's window expects ("2026-01-01T00:00:00"). */
 const toLocalIso = (ms: number) => format(new Date(ms), "yyyy-MM-dd'T'HH:mm:ss");
@@ -393,7 +397,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // rows and bucketing client-side (no aggregate endpoint exists for them).
   const isRegister = widget.entityType === "register";
   const isDocument = widget.entityType === "document";
-  const windowField = widget.dateField || (isRegister ? "_period" : "_date");
+  const windowField = isRegister
+    ? (widget.dateField || "_period")
+    : logicalEntityKey(widget.dateField || "date");
 
   // The absolute window, resolved once per range change: resolveRange anchors a relative range to
   // "now", so resolving inline every render would shift the fetch params and never let them settle.
@@ -466,11 +472,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
       p.metric2 = config.secondaryMetric;
       if (config.secondaryField) p.field2 = config.secondaryField;
     }
-    // Catalogs have no _date system column (documents do), so the "_date" defaults degrade instead
+    // Catalogs have no date system field (documents do), so the date default degrades instead
     // of failing the query: an un-grouped catalog chart takes the endpoint's single grand-total
     // bucket, and the window/span ride only on an author-named date field.
     const groupBy = stripDisplay(config.groupBy);
-    if (isDocument || groupBy !== "_date") {
+    if (isDocument || groupBy !== "date") {
       p.groupBy = groupBy;
       if (effGranularity) p.groupByDate = effGranularity;
     }
@@ -479,7 +485,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     if (split) p.seriesBy = stripDisplay(split);
     const filter = widget.extraConfig?.filter;
     if (filter) p.filter = filter;
-    if (isDocument || windowField !== "_date") {
+    if (isDocument || windowField !== "date") {
       // Send the date field even for an unbounded window — the auto-granularity needs `span` back.
       p.dateField = windowField;
       if (windowRange.from !== -Infinity) p.from = toLocalIso(windowRange.from);

@@ -133,7 +133,7 @@ function EventLog({ widget }: WidgetProps) {
   useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
   return (
     <ul className="text-sm text-foreground">
-      {rows.map((r) => <li key={String(r._id)}>{String(r._date)} — {String(r._number)}</li>)}
+      {rows.map((r) => <li key={String(r.id)}>{String(r.date)} — {String(r.number)}</li>)}
     </ul>
   );
 }

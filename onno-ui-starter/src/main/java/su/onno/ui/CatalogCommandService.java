@@ -17,7 +17,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,7 +57,7 @@ public class CatalogCommandService {
     public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
 
         UUID id = UUID.randomUUID();
         String code = resolveCode(desc, body);
@@ -129,7 +128,7 @@ public class CatalogCommandService {
                                        Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
 
         // Reconstruct the stored item, overlay the submitted changes, and run the write lifecycle
         // (beforeWrite + rules) on the merged state so derived fields recompute the way they do on
@@ -225,7 +224,7 @@ public class CatalogCommandService {
     public Map<String, Object> validate(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
                                         Principal principal) {
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody);
+        Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
 
         ValidationErrors errors = new ValidationErrors();
         boolean isNew = id == null;
