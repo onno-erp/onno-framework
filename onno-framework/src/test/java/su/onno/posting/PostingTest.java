@@ -258,6 +258,62 @@ class PostingTest {
     }
 
     @Test
+    void post_deletedDocument_rejectsWithoutWritingMovements() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("10"));
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(TestReceipt.class);
+        jdbi.useHandle(handle -> handle.createUpdate(
+                        "UPDATE " + descriptor.tableName() +
+                                " SET _deletion_mark = TRUE WHERE _id = :id")
+                .bind("id", receipt.getId())
+                .execute());
+
+        assertThatThrownBy(() -> engine.post(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("deleted");
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).isEmpty();
+    }
+
+    @Test
+    void repost_replacesMovementsAndTotalsAtomically() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+        engine.post(receipt);
+
+        receipt.getItems().getFirst().setQuantity(new BigDecimal("4"));
+        engine.repost(receipt);
+
+        List<TestStockRegister> records = stockPersistence.getRecordsByDocument(receipt.getId());
+        assertThat(records).hasSize(2);
+        assertThat(records).filteredOn(TestStockRegister::isActive)
+                .singleElement()
+                .extracting(TestStockRegister::getQuantity)
+                .satisfies(quantity -> assertThat(quantity).isEqualByComparingTo("4"));
+        assertStockBalance(product, warehouse, "4");
+        assertThat(receipt.isPosted()).isTrue();
+    }
+
+    @Test
+    void repost_failureRollsBackToOriginalPostedState() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+        engine.post(receipt);
+
+        receipt.getItems().getFirst().setQuantity(new BigDecimal("-20"));
+
+        assertThatThrownBy(() -> engine.repost(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("negative balance");
+        assertStockBalance(product, warehouse, "10");
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId()))
+                .singleElement()
+                .matches(TestStockRegister::isActive);
+        assertThat(isPosted(receipt)).isTrue();
+    }
+
+    @Test
     void post_concurrentDuplicateRequests_onlyOneWritesMovements() {
         UUID product = UUID.randomUUID();
         UUID warehouse = UUID.randomUUID();
@@ -432,6 +488,20 @@ class PostingTest {
     }
 
     @Test
+    void unpost_draftDocumentRejectsWithoutPublishingEvent() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("10"));
+        List<Object> events = new ArrayList<>();
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add);
+
+        assertThatThrownBy(() -> engineWithEvents.unpost(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("not posted");
+        assertThat(events).isEmpty();
+    }
+
+    @Test
     void post_nonPostableDocument_throws() {
         DocumentObject nonPostable = new DocumentObject() {};
         nonPostable.setId(UUID.randomUUID());
@@ -487,6 +557,24 @@ class PostingTest {
         map.put(TestCostRegister.class,
                 new RegisterRepositoryImpl<>(costPersistence, TestCostRegister.class));
         return map;
+    }
+
+    private boolean isPosted(DocumentObject document) {
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(document.getClass());
+        return jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT _posted FROM " + descriptor.tableName() + " WHERE _id = :id")
+                .bind("id", document.getId())
+                .mapTo(Boolean.class)
+                .one());
+    }
+
+    private void assertStockBalance(UUID product, UUID warehouse, String expected) {
+        List<Map<String, Object>> balance = stockPersistence.getBalance(Map.of(
+                "product", product, "warehouse", warehouse));
+        assertThat(balance).hasSize(1);
+        BigDecimal quantity = (BigDecimal) balance.getFirst().getOrDefault(
+                "QUANTITY", balance.getFirst().get("quantity"));
+        assertThat(quantity).isEqualByComparingTo(expected);
     }
 
     private TestSecretDocument createSecretDocument(SecretCipher cipher) {

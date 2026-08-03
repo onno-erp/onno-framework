@@ -42,14 +42,16 @@ public class SchemaUpgrader {
             return MigrationPlan.EMPTY;
         }
         SqlDialect dialect = jdbi.withHandle(handle -> SqlDialect.detect(handle.getConnection()));
-        history.ensure(jdbi);
+        if (mode == SchemaMode.APPLY) {
+            history.ensure(jdbi);
+        }
 
         SchemaModel model = new SchemaModelBuilder(registry).build();
         SchemaSnapshot current = SchemaSnapshot.of(model);
-        SchemaSnapshot previous = history.latestSnapshotJson(jdbi)
-                .map(SchemaSnapshot::fromJson)
-                .orElse(null);
         DatabaseIntrospector.DbState db = jdbi.withHandle(DatabaseIntrospector::read);
+        SchemaSnapshot previous = db.hasTable(SchemaHistoryRepository.TABLE)
+                ? history.latestSnapshotJson(jdbi).map(SchemaSnapshot::fromJson).orElse(null)
+                : null;
 
         MigrationPlan plan = new SchemaDiffEngine(dialect).diff(model, previous, db);
 

@@ -351,6 +351,9 @@ claim path + a `shape` (`array` = a string array or a `{roles:[…]}` wrapper; `
 keyed by role name). Claim paths resolve as a literal key first (so keys containing dots, like the
 Zitadel URN, work) then by dotted-path walking.
 
+`registration-id` is required only in OIDC client mode, where it builds the authorization URL. A
+stateless `resource-server` using custom JWT claims has no client registration and may omit it.
+
 ```yaml
 onno:
   auth:
@@ -371,7 +374,7 @@ onno:
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `provider` | `keycloak` | Preset: `keycloak` \| `zitadel` \| `custom`. Fills registration id, principal claim, and role sources. |
-| `registration-id` | preset | Matches `spring.security.oauth2.client.registration.*`; builds the login URL. Required for `custom`. |
+| `registration-id` | preset | Matches `spring.security.oauth2.client.registration.*`; builds the OIDC login URL. Required for `custom` only in OIDC client mode; unused by resource-server JWT validation. |
 | `principal-claim` | `preferred_username` | Token claim used as the authenticated principal name. |
 | `logout-path` | `/logout` | OIDC RP-initiated-logout endpoint surfaced to the SPA as `logoutUrl`. |
 | `post-logout-redirect-uri` | `{baseUrl}` | Where the IdP returns after sign-out; must be registered on the client. |

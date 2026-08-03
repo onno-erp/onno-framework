@@ -29,6 +29,7 @@ class OnnoJdbcRepositoriesRegistrar extends AbstractRepositoryConfigurationSourc
     }
 
     @EnableJdbcRepositories(
+            repositoryBaseClass = OnnoSimpleJdbcRepository.class,
             excludeFilters = @ComponentScan.Filter(
                     type = FilterType.ASSIGNABLE_TYPE,
                     classes = RegisterRepository.class

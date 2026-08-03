@@ -667,6 +667,9 @@ public class DivKitController implements DisposableBean {
         }
         CatalogDescriptor cd = catalogQuery.forClass(entity);
         if (cd != null) {
+            if (!viewResolver.hasView(cd.javaClass(), profileId)) {
+                return null;
+            }
             if (!access.canRead(principal, cd)) {
                 return null;
             }
@@ -680,6 +683,9 @@ public class DivKitController implements DisposableBean {
         }
         DocumentDescriptor dd = documentQuery.forClass(entity);
         if (dd != null) {
+            if (!viewResolver.hasView(dd.javaClass(), profileId)) {
+                return null;
+            }
             if (!access.canRead(principal, dd)) {
                 return null;
             }
@@ -831,6 +837,7 @@ public class DivKitController implements DisposableBean {
                                           @RequestParam Map<String, String> params, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
+        requireView(desc.javaClass(), activeProfile(principal, params.get("profile")).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Extra query params
@@ -840,9 +847,12 @@ public class DivKitController implements DisposableBean {
     }
 
     @GetMapping("/catalogs/{name}/{id}/duplicate")
-    public Map<String, Object> catalogDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+    public Map<String, Object> catalogDuplicate(@PathVariable String name, @PathVariable UUID id,
+                                                @RequestParam(required = false) String profile,
+                                                Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
+        requireView(desc.javaClass(), activeProfile(principal, profile).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> draft = duplicateDraft(catalogQuery.get(desc, id), desc.attributes());
         return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
@@ -927,6 +937,7 @@ public class DivKitController implements DisposableBean {
                                            @RequestParam Map<String, String> params, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
+        requireView(desc.javaClass(), activeProfile(principal, params.get("profile")).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
@@ -943,9 +954,12 @@ public class DivKitController implements DisposableBean {
     }
 
     @GetMapping("/documents/{name}/{id}/duplicate")
-    public Map<String, Object> documentDuplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+    public Map<String, Object> documentDuplicate(@PathVariable String name, @PathVariable UUID id,
+                                                 @RequestParam(required = false) String profile,
+                                                 Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
+        requireView(desc.javaClass(), activeProfile(principal, profile).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(desc, id), desc.attributes());
         return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
@@ -1015,7 +1029,7 @@ public class DivKitController implements DisposableBean {
                     // A page link has no per-entity read grant to check (it resolves to a Page bean by
                     // route); its route handler enforces auth. Entity items keep the RBAC filter.
                     .filter(item -> "page".equals(item.type()) || access.canRead(principal, item.type(), item.name()))
-                    .filter(item -> isDeclared(item, profileId))
+                    .filter(item -> isDeclared(item, profileId, vp))
                     .map(item -> new ShellLayoutBuilder.NavItem(
                             // The display label is the title (falls back to name); the route
                             // still keys off the URL-safe href.
@@ -1091,15 +1105,12 @@ public class DivKitController implements DisposableBean {
      * {@link su.onno.ui.EntityView} declares it for this profile. Registers are
      * report surfaces with no EntityView yet, so they're exempt for now.
      */
-    private boolean isDeclared(UiLayout.ResolvedItem item, String profileId) {
+    private boolean isDeclared(UiLayout.ResolvedItem item, String profileId, Viewport viewport) {
         if ("register".equals(item.type())) {
             return true;
         }
-        // A page link resolves to a Page bean by route, not to an EntityView — it has no java class
-        // to gate on here. Its route either has a registered Page (renders) or 404s on navigation;
-        // either way the nav entry itself is authored, so honor it.
         if ("page".equals(item.type())) {
-            return true;
+            return pageResolver.resolve(item.href(), profileId, viewport) != null;
         }
         return viewResolver.hasView(item.javaClass(), profileId);
     }

@@ -4,7 +4,10 @@
 
 - Complete Sales Order
 - Tabular Section Row
+- Status Enumeration
+- Typed Entity View
 - Repository
+- Runtime Verification
 - Document Or Something Else
 - Common Mistakes
 
@@ -33,7 +36,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-@Document(name = "Sales Orders", title = "Sales orders", numberPrefix = "SO-", context = "Sales")
+@Document(name = "SalesOrders", title = "Sales orders", numberPrefix = "SO-", context = "Sales")
 @AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"SALES", "ADMIN"})
 @Getter
 @Setter
@@ -132,6 +135,50 @@ Give every `@TabularSection` a distinct concrete row class: Spring Data maps tha
 table, and startup rejects reuse across documents or sections. Structurally similar rows can extend
 a shared base class.
 
+## Status Enumeration
+
+```java
+@Enumeration(name = "OrderStatuses", title = "Order status")
+public enum OrderStatus {
+    @EnumLabel(value = "Draft", color = "#6B7280") DRAFT,
+    @EnumLabel(value = "Confirmed", color = "#2563EB") CONFIRMED,
+    @EnumLabel(value = "Fulfilled", color = "#059669") FULFILLED,
+    @EnumLabel(value = "Cancelled", color = "#DC2626") CANCELLED
+}
+```
+
+The enum constrains values; it does not enforce legal transitions. Recheck transition rules in the
+application command/service that changes status.
+
+## Typed Entity View
+
+```java
+@Component
+public class SalesOrderView implements EntityView<SalesOrder> {
+    @Override public Class<SalesOrder> entity() { return SalesOrder.class; }
+
+    @Override
+    public void list(ListSpec<SalesOrder> list) {
+        list.columns(SalesOrder::getNumber, SalesOrder::getDate, SalesOrder::getCustomer,
+                SalesOrder::getStatus, SalesOrder::getTotal)
+            .sortBy(SalesOrder::getDate, true);
+        list.filter(SalesOrder::getStatus).multiOptions();
+    }
+
+    @Override
+    public void fields(EntityConfigBuilder<SalesOrder> f) {
+        f.refField(SalesOrder::getCustomer).label("Customer");
+        f.field(SalesOrder::getTotal).format("currency:USD").hideInForm();
+        f.rowRefField(SalesOrder::getItems, SalesOrderLine::getProduct).label("Product");
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getQuantity).label("Quantity");
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getUnitPrice)
+                .label("Unit price").format("currency:USD");
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getAmount)
+                .label("Amount").format("currency:USD");
+    }
+}
+```
+
 ## Repository
 
 ```java
@@ -141,17 +188,31 @@ import com.acme.sales.domain.SalesOrder;
 import org.springframework.stereotype.Repository;
 import su.onno.repository.DocumentRepository;
 
-import java.time.LocalDateTime;
-import java.util.List;
-
 @Repository
 public interface SalesOrderRepository extends DocumentRepository<SalesOrder> {
-    List<SalesOrder> findActiveByDateBetween(LocalDateTime from, LocalDateTime to);
-    List<SalesOrder> findByExternalNumberAndDeletionMarkFalse(String externalNumber);
 }
 ```
 
-Business logic should use active finders. Raw inherited finders can return deletion-marked rows.
+`findActiveById`, `findActiveByNumber`, and `findActiveByDateBetween` are inherited. Add a custom
+deletion-aware finder only for a field that actually exists. Raw inherited finders can return
+deletion-marked rows.
+
+## Runtime Verification
+
+In a cookie-authenticated session, obtain CSRF and then exercise:
+
+```text
+POST /api/documents/SalesOrders/validate
+POST /api/documents/SalesOrders
+GET  /api/documents/SalesOrders/{id}
+GET  /api/list/documents/SalesOrders?limit=50
+PUT  /api/documents/SalesOrders/{id}
+```
+
+Writes use camelCase header/row fields and send rows under `items`. Single-record reads use
+snake_case/storage keys and include inline lines. Keyset list reads return
+`{rows,nextCursor,hasMore}` and intentionally omit line sections. Updating a section replaces its
+rows as a whole. Verify both the computed header total and computed line amounts after create/update.
 
 ## Document Or Something Else
 

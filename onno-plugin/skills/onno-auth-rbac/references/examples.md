@@ -83,6 +83,28 @@ URL.
 onno:
   auth:
     mode: resource-server
+    # This property replaces the defaults. Preserve every bootstrap path before adding custom ones.
+    public-paths:
+      - /error
+      - /api/theme
+      - /api/config
+      - /api/branding
+      - /api/auth/login
+      - /api/auth/me
+      - /api/auth/csrf
+      - /api/divkit/login
+      - /api/desktop/ready
+      - /api/desktop/manifest
+      - /api/health
+      - /api/health/**
+    oidc:
+      provider: keycloak
+      principal-claim: preferred_username
+      roles:
+        realm-roles: true
+        client-roles: true
+        client-id: onno-app
+        prefix: "ROLE_"
 
 spring:
   security:
@@ -93,6 +115,8 @@ spring:
 ```
 
 Clients send `Authorization: Bearer <token>`. CSRF is off in this mode.
+`csrf-ignored-paths` is ignored. `/api/auth/login` returns `409`; token issuance/revocation belongs
+to the client and identity provider.
 
 ## Entity RBAC
 
@@ -122,12 +146,8 @@ public class AdminLayout implements Layout {
     }
 
     @Override
-    public List<String> roles() {
-        return List.of("ADMIN");
-    }
-
-    @Override
     public void configure(LayoutSpec spec) {
+        spec.roles("ADMIN").priority(100);
         spec.section("People").catalog(Employee.class);
     }
 }
@@ -138,10 +158,26 @@ This controls nav/persona, not entity authorization. Do both.
 ## Debugging 401 vs 403
 
 - `401` means no valid authenticated identity for the request.
-- `403` means authenticated but not allowed, or CSRF token missing/invalid for mutation.
+- `403` means authenticated but not allowed, or—only in cookie modes—CSRF token missing/invalid for
+  a mutation. Resource-server mode has CSRF disabled.
 - If login screen breaks after changing `onno.auth.public-paths`, remember the property replaces the
   defaults. Repeat required defaults such as `/api/config`, `/api/auth/login`, `/api/auth/me`, and
   `/api/auth/csrf`.
 - If a picker is empty, check target entity `@AccessControl(readRoles=...)`.
 - If MCP can read less than the UI, check the MCP user's roles and whether the client authenticates
   each request.
+
+Resource-server smoke:
+
+```bash
+base=http://localhost:8080
+token='...'
+curl -i "$base/api/list/catalogs/Employees?limit=1" # 401 without bearer token
+curl -fsS -H "Authorization: Bearer $token" "$base/api/auth/me" | jq -e .
+curl -fsS -H "Authorization: Bearer $token" \
+  "$base/api/list/catalogs/Employees?limit=1" | jq -e '.rows'
+curl -fsS "$base/api/health" | jq -e .
+```
+
+The default security chain permits every non-`/api/**` request. If Actuator is exposed on the same
+port, protect it with a management port/chain rather than assuming only `/actuator/health` is public.

@@ -15,6 +15,7 @@ import su.onno.ui.DocumentQueryService;
 import su.onno.ui.KeysetPage;
 import su.onno.ui.RegisterQueryService;
 import su.onno.ui.UiAccessService;
+import su.onno.ui.UiProperties;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
@@ -53,6 +54,7 @@ public class MetadataToolFactory implements McpToolProvider {
     private final CatalogCommandService catalogCommands;
     private final DocumentCommandService documentCommands;
     private final OnnoMcpProperties properties;
+    private final UiProperties uiProperties;
     private final McpJsonMapper json;
 
     public MetadataToolFactory(MetadataRegistry registry, UiAccessService access,
@@ -61,7 +63,7 @@ public class MetadataToolFactory implements McpToolProvider {
                                DocumentCommandService documentCommands, OnnoMcpProperties properties,
                                McpJsonMapper json) {
         this(registry, null, access, catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, properties, json);
+                catalogCommands, documentCommands, properties, new UiProperties(), json);
     }
 
     public MetadataToolFactory(
@@ -76,6 +78,23 @@ public class MetadataToolFactory implements McpToolProvider {
             OnnoMcpProperties properties,
             McpJsonMapper json
     ) {
+        this(registry, processDefinitions, access, catalogQuery, documentQuery, registerQuery,
+                catalogCommands, documentCommands, properties, new UiProperties(), json);
+    }
+
+    public MetadataToolFactory(
+            MetadataRegistry registry,
+            ProcessDefinitions processDefinitions,
+            UiAccessService access,
+            CatalogQueryService catalogQuery,
+            DocumentQueryService documentQuery,
+            RegisterQueryService registerQuery,
+            CatalogCommandService catalogCommands,
+            DocumentCommandService documentCommands,
+            OnnoMcpProperties properties,
+            UiProperties uiProperties,
+            McpJsonMapper json
+    ) {
         this.registry = registry;
         this.processDefinitions = processDefinitions;
         this.access = access;
@@ -85,6 +104,7 @@ public class MetadataToolFactory implements McpToolProvider {
         this.catalogCommands = catalogCommands;
         this.documentCommands = documentCommands;
         this.properties = properties;
+        this.uiProperties = uiProperties;
         this.json = json;
     }
 
@@ -191,7 +211,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     return ok(registerQuery.movements(desc, optString(args, "from"), optString(args, "to")));
                 }));
 
-        if (properties.isWritesEnabled()) {
+        if (properties.isWritesEnabled() && !uiProperties.isReadOnly()) {
             tools.add(writeTool("create_catalog",
                     "Create a catalog record",
                     "Creates a new catalog record. 'values' may include code, description, folder (boolean), "
@@ -270,6 +290,9 @@ public class MetadataToolFactory implements McpToolProvider {
                         return ok(documentCommands.postingPreview(desc, requireUuid(args, "id"), principal(exchange)));
                     }));
 
+        }
+
+        if (properties.isPostingEnabled() && !uiProperties.isReadOnly()) {
             tools.add(writeTool("post_document",
                     "Post a document",
                     "Posts a document, writing its movements to the accumulation/information registers. "
@@ -311,7 +334,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 Map<String, Object> e = new LinkedHashMap<>();
                 e.put("name", d.logicalName());
                 e.put("hierarchical", d.hierarchical());
-                e.put("writable", access.canWrite(principal, d));
+                e.put("writable", writesAllowed() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
                 catalogs.add(e);
             }
@@ -324,7 +347,9 @@ public class MetadataToolFactory implements McpToolProvider {
                 if (!access.canRead(principal, d)) continue;
                 Map<String, Object> e = new LinkedHashMap<>();
                 e.put("name", d.logicalName());
-                e.put("writable", access.canWrite(principal, d));
+                e.put("writable", writesAllowed() && access.canWrite(principal, d));
+                e.put("postingEnabled", properties.isPostingEnabled()
+                        && !uiProperties.isReadOnly() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
                 List<Map<String, Object>> sections = new ArrayList<>();
                 for (TabularSectionDescriptor ts : d.tabularSections()) {
@@ -385,6 +410,10 @@ public class MetadataToolFactory implements McpToolProvider {
         }
 
         return ok(out);
+    }
+
+    private boolean writesAllowed() {
+        return properties.isWritesEnabled() && !uiProperties.isReadOnly();
     }
 
     private List<Map<String, Object>> fields(List<AttributeDescriptor> attributes) {

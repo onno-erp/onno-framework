@@ -14,6 +14,10 @@ public class PostingService {
         engine.post(document);
     }
 
+    public void repost(DocumentObject document) {
+        engine.repost(document);
+    }
+
     public PostingPreview preview(DocumentObject document) {
         return engine.preview(document);
     }

@@ -11,6 +11,7 @@ import su.onno.ui.DocumentCommandService;
 import su.onno.ui.DocumentQueryService;
 import su.onno.ui.RegisterQueryService;
 import su.onno.ui.UiAccessService;
+import su.onno.ui.UiProperties;
 import su.onno.ui.UiAutoConfiguration;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -79,16 +80,18 @@ public class OnnoMcpAutoConfiguration {
                                                    RegisterQueryService registerQuery,
                                                    CatalogCommandService catalogCommands,
                                                    DocumentCommandService documentCommands,
-                                                   OnnoMcpProperties properties, McpJsonMapper json) {
+                                                   OnnoMcpProperties properties, UiProperties uiProperties,
+                                                   McpJsonMapper json) {
         return new MetadataToolFactory(registry, processDefinitions, access,
                 catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, properties, json);
+                catalogCommands, documentCommands, properties, uiProperties, json);
     }
 
     @Bean
     public McpToolProvider annotatedMcpToolProvider(ConfigurableListableBeanFactory beanFactory,
-                                                   OnnoMcpProperties properties, McpJsonMapper json) {
-        return new AnnotatedMcpToolProvider(beanFactory, properties, json);
+                                                   OnnoMcpProperties properties, UiProperties uiProperties,
+                                                   McpJsonMapper json) {
+        return new AnnotatedMcpToolProvider(beanFactory, properties, uiProperties, json);
     }
 
     @Bean

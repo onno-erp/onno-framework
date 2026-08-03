@@ -13,6 +13,7 @@ import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.server.ResponseStatusException;
+import su.onno.ui.UiProperties;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -47,11 +48,18 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
     private final ConfigurableListableBeanFactory beans;
     private final OnnoMcpProperties properties;
     private final McpJsonMapper json;
+    private final UiProperties uiProperties;
 
     AnnotatedMcpToolProvider(ConfigurableListableBeanFactory beans, OnnoMcpProperties properties,
                              McpJsonMapper json) {
+        this(beans, properties, new UiProperties(), json);
+    }
+
+    AnnotatedMcpToolProvider(ConfigurableListableBeanFactory beans, OnnoMcpProperties properties,
+                             UiProperties uiProperties, McpJsonMapper json) {
         this.beans = beans;
         this.properties = properties;
+        this.uiProperties = uiProperties;
         this.json = json;
     }
 
@@ -65,7 +73,8 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
                     (MethodIntrospector.MetadataLookup<McpTool>) method ->
                             AnnotatedElementUtils.findMergedAnnotation(method, McpTool.class));
             methods.forEach((method, annotation) -> {
-                if (annotation.readOnly() || properties.isWritesEnabled()) {
+                if (annotation.readOnly()
+                        || properties.isWritesEnabled() && !uiProperties.isReadOnly()) {
                     result.add(adapt(beanName, method, annotation));
                 }
             });

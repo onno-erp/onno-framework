@@ -117,6 +117,7 @@ public class CatalogCommandService {
             }
             update.execute();
         });
+        lifecycle.runAfterWrite(entity);
 
         Map<String, Object> result = query.get(desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.CATALOG,
@@ -204,6 +205,7 @@ public class CatalogCommandService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Catalog item was changed by another transaction: " + id);
         }
+        lifecycle.runAfterWrite(entity);
 
         Map<String, Object> result = query.get(desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.CATALOG,

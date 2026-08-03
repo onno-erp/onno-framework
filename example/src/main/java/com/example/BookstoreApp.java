@@ -28,8 +28,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * </ul>
  *
  * <p>Run it, then sign in at <a href="http://localhost:8080">localhost:8080</a> with a demo user from
- * {@code application.yaml} — {@code admin}/{@code admin} (dashboard + staff) or
- * {@code manager}/{@code manager} (runs the shop).</p>
+ * {@code application.yaml} — {@code admin@onnobooks.local}/{@code admin} (dashboard + staff) or
+ * {@code manager@onnobooks.local}/{@code manager} (runs the shop).</p>
  */
 @SpringBootApplication
 public class BookstoreApp {

@@ -22,6 +22,7 @@ public record SchemaChange(
         RENAME_COLUMN,
         ADD_COLUMN,
         ALTER_COLUMN_TYPE,
+        ALTER_COLUMN_NULLABILITY,
         DROP_COLUMN,
         DROP_TABLE
     }

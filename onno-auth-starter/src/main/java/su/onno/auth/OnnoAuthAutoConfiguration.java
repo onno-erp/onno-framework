@@ -460,7 +460,8 @@ public class OnnoAuthAutoConfiguration {
                     .csrf(csrf -> csrf.disable())
                     .oauth2ResourceServer(oauth -> oauth
                             .jwt(jwt -> jwt.jwtAuthenticationConverter(
-                                    jwtAuthenticationConverter(properties.getOidc().resolved()))))
+                                    jwtAuthenticationConverter(
+                                            properties.getOidc().resolvedForResourceServer()))))
                     .exceptionHandling(ex -> ex.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
                     .formLogin(form -> form.disable())
                     .httpBasic(basic -> basic.disable())

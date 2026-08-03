@@ -54,7 +54,7 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 ## Styling
 
 The `su.onno.widgets` Gradle plugin runs **Tailwind over your widget sources** and ships the result as
-`onno-widgets.css`, which the host injects at boot — before its own stylesheet, so these unscoped
+`<group>-<artifact>-widgets.css`, which the host injects at boot — before its own stylesheet, so these unscoped
 utilities can never out-cascade the host's responsive variants on host markup. So Tailwind utility
 classes in your widget's own
 markup — including uncommon ones (`border-l`) and arbitrary values (`-left-[5px]`) the host never
@@ -133,7 +133,7 @@ function EventLog({ widget }: WidgetProps) {
   useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
   return (
     <ul className="text-sm text-foreground">
-      {rows.map((r) => <li key={String(r.id)}>{String(r._date)} — {String(r._number)}</li>)}
+      {rows.map((r) => <li key={String(r._id)}>{String(r._date)} — {String(r._number)}</li>)}
     </ul>
   );
 }

@@ -60,7 +60,7 @@ Notes:
 Use hierarchy when users organize a list into folders or parent-child trees.
 
 ```java
-@Catalog(name = "Product Groups", title = "Product groups", hierarchical = true,
+@Catalog(name = "ProductGroups", title = "Product groups", hierarchical = true,
         codePrefix = "G-", context = "Catalog")
 @AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
@@ -80,7 +80,7 @@ package com.acme.sales.domain;
 import su.onno.annotations.EnumLabel;
 import su.onno.annotations.Enumeration;
 
-@Enumeration(name = "Order Statuses", title = "Order status")
+@Enumeration(name = "OrderStatuses", title = "Order status")
 public enum OrderStatus {
     @EnumLabel(value = "Draft", color = "#6B7280")
     DRAFT,
@@ -99,13 +99,14 @@ public enum OrderStatus {
 }
 ```
 
-Keep enum constants stable. Stored UUIDs and import/filter mappings depend on constants, not labels.
-Change labels freely; do not rename constants without a migration plan.
+Keep the enum's fully qualified class name and constant names stable. Stored UUIDs and import/filter
+mappings depend on both. Change labels freely; moving/renaming the class or constants requires a
+migration plan.
 
 ## Secret Attributes
 
 ```java
-@Catalog(name = "Api Accounts", title = "API accounts", codePrefix = "API-")
+@Catalog(name = "ApiAccounts", title = "API accounts", codePrefix = "API-")
 @AccessControl(readRoles = "ADMIN", writeRoles = "ADMIN")
 @Getter
 @Setter
@@ -133,17 +134,26 @@ import org.springframework.stereotype.Repository;
 import su.onno.repository.CatalogRepository;
 
 import java.util.Optional;
-import java.util.UUID;
 
 @Repository
 public interface ProductRepository extends CatalogRepository<Product> {
-    Optional<Product> findActiveById(UUID id);
-    Optional<Product> findBySkuAndDeletionMarkFalse(String sku);
+    Optional<Product> findByNameAndDeletionMarkFalse(String name);
 }
 ```
 
-Business logic should use active finders. The inherited `findAll()`, `findById()`, and `findByCode()`
-can return deletion-marked rows because restore/admin and reference resolution need tombstones.
+`findActiveById` is already inherited. Business logic should use active finders. The inherited
+`findAll()`, `findById()`, and `findByCode()` can return deletion-marked rows because restore/admin
+and reference resolution need tombstones. Custom derived finders must name a field that actually
+exists and include `DeletionMarkFalse` unless annotated `@IncludesDeleted` deliberately.
+
+## Verification
+
+After authenticated login, verify hierarchy with `GET /api/catalogs/ProductGroups/tree`, collection
+reads with `GET /api/list/catalogs/ProductGroups?limit=50` and
+`GET /api/list/catalogs/Products?limit=50`, and individual records with
+`GET /api/catalogs/Products/{id}`. Product reads expose the raw `group` UUID plus display/ref
+companions. MCP `describe_metadata(kind="all")` exposes hierarchy, ref targets, and stable enum
+UUIDs; enum labels/colors are visible through form metadata and entity row sidecars.
 
 ## Catalog Or Enum
 

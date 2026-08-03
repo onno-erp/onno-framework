@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -239,7 +240,7 @@ public class RegisterQueryService {
             var query = h.createQuery(sql.toString());
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
-                    query.bind(dim.columnName(), filters.get(dim.fieldName()));
+                    query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
                 }
             }
             query.bind("cap", BALANCE_CAP);
@@ -255,7 +256,7 @@ public class RegisterQueryService {
                 .map(AttributeDescriptor::columnName)
                 .collect(Collectors.joining(", "));
         String resourceSums = desc.resources().stream()
-                .map(r -> "SUM(" + r.columnName() + ") AS " + r.columnName())
+                .map(r -> signedSum(r.columnName()) + " AS " + r.columnName())
                 .collect(Collectors.joining(", "));
 
         StringBuilder sql = new StringBuilder("SELECT ");
@@ -278,7 +279,7 @@ public class RegisterQueryService {
             var query = h.createQuery(sql.toString()).bind("from", from).bind("to", to);
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
-                    query.bind(dim.columnName(), filters.get(dim.fieldName()));
+                    query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
                 }
             }
             return query.mapToMap().list();
@@ -295,10 +296,13 @@ public class RegisterQueryService {
      */
     public BigDecimal total(AccumulationRegisterDescriptor desc, String resourceField,
                             String from, String to, String filter) {
-        Set<String> resourceColumns = desc.resources().stream()
-                .map(r -> r.columnName().toLowerCase())
-                .collect(Collectors.toSet());
-        String agg = WidgetAggregate.expression("sum", resourceField, resourceColumns);
+        String resourceColumn = desc.resources().stream()
+                .map(AttributeDescriptor::columnName)
+                .filter(column -> column.equalsIgnoreCase(resourceField))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown register resource: " + resourceField));
+        String agg = "COALESCE(" + signedSum(resourceColumn) + ", 0)";
         WidgetFilter.Result f = WidgetFilter.parse(filter, dimensionColumns(desc));
 
         StringBuilder sql = new StringBuilder("SELECT ").append(agg)
@@ -322,6 +326,26 @@ public class RegisterQueryService {
         return desc.dimensions().stream()
                 .map(d -> d.columnName().toLowerCase())
                 .collect(Collectors.toSet());
+    }
+
+    private static String signedSum(String resourceColumn) {
+        return "SUM(CASE WHEN _movement_type = 'RECEIPT' THEN " + resourceColumn +
+                " ELSE -" + resourceColumn + " END)";
+    }
+
+    /** Convert HTTP query values to the JDBC type declared by the register dimension. */
+    private static Object filterValue(AttributeDescriptor dimension, String raw) {
+        Class<?> type = dimension.javaType();
+        if (dimension.isRef() || type.isEnum() || type == UUID.class) {
+            return UUID.fromString(raw);
+        }
+        if (type == BigDecimal.class) return new BigDecimal(raw);
+        if (type == Integer.class || type == int.class) return Integer.valueOf(raw);
+        if (type == Long.class || type == long.class) return Long.valueOf(raw);
+        if (type == Double.class || type == double.class) return Double.valueOf(raw);
+        if (type == Float.class || type == float.class) return Float.valueOf(raw);
+        if (type == Boolean.class || type == boolean.class) return Boolean.valueOf(raw);
+        return raw;
     }
 
     private void resolveAll(AccumulationRegisterDescriptor desc, List<Map<String, Object>> rows) {

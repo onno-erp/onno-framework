@@ -253,6 +253,12 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Bean
+    public OnnoAfterDeleteCallback onnoAfterDeleteCallback(OutboxWriter outboxWriter, MetadataRegistry registry,
+                                                           su.onno.events.EntityChangePublisher entityChangePublisher) {
+        return new OnnoAfterDeleteCallback(outboxWriter, registry, entityChangePublisher);
+    }
+
+    @Bean
     public su.onno.numbering.NumberGenerator numberGenerator(Jdbi jdbi) {
         return new JdbcNumberGenerator(jdbi);
     }
@@ -453,7 +459,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return l.profile() == null ? "" : l.profile();
     }
 
-    private UiLayout buildUiLayout(List<Layout> layouts) {
+    static UiLayout buildUiLayout(List<Layout> layouts) {
         // Each Layout bean is one persona's shell; the default layout (profile()==null)
         // is the back-office shell. A Layout IS a profile.
         //
@@ -477,6 +483,11 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
                     identity = spec.identity();
                 }
             } else {
+                if (spec.identity() != null || !ShellConfig.defaults().equals(spec.shellConfig())) {
+                    throw new IllegalStateException("Named Layout '" + layout.profile()
+                            + "' cannot declare shell branding/navigation or identity; "
+                            + "put shared shell/identity configuration on the default Layout");
+                }
                 profiles.add(new UiLayout.Profile(layout.profile(), spec.title(), spec.theme(),
                         spec.roles(), spec.priority(), spec.sections(), List.of()));
             }

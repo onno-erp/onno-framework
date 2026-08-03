@@ -143,12 +143,94 @@ configure(subprojects.filter { it.name in publishedModules.keys }) {
 // Community integrations catalog
 // ---------------------------------------------------------------------------
 // INTEGRATIONS.md is *generated* from community/registry.json (the source of truth). Edit the JSON,
-// then run `./gradlew generateIntegrationsDoc` and commit both files. There is no CI gate — the
-// regenerate step is part of the PR checklist (see CONTRIBUTING.md). Uses Gradle's bundled
-// groovy-json, so it needs no extra dependency.
+// then run `./gradlew generateIntegrationsDoc` and commit both files. Validation uses Gradle's
+// bundled groovy-json, so it needs no extra dependency.
+tasks.register("checkCommunityRegistry") {
+    group = "verification"
+    description = "Validate community/registry.json against its public schema contract."
+    val registryFile = layout.projectDirectory.file("community/registry.json")
+    inputs.file(registryFile)
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val root = groovy.json.JsonSlurper().parse(registryFile.asFile) as? Map<String, Any?>
+            ?: throw GradleException("community/registry.json must contain a JSON object")
+        val rootKeys = setOf("\$schema", "integrations")
+        val unexpectedRoot = root.keys - rootKeys
+        if (unexpectedRoot.isNotEmpty()) {
+            throw GradleException("community/registry.json has unknown root keys: $unexpectedRoot")
+        }
+        @Suppress("UNCHECKED_CAST")
+        val integrations = root["integrations"] as? List<Map<String, Any?>>
+            ?: throw GradleException("community/registry.json must contain an integrations array")
+        val required = setOf("name", "description", "author", "repository", "category",
+            "onnoVersion", "license", "status")
+        val allowed = required + setOf("homepage", "coordinates", "tags")
+        val categories = setOf("connector", "spi", "ui", "skill", "library")
+        val statuses = setOf("active", "experimental", "unmaintained")
+        val coordinates = Regex("""^[^:\s]+:[^:\s]+(:[^:\s]+)?$""")
+        val names = mutableSetOf<String>()
+        val repositories = mutableSetOf<String>()
+
+        fun text(row: Map<String, Any?>, key: String, index: Int, max: Int? = null): String {
+            val value = row[key] as? String
+                ?: throw GradleException("integrations[$index].$key must be a string")
+            if (value.isBlank()) throw GradleException("integrations[$index].$key must not be blank")
+            if (max != null && value.length > max) {
+                throw GradleException("integrations[$index].$key exceeds $max characters")
+            }
+            return value
+        }
+
+        integrations.forEachIndexed { index, row ->
+            val missing = required - row.keys
+            val unexpected = row.keys - allowed
+            if (missing.isNotEmpty()) throw GradleException("integrations[$index] is missing $missing")
+            if (unexpected.isNotEmpty()) throw GradleException("integrations[$index] has unknown keys $unexpected")
+            val name = text(row, "name", index, 80)
+            text(row, "description", index, 280)
+            text(row, "author", index)
+            text(row, "onnoVersion", index)
+            text(row, "license", index)
+            val repository = text(row, "repository", index)
+            if (!repository.startsWith("https://") && !repository.startsWith("http://")) {
+                throw GradleException("integrations[$index].repository must be an HTTP(S) URL")
+            }
+            (row["homepage"] as? String)?.let {
+                if (!it.startsWith("https://") && !it.startsWith("http://")) {
+                    throw GradleException("integrations[$index].homepage must be an HTTP(S) URL")
+                }
+            }
+            if (row["category"] !in categories) {
+                throw GradleException("integrations[$index].category must be one of $categories")
+            }
+            if (row["status"] !in statuses) {
+                throw GradleException("integrations[$index].status must be one of $statuses")
+            }
+            (row["coordinates"] as? String)?.let {
+                if (!coordinates.matches(it)) {
+                    throw GradleException("integrations[$index].coordinates is not group:artifact[:version]")
+                }
+            }
+            row["tags"]?.let { raw ->
+                val tags = raw as? List<*>
+                    ?: throw GradleException("integrations[$index].tags must be an array")
+                if (tags.any { it !is String || it.isBlank() } || tags.toSet().size != tags.size) {
+                    throw GradleException("integrations[$index].tags must contain unique non-blank strings")
+                }
+            }
+            if (!names.add(name.lowercase())) throw GradleException("Duplicate integration name: $name")
+            if (!repositories.add(repository.lowercase())) {
+                throw GradleException("Duplicate integration repository: $repository")
+            }
+        }
+        logger.lifecycle("community/registry.json is valid (${integrations.size} integration(s)).")
+    }
+}
+
 tasks.register("generateIntegrationsDoc") {
     group = "documentation"
     description = "Regenerate INTEGRATIONS.md from community/registry.json"
+    dependsOn("checkCommunityRegistry")
 
     val registryFile = layout.projectDirectory.file("community/registry.json")
     val outputFile = layout.projectDirectory.file("INTEGRATIONS.md")
@@ -364,7 +446,7 @@ fun renderConfigDocs(): String {
 tasks.register("generateConfigDocs") {
     group = "documentation"
     description = "Regenerate docs/CONFIGURATION.md from the starters' spring-configuration-metadata.json."
-    configModuleProjects.forEach { dependsOn(":$it:classes") }
+    configModuleProjects.forEach { dependsOn(":$it:compileJava") }
     inputs.dir(configNotesDir)
     outputs.file(configDocFile)
     doLast {
@@ -376,7 +458,7 @@ tasks.register("generateConfigDocs") {
 tasks.register("checkConfigDocs") {
     group = "verification"
     description = "Fail if docs/CONFIGURATION.md is out of sync with the @ConfigurationProperties metadata."
-    configModuleProjects.forEach { dependsOn(":$it:classes") }
+    configModuleProjects.forEach { dependsOn(":$it:compileJava") }
     doLast {
         val expected = renderConfigDocs()
         val actual = if (configDocFile.exists()) configDocFile.readText() else ""
@@ -391,7 +473,7 @@ tasks.register("checkConfigDocs") {
 }
 
 // Make the drift guard part of the standard verification lifecycle.
-tasks.named("check") { dependsOn("checkConfigDocs") }
+tasks.named("check") { dependsOn("checkConfigDocs", "checkCommunityRegistry") }
 
 // ---------------------------------------------------------------------------
 // Aggregated Javadoc  (build/docs/javadoc) — the API reference for the docs site
@@ -416,9 +498,8 @@ tasks.register<Javadoc>("aggregateJavadoc") {
     title = "onno-framework API"
     (options as StandardJavadocDocletOptions).apply {
         encoding = "UTF-8"
-        addStringOption("Xdoclint:none", "-quiet")
+        addBooleanOption("Xdoclint:reference", true)
+        addBooleanOption("Werror", true)
     }
-    // Lombok-generated accessors aren't visible to the Javadoc tool; don't fail the whole API doc
-    // over individual missing-symbol warnings.
-    isFailOnError = false
+    isFailOnError = true
 }

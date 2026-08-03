@@ -11,8 +11,8 @@ public class OnnoProperties {
     /**
      * Packages scanned for {@code @Catalog}, {@code @Document}, {@code @AccumulationRegister},
      * {@code @InformationRegister}, {@code @Enumeration}, and {@code @Constant} types. Leave unset
-     * to scan from your {@code @SpringBootApplication} package. This is the core scan property —
-     * <strong>not</strong> {@code onno.base-packages} (which only exists for mail/print templates).
+     * to scan from your {@code @SpringBootApplication} package. This is the core scan property;
+     * there is no {@code onno.base-packages} alias.
      */
     private List<String> scanPackages = new ArrayList<>();
 

@@ -45,7 +45,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
 | `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, and a read-only data client that resolve to the host SPA at runtime. |
-| `example` | (not published) | A vacation-rentals ERP that exercises every concept; the canonical reference app. |
+| `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
 ## Boot pipeline
@@ -218,6 +218,12 @@ on `CatalogRepository`/`DocumentRepository` — `findAllActive()`, `findActiveBy
 `findActiveByCode(String)` / `findActiveByNumber(String)`, `findActiveByDateBetween(from, to)`
 (backed by derived `findByDeletionMarkFalse()`-style queries) — or filter `!isDeletionMark()`.
 
+The framework's Spring Data repository base class also turns `delete(...)`, `deleteById(...)`, and
+bulk deletes of catalog/document aggregates into deletion-mark saves. It runs
+`BeforeDeleteHandler.beforeDelete()` first, publishes delete events only after the mark is stored,
+and refuses to delete a posted document; explicitly unpost it first. Repositories for ordinary,
+non-onno aggregates keep Spring Data JDBC's physical-delete behavior.
+
 Because Spring Data JDBC has no global soft-delete filter (no JPA `@Where` equivalent), a
 **boot-time guardrail** catches the cases people forget: at startup every
 `CatalogRepository`/`DocumentRepository` is scanned, and any *consumer-declared* finder that returns
@@ -289,7 +295,13 @@ persisted, so retries cannot double-count registers. After commit
 it emits `@DomainEvent` outbox rows, calls `afterPost`, and publishes a Spring
 `DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
 
-For a register declared with `postingOrder = PostingOrder.CHRONOLOGICAL`, posting or unposting a
+`PostingService.repost(...)` is the explicit recalculation operation for a posted document: it
+reverses the old movements and writes the recalculated movements atomically, so a failed recalculation
+leaves the original posting intact. The generic REST `.../{id}/post` command selects this operation
+when the document is already posted. Core `post(...)` remains a strict first-post operation, and
+unposting a draft or deleted document is rejected.
+
+For a register declared with `postingOrder = PostingOrder.CHRONOLOGICAL`, posting, reposting, or unposting a
 backdated document discovers later active documents through that register (including documents
 linked through other chronological registers), reverses them newest-first, applies the requested
 change, and reposts them oldest-first. The restoration uses one serializable JDBI transaction, and
@@ -301,8 +313,8 @@ Two semantics that bite every integration:
 - **Posting is its own transaction**, not enlisted in an ambient `@Transactional`. Save the document
   (let it commit), *then* post. Wrapping save+post in one `@Transactional` silently leaves
   `_posted = false`.
-- **Posting an already-posted document is rejected.** Unpost it before intentionally recalculating
-  its movements; a repeated core `post(...)` call never duplicates register totals.
+- **Core posting an already-posted document is rejected.** Use `repost(...)` to intentionally
+  recalculate its movements; a repeated core `post(...)` call never duplicates register totals.
 - **React to a post with a Spring `@EventListener` on `DocumentPostedEvent`** (full DI), not from
   inside `handlePosting`. The domain `AfterPostHandler.afterPost()` hook has no Spring access.
 
@@ -368,7 +380,6 @@ cannot be used as a blind oracle for encrypted values.
 | Import | `POST /api/import/{catalogs,documents}/{name}/csv[/preview]` (import-starter) |
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
-| Mail (dev) | `GET /onno/mail/preview[/{name}]`, `POST /onno/mail/events` webhook (mail-starter) |
 
 > **SPA fallback gotcha:** any non-`/api` path returns `index.html` with HTTP 200 (React Router
 > deep-linking). A mistyped URL "succeeds" with the SPA shell. Only `/api/**` produces real
@@ -377,8 +388,10 @@ cannot be used as a blind oracle for encrypted values.
 The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentCommandService`, shared by
 the REST API, the generated UI, CSV import, and the MCP tools) reconstruct the typed entity and run
 the same entity write lifecycle as `repository.save(...)` — `onFilling()` (create), `beforeWrite()`,
-and `Validated` business rules — before the JDBI write, so a field a model derives in `beforeWrite()`
-is persisted on every write path, not just on the repository path. Auto-numbering and secret
+and `Validated` business rules — before the JDBI write, then `afterWrite()` after a successful
+persist. A field a model derives in `beforeWrite()` is therefore persisted on every write path, not
+just on the repository path. Validation previews run only the pre-write phase and never call
+`afterWrite()`. Auto-numbering and secret
 encryption stay in the command services; posting still runs its own lifecycle in `PostingEngine`.
 
 The same pipeline backs **live form validation**: `POST /api/{catalogs,documents}/{name}[/{id}]/validate`
@@ -394,14 +407,16 @@ The UI is authored as Spring beans, never as annotations on domain classes:
 
 - **`Layout`** — navigation, shell (`NavStyle`), branding, persona (`profile()`), `roles`, and an
   optional `viewport()` (DESKTOP/TABLET/MOBILE). The default layout (`profile() == null`) is the
-  back-office shell. **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
+  back-office shell. Shell, branding, and `identity(...)` are application-wide and therefore belong
+  on that default layout; startup rejects them on a named profile instead of silently dropping them.
+  **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
   sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
   catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions
   auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS` groups; that was removed.) A
   section can also link an authored `Page` at an arbitrary route with
   `section(...).page(route, label, icon)` — the nav peer of a catalog/document entry.
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
-  chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `constants`, `custom`,
+  chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `actions`, `custom`,
   and `bare()`/`header(false)` to drop the title row. A page is served at **any** route — the home
   dashboard (`/`), settings (`/settings`), a **default surface route** (`/catalogs/{name}`,
   `/documents/{name}`, or `/registers/{name}`, where an authored page *overrides* the default
@@ -430,7 +445,7 @@ The UI is authored as Spring beans, never as annotations on domain classes:
 Server-side rendering uses **DivKit**: the controllers emit DivKit card JSON resolved for the
 caller's persona, roles, theme, and viewport. The same contract drives the bundled React/Vite SPA
 today and is intended to drive a native client later. The frontend lives in
-`onno-ui-starter/src/main/frontend` and is built by Gradle (`buildFrontend`, Node 20) into
+`onno-ui-starter/src/main/frontend` and is built by Gradle (`buildFrontend`, Node 22.22) into
 `static/ui/`. See [onno-ui-starter/README.md](../onno-ui-starter/README.md) for the full widget DSL
 and `config(key,value)` reference.
 
@@ -588,10 +603,11 @@ are in [docs/licensing/MODULE-SPLIT-PLAN.md](licensing/MODULE-SPLIT-PLAN.md).
 ## Community extensions
 
 The same starter mechanism is open to anyone — community extensions are first-class, not a fork.
-There are five extension surfaces: **connectors** (auto-config starters wrapping an external
+There are six extension surfaces: **connectors** (auto-config starters wrapping an external
 system), **SPI implementations** (`MediaStorage`, `MailDispatcher`, an additive
 `AuthMethodsContributor` login button, custom `SecurityFilterChain`/`UserDetailsService`, Kafka
-`EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom widgets/actions), **MCP**
+`EventHandler`), **UI** (`Page`/`Layout`/`EntityView` beans and custom widgets/actions),
+**observability** (`TelemetryRecorder` semantic outcomes and timings), **MCP**
 (`@McpTool` methods and `McpToolProvider` beans), and Claude **skills/plugins** (via
 [.claude-plugin/marketplace.json](../.claude-plugin/marketplace.json)).
 
@@ -600,3 +616,5 @@ and the `su.onno.*` packages reserved, and a definition of done — is in
 [EXTENDING.md](EXTENDING.md). Community-built integrations are cataloged in
 [INTEGRATIONS.md](../INTEGRATIONS.md), generated from the machine-readable
 [`community/registry.json`](../community/registry.json) by the `generateIntegrationsDoc` Gradle task.
+Both `check` and `generateIntegrationsDoc` validate registry structure, allowed values, URLs,
+coordinates, and duplicate ids before accepting it.

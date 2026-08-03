@@ -1,9 +1,17 @@
 package su.onno.repository;
 
 import su.onno.fixtures.TestPriceRegister;
+import su.onno.fixtures.TestProduct;
 import su.onno.fixtures.TestSettingRegister;
+import su.onno.annotations.Dimension;
+import su.onno.annotations.Enumeration;
+import su.onno.annotations.InformationRegister;
+import su.onno.annotations.Resource;
 import su.onno.metadata.*;
+import su.onno.model.InformationRecord;
+import su.onno.model.Periodicity;
 import su.onno.schema.SchemaGenerator;
+import su.onno.types.Ref;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -19,6 +27,48 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 
 class InformationRegisterPersistenceTest {
+
+    @Enumeration(name = "TestInformationChannels")
+    enum Channel {
+        RETAIL,
+        WHOLESALE
+    }
+
+    @InformationRegister(name = "TypedInformationRates", periodicity = Periodicity.NONE)
+    public static class TypedInformationRate extends InformationRecord {
+        @Dimension
+        private Ref<TestProduct> product;
+
+        @Dimension
+        private Channel channel;
+
+        @Resource
+        private BigDecimal rate;
+
+        public Ref<TestProduct> getProduct() {
+            return product;
+        }
+
+        public void setProduct(Ref<TestProduct> product) {
+            this.product = product;
+        }
+
+        public Channel getChannel() {
+            return channel;
+        }
+
+        public void setChannel(Channel channel) {
+            this.channel = channel;
+        }
+
+        public BigDecimal getRate() {
+            return rate;
+        }
+
+        public void setRate(BigDecimal rate) {
+            this.rate = rate;
+        }
+    }
 
     private Jdbi jdbi;
     private InformationRegisterPersistence<TestPriceRegister> pricePersistence;
@@ -205,6 +255,37 @@ class InformationRegisterPersistenceTest {
         List<TestSettingRegister> records = settingPersistence.getRecords(Collections.emptyMap());
         assertThat(records).hasSize(1);
         assertThat(records.get(0).getSettingValue()).isEqualTo("dark_mode");
+    }
+
+    @Test
+    void typedRefAndEnumDimensions_roundTripAndFilterByDomainValues() {
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        MetadataRegistry registry = new MetadataRegistry();
+        registry.registerEnumeration(scanner.scanEnumeration(Channel.class));
+        InformationRegisterDescriptor descriptor =
+                scanner.scanInformationRegister(TypedInformationRate.class);
+        registry.registerInformationRegister(descriptor);
+        new SchemaGenerator(registry).execute(jdbi);
+        InformationRegisterPersistence<TypedInformationRate> persistence =
+                new InformationRegisterPersistence<>(jdbi, descriptor);
+        Ref<TestProduct> product = Ref.of(TestProduct.class, UUID.randomUUID());
+        TypedInformationRate rate = new TypedInformationRate();
+        rate.setProduct(product);
+        rate.setChannel(Channel.RETAIL);
+        rate.setRate(new BigDecimal("12.50"));
+
+        persistence.write(rate);
+
+        assertThat(persistence.getRecords(java.util.Map.of(
+                "product", product,
+                "channel", Channel.RETAIL)))
+                .singleElement()
+                .satisfies(stored -> {
+                    assertThat(stored.getProduct()).isEqualTo(product);
+                    assertThat(stored.getProduct().type()).isEqualTo(TestProduct.class);
+                    assertThat(stored.getChannel()).isEqualTo(Channel.RETAIL);
+                    assertThat(stored.getRate()).isEqualByComparingTo("12.50");
+                });
     }
 
     @Test
