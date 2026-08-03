@@ -70,6 +70,13 @@ class AuthApiController {
             Authentication authentication = authenticationManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(body.username(), body.password()));
 
+            // This controller performs authentication outside Spring Security's login filters, so
+            // their SessionFixationProtectionStrategy is not invoked for us. Rotate any session
+            // established before authentication before storing the privileged security context.
+            if (request.getSession(false) != null) {
+                request.changeSessionId();
+            }
+
             SecurityContext context = SecurityContextHolder.createEmptyContext();
             context.setAuthentication(authentication);
             SecurityContextHolder.setContext(context);
