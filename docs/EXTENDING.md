@@ -7,7 +7,7 @@ modeling playbook in [AGENTS.md](../AGENTS.md).
 
 > Built something? Jump to [Get your extension listed](#get-your-extension-listed).
 
-## The five extension surfaces
+## The six extension surfaces
 
 Pick the one that matches what you're adding. Most "integrations" are **connectors**.
 
@@ -27,10 +27,11 @@ covers both.
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.
-The catalogs, documents, registers, posting, and UI live in the **consuming application**. The only
-framework types a connector typically touches are `su.onno.types.Ref` and
-`su.onno.types.RefResolver`. A connector is a Spring Boot **auto-configuration starter that exposes
-a typed client + service for one external system**; the host app wires it into its domain.
+The catalogs, documents, registers, posting, and UI live in the **consuming application**. A reusable
+connector should not depend on application model types. Host-side adapter code may translate the
+application's `Ref<T>` values and enums into the connector's external ids and codes. A connector is
+a Spring Boot **auto-configuration starter that exposes a typed client + service for one external
+system**; the host app owns the domain mapping.
 
 This keeps the seam clean: your integration is reusable across any app built on the framework, and
 the app owns its own model.
@@ -73,7 +74,9 @@ public class OnnoShopifyAutoConfiguration {
 ```
 
 - Gate the whole starter with `@ConditionalOnProperty(prefix = "onno.<name>", name = "enabled")`.
-- Make **every** bean `@ConditionalOnMissingBean` so the host can override any of them.
+- Make public extension seams (client, SPI, and facade beans) replaceable with
+  `@ConditionalOnMissingBean`. Keep dependent bean conditions coherent so replacing a client does
+  not accidentally create two competing service graphs.
 - List the auto-configuration class in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
   (Spring Boot 3's mechanism — one fully-qualified class name per line). Adding the dependency is then
   enough; no `@Import` needed in the host.
@@ -110,7 +113,7 @@ collide and config stays predictable.
 When your extension reacts to the host's business data, use the framework's seams — they're covered
 in depth in [ARCHITECTURE.md](ARCHITECTURE.md):
 
-- **`Ref<T>` + `RefResolver`** are the canonical bridge between app domain objects and your code.
+- **`Ref<T>` + `RefResolver`** are the canonical bridge in the host adapter between app domain objects and your code.
   `refResolver.resolve(ref).orElse(null)` dereferences a `Ref<Customer>` into the catalog entity;
   map enums to the external system's codes with a `switch`.
 - **React to a posted document with a Spring `@EventListener` on `DocumentPostedEvent`** (full
@@ -135,8 +138,8 @@ Before you publish and ask to be listed:
 - [ ] Has a README: what it does, the `onno.<name>.*` properties, a minimal setup snippet.
 - [ ] Has a declared license (an SPDX id in the repo).
 - [ ] Uses your own Maven group and Java package (not `su.onno` / `su.onno.*`).
-- [ ] For a starter: gated by `onno.<name>.enabled`, every bean `@ConditionalOnMissingBean`, and a
-      valid `AutoConfiguration.imports` file.
+- [ ] For a starter: gated by `onno.<name>.enabled`, public client/SPI/facade seams are replaceable,
+      and the module has a valid `AutoConfiguration.imports` file.
 - [ ] `./gradlew publishToMavenLocal` produces a consumable artifact **with sources, javadoc, and a
       POM** — a build can pass yet still fail to produce these.
 
@@ -145,9 +148,10 @@ Before you publish and ask to be listed:
 The community catalog is [INTEGRATIONS.md](../INTEGRATIONS.md), generated from a machine-readable
 registry. To get listed:
 
-1. Add an entry to [`community/registry.json`](../community/registry.json) (it validates against
-   [`community/registry.schema.json`](../community/registry.schema.json)).
-2. Regenerate the catalog: `./gradlew generateIntegrationsDoc`.
+1. Add an entry to [`community/registry.json`](../community/registry.json). Its schema is documented
+   by [`community/registry.schema.json`](../community/registry.schema.json), and Gradle performs the
+   repository's structural and duplicate checks.
+2. Run `./gradlew checkCommunityRegistry generateIntegrationsDoc`.
 3. Open a PR with both files. See the
    [listing criteria](../CONTRIBUTING.md#listing-a-community-integration) in `CONTRIBUTING.md`, or
    open a [community integration submission](https://github.com/onno-erp/onno-framework/issues/new?template=integration-submission.yml)

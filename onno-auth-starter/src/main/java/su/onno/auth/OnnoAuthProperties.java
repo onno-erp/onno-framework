@@ -402,7 +402,8 @@ public class OnnoAuthProperties {
         /**
          * {@code spring.security.oauth2.client.registration.*} id used to build the login URL
          * ({@code /oauth2/authorization/{registrationId}}) surfaced to the SPA. Defaults from the
-         * preset (e.g. {@code keycloak}, {@code zitadel}); required for {@link Provider#CUSTOM}.
+         * preset (e.g. {@code keycloak}, {@code zitadel}); required for {@link Provider#CUSTOM} in
+         * OIDC client mode and unused by stateless resource-server JWT validation.
          */
         private String registrationId;
 
@@ -478,10 +479,23 @@ public class OnnoAuthProperties {
         /**
          * Applies the {@link Provider} preset to produce the effective, fully-populated settings the
          * autoconfig and {@link ClaimRoleConverter} consume. Explicit values always win; preset
-         * defaults only fill what was left null/empty. Validates configuration (e.g. Keycloak
-         * client-roles without a client-id, or CUSTOM without a registration-id).
+         * defaults only fill what was left null/empty. Validates OIDC-client configuration (e.g.
+         * Keycloak client-roles without a client-id, or CUSTOM without a registration-id).
          */
         public ResolvedOidc resolved() {
+            return resolve(true);
+        }
+
+        /**
+         * Resolves principal/role claim settings for stateless JWT validation. A resource server
+         * has no OAuth client registration, so a CUSTOM provider does not require
+         * {@code registration-id}.
+         */
+        public ResolvedOidc resolvedForResourceServer() {
+            return resolve(false);
+        }
+
+        private ResolvedOidc resolve(boolean requireRegistrationId) {
             String regId = registrationId;
             String principal = principalClaim;
             List<RoleSource> sources = new ArrayList<>(roles.getSources());
@@ -510,7 +524,7 @@ public class OnnoAuthProperties {
                     }
                 }
                 case CUSTOM -> {
-                    if (isBlank(regId)) {
+                    if (requireRegistrationId && isBlank(regId)) {
                         throw new IllegalStateException(
                                 "onno.auth.oidc.provider=custom requires onno.auth.oidc.registration-id");
                     }

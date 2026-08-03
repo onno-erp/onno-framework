@@ -8,7 +8,7 @@ if something looks off — the code wins, and you should fix this file if it has
 ### `@Catalog` (on a class extending `CatalogObject`)
 | Element | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `name` | String | — (required) | Logical/display name (URL-safe). |
+| `name` | String | — (required) | Stable logical key used by routes/schema; ASCII and URL-safe. |
 | `title` | String | `""` | UI label; falls back to `name`. |
 | `tableName` | String | `""` | Stable DB table; derived from `name` if empty. |
 | `previousNames` | String[] | `{}` | Former name/tableName for rename detection. |
@@ -60,7 +60,7 @@ posts the browser's percent-encoded route path, which previously made presence/S
 `@Resource` (numbers). Posting rejects a negative resource total in a `BALANCE` register by default;
 set `allowNegative=true` only for a balance whose domain permits debt or overdrafts. The policy is
 ignored for `TURNOVER` registers. `postingOrder=CHRONOLOGICAL` reverses and reposts later affected
-documents after a backdated post/unpost; use it for order-dependent calculations such as average cost.
+documents after a backdated post/repost/unpost; use it for order-dependent calculations such as average cost.
 
 ### `@InformationRegister` (on a class extending `InformationRecord`)
 `name` (required), `tableName=""`, `periodicity = Periodicity.NONE|DAY|MONTH|QUARTER|YEAR` (default
@@ -158,8 +158,8 @@ Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER
 | Interface | Method | When |
 | --- | --- | --- |
 | `BeforeWriteHandler` | `beforeWrite()` | Before save and before post — compute derived fields. |
-| `AfterWriteHandler` | `afterWrite()` | After save. |
-| `OnFillingHandler` | `onFilling()` | **Seed defaults here** so the New form opens populated (status, `date`/`period` = now, `quantity = 1`, default counterparty). ⚠️ Runs on **every save of a new entity** (`isNew==true`), not just the blank-form pre-fill — the repository persist path calls it too (`OnnoBeforeConvertCallback`). So make it **idempotent / guard on null** (`if (getDate()==null) setDate(now)`); an unconditional `status = NEW` clobbers a status set by a seeder/import or chosen on the form. For a fixed default that should never be overwritten, prefer a Java field initializer over `onFilling`. |
+| `AfterWriteHandler` | `afterWrite()` | After a successful repository or generic REST/import/MCP save; validation previews skip it. |
+| `OnFillingHandler` | `onFilling()` | Seed/normalize defaults on **create/save**. It does not populate the initially rendered blank New form; use Java field initializers for values that must appear there. It runs on every save of a new entity (`isNew==true`), so guard on null and keep it idempotent. |
 | `BeforePostHandler` | `beforePost()` | Before posting (validation) — **no Spring DI** (see below). |
 | `Postable` | `handlePosting(PostingContext)` | Write register movements. |
 | `AfterPostHandler` | `afterPost()` | After post — **no Spring DI**; prefer `@EventListener` on `DocumentPostedEvent`. |
@@ -175,18 +175,25 @@ side effects, an `@EventListener` on the published event (`DocumentPostedEvent`,
 
 `BusinessRule` — `record(String name, String field, String message, BooleanSupplier condition)`.
 Constructors: `new BusinessRule(name, message, condition)` (cross-field) and
-`BusinessRule.onField(field, message, condition)`. First failing rule throws with its message.
+`BusinessRule.onField(field, message, condition)`. Validation collects all failing rules into one
+validation exception/payload.
 
 ## Posting (package `su.onno.posting`)
 
-- `PostingService` — `post(DocumentObject)`, `unpost(DocumentObject)`, `preview(DocumentObject)`.
+- `PostingService` — `post(DocumentObject)`, atomic `repost(DocumentObject)`, `unpost(DocumentObject)`, `preview(DocumentObject)`.
 - `PostingContext` — `movements(Class<T extends AccumulationRecord>)` returns a `RegisterRepository<T>`;
   call `addReceipt(Consumer<T>)` / `addExpense(Consumer<T>)` to stage movements.
 - Events: `DocumentPostedEvent(document)`, `DocumentUnpostedEvent(document)` (Spring events, after commit).
-- `PostingEngine` runs `beforeWrite → beforePost → rules` then, in its own JDBI transaction, inserts
-  movements, updates totals, rejects negative BALANCE results unless the register declares
-  `allowNegative=true`, writes back computed fields, sets `_posted=true`. **Save then post — never
-  wrap both in one `@Transactional`.**
+- `PostingEngine` runs `beforeWrite → beforePost → rules → handlePosting`. Normal posting stages
+  movements before opening its JDBI persistence transaction, then atomically claims an existing
+  unposted document, inserts movements, updates totals, rejects negative BALANCE results unless the
+  register declares `allowNegative=true`, writes back computed fields, and sets `_posted=true`.
+  Core `post` rejects an already-posted document; `repost` reverses old movements and writes the
+  recalculated set in one transaction, preserving the old posting if recalculation fails. Unpost
+  rejects drafts and deleted documents.
+  Preview stages/returns movements without claiming the document, checking negative balances, or
+  simulating chronological restoration, so it is not a guarantee that post succeeds. Save and
+  commit before posting.
 
 ## Runtime query paths
 
@@ -218,6 +225,9 @@ because they are not Java field references.
   isn't deletion-scoped (no `…AndDeletionMarkFalse`, no `deletion_mark` in `@Query`, not `findActive*`).
   Opt a finder out with `@su.onno.repository.IncludesDeleted` when it must see tombstones (Ref
   resolution, restore/admin).
+- Repository `delete(...)`, `deleteById(...)`, and bulk delete methods for catalog/document entities
+  run `BeforeDeleteHandler` and persist `deletionMark=true`; a posted document must be unposted first.
+  Repositories for ordinary non-onno aggregates still physically delete.
 - `RegisterRepository<T>` — read-only for accumulation registers: `getBalance(...)`,
   `getTurnover(from,to,...)`, `getRecordsByDocument(uuid)`, plus `addReceipt/addExpense` used during
   posting; writes happen via the `PostingEngine`. Filters narrow a read in one query, not in Java:
@@ -239,6 +249,8 @@ because they are not Java field references.
 - `Layout` — `profile()` (persona or null=default), `viewport()`, `configure(LayoutSpec)`:
   `spec.section(name).icon(…).catalog(X.class).document(Y.class)`, `spec.shell().nav(NavStyle.SIDEBAR)`,
   `spec.title/theme/priority/roles(...)`, `spec.identity(directoryClass, loginField)`.
+  Shell, branding, and `identity(...)` are global: configure them only on the default layout;
+  startup rejects those settings on a named profile.
   `spec.section(name).page(route, label, icon)` adds a sidebar link to an authored `Page` at an
   arbitrary route (the nav peer of `.catalog(...)`) — e.g. a custom dashboard `.page("/ops", "Sales Ops", "activity")`.
   - Branding logo: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)`, plus `.logoWidth(px)` /
@@ -276,7 +288,7 @@ because they are not Java field references.
     Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
     lookalikes. Reach for these before hand-rolling.
   - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
-    `onno-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
+    a coordinate-specific `*-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
     host stylesheet (its unscoped utilities tie with the host's on specificity, so loaded last a bare
     `.flex-col` would beat the host's `sm:flex-row` and break host layouts) — so a widget's
     own utility classes (incl. `border-l`, arbitrary `-left-[5px]`) get real CSS. Residual caveats:
@@ -293,8 +305,8 @@ because they are not Java field references.
   mistyped path, silently returns the app shell instead of a 404, and won't render under `nosniff`.
   `/api/**` and `{onno.ui.path}/plugins/**` are exempt. For a custom path or content-type, add a
   dedicated `@GetMapping` (a controller out-precedences the SPA fallback).
-- `EntityView` (non-generic) — `Class<?> entity()` (names the target catalog/document), `profile()`,
-  `list(ListSpec)`, `fields(EntityConfigBuilder)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
+- `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`,
+  `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
@@ -314,8 +326,8 @@ because they are not Java field references.
     as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
-    every declared value labelled like the pills; `map()` → `MapSpec` adds a Table⇄Map toggle —
-    `lat(f).lng(f)` or `geoJson(f)`, `label(f)` (marker popup), `defaultView()`
+    every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
+    `lat(getter).lng(getter)` or `geoJson(String)`, `label(getter)` (marker popup), `defaultView()`
     (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
@@ -381,7 +393,9 @@ because they are not Java field references.
     creates server-side copies via `POST /api/{kind}/{name}/{id}/duplicate` (fresh identity,
     catalog description + " (copy)" [`duplicate.copySuffix`], documents unposted/dated now,
     secrets unset). Forms with unsaved edits confirm "Discard changes?" before the tab closes.
-  - `EntityConfigBuilder`: `field(name)` → `FieldHintBuilder`; `validation(key, FormValidator.class)`
+  - `EntityConfigBuilder<E>`: typed `field/refField/rowField/rowRefField` getter overloads are the
+    authored default; string names are unsafe dynamic escape hatches.
+    `validation(key, FormValidator.class)`
     → `.dependsOn(fields…)` (dotted section paths supported) + `.debounce(Duration)` for live,
     advisory error/warning/info feedback; validators are Spring beans and never replace
     authoritative save/post rules; `icon(name)` (nav icon, any lucide

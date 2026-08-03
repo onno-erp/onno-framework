@@ -10,14 +10,19 @@ import su.onno.ui.DocumentCommandService;
 import su.onno.ui.DocumentQueryService;
 import su.onno.ui.RegisterQueryService;
 import su.onno.ui.UiAccessService;
+import su.onno.ui.UiProperties;
 
+import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.server.McpSyncServerExchange;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 import java.util.Map;
@@ -50,9 +55,13 @@ class MetadataToolFactoryTest {
     }
 
     private MetadataToolFactory factory(OnnoMcpProperties props) {
+        return factory(props, new UiProperties());
+    }
+
+    private MetadataToolFactory factory(OnnoMcpProperties props, UiProperties uiProperties) {
         UiAccessService access = new UiAccessService(registry);
-        return new MetadataToolFactory(registry, access, catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, props, json);
+        return new MetadataToolFactory(registry, null, access, catalogQuery, documentQuery, registerQuery,
+                catalogCommands, documentCommands, props, uiProperties, json);
     }
 
     private static Set<String> names(List<SyncToolSpecification> tools) {
@@ -88,6 +97,33 @@ class MetadataToolFactoryTest {
     }
 
     @Test
+    void uiReadOnlyGateRemovesMutationToolsButKeepsPostingPreview() {
+        UiProperties ui = new UiProperties();
+        ui.setReadOnly(true);
+
+        Set<String> names = names(factory(new OnnoMcpProperties(), ui).build());
+
+        assertThat(names).contains("posting_preview", "list_catalog");
+        assertThat(names).doesNotContain(
+                "create_catalog", "update_catalog", "delete_catalog",
+                "create_document", "update_document", "delete_document",
+                "post_document", "unpost_document");
+    }
+
+    @Test
+    void describeMetadataReportsGlobalWriteGate() {
+        OnnoMcpProperties properties = new OnnoMcpProperties();
+        properties.setWritesEnabled(false);
+        SyncToolSpecification describe = byName(factory(properties).build(), "describe_metadata");
+
+        CallToolResult result = describe.callHandler().apply(exchange("maria", "RENTALS"),
+                new CallToolRequest("describe_metadata", Map.of("kind", "catalog")));
+
+        assertThat(result.content().toString())
+                .contains("Clients", "writable", "false");
+    }
+
+    @Test
     void readToolDeniesAnonymousCaller() {
         when(catalogQuery.require("Clients")).thenReturn(clients);
         SyncToolSpecification listCatalog = byName(factory(new OnnoMcpProperties()).build(), "list_catalog");
@@ -110,5 +146,15 @@ class MetadataToolFactoryTest {
         assertThat(result.isError()).isNotEqualTo(Boolean.TRUE);
         String text = result.content().toString();
         assertThat(text).doesNotContain("Clients");
+    }
+
+    private static McpSyncServerExchange exchange(String username, String role) {
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(
+                username, "n/a", List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        McpTransportContext transport = McpTransportContext.create(
+                Map.of(McpPrincipalContext.PRINCIPAL_KEY, authentication));
+        McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);
+        when(exchange.transportContext()).thenReturn(transport);
+        return exchange;
     }
 }

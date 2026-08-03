@@ -16,12 +16,16 @@ change.
 
 - `/api/**` requires auth except configured public bootstrap endpoints.
 - **`onno.auth.public-paths` REPLACES the defaults — re-list all of them when overriding**, and add
-  SSO callback paths to both `public-paths` and `csrf-ignored-paths`. Full default list in
-  `docs/GOTCHAS.md`.
-- A blank `onno.auth.session.remember-me.key` fails startup; dev opt-out is
+  custom anonymous `/api/**` SSO callback paths to both `public-paths` and `csrf-ignored-paths` in
+  cookie modes. Spring's normal `/login/oauth2/code/{registrationId}` callback is outside `/api/**`.
+  The full default list is in [references/gotchas.md](references/gotchas.md).
+- In in-memory mode, when remember-me is enabled, a blank
+  `onno.auth.session.remember-me.key` fails startup; dev opt-out is
   `allow-ephemeral-key: true`. Never ship prod without a real key.
 - In-memory and OIDC modes use sessions and CSRF.
 - Resource-server mode uses bearer JWT and no CSRF.
+- The starter protects `/api/**` and permits other same-port routes. Treat exposed Actuator or custom
+  non-API endpoints as a separate security decision; use a management port/chain when needed.
 - `@AccessControl` is deny-by-default. `ADMIN` always passes.
 - `writeRoles` falls back to `readRoles` when empty.
 - Layout/page roles curate UI; entity access still gates data and API calls.
@@ -36,5 +40,5 @@ change.
   `SameSite=None; Secure` servlet-session cookies.
 
 Read [references/examples.md](references/examples.md) for config and debugging flows, and
-`docs/GOTCHAS.md` for the failure-signature list (401 after config change, sign-out after
-redeploy, HTML instead of JSON).
+[references/gotchas.md](references/gotchas.md) for the public bootstrap list and common failure
+signatures.

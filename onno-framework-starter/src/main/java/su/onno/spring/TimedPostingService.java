@@ -22,6 +22,11 @@ public class TimedPostingService extends PostingService {
     }
 
     @Override
+    public void repost(DocumentObject document) {
+        metrics.time("onno.posting-service.repost", 1, () -> engine.repost(document));
+    }
+
+    @Override
     public PostingPreview preview(DocumentObject document) {
         return metrics.time("onno.posting-service.preview", 1, () -> engine.preview(document));
     }

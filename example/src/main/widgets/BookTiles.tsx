@@ -23,7 +23,7 @@ function price(row: EntityRecord): string | null {
 }
 
 function coverUrl(row: EntityRecord): string | null {
-  const v = row.cover_url ?? row.coverUrl;
+  const v = row.coverUrl;
   return typeof v === "string" && v ? v : null;
 }
 
@@ -35,7 +35,7 @@ function BookTiles({ rows, open }: ListRendererProps) {
         const p = price(row);
         return (
           <button
-            key={String(row._id)}
+            key={String(row.id)}
             type="button"
             onClick={() => open(row)}
             className="overflow-hidden rounded-panel border border-border bg-card p-0 text-left transition-colors hover:bg-accent/40"
@@ -51,7 +51,7 @@ function BookTiles({ rows, open }: ListRendererProps) {
             </div>
             <div className="px-2.5 pb-2.5 pt-2">
               <div className="truncate text-[13px] font-medium text-foreground">
-                {String(row._description ?? "")}
+                {String(row.description ?? "")}
               </div>
               <div className="truncate text-[11px] text-muted-foreground">{String(row.author ?? "")}</div>
               {p ? (

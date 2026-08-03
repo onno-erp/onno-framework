@@ -17,10 +17,11 @@ Use the narrowest useful command while iterating, then broaden before handing of
 ```bash
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
+./gradlew :onno-ui-starter:test :onno-ui-starter:testFrontend
 ./gradlew :onno-ui-starter:buildFrontend
 ./gradlew :onno-ui-starter:compileJava
 ./gradlew clean check
-./gradlew publishToMavenLocal
+./gradlew publishToMavenLocal aggregateJavadoc
 ```
 
 ## Runtime Smoke
@@ -32,7 +33,8 @@ browser reload) — see `docs/RUNNING.md`. Example logins: `admin@onnobooks.loca
 
 ## Releases
 
-Publishing is tag-driven CI only (`vX.Y.Z` → Central Portal + cloud.onno.su/modules mirror) — never
+Publishing is CI-only; version tags are the normal path and the workflow also permits an explicit
+manual dispatch. Never
 `./gradlew publish` locally. Verify an artifact landed before bumping consumers:
 `curl -sI https://repo1.maven.org/maven2/su/onno/onno-framework-starter/<v>/…pom`, or the registry
 with the license key as password. Consumer setup + upgrade checklist: `docs/CONSUMING.md`.

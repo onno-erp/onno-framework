@@ -104,6 +104,11 @@ final class DdlRenderer {
         return "ALTER TABLE " + tableName + " ALTER COLUMN " + columnName + " SET DATA TYPE " + newType;
     }
 
+    static String alterColumnNullability(String tableName, String columnName, boolean notNull) {
+        return "ALTER TABLE " + tableName + " ALTER COLUMN " + columnName
+                + (notNull ? " SET NOT NULL" : " DROP NOT NULL");
+    }
+
     static String dropColumn(String tableName, String columnName) {
         return "ALTER TABLE " + tableName + " DROP COLUMN " + columnName;
     }

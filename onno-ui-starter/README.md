@@ -1,7 +1,7 @@
 # onno-ui-starter
 
 Spring Boot starter that serves the onno admin / back-office UI. It bundles a React SPA (built with
-Node 20 by Gradle) and exposes a generic REST + **DivKit** (server-driven UI) layer over the
+Node 22.22 by Gradle) and exposes a generic REST + **DivKit** (server-driven UI) layer over the
 business model: catalogs, documents and registers get list/detail/form screens generated from
 metadata, with no per-entity controller to write.
 
@@ -187,8 +187,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 | GET | `/{name}/{id}` | Single document. |
 | POST | `/{name}` | Create. Body carries header fields + tabular-section arrays keyed by section name. Number auto-generated when omitted and the document auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. Optimistic locking via `version`/`_version` (`409` on conflict). |
-| POST | `/{name}/{id}/post` | Run posting (writes register movements). |
-| POST | `/{name}/{id}/unpost` | Reverse posting. |
+| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. |
+| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
@@ -212,6 +212,10 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 | GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`date`; `_date` is also accepted). |
 | GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
 | GET | `/api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` | The **widget aggregate** read behind `chart`/`stat`/`sparkline`/`gauge` (#199): a server-side `GROUP BY groupBy[, seriesBy]` (`groupByDate` = `minute`…`month` buckets a timestamp via `DATE_TRUNC`; `dateField`+`from`/`to` window the rows) returning `{ buckets: [{ key, label?, series?, seriesLabel?, value, value2? }], truncated, span? }` — O(buckets) instead of the whole table. Blank `groupBy` → one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/`Ref` buckets carry a resolved `label`; buckets cap at 1000 (`truncated: true`). Date-bucketed axes always **zero-fill empty periods** over the window (or between first/last data, unbounded) with `{ key, value: 0 }` fillers (#246); the filled spine honors the same 1000 cap. |
+
+`@Attribute(secret = true)` fields are write-only and are never valid list filter, sort, grouping, or
+aggregate columns. Query endpoints cannot expose encrypted values indirectly through row membership
+or counts.
 
 - **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
   needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
@@ -311,6 +315,11 @@ data-bearing surfaces.
 > presence: no view → `404`; view but no section → reachable but unlisted; view + section → in the
 > sidebar. (Earlier versions auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS`
 > groups; that was removed.)
+
+Shell configuration, branding, and `Layout.identity(...)` are application-wide. Declare them only
+on the default layout (`profile() == null`); named persona layouts should contain their role-scoped
+sections and presentation metadata. Startup rejects a named layout that tries to configure the
+global shell or identity mapping, so the configuration cannot be silently ignored.
 
 ### List row actions
 
@@ -855,7 +864,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 |-----|-----------|--------|
 | `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
 | `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
-| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND _posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
+| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Logical field names are preferred and legacy storage names remain accepted. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
 | `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
@@ -1300,18 +1309,18 @@ curl -c jar.txt http://localhost:8080/api/config
 # 2. Log in (CSRF-exempt). The response sets the session cookie into the same jar.
 curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"secret"}'
+  -d '{"username":"admin@onnobooks.local","password":"admin"}'
 
 # 3. Read calls only need the session cookie.
-curl -b jar.txt http://localhost:8080/api/catalogs/Properties
+curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Books?limit=50'
 
 # 4. Mutating calls also need the CSRF token: read it from the cookie jar and
 #    echo it back in the X-XSRF-TOKEN header.
 XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)
-curl -b jar.txt -X POST http://localhost:8080/api/catalogs/Properties \
+curl -b jar.txt -X POST http://localhost:8080/api/catalogs/Books \
   -H "X-XSRF-TOKEN: $XSRF" \
   -H 'Content-Type: application/json' \
-  -d '{"description":"Seaside Villa"}'
+  -d '{"description":"The Left Hand of Darkness"}'
 ```
 
 A browser SPA gets this for free: the cookie is sent automatically and the client copies

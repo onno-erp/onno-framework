@@ -10,8 +10,8 @@ controller source (issues #33 and #314).
 
 It pairs with the auth/CSRF notes in [AGENTS.md](../AGENTS.md#inspecting-a-running-app-read-this-before-you-curl):
 every `/api/**` route is authenticated, reads need only the session cookie (or a bearer token in
-`resource-server` mode), and `{name}` is the entity's **display/logical name** (e.g. `Properties`,
-`Reservations`) — not the Java class name.
+`resource-server` mode), and `{name}` is the entity's annotation **logical name** (e.g. `Books`,
+`SalesOrders`) — not the Java class name or localized `title`.
 
 ## Endpoints
 
@@ -133,7 +133,7 @@ Catalog/document responses use **logical API names by default**. Attributes use 
 | `parentId`, `lineNumber` | tabular-section row | back-reference to the document / 1-based ordinal |
 | `<fieldName>` | attribute | Java field name; a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
 | `<fieldName>Display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
-| `<fieldName>Ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }` |
+| `<fieldName>Ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }`; `type` is the target's logical name, while `kind`/`javaType` are present for polymorphic refs |
 | `<fieldName>Code` | catalog-`Ref<>` attrs only | the target's code |
 | `<fieldName>Avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
 | `<fieldName>Color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
@@ -254,6 +254,9 @@ With `?representation=storage`, these companions retain their former `{column}_d
 Columns from a `@Attribute(secret = true)` field are **write-only**. On read they are replaced in
 place with the sentinel string `__SECRET_SET__` when a value is stored, or `null` when empty — the
 ciphertext is never returned. Submitting the sentinel back on a write means "leave unchanged".
+Secret attributes are also excluded from every catalog/document list-query allowlist: clients cannot
+filter, sort, group, or aggregate by them. This prevents row membership or counts from becoming a
+blind oracle for encrypted values.
 
 ## Writes (partial, logical names plus storage aliases)
 
@@ -277,7 +280,7 @@ POST /api/catalogs/{name}                 create (body = camelCase fields)
 PUT  /api/catalogs/{name}/{id}            partial update
 POST /api/documents/{name}                create
 PUT  /api/documents/{name}/{id}           partial update
-POST /api/documents/{name}/{id}/post      post (re-post first unposts, then posts)
+POST /api/documents/{name}/{id}/post      post, or atomically repost an already-posted document
 ```
 
 Two more contracts worth knowing:
@@ -285,13 +288,16 @@ Two more contracts worth knowing:
 - **Tabular sections replace, they don't merge.** Submitting a section (keyed by its section name)
   deletes and re-inserts that whole section; a section absent from the body is left untouched.
 - **Lifecycle hooks re-run on every write.** `beforeWrite` runs on create *and* update (and
-  `onFilling` on create); `beforePost` runs on post. Don't assume they only fire once.
+  `onFilling` on create), then `afterWrite` runs after a successful persist; validation previews do
+  not call `afterWrite`. `beforePost` runs on post/repost. Don't assume hooks only fire once.
 
 ## Filtering & deletion
 
 `list` returns only live rows (`deletionMark = false`; `_deletion_mark` in storage representation).
 Deletes are soft (the mark is set), so a
-deleted row disappears from `list` but is still reachable by `get` until purged.
+deleted row disappears from `list` but is still reachable by `get` until purged. Spring Data
+`CatalogRepository`/`DocumentRepository` delete methods use the same tombstone contract; posted
+documents must be unposted before repository deletion.
 
 ## Reacting to changes
 

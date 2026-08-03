@@ -13,6 +13,14 @@ import org.gradle.kotlin.dsl.register
 import org.gradle.kotlin.dsl.withType
 import org.gradle.language.jvm.tasks.ProcessResources
 
+internal fun widgetStyleFileName(group: String, projectName: String): String {
+    val coordinate = "$group-$projectName".lowercase()
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+        .ifBlank { "onno" }
+    return "$coordinate-widgets.css"
+}
+
 /**
  * User-facing configuration for [WidgetsPlugin], exposed as the `onnoWidgets {}` block. Conventions
  * make a bare `id("su.onno.widgets")` work: drop `.tsx` files in `src/main/widgets` and build.
@@ -58,6 +66,9 @@ class WidgetsPlugin : Plugin<Project> {
         // is added as a resource srcDir, so the files ship in the jar at classpath /onno-plugins/.
         val resourcesRoot = workDir.map { it.dir("resources") }
         val distDir = resourcesRoot.map { it.dir("onno-plugins") }
+        val styleFileName = project.provider {
+            widgetStyleFileName(project.group.toString(), project.name)
+        }
 
         // Managed Node, rooted at our generated workspace so npmInstall/esbuild run there.
         project.plugins.apply(NodePlugin::class.java)
@@ -91,7 +102,8 @@ class WidgetsPlugin : Plugin<Project> {
             dependsOn("npmInstall")
             script.set(workDir.map { d -> d.file("build.mjs") })
             args.set(project.provider {
-                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath)
+                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath,
+                    styleFileName.get())
             })
             inputs.dir(ext.sourceDir).optional().withPropertyName("widgetSources")
             outputs.dir(distDir)
@@ -104,7 +116,8 @@ class WidgetsPlugin : Plugin<Project> {
             dependsOn("npmInstall")
             script.set(workDir.map { d -> d.file("build.mjs") })
             args.set(project.provider {
-                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath, "--watch")
+                listOf(ext.sourceDir.get().asFile.absolutePath, distDir.get().asFile.absolutePath,
+                    styleFileName.get(), "--watch")
             })
         }
 
@@ -218,7 +231,7 @@ class WidgetsPlugin : Plugin<Project> {
             // the output ships with no React of its own. Resolution is rooted at this workspace so the
             // bundled @onno/widget-sdk resolves regardless of where the widget sources live.
             //
-            // It also runs Tailwind over the widget sources and emits <outDir>/onno-widgets.css, so
+            // It also runs Tailwind over the widget sources and emits a coordinate-specific CSS file, so
             // utility classes in a widget's own markup produce real CSS (utilities the host doesn't
             // itself emit are otherwise silently dropped — the widget compiles outside the host's
             // Tailwind build). The stylesheet is utilities-only with preflight OFF (no global reset)
@@ -229,7 +242,7 @@ class WidgetsPlugin : Plugin<Project> {
             // loaded after, a bare utility here (.flex-col) would win cascade ties against the host's
             // responsive variants (sm:flex-row) and break host layouts.
             import { build, context, transform } from "esbuild";
-            import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+            import { readdirSync, existsSync, mkdirSync, rmSync, writeFileSync, watch as watchFiles } from "node:fs";
             import { join, parse, dirname } from "node:path";
             import { fileURLToPath } from "node:url";
             import postcss from "postcss";
@@ -239,7 +252,7 @@ class WidgetsPlugin : Plugin<Project> {
             const workDir = dirname(fileURLToPath(import.meta.url));
             const args = process.argv.slice(2);
             const watch = args.includes("--watch");
-            const [srcDir, outDir] = args.filter((a) => a !== "--watch");
+            const [srcDir, outDir, cssFile = "onno-widgets.css"] = args.filter((a) => a !== "--watch");
 
             if (!srcDir || !existsSync(srcDir)) {
               console.log("[onno-widgets] no widget source dir: " + srcDir);
@@ -318,8 +331,8 @@ class WidgetsPlugin : Plugin<Project> {
               });
               let css = result.css;
               if (!watch) css = (await transform(css, { loader: "css", minify: true })).code;
-              writeFileSync(join(outDir, "onno-widgets.css"), css);
-              console.log("[onno-widgets] wrote onno-widgets.css (" + css.length + " bytes)");
+              writeFileSync(join(outDir, cssFile), css);
+              console.log("[onno-widgets] wrote " + cssFile + " (" + css.length + " bytes)");
             }
 
             if (watch) {
@@ -327,8 +340,17 @@ class WidgetsPlugin : Plugin<Project> {
                 const ctx = await context(options(f));
                 await ctx.watch();
               }
-              // CSS is generated once on start (no live rescan on class edits in the dev loop).
               await emitCss();
+              let cssTimer;
+              let cssBuild = Promise.resolve();
+              watchFiles(srcDir, { recursive: true }, (_event, filename) => {
+                if (!filename || !/\.(tsx|jsx|ts|js)${'$'}/.test(filename)) return;
+                clearTimeout(cssTimer);
+                cssTimer = setTimeout(() => {
+                  cssBuild = cssBuild.then(emitCss).catch((error) =>
+                    console.error("[onno-widgets] CSS rebuild failed", error));
+                }, 75);
+              });
               console.log(`[onno-widgets] watching ${'$'}{entries.length} widget(s) in ${'$'}{srcDir}`);
             } else {
               await Promise.all(entries.map((f) => build(options(f))));

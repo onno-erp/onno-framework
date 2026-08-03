@@ -5,6 +5,8 @@
 - Defaults With OnFillingHandler
 - Derived Fields With BeforeWriteHandler
 - Business Rules
+- Reusable Rule Factory
+- Path Matrix
 - Spring Services And Events
 - Delete Guard
 - Gotchas
@@ -28,8 +30,9 @@ public class Invoice extends DocumentObject implements OnFillingHandler {
 }
 ```
 
-`onFilling()` runs for the generic blank New form and for any new entity saved through the repository
-path. Guard on null. Do not overwrite values set by importers, seeders, or tests.
+Field initializers populate the initially rendered blank New form. `onFilling()` runs during
+create/save and live create validation. Guard on null; do not overwrite values set by importers,
+seeders, tests, or the form.
 
 ## Derived Fields With BeforeWriteHandler
 
@@ -86,6 +89,38 @@ public class Invoice extends DocumentObject implements Validated {
 
 Rules run before write and before posting. Give stable names and user-facing messages.
 
+## Reusable Rule Factory
+
+There is no framework `BusinessRuleSet` type. Share rules with ordinary Java:
+
+```java
+final class InvoiceRules {
+    private InvoiceRules() {}
+
+    static List<BusinessRule> rulesFor(Invoice invoice) {
+        return List.of(
+                BusinessRule.onField("customer", "Choose a customer",
+                        () -> invoice.getCustomer() != null),
+                new BusinessRule("items-required", "Add at least one line",
+                        () -> invoice.getItems() != null && !invoice.getItems().isEmpty()));
+    }
+}
+```
+
+`Validated.rules()` returns `InvoiceRules.rulesFor(this)`. Validation collects all failures.
+
+## Path Matrix
+
+| Path | Lifecycle |
+| --- | --- |
+| repository insert | id → `onFilling` → number → `beforeWrite` → validation → write → `afterWrite` |
+| UI/API/import/MCP create | number/date → entity → `onFilling` → `beforeWrite` → validation → write → `afterWrite` → `EntityChangedEvent` |
+| update | create sequence without `onFilling` |
+| post/preview | `beforeWrite` → `beforePost` → rules → `handlePosting` |
+
+`AfterWriteHandler` runs after successful repository and generic-command persistence, but it is not
+a universal after-commit hook. Validation previews never call it.
+
 ## Spring Services And Events
 
 Do not inject a service into a domain object. For side effects after posting, listen to framework
@@ -109,8 +144,8 @@ public class InvoicePostedListener {
 }
 ```
 
-`handlePosting` runs inside the posting transaction and should only create movements. External calls
-belong after commit via events.
+Normal posting invokes `handlePosting` to stage movements before transactional persistence. Preview
+and chronological restoration may replay it. External calls belong after commit via events/outbox.
 
 ## Delete Guard
 
@@ -121,7 +156,7 @@ public class Employee extends CatalogObject implements BeforeDeleteHandler {
     @Override
     public void beforeDelete() {
         if (systemUser) {
-            throw new IllegalStateException("System users cannot be deleted");
+            throw new ValidationException("System users cannot be deleted");
         }
     }
 }
@@ -135,5 +170,8 @@ Deletion is soft, but delete hooks still matter for business invariants.
 - `AfterPostHandler` exists but has no Spring DI; prefer `DocumentPostedEvent`.
 - `onFilling()` must be idempotent.
 - `BeforeWriteHandler` runs before save and before post.
-- Cross-record validation usually belongs in a Spring service or event listener, not a domain hook,
-  unless you deliberately use an application-context bridge.
+- An event listener is after-the-fact and cannot veto a write. Cross-record pre-write validation
+  belongs in an application command/service, a command-integrated validator, or a deliberate
+  application-context bridge from the hook. Use events only for side effects after success.
+- Direct `PostingService.post` rejects an already-posted document. Use atomic `repost` to
+  intentionally recalculate; generated REST/MCP post commands select it for an already-posted row.

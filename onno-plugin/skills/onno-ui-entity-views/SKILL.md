@@ -14,12 +14,18 @@ description: >-
 An `EntityView` is the allowlist for served catalog/document surfaces. It is necessary for direct
 routes and API UI surfaces, but nav still requires a `Layout` section.
 
-## Work In Three Methods
+## Author The Complete View
 
 - `list(ListSpec)` for table/report shape, filters, grouping, sorting, row styles, map toggle.
 - `fields(EntityConfigBuilder)` for form/detail hints, system column labels, tabular section hints,
   related lists, action placement.
 - `actions(ActionSpec)` for toolbar, row, and detail buttons.
+- `inputs(InputSpec)` for toolbar inputs when the surface needs them.
+- `comments()` to opt the entity into comments when the global feature is enabled.
+
+Use `EntityView<E>` and getter references. Prefer `field/refField/rowField/rowRefField` typed
+overloads; raw types and string Java-field names are only dynamic escape hatches. Expression text
+such as `refFilter("customer = ${customer}")` intentionally remains a string.
 
 For a server row action with `label(row -> ...)`, also set a human-facing `label(String)`. Batch
 selection has no single `ActionRow`, so its menu and progress messages use the static label and

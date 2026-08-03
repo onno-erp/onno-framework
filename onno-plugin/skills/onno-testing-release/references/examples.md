@@ -15,7 +15,7 @@
 | annotation/base model/posting core | `./gradlew :onno-framework:test` | `./gradlew clean check` |
 | starter auto-config | `./gradlew :module:compileJava` | `./gradlew clean check` |
 | UI Java/controller behavior | `./gradlew :onno-ui-starter:test` | `./gradlew clean check` |
-| frontend only | `./gradlew :onno-ui-starter:buildFrontend` | `./gradlew clean check` |
+| frontend only | `./gradlew :onno-ui-starter:testFrontend :onno-ui-starter:buildFrontend` | `./gradlew clean check` |
 | config property docs | `./gradlew generateConfigDocs` | `./gradlew checkConfigDocs clean check` |
 | community registry | `./gradlew generateIntegrationsDoc` | `./gradlew clean check` |
 | publication/POM/Javadoc | `./gradlew publishToMavenLocal` | `./gradlew publishToMavenLocal` |
@@ -30,12 +30,13 @@
 ```
 
 `docs/CONFIGURATION.md` is generated from configuration metadata. Edit property Javadoc or
-additional metadata, then regenerate.
+additional metadata, then regenerate. Other public docs are manual contracts: use the repository's
+docs-sync matrix and review them explicitly; `checkConfigDocs` does not validate semantic prose.
 
 ## Maven Local Verification
 
 ```bash
-./gradlew publishToMavenLocal
+./gradlew publishToMavenLocal aggregateJavadoc
 ```
 
 This catches issues that project dependencies hide:
@@ -44,7 +45,12 @@ This catches issues that project dependencies hide:
 - broken Javadoc links
 - sources/javadoc jar failures
 - publication metadata mistakes
-- consumers resolving stale coordinates
+- main/sources/Javadoc JAR and generated POM problems
+
+Inspect the published POM and JARs under
+`~/.m2/repository/su/onno/<module>/<version>/`, including configuration metadata and
+`AutoConfiguration.imports`, then compile a tiny external consumer using `mavenLocal()`. Task
+success alone does not prove consumer compatibility or semantic artifact contents.
 
 ## Runtime Smoke Test
 
@@ -60,12 +66,13 @@ jar=$(mktemp)
 curl -fsS -c "$jar" "$base/api/config" >/dev/null
 curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}' >/dev/null
-curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=50" | jq .
-curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=50" | jq .
+  -d '{"username":"admin@onnobooks.local","password":"admin"}' | jq -e '.authenticated'
+curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=50" | jq -e '.rows'
+curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=50" | jq -e '.rows'
 ```
 
-Use API routes for smoke tests. Browser routes can fall through to SPA HTML with status 200.
+Use API routes and parse expected JSON fields. Browser/unmatched routes can fall through to SPA HTML
+with status 200.
 
 ## Known Warnings
 
@@ -74,3 +81,5 @@ Use API routes for smoke tests. Browser routes can fall through to SPA HTML with
   generated frontend behavior and lockfile impact.
 - Generated local caches (`.gradle/`, `build/`, `.kotlin/`, frontend `dist/`, `node_modules/`) should
   not be committed.
+- Never publish remotely from a workstation. CI publication normally starts from a version tag; the
+  current workflow also supports an explicit manual dispatch.

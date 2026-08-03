@@ -63,6 +63,12 @@ import java.util.stream.Collectors;
  */
 public class PostingEngine {
 
+    private enum PostingMutation {
+        POST,
+        REPOST,
+        UNPOST
+    }
+
     private static final Logger log = LoggerFactory.getLogger(PostingEngine.class);
 
     private final Jdbi jdbi;
@@ -116,6 +122,21 @@ public class PostingEngine {
         }
     }
 
+    /**
+     * Replaces the active movements of an already-posted document and writes the
+     * freshly calculated movements in one database transaction.
+     */
+    public void repost(DocumentObject document) {
+        try {
+            OnnoPerformance.record("onno.document.repost", 1, () -> doRepost(document));
+            log.debug("Re-posted {} {}", document.getClass().getSimpleName(), document.getId());
+        } catch (RuntimeException e) {
+            log.warn("Re-posting failed for {} {}: {}",
+                    document.getClass().getSimpleName(), document.getId(), e.getMessage());
+            throw e;
+        }
+    }
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doPost(DocumentObject document) {
         if (!(document instanceof Postable)) {
@@ -137,7 +158,7 @@ public class PostingEngine {
         PostingContext context = buildPostingContext(document);
         Set<Class<?>> chronologicalRegisters = chronologicalRegisters(context.touchedRepositories());
         if (!chronologicalRegisters.isEmpty()) {
-            restoreChronologically(document, context, chronologicalRegisters, false);
+            restoreChronologically(document, context, chronologicalRegisters, PostingMutation.POST);
             afterSuccessfulPost(document);
             return;
         }
@@ -147,6 +168,26 @@ public class PostingEngine {
             persistPosting(handle, docDescriptor, document, context);
         }));
 
+        afterSuccessfulPost(document);
+    }
+
+    private void doRepost(DocumentObject document) {
+        PostingContext context = preparePosting(document);
+        Set<Class<?>> chronologicalRegisters = new LinkedHashSet<>(
+                chronologicalRegistersForDocument(document.getId()));
+        chronologicalRegisters.addAll(chronologicalRegisters(context.touchedRepositories()));
+        if (!chronologicalRegisters.isEmpty()) {
+            restoreChronologically(document, context, chronologicalRegisters, PostingMutation.REPOST);
+            afterSuccessfulPost(document);
+            return;
+        }
+
+        DocumentDescriptor descriptor = registry.getDocumentDescriptor(document.getClass());
+        OnnoPerformance.record("onno.document.repost.transaction", 1, () -> jdbi.useTransaction(handle -> {
+            claimPostedDocument(handle, descriptor, document.getId(), false);
+            unpostMovements(handle, document.getId());
+            persistPosting(handle, descriptor, document, context);
+        }));
         afterSuccessfulPost(document);
     }
 
@@ -210,7 +251,7 @@ public class PostingEngine {
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
         Set<Class<?>> chronologicalRegisters = chronologicalRegistersForDocument(document.getId());
         if (!chronologicalRegisters.isEmpty()) {
-            restoreChronologically(document, null, chronologicalRegisters, true);
+            restoreChronologically(document, null, chronologicalRegisters, PostingMutation.UNPOST);
             document.setPosted(false);
             publishApplicationEvent(new DocumentUnpostedEvent(document));
             return;
@@ -239,14 +280,19 @@ public class PostingEngine {
     private void restoreChronologically(DocumentObject requested,
                                         PostingContext requestedContext,
                                         Set<Class<?>> chronologicalRegisters,
-                                        boolean unpostRequested) {
+                                        PostingMutation mutation) {
         OnnoPerformance.record("onno.document.restore-sequence", 1,
                 () -> jdbi.useTransaction(TransactionIsolationLevel.SERIALIZABLE, handle ->
                         withBoundRegisterReads(handle, () -> {
                             DocumentDescriptor requestedDescriptor =
                                     registry.getDocumentDescriptor(requested.getClass());
-                            if (!unpostRequested) {
-                                claimUnpostedDocument(handle, requestedDescriptor, requested.getId());
+                            switch (mutation) {
+                                case POST -> claimUnpostedDocument(
+                                        handle, requestedDescriptor, requested.getId());
+                                case REPOST -> claimPostedDocument(
+                                        handle, requestedDescriptor, requested.getId(), false);
+                                case UNPOST -> claimPostedDocument(
+                                        handle, requestedDescriptor, requested.getId(), true);
                             }
                             List<DocumentObject> laterDocuments =
                                     loadLaterDocuments(handle, requested, chronologicalRegisters);
@@ -256,9 +302,12 @@ public class PostingEngine {
                                 unpostMovements(handle, later.getId());
                             }
 
-                            if (unpostRequested) {
-                                unpostInTransaction(handle, requestedDescriptor, requested.getId());
+                            if (mutation == PostingMutation.UNPOST) {
+                                unpostMovements(handle, requested.getId());
                             } else {
+                                if (mutation == PostingMutation.REPOST) {
+                                    unpostMovements(handle, requested.getId());
+                                }
                                 persistPosting(handle, requestedDescriptor, requested, requestedContext);
                             }
 
@@ -310,23 +359,39 @@ public class PostingEngine {
                                        DocumentDescriptor descriptor,
                                        UUID documentId) {
         int updated = handle.createUpdate("UPDATE " + descriptor.tableName() +
-                        " SET _posted = TRUE WHERE _id = :id AND _posted = FALSE")
+                        " SET _posted = TRUE WHERE _id = :id AND _posted = FALSE" +
+                        " AND _deletion_mark = FALSE")
                 .bind("id", documentId)
                 .execute();
         if (updated != 1) {
             throw new IllegalStateException(
-                    "Document " + documentId + " does not exist or is already posted");
+                    "Document " + documentId +
+                            " does not exist, is deleted, or is already posted");
+        }
+    }
+
+    private void claimPostedDocument(Handle handle,
+                                     DocumentDescriptor descriptor,
+                                     UUID documentId,
+                                     boolean clearPosted) {
+        int updated = handle.createUpdate("UPDATE " + descriptor.tableName() +
+                        " SET _posted = :posted WHERE _id = :id AND _posted = TRUE" +
+                        " AND _deletion_mark = FALSE")
+                .bind("posted", !clearPosted)
+                .bind("id", documentId)
+                .execute();
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "Document " + documentId +
+                            " does not exist, is deleted, or is not posted");
         }
     }
 
     private void unpostInTransaction(Handle handle,
                                      DocumentDescriptor descriptor,
                                      UUID documentId) {
+        claimPostedDocument(handle, descriptor, documentId, true);
         unpostMovements(handle, documentId);
-        handle.createUpdate("UPDATE " + descriptor.tableName() +
-                        " SET _posted = FALSE WHERE _id = :id")
-                .bind("id", documentId)
-                .execute();
     }
 
     private void unpostMovements(Handle handle, UUID documentId) {

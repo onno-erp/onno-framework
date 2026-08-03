@@ -166,6 +166,22 @@ class ClaimRoleConverterTest {
     }
 
     @Test
+    void customResourceServerDoesNotRequireClientRegistrationId() {
+        OnnoAuthProperties.Oidc oidc = new OnnoAuthProperties.Oidc();
+        oidc.setProvider(OnnoAuthProperties.Provider.CUSTOM);
+        oidc.setPrincipalClaim("sub");
+        oidc.getRoles().getSources().add(new OnnoAuthProperties.RoleSource(
+                "roles", OnnoAuthProperties.Shape.ARRAY));
+
+        OnnoAuthProperties.ResolvedOidc resolved = oidc.resolvedForResourceServer();
+
+        assertThat(resolved.registrationId()).isNull();
+        assertThat(resolved.principalClaim()).isEqualTo("sub");
+        assertThat(resolved.roleSources()).singleElement().satisfies(source ->
+                assertThat(source.getClaim()).isEqualTo("roles"));
+    }
+
+    @Test
     void customProviderWithoutSourcesYieldsNoAuthorities() {
         OnnoAuthProperties.Oidc oidc = new OnnoAuthProperties.Oidc();
         oidc.setProvider(OnnoAuthProperties.Provider.CUSTOM);

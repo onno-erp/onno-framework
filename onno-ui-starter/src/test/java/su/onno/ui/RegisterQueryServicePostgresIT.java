@@ -60,9 +60,10 @@ class RegisterQueryServicePostgresIT {
         // One movement dated 2024-06-01.
         jdbi.useHandle(h -> h.createUpdate(
                         "INSERT INTO " + descriptor.tableName()
-                                + " (_id, _period, _active, property, amount)"
-                                + " VALUES (:id, :period, true, :property, :amount)")
+                                + " (_id, _period, _active, _document_ref, _movement_type, property, amount)"
+                                + " VALUES (:id, :period, true, :document, 'RECEIPT', :property, :amount)")
                 .bind("id", UUID.randomUUID())
+                .bind("document", UUID.randomUUID())
                 .bind("period", LocalDateTime.of(2024, 6, 1, 10, 0))
                 .bind("property", property)
                 .bind("amount", new BigDecimal("100.00"))
@@ -77,6 +78,16 @@ class RegisterQueryServicePostgresIT {
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0)).containsEntry("property", property);
         assertThat((BigDecimal) rows.get(0).get("amount")).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void turnover_convertsUuidFilterFromHttpTextBeforeBindingOnPostgres() {
+        List<Map<String, Object>> rows = service.turnover(
+                descriptor, "1970-01-01T00:00:00", "2999-12-31T23:59:59",
+                Map.of("property", property.toString()));
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).containsEntry("property", property);
     }
 
     @Test
@@ -145,9 +156,10 @@ class RegisterQueryServicePostgresIT {
     private void insertMovement(LocalDateTime period, BigDecimal amount) {
         jdbi.useHandle(h -> h.createUpdate(
                         "INSERT INTO " + descriptor.tableName()
-                                + " (_id, _period, _active, property, amount)"
-                                + " VALUES (:id, :period, true, :property, :amount)")
+                                + " (_id, _period, _active, _document_ref, _movement_type, property, amount)"
+                                + " VALUES (:id, :period, true, :document, 'RECEIPT', :property, :amount)")
                 .bind("id", UUID.randomUUID())
+                .bind("document", UUID.randomUUID())
                 .bind("period", period)
                 .bind("property", property)
                 .bind("amount", amount)

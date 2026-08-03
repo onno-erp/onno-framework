@@ -5,9 +5,10 @@ import java.util.List;
 
 /**
  * The builder a {@link Layout} configures: navigation sections (with per-field
- * hints), the shell/nav presentation, branding, identity link, and — for persona
- * layouts — the target roles and match priority. Reuses {@link UiLayoutBuilder}
- * for the section/shell/identity DSL; adds the persona metadata on top.
+ * hints) and — for persona layouts — the target roles and match priority. The
+ * default layout also owns the application's shared shell/nav presentation,
+ * branding, and identity link. Reuses {@link UiLayoutBuilder} for the
+ * section/shell/identity DSL; adds the persona metadata on top.
  */
 public final class LayoutSpec {
 
@@ -23,11 +24,19 @@ public final class LayoutSpec {
         return builder.section(name);
     }
 
+    /**
+     * Configure the shared application shell. Use only from the default layout;
+     * startup rejects shell customization on a named persona layout.
+     */
     public UiLayoutBuilder.ShellBuilder shell() {
         return builder.shell();
     }
 
-    /** Link login accounts to a directory record by matching a field. See {@link UiIdentityLink}. */
+    /**
+     * Link login accounts to a directory record by matching a field. Use only from
+     * the default layout; startup rejects identity links on named persona layouts.
+     * See {@link UiIdentityLink}.
+     */
     public LayoutSpec identity(Class<?> directoryClass, String loginField) {
         builder.identity(directoryClass, loginField);
         return this;

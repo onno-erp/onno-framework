@@ -26,6 +26,10 @@ accumulate or are stored as facts. An `@Enumeration` enum is a supported dimensi
 register posting and totals store its stable UUID, while typed filters and reads use the enum
 constant.
 
+BALANCE resources reject negative totals during posting unless the register explicitly declares
+`allowNegative = true`. Use `postingOrder = CHRONOLOGICAL` when backdated post/unpost must preserve
+order-dependent historical balances, not only the current total.
+
 ## Read The Examples
 
 Read [references/examples.md](references/examples.md) when writing code. It includes:
@@ -34,6 +38,10 @@ Read [references/examples.md](references/examples.md) when writing code. It incl
 - sales turnover register
 - price information register
 - register queries and tuple filters
+- typed `Ref<T>`/enum filters and reconstruction
+- negative-balance and chronological-order policy
+- authenticated accumulation REST verification and the absence of a generic information-register
+  REST surface
 - UI view hints for registers
 
 Posting examples live in `onno-posting`.

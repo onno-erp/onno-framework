@@ -6,7 +6,8 @@ description: >-
   to ask, or needs a structured path from conversation to catalogs, documents, tabular sections,
   registers, enums, constants, jobs, contexts, rules, integrations, and UI scope. Covers interview
   rounds, question banks, how many questions to ask at once, how to extract model objects from
-  answers, what to confirm before coding, and example transcripts.
+  answers, durable business processes/human tasks, what to confirm before coding, and example
+  transcripts.
 ---
 
 # onno Modeling Interview
@@ -39,7 +40,8 @@ rules, and examples.
 Produce:
 
 - business summary
-- candidate catalogs, enums, documents, tabular sections, registers, constants, jobs, contexts
+- candidate catalogs, enums, documents, tabular sections, registers, typed processes/human tasks,
+  constants, jobs, contexts
 - posting/rule assumptions
 - UI/persona assumptions
 - first vertical slice to implement

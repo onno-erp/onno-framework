@@ -51,8 +51,8 @@ function EventLog({ widget }: WidgetProps) {
   const [order, setOrder] = useState<Order>("newest");
 
   const cfg = widget.extraConfig ?? {};
-  const dateField = cfg.dateField || "_date";
-  const titleField = cfg.titleField || "_number";
+  const dateField = cfg.dateField || "date";
+  const titleField = cfg.titleField || "number";
   const amountField = cfg.amountField;
   const currency = cfg.currency;
   const max = widget.maxItems && widget.maxItems > 0 ? widget.maxItems : 12;
@@ -89,7 +89,7 @@ function EventLog({ widget }: WidgetProps) {
   // Open the record like a built-in list row: the host routes "onno://{kind}s/{name}/{id}" through
   // the same handler as a DivKit row tap (widget.entityType is singular: "document" | "catalog").
   const open = (r: EntityRecord) => {
-    const id = String(r._id ?? "");
+    const id = String(r.id ?? "");
     if (!id) return;
     window.dispatchEvent(
       new CustomEvent("onno:action", {
@@ -127,7 +127,7 @@ function EventLog({ widget }: WidgetProps) {
             const amount = amountField ? money(r[amountField]) : null;
             const date = fmtDay(r[dateField]);
             return (
-              <li key={String(r._id ?? r[titleField])} className="ml-4">
+              <li key={String(r.id ?? r[titleField])} className="ml-4">
                 {/* The dot is dead-centred on the 1px rule via an arbitrary-value class (`-left-[4.5px]`)
                     and parked level with the title line (`mt-3`) — both formerly-dropped utilities. */}
                 <span

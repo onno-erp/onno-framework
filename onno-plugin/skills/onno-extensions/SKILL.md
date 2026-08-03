@@ -18,8 +18,10 @@ Extend onno without forking. Ship a separate artifact that a host app opts into.
 | --- | --- |
 | Connector | Spring Boot starter wrapping an external API |
 | SPI implementation | Bean implementing a framework extension point |
-| UI add-on | `Page`/`Layout`/`EntityView`, actions, or custom widgets |
+| UI add-on | Additive `Page`/`Layout`/`EntityView`, actions, or custom widgets |
 | Skill/plugin | Agent guidance for a domain or integration |
+| Observability exporter | Consumer of the observability export SPI |
+| MCP tool pack | Additive `@McpTool` methods or `McpToolProvider` beans |
 
 Use `docs/EXTENDING.md` for public community integrations and `../onno/reference/connectors.md` for
 commercial connector patterns.
@@ -31,10 +33,17 @@ commercial connector patterns.
 - `withSourcesJar()` and `withJavadocJar()`
 - Auto-config imports file at
   `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- `@ConfigurationProperties(prefix = "onno.<name>")` with Javadoc for generated config docs
+- `@ConfigurationProperties(prefix = "onno.<name>")` with Javadoc plus the Spring configuration
+  processor. Third-party metadata stays in that artifact; it does not enter this repository's
+  generated `docs/CONFIGURATION.md`.
 - `@ConditionalOnProperty(prefix = "onno.<name>", name = "enabled")`
-- `@ConditionalOnMissingBean` on replaceable beans
+- `@ConditionalOnMissingBean` only on singleton replacement SPIs. Additive `Page`, `Layout`,
+  `EntityView`, contributor, and tool beans must coexist.
+- Order a replacement auto-configuration before the framework fallback it replaces.
+- Use the publisher's own Maven group and Java package; `su.onno.*` is reserved.
 - README or root docs explaining how consumers enable it
+- Unit and `ApplicationContextRunner` tests, artifact-content checks, `publishToMavenLocal`, and a
+  tiny external-consumer smoke test
 
 ## Connector Principle
 
@@ -54,7 +63,10 @@ To list a community extension, update `community/registry.json`, run:
 ./gradlew generateIntegrationsDoc
 ```
 
-Then verify `INTEGRATIONS.md` is regenerated from the registry, not edited by hand.
+Validate the registry against `community/registry.schema.json` first. Then verify
+`INTEGRATIONS.md` is regenerated from the registry, not edited by hand. Create one entry per
+independently installable artifact and include its supported onno version, license, public README,
+coordinates, and repository.
 
 ## Docs Sync
 

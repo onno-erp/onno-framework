@@ -31,7 +31,7 @@ public final class ListSpec<E> {
     private String sortField;
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
-    private MapSpec map;
+    private MapSpec<E> map;
     private CustomSpec custom;
     private int pageSize;
     private final List<String> groupable = new ArrayList<>();
@@ -195,9 +195,9 @@ public final class ListSpec<E> {
      * list.map().geoJson("location").defaultView();         // GeoJSON; open on the map
      * </pre>
      */
-    public MapSpec map() {
+    public MapSpec<E> map() {
         if (map == null) {
-            map = new MapSpec();
+            map = new MapSpec<>();
         }
         return map;
     }
@@ -401,7 +401,7 @@ public final class ListSpec<E> {
     }
 
     /** The map view spec, or null when {@link #map()} was never called (no map view). */
-    public MapSpec mapSpec() {
+    public MapSpec<E> mapSpec() {
         return map;
     }
 
@@ -447,7 +447,7 @@ public final class ListSpec<E> {
      * {@link #geoJson} field. A record may use both. {@link #label} names the field shown in a
      * feature's popup; {@link #defaultView} opens the list on the map rather than the table.
      */
-    public static final class MapSpec {
+    public static final class MapSpec<E> {
         private String latField;
         private String lngField;
         private String geoJsonField;
@@ -457,46 +457,51 @@ public final class ListSpec<E> {
         MapSpec() {}
 
         /** The latitude field, when the point is stored as a numeric lat/lng pair. */
-        public MapSpec lat(String latField) {
+        public MapSpec<E> lat(String latField) {
             this.latField = latField;
             return this;
         }
 
         /** Compiler-checked latitude field. */
-        public <T, N extends Number> MapSpec lat(Field<T, N> field) {
+        public <N extends Number> MapSpec<E> lat(Field<E, N> field) {
             return lat(Fields.name(field));
         }
 
         /** The longitude field, when the point is stored as a numeric lat/lng pair. */
-        public MapSpec lng(String lngField) {
+        public MapSpec<E> lng(String lngField) {
             this.lngField = lngField;
             return this;
         }
 
         /** Compiler-checked longitude field. */
-        public <T, N extends Number> MapSpec lng(Field<T, N> field) {
+        public <N extends Number> MapSpec<E> lng(Field<E, N> field) {
             return lng(Fields.name(field));
         }
 
         /** A GeoJSON field for arbitrary geometry — points, paths, and areas (what {@code .widget("geojson")} writes). */
-        public MapSpec geoJson(String geoJsonField) {
+        public MapSpec<E> geoJson(String geoJsonField) {
             this.geoJsonField = geoJsonField;
             return this;
         }
 
+        /** Compiler-checked GeoJSON field. */
+        public <V> MapSpec<E> geoJson(Field<E, V> field) {
+            return geoJson(Fields.name(field));
+        }
+
         /** The field shown in a feature's popup (defaults to a system identifier when unset). */
-        public MapSpec label(String labelField) {
+        public MapSpec<E> label(String labelField) {
             this.labelField = labelField;
             return this;
         }
 
         /** Compiler-checked marker label field. */
-        public <T, V> MapSpec label(Field<T, V> field) {
+        public <V> MapSpec<E> label(Field<E, V> field) {
             return label(Fields.name(field));
         }
 
         /** Open the list on the map view rather than the table. */
-        public MapSpec defaultView() {
+        public MapSpec<E> defaultView() {
             this.defaultView = true;
             return this;
         }

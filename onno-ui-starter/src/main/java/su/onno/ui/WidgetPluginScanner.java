@@ -32,7 +32,7 @@ public class WidgetPluginScanner {
     public WidgetPluginScanner(String location) {
         this.serveLocation = toServeLocation(location);
         this.scriptNames = scan(location, "*.js");
-        // The Gradle plugin also emits onno-widgets.css (Tailwind over the widget sources); serve and
+        // The Gradle plugin also emits a coordinate-specific *-widgets.css (Tailwind over the widget sources); serve and
         // advertise any stylesheet alongside the modules so the SPA can inject it (see ThemeController).
         this.styleNames = scan(location, "*.css");
         if (!scriptNames.isEmpty()) {
@@ -46,7 +46,7 @@ public class WidgetPluginScanner {
         return scriptNames;
     }
 
-    /** The discovered plugin stylesheet file names (e.g. {@code onno-widgets.css}), sorted, deduplicated. */
+    /** The discovered plugin stylesheet file names (e.g. {@code com-acme-app-widgets.css}), sorted, deduplicated. */
     public List<String> styleNames() {
         return styleNames;
     }

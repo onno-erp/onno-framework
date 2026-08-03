@@ -11,7 +11,7 @@ import su.onno.annotations.Enumeration;
  *
  * <p>Each {@code @EnumLabel} gives a value a human label <em>and</em> a {@code color}, so the
  * framework paints it as a colored status pill in list cells, the form dropdown, and the detail view
- * (the color also rides the read API as {@code status_color}). No text-mirror column or hand-built
+ * (the color also rides the default read API as {@code statusColor}). No text-mirror column or hand-built
  * legend is needed — the enum is the single source of truth, and {@link OrderView}'s row actions and
  * {@link Order#handlePosting} branch on the constant directly.</p>
  */

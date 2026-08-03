@@ -96,9 +96,10 @@ public class EntityConfigBuilder<E> {
     }
 
     /**
-     * Configure where a detail-header action shows: {@code post}, {@code unpost},
-     * {@code edit} or {@code delete}. By default Post is a primary button and the
-     * rest live in the overflow (⋯) menu; override per action with
+     * Configure where a detail-header action shows, keyed exactly as declared through
+     * {@link EntityView#actions(ActionSpec)}. Built-ins include {@code post}, {@code unpost},
+     * {@code edit}, and {@code delete}; custom detail actions use their authored key too.
+     * By default Post is a primary button and the rest live in the overflow (⋯) menu; override with
      * {@code .primary()}, {@code .inMenu()} or {@code .hidden()}.
      */
     public ActionHintBuilder action(String name) {
@@ -109,7 +110,7 @@ public class EntityConfigBuilder<E> {
         actions.put(name, placement);
     }
 
-    /** Action placement overrides ({@code action name -> primary|menu|hidden}). */
+    /** Action placement overrides ({@code action key -> primary|menu|hidden}). */
     Map<String, String> buildActions() {
         return Map.copyOf(actions);
     }

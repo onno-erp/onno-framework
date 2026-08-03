@@ -50,16 +50,19 @@ class EntityChangeEventTest {
     }
 
     @Test
-    void delete_emitsDeleted() {
+    void delete_emitsDeletedOnlyAfterDeletionCompletes() {
         List<EntityChangedEvent> captured = new ArrayList<>();
-        OnnoBeforeDeleteCallback callback = new OnnoBeforeDeleteCallback(null, registry, captured::add);
+        OnnoBeforeDeleteCallback before = new OnnoBeforeDeleteCallback(null, registry, captured::add);
+        OnnoAfterDeleteCallback after = new OnnoAfterDeleteCallback(null, registry, captured::add);
 
         TestService service = new TestService();
         service.setId(UUID.randomUUID());
         service.setCode("S-9");
         service.setName("Gone");
 
-        callback.onBeforeDelete(service, null);
+        before.onBeforeDelete(service, null);
+        assertThat(captured).isEmpty();
+        after.onAfterDelete(service);
 
         assertThat(captured).hasSize(1);
         assertThat(captured.get(0).changeType()).isEqualTo(EntityChangedEvent.DELETED);

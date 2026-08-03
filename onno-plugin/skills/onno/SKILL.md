@@ -7,7 +7,7 @@ description: >-
   MCP, auth/RBAC). Use when working
   in the onno-framework or onno-enterprise repos, or building/modifying an ERP app that consumes
   su.onno:onno-* (su.onno.* packages) — i.e. anything touching @Catalog, @Document,
-  @AccumulationRegister, @InformationRegister, @TabularSection, Postable/handlePosting, Ref<T>,
+  @AccumulationRegister, @InformationRegister, @TabularSection, Postable/handlePosting, typed Ref references,
   Layout/Page/EntityView, or onno.* config. Covers modeling a business into framework concepts,
   posting/validation rules, diff-based schema migrations, the runtime API + auth recipe, the module
   map, and the rule to keep docs in sync with code.
@@ -127,14 +127,18 @@ public class SalesRegister extends AccumulationRecord {
     @Resource(precision = 15, scale = 2) private BigDecimal amount;
 }
 
-// 4. EntityView — REQUIRED for the entity surface to be served (no view → 404; the view layer is
+// 4. EntityView — REQUIRED for DivKit entity routes to be served (no view → 404; the view layer is
 //    the allowlist). A view alone does NOT put the entity in the sidebar — a Layout section must
-//    list it (nav is curated). EntityView is NOT generic; it names its target via entity().
+//    list it (nav is curated). Generic REST/MCP exposure does not depend on EntityView.
 @Component
-public class CustomerView implements EntityView {
-    @Override public Class<?> entity() { return Customer.class; }
-    @Override public void list(ListSpec spec) { spec.column("code", "Code"); spec.column("name", "Name"); }
-    @Override public void fields(EntityConfigBuilder f) { f.field("name").order(10).width("full"); }
+public class CustomerView implements EntityView<Customer> {
+    @Override public Class<Customer> entity() { return Customer.class; }
+    @Override public void list(ListSpec<Customer> spec) {
+        spec.columns(Customer::getCode, Customer::getName).label(Customer::getName, "Name");
+    }
+    @Override public void fields(EntityConfigBuilder<Customer> f) {
+        f.field(Customer::getName).order(10).width("full");
+    }
 }
 ```
 
@@ -144,13 +148,17 @@ running app (see below). Summarize what you modeled and your assumptions.
 
 ## Posting & rules — the two gotchas that bite everyone
 
-- **Posting runs in its own JDBI transaction**, not enlisted in an ambient Spring `@Transactional`.
-  **Save the document (let it commit), then post.** Wrapping save+post in one `@Transactional`
-  method silently leaves register movements written but `_posted = false`.
-- **Posting an already-posted document is rejected before movements are persisted.** Unpost first
-  when an intentional recalculation is required; retrying `post(...)` cannot double-count totals.
+- **Save the document and let it commit, then post.** The posting engine claims an existing unposted
+  row before movements persist; an uncommitted/missing document is rejected. Do not rely on an
+  ambient Spring `@Transactional` save+post boundary because posting owns its JDBI transaction.
+- **Give every tabular section its own concrete row class.** Share common behavior through a base
+  row class; never reuse one concrete `TabularSectionRow` in multiple sections.
+- **Core posting an already-posted document is rejected before movements are persisted.** Use the
+  atomic `repost(...)` operation for an intentional recalculation; retrying `post(...)` cannot
+  double-count totals. Unpost rejects drafts and deleted rows.
 - **React to a post with a Spring `@EventListener` on `DocumentPostedEvent`** (full DI), not from
-  inside `handlePosting` (that runs in the posting transaction and should only write movements). The
+  inside `handlePosting` (normal posting stages movements before transactional persistence, and
+  preview/restoration may replay it). The
   domain `AfterPostHandler.afterPost()` hook exists but has no Spring access — prefer the event for
   anything that touches beans:
 
@@ -197,18 +205,20 @@ UI is authored as Spring beans on the *view* side, never as annotations on domai
   **Nav is curated:** an entity shows in the sidebar only if a `spec.section(...)` lists it; there is
   no auto-listing of unclaimed catalogs.
 - **`Page`** — a composed route (dashboards): `compose(PageBuilder)` with `widget`/`text`/`list(entity)`/
-  `constants`/`custom`, plus `actions(heading, …)` for a row of server-handled buttons (same `ActionSpec`
+  `custom`, plus `actions(heading, …)` for a row of server-handled buttons (same `ActionSpec`
   DSL as entity actions).
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
   hints. **An entity surface is only served if it has an `EntityView` for the active profile** (no
   view → `404`). That is *necessary but not sufficient* for nav presence: a view makes the entity
   reachable by direct route, but it appears in the sidebar only once a `Layout` section lists it.
-  Beyond columns and field hints, `EntityView` also drives: custom **detail-action placement**
+  Beyond columns and field hints, typed `EntityView<E>` also drives: custom **detail-action placement**
   (`f.action("post").primary()` / `.inMenu()` / `.hidden()`), catalog-side **related lists**
-  (`f.relatedList("doctors", ClinicDoctor.class).via("clinic").display("doctor")` — the catalog
+  (`f.relatedList("doctors", ClinicDoctor.class).via(ClinicDoctor::getClinic)
+  .display(ClinicDoctor::getDoctor)` — the catalog
   analogue of a document `@TabularSection`), **Ref-picker secondary lines + avatars**
-  (`f.field("client").refSecondary("phone")`, `.widget("avatar")`), and a **list map view**
-  (`spec.map().lat("latitude").lng("longitude")`). The full per-method list is in
+  (`f.refField(Appointment::getClient).refSecondary(Client::getPhone)`, `.widget("avatar")`), and a
+  **list map view** (`spec.map().lat(Location::getLatitude).lng(Location::getLongitude)`). The full
+  per-method list is in
   [reference/cheatsheet.md](reference/cheatsheet.md).
 
 Do not put UI placement or field-display hints on domain annotations; author them with
@@ -238,11 +248,11 @@ formatting. Close that gap in the same pass you model the business, not "later":
   Mixed-language UI ("Sign in" over a Russian catalog of "Контрагенты") is the #1 tell of an
   unfinished first pass.
 
-- **Seed defaults so the New form opens populated, not blank.** Implement `OnFillingHandler.onFilling()`
-  to pre-fill a new instance — status = the initial enum, `date`/`period` = now, sensible
-  `quantity = 1`, a default counterparty or warehouse, etc. This runs on the generic create path, so
-  the rendered New form shows those values. Use `@Constant` for global defaults and plain Java field
-  initializers for fixed constants. A blank form the user must fill from scratch is a missed default.
+- **Seed defaults so the New form opens populated, not blank.** Use Java field initializers for
+  values that must appear on the initially rendered blank form. Use null-guarded
+  `OnFillingHandler.onFilling()` for create/save defaults and normalization — it runs on write paths,
+  not on the first blank-form render. Use `@Constant` for global defaults. A blank form the user must
+  fill from scratch is a missed default.
   For `Ref` defaults and cross-navigation, the New form also prefills from query params
   (`…/new?room=<uuid>&startsAt=2026-07-16T19:00` — keys are write-path field names, `Ref`/enum
   values UUIDs, temporals ISO).
@@ -261,7 +271,9 @@ formatting. Close that gap in the same pass you model the business, not "later":
 
 ## Inspecting a running app
 
-Everything under `/api/**` is **authenticated** and mutations are **CSRF-protected**. Two traps:
+Most `/api/**` routes are authenticated; the documented bootstrap allowlist (theme/config/branding,
+login/me/CSRF, login DivKit, and desktop probes by default) is public. Cookie-mode mutations are
+**CSRF-protected**; resource-server bearer mode disables CSRF. Two traps:
 
 1. **There is no anonymous manifest endpoint.** `/api/ui/metadata/manifest` does not exist (the only
    `/manifest` is the desktop shell's). Introspect the model via the real generated endpoints or the
@@ -269,18 +281,19 @@ Everything under `/api/**` is **authenticated** and mutations are **CSRF-protect
 2. **Unknown non-`/api` paths return the SPA `index.html` with HTTP 200**, not 404 — a wrong path
    *looks* like success. Test API URLs, not page URLs.
 
-`{name}` is the entity's **display name** (`Properties`, `Sales Orders`), not the class name. Login
+`{name}` is the annotation's logical `name` (`Books`, `SalesOrders`), not the Java class name or
+localized `title`. Collection reads use `/api/list/catalogs|documents/{name}`. Login
 is a JSON POST that sets a session cookie; mutations need the CSRF token from the `XSRF-TOKEN`
 cookie echoed in `X-XSRF-TOKEN`:
 
 ```bash
 curl -c jar.txt http://localhost:8080/api/config                       # get XSRF-TOKEN cookie
 curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}'
-curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50' # reads need the session
+  -H 'Content-Type: application/json' -d '{"username":"admin@onnobooks.local","password":"admin"}'
+curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Books?limit=50'      # reads need the session
 XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)                        # mutations need the token
 curl -b jar.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
-  -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Properties
+  -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Books
 ```
 
 The real endpoints (auth `/api/auth/login|logout|me`, catalogs/documents/registers, posting,
@@ -318,9 +331,10 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
 
 Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-ui-starter`, `onno-auth-starter`,
 `onno-mcp-starter`, `onno-import-starter`, `onno-cluster-starter` (cross-node live-UI sync for
-horizontal scale-out), `onno-kafka-starter`, `onno-desktop-starter` (+ Gradle plugin). Each
-integration starter is gated by
-`onno.<module>.enabled` (default on). The full module map is in
+horizontal scale-out), `onno-kafka-starter`, `onno-observability-starter`,
+`onno-desktop-starter` (+ Gradle plugin), `onno-widgets-gradle-plugin`, and `onno-widget-sdk`.
+Optional starters use their documented `onno.<module>.enabled` switches where provided. The full
+module map is in
 [docs/ARCHITECTURE.md](https://github.com/onno-erp/onno-framework/blob/main/docs/ARCHITECTURE.md); every `onno.*` property is in
 [docs/CONFIGURATION.md](https://github.com/onno-erp/onno-framework/blob/main/docs/CONFIGURATION.md).
 

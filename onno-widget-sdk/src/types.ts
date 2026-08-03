@@ -35,7 +35,7 @@ export interface DashboardWidgetMeta {
   hint?: string;
 }
 
-/** A read record from the REST API — column name → value (display/ref sidecars included). */
+/** A read record from the REST API — logical field name → value (`FieldDisplay`/`FieldRef` sidecars included). */
 export type EntityRecord = Record<string, unknown>;
 
 /**

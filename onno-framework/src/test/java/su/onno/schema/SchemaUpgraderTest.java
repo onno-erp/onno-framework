@@ -67,6 +67,14 @@ class SchemaUpgraderTest {
         private String status;
     }
 
+    @Catalog(name = "MigProducts")
+    static class ProductOptionalStatus extends CatalogObject {
+        @Attribute(length = 100)
+        private String fullName;
+        @Attribute(length = 20)
+        private String status;
+    }
+
     private static final String TABLE = "catalog_mig_products";
 
     private Jdbi h2(String name) {
@@ -265,6 +273,44 @@ class SchemaUpgraderTest {
     }
 
     @Test
+    void existingAttributeCanLoosenAndTightenNullabilitySafely() {
+        Jdbi jdbi = h2("upg_nullability");
+        apply(jdbi, ProductRequired.class);
+
+        MigrationPlan loosen = apply(jdbi, ProductOptionalStatus.class);
+        assertThat(loosen.changes()).anyMatch(change ->
+                change.type() == SchemaChange.Type.ALTER_COLUMN_NULLABILITY
+                        && !change.destructive());
+        assertThat(isNullable(jdbi, "status")).isEqualTo("YES");
+
+        insertProduct(jdbi, "Nullable widget");
+        MigrationPlan tighten = apply(jdbi, ProductRequired.class);
+        assertThat(tighten.changes()).anyMatch(change ->
+                change.type() == SchemaChange.Type.ALTER_COLUMN_NULLABILITY
+                        && change.destructive());
+        assertThat(isNullable(jdbi, "status")).isEqualTo("YES");
+
+        jdbi.useHandle(handle -> handle.execute(
+                "UPDATE " + TABLE + " SET status = '' WHERE status IS NULL"));
+        new SchemaUpgrader(registryOf(ProductRequired.class), SchemaMode.APPLY, true).run(jdbi);
+        assertThat(isNullable(jdbi, "status")).isEqualTo("NO");
+    }
+
+    @Test
+    void unmatchedExternalColumnIsNotProposedForDeletion() {
+        Jdbi jdbi = h2("upg_external_column");
+        apply(jdbi, ProductV1.class);
+        jdbi.useHandle(handle -> handle.execute(
+                "ALTER TABLE " + TABLE + " ADD COLUMN external_note VARCHAR(255)"));
+
+        MigrationPlan plan = apply(jdbi, ProductV1.class);
+
+        assertThat(plan.changes()).noneMatch(change ->
+                "external_note".equalsIgnoreCase(change.column()));
+        assertThat(columns(jdbi, TABLE)).contains("EXTERNAL_NOTE");
+    }
+
+    @Test
     void applyMode_backfillsExecutionTokenForLegacyActiveProcess() {
         Jdbi jdbi = h2("upg_process_token_backfill");
 
@@ -342,6 +388,19 @@ class SchemaUpgraderTest {
     }
 
     @Test
+    void planAndValidateModesDoNotCreateHistoryTable() {
+        Jdbi planned = h2("upg_plan_no_history");
+        new SchemaUpgrader(registryOf(ProductV1.class), SchemaMode.PLAN, false).run(planned);
+        assertThat(columns(planned, SchemaHistoryRepository.TABLE)).isEmpty();
+
+        Jdbi validated = h2("upg_validate_no_history");
+        assertThatThrownBy(() -> new SchemaUpgrader(
+                registryOf(ProductV1.class), SchemaMode.VALIDATE, false).run(validated))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(columns(validated, SchemaHistoryRepository.TABLE)).isEmpty();
+    }
+
+    @Test
     void offMode_doesNothing() {
         Jdbi jdbi = h2("upg_off");
         MigrationPlan plan = new SchemaUpgrader(registryOf(ProductV1.class),
@@ -349,5 +408,15 @@ class SchemaUpgraderTest {
 
         assertThat(plan.isEmpty()).isTrue();
         assertThat(columns(jdbi, TABLE)).isEmpty();
+    }
+
+    private String isNullable(Jdbi jdbi, String column) {
+        return jdbi.withHandle(handle -> handle.createQuery(
+                        "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS "
+                                + "WHERE TABLE_NAME = :table AND COLUMN_NAME = :column")
+                .bind("table", TABLE.toUpperCase())
+                .bind("column", column.toUpperCase())
+                .mapTo(String.class)
+                .one());
     }
 }

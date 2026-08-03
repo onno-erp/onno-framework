@@ -66,9 +66,11 @@ b.widget("Revenue").type("chart").document(Order.class)
         .metricField(Order::getTotal);
 ```
 
-The resolver converts Java names to REST/storage columns at the boundary (`date` → `_date`,
-`startsAt` → `starts_at`). Keep `config(...)` for widget behavior (`kind`, `currency`,
-`groupByDate`) and custom-widget contracts. A derived response key such as `status_display` has no
+The resolver converts Java names to the preferred logical REST keys at the boundary (`date` →
+`date`, `startsAt` → `startsAt`); legacy storage-column strings such as `_date` and `starts_at`
+remain accepted and normalize to the same logical keys for catalog/document widgets. Registers
+retain their storage-shaped projection. Keep `config(...)` for widget behavior (`kind`, `currency`,
+`groupByDate`) and custom-widget contracts. A derived response key such as `statusDisplay` has no
 Java getter and therefore remains an explicit string.
 
 ## Queries and registers
@@ -186,7 +188,7 @@ tokens, and subprocess descendants with an audit trail.
 - external authentication subjects when no identity catalog is configured;
 - human labels, hints, and formatting patterns;
 - parsed filter expressions and their runtime values;
-- derived/synthetic wire columns such as `status_display`;
+- derived/synthetic wire keys such as `statusDisplay`;
 - dynamic metadata loaded at runtime, using the documented unsafe string overloads.
 
 Do not turn those into fake Java types. Conversely, if a string names a real Java field in authored

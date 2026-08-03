@@ -67,12 +67,12 @@ public class DashboardPage implements Page {
                 .config("comparisonLabel", "vs previous period")
                 // System columns carry the `_` prefix in widget configs (cf. `_date` below): the
                 // posted flag is `_posted`, not `posted`.
-                .config("filter", "_posted = true")
+                .config("filter", "posted = true")
                 .hint("Sum of order totals across posted orders.");
 
         // ---- Charts -----------------------------------------------------------------------------
         b.widget("Orders by status").type("chart").width("1/2").order(10).document(Order.class)
-                .config("kind", "pie").config("groupBy", "status_display")
+                .config("kind", "pie").config("groupBy", "statusDisplay")
                 .config("metric", "count")
                 .hint("Where orders sit in the lifecycle.");
 
@@ -82,7 +82,7 @@ public class DashboardPage implements Page {
                 .config("kind", "area")
                 .groupBy(Order::getDate).config("groupByDate", "day")
                 .config("metric", "sum").metricField(Order::getTotal)
-                .config("filter", "_posted = true")
+                .config("filter", "posted = true")
                 .hint("Posted-order revenue over time.");
 
         // Dual-axis: revenue (area, left axis, $) and order count (bars, right axis) on one chart —
@@ -93,13 +93,13 @@ public class DashboardPage implements Page {
                 .groupBy(Order::getDate).config("groupByDate", "week")
                 .config("metric", "sum").metricField(Order::getTotal)
                 .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
-                .config("filter", "_posted = true")
+                .config("filter", "posted = true")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------
         b.widget("Recent orders").type("list").width("full").order(20).document(Order.class).maxItems(10)
-                .config("titleTemplate", "{_number} · {customer_display}")
-                .config("secondaryField", "status_display");
+                .config("titleTemplate", "{number} · {customerDisplay}")
+                .config("secondaryField", "statusDisplay");
 
         // ---- Custom widget: a type the framework has no built-in for ---------------------------
         // "eventLog" has no server-side renderer — its React component ships as
@@ -107,8 +107,8 @@ public class DashboardPage implements Page {
         // loaded into the SPA at boot. The .config(...) values arrive as widget.extraConfig.
         b.widget("Recent activity").type("eventLog").width("full").order(60).document(Order.class)
                 .maxItems(10)
-                .config("dateField", "_date").config("titleField", "_number")
-                .config("secondaryDisplay", "customer_display")
+                .config("dateField", "date").config("titleField", "number")
+                .config("secondaryDisplay", "customerDisplay")
                 .config("amountField", "total").config("currency", "USD")
                 .hint("A dev-authored widget — its renderer is a .tsx compiled by su.onno.widgets.");
 

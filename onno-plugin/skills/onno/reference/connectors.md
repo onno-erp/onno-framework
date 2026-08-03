@@ -32,11 +32,16 @@ onno-<name>-starter/
 ```
 
 Auto-configuration is gated by `@ConditionalOnProperty(prefix = "onno.<name>", name = "enabled")`
-and (for HTTP clients) `@ConditionalOnClass(RestClient.class)`; every bean is
-`@ConditionalOnMissingBean` so the host can override any of them. Build files use `java-library` +
+and (for HTTP clients) `@ConditionalOnClass(RestClient.class)`; replaceable singleton beans are
+`@ConditionalOnMissingBean` so the host can override them. Build files use `java-library` +
 `maven-publish` with `withSourcesJar()`/`withJavadocJar()`, depend on the core as
 `su.onno:onno-framework` (`api`) + `onno-framework-starter` (`implementation`), and
 publish to the private `onno-enterprise` GitHub Packages repo.
+
+Credentialed community connectors default `enabled=false`. Add
+`spring-boot-configuration-processor` so the artifact packages its own property metadata. Apply
+`@ConditionalOnMissingBean` to replaceable singleton client/token/service beans—not additive host UI,
+tool, or contributor beans. If a bean injects `RestClient.Builder`, also condition on that bean.
 
 ## Robust external-HTTP-client template (Guesty/Tochka)
 
@@ -47,6 +52,14 @@ response envelopes (Tochka wraps everything in `{Data, Links, Meta}`; the client
 records). Token managers cache the token **in memory and on disk** when the provider rate-limits
 token issuance (Guesty caps at 5/24h) or **rotates the refresh token** on every renewal (Tochka — so
 persist the latest refresh token, not the seed).
+
+Bound attempts, honor `Retry-After`, add jitter, and automatically retry only idempotent GET/pull
+operations or writes that reuse the same provider idempotency key. Never log credentials.
+
+For inbound synchronization, keep connector APIs in external DTOs/pages/cursors. The host owns
+domain mapping, repositories, `RefResolver`, projections, and jobs. Advance a checkpoint only after
+all host projections commit; replay must upsert by external id plus revision and define tombstone
+handling.
 
 ## Async external workflows are poll-based
 
@@ -91,3 +104,7 @@ Update the connector's module README and the repo's top-level README module tabl
 or change a connector — a connector that is missing from the module table is effectively
 undiscoverable. Confirm the module depends on the core as `su.onno:onno-framework` /
 `su.onno:onno-framework-starter`, not any stale coordinates.
+
+Test token expiry/single-flight refresh, HTTP error/retry policy, pagination/replay, idempotency and
+checkpoint ordering, datasource-optional ledger wiring, bean override, configuration metadata, and
+published JAR/POM contents. Run `publishToMavenLocal` plus a tiny external consumer before release.
