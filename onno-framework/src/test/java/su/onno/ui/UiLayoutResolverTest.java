@@ -96,7 +96,7 @@ class UiLayoutResolverTest {
     }
 
     @Test
-    void resolveWidgets_mapsTypedJavaFieldsToApiColumns() {
+    void resolveWidgets_mapsTypedJavaFieldsToPreferredApiNames() {
         PageBuilder page = new PageBuilder();
         page.widget("Orders").type("chart").document(TestSalesOrder.class)
                 .dateField(TestSalesOrder::getDate)
@@ -107,11 +107,26 @@ class UiLayoutResolverTest {
         PageWidgetDescriptor widget =
                 resolver.resolveWidgetConfigs(page.widgets()).getFirst();
 
-        assertThat(widget.dateField()).isEqualTo("_date");
-        assertThat(widget.titleField()).isEqualTo("_number");
+        assertThat(widget.dateField()).isEqualTo("date");
+        assertThat(widget.titleField()).isEqualTo("number");
         assertThat(widget.extraConfig())
                 .containsEntry("metricField", "amount")
                 .containsEntry("groupBy", "status");
+    }
+
+    @Test
+    void resolveWidgets_mapsLegacyStorageStringsToLogicalNames() {
+        PageBuilder page = new PageBuilder();
+        page.widget("Orders").type("chart").document(TestSalesOrder.class)
+                .dateField("_date")
+                .titleField("_number")
+                .config("groupBy", "status_display");
+
+        PageWidgetDescriptor widget = resolver.resolveWidgetConfigs(page.widgets()).getFirst();
+
+        assertThat(widget.dateField()).isEqualTo("date");
+        assertThat(widget.titleField()).isEqualTo("number");
+        assertThat(widget.extraConfig()).containsEntry("groupBy", "statusDisplay");
     }
 
     private static UiLayout buildLayout(UiLayoutBuilder builder) {

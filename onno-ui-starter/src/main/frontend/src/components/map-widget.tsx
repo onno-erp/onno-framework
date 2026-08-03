@@ -26,10 +26,10 @@ const MAP_HEIGHT = 360;
 /** A record's marker/shape label: the configured title field, else a system identifier. */
 function labelFor(row: EntityRecord, titleField: string): string {
   const candidates = [
-    titleField && (row[`${titleField}_display`] ?? row[titleField]),
-    row._description,
-    row._number,
-    row._code,
+    titleField && (row[`${titleField}Display`] ?? row[titleField]),
+    row.description,
+    row.number,
+    row.code,
     row.name,
   ];
   for (const c of candidates) {
@@ -48,7 +48,7 @@ export function MapWidget({ widget }: { widget: DashboardWidgetMeta }) {
     const out: Feature[] = [];
     for (const row of rows) {
       const href =
-        widget.entityType && row._id ? `onno://${widget.entityType}s/${route}/${row._id}` : undefined;
+        widget.entityType && row.id ? `onno://${widget.entityType}s/${route}/${row.id}` : undefined;
       const props = { label: labelFor(row, widget.titleField), href };
       out.push(...featuresFromRow(row, source, props));
     }

@@ -57,8 +57,10 @@ export interface OnnoReadApi {
 
 /** One resolved list column, as the entity's ListSpec/field hints produced it. */
 export interface ListRendererColumn {
-  /** The data column to read off each row (display/ref sidecars ride as {@code {col}_display} etc.). */
+  /** The validated storage column retained for query metadata and compatibility. */
   columnName: string;
+  /** The preferred key to read from catalog/document rows; sidecars use `FieldDisplay`, `FieldRef`, etc. */
+  fieldName: string;
   /** The header label the table would have shown. */
   label: string;
   /** Authored width hint in px, or "" (size to content). */

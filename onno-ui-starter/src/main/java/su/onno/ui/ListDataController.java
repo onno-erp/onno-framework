@@ -61,6 +61,8 @@ public class ListDataController {
                                            Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
+        EntityJsonRepresentation.Mode representation =
+                EntityJsonRepresentation.parse(request.getParameter("representation"));
         // Surgical refresh: when the island asks for specific ids (a single-row live patch), return
         // just those decorated rows and skip paging/filtering entirely. The presence of the param —
         // not the parse result — selects ids-mode, so an all-unparseable request returns no rows
@@ -69,6 +71,7 @@ public class ListDataController {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(desc, ids);
             decorateRowActions(desc.javaClass(), picked);
+            picked = EntityJsonRepresentation.catalogs(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
@@ -82,6 +85,8 @@ public class ListDataController {
         KeysetPage kp = catalogQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
+        kp = new KeysetPage(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation),
+                kp.nextCursor(), kp.hasMore());
         boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
                 () -> catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter),
@@ -102,11 +107,14 @@ public class ListDataController {
                                             Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
+        EntityJsonRepresentation.Mode representation =
+                EntityJsonRepresentation.parse(request.getParameter("representation"));
         // Surgical refresh by id (single-row live patch) — see catalogPage.
         if (request.getParameterValues("ids") != null) {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(desc, ids);
             decorateRowActions(desc.javaClass(), picked);
+            picked = EntityJsonRepresentation.documents(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
@@ -119,6 +127,8 @@ public class ListDataController {
         KeysetPage kp = documentQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
+        kp = new KeysetPage(EntityJsonRepresentation.documents(desc, kp.rows(), representation),
+                kp.nextCursor(), kp.hasMore());
         boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
                 () -> documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter),

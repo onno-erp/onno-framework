@@ -18,8 +18,9 @@ Everything under `/api/**` is authenticated. Mutations are CSRF-protected.
 - Unknown non-`/api` paths return the SPA `index.html` with HTTP 200. Test API URLs, not page URLs.
 - `{name}` route segments are entity display names such as `Properties` or `Sales Orders`, not Java
   class names.
-- List/get JSON expands refs and enums with companion keys such as `{col}_display`, `{col}_ref`, and
-  `{col}_color`; secrets read as `__SECRET_SET__`.
+- Catalog/document list/get JSON defaults to logical keys and expands refs/enums with companions
+  such as `FieldDisplay`, `FieldRef`, and `FieldColor`; add `?representation=storage` for the legacy
+  column-shaped response. Secrets read as `__SECRET_SET__`.
 
 ## Curl Recipe
 

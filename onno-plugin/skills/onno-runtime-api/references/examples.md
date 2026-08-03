@@ -29,7 +29,7 @@ token.
 ## Catalog CRUD
 
 ```bash
-curl -sS -b "$jar" "$base/api/catalogs/Products"
+curl -sS -b "$jar" "$base/api/list/catalogs/Products?limit=100"
 
 curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \
   -X POST "$base/api/catalogs/Products" \
@@ -67,7 +67,7 @@ curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H "Content-Type: application/json" 
 # {"valid":false,"fieldErrors":{"customer":["Customer is required"]},"formErrors":["Choose a customer"]}
 ```
 
-Posting writes register movements and marks `_posted=true`. Preview should be used before destructive
+Posting writes register movements and returns `posted=true`. Preview should be used before destructive
 or high-value tests.
 
 ## Register Reads
@@ -83,27 +83,28 @@ wins over stale docs.
 
 ## Response Shape
 
-List/get responses include storage values and display companions:
+Catalog/document list/get responses default to logical values and display companions:
 
 ```json
 {
   "id": "5d3...",
   "customer": "9a1...",
-  "customer_display": "Acme LLC",
-  "customer_ref": {
+  "customerDisplay": "Acme LLC",
+  "customerRef": {
     "type": "Customers",
     "id": "9a1..."
   },
-  "status": "CONFIRMED",
-  "status_display": "Confirmed",
-  "status_color": "#2563EB",
+  "status": "7f4...",
+  "statusDisplay": "Confirmed",
+  "statusColor": "#2563EB",
   "apiKey": "__SECRET_SET__"
 }
 ```
 
-Use raw values for writes and filters. Use `*_display` and `*_color` for headless UI rendering.
-Do not echo a read row back as a write: reads use snake_case storage columns while writes use
-camelCase field names.
+Use raw values for writes and `*Display` / `*Color` for headless UI rendering. Writable values from
+the default response can be submitted to `PUT` without renaming. Add `?representation=storage` for
+the legacy `_description` / `customer_display` response; storage aliases are also accepted on
+writes, and conflicting logical/storage values return `400`.
 
 Temporals are ISO wall-clock strings. `LocalDate` is `2026-06-04`; `LocalDateTime` reads canonically
 as offset-free `2026-06-04T10:00:00`. An offset-bearing write such as
@@ -128,8 +129,8 @@ curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"username\":\"${ONNO_USER:-admin}\",\"password\":\"${ONNO_PASSWORD:-admin}\"}" >/dev/null
 
-curl -fsS -b "$jar" "$base/api/catalogs/Products" | jq .
-curl -fsS -b "$jar" "$base/api/documents/Sales%20Orders" | jq .
+curl -fsS -b "$jar" "$base/api/list/catalogs/Products?limit=100" | jq .
+curl -fsS -b "$jar" "$base/api/list/documents/Sales%20Orders?limit=100" | jq .
 ```
 
 Use `curl -f` so HTML fallback and 401/403 failures fail the script instead of looking successful.

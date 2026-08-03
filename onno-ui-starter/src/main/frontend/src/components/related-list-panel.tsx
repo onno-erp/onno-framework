@@ -106,12 +106,13 @@ export function RelatedListPanel({
     }
   };
 
-  // Render a single join-row cell: refs/enums resolve to a "*_display" label server-side; fall
-  // back to the raw column value for plain attributes (e.g. a role string on the join row).
+  // Join catalogs use logical entity keys; register-backed panels retain the register projection.
   const cell = (row: EntityRecord, col: AttributeMeta): string => {
-    const display = row[`${col.columnName}_display`];
+    const logical = meta.sourceKind !== "register";
+    const key = logical ? col.fieldName : col.columnName;
+    const display = logical ? row[`${key}Display`] : row[`${key}_display`];
     if (display != null && display !== "") return String(display);
-    const raw = row[col.columnName];
+    const raw = row[key];
     return raw == null ? "" : String(raw);
   };
 
@@ -169,7 +170,7 @@ export function RelatedListPanel({
           ) : (
             <div className="space-y-1">
               {rows.map((row) => {
-                const rowId = String(row._id);
+                const rowId = String(row.id ?? row._id);
                 return (
                   <div
                     key={rowId}

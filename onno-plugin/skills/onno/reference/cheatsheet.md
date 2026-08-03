@@ -74,11 +74,12 @@ totals storage use its stable UUID, while typed filters/reads use the enum const
 ### `@Enumeration` (on a Java `enum`)
 `name` (required), `title=""` (display label for the type; falls back to `name`), `tableName=""`.
 Persisted as a reference table; each value gets a stable UUID. Annotate a constant with
-`@EnumLabel("…")` to give it a human/localized display label (surfaced in `{col}_display`, the
+`@EnumLabel("…")` to give it a human/localized display label (surfaced in `FieldDisplay`, the
 `enumValues[].label` metadata, and the dropdown) without renaming the constant; unlabelled constants
 display as their name. `@EnumLabel(value="…", color="#RRGGBB")` additionally paints the value as a
 colored status pill in list cells and the form dropdown — the colour rides the read API
-as `{col}_color` and `enumValues[].color`; an uncoloured value renders as plain text.
+as `FieldColor` and `enumValues[].color`; an uncoloured value renders as plain text. Storage
+compatibility reads retain `{col}_display` and `{col}_color`.
 
 ### `@Constant` (on a plain class with one value field)
 `name` (required).

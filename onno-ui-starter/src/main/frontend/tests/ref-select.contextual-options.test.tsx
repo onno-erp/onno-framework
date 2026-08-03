@@ -21,14 +21,14 @@ vi.mock("@/components/ui/popover", () => ({
 import { RefSelect } from "@/components/ref-select";
 
 const available = {
-  _id: "employee-1",
-  _description: "Alex Morgan",
+  id: "employee-1",
+  description: "Alex Morgan",
   _optionBadge: "Available",
   _optionTone: "success",
 };
 const unavailable = {
-  _id: "employee-2",
-  _description: "Sam Lee",
+  id: "employee-2",
+  description: "Sam Lee",
   _optionBadge: "Unavailable",
   _optionTone: "danger",
   _optionDisabled: true,
@@ -88,7 +88,7 @@ describe("RefSelect contextual options (#272)", () => {
   it("immediately disables a sibling-row selection while leaving other options active", async () => {
     searchRefOptions.mockResolvedValue([
       available,
-      { _id: "employee-2", _description: "Sam Lee" },
+      { id: "employee-2", description: "Sam Lee" },
     ]);
     const onChange = vi.fn();
 

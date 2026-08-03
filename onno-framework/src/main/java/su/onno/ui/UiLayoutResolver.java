@@ -137,7 +137,8 @@ public class UiLayoutResolver {
         Map<String, String> resolved = new LinkedHashMap<>(widget.extraConfig());
         for (String key : List.of(
                 "endDateField", "durationField", "secondaryField", "amountField",
-                "currencyField", "metricField", "field2", "groupBy", "seriesBy",
+                "currencyField", "metricField", "secondaryMetricField", "field2",
+                "groupBy", "seriesBy", "colorBy",
                 "latField", "lngField", "geoJsonField")) {
             String value = resolved.get(key);
             if (value == null || value.isBlank() || value.contains(",")) {
@@ -149,38 +150,47 @@ public class UiLayoutResolver {
     }
 
     /**
-     * Widgets consume REST rows, whose keys are physical/API columns. Typed authoring supplies Java
-     * property names, so resolve them through metadata at this boundary. Already-resolved system or
-     * API column names pass through unchanged.
+     * Catalog/document widgets consume the preferred logical REST representation, so both typed
+     * Java property names and legacy storage-column strings resolve to logical field names here.
+     * Registers retain their storage-shaped read contract.
      */
     private String resolveWidgetField(UiLayoutBuilder.WidgetConfig widget, String authored) {
         if (authored == null || authored.isBlank() || widget.entityClass() == null) {
             return authored;
         }
-        if (authored.startsWith("_")) {
-            return authored;
+        boolean logicalEntity = "catalog".equals(widget.entityType()) || "document".equals(widget.entityType());
+        String field = authored;
+        String sidecar = "";
+        if (logicalEntity && field.endsWith("_display")) {
+            field = field.substring(0, field.length() - "_display".length());
+            sidecar = "Display";
+        } else if (logicalEntity && field.endsWith("Display")) {
+            field = field.substring(0, field.length() - "Display".length());
+            sidecar = "Display";
         }
+        String lookupField = field;
+        String resolvedSidecar = sidecar;
         String systemColumn = switch (widget.entityType()) {
-            case "catalog" -> switch (authored) {
-                case "id" -> "_id";
-                case "code" -> "_code";
-                case "description" -> "_description";
-                case "deletionMark" -> "_deletion_mark";
-                case "folder" -> "_is_folder";
-                case "parent" -> "_parent";
-                case "version" -> "_version";
+            case "catalog" -> switch (lookupField) {
+                case "id", "_id" -> "id";
+                case "code", "_code" -> "code";
+                case "description", "_description" -> "description";
+                case "deletionMark", "_deletion_mark" -> "deletionMark";
+                case "folder", "_is_folder" -> "folder";
+                case "parent", "_parent" -> "parent";
+                case "version", "_version" -> "version";
                 default -> null;
             };
-            case "document" -> switch (authored) {
-                case "id" -> "_id";
-                case "number" -> "_number";
-                case "date" -> "_date";
-                case "posted" -> "_posted";
-                case "deletionMark" -> "_deletion_mark";
-                case "version" -> "_version";
+            case "document" -> switch (lookupField) {
+                case "id", "_id" -> "id";
+                case "number", "_number" -> "number";
+                case "date", "_date" -> "date";
+                case "posted", "_posted" -> "posted";
+                case "deletionMark", "_deletion_mark" -> "deletionMark";
+                case "version", "_version" -> "version";
                 default -> null;
             };
-            case "register" -> switch (authored) {
+            case "register" -> switch (lookupField) {
                 case "id" -> "_id";
                 case "period" -> "_period";
                 case "active" -> "_active";
@@ -189,7 +199,7 @@ public class UiLayoutResolver {
             default -> null;
         };
         if (systemColumn != null) {
-            return systemColumn;
+            return systemColumn + resolvedSidecar;
         }
         List<AttributeDescriptor> attributes = switch (widget.entityType()) {
             case "catalog" -> registry.allCatalogs().stream()
@@ -208,8 +218,11 @@ public class UiLayoutResolver {
             default -> List.of();
         };
         return attributes.stream()
-                .filter(a -> a.fieldName().equals(authored) || a.columnName().equals(authored))
-                .findFirst().map(AttributeDescriptor::columnName).orElse(authored);
+                .filter(a -> a.fieldName().equals(lookupField) || a.columnName().equals(lookupField))
+                .findFirst()
+                .map(a -> "register".equals(widget.entityType()) ? a.columnName() : a.fieldName())
+                .map(name -> name + resolvedSidecar)
+                .orElse(authored);
     }
 
     private String resolveEntityName(UiLayoutBuilder.EntityRef ref) {

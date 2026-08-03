@@ -71,6 +71,7 @@ public final class SurfaceDivBuilder {
         for (ResolvedListView.Column c : view.columns()) {
             Map<String, Object> col = new LinkedHashMap<>();
             col.put("columnName", c.columnName());
+            col.put("fieldName", c.fieldName());
             col.put("label", c.label());
             col.put("width", c.width() == null ? "" : c.width());
             // Display hints the React list honors: an image/avatar widget renders a thumbnail, and

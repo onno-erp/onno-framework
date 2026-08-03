@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronsUpDown, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
+import { logicalEntityKey } from "@/lib/entity-keys";
 import type { EntityRecord, RefOptionSearch } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FacetSheet, useTouchLayout } from "@/components/ui/facet-sheet";
@@ -46,12 +47,18 @@ function initials(name: string | undefined): string {
 }
 
 function displayOf(item: EntityRecord): string {
-  const desc = item._description as string | undefined;
+  const desc = item.description as string | undefined;
   if (desc && desc.trim()) return desc;
   // Catalogs label by code; documents have no code/description, so fall back to number.
   return (
-    (item._code as string) ?? (item._number as string) ?? (item._id as string) ?? ""
+    (item.code as string) ??
+    (item.number as string) ??
+    (item.id as string) ?? ""
   );
+}
+
+function optionId(item: EntityRecord): string {
+  return String(item.id ?? "");
 }
 
 /**
@@ -112,7 +119,7 @@ export function RefSelect({
       setSelected(null);
       return;
     }
-    if (selected && selected._id === value) return;
+    if (selected && optionId(selected) === value) return;
     let cancelled = false;
     const fetchOne = isDocument ? api.getDocument(name, value) : api.getCatalogItem(name, value);
     fetchOne.then((r) => !cancelled && setSelected(r)).catch(() => {});
@@ -156,7 +163,7 @@ export function RefSelect({
     // A manual pick supersedes any outstanding "+ New" hand-off.
     cancelQuickCreate(kind, name);
     setSelected(item);
-    onChange(item._id as string);
+    onChange(optionId(item));
     setOpen(false);
   };
 
@@ -292,7 +299,8 @@ function RefSelectOptions({
           </div>
         ) : (
           items.map((item) => {
-            const excluded = excludedIds.includes(String(item._id));
+            const id = optionId(item);
+            const excluded = excludedIds.includes(id);
             const disabled = excluded || item._optionDisabled === true;
             const reason = excluded
               ? t("ref.selectedElsewhere")
@@ -302,14 +310,14 @@ function RefSelectOptions({
               : String(item._optionBadge ?? "");
             return (
               <button
-                key={item._id as string}
+                key={id}
                 type="button"
                 disabled={disabled}
                 title={disabled && reason ? reason : undefined}
                 onClick={() => onPick(item)}
                 className={cn(
                   "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                  item._id === value && "bg-accent/60",
+                  id === value && "bg-accent/60",
                   disabled && "cursor-not-allowed opacity-55 hover:bg-transparent"
                 )}
               >
@@ -369,16 +377,14 @@ function RefRow({
 }) {
   const display = displayOf(item);
   const avatarUrl =
-    (item.avatar_url as string | undefined) ??
-    (item._avatar as string | undefined) ??
     (item.avatarUrl as string | undefined) ??
     undefined;
-  // A target catalog's `color` attribute (same convention the list uses for {col}_color pills):
+  // A target catalog's `color` attribute (same convention the list uses for FieldColor pills):
   // render a small dot so colored options — statuses, tags — read the same here as on the board.
   const color = ((item.color as string | undefined) ?? "").trim();
-  const code = item._code as string | undefined;
+  const code = item.code as string | undefined;
   // The disambiguating secondary line (e.g. a phone), shown under the name in the options list.
-  const sub = secondary ? item[secondary] : undefined;
+  const sub = secondary ? item[logicalEntityKey(secondary)] : undefined;
   const subText = sub == null ? "" : String(sub);
   const toneClass: Record<string, string> = {
     neutral: "bg-muted text-muted-foreground",

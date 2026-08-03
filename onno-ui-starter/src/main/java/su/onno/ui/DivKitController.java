@@ -819,7 +819,9 @@ public class DivKitController implements DisposableBean {
         if (label.isBlank()) label = str(row.get("_code"));
         if (label.isBlank()) label = str(meta.get("name"));
         Map<String, Object> content = entityFormBody("catalogs", name, id, label,
-                messages.get("action.save"), meta, row, false, !canWrite, actions);
+                messages.get("action.save"), meta,
+                EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
+                false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -836,7 +838,9 @@ public class DivKitController implements DisposableBean {
         // (issue #181); blank for an entity with no usable no-arg constructor. Extra query params
         // overlay onto that seed as initial field values.
         return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
-                meta, catalogQuery.newDraft(desc, formPrefill(params)));
+                meta, EntityJsonRepresentation.catalog(desc,
+                        catalogQuery.newDraft(desc, formPrefill(params)),
+                        EntityJsonRepresentation.Mode.LOGICAL));
     }
 
     @GetMapping("/catalogs/{name}/{id}/duplicate")
@@ -845,7 +849,8 @@ public class DivKitController implements DisposableBean {
         access.requireWrite(principal, desc);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         Map<String, Object> draft = duplicateDraft(catalogQuery.get(desc, id), desc.attributes());
-        return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
+        return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
+                EntityJsonRepresentation.catalog(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
 
     @GetMapping("/documents/{name}")
@@ -915,7 +920,9 @@ public class DivKitController implements DisposableBean {
         actions.removeIf(a -> "hidden".equals(a.placement()));
         Map<String, Object> content = entityFormBody("documents", name, id,
                 str(meta.get("name")) + " " + str(row.get("_number")),
-                messages.get("action.save"), meta, row, false, !canWrite, actions);
+                messages.get("action.save"), meta,
+                EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
+                false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -932,7 +939,9 @@ public class DivKitController implements DisposableBean {
         // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
         // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
         return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
-                meta, documentQuery.newDraft(desc, formPrefill(params)));
+                meta, EntityJsonRepresentation.document(desc,
+                        documentQuery.newDraft(desc, formPrefill(params)),
+                        EntityJsonRepresentation.Mode.LOGICAL));
     }
 
     /** Query params usable as New-form field prefills — the surface-control params are reserved, not fields. */
@@ -948,7 +957,8 @@ public class DivKitController implements DisposableBean {
         access.requireWrite(principal, desc);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(desc, id), desc.attributes());
-        return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta, draft, true);
+        return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
+                EntityJsonRepresentation.document(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
 
     @GetMapping("/registers/{name}")

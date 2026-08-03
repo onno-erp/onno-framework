@@ -84,7 +84,7 @@ export const registerWidget: (
  *
  *   function BookTiles({ rows, open }: ListRendererProps) {
  *     return <div className="grid grid-cols-4 gap-3">{rows.map((r) => (
- *       <button key={String(r._id)} onClick={() => open(r)}>{String(r._description)}</button>
+ *       <button key={String(r.id)} onClick={() => open(r)}>{String(r.description)}</button>
  *     ))}</div>;
  *   }
  *   registerListRenderer("bookTiles", BookTiles);

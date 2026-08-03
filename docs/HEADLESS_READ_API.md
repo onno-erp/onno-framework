@@ -1,9 +1,12 @@
 # Headless Read API
 
-The generic REST API under `/api/**` (served by `onno-ui-starter`) is admin-shaped: its JSON uses
-raw storage column names (`_id`, `_code`, …), expands references inline, and redacts secrets. This
-document is the response contract for headless consumers (a separate front end, a sync job, a search
-indexer) so you don't have to learn the shape by reading controller source (issue #33).
+The generic REST API under `/api/**` (served by `onno-ui-starter`) gives catalog and document
+consumers a logical JSON contract: system fields and model attributes use the same names on reads
+and writes (`id`, `description`, `taxId`, …), references expand alongside them, and secrets are
+redacted. The previous storage-shaped contract remains available with
+`?representation=storage`. This document is the response contract for headless consumers (a
+separate front end, a sync job, a search indexer) so you don't have to learn the shape by reading
+controller source (issues #33 and #314).
 
 It pairs with the auth/CSRF notes in [AGENTS.md](../AGENTS.md#inspecting-a-running-app-read-this-before-you-curl):
 every `/api/**` route is authenticated, reads need only the session cookie (or a bearer token in
@@ -19,6 +22,7 @@ GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arr
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
+POST /api/ref-options/search                  bounded contextual reference options
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -104,31 +108,49 @@ Catalog and document collections are available only through the keyset list feed
 context-aware search input. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
+Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,
+create/update/duplicate, and post/unpost entity responses all accept
+`?representation=logical|storage`. Omitted means `logical`; an unknown value is `400`. Registers
+and aggregate/group responses retain their own storage/aggregation contracts and do not use this
+switch.
+
 ## Response shape
 
-Keys are **storage column names**, not Java field names. Framework columns are prefixed with `_`;
-attribute columns are the `snake_case` of the field name (or the explicit `@Attribute(name=...)`).
-Reading `description` (no underscore) or a camelCase `taxId` returns `undefined` — the read keys are:
+Catalog/document responses use **logical API names by default**. Attributes use their Java
+`fieldName`; system and sidecar names are camelCase. These are the default read keys:
 
 | Key | Applies to | Meaning |
 |-----|------------|---------|
-| `_id` | catalog, document, TS row | UUID primary key |
-| `_code` | catalog | natural key / slug |
-| `_number` | document | natural key / slug |
-| `_date` | document | timestamp |
-| `_posted` | document | posting flag |
-| `_description` | catalog | **the display name** (there is no `description` key) |
-| `_deletion_mark` | catalog, document | soft-delete flag |
-| `_is_folder`, `_parent` | hierarchical catalog | folder flag / parent UUID |
-| `_version` | catalog, document | optimistic-lock version |
-| `_parent_id`, `_line_number` | tabular-section row | back-reference to the document / 1-based ordinal |
-| `_period`, `_active` | register rows | period / active flag |
-| `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
-| `<col>_display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
-| `<col>_ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }` |
-| `<col>_code` | catalog-`Ref<>` attrs only | the target's code |
-| `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
-| `<col>_color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
+| `id` | catalog, document, TS row | UUID primary key |
+| `code` | catalog | natural key / slug |
+| `number` | document | natural key / slug |
+| `date` | document | timestamp |
+| `posted` | document | posting flag |
+| `description` | catalog | display name |
+| `deletionMark` | catalog, document | soft-delete flag |
+| `folder`, `parent` | hierarchical catalog | folder flag / parent UUID |
+| `version` | catalog, document | optimistic-lock version |
+| `parentId`, `lineNumber` | tabular-section row | back-reference to the document / 1-based ordinal |
+| `<fieldName>` | attribute | Java field name; a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
+| `<fieldName>Display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
+| `<fieldName>Ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }` |
+| `<fieldName>Code` | catalog-`Ref<>` attrs only | the target's code |
+| `<fieldName>Avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
+| `<fieldName>Color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
+
+### Storage compatibility representation
+
+Append `?representation=storage` to retain the pre-#314 response shape. It maps the default names
+back to `_id`, `_description`, `_posted`, `tax_id`, `region_display`, and so on. This is an explicit
+compatibility contract, not an undocumented database leak; tests pin it while consumers migrate.
+The bundled SPA consumes the preferred logical representation; storage column names remain confined
+to its server-side query descriptors.
+
+Writes accept both vocabularies during the compatibility period. For example, `taxId` and `tax_id`
+are aliases, as are `description` and `_description`; the logical spelling is canonical. Supplying
+both with equal values is allowed. Supplying both with different values returns `400` instead of
+choosing one silently. Read-only keys and display/ref/color companions remain ignored by partial
+writes, so a default logical GET payload can be submitted to PUT without renaming writable keys.
 
 ### Temporal values
 
@@ -145,12 +167,12 @@ offset is treated as transport decoration and the local fields are preserved wit
 
 PostgreSQL/JDBC may internally expose timestamps as `Timestamp` or offset-bearing values, but the
 read API normalizes those before JSON serialization. The generated form also canonicalizes loaded
-catalog, document, and tabular-section temporal values before save. Headless callers must still map
-the snake_case read key to the camelCase write field:
+catalog, document, and tabular-section temporal values before save. Default headless reads and
+writes use the same field name:
 
 ```jsonc
 // GET /api/documents/Events/{id}
-{ "starts_at": "2026-06-04T10:00" }
+{ "startsAt": "2026-06-04T10:00" }
 
 // PUT /api/documents/Events/{id}
 { "startsAt": "2026-06-04T10:00" }
@@ -160,18 +182,18 @@ the snake_case read key to the camelCase write field:
 
 ```jsonc
 {
-  "_id": "f3b1…",            // UUID primary key
-  "_code": "C-000123",        // natural key / slug
-  "_description": "Acme Corp",
-  "_deletion_mark": false,
-  "_is_folder": false,
-  "_parent": null,            // UUID of parent folder (hierarchical catalogs)
-  "_version": 3,              // optimistic-lock version
-  "tax_id": "B12345678",      // attribute column (field `taxId`)
+  "id": "f3b1…",             // UUID primary key
+  "code": "C-000123",        // natural key / slug
+  "description": "Acme Corp",
+  "deletionMark": false,
+  "folder": false,
+  "parent": null,             // UUID of parent folder (hierarchical catalogs)
+  "version": 3,               // optimistic-lock version
+  "taxId": "B12345678",      // attribute field
   "region": "a17c…",          // a Ref<> / enum attribute is stored as a UUID
-  "region_display": "Madrid", // + resolved display (see "Reference & enum expansion")
-  "region_ref": { "id": "a17c…", "type": "catalog", "display": "Madrid", "code": "R-01", "avatarUrl": null },
-  "region_code": "R-01"       // catalog-ref only; + region_avatar when the target has one
+  "regionDisplay": "Madrid",  // + resolved display (see "Reference & enum expansion")
+  "regionRef": { "id": "a17c…", "type": "Regions", "display": "Madrid", "code": "R-01" },
+  "regionCode": "R-01"        // catalog-ref only; + regionAvatar when the target has one
 }
 ```
 
@@ -179,20 +201,20 @@ the snake_case read key to the camelCase write field:
 
 ```jsonc
 {
-  "_id": "…",
-  "_number": "SO-00042",      // natural key / slug
-  "_date": "2026-06-04T10:00:00",
-  "_posted": true,
-  "_deletion_mark": false,
-  "_version": 1,
-  "customer": "…",            // Ref<> UUID (+ customer_display / customer_ref)
+  "id": "…",
+  "number": "SO-00042",       // natural key / slug
+  "date": "2026-06-04T10:00:00",
+  "posted": true,
+  "deletionMark": false,
+  "version": 1,
+  "customer": "…",            // Ref<> UUID (+ customerDisplay / customerRef)
   "items": [                  // tabular section, keyed by its section name — GET /{id} only
     {
-      "_id": "…",
-      "_parent_id": "…",      // back-reference to the document
-      "_line_number": 1,
+      "id": "…",
+      "parentId": "…",        // back-reference to the document
+      "lineNumber": 1,
       "product": "…",         // row attribute columns, same conventions
-      "product_display": "Widget",
+      "productDisplay": "Widget",
       "quantity": 3
     }
   ]
@@ -204,25 +226,28 @@ returns `404` when the id is unknown.
 
 ## Reference & enum expansion
 
-A `Ref<>` or `@Enumeration` attribute is stored as a UUID. For each such column the read layer adds
+A `Ref<>` or `@Enumeration` attribute is stored as a UUID. For each such field the read layer adds
 two sibling keys so the client need not make a second call:
 
-- `{column}_display` — a human-readable label (catalog description or code; for an enum, the value's
+- `{fieldName}Display` — a human-readable label (catalog description or code; for an enum, the value's
   `@EnumLabel`, falling back to the constant name when unlabelled).
-- `{column}_ref` — an object `{ id, type, display, code?, avatarUrl?, color? }` for richer rendering
-  (`type` is `catalog`/`document`; `code`/`avatarUrl`/`color` present for catalog refs). Document
-  refs get only `_display` + `_ref`.
-- `{column}_code` — catalog refs only: the target's code.
-- `{column}_avatar` — catalog refs only: the target's `avatar_url`, when it has one.
-- `{column}_color` — a badge colour (CSS hex) the client paints as a status pill. Emitted for an
+- `{fieldName}Ref` — an object `{ id, type, display, code?, avatarUrl?, color? }` for richer rendering
+  (`type` is the target's logical name; `code`/`avatarUrl`/`color` may be present for catalog refs).
+  Document refs get only `Display` + `Ref` companions.
+- `{fieldName}Code` — catalog refs only: the target's code.
+- `{fieldName}Avatar` — catalog refs only: the target's `avatar_url`, when it has one.
+- `{fieldName}Color` — a badge colour (CSS hex) the client paints as a status pill. Emitted for an
   **enum** value declaring `@EnumLabel(color="#…")`, and for a **catalog ref** whose target declares
   a `color` attribute (column-name convention, like `avatar_url`) holding a non-blank value — this
   is what lets a user-editable status *catalog* keep the colored pills a status enum had. Absent
   when there is no colour.
 
-The raw `{column}` value remains the UUID for `Ref<>`, or `fully.qualified.JavaType|UUID` for a
-`PolyRef`, so writers can round-trip it unchanged. A polymorphic `_ref` also includes `kind`
+The raw `{fieldName}` value remains the UUID for `Ref<>`, or `fully.qualified.JavaType|UUID` for a
+`PolyRef`, so writers can round-trip it unchanged. A polymorphic `Ref` companion also includes `kind`
 (`catalog`/`document`) and `javaType`; its `type` is the selected target's logical name.
+
+With `?representation=storage`, these companions retain their former `{column}_display`,
+`{column}_ref`, `{column}_code`, `{column}_avatar`, and `{column}_color` names.
 
 ## Secrets
 
@@ -230,14 +255,14 @@ Columns from a `@Attribute(secret = true)` field are **write-only**. On read the
 place with the sentinel string `__SECRET_SET__` when a value is stored, or `null` when empty — the
 ciphertext is never returned. Submitting the sentinel back on a write means "leave unchanged".
 
-## Writes (partial, camelCase)
+## Writes (partial, logical names plus storage aliases)
 
-Writes are the mirror image of reads, and two things surprise people:
+Writes mirror the default logical reads:
 
-- **Request bodies use camelCase `fieldName`, not the snake_case read columns.** You read
-  `tax_id` / `region_display`, but you write `{ "taxId": "…" }`. System fields are the logical names
-  too: catalog `code` / `description` / `folder` / `parent` / `version`; document `number` / `date` /
-  `version` (`_version` is also accepted). A `Ref<>`/enum is written as its bare UUID string.
+- **Request bodies canonically use camelCase `fieldName`.** System fields are catalog `code` /
+  `description` / `folder` / `parent` / `version` and document `number` / `date` / `version`.
+  Storage aliases (`tax_id`, `_description`, `_version`, and tabular-row storage columns) are also
+  accepted; conflicting duplicate spellings are `400`. A `Ref<>`/enum is written as its bare UUID string.
   A `PolyRef` accepts its raw `JavaType|UUID` string or `{ "type": "<logical-name-or-Java-type>",
   "id": "<uuid>" }`; the declared `@RefTargets` allowlist is enforced.
 - **Updates are partial.** `PUT /api/{catalogs|documents}/{name}/{id}` only touches the fields present
@@ -264,7 +289,8 @@ Two more contracts worth knowing:
 
 ## Filtering & deletion
 
-`list` returns only live rows (`_deletion_mark = false`). Deletes are soft (the mark is set), so a
+`list` returns only live rows (`deletionMark = false`; `_deletion_mark` in storage representation).
+Deletes are soft (the mark is set), so a
 deleted row disappears from `list` but is still reachable by `get` until purged.
 
 ## Reacting to changes
@@ -287,5 +313,5 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 
 There is no separate "public projection" endpoint yet; the generic read API is the contract above and
 is auth-gated. To expose a curated, anonymous read surface, front it with your own controller that
-maps these column-name keys to your DTOs, and (if it also accepts writes) add its path to
+maps the logical entity to your DTOs, and (if it also accepts writes) add its path to
 `onno.auth.public-paths` and `onno.auth.csrf-ignored-paths`.

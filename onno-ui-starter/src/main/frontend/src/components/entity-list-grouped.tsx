@@ -4,7 +4,15 @@ import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
 import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
-import { ListCell, ROW_H, eventMatches, type ListAggregate, type ListColumn } from "@/components/entity-list-widget";
+import {
+  ListCell,
+  ROW_H,
+  entityRowId,
+  entityRowTone,
+  eventMatches,
+  type ListAggregate,
+  type ListColumn,
+} from "@/components/entity-list-widget";
 
 /** One expand filter param a group header carries; the flat feed replays it to load the group's rows. */
 type ExpandParam = { op: string; column: string; value: string };
@@ -224,7 +232,7 @@ export function GroupedList({
       const st = expanded[i];
       if (!st) return;
       offsets[i] = ids.length;
-      for (const r of st.rows) ids.push(r._id != null ? String(r._id) : "");
+      for (const r of st.rows) ids.push(entityRowId(r) ?? "");
     });
     return { ids, offsets };
   }, [groups, expanded]);
@@ -362,8 +370,8 @@ export function GroupedList({
                       (across group boundaries), right-click opens the island's row menu. */}
                   {open && state.rows.map((row, ri) => {
                     const absIdx = (flat.offsets[i] ?? 0) + ri;
-                    const rowId = openable && row._id != null ? String(row._id) : null;
-                    const url = openable ? `onno://${kind}/${name}/${row._id}` : undefined;
+                    const rowId = openable ? entityRowId(row) : null;
+                    const url = rowId ? `onno://${kind}/${name}/${rowId}` : undefined;
                     const isSelected = rowId != null && selected.has(rowId);
                     return (
                       <div
@@ -418,10 +426,11 @@ export function GroupedList({
                           "grid items-center gap-3 border-b border-border/50 text-sm",
                           url && "cursor-pointer",
                           leftPad,
-                          // Conditional formatting (`_style`) replaces the zebra stripe when set;
+                          // Conditional formatting (`style`, with `_style` compatibility) replaces
+                          // the zebra stripe when set;
                           // selection still wins over both.
-                          !isSelected && rowStyleClass(row._style),
-                          ri % 2 === 1 && !isSelected && !rowStyleClass(row._style) && "bg-muted/20",
+                          !isSelected && rowStyleClass(entityRowTone(row)),
+                          ri % 2 === 1 && !isSelected && !rowStyleClass(entityRowTone(row)) && "bg-muted/20",
                           isSelected && "bg-primary/10"
                         )}
                         style={{ minHeight: ROW_H, gridTemplateColumns: template }}

@@ -28,7 +28,7 @@ class RefPickerActionMetadataTest {
 
     @Catalog(name = "PickCustomers")
     static class Customer extends CatalogObject {
-        @Attribute(displayName = "Phone", length = 40)
+        @Attribute(name = "phone_number", displayName = "Phone", length = 40)
         private String phone;
     }
 
@@ -73,8 +73,7 @@ class RefPickerActionMetadataTest {
 
         Map<String, Object> described = svc.describeDocument(scanner.scanDocument(Order.class));
 
-        // The configured "phone" field on the target resolves to its column key, which the picker
-        // reads from each option's payload.
+        // The configured target field stays logical even when its storage column differs.
         assertThat(attr(described, "customer").get("refSecondary")).isEqualTo("phone");
     }
 

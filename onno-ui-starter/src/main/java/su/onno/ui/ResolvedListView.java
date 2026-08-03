@@ -125,6 +125,12 @@ public record ResolvedListView(String title, List<Column> columns,
      */
     /** {@code cellMenu}: a row-action submenu label the cell opens directly on right-click
      *  ({@code ListSpec.cellMenu}); blank = the cell has no menu of its own. */
-    public record Column(String label, String columnName, String width, String widget, String format,
-                         String hint, String cellMenu) {}
+    public record Column(String label, String columnName, String fieldName, String width, String widget,
+                         String format, String hint, String cellMenu) {
+        /** Backward-compatible constructor for descriptors created before logical response keys. */
+        public Column(String label, String columnName, String width, String widget, String format,
+                      String hint, String cellMenu) {
+            this(label, columnName, columnName, width, widget, format, hint, cellMenu);
+        }
+    }
 }

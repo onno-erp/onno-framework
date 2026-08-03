@@ -39,24 +39,32 @@ public class GenericCatalogController {
     @GetMapping("/{name}/children")
     public List<Map<String, Object>> children(@PathVariable String name,
                                               @RequestParam(required = false) UUID parent,
+                                              @RequestParam(defaultValue = "logical") String representation,
                                               Principal principal) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
-        return query.children(desc, parent);
+        return EntityJsonRepresentation.catalogs(desc, query.children(desc, parent),
+                EntityJsonRepresentation.parse(representation));
     }
 
     @GetMapping("/{name}/tree")
-    public List<Map<String, Object>> tree(@PathVariable String name, Principal principal) {
+    public List<Map<String, Object>> tree(@PathVariable String name,
+                                          @RequestParam(defaultValue = "logical") String representation,
+                                          Principal principal) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
-        return query.tree(desc);
+        return EntityJsonRepresentation.catalogs(desc, query.tree(desc),
+                EntityJsonRepresentation.parse(representation));
     }
 
     @GetMapping("/{name}/{id}")
-    public Map<String, Object> get(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+    public Map<String, Object> get(@PathVariable String name, @PathVariable UUID id,
+                                   @RequestParam(defaultValue = "logical") String representation,
+                                   Principal principal) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(principal, desc);
-        return query.get(desc, id);
+        return EntityJsonRepresentation.catalog(desc, query.get(desc, id),
+                EntityJsonRepresentation.parse(representation));
     }
 
     /**
@@ -69,16 +77,23 @@ public class GenericCatalogController {
      */
     @GetMapping("/{name}/{id}/related/{relatedName}")
     public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
-                                             @PathVariable String relatedName, Principal principal) {
+                                             @PathVariable String relatedName,
+                                             @RequestParam(defaultValue = "logical") String representation,
+                                             Principal principal) {
         CatalogDescriptor parent = query.require(name);
         access.requireRead(principal, parent);
-        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, principal);
+        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, principal,
+                EntityJsonRepresentation.parse(representation));
     }
 
     @PostMapping("/{name}")
     public Map<String, Object> create(@PathVariable String name, @RequestBody Map<String, Object> body,
+                                      @RequestParam(defaultValue = "logical") String representation,
                                       Principal principal) {
-        return commands.create(query.require(name), body, principal);
+        CatalogDescriptor desc = query.require(name);
+        EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
+        return EntityJsonRepresentation.catalog(desc, commands.create(desc, body, principal),
+                mode);
     }
 
     /**
@@ -88,9 +103,12 @@ public class GenericCatalogController {
      * (lifecycle hooks, validation, write access). Powers the list's clipboard paste (⌘C/⌘V).
      */
     @PostMapping("/{name}/{id}/duplicate")
-    public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id, Principal principal) {
+    public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id,
+                                         @RequestParam(defaultValue = "logical") String representation,
+                                         Principal principal) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(principal, desc); // create() enforces write below
+        EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
         Map<String, Object> row = query.get(desc, id);
         Map<String, Object> body = new LinkedHashMap<>();
         if (row.get("_description") != null) {
@@ -110,14 +128,19 @@ public class GenericCatalogController {
                 body.put(attr.fieldName(), v);
             }
         }
-        return commands.create(desc, body, principal);
+        return EntityJsonRepresentation.catalog(desc, commands.create(desc, body, principal),
+                mode);
     }
 
     @PutMapping("/{name}/{id}")
     public Map<String, Object> update(@PathVariable String name, @PathVariable UUID id,
                                       @RequestBody Map<String, Object> body,
+                                      @RequestParam(defaultValue = "logical") String representation,
                                       Principal principal) {
-        return commands.update(query.require(name), id, body, principal);
+        CatalogDescriptor desc = query.require(name);
+        EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
+        return EntityJsonRepresentation.catalog(desc, commands.update(desc, id, body, principal),
+                mode);
     }
 
     /**

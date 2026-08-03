@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe("EntityFormWidget temporal round trips (#267)", () => {
   it("submits an unchanged catalog LocalDateTime without its transport offset", async () => {
-    updateCatalogItem.mockResolvedValue({ _id: "episode-1", observed_at: "2026-01-16T04:00" });
+    updateCatalogItem.mockResolvedValue({ id: "episode-1", observedAt: "2026-01-16T04:00" });
     validateRecord.mockResolvedValue({ fieldErrors: {}, formErrors: [] });
     const form: FormDescriptor = {
       kind: "catalogs",
@@ -57,7 +57,7 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
         name: "Episodes",
         attributes: [temporalAttr("observedAt", "observed_at")],
       },
-      initial: { _id: "episode-1", observed_at: "2026-01-16T04:00:00.000+00:00" },
+      initial: { id: "episode-1", observedAt: "2026-01-16T04:00:00.000+00:00" },
     };
 
     render(<EntityFormWidget form={form} />);
@@ -74,7 +74,7 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
   });
 
   it("normalizes document header and tabular-section LocalDateTimes before save", async () => {
-    updateDocument.mockResolvedValue({ _id: "event-1" });
+    updateDocument.mockResolvedValue({ id: "event-1" });
     validateRecord.mockResolvedValue({ fieldErrors: {}, formErrors: [] });
     const form: FormDescriptor = {
       kind: "documents",
@@ -92,9 +92,9 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
         }],
       },
       initial: {
-        _id: "event-1",
-        starts_at: "2026-01-16T04:00:00.000+03:00",
-        slots: [{ happens_at: "2026-01-16T05:30:00Z" }],
+        id: "event-1",
+        startsAt: "2026-01-16T04:00:00.000+03:00",
+        slots: [{ happensAt: "2026-01-16T05:30:00Z" }],
       },
     };
 

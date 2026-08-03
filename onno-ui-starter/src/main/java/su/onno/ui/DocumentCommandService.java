@@ -28,7 +28,6 @@ import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -78,7 +77,7 @@ public class DocumentCommandService {
     public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
+        Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
         UUID id = UUID.randomUUID();
 
         String number = resolveNumber(desc, body);
@@ -149,7 +148,7 @@ public class DocumentCommandService {
                                        Principal principal) {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody); // working copy; hooks may derive fields we merge in
+        Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
 
         // Reconstruct the stored document, overlay the submitted changes (including tabular rows),
         // and run the write lifecycle (beforeWrite + rules) on the merged state so derived fields
@@ -248,7 +247,7 @@ public class DocumentCommandService {
     public Map<String, Object> validate(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
                                         Principal principal) {
         access.requireWrite(principal, desc);
-        Map<String, Object> body = new LinkedHashMap<>(requestBody);
+        Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
 
         ValidationErrors errors = new ValidationErrors();
         boolean isNew = id == null;

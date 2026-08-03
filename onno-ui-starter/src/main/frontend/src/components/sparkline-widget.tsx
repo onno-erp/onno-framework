@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { Sparkline } from "@/components/sparkline";
 import { AnimatedNumber } from "@/components/ui/animated-number";
+import { logicalEntityKey } from "@/lib/entity-keys";
 
 /**
  * The minimal trend tile: a title, the aggregate figure, and an inline sparkline — no delta badge
@@ -24,15 +25,18 @@ export function SparklineWidget({ widget }: { widget: DashboardWidgetMeta }) {
   // Catalog/document tiles fetch pre-aggregated buckets (#199); registers keep the row path, so
   // hand useWidgetRows an entityType it ignores on the bucket path (the hook must still be called).
   const isRegister = widget.entityType === "register";
+  const fieldKey = isRegister ? (key: string) => key : logicalEntityKey;
   const rowsWidget = useMemo(() => (isRegister ? widget : { ...widget, entityType: "" }), [isRegister, widget]);
   const items = useWidgetRows(rowsWidget);
 
   const metric = (cfg.metric as Metric) ?? "count";
-  const metricField = cfg.metricField;
-  const groupBy = cfg.groupBy ?? "_date";
+  const metricField = cfg.metricField ? fieldKey(cfg.metricField) : undefined;
+  const groupBy = fieldKey(
+    cfg.groupBy ?? (isRegister ? "_period" : "date")
+  );
   const groupByDate =
     (cfg.groupByDate as GroupByDate | undefined) ??
-    (groupBy === "_date" || !cfg.groupBy ? "day" : undefined);
+    (groupBy === "date" || groupBy === "_period" ? "day" : undefined);
   const color = resolveColor(cfg.colors);
   const fmtNum = (n: number) =>
     formatCompact(n, {
@@ -43,15 +47,14 @@ export function SparklineWidget({ widget }: { widget: DashboardWidgetMeta }) {
       locale: cfg.locale,
     });
 
-  // The bucket request: same measure/grouping as the row path, with the authored "_display" suffix
-  // stripped — the server groups the real column and resolves labels itself. Catalogs have no _date
-  // column, so a defaulted "_date" grouping degrades to the endpoint's single grand-total bucket.
+  // The bucket request groups by the real field; the server resolves display labels itself.
+  // Catalogs have no date system field, so the default degrades to one grand-total bucket.
   const params = useMemo(() => {
     if (isRegister) return null;
     const p: Record<string, string> = { metric };
     if (metricField) p.field = metricField;
-    const group = groupBy.replace(/_display$/, "");
-    if (widget.entityType === "document" || group !== "_date") {
+    const group = groupBy.replace(/(?:_display|Display)$/, "");
+    if (widget.entityType === "document" || group !== "date") {
       p.groupBy = group;
       if (groupByDate) p.groupByDate = groupByDate;
     }
