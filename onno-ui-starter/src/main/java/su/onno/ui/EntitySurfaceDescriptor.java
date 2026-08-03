@@ -24,7 +24,9 @@ record EntitySurfaceDescriptor(
 
     static EntitySurfaceDescriptor catalog(CatalogDescriptor desc) {
         Set<String> sortable = new LinkedHashSet<>(Set.of("_code", "_description"));
-        desc.attributes().forEach(a -> sortable.add(a.columnName()));
+        desc.attributes().stream()
+                .filter(a -> !a.secret())
+                .forEach(a -> sortable.add(a.columnName()));
         return new EntitySurfaceDescriptor(
                 "catalog",
                 desc.logicalName(),
@@ -41,7 +43,9 @@ record EntitySurfaceDescriptor(
 
     static EntitySurfaceDescriptor document(DocumentDescriptor desc) {
         Set<String> sortable = new LinkedHashSet<>(Set.of("_number", "_date", "_posted"));
-        desc.attributes().forEach(a -> sortable.add(a.columnName()));
+        desc.attributes().stream()
+                .filter(a -> !a.secret())
+                .forEach(a -> sortable.add(a.columnName()));
         return new EntitySurfaceDescriptor(
                 "document",
                 desc.logicalName(),
@@ -58,6 +62,7 @@ record EntitySurfaceDescriptor(
 
     Set<String> columnNames() {
         return attributes.stream()
+                .filter(a -> !a.secret())
                 .map(a -> a.columnName().toLowerCase())
                 .collect(Collectors.toSet());
     }
@@ -69,6 +74,7 @@ record EntitySurfaceDescriptor(
     /** Columns whose SQL type is UUID (refs and enums), so a filter binds them typed (PG-strict). */
     Set<String> uuidColumns() {
         return attributes.stream()
+                .filter(a -> !a.secret())
                 .filter(a -> a.isRef() || a.javaType().isEnum())
                 .map(a -> a.columnName().toLowerCase())
                 .collect(Collectors.toSet());

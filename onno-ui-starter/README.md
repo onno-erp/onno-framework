@@ -207,6 +207,10 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 | GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
 | GET | `/api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` | The **widget aggregate** read behind `chart`/`stat`/`sparkline`/`gauge` (#199): a server-side `GROUP BY groupBy[, seriesBy]` (`groupByDate` = `minute`…`month` buckets a timestamp via `DATE_TRUNC`; `dateField`+`from`/`to` window the rows) returning `{ buckets: [{ key, label?, series?, seriesLabel?, value, value2? }], truncated, span? }` — O(buckets) instead of the whole table. Blank `groupBy` → one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/`Ref` buckets carry a resolved `label`; buckets cap at 1000 (`truncated: true`). Date-bucketed axes always **zero-fill empty periods** over the window (or between first/last data, unbounded) with `{ key, value: 0 }` fillers (#246); the filled spine honors the same 1000 cap. |
 
+`@Attribute(secret = true)` fields are write-only and are never valid list filter, sort, grouping, or
+aggregate columns. Query endpoints cannot expose encrypted values indirectly through row membership
+or counts.
+
 - **No COUNT by default.** `hasMore` (one extra row fetched under the hood) is what the scroller
   needs to keep loading, so the hot path never pays for a full count. Add `?count=exact` for a precise
   total, or `?count=estimate` for a cheap PostgreSQL planner figure (omitted on H2 or when a
