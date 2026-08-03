@@ -229,6 +229,9 @@ The raw `{column}` value remains the UUID for `Ref<>`, or `fully.qualified.JavaT
 Columns from a `@Attribute(secret = true)` field are **write-only**. On read they are replaced in
 place with the sentinel string `__SECRET_SET__` when a value is stored, or `null` when empty — the
 ciphertext is never returned. Submitting the sentinel back on a write means "leave unchanged".
+Secret attributes are also excluded from every catalog/document list-query allowlist: clients cannot
+filter, sort, group, or aggregate by them. This prevents row membership or counts from becoming a
+blind oracle for encrypted values.
 
 ## Writes (partial, camelCase)
 
