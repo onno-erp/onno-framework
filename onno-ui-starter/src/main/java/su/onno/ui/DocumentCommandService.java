@@ -100,6 +100,7 @@ public class DocumentCommandService {
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
             if (EntityWriteSupport.bake(lifecycle, doc, true, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
+                writeBackTabularSections(doc, desc, body);
                 body.put("number", doc.getNumber());
                 if (doc.getDate() != null) body.put("date", doc.getDate().toString());
             }
@@ -138,6 +139,7 @@ public class DocumentCommandService {
         });
 
         insertTabularSections(desc, id, body);
+        lifecycle.runAfterWrite(doc);
 
         Map<String, Object> result = query.get(desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.DOCUMENT,
@@ -168,6 +170,7 @@ public class DocumentCommandService {
             LocalDateTime dateBefore = doc.getDate();
             if (EntityWriteSupport.bake(lifecycle, doc, false, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
+                writeBackTabularSections(doc, desc, body);
                 if (!Objects.equals(doc.getNumber(), numberBefore)) body.put("number", doc.getNumber());
                 if (doc.getDate() != null && !Objects.equals(doc.getDate(), dateBefore)) {
                     body.put("date", doc.getDate().toString());
@@ -228,6 +231,7 @@ public class DocumentCommandService {
             }
         }
         insertTabularSections(desc, id, body);
+        lifecycle.runAfterWrite(doc);
 
         Map<String, Object> result = query.get(desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.DOCUMENT,
@@ -281,13 +285,11 @@ public class DocumentCommandService {
         EntityWriteSupport.requireWritable(properties);
         access.requireWrite(principal, desc);
         DocumentObject doc = loadDocumentObject(desc, id);
-        // Re-posting (1C "Провести" on an already-posted document): reverse the existing
-        // register movements before writing fresh ones, otherwise posting twice would
-        // double-count. A first-time post sees posted=false and skips this.
         if (doc.isPosted()) {
-            postingService.unpost(doc);
+            postingService.repost(doc);
+        } else {
+            postingService.post(doc);
         }
-        postingService.post(doc);
         Map<String, Object> result = query.get(desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.POSTED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, naturalKey(result)));
@@ -395,6 +397,39 @@ public class DocumentCommandService {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private void writeBackTabularSections(DocumentObject doc, DocumentDescriptor desc,
+                                          Map<String, Object> body) {
+        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+            if (!(body.get(ts.name()) instanceof List<?> submitted)) {
+                continue;
+            }
+            Field listField = findField(desc.javaClass(), ts.fieldName());
+            if (listField == null) {
+                continue;
+            }
+            listField.setAccessible(true);
+            try {
+                if (!(listField.get(doc) instanceof List<?> materialized)) {
+                    continue;
+                }
+                List<Map<String, Object>> rewritten = new ArrayList<>();
+                for (int i = 0; i < materialized.size(); i++) {
+                    Object rowObject = materialized.get(i);
+                    Map<String, Object> rowBody = i < submitted.size()
+                            && submitted.get(i) instanceof Map<?, ?> original
+                            ? new LinkedHashMap<>((Map<String, Object>) original)
+                            : new LinkedHashMap<>();
+                    lifecycle.writeBackAll(rowObject, ts.attributes(), rowBody);
+                    rewritten.add(rowBody);
+                }
+                body.put(ts.name(), rewritten);
+            } catch (IllegalAccessException unreachable) {
+                throw new IllegalStateException(unreachable);
+            }
+        }
+    }
+
     /**
      * Reconstruct the document for the update lifecycle, returning {@code null} (rather than 404ing)
      * when the row is missing so any pending validation error surfaces first and the existing
@@ -428,7 +463,8 @@ public class DocumentCommandService {
     @SuppressWarnings("unchecked")
     private DocumentObject loadDocumentObject(DocumentDescriptor desc, UUID id) {
         Map<String, Object> raw = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")
+                h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE _id = :id AND _deletion_mark = FALSE")
                         .bind("id", id)
                         .mapToMap()
                         .findOne()

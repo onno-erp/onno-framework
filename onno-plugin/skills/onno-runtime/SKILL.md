@@ -10,33 +10,53 @@ description: >-
 
 # onno Runtime Verification
 
-Everything under `/api/**` is authenticated. Mutations are CSRF-protected.
+Most `/api/**` routes are authenticated; the configured bootstrap allowlist is public. Cookie-mode
+mutations are CSRF-protected. Resource-server mode uses bearer tokens and disables CSRF.
 
 ## API Traps
 
 - There is no anonymous `/api/ui/metadata/manifest` endpoint.
 - Unknown non-`/api` paths return the SPA `index.html` with HTTP 200. Test API URLs, not page URLs.
-- `{name}` route segments are entity display names such as `Properties` or `Sales Orders`, not Java
-  class names.
+- `{name}` route segments are annotation logical names, not Java class names or localized titles.
+- Detect optional starters before testing them. The canonical example does not include MCP/import.
+- Separate read-only probes, dry-run validation, and mutations. Use isolated storage/database for
+  seeders, uploads, imports, posting, and CRUD.
 - List/get JSON expands refs and enums with companion keys such as `{col}_display`, `{col}_ref`, and
   `{col}_color`; secrets read as `__SECRET_SET__`.
 
 ## Curl Recipe
 
 ```bash
-curl -c jar.txt http://localhost:8080/api/config
-curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
-  -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}'
+base=http://localhost:8080
+jar=$(mktemp)
+curl -fsS -c "$jar" "$base/api/auth/csrf" >/dev/null
+curl -fsS -b "$jar" -c "$jar" -X POST "$base/api/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"manager@onnobooks.local","password":"manager"}' | jq -e '.authenticated'
 
-curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50'
+csrf=$(curl -fsS -b "$jar" -c "$jar" "$base/api/auth/csrf" | jq -er .token)
+book_id=$(curl -fsS -b "$jar" "$base/api/list/catalogs/Books?limit=1" | jq -er '.rows[0]._id')
+curl -fsS -b "$jar" "$base/api/catalogs/Books/$book_id" | jq -e '._id'
 
-XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)
-curl -b jar.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
-  -d '{...entity JSON...}' http://localhost:8080/api/catalogs/Properties
+order_id=$(curl -fsS -b "$jar" "$base/api/list/documents/Orders?limit=1" | jq -er '.rows[0]._id')
+curl -fsS -b "$jar" "$base/api/documents/Orders/$order_id" | jq -e '.items'
+curl -fsS -b "$jar" "$base/api/registers/Book%20Stock/balance" | jq -e .
+curl -fsS -b "$jar" "$base/api/divkit/shell" | jq -e '.nav'
+
+curl -NsS --max-time 3 -b "$jar" "$base/api/events" 2>/dev/null | grep -q '^event:ready'
+
+# Safe dry run: no persistence.
+curl -fsS -b "$jar" -H "X-XSRF-TOKEN: $csrf" -H 'Content-Type: application/json' \
+  -d '{}' "$base/api/documents/Orders/validate" | jq -e 'has("valid")'
 ```
 
-Use MCP `describe_metadata`, CRUD, register read, and posting tools when available; they follow the
-same auth and RBAC model.
+The example enables demo auto-login by default, so a real anonymous/401 check requires an isolated
+instance with it disabled. Startup also seeds data. Use ephemeral H2/media paths.
+
+For an app that includes import, use CSV preview or `dryRun=true`. For media, an empty
+CSRF-protected upload expecting `400` safely confirms routing; a real upload writes storage. MCP uses
+streamable HTTP with stateless HTTP Basic: initialize, list tools, and call only
+`describe_metadata` while diagnosing; do not invoke write/post tools by default.
 
 ## Verification Commands
 

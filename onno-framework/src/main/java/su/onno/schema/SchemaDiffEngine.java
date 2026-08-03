@@ -107,7 +107,7 @@ public class SchemaDiffEngine {
 
         for (ColumnModel column : table.columns()) {
             if (dbColumns.contains(upper(column.name()))) {
-                diffColumnType(table, column, snapshotTable, changes);
+                diffColumn(table, column, snapshotTable, changes);
                 continue;
             }
             String renamedFrom = null;
@@ -135,7 +135,10 @@ public class SchemaDiffEngine {
         }
 
         for (String dbColumn : dbColumns) {
-            if (!desiredColumnsUpper.contains(dbColumn) && !renamedAwayColumns.contains(dbColumn)) {
+            if (!desiredColumnsUpper.contains(dbColumn)
+                    && !renamedAwayColumns.contains(dbColumn)
+                    && snapshotTable != null
+                    && snapshotTable.column(dbColumn) != null) {
                 String columnName = dbColumn.toLowerCase(Locale.ROOT);
                 changes.add(new SchemaChange(Type.DROP_COLUMN, table.name(), columnName,
                         "no longer in the metadata model", true,
@@ -144,25 +147,37 @@ public class SchemaDiffEngine {
         }
     }
 
-    private void diffColumnType(TableModel table, ColumnModel column,
-                                SchemaSnapshot.TableSnapshot snapshotTable,
-                                List<SchemaChange> changes) {
+    private void diffColumn(TableModel table, ColumnModel column,
+                            SchemaSnapshot.TableSnapshot snapshotTable,
+                            List<SchemaChange> changes) {
         if (snapshotTable == null) {
             return;
         }
         SchemaSnapshot.ColumnSnapshot recorded = snapshotTable.column(column.name());
-        if (recorded == null || recorded.type() == null) {
+        if (recorded == null) {
             return;
         }
-        String oldType = recorded.type().trim();
-        String newType = column.sqlType().trim();
-        if (oldType.equalsIgnoreCase(newType)) {
-            return;
+        if (recorded.type() != null) {
+            String oldType = recorded.type().trim();
+            String newType = column.sqlType().trim();
+            if (!oldType.equalsIgnoreCase(newType)) {
+                boolean widening = isWidening(oldType, newType);
+                changes.add(new SchemaChange(Type.ALTER_COLUMN_TYPE, table.name(), column.name(),
+                        oldType + " -> " + newType, !widening,
+                        List.of(DdlRenderer.alterColumnType(
+                                table.name(), column.name(), newType, dialect))));
+            }
         }
-        boolean widening = isWidening(oldType, newType);
-        changes.add(new SchemaChange(Type.ALTER_COLUMN_TYPE, table.name(), column.name(),
-                oldType + " -> " + newType, !widening,
-                List.of(DdlRenderer.alterColumnType(table.name(), column.name(), newType, dialect))));
+        if (recorded.notNull() != column.notNull()) {
+            boolean tightening = column.notNull();
+            String detail = tightening
+                    ? "nullable -> NOT NULL; backfill existing nulls before applying"
+                    : "NOT NULL -> nullable";
+            changes.add(new SchemaChange(Type.ALTER_COLUMN_NULLABILITY,
+                    table.name(), column.name(), detail, tightening,
+                    List.of(DdlRenderer.alterColumnNullability(
+                            table.name(), column.name(), column.notNull()))));
+        }
     }
 
     /** Whether changing {@code oldType} to {@code newType} cannot lose data. */

@@ -20,11 +20,13 @@ payment, timesheet, work order, adjustment, or check-in.
 3. Put repeated owned rows in `@TabularSection List<Row>`.
 4. Extend `DocumentObject`; each section gets its own concrete `TabularSectionRow` subclass. Share
    common row fields/behavior through a base class, never by reusing one concrete class.
-5. Seed defaults with `OnFillingHandler`.
+5. Use field initializers for values that must appear on the blank New form. Use null-guarded
+   `OnFillingHandler` for create/save defaults.
 6. Compute totals in `BeforeWriteHandler`.
 7. Validate with `Validated`.
 8. If the event affects registers, implement `Postable` or use `onno-posting`.
-9. Add `EntityView` field hints for both header fields and `section.field` line fields.
+9. Add typed `EntityView<E>` hints with getter references: `field`, `refField`, `rowField`, and
+   `rowRefField`. String/dot-path overloads are only unsafe dynamic escape hatches.
 
 ## Read The Examples
 
@@ -35,6 +37,8 @@ Read [references/examples.md](references/examples.md) when writing code. It incl
 - idempotent `onFilling`
 - status enum usage
 - document repository usage
+- typed `EntityView` header and row hints
+- authenticated create/validate/get/list verification and line-replacement semantics
 - common modeling mistakes
 
 For posting-specific examples, use `onno-posting`.

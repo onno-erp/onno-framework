@@ -27,18 +27,23 @@ put the entity in the sidebar; a `Layout` section must list it. Nav is curated.
 ## Layout
 
 Use `spec.section("Sales").icon("...").catalog(Customer.class).document(Invoice.class)` for entity
-links and `.page("/ops", "Sales Ops", "activity")` for authored pages. Use `profile()`, `roles`, and
-`viewport()` for personas. Keep the default layout (`profile() == null`) for back-office users.
+links and `.page("/ops", "Sales Ops", "activity")` for authored pages. Use `profile()` and
+`viewport()` for personas: `Layout.profile()` names the persona and
+`spec.roles(...).priority(...)` selects it. Keep the default layout (`profile() == null`) for shared
+shell/identity and back-office users.
 
 ## Page
 
 Everything is a page: `/`, `/settings`, arbitrary routes, and default entity routes such as
-`/catalogs/{name}` or `/documents/{name}`. A `Page` bean at a default route overrides the framework's
-default surface.
+`/catalogs/{lowercase_snake_name}` or `/documents/{lowercase_snake_name}`. A `Page` bean at a
+default route overrides the framework's default surface.
 
 Common builders: `b.title`, `b.subtitle`, `b.bare()`, `b.header(false)`, `b.widget(...)`,
-`b.list(entity)`, `b.constants(...)`, `b.actions(...)`, `b.custom(type, payload)`, `b.row(...)`, and
+`b.list(entity)`, `b.actions(...)`, `b.custom(type, payload)`, `b.row(...)`, and
 `b.aside(...)`.
+
+Render a constant setting with `b.widget(...).type("setting").config("constant", logicalName)`;
+there is no `b.constants(...)` API.
 
 ## EntityView
 
@@ -51,7 +56,8 @@ built-in action placement, and related lists. Use
 `fields.validation(key, FormValidator.class).dependsOn(...).debounce(...)` for advisory live
 cross-record error/warning/info feedback; keep hard invariants in the authoritative write path.
 
-Seed a New form: field initializers for scalars/enums, `OnFillingHandler` for computed defaults, and
+Seed a blank New form with field initializers for scalars/enums. Use `OnFillingHandler` for
+create/save normalization and computed defaults, and
 query-param prefill for `Ref`s and cross-navigation
 (`…/new?room=<uuid>&startsAt=2026-07-16T19:00` — keys are write-path field names, `Ref`/enum values
 are UUIDs, temporals ISO).

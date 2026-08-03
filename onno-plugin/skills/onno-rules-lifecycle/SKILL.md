@@ -16,13 +16,22 @@ Lifecycle hooks run on domain objects, not Spring beans. Do not `@Autowired` ins
 
 | Need | Use |
 | --- | --- |
-| seed default values for New forms | `OnFillingHandler` |
+| seed values visible on the blank New form | Java field initializer |
+| seed/normalize defaults on create/save | null-guarded `OnFillingHandler` |
 | compute totals/derived fields | `BeforeWriteHandler` |
 | validate invariants | `Validated` and `BusinessRule` |
 | validate immediately before posting | `BeforePostHandler` or `Validated` |
 | write register movements | `Postable` |
 | call Spring services after post | `@EventListener DocumentPostedEvent` |
+| react immediately after a successful entity persist | `AfterWriteHandler` |
 | prevent deletion | `BeforeDeleteHandler` |
+
+There is no framework `BusinessRuleSet` type. Share rules with an ordinary Java factory returning
+`List<BusinessRule>`.
+
+Repository saves and generic UI/API/import/MCP commands invoke `AfterWriteHandler` after a
+successful persist. Validation previews skip it. It is an immediate lifecycle hook, not a universal
+after-commit callback; use `EntityChangedEvent` for Spring-managed side effects after a write.
 
 Rules run on save/post — and live: the generated form debounce-calls
 `POST /api/{catalogs,documents}/{name}[/{id}]/validate` (a dry run of the same lifecycle) while the

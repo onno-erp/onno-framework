@@ -6,6 +6,7 @@
 - Round 1: Business Shape
 - Round 2: Actors And Master Data
 - Round 3: Documents And Workflows
+- Round 3A: Durable Processes And Human Tasks
 - Round 4: Lines, Quantities, Money
 - Round 5: Balances, Ledgers, History
 - Round 6: Rules And Invariants
@@ -85,8 +86,12 @@ Map answers:
 | "We maintain customers/suppliers/products/warehouses" | `@Catalog` |
 | "Products belong to categories" | `Ref<ProductCategory>` or hierarchical catalog |
 | "Categories can contain subcategories" | `@Catalog(hierarchical = true)` |
-| "Only admins change employees" | `@AccessControl(writeRoles = "ADMIN")` |
+| "Only admins change employees" | Confirm non-admin readers; `ADMIN` is already the superuser bypass |
 | "The picker needs phone/email under the name" | `EntityView.field(...).refSecondary(...)` |
+
+`@AccessControl` is deny-by-default. Ask which non-admin roles may read and write; omit `ADMIN` from
+the arrays because it always bypasses. Empty `writeRoles` inherits `readRoles`, so enumerate
+non-admin writers explicitly when they differ.
 
 Follow-up questions:
 
@@ -117,7 +122,7 @@ Map answers:
 | "Draft -> Approved -> Shipped -> Completed" | `@Enumeration` status + actions |
 | "Total is sum of lines" | `BeforeWriteHandler` |
 | "Can only post approved orders" | `Validated` or `BeforePostHandler` |
-| "Cancel should not affect stock" | branch in `handlePosting` |
+| "Unposted cancellation should not affect stock" | no movements in `handlePosting` |
 
 Follow-up questions:
 
@@ -126,6 +131,23 @@ Follow-up questions:
 - Can a posted document be edited, unposted, or reversed?
 - Are numbers auto-generated, prefixed, or imported from another system?
 - Which line fields are entered by users and which are computed?
+
+An enum status is enough for a local entity lifecycle. If work spans assigned people or objects and
+must remember active steps, audit, timers, or parallel/sequential outcomes, model a durable typed
+process instead.
+
+## Round 3A: Durable Processes And Human Tasks
+
+Ask:
+
+- Does approval or fulfillment pass between several people or departments?
+- Must the system remember who can claim, owns, delegates, or completed each step?
+- Are typed decisions, sequential/parallel approvals, timers, or child processes needed?
+- Does cancellation need a durable audit and assignment policy?
+
+Map local status/actions to the document. Map remembered coordination to `ProcessDefinition`,
+`HumanTask`, `TaskAssignment`, typed outcomes, timers, fork/join, and subprocesses. A scheduled job is
+for time-triggered work, not a substitute for human workflow.
 
 ## Round 4: Lines, Quantities, Money
 
@@ -138,6 +160,11 @@ Ask:
 - Can the same product appear more than once?
 - Are line amounts rounded, taxed, discounted, or allocated?
 - Are there serial numbers, lots, rooms, seats, vehicles, employees, or time intervals per line?
+
+For rentals/bookings, explicitly ask whether capacity or an exact asset is reserved, interval
+boundary/timezone rules, overlap, future availability, allocation timing, extensions, blocking
+periods, and location changes. Documents plus ordinary Java query/domain logic may be safer than
+assuming a current BALANCE register answers interval availability.
 
 Map answers:
 
@@ -164,6 +191,9 @@ Ask:
 - What facts change over time and need "as of date" lookup?
 - What dimensions do reports group by?
 - Which document changes each balance or total?
+- Which balances may legitimately be negative?
+- Can users post or unpost backdated documents?
+- Do later calculations depend on earlier balances?
 
 Map answers:
 
@@ -182,6 +212,9 @@ Follow-up questions:
 - What are the resources: quantity, amount, hours, points, weight?
 - Which documents add receipts and which add expenses?
 
+Map legitimate debt/overdraft to `allowNegative = true`. Use `PostingOrder.CHRONOLOGICAL` when
+backdated changes must restore later order-dependent calculations.
+
 ## Round 6: Rules And Invariants
 
 Ask:
@@ -193,6 +226,8 @@ Ask:
 - What values are defaulted?
 - What values are derived and should not be edited?
 - What data must remain after deletion?
+- Which settings are truly global (legal company name, default currency/location, tax defaults),
+  and which vary by company/location/date?
 
 Map answers:
 
@@ -210,6 +245,9 @@ Follow-up questions:
 - Does it apply on save, on post, or on a specific action?
 - Is the message user-facing and localized?
 - Does the rule require looking up other records?
+
+Map truly global singleton settings to `@Constant`; per-company/location/effective-dated settings
+belong on catalogs or information registers.
 
 ## Round 7: UI, Roles, And Daily Work
 
@@ -284,6 +322,7 @@ Use this pass after each answer.
    - Create/approve/ship/pay/cancel/post -> document actions/lifecycle.
    - Add/remove/consume/earn/spend -> register movements.
    - Recalculate/sync/import/export -> jobs/integrations.
+   - Claim/delegate/approve across people -> typed process/human task.
 
 3. Ask "who owns this?"
    - Same team/app -> same monolith context.
@@ -358,7 +397,8 @@ Extract:
 - `Sales` -> TURNOVER register by book/day/customer
 - `Sales`, `Inventory`, `Catalog` -> contexts
 - posting: receipt adds stock; order removes stock and records sales
-- rules: no empty order; no negative stock; cancelled order posts nothing
+- rules: no empty order; no negative stock; a never-posted cancelled order writes no movements;
+  cancelling an already-posted order requires explicit unpost, reversal, or compensation
 
 Next questions:
 
@@ -407,12 +447,14 @@ Stop discovery and implement when:
 - documents and line items are known
 - at least one register/posting rule is clear, or the slice is intentionally master-data-only
 - roles and first UI nav are clear
+- document-status versus durable-process decisions are clear
 - remaining uncertainties are explicitly listed as assumptions
 
 Keep asking if:
 
 - a document vs catalog vs register decision is ambiguous
 - posting semantics are unclear
+- durable assignment/audit needs are unclear
 - a balance might go negative but the exception rules are unknown
 - the same term means different things to different roles
 - an integration owns the source of truth

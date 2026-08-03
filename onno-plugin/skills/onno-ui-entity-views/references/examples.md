@@ -8,12 +8,13 @@
 - Action Form
 - Related List
 - Map View
+- Reachability And RBAC
 
 ## Complete EntityView
 
 ```java
 @Component
-public class SalesOrderView implements EntityView {
+public class SalesOrderView implements EntityView<SalesOrder> {
     private final SalesOrderRepository orders;
 
     public SalesOrderView(SalesOrderRepository orders) {
@@ -21,7 +22,7 @@ public class SalesOrderView implements EntityView {
     }
 
     @Override
-    public Class<?> entity() {
+    public Class<SalesOrder> entity() {
         return SalesOrder.class;
     }
 
@@ -31,20 +32,20 @@ public class SalesOrderView implements EntityView {
     }
 
     @Override
-    public void list(ListSpec list) {
-        list.columns("number", "date", "customer", "status", "total", "posted")
-                .label("number", "Order #")
-                .label("posted", "Posted")
-                .sortBy("date", true)
-                .groupable("status", "customer", "date")
-                .aggregate("total", ListSpec.Agg.SUM, "Total");
+    public void list(ListSpec<SalesOrder> list) {
+        list.columns(SalesOrder::getNumber, SalesOrder::getDate, SalesOrder::getCustomer,
+                        SalesOrder::getStatus, SalesOrder::getTotal, SalesOrder::isPosted)
+                .label(SalesOrder::getNumber, "Order #")
+                .label(SalesOrder::isPosted, "Posted")
+                .sortBy(SalesOrder::getDate, true)
+                .groupable(SalesOrder::getStatus, SalesOrder::getCustomer, SalesOrder::getDate)
+                .aggregate(SalesOrder::getTotal, ListSpec.Agg.SUM, "Total");
 
-        list.filter("status").label("Status").multiOptions();
-        list.filter("date").label("Order date").dateRange();
-        list.filter("customer").label("Customer").contains();
+        list.filter(SalesOrder::getStatus).label("Status").multiOptions();
+        list.filter(SalesOrder::getDate).label("Order date").dateRange();
 
         list.rowStyle(row -> {
-            OrderStatus status = row.enumValue("status", OrderStatus.class);
+            OrderStatus status = row.enumValue(SalesOrder::getStatus, OrderStatus.class);
             if (status == OrderStatus.CANCELLED) {
                 return ListSpec.RowStyle.MUTED;
             }
@@ -56,24 +57,27 @@ public class SalesOrderView implements EntityView {
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("number").label("Order #")
-            .field("date").label("Date").width("half").format("dd-MM-yyyy")
-            .field("posted").label("Posting status")
-            .field("customer").order(10).width("half").refSecondary("phone")
-                .hint("Customer on the order.")
+    public void fields(EntityConfigBuilder<SalesOrder> f) {
+        f.field(SalesOrder::getNumber).label("Order #")
+            .field(SalesOrder::getDate).label("Date").width("half").format("dd-MM-yyyy")
+            .field(SalesOrder::isPosted).label("Posting status");
+        f.refField(SalesOrder::getCustomer).order(10).width("half")
+                .refSecondary(Customer::getPhone).hint("Customer on the order.");
             // Cascading picker: only this customer's delivery addresses. ${...} substitutes the
             // form's current value; empty → unfiltered; changing customer clears this field.
-            .field("deliveryAddress").refFilter("customer = ${customer}")
-            .field("status").order(20).width("half")
-            .field("total").order(30).format("currency:USD").hideInForm()
-                .hint("Computed from lines.")
-            .field("comment").order(40).widget("textarea").width("full");
+        f.refField(SalesOrder::getDeliveryAddress).refFilter("customer = ${customer}");
+        f.field(SalesOrder::getStatus).order(20).width("half");
+        f.field(SalesOrder::getTotal).order(30).format("currency:USD").hideInForm()
+                .hint("Computed from lines.");
+        f.field(SalesOrder::getComment).order(40).widget("textarea").width("full");
 
-        f.field("items.product").label("Product")
-            .field("items.quantity").label("Qty")
-            .field("items.unitPrice").label("Unit price").format("currency:USD")
-            .field("items.amount").label("Amount").format("currency:USD");
+        f.rowRefField(SalesOrder::getItems, SalesOrderLine::getProduct)
+                .label("Product").refSecondary(Product::getSku);
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getQuantity).label("Qty");
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getUnitPrice)
+                .label("Unit price").format("currency:USD");
+        f.rowField(SalesOrder::getItems, SalesOrderLine::getAmount)
+                .label("Amount").format("currency:USD");
 
         f.action("post").primary();
         f.action("delete").inMenu();
@@ -82,12 +86,12 @@ public class SalesOrderView implements EntityView {
     @Override
     public void actions(ActionSpec actions) {
         actions.action("advance").scope(ActionScope.ROW).icon("chevron-right").label("Advance")
-                .label(row -> "Advance to " + next(row.enumValue("status", OrderStatus.class)))
-                .visibleWhen(row -> !terminal(row.enumValue("status", OrderStatus.class)))
+                .label(row -> "Advance to " + next(row.enumValue(SalesOrder::getStatus, OrderStatus.class)))
+                .visibleWhen(row -> !terminal(row.enumValue(SalesOrder::getStatus, OrderStatus.class)))
                 .handler(ctx -> advance(ctx.id()));
 
         actions.action("cancel").scope(ActionScope.DETAIL).icon("ban").label("Cancel")
-                .visibleWhen(row -> !terminal(row.enumValue("status", OrderStatus.class)))
+                .visibleWhen(row -> !terminal(row.enumValue(SalesOrder::getStatus, OrderStatus.class)))
                 .form(f -> f.input("reason").label("Reason").type(InputType.TEXTAREA).required())
                 .handler(ctx -> cancel(ctx.id(), ctx.input("reason")));
     }
@@ -96,7 +100,7 @@ public class SalesOrderView implements EntityView {
         SalesOrder order = orders.findActiveById(id).orElseThrow();
         order.setStatus(next(order.getStatus()));
         orders.save(order);
-        return ActionResult.success("Order advanced");
+        return ActionResult.refresh(ActionToast.success("Order advanced"));
     }
 
     private ActionResult cancel(UUID id, String reason) {
@@ -104,7 +108,7 @@ public class SalesOrderView implements EntityView {
         order.setStatus(OrderStatus.CANCELLED);
         order.setComment(reason);
         orders.save(order);
-        return ActionResult.success("Order cancelled");
+        return ActionResult.refresh(ActionToast.success("Order cancelled"));
     }
 }
 ```
@@ -119,13 +123,13 @@ is not a well-defined operation, model separate deterministic actions instead.
 Use field hints to make generated forms feel authored:
 
 ```java
-f.field("code").label("Code")
- .field("description").label("Name")
- .field("phone").placeholder("+1 555 0100").hint("Shown in the customer picker.")
- .field("avatarUrl").widget("avatar")
- .field("color").widget("color")
- .field("notes").widget("textarea").width("full")
- .field("internalFlag").hideInList().hideInForm().hideInDetail();
+f.field(Customer::getCode).label("Code")
+ .field(Customer::getDescription).label("Name")
+ .field(Customer::getPhone).placeholder("+1 555 0100").hint("Shown in the customer picker.")
+ .field(Customer::getAvatarUrl).widget("avatar")
+ .field(Customer::getColor).widget("color")
+ .field(Customer::getNotes).widget("textarea").width("full")
+ .field(Customer::isInternal).hideInList().hideInForm().hideInDetail();
 ```
 
 System columns (`code`, `description`, `number`, `date`, `posted`) need `field(...).label(...)` for
@@ -135,10 +139,11 @@ form/detail labels. `ListSpec.label(...)` only changes list headers.
 
 ```java
 @Override
-public void fields(EntityConfigBuilder f) {
+public void fields(EntityConfigBuilder<Customer> f) {
     f.relatedList("contacts", CustomerContact.class)
-            .via("customer")
-            .display("contact")
+            .via(CustomerContact::getCustomer)
+            .display(CustomerContact::getContact)
+            .columns(CustomerContact::getRole)
             .label("Contacts");
 }
 ```
@@ -150,10 +155,22 @@ still a `@TabularSection`, not a related list.
 
 ```java
 @Override
-public void list(ListSpec list) {
-    list.columns("code", "description", "city", "status");
-    list.map().lat("latitude").lng("longitude").label("description");
+public void list(ListSpec<Location> list) {
+    list.columns(Location::getCode, Location::getDescription, Location::getCity, Location::getStatus);
+    list.map().lat(Location::getLatitude).lng(Location::getLongitude)
+            .label(Location::getDescription);
 }
 ```
 
 Use map view only when the entity has stable latitude and longitude attributes.
+
+Enum status pills come from `@EnumLabel(color = "#RRGGBB")`, not from `EntityView`. For a Ref
+filter, supply UUID-backed `ListSpec.Option` values; `contains()` searches the stored UUID column,
+not the target's display label. UI visibility predicates are presentation only—handlers must recheck
+authorization and domain preconditions.
+
+## Reachability And RBAC
+
+`EntityView<E>` makes DivKit list/detail routes eligible; `Layout` controls navigation. Generic REST
+does not require a view. Verify shell/list/detail/New/action routes as reader, writer, unrelated role,
+and `ADMIN`; readers must receive `canWrite=false` and mutations/actions must still return `403`.

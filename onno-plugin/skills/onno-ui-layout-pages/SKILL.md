@@ -18,7 +18,13 @@ belong in `EntityView`, not here.
   it.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
 - A custom page route appears in nav only when a layout section links it with `.page(...)`.
-- Persona selection uses `profile()`, `roles`, `viewport()`, and priority.
+- `Layout.profile()` names the persona; call `spec.roles(...).priority(...)` inside `configure` to
+  select it. Named profiles replace the default navigation, so share/repeat all desired sections.
+- `Page.profile()` must match the persona for profile-only reachability. A page with no profile is
+  available to every profile; linking it controls nav presence, not authorization.
+- Page actions have no entity gate and must declare `.roles(...)` when restricted. Global constant
+  settings use the ADMIN-only settings API.
+- Canonical entity routes use lowercase snake case, for example `/catalogs/product_groups`.
 - Keep branding/static assets under `classpath:/static/ui/...`.
 
 Read [references/examples.md](references/examples.md) before writing layout/page code.

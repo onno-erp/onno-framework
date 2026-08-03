@@ -20,6 +20,12 @@ the interaction or visualization.
 3. Use `@onno/widget-sdk` for types, host UI primitives, and read-only data calls.
 4. Apply `su.onno.widgets` in the consuming app.
 5. Declare the widget from a `Page` with `b.widget("Title").type("myWidget").config(...)`.
-6. If it needs live updates, subscribe to named SSE events.
+6. Register it at module load with `registerWidget("myWidget", Component)`.
+7. If it needs live updates, subscribe to named SSE events and filter payloads to the bound entity.
+8. Run `compileWidgets`, inspect packaged `onno-plugins/*.js` and CSS, then verify `/api/config`,
+   plugin URLs, RBAC-controlled reads, rendering, and SSE refresh in the browser.
+
+Built-in `list` accepts catalogs/documents, not registers. Register KPI filters address dimensions;
+use a custom widget with `api.getBalance`/`getMovements` for resource-threshold or movement-list UI.
 
 Read [references/examples.md](references/examples.md) for full Java and TSX examples.

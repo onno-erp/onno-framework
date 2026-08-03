@@ -231,7 +231,7 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
         boolean first = true;
         for (Map.Entry<String, Object> entry : filters.entrySet()) {
             if (!first) sb.append(" AND ");
-            sb.append(entry.getKey()).append(" = :filter_").append(entry.getKey());
+            sb.append(filterColumn(entry.getKey())).append(" = :filter_").append(entry.getKey());
             first = false;
         }
         sb.append(" ");
@@ -246,6 +246,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
                 stmt.bind("filter_" + entry.getKey(), ref.id());
             } else if (value instanceof PolyRef ref) {
                 stmt.bind("filter_" + entry.getKey(), ref.externalForm());
+            } else if (value instanceof Enum<?> enumValue) {
+                stmt.bind("filter_" + entry.getKey(), enumStoredValue(enumValue));
             } else {
                 stmt.bind("filter_" + entry.getKey(), value);
             }
@@ -306,7 +308,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
             return val != null ? EnumerationPersistence.resolveValue(type, UUID.fromString(val)) : null;
         } else if (Ref.class.isAssignableFrom(type)) {
             String val = rs.getString(col);
-            return val != null ? new Ref<>(Object.class, UUID.fromString(val)) : null;
+            Field field = findField(recordClass, attr.fieldName());
+            return val != null ? Ref.of(refTargetClass(field), UUID.fromString(val)) : null;
         } else if (PolyRef.class.isAssignableFrom(type)) {
             return PolyRef.parse(rs.getString(col));
         }
@@ -325,6 +328,8 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
                     stmt.bind(attr.fieldName(), ref.id());
                 } else if (value instanceof PolyRef ref) {
                     stmt.bind(attr.fieldName(), ref.externalForm());
+                } else if (value instanceof Enum<?> enumValue) {
+                    stmt.bind(attr.fieldName(), enumStoredValue(enumValue));
                 } else {
                     stmt.bind(attr.fieldName(), value);
                 }
@@ -344,6 +349,32 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
             }
         }
         throw new RuntimeException("Field not found: " + fieldName);
+    }
+
+    private String filterColumn(String fieldName) {
+        List<AttributeDescriptor> fields = new ArrayList<>();
+        fields.addAll(descriptor.dimensions());
+        fields.addAll(descriptor.resources());
+        fields.addAll(descriptor.attributes());
+        return fields.stream()
+                .filter(field -> field.fieldName().equals(fieldName))
+                .map(AttributeDescriptor::columnName)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown information-register filter field: " + fieldName));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static UUID enumStoredValue(Enum<?> value) {
+        return EnumerationPersistence.resolveId((Class) value.getDeclaringClass(), value);
+    }
+
+    private static Class<?> refTargetClass(Field field) {
+        if (field.getGenericType() instanceof java.lang.reflect.ParameterizedType parameterized
+                && parameterized.getActualTypeArguments()[0] instanceof Class<?> target) {
+            return target;
+        }
+        return Object.class;
     }
 
     static LocalDateTime truncatePeriod(LocalDateTime dt, Periodicity periodicity) {

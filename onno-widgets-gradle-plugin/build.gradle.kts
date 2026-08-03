@@ -22,6 +22,13 @@ repositories {
 dependencies {
     // Drives the managed Node install + npm/esbuild invocations the plugin adds to a consumer build.
     implementation("com.github.node-gradle:gradle-node-plugin:7.1.0")
+    testImplementation(gradleTestKit())
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation("org.assertj:assertj-core:3.27.3")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 // Bundle the @onno/widget-sdk source into the plugin jar as a single zip resource. At apply time the

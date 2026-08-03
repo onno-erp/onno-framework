@@ -31,7 +31,8 @@ Use this file as the agent handoff document in the consuming ERP repo. It explai
 - enumerations for closed state sets
 - constants for singleton settings
 - lifecycle hooks and rules for invariants
-- Spring Boot starters for schema, repositories, generic APIs, UI, auth, mail, print, desktop, Kafka, and integrations
+- Spring Boot starters for schema, repositories, generic APIs, UI, auth, MCP, import, observability,
+  clustering, desktop, Kafka, and integrations
 
 Do not start from database tables or controllers. Start from the business model. The framework turns that model into persistence, repositories, generic APIs, metadata, and UI surfaces.
 
@@ -100,11 +101,9 @@ onno:
       - { username: admin, password: admin, roles: [ADMIN] }
 ```
 
-`onno.scan-packages` (note: **not** `onno.base-packages`) points at the package where catalogs,
+`onno.scan-packages` (there is no `onno.base-packages` alias) points at the package where catalogs,
 documents, registers, constants, jobs, layouts, pages, and entity views live. It is optional — if you
-omit it, the framework scans from your `@SpringBootApplication` package. The `onno.base-packages` name
-only exists on the mail and print starters (`onno.mail.base-packages` / `onno.print.base-packages`)
-for template scanning.
+omit it, the framework scans from your `@SpringBootApplication` package.
 
 ## Recommended Project Layout
 

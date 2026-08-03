@@ -1,15 +1,19 @@
 package su.onno.spring;
 
 import su.onno.metadata.DefaultNamingStrategy;
+import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.EnumerationDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
+import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.numbering.NumberGenerator;
 import su.onno.schema.SchemaGenerator;
 import su.onno.security.SecretCipher;
 import su.onno.spring.fixtures.TestService;
 import su.onno.spring.fixtures.TestServiceCategory;
 import su.onno.spring.fixtures.TestServiceRepository;
+import su.onno.spring.fixtures.TestStarterInvoice;
+import su.onno.spring.fixtures.TestStarterInvoiceRepository;
 
 import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
@@ -34,11 +38,15 @@ import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Proves the soft-delete-aware finders on {@link su.onno.repository.CatalogRepository} resolve as
@@ -56,6 +64,9 @@ class SoftDeleteFinderIT {
     private TestServiceRepository repository;
 
     @Autowired
+    private TestStarterInvoiceRepository documentRepository;
+
+    @Autowired
     private DataSource dataSource;
 
     private UUID liveId;
@@ -67,7 +78,11 @@ class SoftDeleteFinderIT {
         new SchemaGenerator(buildRegistry()).execute(jdbi);
         // The in-memory H2 (singleton datasource, DB_CLOSE_DELAY=-1) persists across @BeforeEach
         // runs and SchemaGenerator is idempotent, so clear rows to start each test from exactly 3.
-        jdbi.useHandle(h -> h.execute("DELETE FROM catalog_test_services"));
+        jdbi.useHandle(h -> {
+            h.execute("DELETE FROM document_starter_invoices_items");
+            h.execute("DELETE FROM document_starter_invoices");
+            h.execute("DELETE FROM catalog_test_services");
+        });
 
         liveId = save("S-1", "Rabies shot", false);
         save("S-2", "Microchipping", false);
@@ -96,6 +111,40 @@ class SoftDeleteFinderIT {
         assertThat(repository.findById(deletedId)).isPresent(); // RefResolver path still resolves it
     }
 
+    @Test
+    void repositoryDelete_marksCatalogRowInsteadOfRemovingIt() {
+        repository.deleteById(liveId);
+
+        assertThat(repository.findActiveById(liveId)).isEmpty();
+        assertThat(repository.findById(liveId))
+                .get()
+                .extracting(TestService::isDeletionMark)
+                .isEqualTo(true);
+    }
+
+    @Test
+    void repositoryDelete_marksDraftDocumentAndRejectsPostedDocument() {
+        TestStarterInvoice draft = invoice("INV-1");
+        documentRepository.save(draft);
+        documentRepository.delete(draft);
+
+        assertThat(documentRepository.findById(draft.getId()))
+                .get()
+                .extracting(TestStarterInvoice::isDeletionMark)
+                .isEqualTo(true);
+
+        TestStarterInvoice posted = invoice("INV-2");
+        posted.setPosted(true);
+        documentRepository.save(posted);
+        assertThatThrownBy(() -> documentRepository.delete(posted))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("must be unposted");
+        assertThat(documentRepository.findById(posted.getId()))
+                .get()
+                .extracting(TestStarterInvoice::isDeletionMark)
+                .isEqualTo(false);
+    }
+
     private UUID save(String code, String name, boolean deletionMark) {
         TestService s = new TestService();
         s.setCode(code);
@@ -115,12 +164,22 @@ class SoftDeleteFinderIT {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerCatalog(scanner.scan(TestService.class));
+        registry.registerDocument(scanner.scanDocument(TestStarterInvoice.class));
         registry.registerEnumeration(scanner.scanEnumeration(TestServiceCategory.class));
         return registry;
     }
 
+    private static TestStarterInvoice invoice(String number) {
+        TestStarterInvoice invoice = new TestStarterInvoice();
+        invoice.setNumber(number);
+        invoice.setDate(LocalDateTime.of(2026, 8, 3, 12, 0));
+        return invoice;
+    }
+
     @Configuration
-    @EnableJdbcRepositories(basePackageClasses = TestServiceRepository.class)
+    @EnableJdbcRepositories(
+            basePackageClasses = TestServiceRepository.class,
+            repositoryBaseClass = OnnoSimpleJdbcRepository.class)
     static class Config extends AbstractJdbcConfiguration {
 
         @Bean
@@ -146,8 +205,14 @@ class SoftDeleteFinderIT {
         }
 
         @Bean
-        NamingStrategy onnoNamingStrategy() {
-            return new OnnoNamingStrategy();
+        NamingStrategy onnoNamingStrategy(MetadataRegistry registry) {
+            Map<Class<?>, String> tabularTables = new HashMap<>();
+            for (DocumentDescriptor document : registry.allDocuments()) {
+                for (TabularSectionDescriptor section : document.tabularSections()) {
+                    tabularTables.put(section.rowClass(), section.tableName());
+                }
+            }
+            return new OnnoNamingStrategy(tabularTables);
         }
 
         @Override

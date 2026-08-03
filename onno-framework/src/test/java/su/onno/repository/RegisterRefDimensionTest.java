@@ -171,6 +171,19 @@ class RegisterRefDimensionTest {
     }
 
     @Test
+    void fluentBalanceQuery_mapsRefDimensionBackToTypedRef() {
+        stockMovement(productA, "EUR", "10");
+        stock.rebuildTotals();
+
+        assertThat(stock.query().balance().execute())
+                .singleElement()
+                .satisfies(row -> {
+                    assertThat(row.getProduct()).isEqualTo(Ref.of(TestProduct.class, productA));
+                    assertThat(row.getQuantity()).isEqualByComparingTo("10");
+                });
+    }
+
+    @Test
     void getTurnover_mapsRefDimensionBackToTypedRef() {
         salesMovement(productA, "100");
         salesMovement(productA, "50");
@@ -265,5 +278,9 @@ class RegisterRefDimensionTest {
                     assertThat(balance.getChannel()).isEqualTo(Channel.RETAIL);
                     assertThat(balance.getAmount()).isEqualByComparingTo("12.50");
                 });
+        assertThat(repository.query().balance().execute())
+                .singleElement()
+                .extracting(ChannelBalance::getChannel)
+                .isEqualTo(Channel.RETAIL);
     }
 }

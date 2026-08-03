@@ -2,7 +2,7 @@
 name: onno-catalogs-enums
 description: >-
   Create or modify onno-framework catalogs and enumerations. Use when modeling master data,
-  hierarchical catalogs, reference fields with Ref<T>, catalog codes/prefixes, localized titles and
+  hierarchical catalogs, typed reference fields, catalog codes/prefixes, localized titles and
   field labels, @Enumeration Java enums, @EnumLabel display labels/colors, secret attributes,
   catalog repositories, soft-delete-aware catalog logic, or deciding whether a business list should
   be a @Catalog or an enum.
@@ -20,7 +20,8 @@ set and business logic branches on constants.
    `displayName`, `EntityView.field(...).label(...)`, and `@EnumLabel`.
 3. Use `Ref<T>` for links to catalogs/documents. Do not embed target objects.
 4. Add `@AccessControl`; entities without explicit roles are deny-by-default.
-5. Add an `EntityView` if the catalog should be served in the UI/API surface.
+5. Add an `EntityView` if the catalog should be served by DivKit/UI routes. Generic REST and MCP
+   exposure depend on metadata registration and RBAC, not on `EntityView`.
 6. Add repository methods only when app logic needs them; prefer active finders for business rules.
 
 ## Read The Examples

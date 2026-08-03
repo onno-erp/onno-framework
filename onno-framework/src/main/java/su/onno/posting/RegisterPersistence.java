@@ -421,7 +421,7 @@ public class RegisterPersistence<T extends AccumulationRecord> {
                     for (AttributeDescriptor dim : finalGroupDims) {
                         Field field = findField(descriptor.javaClass(), dim.fieldName());
                         field.setAccessible(true);
-                        field.set(record, rs.getObject(dim.columnName(), field.getType()));
+                        field.set(record, readDimension(rs, dim, field));
                     }
                     for (AttributeDescriptor res : descriptor.resources()) {
                         Field field = findField(descriptor.javaClass(), res.fieldName());
@@ -479,29 +479,32 @@ public class RegisterPersistence<T extends AccumulationRecord> {
         for (AttributeDescriptor dim : descriptor.dimensions()) {
             Field field = findField(descriptor.javaClass(), dim.fieldName());
             field.setAccessible(true);
-            if (dim.isRef()) {
-                String raw = rs.getString(dim.columnName());
-                if (PolyRef.class.isAssignableFrom(field.getType())) {
-                    field.set(record, PolyRef.parse(raw));
-                } else {
-                    // A Ref dimension is stored as a bare UUID column; JDBC can't materialize a Ref
-                    // itself (#207), so rebuild it against the field's declared target type.
-                    field.set(record, raw == null ? null
-                            : Ref.of(refTargetClass(field), UUID.fromString(raw)));
-                }
-            } else if (field.getType().isEnum()) {
-                String raw = rs.getString(dim.columnName());
-                field.set(record, raw == null ? null
-                        : EnumerationPersistence.resolveValue(field.getType(), UUID.fromString(raw)));
-            } else {
-                field.set(record, rs.getObject(dim.columnName(), field.getType()));
-            }
+            field.set(record, readDimension(rs, dim, field));
         }
         for (AttributeDescriptor res : descriptor.resources()) {
             Field field = findField(descriptor.javaClass(), res.fieldName());
             field.setAccessible(true);
             field.set(record, rs.getObject(res.columnName(), BigDecimal.class));
         }
+    }
+
+    private Object readDimension(java.sql.ResultSet rs, AttributeDescriptor dim, Field field)
+            throws java.sql.SQLException {
+        if (dim.isRef()) {
+            String raw = rs.getString(dim.columnName());
+            if (PolyRef.class.isAssignableFrom(field.getType())) {
+                return PolyRef.parse(raw);
+            }
+            // A Ref dimension is stored as a bare UUID column; JDBC cannot materialize a Ref
+            // itself, so rebuild it against the field's declared target type.
+            return raw == null ? null : Ref.of(refTargetClass(field), UUID.fromString(raw));
+        }
+        if (field.getType().isEnum()) {
+            String raw = rs.getString(dim.columnName());
+            return raw == null ? null
+                    : EnumerationPersistence.resolveValue(field.getType(), UUID.fromString(raw));
+        }
+        return rs.getObject(dim.columnName(), field.getType());
     }
 
     /** The {@code T} of a {@code Ref<T>} field, or {@code Object.class} for a raw/wildcard Ref. */

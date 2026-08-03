@@ -16,7 +16,9 @@ Generated APIs are authenticated. Browser page routes are not a substitute for A
 
 - Login with `/api/auth/login` or your selected auth mode.
 - Mutations need `X-XSRF-TOKEN` in cookie-based modes.
-- Use entity display names in URLs: `/api/catalogs/Products`, not Java class names.
+- Use the annotation's logical `name` in URLs, not the Java class name. Collection reads use
+  `/api/list/catalogs/{name}` and `/api/list/documents/{name}`; CRUD uses
+  `/api/catalogs/{name}` and `/api/documents/{name}`.
 - Unknown non-API routes can return SPA HTML with 200.
 - There is no anonymous `/api/ui/metadata/manifest`.
 - Reads use snake_case storage columns; writes use camelCase model field names and are partial.

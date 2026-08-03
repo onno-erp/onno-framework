@@ -30,7 +30,8 @@ At minimum, discover:
 5. Documents users create, their statuses, and their line items.
 6. Balances, period totals, or historical facts the business must trust.
 7. Rules that prevent bad saves/posts.
-8. Roles, daily UI surfaces, integrations, background jobs, and future service boundaries.
+8. Roles, daily UI surfaces, durable assigned work, integrations, background jobs, and future
+   service boundaries.
 
 Nouns usually become catalogs, registers, constants, or enum values. Verbs usually become documents,
 lifecycle transitions, posting movements, or background jobs.
@@ -47,21 +48,23 @@ lifecycle transitions, posting movements, or background jobs.
 | Period totals | `@AccumulationRegister(type = TURNOVER)` |
 | Historical fact by dimensions | `@InformationRegister` |
 | Singleton setting | `@Constant` |
-| Repeated/later process | `@ScheduledJob` or Spring `@Scheduled` |
+| Time-triggered/repeated work | `@ScheduledJob` or Spring `@Scheduled` |
+| Durable multi-person/multi-object coordination | `ProcessDefinition` + `HumanTask` |
 | Future service/team boundary | `context = "..."` |
 
 Use `Ref<T>` for references between concepts. Do not embed whole objects.
 
 ## Implementation Order
 
-1. Write a short business summary and list assumptions.
-2. Implement catalogs and enums.
-3. Implement documents and tabular sections.
-4. Implement registers and posting logic.
-5. Add constants, jobs, and integrations.
-6. Author UI with `Layout`, `Page`, and `EntityView`.
-7. Add focused tests and verify the running app.
-8. Summarize what was modeled, what was assumed, and what remains ambiguous.
+1. Write a short business summary, concept map, assumptions, and blocking ambiguities.
+2. Confirm decisions that change data shape, posting, assignment, or user workflow.
+3. Implement catalogs and enums.
+4. Implement documents and tabular sections.
+5. Implement registers and posting logic.
+6. Add typed processes, constants, jobs, and integrations when required.
+7. Author UI with `Layout`, `Page`, and `EntityView`.
+8. Add focused tests and verify the running app.
+9. Summarize what was modeled, what was assumed, and what remains ambiguous.
 
 Read `../onno/reference/cheatsheet.md` before writing model classes or lifecycle hooks. It is the
 dense public API lookup; code wins if the cheat sheet drifts.

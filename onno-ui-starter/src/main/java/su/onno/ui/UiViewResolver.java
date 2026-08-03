@@ -11,10 +11,10 @@ import java.util.Map;
 
 /**
  * Resolves a per-entity {@link EntityView} (authored in code) over the
- * auto-generated metadata defaults into a renderer-agnostic {@link ResolvedListView}.
- * Entities without an EntityView fall back entirely to the defaults (system +
- * visible custom columns, in field-hint order), so adding a view is purely
- * additive. The DivKit emitter compiles the result; the model is renderer-neutral.
+ * auto-generated metadata defaults into a renderer-agnostic {@link ResolvedListView}. Internal
+ * resolution can produce defaults, but routed DivKit surfaces treat the registered views as an
+ * allowlist and call {@link #hasView(Class, String)} before rendering. The model remains
+ * renderer-neutral.
  */
 public class UiViewResolver {
 

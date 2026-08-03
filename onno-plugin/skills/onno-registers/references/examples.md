@@ -8,6 +8,7 @@
 - Querying Accumulation Registers
 - Querying Information Registers
 - Register UI Hints
+- Runtime Verification
 
 ## Balance Register
 
@@ -34,6 +35,9 @@ A balance register rejects posting movements that would make the resulting balan
 Use this for stock, cash, reservations, loyalty points, and open obligations.
 Dimensions may also use an `@Enumeration` enum. Set the enum constant on the movement; onno stores
 its stable UUID in movement and totals tables and maps it back for typed filters and reads.
+Declare `allowNegative = true` only for debt/overdraft balances. The guard applies only to BALANCE
+and checks all resources atomically during posting. Use `postingOrder = CHRONOLOGICAL` when
+backdated changes must preserve order-dependent historical balances.
 
 ## Turnover Register
 
@@ -97,18 +101,28 @@ public class StockService {
     }
 
     public BigDecimal onHand(Ref<Warehouse> warehouse, Ref<Product> product) {
-        var rows = stock.getBalance(Map.of(
-                "warehouse", warehouse.id(),
-                "product", product.id()));
+        var rows = stock.getBalance(f -> f
+                .where(StockRegister::getWarehouse, warehouse)
+                .where(StockRegister::getProduct, product));
         return rows.stream()
-                .map(row -> row.getBigDecimal("quantity"))
+                .map(StockRegister::getQuantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }
 ```
 
 For posting code that checks many dimension tuples, prefer query filters over loading the whole
-register slice. The fluent query API supports `whereIn(field, values)` and tuple filters.
+register slice. The fluent query API supports `whereIn(field, values)` and tuple filters:
+
+```java
+stock.query().balance()
+        .whereIn(StockRegister::getWarehouse, StockRegister::getProduct,
+                List.of(List.of(warehouseA, productA), List.of(warehouseB, productB)))
+        .execute();
+```
+
+Pass `Ref<T>` and enum constants directly to typed filters. Storage uses UUIDs; typed results
+reconstruct the declared Ref target and enum constant.
 
 ## Querying Information Registers
 
@@ -122,7 +136,7 @@ public class PriceService {
     }
 
     public Optional<PriceRegister> priceAt(Ref<Product> product, LocalDateTime at) {
-        return prices.getSliceLast(at, Map.of("product", product.id())).stream().findFirst();
+        return prices.getSliceLast(at, Map.of("product", product)).stream().findFirst();
     }
 }
 ```
@@ -136,24 +150,40 @@ Registers can have `EntityView` hints even though they are report/read surfaces:
 
 ```java
 @Component
-public class SalesRegisterView implements EntityView {
+public class SalesRegisterView implements EntityView<SalesRegister> {
     @Override
-    public Class<?> entity() {
+    public Class<SalesRegister> entity() {
         return SalesRegister.class;
     }
 
     @Override
-    public void list(ListSpec list) {
-        list.columns("period", "product", "salesperson", "quantity", "revenue")
-                .label("revenue", "Revenue")
-                .sortBy("period", true);
-        list.filter("period").label("Period").dateRange();
+    public void list(ListSpec<SalesRegister> list) {
+        list.columns(SalesRegister::getPeriod, SalesRegister::getProduct,
+                SalesRegister::getSalesperson, SalesRegister::getQuantity,
+                SalesRegister::getRevenue)
+            .label(SalesRegister::getRevenue, "Revenue")
+            .sortBy(SalesRegister::getPeriod, true);
+        list.filter(SalesRegister::getPeriod).label("Period").dateRange();
     }
 
     @Override
-    public void fields(EntityConfigBuilder f) {
-        f.field("period").format("dd-MM-yyyy")
-            .field("revenue").format("currency:USD");
+    public void fields(EntityConfigBuilder<SalesRegister> f) {
+        f.field(SalesRegister::getPeriod).format("dd-MM-yyyy");
+        f.field(SalesRegister::getRevenue).format("currency:USD");
     }
 }
 ```
+
+## Runtime Verification
+
+After authentication, accumulation REST reads use logical register names:
+
+```bash
+curl -fsS -b "$jar" "$base/api/registers/Stock/balance?product=$product_id" | jq -e .
+curl -fsS -b "$jar" \
+  "$base/api/registers/Sales/turnover?from=2026-08-01T00:00:00&to=2026-09-01T00:00:00" | jq -e .
+curl -fsS -b "$jar" "$base/api/registers/Stock/movements" | jq -e .
+```
+
+There is no generic information-register REST CRUD/read endpoint. Verify `PriceRegister` through
+`InformationRegisterRepository`, a focused integration test, or an application-owned API.

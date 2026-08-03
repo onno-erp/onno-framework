@@ -1,7 +1,7 @@
 # onno-ui-starter
 
 Spring Boot starter that serves the onno admin / back-office UI. It bundles a React SPA (built with
-Node 20 by Gradle) and exposes a generic REST + **DivKit** (server-driven UI) layer over the
+Node 22.22 by Gradle) and exposes a generic REST + **DivKit** (server-driven UI) layer over the
 business model: catalogs, documents and registers get list/detail/form screens generated from
 metadata, with no per-entity controller to write.
 
@@ -181,8 +181,8 @@ name returns `404`.
 | GET | `/{name}/{id}` | Single document. |
 | POST | `/{name}` | Create. Body carries header fields + tabular-section arrays keyed by section name. Number auto-generated when omitted and the document auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. Optimistic locking via `version`/`_version` (`409` on conflict). |
-| POST | `/{name}/{id}/post` | Run posting (writes register movements). |
-| POST | `/{name}/{id}/unpost` | Reverse posting. |
+| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. |
+| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
@@ -304,6 +304,11 @@ data-bearing surfaces.
 > presence: no view → `404`; view but no section → reachable but unlisted; view + section → in the
 > sidebar. (Earlier versions auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS`
 > groups; that was removed.)
+
+Shell configuration, branding, and `Layout.identity(...)` are application-wide. Declare them only
+on the default layout (`profile() == null`); named persona layouts should contain their role-scoped
+sections and presentation metadata. Startup rejects a named layout that tries to configure the
+global shell or identity mapping, so the configuration cannot be silently ignored.
 
 ### List row actions
 
@@ -1293,18 +1298,18 @@ curl -c jar.txt http://localhost:8080/api/config
 # 2. Log in (CSRF-exempt). The response sets the session cookie into the same jar.
 curl -b jar.txt -c jar.txt -X POST http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"secret"}'
+  -d '{"username":"admin@onnobooks.local","password":"admin"}'
 
 # 3. Read calls only need the session cookie.
-curl -b jar.txt http://localhost:8080/api/catalogs/Properties
+curl -b jar.txt 'http://localhost:8080/api/list/catalogs/Books?limit=50'
 
 # 4. Mutating calls also need the CSRF token: read it from the cookie jar and
 #    echo it back in the X-XSRF-TOKEN header.
 XSRF=$(awk '$6=="XSRF-TOKEN"{print $7}' jar.txt)
-curl -b jar.txt -X POST http://localhost:8080/api/catalogs/Properties \
+curl -b jar.txt -X POST http://localhost:8080/api/catalogs/Books \
   -H "X-XSRF-TOKEN: $XSRF" \
   -H 'Content-Type: application/json' \
-  -d '{"description":"Seaside Villa"}'
+  -d '{"description":"The Left Hand of Darkness"}'
 ```
 
 A browser SPA gets this for free: the cookie is sent automatically and the client copies

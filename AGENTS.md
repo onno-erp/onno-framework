@@ -313,10 +313,18 @@ public class InventoryCostRegister extends AccumulationRecord {
 }
 ```
 
-A backdated post/unpost reverses later affected documents and reposts them in date order in one
+A backdated post/repost/unpost reverses later affected documents and reposts them in date order in one
 serializable transaction. Keep `handlePosting` deterministic and free of external side effects.
-Posting atomically claims an existing unposted document before writing movements. A repeated
-`post(...)` call is rejected; unpost first when an intentional recalculation is required.
+Posting atomically claims an existing live, unposted document before writing movements. Core
+`post(...)` rejects an already-posted document; use the atomic `repost(...)` operation when an
+intentional recalculation is required. Unposting a draft or deleted document is rejected.
+
+Catalog/document repository deletes are soft: `delete(...)`, `deleteById(...)`, and bulk delete
+methods run `BeforeDeleteHandler`, save `deletionMark = true`, and then publish delete events. A
+posted document must be explicitly unposted before repository deletion. Ordinary non-onno Spring
+Data aggregates retain physical deletes. Generic REST/import/MCP creates and updates run
+`onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
+run `afterWrite`.
 
 Use `TURNOVER` when period totals matter but current balance does not.
 
@@ -891,8 +899,8 @@ The compiler checks the field references, the IDE refactors through them, and th
 
 UI is authored as Java classes registered as Spring beans — never as annotations on domain classes. Three kinds:
 
-- **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell; one per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
-- **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.constants(...)`, `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
+- **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
+- **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
 - **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
@@ -1034,20 +1042,20 @@ example app seeds `admin@onnobooks.local`/`admin` and `manager@onnobooks.local`/
 ```bash
 # 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.
 curl -sc cookies.txt -H 'Content-Type: application/json' \
-     -d '{"username":"admin","password":"…"}' http://localhost:8080/api/auth/login
+     -d '{"username":"admin@onnobooks.local","password":"admin"}' http://localhost:8080/api/auth/login
 
 # 2. Reads just need the session cookie:
-curl -sb cookies.txt 'http://localhost:8080/api/list/catalogs/Properties?limit=50'
-curl -sb cookies.txt 'http://localhost:8080/api/list/documents/Reservations?limit=50'
+curl -sb cookies.txt 'http://localhost:8080/api/list/catalogs/Books?limit=50'
+curl -sb cookies.txt 'http://localhost:8080/api/list/documents/Orders?limit=50'
 
 # 3. Mutations also need the CSRF header (value taken from the XSRF-TOKEN cookie):
 XSRF=$(awk '/XSRF-TOKEN/{print $7}' cookies.txt)
 curl -sb cookies.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json' \
-     -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Properties
+     -d '{ …entity JSON… }' http://localhost:8080/api/catalogs/Books
 ```
 
-`{name}` is the entity's **display name** (e.g. `Properties`, `Reservations`), *not* the Java class
-name (`Property` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onno-ui-starter`):
+`{name}` is the entity's **display name** (e.g. `Books`, `Orders`), *not* the Java class
+name (`Book` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onno-ui-starter`):
 
 ```text
 GET    /api/list/catalogs/{name}?cursor=&limit=    collection window

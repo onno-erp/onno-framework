@@ -7,8 +7,8 @@ indexer) so you don't have to learn the shape by reading controller source (issu
 
 It pairs with the auth/CSRF notes in [AGENTS.md](../AGENTS.md#inspecting-a-running-app-read-this-before-you-curl):
 every `/api/**` route is authenticated, reads need only the session cookie (or a bearer token in
-`resource-server` mode), and `{name}` is the entity's **display/logical name** (e.g. `Properties`,
-`Reservations`) — not the Java class name.
+`resource-server` mode), and `{name}` is the entity's **display/logical name** (e.g. `Books`,
+`Orders`) — not the Java class name.
 
 ## Endpoints
 
@@ -125,7 +125,7 @@ Reading `description` (no underscore) or a camelCase `taxId` returns `undefined`
 | `_period`, `_active` | register rows | period / active flag |
 | `<snake_col>` | attribute | `snake_case(fieldName)` (or `@Attribute(name)`); a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
 | `<col>_display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
-| `<col>_ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }` |
+| `<col>_ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }`; `type` is the target's logical name, while `kind`/`javaType` are present for polymorphic refs |
 | `<col>_code` | catalog-`Ref<>` attrs only | the target's code |
 | `<col>_avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
 | `<col>_color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
@@ -252,7 +252,7 @@ POST /api/catalogs/{name}                 create (body = camelCase fields)
 PUT  /api/catalogs/{name}/{id}            partial update
 POST /api/documents/{name}                create
 PUT  /api/documents/{name}/{id}           partial update
-POST /api/documents/{name}/{id}/post      post (re-post first unposts, then posts)
+POST /api/documents/{name}/{id}/post      post, or atomically repost an already-posted document
 ```
 
 Two more contracts worth knowing:
@@ -260,12 +260,15 @@ Two more contracts worth knowing:
 - **Tabular sections replace, they don't merge.** Submitting a section (keyed by its section name)
   deletes and re-inserts that whole section; a section absent from the body is left untouched.
 - **Lifecycle hooks re-run on every write.** `beforeWrite` runs on create *and* update (and
-  `onFilling` on create); `beforePost` runs on post. Don't assume they only fire once.
+  `onFilling` on create), then `afterWrite` runs after a successful persist; validation previews do
+  not call `afterWrite`. `beforePost` runs on post/repost. Don't assume hooks only fire once.
 
 ## Filtering & deletion
 
 `list` returns only live rows (`_deletion_mark = false`). Deletes are soft (the mark is set), so a
-deleted row disappears from `list` but is still reachable by `get` until purged.
+deleted row disappears from `list` but is still reachable by `get` until purged. Spring Data
+`CatalogRepository`/`DocumentRepository` delete methods use the same tombstone contract; posted
+documents must be unposted before repository deletion.
 
 ## Reacting to changes
 

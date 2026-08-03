@@ -2,8 +2,9 @@ package su.onno.ui;
 
 /**
  * An authored layout — the structural peer of {@link Page} and {@link EntityView}.
- * One {@code Layout} bean describes one persona's shell: its navigation sections,
- * nav presentation, branding, and (for personas) the roles that resolve into it.
+ * One {@code Layout} bean describes one persona's navigation sections and, for
+ * persona layouts, the roles that resolve into it. The default layout alone owns
+ * the shared shell, branding, and identity-directory link.
  *
  * <p>The default layout ({@code profile() == null}) is the back-office shell served
  * to anyone who matches no persona. A persona layout ({@code profile() == "cleaning"})
@@ -38,6 +39,10 @@ public interface Layout {
         return null;
     }
 
-    /** Build this layout's sections, shell, branding and (for personas) roles. */
+    /**
+     * Build this layout's sections and persona metadata. Shell and identity settings
+     * are valid only on the default layout ({@link #profile()} is {@code null});
+     * startup rejects them on named persona layouts instead of silently discarding them.
+     */
     void configure(LayoutSpec spec);
 }

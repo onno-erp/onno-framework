@@ -6,6 +6,7 @@
 - Custom Widget Declaration
 - Custom Widget TSX
 - SSE Updates
+- Packaging And Verification
 - Troubleshooting
 
 ## Built-In Widget Page
@@ -26,10 +27,10 @@ public class InventoryPage implements Page {
                 .config("presets", "24h,7d,30d,all")
                 .config("default", "30d");
 
-        b.widget("Low stock").type("count").width("1/3").order(0)
-                .register(StockRegister.class)
+        b.widget("Open orders").type("count").width("1/3").order(0)
+                .document(SalesOrder.class)
                 .config("metric", "count")
-                .config("filter", "quantity < 5");
+                .config("filter", "status != 'CANCELLED'");
 
         b.widget("Stock by warehouse").type("chart").width("2/3").order(1)
                 .register(StockRegister.class)
@@ -38,11 +39,11 @@ public class InventoryPage implements Page {
                 .config("metric", "sum")
                 .config("metricField", "quantity");
 
-        b.widget("Recent movements").type("list").width("full").order(2)
-                .register(StockRegister.class)
+        b.widget("Recent receipts").type("list").width("full").order(2)
+                .document(GoodsReceipt.class)
                 .maxItems(20)
-                .config("titleTemplate", "{product_display}")
-                .config("secondaryField", "warehouse_display");
+                .config("titleTemplate", "{_number}")
+                .config("secondaryField", "_date");
     }
 }
 ```
@@ -70,31 +71,33 @@ import {
   Badge,
   Button,
   Card,
-  useOnnoWidget,
-  type OnnoWidgetProps,
+  api,
+  registerWidget,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type EntityRecord,
+  type WidgetProps,
 } from "@onno/widget-sdk";
-import { useEffect, useState } from "react";
 
-type Row = Record<string, unknown>;
+function EventLog({ widget }: WidgetProps) {
+  const [all, setAll] = useState<EntityRecord[]>([]);
+  const cfg = widget.extraConfig ?? {};
+  const dateField = cfg.dateField || "_date";
+  const titleField = cfg.titleField || "_number";
+  const max = widget.maxItems > 0 ? widget.maxItems : 10;
 
-export default function EventLog(props: OnnoWidgetProps) {
-  const widget = useOnnoWidget(props);
-  const [rows, setRows] = useState<Row[]>([]);
-  const dateField = String(widget.config.dateField ?? "_date");
-  const titleField = String(widget.config.titleField ?? "_number");
+  const load = useCallback(async () => {
+    if (widget.entityType !== "document") return;
+    setAll(await api.listDocuments(widget.entityName));
+  }, [widget.entityName, widget.entityType]);
 
-  async function load() {
-    if (!widget.entity) return;
-    const result = await widget.api.list(widget.entity.kind, widget.entity.name, {
-      limit: widget.maxItems ?? 10,
-      sort: `${dateField}:desc`,
-    });
-    setRows(result.rows);
-  }
+  useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => {
-    void load();
-  }, [widget.entity?.name, widget.maxItems]);
+  const rows = useMemo(() => [...all]
+    .sort((a, b) => String(b[dateField] ?? "").localeCompare(String(a[dateField] ?? "")))
+    .slice(0, max), [all, dateField, max]);
 
   return (
     <Card className="p-3">
@@ -106,7 +109,7 @@ export default function EventLog(props: OnnoWidgetProps) {
       </div>
       <div className="mt-3 space-y-2">
         {rows.map((row, index) => (
-          <div key={String(row.id ?? index)} className="flex items-center gap-2">
+          <div key={String(row._id ?? index)} className="flex items-center gap-2">
             <Badge>{String(row[dateField] ?? "")}</Badge>
             <span>{String(row[titleField] ?? "")}</span>
           </div>
@@ -115,6 +118,8 @@ export default function EventLog(props: OnnoWidgetProps) {
     </Card>
   );
 }
+
+registerWidget("eventLog", EventLog);
 ```
 
 Prefer SDK controls (`Button`, `Badge`, `Select`, `DatePicker`, etc.) over hand-built lookalikes.
@@ -124,17 +129,30 @@ Prefer SDK controls (`Button`, `Badge`, `Select`, `DatePicker`, etc.) over hand-
 ```tsx
 useEffect(() => {
   const events = new EventSource("/api/events");
-  const reload = () => void load();
-  events.addEventListener("created", reload);
-  events.addEventListener("updated", reload);
-  events.addEventListener("deleted", reload);
-  events.addEventListener("posted", reload);
-  events.addEventListener("unposted", reload);
+  const reload = (event: MessageEvent) => {
+    try {
+      const change = JSON.parse(event.data);
+      if (change.entityName && change.entityName !== widget.entityName) return;
+    } catch { /* payload-free invalidations still reload */ }
+    void load();
+  };
+  for (const name of ["created", "updated", "deleted", "posted", "unposted", "changed"]) {
+    events.addEventListener(name, reload as EventListener);
+  }
   return () => events.close();
-}, []);
+}, [load, widget.entityName]);
 ```
 
 Events are named. `events.onmessage` will not fire for these updates.
+
+## Packaging And Verification
+
+Run `./gradlew compileWidgets processResources` (or the consuming module's qualified tasks), then
+inspect the artifact for `onno-plugins/*.js` and its generated CSS. At runtime, authenticate and
+check `/api/config` for `pluginScripts`/`pluginStyles`, fetch every bundle URL with the expected
+content type, inspect the browser console, verify read-only RBAC data, and trigger a matching SSE
+change. Add component tests plus descriptor/packaging tests. Keep Tailwind class names literal and
+use semantic host tokens/radii.
 
 ## Troubleshooting
 
@@ -145,3 +163,5 @@ Events are named. `events.onmessage` will not fire for these updates.
 - If the widget is blank, verify the `type` string, browser console, and plugin bundle URL under
   `{onno.ui.path}/plugins/**`.
 - If data is stale, subscribe to named SSE events or provide a refresh button.
+- Built-in `list` accepts catalogs/documents only. For register movements or low-resource counts,
+  use a custom widget with `api.getMovements(...)` or `api.getBalance(...)`.

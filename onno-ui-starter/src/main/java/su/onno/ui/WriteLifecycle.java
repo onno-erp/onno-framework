@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.lifecycle.AfterWriteHandler;
 import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.lifecycle.OnFillingHandler;
 import su.onno.metadata.AttributeDescriptor;
@@ -29,15 +30,17 @@ import java.util.UUID;
  * path. The catalog/document command services persist with hand-built JDBI INSERT/UPDATEs rather
  * than a Spring Data repository, so the {@code BeforeConvertCallback} that drives the lifecycle on
  * the repository path never fires for them (issue #158). Left unaddressed, {@link OnFillingHandler},
- * {@link BeforeWriteHandler} and cross-field {@link su.onno.rules.Validated} rules are skipped, and
- * fields a model derives in {@code beforeWrite()} stay null on anything created or edited through
- * the REST API, the generated UI, or CSV import.
+ * {@link BeforeWriteHandler}, {@link AfterWriteHandler}, and cross-field
+ * {@link su.onno.rules.Validated} rules are skipped, and fields a model derives in
+ * {@code beforeWrite()} stay null on anything created or edited through the REST API, the generated
+ * UI, CSV import, or MCP.
  *
  * <p>This rebuilds the typed entity at the same fidelity the runtime uses (enums resolved by id,
  * {@link Ref}s typed, secrets in plaintext), runs {@code onFilling()} (create only) and
- * {@code beforeWrite()}, collects business-rule failures on the final state, and writes any field a
- * hook derived back into the submitted body so the JDBI write captures it. Auto-numbering and
- * secret encryption stay with the command services, which own those concerns.
+ * {@code beforeWrite()}, collects business-rule failures on the final state, writes any derived
+ * field back into the submitted body so the JDBI write captures it, and runs {@code afterWrite()}
+ * after successful persistence. Auto-numbering and secret encryption stay with the command
+ * services, which own those concerns.
  */
 class WriteLifecycle {
 
@@ -57,6 +60,13 @@ class WriteLifecycle {
         }
         if (entity instanceof BeforeWriteHandler handler) {
             handler.beforeWrite();
+        }
+    }
+
+    /** Run the post-persistence hook used by the Spring Data {@code AfterSaveCallback} path. */
+    void runAfterWrite(Object entity) {
+        if (entity instanceof AfterWriteHandler handler) {
+            handler.afterWrite();
         }
     }
 
@@ -125,6 +135,19 @@ class WriteLifecycle {
             Object current = readField(entity, attr.fieldName());
             if (!Objects.equals(current, snapshot.get(attr.fieldName()))) {
                 body.put(attr.fieldName(), looseValue(current));
+            }
+        }
+    }
+
+    /**
+     * Fold the complete non-secret state of a lifecycle-materialized tabular row back into its
+     * request map. Row hooks commonly derive amounts in the parent document's
+     * {@code beforeWrite()}; persisting the original request map would otherwise discard them.
+     */
+    void writeBackAll(Object entity, List<AttributeDescriptor> attributes, Map<String, Object> body) {
+        for (AttributeDescriptor attr : attributes) {
+            if (!attr.secret()) {
+                body.put(attr.fieldName(), looseValue(readField(entity, attr.fieldName())));
             }
         }
     }

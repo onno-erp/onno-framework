@@ -55,6 +55,7 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
     private Object afterSave(Object aggregate) {
         // Read isNew before markNotNew flips it: a still-new aggregate at this point was inserted.
         boolean wasNew = isNew(aggregate);
+        boolean deleted = isDeletionMarked(aggregate);
         markNotNew(aggregate);
 
         // OnnoBeforeConvertCallback encrypted the secret fields in place before the row was
@@ -64,12 +65,16 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
                     SecretFields.apply(aggregate, registry, secretCipher::decrypt));
         }
 
-        // Call AfterWriteHandler
-        if (aggregate instanceof AfterWriteHandler handler) {
+        // A repository delete is implemented as a deletion-mark save. It has already run
+        // BeforeDeleteHandler in OnnoSimpleJdbcRepository and must publish delete semantics,
+        // not masquerade as an ordinary update/after-write.
+        if (!deleted && aggregate instanceof AfterWriteHandler handler) {
             time(operationName("after-write", aggregate), aggregate, handler::afterWrite);
         }
-        publishDomainEvents(aggregate, EventTiming.AFTER_WRITE);
-        publishEntityChange(aggregate, wasNew ? EntityChangedEvent.CREATED : EntityChangedEvent.UPDATED);
+        publishDomainEvents(aggregate, deleted ? EventTiming.AFTER_DELETE : EventTiming.AFTER_WRITE);
+        publishEntityChange(aggregate, deleted
+                ? EntityChangedEvent.DELETED
+                : wasNew ? EntityChangedEvent.CREATED : EntityChangedEvent.UPDATED);
 
         return aggregate;
     }
@@ -91,6 +96,11 @@ public class OnnoAfterSaveCallback implements AfterSaveCallback<Object>, AfterCo
             return record.isNew();
         }
         return false;
+    }
+
+    private boolean isDeletionMarked(Object aggregate) {
+        return aggregate instanceof CatalogObject catalog && catalog.isDeletionMark()
+                || aggregate instanceof DocumentObject document && document.isDeletionMark();
     }
 
     /**
