@@ -2,8 +2,13 @@ package su.onno.auth;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.DefaultCsrfToken;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,5 +39,26 @@ class AuthApiControllerTest {
         assertThat(res.token()).isNull();
         assertThat(res.headerName()).isNull();
         assertThat(res.parameterName()).isNull();
+    }
+
+    @Test
+    void successfulLoginRotatesTheExistingSessionId() {
+        var authentication = UsernamePasswordAuthenticationToken.authenticated(
+                "alice", "", List.of());
+        var loginController = new AuthApiController(
+                ignored -> authentication, null, new OnnoAuthProperties());
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        String preAuthenticationSessionId = request.getSession().getId();
+
+        try {
+            var result = loginController.login(
+                    new AuthApiController.LoginRequest("alice", "secret", false), request, response);
+
+            assertThat(result.getStatusCode().is2xxSuccessful()).isTrue();
+            assertThat(request.getSession(false).getId()).isNotEqualTo(preAuthenticationSessionId);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 }
