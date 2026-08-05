@@ -145,9 +145,9 @@ the legacy `_description` / `customer_display` response; storage aliases are als
 writes, and conflicting logical/storage values return `400`.
 
 Temporals are ISO wall-clock strings. `LocalDate` is `2026-06-04`; `LocalDateTime` reads canonically
-as offset-free `2026-06-04T10:00:00`. An offset-bearing write such as
-`2026-06-04T10:00:00+03:00` is accepted as the same local wall time (no timezone shift), but prefer
-the offset-free canonical representation:
+as offset-free `2026-06-04T10:00:00`. Offset- or zone-bearing writes such as
+`2026-06-04T10:00:00+03:00` are rejected with a field-specific `400`; send the intended wall time
+in the offset-free canonical representation:
 
 ```bash
 curl -sS -b "$jar" -H "X-XSRF-TOKEN: $xsrf" -H 'Content-Type: application/json' \

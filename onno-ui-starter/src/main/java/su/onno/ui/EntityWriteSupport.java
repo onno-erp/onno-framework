@@ -3,6 +3,7 @@ package su.onno.ui;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.security.SecretCipher;
 import su.onno.security.SecretRedactor;
+import su.onno.validation.ValidationException;
 import su.onno.validation.ValidationErrors;
 import su.onno.types.PolyRef;
 
@@ -95,9 +96,18 @@ final class EntityWriteSupport {
         if (attr.javaType() == BigDecimal.class) {
             return value instanceof BigDecimal bd ? bd : new BigDecimal(value.toString());
         }
-        Object temporal = TemporalValues.coerce(attr.javaType(), value);
-        if (temporal != null) {
-            return temporal;
+        try {
+            Object temporal = TemporalValues.coerce(attr.javaType(), value);
+            if (temporal != null) {
+                return temporal;
+            }
+        } catch (IllegalArgumentException invalidTemporal) {
+            if (attr.javaType() == java.time.LocalDateTime.class) {
+                throw new ValidationException(
+                        attr.displayName() + " " + TemporalValues.LOCAL_DATE_TIME_WRITE_MESSAGE,
+                        attr.fieldName());
+            }
+            throw invalidTemporal;
         }
         return value;
     }

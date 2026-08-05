@@ -5,12 +5,12 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
- * Coerces loosely-typed values — JSON strings from a write request, or JDBC
- * {@code Date}/{@code Timestamp} read back from a row — into the {@code java.time} types the
- * schema generator maps to columns: {@link LocalDate} ({@code DATE}) and {@link LocalDateTime}
- * ({@code TIMESTAMP}).
+ * Coerces temporal values at two different trust boundaries: strict JSON write values and
+ * permissive JDBC read values. Write-side {@link LocalDateTime} strings must be offset-free ISO
+ * wall time; read normalization still accepts driver-specific timestamp objects and strings.
  *
  * <p>JSON has no temporal type, so a date/datetime attribute always arrives as a string on write.
  * Binding that string straight to a {@code date}/{@code timestamp} column makes JDBI send a
@@ -20,6 +20,9 @@ import java.time.format.DateTimeFormatter;
  * ({@code coerceAttribute}) and the document reconstruct path. (#163)
  */
 final class TemporalValues {
+
+    static final String LOCAL_DATE_TIME_WRITE_MESSAGE =
+            "must be an offset-free ISO local date-time (yyyy-MM-ddTHH:mm[:ss[.fraction]])";
 
     private TemporalValues() {
     }
@@ -35,9 +38,30 @@ final class TemporalValues {
             return toLocalDate(value);
         }
         if (targetType == LocalDateTime.class) {
-            return toLocalDateTime(value);
+            return toWriteLocalDateTime(value);
         }
         return null;
+    }
+
+    /**
+     * Parse an external write value for a {@link LocalDateTime}. Offset- or zone-bearing values are
+     * rejected because silently discarding that information can persist a different moment than
+     * the caller intended. Already-typed JDBC values remain accepted for programmatic command
+     * callers; JSON strings must use the canonical offset-free ISO representation.
+     */
+    static LocalDateTime toWriteLocalDateTime(Object value) {
+        if (value instanceof LocalDateTime ldt) return ldt;
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        if (value instanceof LocalDate ld) return ld.atStartOfDay();
+        if (value instanceof java.sql.Date d) return d.toLocalDate().atStartOfDay();
+        if (value instanceof OffsetDateTime || value instanceof ZonedDateTime) {
+            throw new IllegalArgumentException(LOCAL_DATE_TIME_WRITE_MESSAGE);
+        }
+        try {
+            return LocalDateTime.parse(value.toString(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (DateTimeParseException invalid) {
+            throw new IllegalArgumentException(LOCAL_DATE_TIME_WRITE_MESSAGE, invalid);
+        }
     }
 
     /**
@@ -56,9 +80,10 @@ final class TemporalValues {
     }
 
     /**
-     * Coerce a value into a {@link LocalDateTime}, accepting {@code Timestamp}/{@code Date}
-     * instances and both {@code T}- and space-separated strings (H2 returns the latter for
-     * TIMESTAMP columns).
+     * Normalize a JDBC/read-side value into a {@link LocalDateTime}, accepting
+     * {@code Timestamp}/{@code Date} instances and both {@code T}- and space-separated strings (H2
+     * returns the latter for TIMESTAMP columns). Offset-bearing driver values retain their local
+     * fields; this method is not used to validate external writes.
      */
     static LocalDateTime toLocalDateTime(Object value) {
         if (value instanceof LocalDateTime ldt) return ldt;

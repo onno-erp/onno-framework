@@ -337,9 +337,10 @@ Catalog/document reads default to logical camelCase names, matching the partial-
 the prior storage-shaped response remains available explicitly with `?representation=storage`
 (full contract: [HEADLESS_READ_API.md](HEADLESS_READ_API.md)). Writes accept both logical and storage
 aliases and reject unequal duplicates. Temporal values are normalized at the read/write boundary:
-`LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time. Offset-bearing inputs
-are accepted without shifting their local fields. This keeps PostgreSQL, H2, the bundled forms, and
-headless clients on one round-trip-safe preferred representation.
+`LocalDate` is `yyyy-MM-dd`, and `LocalDateTime` is offset-free ISO wall time. Offset- or
+zone-bearing `LocalDateTime` writes are rejected with a field-specific `400` rather than silently
+discarding the offset. JDBC timestamp variants remain normalized on reads. This keeps PostgreSQL,
+H2, the bundled forms, and headless clients on one round-trip-safe representation.
 
 All endpoints are under `/api/**`, authenticated, and (for mutations) CSRF-protected. `{name}` is
 the entity's annotation **logical name** (e.g. `Properties`, not the class `Property` or a localized title), matched

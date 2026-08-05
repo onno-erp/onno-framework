@@ -111,7 +111,7 @@ class TemporalRoundTripPostgresIT {
         LocalDateTime expected = LocalDateTime.of(2026, 1, 16, 4, 0);
         UUID id = (UUID) catalogCommands.create(episodeDesc, Map.of(
                 "code", "episode-1",
-                "observedAt", "2026-01-16T04:00:00.000+00:00"
+                "observedAt", "2026-01-16T04:00:00.000"
         ), admin).get("_id");
 
         Map<String, Object> read = catalogQuery.get(episodeDesc, id);
@@ -127,8 +127,8 @@ class TemporalRoundTripPostgresIT {
         LocalDateTime header = LocalDateTime.of(2026, 1, 16, 4, 0);
         LocalDateTime line = LocalDateTime.of(2026, 1, 16, 5, 30);
         UUID id = (UUID) documentCommands.create(eventDesc, Map.of(
-                "startsAt", "2026-01-16T04:00:00.000+00:00",
-                "slots", List.of(Map.of("happensAt", "2026-01-16T05:30:00.000Z"))
+                "startsAt", "2026-01-16T04:00:00.000",
+                "slots", List.of(Map.of("happensAt", "2026-01-16T05:30:00.000"))
         ), admin).get("_id");
 
         Map<String, Object> read = documentQuery.get(eventDesc, id);

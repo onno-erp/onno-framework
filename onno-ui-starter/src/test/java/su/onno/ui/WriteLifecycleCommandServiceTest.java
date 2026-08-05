@@ -35,6 +35,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.security.Principal;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -67,6 +68,7 @@ class WriteLifecycleCommandServiceTest {
         @Attribute(length = 60) private String statusName; // derived mirror of the enum
         @Attribute(length = 120) private String summary;    // derived from number + title
         @Attribute private boolean filled;                  // set by onFilling
+        @Attribute private LocalDateTime startsAt;
         @TabularSection(name = "items")
         private List<LifecycleOrderLine> items = new ArrayList<>();
 
@@ -100,6 +102,7 @@ class WriteLifecycleCommandServiceTest {
         @Attribute(precision = 15, scale = 2) private BigDecimal quantity;
         @Attribute(precision = 15, scale = 2) private BigDecimal price;
         @Attribute(precision = 15, scale = 2) private BigDecimal amount;
+        @Attribute private LocalDateTime happensAt;
     }
 
     @Catalog(name = "LifecycleWidgets", codePrefix = "LW-")
@@ -109,6 +112,7 @@ class WriteLifecycleCommandServiceTest {
         static final AtomicInteger AFTER_WRITES = new AtomicInteger();
         @Attribute(length = 60) private String label;
         @Attribute(length = 60) private String slug; // derived from label
+        @Attribute private LocalDateTime observedAt;
 
         @Override public void beforeWrite() {
             this.slug = label == null ? null : label.toLowerCase(Locale.ROOT);
@@ -337,6 +341,52 @@ class WriteLifecycleCommandServiceTest {
         Map<String, List<String>> fieldErrors = (Map<String, List<String>>) report.get("fieldErrors");
         assertThat(fieldErrors).containsKey("label");
         assertThat(fieldErrors.get("label")).anyMatch(m -> m.contains("Label is required"));
+    }
+
+    @Test
+    void genericWritesRejectOffsetBearingLocalDateTimesWithFieldErrors() {
+        assertInvalidLocalDateTime(
+                () -> catalogCommands.create(widgetDesc,
+                        Map.of("label", "Clock", "observedAt", "2026-06-04T10:00+03:00"), admin),
+                "observedAt");
+
+        assertInvalidLocalDateTime(
+                () -> documentCommands.create(orderDesc,
+                        Map.of("startsAt", "2026-06-04T10:00Z"), admin),
+                "startsAt");
+
+        assertInvalidLocalDateTime(
+                () -> documentCommands.create(orderDesc,
+                        Map.of("date", "2026-06-04T10:00+03:00"), admin),
+                "date");
+
+        assertInvalidLocalDateTime(
+                () -> documentCommands.create(orderDesc,
+                        Map.of("items", List.of(Map.of(
+                                "happensAt", "2026-06-04T10:00+03:00"))), admin),
+                "happensAt");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void dryRunValidationRejectsOffsetBearingLocalDateTimes() {
+        Map<String, Object> report = documentCommands.validate(orderDesc, null,
+                Map.of("startsAt", "2026-06-04T10:00+03:00"), admin);
+
+        assertThat(report.get("valid")).isEqualTo(false);
+        Map<String, List<String>> fieldErrors =
+                (Map<String, List<String>>) report.get("fieldErrors");
+        assertThat(fieldErrors).containsKey("startsAt");
+        assertThat(fieldErrors.get("startsAt")).allMatch(message -> message.contains("offset-free ISO"));
+    }
+
+    private static void assertInvalidLocalDateTime(Runnable write, String field) {
+        assertThatThrownBy(write::run)
+                .isInstanceOfSatisfying(ValidationException.class, error -> {
+                    assertThat(error.fieldErrors()).containsKey(field);
+                    assertThat(error.fieldErrors().get(field))
+                            .allMatch(message -> message.contains("offset-free ISO"));
+                });
     }
 
     private UUID statusId(String name) {
