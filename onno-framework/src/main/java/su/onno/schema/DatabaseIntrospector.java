@@ -9,10 +9,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Reads the live database structure (tables and their columns) from
- * {@code INFORMATION_SCHEMA}, which both H2 and PostgreSQL expose. Names are normalized
- * to upper case so lookups are case-insensitive regardless of how the engine stores
- * unquoted identifiers (H2 upper-cases, PostgreSQL lower-cases).
+ * Reads the live database structure (tables and their columns) from the connection's current
+ * schema in {@code INFORMATION_SCHEMA}, which both H2 and PostgreSQL expose. Names are normalized
+ * to upper case so lookups are case-insensitive regardless of how the engine stores unquoted
+ * identifiers (H2 upper-cases, PostgreSQL lower-cases).
  */
 public final class DatabaseIntrospector {
 
@@ -37,9 +37,13 @@ public final class DatabaseIntrospector {
 
     public static DbState read(Handle handle) {
         Map<String, Set<String>> tables = new HashMap<>();
+        String currentSchema = handle.createQuery("SELECT CURRENT_SCHEMA")
+                .mapTo(String.class)
+                .one();
         handle.createQuery(
                         "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS " +
-                                "WHERE UPPER(TABLE_SCHEMA) NOT IN ('INFORMATION_SCHEMA', 'PG_CATALOG')")
+                                "WHERE UPPER(TABLE_SCHEMA) = UPPER(:currentSchema)")
+                .bind("currentSchema", currentSchema)
                 .mapToMap()
                 .forEach(row -> {
                     String table = upper(String.valueOf(row.get("table_name")));

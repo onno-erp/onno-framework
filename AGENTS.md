@@ -21,6 +21,8 @@ to future agents that may not have the full conversation context.
   coordinate changed. Releases are tag-driven (`vX.Y.Z`); the latest is in the git tags.
 - Java 21 is required. The Gradle wrapper is the source of truth for builds.
 - `onno-ui-starter` builds a bundled frontend with Node 22.22 via Gradle.
+- Schema reconciliation introspects only the database connection's current schema; same-named
+  tables in other PostgreSQL schemas do not participate in the diff.
 - The architecture reference is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); every `onno.*`
   property is in [docs/CONFIGURATION.md](docs/CONFIGURATION.md); hands-on playbooks live in the
   [`onno` skills](onno-plugin/skills/onno/SKILL.md), with focused entries for modeling, UI, posting,

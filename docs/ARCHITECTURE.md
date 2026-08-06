@@ -257,10 +257,10 @@ files for structural changes. The diff-based engine lives in
 - **Modes** (`onno.schema.mode`): `apply` (default — safe changes run; destructive ones are logged
   and skipped unless `onno.schema.allow-destructive=true`), `plan` (log only), `validate` (fail on
   drift / unapplied migrations), `off`.
-- **Diff inputs**: the desired `SchemaModel` (from the registry), the live DB
-  (`INFORMATION_SCHEMA`), and the previous `SchemaSnapshot` (stored as JSON in
-  `onno_schema_history`). The snapshot is how *type changes* and *removed entities* are detected on
-  later boots.
+- **Diff inputs**: the desired `SchemaModel` (from the registry), the live DB's current schema
+  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`), and the previous `SchemaSnapshot` (stored
+  as JSON in `onno_schema_history`). Same-named tables in other PostgreSQL schemas are ignored. The
+  snapshot is how *type changes* and *removed entities* are detected on later boots.
 - **Renames keep data**: declare the former name with `previousNames` on `@Catalog`/`@Document`/
   `@Attribute`; the engine emits a `RENAME_TABLE`/`RENAME_COLUMN` instead of drop+add.
 - **Change kinds** (`SchemaChange.Type`): `CREATE_TABLE`, `RENAME_TABLE`, `RENAME_COLUMN`,
