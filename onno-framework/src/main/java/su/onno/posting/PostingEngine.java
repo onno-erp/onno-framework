@@ -347,10 +347,8 @@ public class PostingEngine {
             persistence.insertRecords(handle, repo.getPendingMovements(),
                     document.getId(), document.getDate());
             persistence.updateTotals(handle, repo.getPendingMovements());
+            checkNonNegativeBalances(handle, persistence.getDescriptor(), document.getId());
             repo.clearPending();
-        }
-        for (RegisterRepositoryImpl<?> repo : context.touchedRepositories()) {
-            checkNonNegativeBalances(handle, repo.getPersistence().getDescriptor());
         }
         writeBackDocument(handle, descriptor, document);
     }
@@ -514,14 +512,22 @@ public class PostingEngine {
         }
     }
 
-    private void checkNonNegativeBalances(Handle handle,
-                                           AccumulationRegisterDescriptor desc) {
+    private void checkNonNegativeBalances(
+            Handle handle,
+            AccumulationRegisterDescriptor desc,
+            UUID documentId) {
         if (desc.accumulationType() != AccumulationType.BALANCE || desc.allowNegative()) return;
+
+        String touchedPredicate = touchedDimensionPredicate(desc);
 
         for (AttributeDescriptor res : desc.resources()) {
             String sql = "SELECT COUNT(*) FROM " + desc.totalsTableName() +
-                    " WHERE " + res.columnName() + " < 0";
-            int count = handle.createQuery(sql).mapTo(Integer.class).one();
+                    " WHERE " + res.columnName() + " < 0" + touchedPredicate;
+            var query = handle.createQuery(sql);
+            if (!desc.dimensions().isEmpty()) {
+                query.bind("documentId", documentId);
+            }
+            int count = query.mapTo(Integer.class).one();
             if (count > 0) {
                 throw new IllegalStateException(
                         "Insufficient " + res.displayName().toLowerCase() +
@@ -529,6 +535,20 @@ public class PostingEngine {
                         "Posting would result in negative balance.");
             }
         }
+    }
+
+    private String touchedDimensionPredicate(AccumulationRegisterDescriptor desc) {
+        if (desc.dimensions().isEmpty()) return "";
+
+        String dimensions = desc.dimensions().stream()
+                .map(AttributeDescriptor::columnName)
+                .collect(java.util.stream.Collectors.joining(", "));
+        String totalsKey = desc.dimensions().size() == 1
+                ? dimensions
+                : "(" + dimensions + ")";
+        return " AND " + totalsKey + " IN (SELECT " + dimensions +
+                " FROM " + desc.tableName() +
+                " WHERE _document_ref = :documentId AND _active = TRUE)";
     }
 
     private PostingContext buildPostingContext(DocumentObject document) {

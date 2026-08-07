@@ -89,7 +89,8 @@ In brief:
   child table; startup rejects reuse across documents or sections before scan order can select the
   wrong table. Common fields/behavior belong in a shared base row class.
 - **`@AccumulationRegister`** — ledgers, `type = BALANCE | TURNOVER`; `BALANCE` rejects negative
-  resource totals by default and `allowNegative = true` opts a debt/overdraft register out;
+  resource totals on dimension tuples touched by the post and `allowNegative = true` opts a
+  debt/overdraft register out; unrelated stale negative tuples do not block otherwise valid posts;
   `postingOrder = CHRONOLOGICAL` makes a backdated post/unpost restore and repost later affected
   documents in date order;
   `@Dimension` keys and `@Resource` numbers; rows extend `AccumulationRecord` (`period`, `active`,
@@ -290,9 +291,9 @@ public void handlePosting(PostingContext context) {
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
 `beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
 atomically claims an existing unposted document, inserts movements, updates register totals, rejects
-negative `BALANCE` results unless that register declares `allowNegative = true`, and writes back
-computed fields. Posting a missing or already-posted document is rejected before any movement is
-persisted, so retries cannot double-count registers. After commit
+negative `BALANCE` results on dimension tuples touched by that post unless the register declares
+`allowNegative = true`, and writes back computed fields. Posting a missing or already-posted document
+is rejected before any movement is persisted, so retries cannot double-count registers. After commit
 it emits `@DomainEvent` outbox rows, calls `afterPost`, and publishes a Spring
 `DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
 
