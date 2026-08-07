@@ -11,6 +11,8 @@ import su.onno.model.CatalogObject;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,6 +35,8 @@ class NewEntityDefaultsTest {
         private boolean active = true;
         @Attribute(displayName = "Price", precision = 15, scale = 2)
         private BigDecimal price = new BigDecimal("9.99");
+        @Attribute(displayName = "Observed at")
+        private LocalDateTime observedAt;
         @Attribute(displayName = "Token", secret = true)
         private String token = "do-not-leak"; // a secret default must never be seeded
     }
@@ -59,5 +63,20 @@ class NewEntityDefaultsTest {
         assertThat(row).doesNotContainKey(column(desc, "name"));
         // A secret default is never exposed.
         assertThat(row).doesNotContainKey(column(desc, "token"));
+    }
+
+    @Test
+    void prefillAcceptsOnlyOffsetFreeLocalDateTime() {
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        CatalogDescriptor desc = scanner.scan(Product.class);
+
+        Map<String, Object> row = new HashMap<>();
+        NewEntityDefaults.applyPrefill(row, desc.attributes(),
+                Map.of("observedAt", "2026-06-04T10:00+03:00"));
+        assertThat(row).doesNotContainKey(column(desc, "observedAt"));
+
+        NewEntityDefaults.applyPrefill(row, desc.attributes(),
+                Map.of("observedAt", "2026-06-04T10:00:00"));
+        assertThat(row.get(column(desc, "observedAt"))).isEqualTo("2026-06-04T10:00");
     }
 }

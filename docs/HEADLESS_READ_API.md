@@ -159,11 +159,11 @@ Temporal columns are database-independent ISO strings:
 | Java type | Read representation | Accepted write representation |
 |-----------|---------------------|-------------------------------|
 | `LocalDate` | `yyyy-MM-dd` | `yyyy-MM-dd` |
-| `LocalDateTime` | offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]` | the same; offset-bearing ISO (`Z`, `+03:00`) is also accepted |
+| `LocalDateTime` | offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]` | the same offset-free ISO representation |
 
-`LocalDateTime` is a business wall-clock value, not an instant. If a write includes an offset, the
-offset is treated as transport decoration and the local fields are preserved without conversion:
-`2026-06-04T10:00+03:00` stores and reads back as `2026-06-04T10:00`.
+`LocalDateTime` is a business wall-clock value, not an instant. Offset- or zone-bearing writes such
+as `2026-06-04T10:00+03:00` and `2026-06-04T10:00Z` are rejected with a field-specific `400`
+validation response; callers must choose the intended wall time and send it without an offset.
 
 PostgreSQL/JDBC may internally expose timestamps as `Timestamp` or offset-bearing values, but the
 read API normalizes those before JSON serialization. The generated form also canonicalizes loaded

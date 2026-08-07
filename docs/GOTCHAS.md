@@ -63,11 +63,11 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   `FieldColor` sidecars (`{col}_display` / `{col}_color` in storage compatibility mode).
 - **Temporal reads and writes are ISO-8601 wall-clock values.** `LocalDate` reads/writes as
   `yyyy-MM-dd`; `LocalDateTime` reads/writes as offset-free `yyyy-MM-ddTHH:mm[:ss[.fraction]]`.
-  Since `LocalDateTime` has no zone, an accepted transport offset (`Z`, `+03:00`) is ignored without
-  shifting the local fields: `2026-06-04T10:00+03:00` persists as `2026-06-04T10:00`. Since v1.11.1
-  the read API normalizes PostgreSQL/JDBC timestamp representations and the bundled form normalizes
-  loaded values before resubmitting them. Default logical reads can round-trip writable values
-  without renaming keys; display/ref/color companions are read-only and ignored by partial writes.
+  Since `LocalDateTime` has no zone, writes containing `Z` or a numeric offset are rejected with a
+  field-specific `400`; choose the intended wall time and send it without an offset. The read API
+  still normalizes PostgreSQL/JDBC timestamp representations and the bundled form normalizes loaded
+  values before resubmitting them. Default logical reads can round-trip writable values without
+  renaming keys; display/ref/color companions are read-only and ignored by partial writes.
 
 ## SPA & static assets
 
