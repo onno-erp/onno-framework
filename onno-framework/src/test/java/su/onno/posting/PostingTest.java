@@ -356,6 +356,33 @@ class PostingTest {
     }
 
     @Test
+    void post_negativeBalanceOnUntouchedDimensions_doesNotBlockPosting() {
+        AccumulationRegisterDescriptor descriptor =
+                registry.getRegisterDescriptor(TestStockRegister.class);
+        UUID staleProduct = UUID.randomUUID();
+        UUID staleWarehouse = UUID.randomUUID();
+        jdbi.useHandle(handle -> handle.createUpdate(
+                        "INSERT INTO " + descriptor.totalsTableName() +
+                                " (product, warehouse, quantity) " +
+                                "VALUES (:product, :warehouse, :quantity)")
+                .bind("product", staleProduct)
+                .bind("warehouse", staleWarehouse)
+                .bind("quantity", new BigDecimal("-1"))
+                .execute());
+
+        UUID postedProduct = UUID.randomUUID();
+        UUID postedWarehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(
+                postedWarehouse, postedProduct, new BigDecimal("5"));
+
+        engine.post(receipt);
+
+        assertStockBalance(postedProduct, postedWarehouse, "5");
+        assertStockBalance(staleProduct, staleWarehouse, "-1");
+        assertThat(receipt.isPosted()).isTrue();
+    }
+
+    @Test
     void post_allowNegativeBalancePolicy_permitsOverdraft() {
         TestWithdrawal withdrawal = createWithdrawal(
                 UUID.randomUUID(), new BigDecimal("125.50"));

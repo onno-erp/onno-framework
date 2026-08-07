@@ -76,9 +76,11 @@ tables, and register filters/typed reads convert it in both directions.
 
 ## Negative Balance Policy
 
-`@AccumulationRegister(type = BALANCE)` rejects a post if any resource total would become negative.
-This safe default fits inventory and other constrained balances. Declare `allowNegative = true` on
-an individual balance register when its domain permits debt or overdrafts:
+`@AccumulationRegister(type = BALANCE)` rejects a post if any resource total on a dimension tuple
+touched by that post would become negative. A stale negative balance on an unrelated tuple does not
+block otherwise valid work. This safe default fits inventory and other constrained balances.
+Declare `allowNegative = true` on an individual balance register when its domain permits debt or
+overdrafts:
 
 ```java
 @AccumulationRegister(

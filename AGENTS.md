@@ -288,8 +288,10 @@ Examples:
 - Loyalty points
 - Open reservations
 
-Balance registers reject posting when any resource total would become negative. For balances where
-debt or overdrafts are valid, opt that register out explicitly with `allowNegative = true`:
+Balance registers reject posting when a resource total for a dimension tuple touched by that post
+would become negative. Existing negative balances on unrelated dimension tuples do not block the
+post. For balances where debt or overdrafts are valid, opt that register out explicitly with
+`allowNegative = true`:
 
 ```java
 @AccumulationRegister(
