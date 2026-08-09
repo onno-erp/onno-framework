@@ -263,6 +263,8 @@ files for structural changes. The diff-based engine lives in
   snapshot is how *type changes* and *removed entities* are detected on later boots.
 - **Renames keep data**: declare the former name with `previousNames` on `@Catalog`/`@Document`/
   `@Attribute`; the engine emits a `RENAME_TABLE`/`RENAME_COLUMN` instead of drop+add.
+- **SQL identifiers fail fast**: metadata-derived table/column names and rename aliases must match
+  `[A-Za-z_][A-Za-z0-9_]*`; the scanner rejects unsafe identifiers before DDL or query rendering.
 - **Change kinds** (`SchemaChange.Type`): `CREATE_TABLE`, `RENAME_TABLE`, `RENAME_COLUMN`,
   `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `DROP_COLUMN`, `DROP_TABLE`. Drops are only ever proposed for
   objects present in the previous snapshot (never user-created tables).

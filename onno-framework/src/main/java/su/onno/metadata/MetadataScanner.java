@@ -58,6 +58,7 @@ public class MetadataScanner {
         String displayTitle = catalog.title().isEmpty() ? logicalName : catalog.title();
         String storageKey = catalog.tableName().isEmpty() ? logicalName : catalog.tableName();
         String tableName = naming.catalogTable(storageKey);
+        validatePreviousNames(catalog.previousNames(), naming::catalogTable);
         int codeLength = catalog.codeLength();
 
         List<AttributeDescriptor> attributes = scanAttributes(clazz, CatalogObject.class);
@@ -81,6 +82,7 @@ public class MetadataScanner {
         String displayTitle = document.title().isEmpty() ? logicalName : document.title();
         String storageKey = document.tableName().isEmpty() ? logicalName : document.tableName();
         String tableName = naming.documentTable(storageKey);
+        validatePreviousNames(document.previousNames(), naming::documentTable);
         int numberLength = document.numberLength();
 
         List<AttributeDescriptor> attributes = scanAttributes(clazz, DocumentObject.class);
@@ -307,6 +309,7 @@ public class MetadataScanner {
                 String columnName = naming.column(
                         attr.name().isEmpty() ? fieldName : attr.name()
                 );
+                validatePreviousNames(attr.previousNames(), naming::column);
                 Class<?> javaType = field.getType();
                 boolean isRef = Ref.class.isAssignableFrom(javaType)
                         || PolyRef.class.isAssignableFrom(javaType);
@@ -485,5 +488,13 @@ public class MetadataScanner {
                     "@TabularSection field " + field.getName() + " must have a concrete type parameter");
         }
         return (Class<?>) typeArgs[0];
+    }
+
+    private static void validatePreviousNames(String[] previousNames,
+                                              java.util.function.Function<String, String> normalizer) {
+        for (String previousName : previousNames) {
+            DefaultNamingStrategy.requireSqlIdentifier(previousName);
+            normalizer.apply(previousName);
+        }
     }
 }

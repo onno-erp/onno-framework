@@ -11,6 +11,16 @@ import static org.assertj.core.api.Assertions.*;
 
 class MetadataScannerTest {
 
+    @su.onno.annotations.Catalog(name = "Unsafe;DROP TABLE catalog_test_products")
+    static class UnsafeCatalogName extends su.onno.model.CatalogObject {
+    }
+
+    @su.onno.annotations.Catalog(name = "UnsafeAttributeCatalog")
+    static class UnsafeAttributeName extends su.onno.model.CatalogObject {
+        @su.onno.annotations.Attribute(name = "unsafe-column")
+        private String value;
+    }
+
     private MetadataScanner scanner;
 
     @BeforeEach
@@ -89,5 +99,21 @@ class MetadataScannerTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("@TabularSection is only supported on @Document")
                 .hasMessageContaining("lines");
+    }
+
+    @Test
+    void scan_rejectsUnsafeTableIdentifierFromAnnotation() {
+        assertThatThrownBy(() -> scanner.scan(UnsafeCatalogName.class))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsafe SQL identifier")
+                .hasMessageContaining("catalog_unsafe;");
+    }
+
+    @Test
+    void scan_rejectsUnsafeColumnIdentifierFromAnnotation() {
+        assertThatThrownBy(() -> scanner.scan(UnsafeAttributeName.class))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsafe SQL identifier")
+                .hasMessageContaining("unsafe-column");
     }
 }
