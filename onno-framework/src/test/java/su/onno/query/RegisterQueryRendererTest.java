@@ -31,6 +31,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class RegisterQueryRendererTest {
 
+    @su.onno.annotations.AccumulationRegister(name = "CustomColumnStock")
+    static class CustomColumnStock extends su.onno.model.AccumulationRecord {
+        @su.onno.annotations.Dimension(name = "warehouse_id")
+        private UUID warehouse;
+
+        @su.onno.annotations.Resource(name = "on_hand")
+        private BigDecimal quantity;
+    }
+
     private Jdbi jdbi;
     private RegisterRepositoryImpl<TestStockRegister> repo;
 
@@ -120,5 +129,18 @@ class RegisterQueryRendererTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Unknown accumulation-register filter field")
                 .hasMessageContaining("warehouse) OR 1=1 --");
+    }
+
+    @Test
+    void knownPhysicalColumnNamesRemainValidMapFilters() {
+        AccumulationRegisterDescriptor descriptor = new MetadataScanner(new DefaultNamingStrategy())
+                .scanRegister(CustomColumnStock.class);
+        RegisterPersistence<CustomColumnStock> persistence = new RegisterPersistence<>(jdbi, descriptor);
+
+        assertThat(persistence.resolveFieldFilters(Map.of(
+                "warehouse_id", warehouse,
+                "on_hand", BigDecimal.ONE)))
+                .containsEntry("warehouse_id", warehouse)
+                .containsEntry("on_hand", BigDecimal.ONE);
     }
 }

@@ -465,12 +465,12 @@ public class RegisterPersistence<T extends AccumulationRecord> {
 
     private String fieldToColumn(String fieldName) {
         for (AttributeDescriptor dim : descriptor.dimensions()) {
-            if (dim.fieldName().equals(fieldName)) {
+            if (dim.fieldName().equals(fieldName) || dim.columnName().equals(fieldName)) {
                 return dim.columnName();
             }
         }
         for (AttributeDescriptor res : descriptor.resources()) {
-            if (res.fieldName().equals(fieldName)) {
+            if (res.fieldName().equals(fieldName) || res.columnName().equals(fieldName)) {
                 return res.columnName();
             }
         }
