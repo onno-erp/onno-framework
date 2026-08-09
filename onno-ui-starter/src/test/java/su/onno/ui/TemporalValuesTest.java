@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Regression for "column is of type date but expression is of type character varying" when editing
@@ -28,16 +29,34 @@ class TemporalValuesTest {
     void coercesDateTimeStringToLocalDateTime() {
         assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04T08:44:44"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
-        // H2 hands TIMESTAMP back space-separated; must still parse.
-        assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04 08:44:44.417097"))
+    }
+
+    @Test
+    void rejectsOffsetBearingLocalDateTimeWrites() {
+        assertThatThrownBy(() -> TemporalValues.coerce(
+                LocalDateTime.class, "2026-06-04T08:44:44.417+00:00"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("offset-free ISO");
+        assertThatThrownBy(() -> TemporalValues.coerce(
+                LocalDateTime.class, "2026-06-04T08:44:44Z"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("offset-free ISO");
+        assertThatThrownBy(() -> TemporalValues.coerce(LocalDateTime.class,
+                OffsetDateTime.of(2026, 6, 4, 8, 44, 44, 0, ZoneOffset.ofHours(3))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("offset-free ISO");
+    }
+
+    @Test
+    void normalizesOffsetBearingJdbcReadValues() {
+        // H2 hands TIMESTAMP back space-separated; read normalization must still parse it.
+        assertThat(TemporalValues.toLocalDateTime("2026-06-04 08:44:44.417097"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_097_000));
-        // PostgreSQL/Jackson may expose TIMESTAMP as offset-bearing ISO. LocalDateTime represents
-        // business wall time, so accept the transport offset without shifting the local fields.
-        assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04T08:44:44.417+00:00"))
+        assertThat(TemporalValues.toLocalDateTime("2026-06-04T08:44:44.417+00:00"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44, 417_000_000));
-        assertThat(TemporalValues.coerce(LocalDateTime.class, "2026-06-04T08:44:44Z"))
+        assertThat(TemporalValues.toLocalDateTime("2026-06-04T08:44:44Z"))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
-        assertThat(TemporalValues.coerce(LocalDateTime.class,
+        assertThat(TemporalValues.toLocalDateTime(
                 OffsetDateTime.of(2026, 6, 4, 8, 44, 44, 0, ZoneOffset.ofHours(3))))
                 .isEqualTo(LocalDateTime.of(2026, 6, 4, 8, 44, 44));
     }

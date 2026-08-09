@@ -623,9 +623,9 @@ public class Order extends DocumentObject {
 literal initializer — but it *can* be seeded from the URL: the New form prefills from navigation
 query params, keys = write-path `fieldName`s, e.g. `…/new?room=<uuid>&startsAt=2026-07-16T19:00`.
 `Ref`/enum values are UUID strings; `LocalDate` is `yyyy-MM-dd` and `LocalDateTime` is offset-free
-ISO wall time (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset-bearing temporal inputs are accepted
-without shifting the local fields, but the generated form and read API normalize to offset-free
-ISO. `viewport`/`theme`/`profile` are reserved;
+ISO wall time (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset- or zone-bearing `LocalDateTime` values
+are invalid: New-form prefills skip them, and write APIs return a field-specific `400`. The generated
+form and read API normalize JDBC-loaded values to offset-free ISO. `viewport`/`theme`/`profile` are reserved;
 unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
 field initializers, before ref/enum label resolution.)
 

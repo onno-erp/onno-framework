@@ -67,9 +67,10 @@ final class NewEntityDefaults {
      * runs ref/enum resolution, so an injected {@link Ref}/enum id resolves to a label exactly like a
      * declared default. Keys are matched by attribute {@code fieldName} (what the write path and
      * widgets use) and written under {@code columnName} (what the seed row / read side uses), in the
-     * same loose shape {@link #columnValues} emits: {@link Ref}/enum → id {@link UUID}, temporals kept
-     * as their ISO string, everything else the raw string. Unknown keys, secrets, and values that
-     * can't be coerced are skipped, never errored — a malformed deep link degrades to a blank field.
+     * same loose shape {@link #columnValues} emits: {@link Ref}/enum → id {@link UUID},
+     * {@link LocalDateTime} as a canonical offset-free ISO string, everything else the raw string.
+     * Unknown keys, secrets, and values that can't be coerced are skipped, never errored — a
+     * malformed deep link degrades to a blank field.
      */
     static void applyPrefill(Map<String, Object> row, List<AttributeDescriptor> attributes,
                              Map<String, String> prefill) {
@@ -99,9 +100,14 @@ final class NewEntityDefaults {
                 } catch (IllegalArgumentException notAUuid) {
                     continue;
                 }
+            } else if (attr.javaType() == LocalDateTime.class) {
+                try {
+                    coerced = TemporalValues.toWriteLocalDateTime(value.trim()).toString();
+                } catch (IllegalArgumentException invalidDateTime) {
+                    continue;
+                }
             } else {
-                // Temporals arrive as ISO strings (what columnValues emits and the write path parses);
-                // everything else is carried verbatim. No parse here — the form seeds from strings.
+                // Other values are carried verbatim; the command path performs final validation.
                 coerced = value;
             }
             row.put(attr.columnName(), coerced);

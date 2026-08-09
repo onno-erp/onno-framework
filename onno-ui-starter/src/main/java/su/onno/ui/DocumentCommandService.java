@@ -14,6 +14,7 @@ import su.onno.security.SecretCipher;
 import su.onno.types.Ref;
 import su.onno.types.PolyRef;
 import su.onno.validation.AttributeValidator;
+import su.onno.validation.ValidationException;
 import su.onno.validation.ValidationErrors;
 
 import org.jdbi.v3.core.Jdbi;
@@ -89,12 +90,13 @@ public class DocumentCommandService {
         // Run the same write lifecycle the repository path runs (onFilling + beforeWrite + rules),
         // then fold any field a hook derived back into the body so the INSERT captures it. (#158)
         ValidationErrors errors = new ValidationErrors();
+        LocalDateTime parsedDate = parseWriteDate(date, errors);
         attributeValidator.validate(body, desc.attributes(), errors);
         DocumentObject doc = instantiate(desc.javaClass());
         if (doc != null) {
             doc.setId(id);
             doc.setNumber(number);
-            doc.setDate(toLocalDateTime(date));
+            if (parsedDate != null) doc.setDate(parsedDate);
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
             overlayTabularSections(doc, desc, body, errors);
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
@@ -127,7 +129,7 @@ public class DocumentCommandService {
                     .bind("_number", resolveNumber(desc, body))
                     // Bind a real LocalDateTime, not its ISO string: PostgreSQL rejects a varchar
                     // bound into the timestamp _date column (H2 silently coerces it). (#163)
-                    .bind("_date", toLocalDateTime(body.getOrDefault("date", LocalDateTime.now())))
+                    .bind("_date", requireWriteDate(body.getOrDefault("date", LocalDateTime.now())))
                     .bind("_posted", false)
                     .bind("_deletion_mark", false)
                     .bind("_version", 0);
@@ -158,11 +160,13 @@ public class DocumentCommandService {
         // recompute the way they do on the repository path; only fields a hook actually changed are
         // folded back in, leaving the partial-update semantics intact. (#158)
         ValidationErrors errors = new ValidationErrors();
+        LocalDateTime parsedDate = body.containsKey("date")
+                ? parseWriteDate(body.get("date"), errors) : null;
         attributeValidator.validatePartial(body, desc.attributes(), errors);
         DocumentObject doc = loadForUpdate(desc, id);
         if (doc != null) {
             if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
-            if (body.containsKey("date")) doc.setDate(toLocalDateTime(body.get("date")));
+            if (parsedDate != null) doc.setDate(parsedDate);
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
             overlayTabularSections(doc, desc, body, errors);
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
@@ -201,7 +205,7 @@ public class DocumentCommandService {
                 var update = h.createUpdate(sql).bind("_id", id);
                 if (body.containsKey("number")) update.bind("_number", body.get("number"));
                 // Same as create: bind the timestamp as a LocalDateTime so Postgres accepts it. (#163)
-                if (body.containsKey("date")) update.bind("_date", toLocalDateTime(body.get("date")));
+                if (body.containsKey("date")) update.bind("_date", requireWriteDate(body.get("date")));
                 if (hasExpectedVersion) {
                     update.bind("_expected_version", parseInt(body.getOrDefault("version", body.get("_version"))));
                 }
@@ -267,12 +271,17 @@ public class DocumentCommandService {
                 doc.setId(UUID.randomUUID());
                 doc.setNumber(asString(body.getOrDefault("number", "")));
                 Object date = body.get("date");
-                doc.setDate(date == null || "".equals(date) ? LocalDateTime.now() : toLocalDateTime(date));
+                LocalDateTime parsedDate = date == null || "".equals(date)
+                        ? LocalDateTime.now() : parseWriteDate(date, errors);
+                if (parsedDate != null) doc.setDate(parsedDate);
             } else {
                 if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
                 // A half-edited form can carry a blank date; keep the stored one rather than throw.
                 Object date = body.get("date");
-                if (date != null && !"".equals(date)) doc.setDate(toLocalDateTime(date));
+                if (date != null && !"".equals(date)) {
+                    LocalDateTime parsedDate = parseWriteDate(date, errors);
+                    if (parsedDate != null) doc.setDate(parsedDate);
+                }
             }
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
             overlayTabularSections(doc, desc, body, errors);
@@ -619,6 +628,24 @@ public class DocumentCommandService {
 
     static LocalDateTime toLocalDateTime(Object value) {
         return TemporalValues.toLocalDateTime(value);
+    }
+
+    private static LocalDateTime parseWriteDate(Object value, ValidationErrors errors) {
+        try {
+            return TemporalValues.toWriteLocalDateTime(value);
+        } catch (RuntimeException invalid) {
+            errors.field("date", "Date " + TemporalValues.LOCAL_DATE_TIME_WRITE_MESSAGE);
+            return null;
+        }
+    }
+
+    private static LocalDateTime requireWriteDate(Object value) {
+        try {
+            return TemporalValues.toWriteLocalDateTime(value);
+        } catch (RuntimeException invalid) {
+            throw new ValidationException(
+                    "Date " + TemporalValues.LOCAL_DATE_TIME_WRITE_MESSAGE, "date");
+        }
     }
 
     /** Natural key for a document row is its number (the slug used to address the resource). */

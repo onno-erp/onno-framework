@@ -25,7 +25,7 @@ Generated APIs are authenticated. Browser page routes are not a substitute for A
   `?representation=storage` only for legacy reads; writes accept either vocabulary and reject
   conflicting aliases.
 - `LocalDate` is `yyyy-MM-dd`. `LocalDateTime` is offset-free ISO wall time
-  (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset-bearing writes are accepted without shifting the
-  local fields, but callers should send the canonical offset-free form.
+  (`yyyy-MM-ddTHH:mm[:ss[.fraction]]`). Offset- or zone-bearing writes are rejected with a
+  field-specific `400`; callers must send the canonical offset-free form.
 
 Read [references/examples.md](references/examples.md) for curl flows and response-shape examples.
