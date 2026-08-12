@@ -387,9 +387,9 @@ cannot be used as a blind oracle for encrypted values.
 | Desktop | `GET /api/desktop/ready`, `GET /api/desktop/manifest` (desktop-starter) |
 | MCP | `POST /mcp` — streamable-HTTP MCP transport (mcp-starter) |
 
-> **SPA fallback gotcha:** any non-`/api` path returns `index.html` with HTTP 200 (React Router
-> deep-linking). A mistyped URL "succeeds" with the SPA shell. Only `/api/**` produces real
-> `404`/`401`/`403`. When debugging, hit API URLs, not page URLs.
+> **SPA routing:** the server returns `index.html` only for `GET` navigation under `onno.ui.path`
+> whose `Accept` header includes `text/html`. Missing assets, unknown `/api/**` routes, non-GET
+> requests, and paths outside the configured UI mount return their normal `404`/`405` responses.
 
 The catalog/document `POST`/`PUT` writes (`CatalogCommandService`/`DocumentCommandService`, shared by
 the REST API, the generated UI, CSV import, and the MCP tools) reconstruct the typed entity and run

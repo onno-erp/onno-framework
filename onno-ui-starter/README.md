@@ -40,13 +40,10 @@ is never returned by `/api/config` or sent to the browser. See
 > `src/main/frontend/dist` to `static/ui/`). `static/ui/` is not committed; build the module to
 > produce it.
 
-> **Static-asset gotcha.** Your own assets (a logo, a kiosk/TV page, fonts) must live under
-> `classpath:/static/ui/…`; they're served at the web root. Any request that does **not** resolve to a
-> real file there falls through to the SPA `index.html` — served as `text/html`, HTTP 200, **not** a
-> 404. So a file placed under a bare `static/` (not `static/ui/`), or a mistyped path, silently returns
-> the app shell (and won't render under `X-Content-Type-Options: nosniff`). `/api/**` routes and
-> `{onno.ui.path}/plugins/**` are exempt. If you need a path outside `static/ui/` or a specific
-> content-type, add a dedicated `@GetMapping` controller — it out-precedences the SPA fallback.
+> **Static assets.** Bundled UI assets are served from `classpath:/static/ui/`; application assets
+> may use Spring Boot's standard `META-INF/resources`, `resources`, `static`, or `public` locations.
+> Missing files return `404` instead of the SPA shell. `{onno.ui.path}/plugins/**` keeps precedence
+> for compiled widget modules.
 
 ### Configuration keys
 
@@ -1349,15 +1346,16 @@ before routing or any deep-link fetch happens. Because React Router strips the `
 `useLocation().pathname`, in-app routes and the `/api/divkit{path}` calls they drive stay
 prefix-relative while the browser URL carries the prefix (e.g. `/ui/catalogs/Properties`).
 
-`SpaResourceResolver` (registered on `/**`) falls back to that injected `index.html` for any path
-that isn't a real static asset, so client-side **deep links cold-load** straight onto their surface.
+`SpaResourceResolver` is registered under `onno.ui.path` and falls back to that injected
+`index.html` only for `GET` navigation requests whose `Accept` header includes `text/html`, so
+client-side **deep links cold-load** straight onto their surface without swallowing API or asset
+errors.
 `SpaIndexController` serves the root: when a base path is configured it redirects `/` → the base
 path (React Router renders nothing for a URL outside its `basename`, so the bare root must bounce
-into it); when `onno.ui.path` is `/` it serves the shell directly. Assets (JS/CSS/icons) are served
-from `classpath:/static/ui/` at the web root regardless of the base path, so they load at any route
-depth.
+into it); when `onno.ui.path` is `/` it serves the shell directly. Bundled assets (JS/CSS/icons) are
+served from `classpath:/static/ui/` at the web root regardless of the base path, so they load at any
+route depth. Standard Spring Boot consumer static locations remain available.
 
-> **Gotcha:** because of the fallback, an unknown path under the SPA returns `index.html` with
-> **HTTP 200**, not a `404`. A mistyped non-`/api` URL looks "successful" and renders the SPA shell.
-> Only `/api/**` paths produce real `404`/`401`/`403` responses. When debugging, test API URLs, not
-> page URLs.
+Missing `.js`, `.css`, image, font, and other file-shaped paths return `404`; unknown `/api/**`
+routes also remain `404`. Requests outside the configured UI mount are left to application
+controllers and Spring Boot's normal static-resource handling.

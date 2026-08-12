@@ -15,7 +15,8 @@ import java.nio.charset.StandardCharsets;
  * before any cold-loaded deep link is resolved.
  *
  * <p>Built once at startup and shared by {@link SpaIndexController} (the {@code /} route) and
- * {@link SpaResourceResolver} (the deep-link fallback) so both serve an identically-prefixed shell.
+ * {@link SpaResourceResolver} (the HTML-navigation deep-link fallback) so both serve an
+ * identically-prefixed shell.
  */
 class SpaIndexHtml {
 

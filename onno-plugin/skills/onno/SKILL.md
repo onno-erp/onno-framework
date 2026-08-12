@@ -278,8 +278,8 @@ login/me/CSRF, login DivKit, and desktop probes by default) is public. Cookie-mo
 1. **There is no anonymous manifest endpoint.** `/api/ui/metadata/manifest` does not exist (the only
    `/manifest` is the desktop shell's). Introspect the model via the real generated endpoints or the
    MCP `describe_metadata` tool.
-2. **Unknown non-`/api` paths return the SPA `index.html` with HTTP 200**, not 404 — a wrong path
-   *looks* like success. Test API URLs, not page URLs.
+2. **The SPA fallback is navigation-only.** Unknown `/api/**` routes and missing assets return
+   `404`; only HTML `GET` navigation under `onno.ui.path` falls back to `index.html`.
 
 `{name}` is the annotation's logical `name` (`Books`, `SalesOrders`), not the Java class name or
 localized `title`. Collection reads use `/api/list/catalogs|documents/{name}`. Login

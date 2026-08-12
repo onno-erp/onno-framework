@@ -11,7 +11,8 @@ controller source (issues #33 and #314).
 It pairs with the auth/CSRF notes in [AGENTS.md](../AGENTS.md#inspecting-a-running-app-read-this-before-you-curl):
 every `/api/**` route is authenticated, reads need only the session cookie (or a bearer token in
 `resource-server` mode), and `{name}` is the entity's annotation **logical name** (e.g. `Books`,
-`SalesOrders`) — not the Java class name or localized `title`.
+`SalesOrders`) — not the Java class name or localized `title`. Unknown `/api/**` routes return
+`404`; they are never converted into the SPA shell.
 
 ## Endpoints
 

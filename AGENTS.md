@@ -1031,11 +1031,10 @@ Everything under `/api/**` is **authenticated** and most of it is **CSRF-protect
 up every agent:
 
 1. **There is no anonymous metadata/manifest endpoint.** Older notes pointed at
-   `/api/ui/metadata/manifest`; no controller serves that path, so it falls through to the SPA and you
-   get `index.html` (HTTP 200, HTML body) — which looks like success but isn't. To introspect the
-   model at runtime, hit the real generated endpoints below.
-2. **Unknown `/api/**`-adjacent paths return the SPA, not a 404.** If a call returns HTML, you have the
-   wrong path or aren't authenticated — not a working endpoint.
+   `/api/ui/metadata/manifest`; no controller serves that path, so it returns `404`. To introspect
+   the model at runtime, hit the real generated endpoints below.
+2. **The SPA fallback is navigation-only.** Unknown `/api/**` routes and missing assets return
+   `404`; only HTML `GET` navigation under `onno.ui.path` falls back to the SPA shell.
 
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
@@ -1059,7 +1058,7 @@ curl -sb cookies.txt -H "X-XSRF-TOKEN: $XSRF" -H 'Content-Type: application/json
 ```
 
 `{name}` is the entity's **display name** (e.g. `Books`, `Orders`), *not* the Java class
-name (`Book` → 404/SPA fallback). The real endpoints (all under `/api`, served by `onno-ui-starter`):
+name (`Book` → 404). The real endpoints (all under `/api`, served by `onno-ui-starter`):
 
 ```text
 GET    /api/list/catalogs/{name}?cursor=&limit=    collection window
