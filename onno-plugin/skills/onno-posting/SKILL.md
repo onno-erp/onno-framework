@@ -18,6 +18,8 @@ Posting is typed Java. There is no string-mapped posting rule or validation expr
   `@Transactional` method.
 - Posting atomically claims an existing live, unposted document. A repeated core `post(...)` is
   rejected before movements are persisted; use atomic `repost(...)` for an intentional recalculation.
+- A posting `@DomainEvent` outbox row is inserted on the posting transaction's JDBI handle. An
+  outbox failure rolls back the posting; a posting rollback cannot leave a phantom event.
 - `handlePosting(PostingContext)` should only stage register movements. Normal posting invokes it
   before transactional persistence; preview and chronological restoration may replay it.
 - For external APIs, notifications, or other bean-backed side effects, listen for

@@ -26,6 +26,7 @@ import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 import org.springframework.data.relational.core.mapping.NamingStrategy;
 import org.springframework.data.repository.config.BootstrapMode;
+import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
 
 import javax.sql.DataSource;
 import java.util.*;
@@ -275,7 +276,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
 
     @Bean
     public Jdbi jdbi(DataSource dataSource) {
-        return Jdbi.create(dataSource);
+        return Jdbi.create(new TransactionAwareDataSourceProxy(dataSource));
     }
 
     /** Validates and indexes every application-provided typed process definition. */
