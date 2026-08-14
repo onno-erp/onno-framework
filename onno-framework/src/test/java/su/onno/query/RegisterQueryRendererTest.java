@@ -18,9 +18,11 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Guards that accumulation-register virtual tables still produce correct balance and
@@ -28,6 +30,15 @@ import static org.assertj.core.api.Assertions.assertThat;
  * shared {@link SqlRenderer} (issue #9 acceptance: no behavior change for registers).
  */
 class RegisterQueryRendererTest {
+
+    @su.onno.annotations.AccumulationRegister(name = "CustomColumnStock")
+    static class CustomColumnStock extends su.onno.model.AccumulationRecord {
+        @su.onno.annotations.Dimension(name = "warehouse_id")
+        private UUID warehouse;
+
+        @su.onno.annotations.Resource(name = "on_hand")
+        private BigDecimal quantity;
+    }
 
     private Jdbi jdbi;
     private RegisterRepositoryImpl<TestStockRegister> repo;
@@ -110,5 +121,26 @@ class RegisterQueryRendererTest {
 
         assertThat(rows).hasSize(2);
         assertThat(rows).allSatisfy(r -> assertThat(r.getWarehouse()).isNull());
+    }
+
+    @Test
+    void unknownMapFilterFieldIsRejectedBeforeSqlRendering() {
+        assertThatThrownBy(() -> repo.getBalance(Map.of("warehouse) OR 1=1 --", warehouse)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unknown accumulation-register filter field")
+                .hasMessageContaining("warehouse) OR 1=1 --");
+    }
+
+    @Test
+    void knownPhysicalColumnNamesRemainValidMapFilters() {
+        AccumulationRegisterDescriptor descriptor = new MetadataScanner(new DefaultNamingStrategy())
+                .scanRegister(CustomColumnStock.class);
+        RegisterPersistence<CustomColumnStock> persistence = new RegisterPersistence<>(jdbi, descriptor);
+
+        assertThat(persistence.resolveFieldFilters(Map.of(
+                "warehouse_id", warehouse,
+                "on_hand", BigDecimal.ONE)))
+                .containsEntry("warehouse_id", warehouse)
+                .containsEntry("on_hand", BigDecimal.ONE);
     }
 }

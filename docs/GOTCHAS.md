@@ -36,8 +36,10 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   explicit per-key `onno.ui.messages.*` overrides.
 - **Entity/attribute `name` is the API contract — keep it ASCII/URL-safe.** It is the REST path
   segment and the write-path field key. Localize through `title`/`displayName`/`label(...)`/
-  `@EnumLabel`, never by renaming `name` (renaming it breaks every client). The old presence/SSE
-  403 on non-ASCII route segments is fixed, but the naming rule stands.
+  `@EnumLabel`, never by renaming `name` (renaming it breaks every client). Metadata-derived table
+  and column identifiers must match `[A-Za-z_][A-Za-z0-9_]*`; startup rejects unsafe punctuation
+  before it can reach generated SQL. The old presence/SSE 403 on non-ASCII route segments is fixed,
+  but the route naming rule still stands.
 
 ## Model & lifecycle
 

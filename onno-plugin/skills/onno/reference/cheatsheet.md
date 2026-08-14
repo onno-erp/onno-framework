@@ -49,10 +49,10 @@ reuse across documents/sections. Share implementation through a base row class.
 Model a time-of-day as a `LocalDateTime`, or a `String`/`int` if you only need the clock value.
 
 **Naming rule — entity/attribute `name` must be ASCII / URL-safe.** It becomes the REST route segment
-(`/api/catalogs/{name}`), the derived table name, and the access-check key; it is **not** validated, so
-a non-ASCII name (e.g. Cyrillic `@Catalog(name="Спектакли")`) compiles but bites at runtime — the SPA
-posts the browser's percent-encoded route path, which previously made presence/SSE access checks 403
-("not allowed to read catalog: %D1%81…"). Keep `name` ASCII and put the localized label in `title`.
+(`/api/catalogs/{name}`), the derived table name, and the access-check key. Derived table/column
+identifiers and rename aliases are validated against `[A-Za-z_][A-Za-z0-9_]*` at scan time, so
+unsafe punctuation fails startup before reaching generated SQL. Keep logical route names ASCII and
+put the localized label in `title`; route compatibility still depends on that stable naming rule.
 
 ### `@AccumulationRegister` (on a class extending `AccumulationRecord`)
 `name` (required), `title=""`, `tableName=""`, `type = AccumulationType.BALANCE|TURNOVER` (default

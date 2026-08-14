@@ -116,7 +116,7 @@ public class RegisterRepositoryImpl<T extends AccumulationRecord> implements Reg
     private Map<String, Object> resolveFilter(Consumer<RegisterFilter<T>> filter) {
         RegisterFilter<T> builder = new RegisterFilter<>();
         filter.accept(builder);
-        return persistence.resolveFieldFilters(builder.getFieldFilters());
+        return builder.getFieldFilters();
     }
 
     private T createRecord(MovementType movementType) {

@@ -158,25 +158,29 @@ public class RegisterPersistence<T extends AccumulationRecord> {
     // --- Query methods ---
 
     public List<Map<String, Object>> getBalance(Map<String, Object> filters) {
-        String sql = balanceSql(filters);
-        return queryMap(sql, bindFilters(filters));
+        Map<String, Object> resolvedFilters = resolveFieldFilters(filters);
+        String sql = balanceSql(resolvedFilters);
+        return queryMap(sql, bindFilters(resolvedFilters));
     }
 
     public List<T> getBalanceTyped(Map<String, Object> filters) {
-        String sql = balanceSql(filters);
-        return queryRecords(sql, bindFilters(filters));
+        Map<String, Object> resolvedFilters = resolveFieldFilters(filters);
+        String sql = balanceSql(resolvedFilters);
+        return queryRecords(sql, bindFilters(resolvedFilters));
     }
 
     public List<Map<String, Object>> getTurnover(LocalDateTime from, LocalDateTime to,
                                                    Map<String, Object> filters) {
-        String sql = turnoverSql(filters);
-        return queryMap(sql, bindTurnover(from, to, filters));
+        Map<String, Object> resolvedFilters = resolveFieldFilters(filters);
+        String sql = turnoverSql(resolvedFilters);
+        return queryMap(sql, bindTurnover(from, to, resolvedFilters));
     }
 
     public List<T> getTurnoverTyped(LocalDateTime from, LocalDateTime to,
                                      Map<String, Object> filters) {
-        String sql = turnoverSql(filters);
-        return queryRecords(sql, bindTurnover(from, to, filters));
+        Map<String, Object> resolvedFilters = resolveFieldFilters(filters);
+        String sql = turnoverSql(resolvedFilters);
+        return queryRecords(sql, bindTurnover(from, to, resolvedFilters));
     }
 
     /** Current balance straight off the totals table, optionally narrowed by column filters. */
@@ -461,16 +465,17 @@ public class RegisterPersistence<T extends AccumulationRecord> {
 
     private String fieldToColumn(String fieldName) {
         for (AttributeDescriptor dim : descriptor.dimensions()) {
-            if (dim.fieldName().equals(fieldName)) {
+            if (dim.fieldName().equals(fieldName) || dim.columnName().equals(fieldName)) {
                 return dim.columnName();
             }
         }
         for (AttributeDescriptor res : descriptor.resources()) {
-            if (res.fieldName().equals(fieldName)) {
+            if (res.fieldName().equals(fieldName) || res.columnName().equals(fieldName)) {
                 return res.columnName();
             }
         }
-        return fieldName;
+        throw new IllegalArgumentException(
+                "Unknown accumulation-register filter field: " + fieldName);
     }
 
     // --- Mapping ---
