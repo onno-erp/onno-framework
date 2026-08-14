@@ -11,6 +11,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import su.onno.repository.*;
 
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.spring5.SpringConnectionFactory;
 import org.jobrunr.scheduling.JobScheduler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
@@ -26,7 +27,6 @@ import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 import org.springframework.data.relational.core.mapping.NamingStrategy;
 import org.springframework.data.repository.config.BootstrapMode;
-import org.springframework.jdbc.datasource.TransactionAwareDataSourceProxy;
 
 import javax.sql.DataSource;
 import java.util.*;
@@ -276,7 +276,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
 
     @Bean
     public Jdbi jdbi(DataSource dataSource) {
-        return Jdbi.create(new TransactionAwareDataSourceProxy(dataSource));
+        return Jdbi.create(new SpringConnectionFactory(dataSource));
     }
 
     /** Validates and indexes every application-provided typed process definition. */
