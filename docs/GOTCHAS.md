@@ -71,11 +71,11 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
 
 ## SPA & static assets
 
-- **The SPA fallback swallows unknown paths — including your static assets.** Anything not found
-  under `classpath:/static/ui/` returns `index.html` with HTTP 200 `text/html`; only
-  `{onno.ui.path}/plugins/**` is exempt. A kiosk page or extra asset directory needs its own
-  `@GetMapping` controller. Corollary for API work: **if a call returns HTML, you hit a wrong path
-  or aren't authenticated — not a working endpoint.**
+- **The SPA fallback is navigation-only.** A `GET` under `onno.ui.path` falls back to
+  `index.html` only when the request accepts `text/html` and the path does not look like a file.
+  Missing assets and unknown `/api/**` routes return `404`. Spring Boot's standard consumer static
+  locations remain available; bundled UI assets and `{onno.ui.path}/plugins/**` retain their own
+  handlers. If an API call returns HTML, verify that a proxy has not rewritten it to a UI route.
 
 ## Live updates (SSE)
 

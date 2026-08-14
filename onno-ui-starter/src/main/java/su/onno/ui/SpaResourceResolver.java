@@ -1,30 +1,63 @@
 package su.onno.ui;
 
 import org.springframework.core.io.Resource;
-import org.springframework.web.servlet.resource.PathResourceResolver;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.web.servlet.resource.AbstractResourceResolver;
+import org.springframework.web.servlet.resource.ResourceResolverChain;
 
-import java.io.IOException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
  * Falls back to the (base-path-injected) index.html for SPA client-side routes.
  * Actual static files (js, css, images) are served normally.
  */
-class SpaResourceResolver extends PathResourceResolver {
+class SpaResourceResolver extends AbstractResourceResolver {
 
     private final SpaIndexHtml indexHtml;
+    private final String basePath;
 
-    SpaResourceResolver(SpaIndexHtml indexHtml) {
+    SpaResourceResolver(SpaIndexHtml indexHtml, String basePath) {
         this.indexHtml = indexHtml;
+        this.basePath = basePath;
     }
 
     @Override
-    protected Resource getResource(String resourcePath, Resource location) throws IOException {
-        Resource resource = super.getResource(resourcePath, location);
-        if (resource != null && resource.exists()) {
+    protected Resource resolveResourceInternal(HttpServletRequest request, String requestPath,
+                                               List<? extends Resource> locations,
+                                               ResourceResolverChain chain) {
+        if (!isNavigationRequest(request, requestPath)) {
+            return chain.resolveResource(request, requestPath, locations);
+        }
+        Resource resource = chain.resolveResource(request, requestPath, locations);
+        if (resource != null) {
             return resource;
         }
-        // Fall back to the injected index.html for client-side routes (deep links).
         Resource fallback = indexHtml.resource();
         return fallback != null && fallback.exists() ? fallback : null;
+    }
+
+    @Override
+    protected String resolveUrlPathInternal(String resourceUrlPath, List<? extends Resource> locations,
+                                            ResourceResolverChain chain) {
+        return chain.resolveUrlPath(resourceUrlPath, locations);
+    }
+
+    private boolean isNavigationRequest(HttpServletRequest request, String requestPath) {
+        if (request == null || !HttpMethod.GET.matches(request.getMethod())) {
+            return false;
+        }
+        if (requestPath.contains(".") || isExcludedRootPath(requestPath)) {
+            return false;
+        }
+        return MediaType.parseMediaTypes(request.getHeader(HttpHeaders.ACCEPT)).stream()
+                .anyMatch(mediaType -> mediaType.isCompatibleWith(MediaType.TEXT_HTML));
+    }
+
+    private boolean isExcludedRootPath(String requestPath) {
+        return basePath.isEmpty() && (requestPath.equals("api") || requestPath.startsWith("api/")
+                || requestPath.equals("plugins") || requestPath.startsWith("plugins/"));
     }
 }

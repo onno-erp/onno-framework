@@ -13,8 +13,8 @@ import java.net.URI;
  * Serves the SPA shell at the application root. When the UI is mounted under a base path
  * (the default {@code onno.ui.path = /ui}), the bare root is redirected there: React Router renders
  * nothing for a URL outside its {@code basename}, so {@code http://host/} must bounce to
- * {@code http://host/ui} for the app to boot. Deep links ({@code /ui/**}) are served by
- * {@link SpaResourceResolver}.
+ * {@code http://host/ui} for the app to boot. HTML navigation deep links under the configured UI
+ * path are served by {@link SpaResourceResolver}; missing assets and API routes remain 404s.
  */
 @RestController
 class SpaIndexController {

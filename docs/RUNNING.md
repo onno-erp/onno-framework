@@ -105,8 +105,8 @@ curl -sI -u license:$ONNO_LICENSE_KEY https://cloud.onno.su/modules/su/onno/onno
 
 ## When something looks broken
 
-- API call returns HTML → wrong path or unauthenticated (the SPA fallback answers 200 for unknown
-  paths — see [GOTCHAS.md](GOTCHAS.md)).
+- API call returns HTML → verify that a proxy has not rewritten it to an HTML navigation under
+  `onno.ui.path`; unknown `/api/**` routes now return `404` (see [GOTCHAS.md](GOTCHAS.md)).
 - Login 401 after config changes → you probably overrode `onno.auth.public-paths` without
   re-listing the defaults.
 - Signed out after every redeploy → `remember-me.key` unset (newer versions fail fast at startup

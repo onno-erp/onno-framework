@@ -37,18 +37,32 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Serve compiled widget plugins under {path}/plugins/** BEFORE the catch-all so a plugin
-        // module isn't swallowed by the SPA's index.html fallback. Registered first → higher precedence.
+        String base = "/".equals(spaIndexHtml.basePath()) ? "" : spaIndexHtml.basePath();
+
+        // Serve compiled widget plugins under {path}/plugins/** before the SPA deep-link handler.
         if (widgetPluginScanner != null) {
-            String base = "/".equals(uiProperties.getPath()) ? "" : uiProperties.getPath();
             registry.addResourceHandler(base + "/plugins/**")
                     .addResourceLocations(widgetPluginScanner.serveLocation())
                     .resourceChain(true);
         }
-        registry.addResourceHandler("/**")
+
+        // Vite emits the entry-point assets at the web root. Keep this handler file-only so missing
+        // files, consumer resources, and API routes are never converted into the SPA shell.
+        registry.addResourceHandler("/assets/**", "/favicon.svg", "/manifest.webmanifest")
                 .addResourceLocations("classpath:/static/ui/")
+                .resourceChain(true);
+
+        String navigationPattern = base.isEmpty() ? "/**" : base + "/**";
+        var navigation = registry.addResourceHandler(navigationPattern);
+        if (base.isEmpty()) {
+            navigation.addResourceLocations("classpath:/META-INF/resources/", "classpath:/resources/",
+                    "classpath:/static/", "classpath:/public/", "classpath:/static/ui/");
+        } else {
+            navigation.addResourceLocations("classpath:/static/ui/");
+        }
+        navigation
                 .resourceChain(true)
-                .addResolver(new SpaResourceResolver(spaIndexHtml));
+                .addResolver(new SpaResourceResolver(spaIndexHtml, base));
     }
 
     @Bean
