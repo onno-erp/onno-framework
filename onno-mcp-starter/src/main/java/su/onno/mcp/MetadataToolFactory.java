@@ -186,21 +186,29 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_balance",
                 "Get accumulation register balances",
-                "Returns current balances for a BALANCE accumulation register, optionally filtered by "
-                        + "dimension field values.",
+                "Returns up to 5000 current balances for a BALANCE accumulation register, optionally "
+                        + "filtered by dimension field values. If more rows match, the call fails instead "
+                        + "of returning an incomplete result; narrow the dimension filters.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
                         + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(principal(exchange), desc);
-                    return ok(registerQuery.balance(desc, stringMap(args.get("filters"))));
+                    RegisterQueryService.BoundedRows result =
+                            registerQuery.balanceBounded(desc, stringMap(args.get("filters")));
+                    if (result.truncated()) {
+                        return error("Register balance exceeds the 5000-row safety limit; "
+                                + "narrow the dimension filters and retry.");
+                    }
+                    return ok(result.rows());
                 }));
 
         tools.add(readTool("register_movements",
                 "Get accumulation register movements",
-                "Returns active movements (postings) for an accumulation register, optionally filtered by "
-                        + "an inclusive period range (ISO-8601), newest first.",
+                "Returns up to 1000 active movements (postings) for an accumulation register, optionally "
+                        + "filtered by an inclusive period range (ISO-8601), newest first. If more rows "
+                        + "match, the call fails instead of returning an incomplete result; narrow from/to.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
                         + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start period (ISO-8601).\"},"
@@ -208,7 +216,13 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(principal(exchange), desc);
-                    return ok(registerQuery.movements(desc, optString(args, "from"), optString(args, "to")));
+                    RegisterQueryService.BoundedRows result = registerQuery.movementsBounded(
+                            desc, optString(args, "from"), optString(args, "to"));
+                    if (result.truncated()) {
+                        return error("Register movements exceed the 1000-row safety limit; "
+                                + "narrow the from/to period and retry.");
+                    }
+                    return ok(result.rows());
                 }));
 
         if (properties.isWritesEnabled() && !uiProperties.isReadOnly()) {

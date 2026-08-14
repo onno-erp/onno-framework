@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
  */
 public class RegisterQueryService {
 
+    /** A capped query result that reports whether additional rows were deliberately withheld. */
+    public record BoundedRows(List<Map<String, Object>> rows, boolean truncated) {}
+
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
     private final RefResolver refResolver;
@@ -53,6 +56,14 @@ public class RegisterQueryService {
     }
 
     public List<Map<String, Object>> movements(AccumulationRegisterDescriptor desc, String from, String to) {
+        return movementsBounded(desc, from, to).rows();
+    }
+
+    /**
+     * The same newest-first movement slice as {@link #movements}, plus an explicit overflow signal
+     * for non-UI callers that must not mistake the capped slice for the complete result set.
+     */
+    public BoundedRows movementsBounded(AccumulationRegisterDescriptor desc, String from, String to) {
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
         if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
@@ -63,11 +74,10 @@ public class RegisterQueryService {
             var query = h.createQuery(sql.toString());
             if (from != null) query.bind("from", from);
             if (to != null) query.bind("to", to);
-            query.bind("cap", MOVEMENTS_CAP);
+            query.bind("cap", MOVEMENTS_CAP + 1);
             return query.mapToMap().list();
         });
-        resolveAll(desc, rows);
-        return rows;
+        return bounded(desc, rows, MOVEMENTS_CAP);
     }
 
     /**
@@ -215,6 +225,14 @@ public class RegisterQueryService {
     }
 
     public List<Map<String, Object>> balance(AccumulationRegisterDescriptor desc, Map<String, String> filters) {
+        return balanceBounded(desc, filters).rows();
+    }
+
+    /**
+     * The same current-balance slice as {@link #balance}, plus an explicit overflow signal for
+     * non-UI callers that require complete-result semantics.
+     */
+    public BoundedRows balanceBounded(AccumulationRegisterDescriptor desc, Map<String, String> filters) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
@@ -243,11 +261,20 @@ public class RegisterQueryService {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
                 }
             }
-            query.bind("cap", BALANCE_CAP);
+            query.bind("cap", BALANCE_CAP + 1);
             return query.mapToMap().list();
         });
-        resolveAll(desc, rows);
-        return rows;
+        return bounded(desc, rows, BALANCE_CAP);
+    }
+
+    private BoundedRows bounded(AccumulationRegisterDescriptor desc,
+                                List<Map<String, Object>> rows, int cap) {
+        boolean truncated = rows.size() > cap;
+        List<Map<String, Object>> returned = truncated
+                ? new ArrayList<>(rows.subList(0, cap))
+                : rows;
+        resolveAll(desc, returned);
+        return new BoundedRows(returned, truncated);
     }
 
     public List<Map<String, Object>> turnover(AccumulationRegisterDescriptor desc, String from, String to,

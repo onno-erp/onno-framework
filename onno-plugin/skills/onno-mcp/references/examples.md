@@ -89,8 +89,8 @@ Do not guess route/entity names from Java classes. Use metadata.
 | create tools | `name`, `values` | write fields use model names; Ref/enum values are UUID strings |
 | update tools | `name`, UUID `id`, `values` | partial update |
 | delete/post/unpost/preview | `name`, UUID `id` | command result/preview |
-| `register_balance` | `name` | dimension `filters` |
-| `register_movements` | `name` | ISO `from`/`to` |
+| `register_balance` | `name` | dimension `filters`; errors above 5,000 matching rows |
+| `register_movements` | `name` | ISO `from`/`to`; errors above 1,000 matching rows |
 
 ## Custom Tools
 
