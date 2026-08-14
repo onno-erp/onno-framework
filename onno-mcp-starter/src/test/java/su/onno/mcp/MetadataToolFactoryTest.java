@@ -1,9 +1,12 @@
 package su.onno.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.model.AccumulationType;
+import su.onno.model.PostingOrder;
 import su.onno.ui.CatalogCommandService;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentCommandService;
@@ -50,8 +53,14 @@ class MetadataToolFactoryTest {
                     true, false, "", 0, 0, true, true, true, 0, "", "", "",
                     AttributeDescriptor.Constraints.NONE, false)));
 
+    private final AccumulationRegisterDescriptor cash = new AccumulationRegisterDescriptor(
+            "Cash", "Cash", "reg_cash", "reg_cash_totals", Object.class,
+            AccumulationType.BALANCE, false, PostingOrder.INDEPENDENT, "Finance",
+            List.of("RENTALS"), List.of("RENTALS"), List.of(), List.of());
+
     MetadataToolFactoryTest() {
         registry.registerCatalog(clients);
+        registry.registerAccumulation(cash);
     }
 
     private MetadataToolFactory factory(OnnoMcpProperties props) {
@@ -146,6 +155,34 @@ class MetadataToolFactoryTest {
         assertThat(result.isError()).isNotEqualTo(Boolean.TRUE);
         String text = result.content().toString();
         assertThat(text).doesNotContain("Clients");
+    }
+
+    @Test
+    void registerMovementsFailsLoudlyWhenTheBoundedQueryTruncates() {
+        when(registerQuery.require("Cash")).thenReturn(cash);
+        when(registerQuery.movementsBounded(cash, null, null))
+                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
+        SyncToolSpecification movements = byName(factory(new OnnoMcpProperties()).build(), "register_movements");
+
+        CallToolResult result = movements.callHandler().apply(exchange("maria", "RENTALS"),
+                new CallToolRequest("register_movements", Map.of("name", "Cash")));
+
+        assertThat(result.isError()).isTrue();
+        assertThat(result.content().toString()).contains("1000", "from", "to");
+    }
+
+    @Test
+    void registerBalanceFailsLoudlyWhenTheBoundedQueryTruncates() {
+        when(registerQuery.require("Cash")).thenReturn(cash);
+        when(registerQuery.balanceBounded(cash, Map.of()))
+                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
+        SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
+
+        CallToolResult result = balance.callHandler().apply(exchange("maria", "RENTALS"),
+                new CallToolRequest("register_balance", Map.of("name", "Cash")));
+
+        assertThat(result.isError()).isTrue();
+        assertThat(result.content().toString()).contains("5000", "filters");
     }
 
     private static McpSyncServerExchange exchange(String username, String role) {

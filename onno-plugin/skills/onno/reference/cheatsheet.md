@@ -480,6 +480,8 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 `update_catalog`, `delete_catalog`, `create_document`, `update_document`, `delete_document` (writes,
 gated by `onno.mcp.writes-enabled`); `post_document`, `unpost_document` (gated by
 `onno.mcp.posting-enabled`). All run as the authenticated user under the same deny-by-default RBAC.
+Catalog/document lists are keyset-paged. Register movements and balances are capped at 1,000 and
+5,000 rows; wider matches fail explicitly rather than returning an incomplete list.
 Add application tools with `@McpTool` on public Spring bean methods and describe inputs with
 `@McpToolParam`; `Principal`/`McpToolContext` are injectable, `roles` restricts callers, and
 `readOnly = false` opts into the global write gate. Use `McpToolProvider` for direct SDK tools.

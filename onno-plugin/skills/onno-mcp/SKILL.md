@@ -33,6 +33,9 @@ startup.
 
 The two list tools return one keyset window as `{rows,nextCursor,hasMore}`. Replay the opaque
 `nextCursor`; do not assume an unbounded list or offset.
+Register reads are bounded one-call tools: movements cap at 1,000 rows and balances at 5,000. If
+more rows match, the tool returns an error instead of incomplete data; narrow `from`/`to` or the
+dimension filters and retry.
 
 Read [references/examples.md](references/examples.md) for dependency/config/client examples and
 agent workflow.

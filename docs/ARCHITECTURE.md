@@ -505,6 +505,9 @@ superuser. Override the whole thing by setting `onno.auth.enabled=false` and sup
   `post_document`/`unpost_document` (gated by `onno.mcp.posting-enabled`). Applications add
   authenticated, role-scoped tools with `@McpTool` methods; `McpToolProvider` is the lower-level
   SDK extension point. Custom tools compose with generated tools and duplicate names fail startup.
+  Catalog/document lists are keyset-paged. Register reads retain bounded one-call results
+  (`register_movements`: 1,000; `register_balance`: 5,000) and return an MCP error when more rows
+  match, so an agent cannot mistake a capped slice for the complete register.
   This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes
