@@ -1,5 +1,6 @@
 package su.onno.messaging;
 
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 
 import java.time.LocalDateTime;
@@ -15,20 +16,36 @@ public class OutboxWriter {
     }
 
     public UUID append(String aggregateType, String aggregateId, String eventType, String payload) {
+        return jdbi.withHandle(handle ->
+                append(handle, aggregateType, aggregateId, eventType, payload));
+    }
+
+    /**
+     * Appends an event using the caller's transaction.
+     *
+     * @param handle the transaction-bound handle that owns the aggregate mutation
+     * @param aggregateType the aggregate's stable type
+     * @param aggregateId the aggregate identifier
+     * @param eventType the domain event type
+     * @param payload the serialized event payload
+     * @return the new outbox event identifier
+     */
+    public UUID append(Handle handle, String aggregateType, String aggregateId,
+                       String eventType, String payload) {
         UUID id = UUID.randomUUID();
-        jdbi.useHandle(handle -> handle.createUpdate(
-                        "INSERT INTO onno_outbox " +
-                                "(_id, _aggregate_type, _aggregate_id, _event_type, _payload, " +
-                                "_created_at, _status) " +
-                                "VALUES (:id, :aggregateType, :aggregateId, :eventType, :payload, " +
-                                ":createdAt, 'NEW')")
+        handle.createUpdate(
+                "INSERT INTO onno_outbox " +
+                        "(_id, _aggregate_type, _aggregate_id, _event_type, _payload, " +
+                        "_created_at, _status) " +
+                        "VALUES (:id, :aggregateType, :aggregateId, :eventType, :payload, " +
+                        ":createdAt, 'NEW')")
                 .bind("id", id)
                 .bind("aggregateType", aggregateType)
                 .bind("aggregateId", aggregateId)
                 .bind("eventType", eventType)
                 .bind("payload", payload)
                 .bind("createdAt", LocalDateTime.now())
-                .execute());
+                .execute();
         return id;
     }
 

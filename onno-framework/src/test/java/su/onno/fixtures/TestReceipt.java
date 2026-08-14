@@ -2,6 +2,8 @@ package su.onno.fixtures;
 
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
+import su.onno.annotations.DomainEvent;
+import su.onno.annotations.EventTiming;
 import su.onno.annotations.TabularSection;
 import su.onno.lifecycle.Postable;
 import su.onno.model.DocumentObject;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Document(name = "TestReceipts")
+@DomainEvent(name = "TestReceiptPosted", when = EventTiming.AFTER_POST)
 @Getter
 @Setter
 public class TestReceipt extends DocumentObject implements Postable {

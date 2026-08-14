@@ -11,6 +11,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import su.onno.repository.*;
 
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.spring5.SpringConnectionFactory;
 import org.jobrunr.scheduling.JobScheduler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
@@ -275,7 +276,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
 
     @Bean
     public Jdbi jdbi(DataSource dataSource) {
-        return Jdbi.create(dataSource);
+        return Jdbi.create(new SpringConnectionFactory(dataSource));
     }
 
     /** Validates and indexes every application-provided typed process definition. */

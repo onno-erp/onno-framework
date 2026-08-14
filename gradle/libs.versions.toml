@@ -48,6 +48,7 @@ spring-session-jdbc = { module = "org.springframework.session:spring-session-jdb
 
 # Persistence / data
 jdbi3-core = { module = "org.jdbi:jdbi3-core", version.ref = "jdbi" }
+jdbi3-spring5 = { module = "org.jdbi:jdbi3-spring5", version.ref = "jdbi" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 

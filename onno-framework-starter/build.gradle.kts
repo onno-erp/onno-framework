@@ -9,6 +9,7 @@ dependencies {
     implementation(libs.spring.context)
     implementation(libs.spring.jdbc)
     implementation(libs.spring.data.jdbc)
+    implementation(libs.jdbi3.spring5)
     implementation(libs.micrometer.core)
     implementation(libs.jackson.databind)
 

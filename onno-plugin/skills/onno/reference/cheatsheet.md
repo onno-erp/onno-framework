@@ -460,8 +460,10 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
   changeType `created/updated/deleted/posted/unposted/changed`; entityType `catalog/document/register`.
 - `EntityMentionedEvent(comment, mention, actor)` — published per readable `@`-mention in a posted
   comment; consumed by the notifications feature, and by any app `@EventListener` (mail, etc.).
-- `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; relayed by
-  `onno-kafka-starter` as CloudEvents.
+- `OutboxWriter.append(aggregateType, aggregateId, eventType, payload)` → `onno_outbox`; the
+  starter wires it to join active Spring JDBC transactions. Posting uses
+  `append(Handle, ...)` so the business mutation and outbox row commit or roll back together.
+  `onno-kafka-starter` relays committed rows as CloudEvents.
 
 ## Schema & migration (packages `su.onno.schema`, `su.onno.migration`)
 

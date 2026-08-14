@@ -12,6 +12,7 @@ import su.onno.fixtures.TestSecretLine;
 import su.onno.fixtures.TestStockRegister;
 import su.onno.fixtures.TestWithdrawal;
 import su.onno.metadata.*;
+import su.onno.messaging.OutboxWriter;
 import su.onno.model.DocumentObject;
 import su.onno.repository.RegisterRepositoryImpl;
 import su.onno.schema.SchemaGenerator;
@@ -572,6 +573,21 @@ class PostingTest {
         assertThatThrownBy(() -> engineWithEvents.post(receipt))
                 .isInstanceOf(su.onno.validation.ValidationException.class);
         assertThat(events).isEmpty();
+    }
+
+    @Test
+    void post_rollsBackWhenOutboxAppendFails() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("10"));
+        jdbi.useHandle(handle -> handle.execute("DROP TABLE onno_outbox"));
+        PostingEngine engineWithOutbox = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), new OutboxWriter(jdbi));
+
+        assertThatThrownBy(() -> engineWithOutbox.post(receipt))
+                .hasMessageContaining("onno_outbox");
+
+        assertThat(isPosted(receipt)).isFalse();
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).isEmpty();
     }
 
     private Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMapFor() {

@@ -36,11 +36,13 @@ This is the only property the starter exposes. Everything else is derived from y
 
 - **`OnnoAutoConfiguration`** — the heart of the wiring. It extends `AbstractJdbcConfiguration`,
   registers the onno `NamingStrategy` and mapping context, and exposes:
-  - `Jdbi` (built from the `DataSource`), `MetadataRegistry`, `RefResolver`
+  - `Jdbi` (built from a transaction-aware wrapper around the `DataSource`, so outbox writes join
+    Spring JDBC transactions), `MetadataRegistry`, `RefResolver`
   - `SchemaInitializer` (see below)
   - the lifecycle callbacks (`OnnoBeforeConvertCallback`, `OnnoAfterSaveCallback`,
     `OnnoAfterConvertCallback`, `OnnoBeforeDeleteCallback`)
-  - `NumberGenerator` (JDBC-backed code/number sequences), `OutboxWriter`
+  - `NumberGenerator` (JDBC-backed code/number sequences), `OutboxWriter` (its ordinary
+    `append(...)` joins an active Spring transaction; posting uses its handle-bound overload)
   - register persistence/repository maps, `PostingService` (wrapping a `PostingEngine`)
   - information-register, constant and enumeration persistence/managers
   - the UI layout model (`LayoutSet`, `UiLayout`, resolvers) assembled from your `Layout` beans

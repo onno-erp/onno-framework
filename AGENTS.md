@@ -321,7 +321,10 @@ A backdated post/repost/unpost reverses later affected documents and reposts the
 serializable transaction. Keep `handlePosting` deterministic and free of external side effects.
 Posting atomically claims an existing live, unposted document before writing movements. Core
 `post(...)` rejects an already-posted document; use the atomic `repost(...)` operation when an
-intentional recalculation is required. Unposting a draft or deleted document is rejected.
+intentional recalculation is required. A posting `@DomainEvent` outbox row is written on the same
+JDBI handle as the posting mutation, so both commit or roll back together. Repository save/delete
+outbox rows likewise join the active Spring JDBC transaction. Unposting a draft or deleted
+document is rejected.
 
 Catalog/document repository deletes are soft: `delete(...)`, `deleteById(...)`, and bulk delete
 methods run `BeforeDeleteHandler`, save `deletionMark = true`, and then publish delete events. A

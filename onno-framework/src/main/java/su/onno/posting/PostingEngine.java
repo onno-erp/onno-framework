@@ -166,6 +166,7 @@ public class PostingEngine {
         OnnoPerformance.record("onno.document.post.transaction", 1, () -> jdbi.useTransaction(handle -> {
             claimUnpostedDocument(handle, docDescriptor, document.getId());
             persistPosting(handle, docDescriptor, document, context);
+            publishDomainEvents(handle, document, EventTiming.AFTER_POST);
         }));
 
         afterSuccessfulPost(document);
@@ -187,6 +188,7 @@ public class PostingEngine {
             claimPostedDocument(handle, descriptor, document.getId(), false);
             unpostMovements(handle, document.getId());
             persistPosting(handle, descriptor, document, context);
+            publishDomainEvents(handle, document, EventTiming.AFTER_POST);
         }));
         afterSuccessfulPost(document);
     }
@@ -268,7 +270,6 @@ public class PostingEngine {
 
     private void afterSuccessfulPost(DocumentObject document) {
         document.setPosted(true);
-        publishDomainEvents(document, EventTiming.AFTER_POST);
 
         if (document instanceof AfterPostHandler handler) {
             OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
@@ -317,6 +318,10 @@ public class PostingEngine {
                                         registry.getDocumentDescriptor(later.getClass());
                                 persistPosting(handle, descriptor, later, context);
                                 later.setPosted(true);
+                            }
+                            if (mutation != PostingMutation.UNPOST) {
+                                publishDomainEvents(
+                                        handle, requested, EventTiming.AFTER_POST);
                             }
                         })));
     }
@@ -583,13 +588,13 @@ public class PostingEngine {
         }
     }
 
-    private void publishDomainEvents(DocumentObject document, EventTiming timing) {
+    private void publishDomainEvents(Handle handle, DocumentObject document, EventTiming timing) {
         if (outboxWriter == null) return;
         for (DomainEvent event : document.getClass().getAnnotationsByType(DomainEvent.class)) {
             if (event.when() != timing) continue;
             String payload = "{\"documentType\":\"" + document.getClass().getName() +
                     "\",\"documentId\":\"" + document.getId() + "\"}";
-            outboxWriter.append(document.getClass().getName(),
+            outboxWriter.append(handle, document.getClass().getName(),
                     document.getId() == null ? null : document.getId().toString(),
                     event.name(),
                     payload);

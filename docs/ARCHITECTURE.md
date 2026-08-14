@@ -295,8 +295,9 @@ public void handlePosting(PostingContext context) {
 atomically claims an existing unposted document, inserts movements, updates register totals, rejects
 negative `BALANCE` results on dimension tuples touched by that post unless the register declares
 `allowNegative = true`, and writes back computed fields. Posting a missing or already-posted document
-is rejected before any movement is persisted, so retries cannot double-count registers. After commit
-it emits `@DomainEvent` outbox rows, calls `afterPost`, and publishes a Spring
+is rejected before any movement is persisted, so retries cannot double-count registers. Inside that
+same transaction it appends `@DomainEvent` outbox rows; after commit it calls `afterPost` and
+publishes a Spring
 `DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
 
 `PostingService.repost(...)` is the explicit recalculation operation for a posted document: it
@@ -535,7 +536,11 @@ may read the affected record, so the live channel honours the same deny-by-defau
 REST/UI/MCP surfaces; unknown event kinds are delivered only to `ADMIN` (fail closed) (#190).
 Process-task invalidations use their own audience gate: only candidate users/roles and `ADMIN`
 receive `tasks-changed`, and the candidate assignment itself never enters the browser payload.
-`@DomainEvent` declarations append to the transactional `onno_outbox`;
+`@DomainEvent` declarations append to `onno_outbox` in the same transaction as the
+repository save/delete or posting mutation; a rollback cannot leave a phantom event, and an outbox
+insert failure rolls back the business mutation. Direct application calls to
+`OutboxWriter.append(...)` join an active Spring JDBC transaction; posting internals use the
+transaction-bound `append(Handle, ...)` overload.
 `onno-kafka-starter` relays those rows when you want cross-service streaming.
 
 The `entityType` vocabulary is open: the modelled kinds are `catalog`, `document`, and `register`,
