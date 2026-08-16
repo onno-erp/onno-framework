@@ -313,6 +313,21 @@ function toSnake(name: string): string {
   return out;
 }
 
+// Entity routes use the same lowercase snake-case key as UiLayoutResolver, while REST keeps the
+// exact logical metadata name. Canonicalize only the framework-owned entity route families: custom
+// Page routes are application-owned and may intentionally contain uppercase segments.
+function canonicalEntityPath(pathname: string): string {
+  const queryAt = pathname.indexOf("?");
+  const path = queryAt >= 0 ? pathname.slice(0, queryAt) : pathname;
+  const query = queryAt >= 0 ? pathname.slice(queryAt) : "";
+  const match = path.match(/^\/(catalogs|documents|registers)\/([^/]+)(\/.*)?$/);
+  if (!match) return pathname;
+
+  const [, kind, rawName, tail = ""] = match;
+  const name = toSnake(decodeSegment(rawName));
+  return `/${kind}/${name}${tail}${query}`;
+}
+
 // Does a server event touch a given surface (the path an island is showing)?
 function affectsSurface(event: UiEvent, pathname: string): boolean {
   if (!event || event.type === "ready") return false;
@@ -427,6 +442,14 @@ export function DivKitView() {
   // shows it. (Clicking a tab in another island focuses it and navigates here, so by
   // the time this runs the focused island already matches — a no-op.)
   useEffect(() => {
+    const canonicalPath = canonicalEntityPath(location.pathname);
+    if (canonicalPath !== location.pathname) {
+      navigate(
+        { pathname: canonicalPath, search: location.search, hash: location.hash },
+        { replace: true }
+      );
+      return;
+    }
     setWorkspace((ws) => {
       const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
       // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
@@ -448,7 +471,7 @@ export function DivKitView() {
       });
       return { ...ws, panes, focused: focused.id };
     });
-  }, [location.pathname]);
+  }, [location.pathname, location.search, location.hash, navigate]);
 
   // The shell depends on (viewport, theme, profile) — not the active route — so it's
   // fetched once per combo and reused across navigations.
@@ -830,7 +853,7 @@ export function DivKitView() {
         op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
         return;
       }
-      const path = "/" + rest;
+      const path = canonicalEntityPath("/" + rest);
       // On the desktop islands layout, a record opens in its own island to the right;
       // elsewhere (single content pane) it just navigates.
       if (shell?.navStyle === "sidebar" && recordBasePath(path)) {

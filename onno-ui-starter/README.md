@@ -300,6 +300,12 @@ data-bearing surfaces.
 | `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. An authored `Page` at `/registers/{name}` overrides it with a curated report (register-backed widgets; `b.list(...)` embeds catalog/document lists, not a register's log). |
 | `GET /{*route}` | Catch-all page endpoint: any other route with a registered `Page` bean (a custom dashboard/report at `/ops`, `/reports`, …); `404` when no page is registered. |
 
+Entity UI routes use the lowercase snake-case form of the logical annotation name: for example,
+`@Document(name = "SalesOrders")` is `/documents/sales_orders`, while its REST route keeps the exact
+logical name (`/api/documents/SalesOrders`). Links and custom-widget actions should emit
+`onno://documents/sales_orders/{id}`. The SPA redirects non-canonical entity links to this form so
+localized tab titles, route metadata, and live event matching all use one stable key.
+
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
 > the underlying REST endpoint would serve it.

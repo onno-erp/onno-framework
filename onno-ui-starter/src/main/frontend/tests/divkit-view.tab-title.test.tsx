@@ -131,6 +131,34 @@ describe("DivKitView tab titles", () => {
     expect(screen.queryByTitle("Customers")).not.toBeInTheDocument();
   });
 
+  it("canonicalizes a logical entity name before resolving the route and title", async () => {
+    render(
+      <MemoryRouter initialEntries={["/catalogs/Customers"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId("content-/catalogs/customers")).toBeInTheDocument();
+    expect(await screen.findByTitle("Клиенты")).toBeInTheDocument();
+    expect(screen.queryByTestId("content-/catalogs/Customers")).not.toBeInTheDocument();
+  });
+
+  it("canonicalizes logical entity names dispatched by custom widgets", async () => {
+    render(
+      <MemoryRouter initialEntries={["/tasks"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    fireEvent(
+      window,
+      new CustomEvent("onno:action", { detail: "onno://catalogs/Customers" })
+    );
+
+    expect(await screen.findByTestId("content-/catalogs/customers")).toBeInTheDocument();
+    expect(await screen.findByTitle("Клиенты")).toBeInTheDocument();
+  });
+
   it("uses the authored navigation icon", async () => {
     render(
       <MemoryRouter initialEntries={["/catalogs/customers"]}>
