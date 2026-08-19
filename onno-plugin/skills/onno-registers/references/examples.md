@@ -69,7 +69,8 @@ are turnover, not balance.
 ## Information Register
 
 ```java
-@InformationRegister(name = "Prices", periodicity = Periodicity.DAY, context = "Catalog")
+@InformationRegister(name = "Prices", title = "Price list", periodicity = Periodicity.DAY,
+        context = "Catalog")
 @AccessControl(readRoles = {"SALES", "ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
@@ -88,6 +89,47 @@ public class PriceRegister extends InformationRecord {
 
 Use information registers for "what was true as of date X?" facts: prices, exchange rates, employee
 rates, SLA settings, supplier lead times, and warehouse-specific configuration.
+
+`title` is the display label; it may be localized and is free of the ASCII/URL-safe constraint on
+`name` (which stays the route segment and access-check key). It falls back to `name` when omitted.
+
+### Periodicity Is Also The Collision Window
+
+Each write is floored to its periodicity bucket and upserted on `(_period, dimensions…)`, so a
+second write landing in the same bucket with the same dimensions **replaces** the first. That
+overwrite is the register's point — "the fact effective as of this period" — but it means the
+bucket is the finest interval at which two facts can coexist.
+
+| Periodicity | Bucket | Use for |
+| --- | --- | --- |
+| `NONE` | no `_period` column | one current row per dimension tuple (settings, current config) |
+| `SECOND` | floored to the second | event logs, audit trails, status histories |
+| `MINUTE` / `HOUR` | floored to the minute / hour | intraday measurement series |
+| `DAY` | midnight | prices, exchange rates, daily rates |
+| `MONTH` / `QUARTER` / `YEAR` | first day of the period | budgets, periodic targets |
+
+Choosing a bucket coarser than the event rate silently discards the earlier facts in each bucket.
+An audit trail on `Periodicity.DAY` keeps one entry per day, not one per change:
+
+```java
+@InformationRegister(name = "TaskStatusHistory", title = "Status history",
+        periodicity = Periodicity.SECOND)
+public class TaskStatusHistory extends InformationRecord {
+
+    @Dimension(displayName = "Task")
+    private Ref<ProblemTask> task;
+
+    @Attribute(displayName = "Status")
+    private TaskStatus status;
+
+    @Attribute(displayName = "Changed by")
+    private String changedBy;
+}
+```
+
+If the model genuinely needs several facts for one dimension tuple within the same second, the
+register key cannot express that — model it as a `@Catalog` (or a document) with its own timestamp
+attribute instead.
 
 ## Querying Accumulation Registers
 

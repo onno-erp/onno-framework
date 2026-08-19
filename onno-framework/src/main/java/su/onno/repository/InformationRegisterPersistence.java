@@ -12,6 +12,7 @@ import org.jdbi.v3.core.statement.Update;
 
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -379,6 +380,9 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
 
     static LocalDateTime truncatePeriod(LocalDateTime dt, Periodicity periodicity) {
         return switch (periodicity) {
+            case SECOND -> dt.truncatedTo(ChronoUnit.SECONDS);
+            case MINUTE -> dt.truncatedTo(ChronoUnit.MINUTES);
+            case HOUR -> dt.truncatedTo(ChronoUnit.HOURS);
             case DAY -> dt.toLocalDate().atStartOfDay();
             case MONTH -> dt.toLocalDate().withDayOfMonth(1).atStartOfDay();
             case QUARTER -> {

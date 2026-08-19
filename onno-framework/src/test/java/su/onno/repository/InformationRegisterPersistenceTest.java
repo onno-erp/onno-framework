@@ -70,8 +70,34 @@ class InformationRegisterPersistenceTest {
         }
     }
 
+    @InformationRegister(name = "TaskStatusHistory", periodicity = Periodicity.SECOND)
+    public static class TaskStatusHistory extends InformationRecord {
+        @Dimension
+        private UUID task;
+
+        @su.onno.annotations.Attribute
+        private String status;
+
+        public UUID getTask() {
+            return task;
+        }
+
+        public void setTask(UUID task) {
+            this.task = task;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+    }
+
     private Jdbi jdbi;
     private InformationRegisterPersistence<TestPriceRegister> pricePersistence;
+    private InformationRegisterPersistence<TaskStatusHistory> historyPersistence;
     private InformationRegisterPersistence<TestSettingRegister> settingPersistence;
     private UUID productA = UUID.randomUUID();
     private UUID productB = UUID.randomUUID();
@@ -88,6 +114,7 @@ class InformationRegisterPersistenceTest {
 
         registry.registerInformationRegister(scanner.scanInformationRegister(TestPriceRegister.class));
         registry.registerInformationRegister(scanner.scanInformationRegister(TestSettingRegister.class));
+        registry.registerInformationRegister(scanner.scanInformationRegister(TaskStatusHistory.class));
 
         new SchemaGenerator(registry).execute(jdbi);
 
@@ -96,6 +123,9 @@ class InformationRegisterPersistenceTest {
 
         InformationRegisterDescriptor settingDesc = registry.getInformationRegisterDescriptor(TestSettingRegister.class);
         settingPersistence = new InformationRegisterPersistence<>(jdbi, settingDesc);
+
+        InformationRegisterDescriptor historyDesc = registry.getInformationRegisterDescriptor(TaskStatusHistory.class);
+        historyPersistence = new InformationRegisterPersistence<>(jdbi, historyDesc);
     }
 
     @Test
@@ -286,6 +316,101 @@ class InformationRegisterPersistenceTest {
                     assertThat(stored.getChannel()).isEqualTo(Channel.RETAIL);
                     assertThat(stored.getRate()).isEqualByComparingTo("12.50");
                 });
+    }
+
+    @Test
+    void periodTruncation_second() {
+        assertThat(InformationRegisterPersistence.truncatePeriod(
+                LocalDateTime.of(2024, 3, 15, 14, 30, 45, 123_456_789),
+                su.onno.model.Periodicity.SECOND
+        )).isEqualTo(LocalDateTime.of(2024, 3, 15, 14, 30, 45));
+    }
+
+    @Test
+    void periodTruncation_minute() {
+        assertThat(InformationRegisterPersistence.truncatePeriod(
+                LocalDateTime.of(2024, 3, 15, 14, 30, 45),
+                su.onno.model.Periodicity.MINUTE
+        )).isEqualTo(LocalDateTime.of(2024, 3, 15, 14, 30));
+    }
+
+    @Test
+    void periodTruncation_hour() {
+        assertThat(InformationRegisterPersistence.truncatePeriod(
+                LocalDateTime.of(2024, 3, 15, 14, 30, 45),
+                su.onno.model.Periodicity.HOUR
+        )).isEqualTo(LocalDateTime.of(2024, 3, 15, 14, 0));
+    }
+
+    /**
+     * The repro from issue #336: two intraday facts for the same dimension tuple. Under the old
+     * DAY floor both writes collapsed onto midnight and the second silently overwrote the first;
+     * a SECOND-periodicity register keeps them as distinct rows.
+     */
+    @Test
+    void write_subDayPeriodicity_keepsBothSameDayFacts() {
+        UUID task = UUID.randomUUID();
+
+        TaskStatusHistory morning = new TaskStatusHistory();
+        morning.setPeriod(LocalDateTime.of(2026, 8, 19, 9, 15, 0));
+        morning.setTask(task);
+        morning.setStatus("VERIFICATION");
+        historyPersistence.write(morning);
+
+        TaskStatusHistory afternoon = new TaskStatusHistory();
+        afternoon.setPeriod(LocalDateTime.of(2026, 8, 19, 14, 40, 0));
+        afternoon.setTask(task);
+        afternoon.setStatus("IN_PROGRESS");
+        historyPersistence.write(afternoon);
+
+        assertThat(historyPersistence.getRecords(Collections.emptyMap()))
+                .extracting(TaskStatusHistory::getStatus)
+                .containsExactlyInAnyOrder("VERIFICATION", "IN_PROGRESS");
+    }
+
+    /** Same second + same dimensions is still one key, so the upsert semantics are unchanged. */
+    @Test
+    void write_subDayPeriodicity_upsertsWithinTheSameSecond() {
+        UUID task = UUID.randomUUID();
+
+        TaskStatusHistory first = new TaskStatusHistory();
+        first.setPeriod(LocalDateTime.of(2026, 8, 19, 9, 15, 0, 100));
+        first.setTask(task);
+        first.setStatus("VERIFICATION");
+        historyPersistence.write(first);
+
+        TaskStatusHistory second = new TaskStatusHistory();
+        second.setPeriod(LocalDateTime.of(2026, 8, 19, 9, 15, 0, 900));
+        second.setTask(task);
+        second.setStatus("IN_PROGRESS");
+        historyPersistence.write(second);
+
+        assertThat(historyPersistence.getRecords(Collections.emptyMap()))
+                .singleElement()
+                .satisfies(row -> assertThat(row.getStatus()).isEqualTo("IN_PROGRESS"));
+    }
+
+    /** A sub-day register still answers "what was true at 10:00?" through the slice reads. */
+    @Test
+    void getSliceLast_subDayPeriodicity_picksTheLatestFactBeforeTheCutoff() {
+        UUID task = UUID.randomUUID();
+
+        TaskStatusHistory morning = new TaskStatusHistory();
+        morning.setPeriod(LocalDateTime.of(2026, 8, 19, 9, 15, 0));
+        morning.setTask(task);
+        morning.setStatus("VERIFICATION");
+        historyPersistence.write(morning);
+
+        TaskStatusHistory afternoon = new TaskStatusHistory();
+        afternoon.setPeriod(LocalDateTime.of(2026, 8, 19, 14, 40, 0));
+        afternoon.setTask(task);
+        afternoon.setStatus("IN_PROGRESS");
+        historyPersistence.write(afternoon);
+
+        assertThat(historyPersistence.getSliceLast(
+                LocalDateTime.of(2026, 8, 19, 10, 0), Collections.emptyMap()))
+                .singleElement()
+                .satisfies(row -> assertThat(row.getStatus()).isEqualTo("VERIFICATION"));
     }
 
     @Test

@@ -97,8 +97,13 @@ In brief:
   `documentRef`, `movementType = RECEIPT | EXPENSE`). Enum dimensions use the same deterministic
   UUID representation as enum attributes throughout movement insertion, totals, filters, and typed
   reads.
-- **`@InformationRegister`** — facts by dimension over time, `periodicity = NONE|DAY|MONTH|QUARTER|YEAR`;
-  rows extend `InformationRecord`.
+- **`@InformationRegister`** — facts by dimension over time (`title` for the display label, falling
+  back to `name`, like every other kind), `periodicity =
+  NONE|SECOND|MINUTE|HOUR|DAY|MONTH|QUARTER|YEAR`; rows extend `InformationRecord`. A write is
+  floored to its periodicity bucket and upserted on `(_period, dimensions…)`, so the bucket is also
+  the finest interval at which two facts for one dimension tuple can coexist — the sub-day values
+  exist for event logs, audit trails, and intraday series, while `NONE` drops `_period` and keeps
+  one current row per dimension tuple.
 - **`@Enumeration`** (on a Java `enum`; `title` for the type's display name, `@EnumLabel` on a
   constant for its localized value label — both fall back to the name — plus an optional
   `@EnumLabel(color="#…")` that renders the value as a colored status pill), **`@Constant`** (singleton

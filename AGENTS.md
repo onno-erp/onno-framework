@@ -380,9 +380,10 @@ Examples:
 - Employee rates
 - Supplier lead times
 - Configuration settings per warehouse
+- Status histories and audit trails (`Periodicity.SECOND`)
 
 ```java
-@InformationRegister(name = "Prices", periodicity = Periodicity.DAY)
+@InformationRegister(name = "Prices", title = "Price list", periodicity = Periodicity.DAY)
 public class PriceRegister extends InformationRecord {
     @Dimension
     private Ref<Product> product;
@@ -391,6 +392,16 @@ public class PriceRegister extends InformationRecord {
     private BigDecimal price;
 }
 ```
+
+`title` is the display label — localizable, and free of the ASCII/URL-safe constraint on `name`
+(which stays the route segment and access-check key). It falls back to `name` when omitted.
+
+`periodicity` is `NONE|SECOND|MINUTE|HOUR|DAY|MONTH|QUARTER|YEAR`. Each write is floored to its
+bucket and upserted on `(_period, dimensions…)`, so a second write in the same bucket with the same
+dimensions replaces the first. Pick a bucket at least as fine as the rate the fact actually changes:
+an audit trail on `DAY` keeps one entry per day, not one per change. `NONE` drops `_period` entirely
+and keeps one current row per dimension tuple. When several facts must share one dimension tuple
+within the finest bucket, model it as a catalog or document with its own timestamp instead.
 
 ### Enumerations
 

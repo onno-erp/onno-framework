@@ -6,6 +6,7 @@ import java.util.List;
 
 public record InformationRegisterDescriptor(
         String logicalName,
+        String displayTitle,
         String tableName,
         Class<?> javaClass,
         Periodicity periodicity,
