@@ -63,8 +63,13 @@ ignored for `TURNOVER` registers. `postingOrder=CHRONOLOGICAL` reverses and repo
 documents after a backdated post/repost/unpost; use it for order-dependent calculations such as average cost.
 
 ### `@InformationRegister` (on a class extending `InformationRecord`)
-`name` (required), `tableName=""`, `periodicity = Periodicity.NONE|DAY|MONTH|QUARTER|YEAR` (default
-`NONE`), `context=""`. Fields are `@Dimension`, `@Resource`, and plain `@Attribute`.
+`name` (required), `title=""` (display label; falls back to `name`), `tableName=""`,
+`periodicity = Periodicity.NONE|SECOND|MINUTE|HOUR|DAY|MONTH|QUARTER|YEAR` (default `NONE`),
+`context=""`. Fields are `@Dimension`, `@Resource`, and plain `@Attribute`. Rows are keyed on
+`(_period, dimensions…)` after the period is floored to the bucket, so a second write in the same
+bucket with the same dimensions **replaces** the first — pick a periodicity at least as fine as the
+rate the fact actually changes. `SECOND`/`MINUTE`/`HOUR` exist for event logs, audit trails, and
+status histories; `NONE` drops `_period` entirely and keeps one current row per dimension tuple.
 
 ### `@Dimension` / `@Resource` (register fields)
 `@Dimension`: `name=""`, `displayName=""`. `@Resource`: `name=""`, `displayName=""`, `precision=15`,
@@ -149,7 +154,7 @@ UI is authored via `Layout`/`Page`/`EntityView` beans, not domain annotations.
 | `Ref<T>` | `record Ref(Class<T> type, UUID id)`; `Ref.of(type, id)`. Stored as UUID column; resolve via `RefResolver`. |
 | `PolyRef` | `record PolyRef(Class<?> type, UUID id)`; declare an explicit `@RefTargets({...})` on each field. Stored as `fully.qualified.JavaType|UUID`; use only when several catalog/document types are valid. |
 
-Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,DAY,MONTH,QUARTER,YEAR}`,
+Enums: `AccumulationType{BALANCE,TURNOVER}`, `Periodicity{NONE,SECOND,MINUTE,HOUR,DAY,MONTH,QUARTER,YEAR}`,
 `MovementType{RECEIPT,EXPENSE}`, `PostingOrder{INDEPENDENT,CHRONOLOGICAL}`,
 `EventTiming{AFTER_WRITE,AFTER_POST,AFTER_DELETE}`.
 

@@ -192,6 +192,7 @@ public class MetadataScanner {
         }
 
         String logicalName = reg.name();
+        String displayTitle = reg.title().isEmpty() ? logicalName : reg.title();
         String storageKey = reg.tableName().isEmpty() ? logicalName : reg.tableName();
         String tableName = naming.infoRegisterTable(storageKey);
         Periodicity periodicity = reg.periodicity();
@@ -201,7 +202,7 @@ public class MetadataScanner {
         List<AttributeDescriptor> attributes = scanAttributes(clazz, InformationRecord.class);
 
         return new InformationRegisterDescriptor(
-                logicalName, tableName, clazz, periodicity, reg.context(),
+                logicalName, displayTitle, tableName, clazz, periodicity, reg.context(),
                 readRoles(clazz), writeRoles(clazz), dimensions, resources, attributes);
     }
 

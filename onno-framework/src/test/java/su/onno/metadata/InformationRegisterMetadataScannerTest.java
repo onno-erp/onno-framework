@@ -1,7 +1,10 @@
 package su.onno.metadata;
 
+import su.onno.annotations.Dimension;
+import su.onno.annotations.InformationRegister;
 import su.onno.fixtures.TestPriceRegister;
 import su.onno.fixtures.TestSettingRegister;
+import su.onno.model.InformationRecord;
 import su.onno.model.Periodicity;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +13,12 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 class InformationRegisterMetadataScannerTest {
+
+    @InformationRegister(name = "ApdexMetrics", title = "Показатели APDEX", periodicity = Periodicity.SECOND)
+    public static class TitledMetricRegister extends InformationRecord {
+        @Dimension
+        private String endpoint;
+    }
 
     private MetadataScanner scanner;
 
@@ -53,6 +62,24 @@ class InformationRegisterMetadataScannerTest {
         assertThat(desc.dimensions()).hasSize(1);
         assertThat(desc.resources()).hasSize(0);
         assertThat(desc.attributes()).hasSize(1);
+    }
+
+    @Test
+    void scanInformationRegister_displayTitle_fallsBackToLogicalName() {
+        InformationRegisterDescriptor desc = scanner.scanInformationRegister(TestPriceRegister.class);
+
+        assertThat(desc.displayTitle()).isEqualTo("Prices");
+    }
+
+    @Test
+    void scanInformationRegister_displayTitle_usesExplicitTitle() {
+        InformationRegisterDescriptor desc = scanner.scanInformationRegister(TitledMetricRegister.class);
+
+        // The logical name stays ASCII/URL-safe (it is the route segment and access-check key)
+        // while the label carries the localized text — same split as catalogs and documents.
+        assertThat(desc.logicalName()).isEqualTo("ApdexMetrics");
+        assertThat(desc.displayTitle()).isEqualTo("Показатели APDEX");
+        assertThat(desc.periodicity()).isEqualTo(Periodicity.SECOND);
     }
 
     @Test
