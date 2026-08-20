@@ -264,16 +264,25 @@ files for structural changes. The diff-based engine lives in
   and skipped unless `onno.schema.allow-destructive=true`), `plan` (log only), `validate` (fail on
   drift / unapplied migrations), `off`.
 - **Diff inputs**: the desired `SchemaModel` (from the registry), the live DB's current schema
-  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`), and the previous `SchemaSnapshot` (stored
-  as JSON in `onno_schema_history`). Same-named tables in other PostgreSQL schemas are ignored. The
-  snapshot is how *type changes* and *removed entities* are detected on later boots.
+  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`, and covers tables, columns and `UNIQUE`
+  constraints), and the previous `SchemaSnapshot` (stored as JSON in `onno_schema_history`).
+  Same-named tables in other PostgreSQL schemas are ignored. The snapshot is how *type changes* and
+  *removed entities* are detected on later boots.
+- **Register keys are reconciled**: an information register's key — `(_period, dimensions…)`, the
+  same tuple its upserts name in `ON CONFLICT` — is diffed against the live `UNIQUE` constraints, so
+  changing `periodicity` or a `@Dimension` on an existing database moves the constraint instead of
+  leaving the old one enforcing a key the code no longer uses. Widening the key (a finer periodicity,
+  an added dimension) is safe by construction and applies by default; narrowing it can meet rows that
+  duplicate under the new key, so it is destructive-gated. A table that declares a key owns every
+  `UNIQUE` constraint on it — use an index, not a constraint, for your own uniqueness on one.
 - **Renames keep data**: declare the former name with `previousNames` on `@Catalog`/`@Document`/
   `@Attribute`; the engine emits a `RENAME_TABLE`/`RENAME_COLUMN` instead of drop+add.
 - **SQL identifiers fail fast**: metadata-derived table/column names and rename aliases must match
   `[A-Za-z_][A-Za-z0-9_]*`; the scanner rejects unsafe identifiers before DDL or query rendering.
 - **Change kinds** (`SchemaChange.Type`): `CREATE_TABLE`, `RENAME_TABLE`, `RENAME_COLUMN`,
-  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `DROP_COLUMN`, `DROP_TABLE`. Drops are only ever proposed for
-  objects present in the previous snapshot (never user-created tables).
+  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `ALTER_COLUMN_NULLABILITY`, `ALTER_UNIQUE_KEY`, `DROP_COLUMN`,
+  `DROP_TABLE`. Drops are only ever proposed for objects present in the previous snapshot (never
+  user-created tables).
 - **Data migrations**: implement `AppMigration` (`version()` compared segment-wise, `migrate(MigrationContext)`)
   as a Spring bean. Each runs exactly once per database, in version order, inside a transaction,
   recorded in `onno_schema_history` (a unique constraint arbitrates concurrent starts).

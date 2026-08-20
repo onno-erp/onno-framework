@@ -23,6 +23,7 @@ public record SchemaChange(
         ADD_COLUMN,
         ALTER_COLUMN_TYPE,
         ALTER_COLUMN_NULLABILITY,
+        ALTER_UNIQUE_KEY,
         DROP_COLUMN,
         DROP_TABLE
     }
