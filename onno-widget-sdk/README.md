@@ -50,6 +50,18 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - `WidgetProps` — `{ widget: DashboardWidgetMeta }`, the props every widget receives. Read
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
   server-side `.config(key, value)` values.
+- **Navigation** — dispatch an `onno:action` event with an `onno://` URL. Entity UI paths use the
+  lowercase snake-case logical name, not the case-preserving REST name; for
+  `@Document(name = "SalesOrders")`, open a record with:
+
+  ```ts
+  window.dispatchEvent(new CustomEvent("onno:action", {
+    detail: `onno://documents/sales_orders/${id}`,
+  }));
+  ```
+
+  The host canonicalizes older case-preserving entity links before navigation. Custom `Page` routes
+  are application-owned and are not rewritten.
 
 ## Styling
 

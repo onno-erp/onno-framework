@@ -24,6 +24,13 @@ A connector and an SPI both ship as a starter; the difference is whether you wra
 or satisfy a framework contract. The rest of this guide focuses on the **starter** shape since it
 covers both.
 
+UI extensions navigate through the host by dispatching `onno:action` with an `onno://` URL. Entity
+routes use lowercase snake-case logical names (`SalesOrders` → `sales_orders`), unlike REST routes,
+which keep the exact annotation name. For example, a widget or notification link to a record is
+`onno://documents/sales_orders/{id}` (or the equivalent stored path
+`documents/sales_orders/{id}`). The SPA canonicalizes older case-preserving entity links; arbitrary
+custom `Page` routes are left unchanged.
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.
