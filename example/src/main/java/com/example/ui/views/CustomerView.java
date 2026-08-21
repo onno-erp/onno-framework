@@ -1,6 +1,7 @@
 package com.example.ui.views;
 
 import com.example.domain.catalogs.Customer;
+import su.onno.ui.DetailSpec;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
 import su.onno.ui.ListSpec;
@@ -22,9 +23,10 @@ public class CustomerView implements EntityView<Customer> {
 
     @Override
     public void list(ListSpec<Customer> list) {
-        list.columns(Customer::getDescription, Customer::getCity,
+        list.columns(Customer::getDescription, Customer::getStatus, Customer::getCity,
                         Customer::getEmail, Customer::getPhone)
                 .label(Customer::getDescription, "Name")
+                .label(Customer::getStatus, "Status")
                 .sortBy(Customer::getDescription, false)
                 // Opens grouped by city (the "Group by ▾" picker can still switch back to None).
                 .groupable(Customer::getCity).defaultGroupBy(Customer::getCity);
@@ -42,10 +44,17 @@ public class CustomerView implements EntityView<Customer> {
     @Override
     public void fields(EntityConfigBuilder<Customer> f) {
         f.field(Customer::getDescription).order(0).label("Name")
-            .field(Customer::getEmail).order(1)
-            .field(Customer::getPhone).order(2)
-            .field(Customer::getCity).order(3)
-            .field(Customer::getLatitude).order(4)
-            .field(Customer::getLongitude).order(5);
+            .field(Customer::getStatus).order(1).label("Client status")
+            .field(Customer::getEmail).order(2)
+            .field(Customer::getPhone).order(3)
+            .field(Customer::getCity).order(4)
+            .field(Customer::getLatitude).order(5)
+            .field(Customer::getLongitude).order(6);
+    }
+
+    @Override
+    public void detail(DetailSpec<Customer> detail) {
+        detail.widget("Client conversations").type("customerConversations").width("full")
+                .hint("Recent client touchpoints and a mock AI relationship summary.");
     }
 }

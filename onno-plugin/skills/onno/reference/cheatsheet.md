@@ -311,9 +311,14 @@ because they are not Java field references.
   `/api/**` and `{onno.ui.path}/plugins/**` are exempt. For a custom path or content-type, add a
   dedicated `@GetMapping` (a controller out-precedences the SPA fallback).
 - `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`,
-  `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `actions(ActionSpec)`, `inputs(InputSpec)`,
+  `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `detail(DetailSpec<E>)`,
+  `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch).
+  - `detail.widget("Timeline").type("orderTimeline").width("full").config(key, value)` embeds a
+    registered custom widget below the fields of a saved catalog/document record. Its
+    `WidgetProps.widget.record` carries `kind`, `name`, `id`, loaded `data`, and `readOnly`;
+    New/Duplicate forms omit detail widgets until a record has been saved.
   - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
     `column(field,label)`, `label(field,label)`, `hide(...)`, `pageSize(n)` (rows per keyset window;
     else `onno.ui.list.page-size`; lists are always cursor/keyset-scrolled),

@@ -25,6 +25,10 @@ the interaction or visualization.
 8. Run `compileWidgets`, inspect packaged `onno-plugins/*.js` and CSS, then verify `/api/config`,
    plugin URLs, RBAC-controlled reads, rendering, and SSE refresh in the browser.
 
+For a record surface, override `EntityView.detail(DetailSpec)` and declare the same registered type
+with `detail.widget("Title").type("myWidget")`. Saved-record widgets receive `widget.record`; they
+do not render on New/Duplicate forms.
+
 Built-in `list` accepts catalogs/documents, not registers. Register KPI filters address dimensions;
 use a custom widget with `api.getBalance`/`getMovements` for resource-threshold or movement-list UI.
 

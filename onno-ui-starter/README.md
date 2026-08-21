@@ -919,6 +919,22 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
        .config("amountField", "amount").config("currency", "EUR");
    ```
 
+   To embed the same registry-backed component in a saved catalog/document record surface, declare
+   it on the entity view instead:
+
+   ```java
+   @Override
+   public void detail(DetailSpec<Payment> detail) {
+       detail.widget("Payment history").type("eventLog").width("full")
+           .config("amountField", "amount");
+   }
+   ```
+
+   A detail widget receives `widget.record` with the plural route `kind`, logical entity `name`,
+   saved record `id`, its already-loaded `data`, and `readOnly`. It renders below the entity fields
+   only for saved records; New and Duplicate forms omit it until an identity exists. `width("half")`
+   places two widgets side-by-side on wide screens; other values render full width.
+
 `./gradlew bootJar` compiles each `.tsx` (managed Node + esbuild, React aliased to the host SPA so
 the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
 The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises

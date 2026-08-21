@@ -19,6 +19,8 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
 - `list(ListSpec)` for table/report shape, filters, grouping, sorting, row styles, map toggle.
 - `fields(EntityConfigBuilder)` for form/detail hints, system column labels, tabular section hints,
   related lists, action placement.
+- `detail(DetailSpec)` for custom widgets below a saved record's fields; `widget.record` supplies
+  the owning kind/name/id, loaded data, and read-only state.
 - `actions(ActionSpec)` for toolbar, row, and detail buttons.
 - `inputs(InputSpec)` for toolbar inputs when the surface needs them.
 - `comments()` to opt the entity into comments when the global feature is enabled.

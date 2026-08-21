@@ -20,6 +20,7 @@ public class FieldHintResolver {
     private final Map<Class<?>, Map<String, String>> actions = new LinkedHashMap<>();
     private final Map<Class<?>, List<RelatedList>> relatedLists = new LinkedHashMap<>();
     private final Map<Class<?>, List<FormValidation>> validations = new LinkedHashMap<>();
+    private final Map<Class<?>, List<DetailWidget>> detailWidgets = new LinkedHashMap<>();
 
     public FieldHintResolver(List<EntityView> views) {
         for (EntityView view : views) {
@@ -32,6 +33,9 @@ public class FieldHintResolver {
             actions.put(view.entity(), cfg.buildActions());
             relatedLists.put(view.entity(), cfg.buildRelatedLists());
             validations.put(view.entity(), cfg.buildValidations());
+            DetailSpec<Object> detail = new DetailSpec<>();
+            view.detail(detail);
+            detailWidgets.put(view.entity(), detail.build());
         }
     }
 
@@ -68,5 +72,10 @@ public class FieldHintResolver {
                 .filter(validation -> validation.key().equals(key))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /** Record-surface custom widgets authored for this entity, in display order. */
+    public List<DetailWidget> detailWidgetsFor(Class<?> entity) {
+        return detailWidgets.getOrDefault(entity, List.of());
     }
 }
