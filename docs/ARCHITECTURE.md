@@ -439,7 +439,8 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   dashboard, the settings screen, and a list page are all just pages: the framework serves a sensible
   default and any registered `Page` bean at that route replaces it. A custom route is surfaced in the
   sidebar with `spec.section(...).page("/ops", "Sales Ops", "activity")`.
-- **`EntityView`** — per-entity `list(ListSpec)` columns/filters and `fields(EntityConfigBuilder)`
+- **`EntityView`** — per-entity `list(ListSpec)` columns/filters, `fields(EntityConfigBuilder)`
+  hints, and record-aware custom widgets through `detail(DetailSpec)`
   hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
   related lists, actions; `label` localizes a field's form/detail/list label, including the built-in
   system columns code/description/number/date/posted). A ref field's picker can show a secondary
@@ -478,6 +479,11 @@ with `registerListRenderer(type, C)`, while the framework keeps the toolbar (sea
 sorting), the feed (infinite/paged + pager), and live refresh — the component just receives the
 current window of rows, the list descriptor, and an open-record callback. An unregistered type
 degrades to the default grid. See the README's "Custom list renderers" section.
+
+It also serves **record detail widgets**. `EntityView.detail(DetailSpec)` declares widgets below the
+fields on the combined catalog/document record form. They render only for saved records and receive
+`widget.record` with `kind`, logical `name`, record `id`, already-loaded `data`, and `readOnly`.
+New and Duplicate forms do not render them because they have no saved record identity yet.
 
 ## Auth & RBAC
 

@@ -12,6 +12,7 @@ import com.example.domain.documents.ScheduleParticipant;
 import com.example.domain.documents.StockReceipt;
 import com.example.domain.documents.StockReceiptLine;
 import com.example.domain.enumerations.OrderStatus;
+import com.example.domain.enumerations.CustomerStatus;
 import com.example.domain.enumerations.Position;
 import com.example.repositories.BookCategoryRepository;
 import com.example.repositories.BookRepository;
@@ -155,6 +156,94 @@ public class BookstoreSeeder implements ApplicationRunner {
         {"Citizen", "Claudia Rankine", "Poetry", "10.50"},
     };
 
+    /** Goodreads cover identifiers resolved once by exact title and author; no runtime scraping. */
+    private static final Map<String, String> BOOK_COVER_IDS = Map.ofEntries(
+            Map.entry("The Great Gatsby", "1650033243i/41733839"),
+            Map.entry("To Kill a Mockingbird", "1612238791i/56916837"),
+            Map.entry("Beloved", "1722944318i/6149"),
+            Map.entry("Pride and Prejudice", "1681804503i/129915654"),
+            Map.entry("The Catcher in the Rye", "1398034300i/5107"),
+            Map.entry("One Hundred Years of Solitude", "1327881361i/320"),
+            Map.entry("Normal People", "1571423190i/41057294"),
+            Map.entry("Where the Wild Things Are", "1384434560i/19543"),
+            Map.entry("Matilda", "1388793265i/39988"),
+            Map.entry("The Very Hungry Caterpillar", "1603739265i/4948"),
+            Map.entry("Charlotte's Web", "1628267712i/24178"),
+            Map.entry("The Gruffalo", "1763832701i/1013383"),
+            Map.entry("Green Eggs and Ham", "1673212751i/23772"),
+            Map.entry("The Cat in the Hat", "1468890477i/233093"),
+            Map.entry("A Brief History of Time", "1333578746i/3869"),
+            Map.entry("The Selfish Gene", "1366758096i/61535"),
+            Map.entry("Cosmos", "1388620656i/55030"),
+            Map.entry("The Gene", "1452452965i/27276428"),
+            Map.entry("Silent Spring", "1442353674i/27333"),
+            Map.entry("The Origin of Species", "1298417570i/22463"),
+            Map.entry("Astrophysics for People in a Hurry", "1562761669i/32191710"),
+            Map.entry("Sapiens", "1703329310i/23692271"),
+            Map.entry("Guns, Germs, and Steel", "1453215833i/1842"),
+            Map.entry("SPQR", "1470421195i/28789711"),
+            Map.entry("The Silk Roads", "1472636067i/25812847"),
+            Map.entry("A People's History of the United States", "1494279423i/2767"),
+            Map.entry("The Wright Brothers", "1430942575i/22609391"),
+            Map.entry("1776", "1306787560i/1067"),
+            Map.entry("Steve Jobs", "1511288482i/11084145"),
+            Map.entry("Long Walk to Freedom", "1327997342i/318431"),
+            Map.entry("The Diary of a Young Girl", "1696989545i/127441416"),
+            Map.entry("Becoming", "1528206996i/38746485"),
+            Map.entry("Educated", "1774287363i/35133922"),
+            Map.entry("Born a Crime", "1473867911i/29780253"),
+            Map.entry("Leonardo da Vinci", "1523543570i/34684622"),
+            Map.entry("The Girl with the Dragon Tattoo", "1684638853i/2429135"),
+            Map.entry("Gone Girl", "1554086139i/19288043"),
+            Map.entry("The Da Vinci Code", "1597798677i/55019161"),
+            Map.entry("And Then There Were None", "1638425885i/16299"),
+            Map.entry("The Silence of the Lambs", "1647930822i/23807"),
+            Map.entry("Big Little Lies", "1559835163i/33516773"),
+            Map.entry("The Reversal", "1421934033i/7936809"),
+            Map.entry("Dune", "1555447414i/44767458"),
+            Map.entry("Neuromancer", "1752514552i/6088007"),
+            Map.entry("Foundation", "1417900846i/29579"),
+            Map.entry("The Left Hand of Darkness", "1488213612i/18423"),
+            Map.entry("Snow Crash", "1656932283i/61240297"),
+            Map.entry("Hyperion", "1746983261i/77566"),
+            Map.entry("The Martian", "1413706054i/18007564"),
+            Map.entry("The Hobbit", "1546071216i/5907"),
+            Map.entry("A Game of Thrones", "1562726234i/13496"),
+            Map.entry("The Name of the Wind", "1704917687i/186074"),
+            Map.entry("Mistborn", "1617768316i/68428"),
+            Map.entry("The Way of Kings", "1659905828i/7235533"),
+            Map.entry("American Gods", "1462924585i/30165203"),
+            Map.entry("The Lion, the Witch and the Wardrobe", "1697079942i/132080146"),
+            Map.entry("Atomic Habits", "1655988385i/40121378"),
+            Map.entry("The 7 Habits of Highly Effective People", "1421842784i/36072"),
+            Map.entry("Thinking, Fast and Slow", "1317793965i/11468377"),
+            Map.entry("The Power of Now", "1689947880i/6708"),
+            Map.entry("Mindset", "1436227012i/40745"),
+            Map.entry("Daring Greatly", "1337110319i/13588356"),
+            Map.entry("Man's Search for Meaning", "1535419394i/4069"),
+            Map.entry("Zero to One", "1630663027i/18050143"),
+            Map.entry("Good to Great", "1546097703i/76865"),
+            Map.entry("The Lean Startup", "1629999184i/10127019"),
+            Map.entry("Clean Code", "1436202607i/3735293"),
+            Map.entry("The Pragmatic Programmer", "1401432508i/4099"),
+            Map.entry("The Innovator's Dilemma", "1347654027i/2615"),
+            Map.entry("Shoe Dog", "1457284880i/27220736"),
+            Map.entry("Salt, Fat, Acid, Heat", "1599649084i/30753841"),
+            Map.entry("The Joy of Cooking", "1379313627i/327847"),
+            Map.entry("Mastering the Art of French Cooking", "1333577773i/129650"),
+            Map.entry("Plenty", "1327921381i/8086216"),
+            Map.entry("How to Cook Everything", "1407047944i/603204"),
+            Map.entry("The Food Lab", "1430990153i/24861842"),
+            Map.entry("Essentials of Classic Italian Cooking", "1694126208i/19552"),
+            Map.entry("Milk and Honey", "1491595510i/23513349"),
+            Map.entry("The Sun and Her Flowers", "1499791446i/35606560"),
+            Map.entry("Leaves of Grass", "1418012204i/27494"),
+            Map.entry("Ariel", "1442258738i/395090"),
+            Map.entry("The Waste Land", "1372992691i/400412"),
+            Map.entry("Devotions", "1733400239i/34272476"),
+            Map.entry("Citizen", "1420944502i/20613761")
+    );
+
     /** Categories: {name, color}. */
     private static final String[][] CATEGORIES = {
         {"Fiction", "#C2410C"},
@@ -241,10 +330,18 @@ public class BookstoreSeeder implements ApplicationRunner {
         OrderStatus.CANCELLED,
     };
 
+    private static final CustomerStatus[] CUSTOMER_STATUS_MIX = {
+        CustomerStatus.ACTIVE, CustomerStatus.ACTIVE, CustomerStatus.ACTIVE,
+        CustomerStatus.VIP, CustomerStatus.LEAD, CustomerStatus.AT_RISK,
+        CustomerStatus.INACTIVE
+    };
+
     private static final int ORDER_COUNT = 80;
     private static final int OPENING_STOCK_PER_BOOK = 150;
     private static final String LEGACY_DEMO_AVATAR_PREFIX =
             "https://api.dicebear.com/9.x/notionists-neutral/svg";
+    private static final String LEGACY_1776_CASINO_COVER =
+            "/api/media/2026/07/4c1a134d-9c99-4d7b-95ce-555a243fc297.jpg";
 
     private final BookCategoryRepository categories;
     private final SupplierRepository suppliers;
@@ -275,6 +372,8 @@ public class BookstoreSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         upgradeLegacyDemoAvatars();
+        upgradeCustomerStatuses();
+        upgradeBookCovers();
         if (books.count() > 0) {
             return; // already seeded
         }
@@ -317,7 +416,8 @@ public class BookstoreSeeder implements ApplicationRunner {
             String[] cityRow = CITIES[i % CITIES.length];
             double lat = Double.parseDouble(cityRow[1]) + (rnd.nextDouble() - 0.5) * 0.12;
             double lng = Double.parseDouble(cityRow[2]) + (rnd.nextDouble() - 0.5) * 0.12;
-            customerRefs.add(customer(first + " " + last, email, cityRow[0], lat, lng));
+            customerRefs.add(customer(first + " " + last, email, cityRow[0], lat, lng,
+                    CUSTOMER_STATUS_MIX[i % CUSTOMER_STATUS_MIX.length]));
         }
 
         // Books, with prices kept in a parallel list so order lines charge the catalog price.
@@ -380,6 +480,31 @@ public class BookstoreSeeder implements ApplicationRunner {
                 });
     }
 
+    /** Backfill the nullable status added after the original demo dataset was introduced. */
+    private void upgradeCustomerStatuses() {
+        List<Customer> existing = customers.findAllActive();
+        for (int i = 0; i < existing.size(); i++) {
+            Customer customer = existing.get(i);
+            if (customer.getStatus() == null) {
+                customer.setStatus(CUSTOMER_STATUS_MIX[i % CUSTOMER_STATUS_MIX.length]);
+                customers.save(customer);
+            }
+        }
+    }
+
+    /** Give existing demo books a real cover while preserving user uploads and custom URLs. */
+    private void upgradeBookCovers() {
+        books.findAllActive().stream()
+                .filter(book -> book.getCoverUrl() == null || book.getCoverUrl().isBlank()
+                        || book.getCoverUrl().startsWith("https://covers.openlibrary.org/b/title/")
+                        || ("1776".equals(book.getDescription())
+                                && LEGACY_1776_CASINO_COVER.equals(book.getCoverUrl())))
+                .forEach(book -> {
+                    book.setCoverUrl(coverUrl(book.getDescription()));
+                    books.save(book);
+                });
+    }
+
     // --- helpers ----------------------------------------------------------------------------------
 
     private Ref<BookCategory> category(String name, String color) {
@@ -396,9 +521,11 @@ public class BookstoreSeeder implements ApplicationRunner {
         return Ref.of(Supplier.class, suppliers.save(s).getId());
     }
 
-    private Ref<Customer> customer(String name, String email, String city, double lat, double lng) {
+    private Ref<Customer> customer(String name, String email, String city, double lat, double lng,
+                                   CustomerStatus status) {
         Customer c = new Customer();
         c.setDescription(name);
+        c.setStatus(status);
         c.setEmail(email);
         c.setCity(city);
         c.setLatitude(BigDecimal.valueOf(lat).setScale(6, RoundingMode.HALF_UP));
@@ -430,6 +557,14 @@ public class BookstoreSeeder implements ApplicationRunner {
         return "https://api.dicebear.com/10.x/glass/svg?seed=" + seed;
     }
 
+    /** Build the pinned Goodreads CDN URL matched by exact title and author at development time. */
+    private static String coverUrl(String title) {
+        String coverId = BOOK_COVER_IDS.get(title);
+        return coverId == null ? null
+                : "https://i.gr-assets.com/images/S/compressed.photo.goodreads.com/books/"
+                        + coverId + ".jpg";
+    }
+
     private Ref<Book> book(String title, String author, String isbn,
                            Ref<BookCategory> category, Ref<Supplier> supplier, BigDecimal price) {
         Book b = new Book();
@@ -439,6 +574,7 @@ public class BookstoreSeeder implements ApplicationRunner {
         b.setCategory(category);
         b.setSupplier(supplier);
         b.setPrice(price);
+        b.setCoverUrl(coverUrl(title));
         return Ref.of(Book.class, books.save(b).getId());
     }
 

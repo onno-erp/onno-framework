@@ -52,6 +52,7 @@ public class ResolvedMetadataService {
                 systemColumn("description", "Description", "_description", hints)));
         map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
         map.put("formValidations", describeFormValidations(d.javaClass()));
+        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "catalog", d.logicalName()));
         return map;
     }
 
@@ -189,7 +190,27 @@ public class ResolvedMetadataService {
         // the form, exactly like a catalog. See #110.
         map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
         map.put("formValidations", describeFormValidations(d.javaClass()));
+        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "document", d.logicalName()));
         return map;
+    }
+
+    private List<Map<String, Object>> describeDetailWidgets(Class<?> entity, String entityType,
+                                                             String entityName) {
+        return fieldHints.detailWidgetsFor(entity).stream().map(widget -> {
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("title", widget.title());
+            map.put("widgetType", widget.type());
+            map.put("order", widget.order());
+            map.put("width", widget.width());
+            map.put("entityType", entityType);
+            map.put("entityName", entityName);
+            map.put("maxItems", 10);
+            map.put("dateField", "");
+            map.put("titleField", "");
+            map.put("extraConfig", widget.extraConfig());
+            map.put("hint", widget.hint());
+            return map;
+        }).toList();
     }
 
     private List<Map<String, Object>> describeFormValidations(Class<?> entity) {

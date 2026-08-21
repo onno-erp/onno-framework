@@ -56,6 +56,10 @@ built-in action placement, and related lists. Use
 `fields.validation(key, FormValidator.class).dependsOn(...).debounce(...)` for advisory live
 cross-record error/warning/info feedback; keep hard invariants in the authoritative write path.
 
+Use `detail(DetailSpec)` to place registry-backed custom widgets below the fields of a saved
+catalog/document record. The widget receives `widget.record` (`kind`, `name`, `id`, loaded `data`,
+`readOnly`) and is intentionally absent from New/Duplicate forms.
+
 Seed a blank New form with field initializers for scalars/enums. Use `OnFillingHandler` for
 create/save normalization and computed defaults, and
 query-param prefill for `Ref`s and cross-navigation

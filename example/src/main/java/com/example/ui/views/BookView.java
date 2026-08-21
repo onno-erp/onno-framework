@@ -35,7 +35,7 @@ public class BookView implements EntityView<Book> {
         list.filter(Book::getIsbn).label("ISBN").startsWith();
         // A Table ⇄ Shelf toggle: the "bookTiles" renderer (src/main/widgets/BookTiles.tsx) draws
         // the same searched/filtered/sorted rows as cover tiles.
-        list.custom("bookTiles").label("Shelf");
+        list.custom("bookTiles").label("Shelf").defaultView();
     }
 
     @Override

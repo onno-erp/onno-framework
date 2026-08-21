@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { toast } from "@/components/ui/toast";
 import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import type { AttributeMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
+import type { AttributeMeta, DashboardWidgetMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
 import { api, ApiError, type FormFeedback } from "@/lib/api";
 import { cn, enumPillStyle } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,8 @@ import type { Translate } from "@/lib/messages";
 import { cancelQuickCreate, consumeQuickCreate } from "@/lib/quick-create";
 import { clearFormDirty, isFormDirty, markFormDirty } from "@/lib/dirty-forms";
 import { ActionsCluster, type ActionItem } from "@/lib/actions-menu-bridge";
+import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-registry";
+import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
 // Matches the DivKit action pills (Edit/Delete/New): a compact dark pill, icon + label,
 // rounded-control, text-sm/medium, with the same vertical/horizontal rhythm.
@@ -77,6 +79,8 @@ export type FormDescriptor = {
     actions?: Record<string, string>;
     /** Application-authored dependency-aware, debounced advisory validators. */
     formValidations?: FormValidationMeta[];
+    /** Custom widgets shown below the fields for saved records. */
+    detailWidgets?: DashboardWidgetMeta[];
   };
   initial: EntityRecord | null;
 };
@@ -334,6 +338,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   // record — so they need its id and only render for a saved record (not create/duplicate). A
   // catalog junction is editable here; a register junction is read-only (see RelatedListPanel).
   const relatedLists = useMemo<RelatedListMeta[]>(() => meta.relatedLists ?? [], [meta]);
+  const detailWidgets = useMemo<DashboardWidgetMeta[]>(() => meta.detailWidgets ?? [], [meta]);
 
   // 1C-style posting: a postable document offers Write (save, no posting) alongside
   // Post / Re-post (save then post). Already-posted documents re-post. Catalogs and
@@ -793,6 +798,16 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         />
       ))}
       </fieldset>
+      {isEdit && id && record && detailWidgets.length > 0 ? (
+        <RecordDetailWidgets
+          widgets={detailWidgets}
+          kind={kind}
+          name={name}
+          id={id}
+          record={record}
+          readOnly={readOnly}
+        />
+      ) : null}
       {/* Related-list panels read/write live join-catalog rows, so they're keyed to the saved
           record's id rather than to form state. On a create/duplicate form (no real id yet) the
           panel shows a "save first" hint. */}
@@ -858,6 +873,61 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           ) : null}
         </div>
       )}
+    </div>
+  );
+}
+
+function RecordDetailWidgets({
+  widgets,
+  kind,
+  name,
+  id,
+  record,
+  readOnly,
+}: {
+  widgets: DashboardWidgetMeta[];
+  kind: "catalogs" | "documents";
+  name: string;
+  id: string;
+  record: EntityRecord;
+  readOnly: boolean;
+}) {
+  // Re-resolve when an asynchronously loaded plugin registers after this form has mounted.
+  useSyncExternalStore(subscribeRegistry, getRegistryVersion, getRegistryVersion);
+
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {widgets.map((declaration, index) => {
+        const Component = resolveWidget(declaration.widgetType) as
+          | ComponentType<{ widget: DashboardWidgetMeta }>
+          | undefined;
+        const widget: DashboardWidgetMeta = {
+          ...declaration,
+          canWrite: !readOnly,
+          record: { kind, name, id, data: record, readOnly },
+        };
+        const half = /^(half|1\/2|50%?)$/i.test((declaration.width ?? "").trim());
+        return (
+          <div
+            key={`${declaration.widgetType}:${declaration.title}:${index}`}
+            className={cn(!half && "sm:col-span-2")}
+          >
+            <IslandErrorBoundary label={declaration.title || declaration.widgetType}>
+              {Component ? (
+                <Component widget={widget} />
+              ) : (
+                <div className="rounded-panel border border-dashed border-border p-4 text-xs text-muted-foreground">
+                  <div className="font-medium text-foreground">{declaration.title}</div>
+                  <div className="mt-1">
+                    No renderer registered for widget type{" "}
+                    <code className="font-mono">{declaration.widgetType}</code>.
+                  </div>
+                </div>
+              )}
+            </IslandErrorBoundary>
+          </div>
+        );
+      })}
     </div>
   );
 }

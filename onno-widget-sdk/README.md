@@ -49,7 +49,9 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - `html` — `htm` bound to the host `React.createElement`, for JSX-free markup.
 - `WidgetProps` — `{ widget: DashboardWidgetMeta }`, the props every widget receives. Read
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
-  server-side `.config(key, value)` values.
+  server-side `.config(key, value)` values. When the component is embedded through
+  `EntityView.detail(DetailSpec)`, `widget.record` additionally carries the saved record's route
+  `kind`, logical `name`, `id`, already-loaded `data`, and `readOnly` state.
 
 ## Styling
 

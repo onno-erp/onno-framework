@@ -13,6 +13,15 @@ import { MapWidget } from "@/components/map-widget";
 import { SettingWidget } from "@/components/setting-widget";
 import { ProcessTasksWidget } from "@/components/process-tasks-widget";
 import { ValueWidget } from "@/components/value-widget";
+import {
+  getRegistryVersion,
+  registerWidget,
+  registeredWidgetTypes,
+  resolveWidget,
+  subscribeRegistry,
+} from "@/lib/widget-registry";
+
+export { registerWidget, registeredWidgetTypes, resolveWidget, subscribeRegistry, getRegistryVersion };
 
 /**
  * Bridges DivKit's {@code div-custom} blocks to React widgets. The server emits a
@@ -31,21 +40,19 @@ import { ValueWidget } from "@/components/value-widget";
  * forking the framework. The server emits {@code .type("gauge")} as an {@code
  * onno-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
  */
-const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> = {
-  count: ValueWidget,
-  metric: ValueWidget,
-  chart: ChartWidget,
-  timeRange: TimeRangeWidget,
-  calendar: CalendarWidget,
-  kanban: KanbanWidget,
-  list: ListWidget,
-  stat: StatWidget,
-  sparkline: SparklineWidget,
-  gauge: GaugeWidget,
-  map: MapWidget,
-  setting: SettingWidget,
-  tasks: ProcessTasksWidget,
-};
+registerWidget("count", ValueWidget);
+registerWidget("metric", ValueWidget);
+registerWidget("chart", ChartWidget);
+registerWidget("timeRange", TimeRangeWidget);
+registerWidget("calendar", CalendarWidget);
+registerWidget("kanban", KanbanWidget);
+registerWidget("list", ListWidget);
+registerWidget("stat", StatWidget);
+registerWidget("sparkline", SparklineWidget);
+registerWidget("gauge", GaugeWidget);
+registerWidget("map", MapWidget);
+registerWidget("setting", SettingWidget);
+registerWidget("tasks", ProcessTasksWidget);
 
 /**
  * Register (or override) the renderer for a widget type. Call once at startup, before
@@ -56,50 +63,12 @@ const REGISTRY: Record<string, ComponentType<{ widget: DashboardWidgetMeta }>> =
  *   registerWidget("gauge", GaugeWidget);
  *   // server: b.widget("SLA").type("gauge").document(Incident.class)
  */
-export function registerWidget(
-  widgetType: string,
-  component: ComponentType<{ widget: DashboardWidgetMeta }>
-) {
-  REGISTRY[widgetType] = component;
-  // Re-publish so any host already on screen picks up the newly registered renderer.
-  mounts = [...mounts];
-  emit();
-  registryVersion++;
-  for (const l of registryListeners) l();
-}
-
-/** The widget types with a registered renderer (built-ins + app-registered). */
-export function registeredWidgetTypes(): string[] {
-  return Object.keys(REGISTRY);
-}
-
 /**
  * Look up the component registered under a type — the same registry {@link registerWidget} feeds.
  * Used by the entity list to resolve a {@code ListSpec.custom(type)} body renderer (whose props are
  * the list-renderer contract, not {@code {widget}} — the registry stores both shapes; the emitting
  * site knows which one it renders). Undefined when nothing is registered under the type.
  */
-export function resolveWidget(widgetType: string): ComponentType<never> | undefined {
-  return REGISTRY[widgetType] as ComponentType<never> | undefined;
-}
-
-// A separate version store for registry *lookups* (vs the mounts store below, which tracks live
-// custom elements): consumers re-resolve when a plugin registers late, without re-rendering on
-// every mount/unmount of unrelated widgets.
-let registryVersion = 0;
-const registryListeners = new Set<() => void>();
-
-/** useSyncExternalStore subscribe for {@link getRegistryVersion}. */
-export function subscribeRegistry(listener: () => void): () => void {
-  registryListeners.add(listener);
-  return () => registryListeners.delete(listener);
-}
-
-/** Bumped on every {@link registerWidget}; a changed value means lookups may resolve differently. */
-export function getRegistryVersion(): number {
-  return registryVersion;
-}
-
 type Mount = { id: number; el: HTMLElement; widget: DashboardWidgetMeta };
 
 // A new array reference is published on every change so useSyncExternalStore sees it.
@@ -193,10 +162,13 @@ function UnknownWidget({ type, title }: { type: string; title: string }) {
 /** Portals every live {@code <onno-widget>} to its React component. Mount once, high in the tree. */
 export function WidgetPortals() {
   const list = useSyncExternalStore(subscribe, getSnapshot);
+  useSyncExternalStore(subscribeRegistry, getRegistryVersion, getRegistryVersion);
   return (
     <>
       {list.map((m) => {
-        const Component = REGISTRY[m.widget.widgetType];
+        const Component = resolveWidget(m.widget.widgetType) as
+          | ComponentType<{ widget: DashboardWidgetMeta }>
+          | undefined;
         const node = Component ? (
           <Component widget={m.widget} />
         ) : (

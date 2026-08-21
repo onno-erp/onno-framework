@@ -311,6 +311,16 @@ export interface DashboardWidgetMeta {
    * server) means unknown; treat as writable so behavior doesn't regress, REST enforces anyway.
    */
   canWrite?: boolean;
+  /** Present when the widget is embedded in a saved catalog/document record surface. */
+  record?: RecordWidgetContext;
+}
+
+export interface RecordWidgetContext {
+  kind: "catalogs" | "documents";
+  name: string;
+  id: string;
+  data: EntityRecord;
+  readOnly: boolean;
 }
 
 export interface LayoutItem {

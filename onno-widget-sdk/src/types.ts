@@ -33,6 +33,19 @@ export interface DashboardWidgetMeta {
   href?: string;
   /** Optional help text (from {@code .hint(...)}). */
   hint?: string;
+  /** Present when this widget is embedded in a saved catalog/document record surface. */
+  record?: {
+    /** Plural route kind used by the read API. */
+    kind: "catalogs" | "documents";
+    /** Logical route name of the owning entity. */
+    name: string;
+    /** Saved record UUID. */
+    id: string;
+    /** Current authoritative record values already loaded by the host. */
+    data: EntityRecord;
+    /** Whether the viewer lacks write access to the owning record. */
+    readOnly: boolean;
+  };
 }
 
 /** A read record from the REST API — logical field name → value (`FieldDisplay`/`FieldRef` sidecars included). */

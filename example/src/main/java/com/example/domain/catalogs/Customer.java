@@ -1,5 +1,6 @@
 package com.example.domain.catalogs;
 
+import com.example.domain.enumerations.CustomerStatus;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -23,6 +24,9 @@ import java.math.BigDecimal;
 @Getter
 @Setter
 public class Customer extends CatalogObject {
+
+    @Attribute(displayName = "Client status")
+    private CustomerStatus status;
 
     @Attribute(displayName = "Email", length = 200, email = true)
     private String email;

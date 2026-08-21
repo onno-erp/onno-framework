@@ -46,6 +46,21 @@ public interface EntityView<E> {
     default void fields(EntityConfigBuilder<E> fields) {}
 
     /**
+     * Custom React widgets embedded below the fields on this entity's saved record surface.
+     * Each widget resolves through the normal {@code registerWidget(type, component)} registry and
+     * receives the current entity kind, name, id, record data, and read-only state in
+     * {@code widget.record}. Widgets are not rendered on New or Duplicate forms because no saved
+     * record exists yet.
+     *
+     * <pre>
+     * public void detail(DetailSpec&lt;Order&gt; detail) {
+     *     detail.widget("Timeline").type("orderTimeline").width("full");
+     * }
+     * </pre>
+     */
+    default void detail(DetailSpec<E> detail) {}
+
+    /**
      * Custom action buttons for this entity — on the list (toolbar / per-row) or the record
      * detail. Each runs arbitrary server logic ({@code .handler(...)}) or just navigates
      * ({@code .navigate(...)}). Actions whose entries come from editable business data may be
