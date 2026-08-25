@@ -1,8 +1,11 @@
 import {
   registerWidget,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  useWidgetUpdates,
   api,
   Segmented,
   Badge,
@@ -49,6 +52,7 @@ function EventLog({ widget }: WidgetProps) {
   const [all, setAll] = useState<EntityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<Order>("newest");
+  const requestVersion = useRef(0);
 
   const cfg = widget.extraConfig ?? {};
   const dateField = cfg.dateField || "date";
@@ -57,16 +61,23 @@ function EventLog({ widget }: WidgetProps) {
   const currency = cfg.currency;
   const max = widget.maxItems && widget.maxItems > 0 ? widget.maxItems : 12;
 
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .listDocuments(widget.entityName)
-      .then((data) => !cancelled && setAll(data))
-      .catch((e) => !cancelled && setError(String(e?.message ?? e)));
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    const request = ++requestVersion.current;
+    try {
+      const data = await api.listDocuments(widget.entityName);
+      if (request !== requestVersion.current) return;
+      setAll(data);
+      setError(null);
+    } catch (e) {
+      if (request !== requestVersion.current) return;
+      setError(String((e as { message?: unknown })?.message ?? e));
+    }
   }, [widget.entityName]);
+
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => () => { requestVersion.current += 1; }, []);
+  // Uses the host's one shared, cross-tab SSE stream and coalesces posting/change bursts.
+  useWidgetUpdates(widget, load);
 
   // Sort by the date field in the chosen direction, then take the most recent `max`.
   const rows = useMemo(() => {

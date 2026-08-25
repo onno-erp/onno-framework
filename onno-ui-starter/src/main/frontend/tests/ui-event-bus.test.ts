@@ -73,6 +73,26 @@ describe("ui-event-bus", () => {
     expect(signal.aborted).toBe(true); // last one gone -> connection closed
   });
 
+  it("isolates listener failures and ignores malformed deliveries", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { subscribeUiEvents } = await import("@/lib/ui-event-bus");
+    const received: UiEvent[] = [];
+    const offBad = subscribeUiEvents(() => { throw new Error("broken widget"); });
+    const offGood = subscribeUiEvents((event) => received.push(event));
+
+    lastStream().onEvent(null as unknown as UiEvent);
+    lastStream().onEvent({ entityType: "catalog" } as unknown as UiEvent);
+    const valid = evt();
+    lastStream().onEvent(valid);
+
+    expect(received).toEqual([valid]);
+    expect(error).toHaveBeenCalledWith("[onno] live-event listener failed", expect.any(Error));
+
+    offBad();
+    offGood();
+    error.mockRestore();
+  });
+
   it("elects a leader via Web Locks and rebroadcasts events to other tabs", async () => {
     (navigator as unknown as { locks: unknown }).locks = {
       // Grant the lock immediately; the leader holds it (callback promise stays pending).

@@ -1,5 +1,14 @@
 import type { ComponentType } from "react";
-import type { DashboardWidgetMeta, ListRendererProps, OnnoHost, OnnoReadApi, OnnoUi } from "./types";
+import type {
+  DashboardWidgetMeta,
+  ListRendererProps,
+  OnnoEvents,
+  OnnoHost,
+  OnnoReadApi,
+  OnnoUi,
+  UiEvent,
+  UiEventFilter,
+} from "./types";
 
 export type {
   DashboardWidgetMeta,
@@ -8,8 +17,11 @@ export type {
   ListRendererDescriptor,
   ListRendererProps,
   OnnoReadApi,
+  OnnoEvents,
   OnnoHost,
   OnnoUi,
+  UiEvent,
+  UiEventFilter,
 } from "./types";
 
 /**
@@ -22,11 +34,13 @@ export type {
  * write the component.)
  *
  * @example
- *   import { registerWidget, useState, useEffect, api, WidgetProps } from "@onno/widget-sdk";
+ *   import { registerWidget, useCallback, useState, useEffect, useWidgetUpdates, api, WidgetProps } from "@onno/widget-sdk";
  *
  *   function EventLog({ widget }: WidgetProps) {
  *     const [rows, setRows] = useState<any[]>([]);
- *     useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
+ *     const load = useCallback(async () => setRows(await api.listDocuments(widget.entityName)), [widget.entityName]);
+ *     useEffect(() => { void load(); }, [load]);
+ *     useWidgetUpdates(widget, load);
  *     return (
  *       <ul className="text-sm text-foreground">
  *         {rows.map((r) => <li key={String(r.id)}>{String(r.date)} — {String(r.description)}</li>)}
@@ -103,6 +117,100 @@ export const html = host.html;
 
 /** The read-only REST client (same-origin, session + CSRF handled by the host). */
 export const api: OnnoReadApi = host.api;
+
+function requireEvents(): OnnoEvents {
+  if (host.events) return host.events;
+  throw new Error(
+    "@onno/widget-sdk: live updates require host contract v3. Upgrade onno-ui-starter to the " +
+      "same version as the su.onno.widgets Gradle plugin."
+  );
+}
+
+/**
+ * Subscribe to the host's shared live-update stream. Do not construct an {@code EventSource} in a
+ * widget: this facade reuses the SPA's authenticated, reconnecting connection across every widget
+ * and browser tab. The capability is resolved lazily so widgets that do not use live updates still
+ * run on a v2 host.
+ */
+export const events: OnnoEvents = Object.freeze({
+  subscribe: (listener: (event: UiEvent) => void, filter?: UiEventFilter) =>
+    requireEvents().subscribe(listener, filter),
+});
+
+/** Function-form alias for {@link events.subscribe}. */
+export const subscribeUiEvents = events.subscribe;
+
+/** Subscribe a React component to the shared event stream and clean up on unmount. */
+export function useUiEvents(listener: (event: UiEvent) => void, filter?: UiEventFilter): void {
+  const listenerRef = host.React.useRef(listener);
+  listenerRef.current = listener;
+  const typesKey = filter?.types?.join("\u0000") ?? "";
+  host.React.useEffect(
+    () => events.subscribe((event) => listenerRef.current(event), filter),
+    [filter?.entityType, filter?.entityName, filter?.id, typesKey]
+  );
+}
+
+const ENTITY_UPDATE_TYPES = ["created", "updated", "deleted", "posted", "unposted", "changed"] as const;
+
+export interface WidgetUpdateOptions {
+  /** Coalesce posting/change bursts before refreshing. Default 250 ms; set 0 for immediate delivery. */
+  debounceMs?: number;
+  /** Set false for a deliberately static widget. Default true. */
+  enabled?: boolean;
+}
+
+/** Whether an entity-change event invalidates the data bound to a widget. */
+export function eventMatchesWidget(event: UiEvent, widget: DashboardWidgetMeta): boolean {
+  if (!(ENTITY_UPDATE_TYPES as readonly string[]).includes(event.type)) return false;
+  if (event.entityType === "register") {
+    return (
+      widget.entityType === "register" &&
+      (!event.entityName || event.entityName === "*" || event.entityName === widget.entityName)
+    );
+  }
+  return event.entityType === widget.entityType && event.entityName === widget.entityName;
+}
+
+/**
+ * Refresh a widget when its bound catalog, document, or register changes. Matching, burst
+ * coalescing, latest-callback handling, shared transport reuse, and unmount cleanup are built in.
+ * Pair it with the same stable loader used for the widget's initial fetch.
+ */
+export function useWidgetUpdates(
+  widget: DashboardWidgetMeta,
+  refresh: () => void | Promise<unknown>,
+  options: WidgetUpdateOptions = {}
+): void {
+  const refreshRef = host.React.useRef(refresh);
+  refreshRef.current = refresh;
+  const debounceMs = Math.max(0, options.debounceMs ?? 250);
+  const enabled = options.enabled ?? true;
+  host.React.useEffect(() => {
+    if (!enabled) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = events.subscribe(
+      (event) => {
+        if (!eventMatchesWidget(event, widget)) return;
+        if (timer !== undefined) clearTimeout(timer);
+        timer = setTimeout(() => {
+          try {
+            Promise.resolve(refreshRef.current()).catch((error) =>
+              console.error("[onno] widget live refresh failed", error)
+            );
+          } catch (error) {
+            console.error("[onno] widget live refresh failed", error);
+          }
+        }, debounceMs);
+      },
+      { types: ENTITY_UPDATE_TYPES }
+    );
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [widget.entityType, widget.entityName, debounceMs, enabled]);
+}
 
 /**
  * The host's UI primitives — the *real* design-system controls (Radix-backed `Select`/`Popover`,

@@ -87,7 +87,10 @@ Author app widgets in `src/main/widgets/*.tsx`, use `@onno/widget-sdk`, and appl
 `su.onno.widgets` Gradle plugin. Prefer SDK UI primitives over lookalike controls. Literal Tailwind
 classes inside `src/main/widgets` are compiled into the widget CSS; dynamic classes are not scanned.
 
-Widgets that need live updates open `new EventSource("/api/events")` and listen for named events
+Data-backed custom widgets use `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`; it filters
+and coalesces the host's shared live-event stream. Never open `new EventSource("/api/events")` in a
+widget. For unusual multi-entity or non-entity subscriptions, use the SDK's `events.subscribe` or
+`useUiEvents`. The underlying stream carries named events
 (`created`, `updated`, `deleted`, `posted`, `unposted`, `changed`). `onmessage` will not fire.
 
 ## Iterate With Dev Mode

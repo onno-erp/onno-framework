@@ -21,7 +21,8 @@ the interaction or visualization.
 4. Apply `su.onno.widgets` in the consuming app.
 5. Declare the widget from a `Page` with `b.widget("Title").type("myWidget").config(...)`.
 6. Register it at module load with `registerWidget("myWidget", Component)`.
-7. If it needs live updates, subscribe to named SSE events and filter payloads to the bound entity.
+7. Make data-backed widgets live with `useWidgetUpdates(widget, load)`. It filters the host's shared
+   SSE stream to the bound entity and coalesces bursts; never open an `EventSource` in a widget.
 8. Run `compileWidgets`, inspect packaged `onno-plugins/*.js` and CSS, then verify `/api/config`,
    plugin URLs, RBAC-controlled reads, rendering, and SSE refresh in the browser.
 

@@ -288,6 +288,14 @@ export interface UiEvent {
   devMode?: boolean;
 }
 
+/** Optional narrowing for consumers of the shared live-event bus (including custom widgets). */
+export interface UiEventFilter {
+  types?: readonly string[];
+  entityType?: string;
+  entityName?: string;
+  id?: string;
+}
+
 export interface DashboardWidgetMeta {
   title: string;
   widgetType: string;

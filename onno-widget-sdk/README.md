@@ -33,6 +33,11 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   An unregistered type degrades to the default grid.
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
+- `useWidgetUpdates(widget, refresh, options?)` — refetch when the widget's bound entity changes,
+  with matching, burst coalescing, and cleanup built in. It reuses the host's shared SSE stream.
+- `events.subscribe(listener, filter?)` / `subscribeUiEvents(...)` / `useUiEvents(...)` — lower-level
+  access to the same shared stream for widgets with unusual matching needs. Never open a separate
+  `EventSource` from a widget.
 - `api` — a read-only REST client (`listCatalog`, `getCatalogItem`, `listDocuments`, `getDocument`,
   `getBalance`, `getTurnover`, `getMovements`). List calls return one bounded keyset window.
   Same-origin,
@@ -99,40 +104,39 @@ function ViewSwitch() {
 
 ## Live updates
 
-A widget does **not** auto-refresh — it only re-renders on its own state changes. To react to writes
-from elsewhere (another user, another tab, the record form, another widget), open the shared SSE
-stream yourself. Two gotchas:
-
-- The SDK `api` is **read-only** — it has no event subscription. Open `new EventSource("/api/events")`.
-- The stream sends **named** events (the change type), never the default unnamed `message` — so
-  `EventSource.onmessage` fires for nothing. You must `addEventListener(name, …)` per type:
-  `created`, `updated`, `deleted`, `posted`, `unposted`, `changed` (plus `ready`, `presence`,
-  `notification`). Each event's `data` is JSON: `{ type, entityType, entityName, id, … }`.
+A widget does **not** auto-refresh merely because it called `api`, but live behavior is one hook:
+use the same stable loader for the initial fetch and `useWidgetUpdates`. The hook matches
+`created`/`updated`/`deleted`/`posted`/`unposted`/`changed` to `widget.entityType` and
+`widget.entityName`, understands register wildcard invalidations, coalesces bursts, and cleans up on
+unmount.
 
 ```tsx
 import { useEffect } from "@onno/widget-sdk";
 
-useEffect(() => {
-  const es = new EventSource("/api/events");
-  const onChange = (e: MessageEvent) => {
-    const ev = JSON.parse(e.data);
-    if (ev.entityName === "Reservations") refetch(); // filter to what you render
-  };
-  for (const name of ["created", "updated", "deleted", "posted", "unposted", "changed"]) {
-    es.addEventListener(name, onChange);
-  }
-  return () => es.close();
-}, []);
+const load = useCallback(async () => {
+  setRows(await api.listDocuments(widget.entityName));
+}, [widget.entityName]);
+useEffect(() => { void load(); }, [load]);
+useWidgetUpdates(widget, load);
 ```
+
+The host owns the authenticated `/api/events` transport, reconnect policy, session-expiry handling,
+and Web Locks/BroadcastChannel fan-out, so every widget and tab shares one connection. Do not use
+`new EventSource(...)` in a custom widget. If the widget depends on several entities or an event such
+as `tasks-changed`, subscribe through `events.subscribe(listener, filter?)` or `useUiEvents(...)`.
 
 ## Example
 
 ```tsx
-import { registerWidget, useEffect, useState, api, type WidgetProps } from "@onno/widget-sdk";
+import {
+  registerWidget, useCallback, useEffect, useState, useWidgetUpdates, api, type WidgetProps
+} from "@onno/widget-sdk";
 
 function EventLog({ widget }: WidgetProps) {
   const [rows, setRows] = useState<any[]>([]);
-  useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
+  const load = useCallback(async () => setRows(await api.listDocuments(widget.entityName)), [widget.entityName]);
+  useEffect(() => { void load(); }, [load]);
+  useWidgetUpdates(widget, load);
   return (
     <ul className="text-sm text-foreground">
       {rows.map((r) => <li key={String(r.id)}>{String(r.date)} — {String(r.number)}</li>)}

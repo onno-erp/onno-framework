@@ -56,8 +56,17 @@ function checkServerRestart(event: UiEvent) {
 }
 
 function deliver(event: UiEvent) {
+  if (!event || typeof event !== "object" || typeof event.type !== "string") return;
   checkServerRestart(event);
-  for (const listener of listeners) listener(event);
+  for (const listener of listeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      // Plugin listeners share this bus with the host. One faulty widget must not starve every
+      // listener registered after it (or break the stream parser's delivery loop).
+      console.error("[onno] live-event listener failed", error);
+    }
+  }
 }
 
 /**

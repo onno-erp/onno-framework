@@ -301,9 +301,11 @@ because they are not Java field references.
     concatenation aren't seen — keep them literal), and dynamic colors still want inline `style` with
     `hsl(var(--primary))` / `hsl(var(--border))`.
   - **Live updates:** the SDK `api` is read-only (no event subscription). A widget that must react to
-    others' writes opens `new EventSource("/api/events")` itself and listens per **named** event
-    (`created`/`updated`/`deleted`/`posted`/`unposted`/`changed`) — `onmessage` never fires (events are
-    named, not the default `message`), so use `addEventListener("updated", …)`.
+    others' writes uses `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`, which filters and
+    coalesces the host's shared SSE stream. Never open a per-widget `EventSource`; use
+    `events.subscribe`/`useUiEvents` only for unusual multi-entity or non-entity matching. Events are
+    **named** (`created`/`updated`/`deleted`/`posted`/`unposted`/`changed`), but that wire detail is
+    owned by the SDK/host rather than each widget.
 - **Static assets** (logos, kiosk/TV pages, fonts) must live under `classpath:/static/ui/…`; they're
   served at the web root. Anything that does NOT resolve to a real file there falls through to the SPA
   `index.html` (HTTP 200, `text/html`) — so a file under a bare `static/` (not `static/ui/`), or a

@@ -2,7 +2,9 @@ import * as React from "react";
 import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
 import { registerWidget } from "./widget-bridge";
+import { subscribeUiEvents } from "./ui-event-bus";
 import { api } from "./api";
+import type { UiEvent, UiEventFilter } from "./types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -81,9 +83,29 @@ export interface OnnoHost {
   api: OnnoReadApi;
   /** The host's UI component primitives (see {@link OnnoUi}) — the real design-system controls. */
   ui: OnnoUi;
+  /** Shared live updates; added in host contract v3. */
+  events: {
+    subscribe(listener: (event: UiEvent) => void, filter?: UiEventFilter): () => void;
+  };
   /** Host contract version; bump on a breaking change to this shape. */
   version: number;
 }
+
+function eventMatchesFilter(event: UiEvent, filter?: UiEventFilter): boolean {
+  if (!filter) return true;
+  if (filter.types && !filter.types.includes(event.type)) return false;
+  if (filter.entityType !== undefined && event.entityType !== filter.entityType) return false;
+  if (filter.entityName !== undefined && event.entityName !== filter.entityName) return false;
+  if (filter.id !== undefined && event.id !== filter.id) return false;
+  return true;
+}
+
+const events: OnnoHost["events"] = Object.freeze({
+  subscribe: (listener, filter) =>
+    subscribeUiEvents((event) => {
+      if (eventMatchesFilter(event, filter)) listener(event);
+    }),
+});
 
 /**
  * The read-only subset of {@link api} exposed to plugins. Deliberately excludes create/update/
@@ -158,8 +180,9 @@ export function installPluginHost(): OnnoHost {
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
     ui,
-    // v2: added `ui` (host UI primitives). Additive — existing widgets keep working.
-    version: 2,
+    events,
+    // v3: added the shared live-event facade. Additive — existing widgets keep working.
+    version: 3,
   });
   window.onno = host;
   return host;

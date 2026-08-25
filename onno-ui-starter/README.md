@@ -900,16 +900,28 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
    read-only data client; the SDK is bundled in the Gradle plugin, so it resolves with no npm access):
 
    ```tsx
-   import { registerWidget, useEffect, useState, api, type WidgetProps } from "@onno/widget-sdk";
+   import {
+     registerWidget, useCallback, useEffect, useState, useWidgetUpdates, api, type WidgetProps
+   } from "@onno/widget-sdk";
 
    function EventLog({ widget }: WidgetProps) {
      const [rows, setRows] = useState<any[]>([]);
-     useEffect(() => { api.listDocuments(widget.entityName).then(setRows); }, [widget.entityName]);
+     const load = useCallback(async () => {
+       setRows(await api.listDocuments(widget.entityName));
+     }, [widget.entityName]);
+     useEffect(() => { void load(); }, [load]);
+     useWidgetUpdates(widget, load);
      return <ul className="text-sm text-foreground">{rows.map((r) =>
        <li key={String(r.id)}>{String(r.date)} — {String(r.number)}</li>)}</ul>;
    }
    registerWidget("eventLog", EventLog);
    ```
+
+   `useWidgetUpdates` filters the host's shared live-event stream to the widget's bound entity and
+   coalesces posting/change bursts before calling `load`. It reuses the SPA's single authenticated
+   SSE connection across every widget and browser tab; custom widgets must not open their own
+   `EventSource`. For unusual event matching, use the lower-level `events.subscribe(...)` or
+   `useUiEvents(...)` SDK APIs.
 
 3. Declare the widget server-side with a matching `type(...)` — its `.config(...)` values arrive as
    `widget.extraConfig`:

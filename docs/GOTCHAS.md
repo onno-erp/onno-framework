@@ -91,6 +91,10 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   (client retries every 3s) refetch the surfaces you care about. Events are role-filtered per
   subscriber. In a browser, the SPA already multiplexes one connection per origin (Web Locks
   leader + BroadcastChannel) — don't open a second one per tab.
+- **Custom widgets subscribe through `@onno/widget-sdk`, never through `EventSource`.** Use
+  `useWidgetUpdates(widget, load)` for the normal entity-bound case, or `events.subscribe` /
+  `useUiEvents` for unusual matching. These APIs reuse the SPA's authenticated, reconnecting,
+  cross-tab stream; a raw widget connection bypasses that sharing and session recovery.
 
 ## Custom widgets
 

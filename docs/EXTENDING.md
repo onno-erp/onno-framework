@@ -24,6 +24,11 @@ A connector and an SPI both ship as a starter; the difference is whether you wra
 or satisfy a framework contract. The rest of this guide focuses on the **starter** shape since it
 covers both.
 
+Custom UI extensions compile against `@onno/widget-sdk`. Data-backed widgets should call
+`useWidgetUpdates(widget, load)` so they join the host's single authenticated, reconnecting SSE
+stream; `events.subscribe`/`useUiEvents` handle unusual matching. Never create a per-widget
+`EventSource`, which bypasses the host's cross-tab sharing and session recovery.
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.
