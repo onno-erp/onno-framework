@@ -153,8 +153,8 @@ public final class WidgetBuckets {
      * sizes date granularity from without ever fetching rows.
      */
     static Map<String, Object> run(Jdbi jdbi, RefResolver refResolver, List<AttributeDescriptor> attributes,
-                                   String table, Set<String> columns, Request r) {
-        WidgetFilter.Result wf = WidgetFilter.parse(r.filter(), columns);
+                                   String table, Set<String> columns, Set<String> uuidColumns, Request r) {
+        WidgetFilter.Result wf = WidgetFilter.parse(r.filter(), columns, uuidColumns);
         Query q = build(r, table, columns, wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(q.sql());

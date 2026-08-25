@@ -135,7 +135,7 @@ public class DocumentQueryService {
         Keyset.Plan plan = Keyset.plan(col, dirDesc, !surface.isNonNullableSort(col), cursor);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
@@ -205,7 +205,7 @@ public class DocumentQueryService {
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
@@ -244,7 +244,7 @@ public class DocumentQueryService {
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns);
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");

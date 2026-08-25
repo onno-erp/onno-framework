@@ -105,7 +105,7 @@ final class EntityQuerySupport {
     static BigDecimal aggregate(Jdbi jdbi, EntitySurfaceDescriptor surface,
                                 String metric, String field, String filter) {
         String agg = WidgetAggregate.expression(metric, surface.storageColumn(field), surface.columnNames());
-        WidgetFilter.Result f = WidgetFilter.parse(filter, surface.columnNames());
+        WidgetFilter.Result f = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
 
         StringBuilder sql = new StringBuilder("SELECT ").append(agg)
                 .append(" FROM ").append(surface.tableName())
@@ -132,7 +132,7 @@ final class EntityQuerySupport {
                 surface.storageColumn(request.seriesBy()), request.filter(),
                 surface.storageColumn(request.dateField()), request.from(), request.to());
         return WidgetBuckets.run(jdbi, refResolver, surface.attributes(), surface.tableName(), allowed,
-                storageRequest);
+                surface.uuidColumns(), storageRequest);
     }
 
     static String searchClause(MetadataRegistry registry, EntitySurfaceDescriptor surface, String search) {

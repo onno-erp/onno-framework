@@ -688,12 +688,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const cancel = () => {
     // Cancel is an explicit discard — clear the dirty flag first so nothing asks "discard?".
     clearFormDirty(formPath);
-    if (isEdit) {
-      if (record) applyRecord(record);
-      return;
-    }
     // Cancelling a create also cancels any ref-picker quick-create waiting on it.
-    cancelQuickCreate(kind, name);
+    if (!isEdit) cancelQuickCreate(kind, name);
     dispatchClose(formPath);
   };
 

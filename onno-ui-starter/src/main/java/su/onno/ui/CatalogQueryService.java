@@ -152,7 +152,7 @@ public class CatalogQueryService {
         Keyset.Plan plan = Keyset.plan(col, descending, !surface.isNonNullableSort(col), cursor);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
         String where = "_deletion_mark = false" + searchClause(surface, search)
                 + filterClause(filter) + filterClause(wf) + plan.predicate();
         int lim = Keyset.clampLimit(limit);
@@ -219,7 +219,7 @@ public class CatalogQueryService {
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
         String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
@@ -250,7 +250,7 @@ public class CatalogQueryService {
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns);
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
         String where = "_deletion_mark = false" + searchClause(surface, search) + filterClause(filter) + filterClause(wf);
 
         // Aggregate select list: drop any the validator rejects (unknown fn/column) rather than fail.

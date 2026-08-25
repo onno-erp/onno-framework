@@ -46,9 +46,16 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                     .resourceChain(true);
         }
 
-        // Vite emits the entry-point assets at the web root. Keep this handler file-only so missing
-        // files, consumer resources, and API routes are never converted into the SPA shell.
-        registry.addResourceHandler("/assets/**", "/favicon.svg", "/manifest.webmanifest")
+        // Spring strips the /assets/ pattern prefix before resolving the remaining path, so point
+        // this handler at the emitted assets directory itself. Resolving against static/ui/ looks
+        // for static/ui/<hash>.js and leaves every packaged SPA blank (#339).
+        registry.addResourceHandler("/assets/**")
+                .addResourceLocations("classpath:/static/ui/assets/")
+                .resourceChain(true);
+
+        // Exact root files retain their full filename and therefore resolve from the bundle root.
+        // Keep both handlers file-only so missing files and API routes never become the SPA shell.
+        registry.addResourceHandler("/favicon.svg", "/manifest.webmanifest")
                 .addResourceLocations("classpath:/static/ui/")
                 .resourceChain(true);
 
