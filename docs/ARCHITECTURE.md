@@ -44,7 +44,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
 | `onno-desktop-gradle-plugin` | (`su.onno.desktop` plugin) | Packages a Spring Boot app into a native `.dmg`/`.msi`/`.AppImage` via jlink + Tauri. |
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
-| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, and a read-only data client that resolve to the host SPA at runtime. |
+| `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, a read-only data client, and shared live-event subscriptions that resolve to the host SPA at runtime. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
@@ -570,6 +570,10 @@ tabs over a `BroadcastChannel`; if the leader tab closes, another transparently 
 keeps a handful of open tabs from exhausting the browser's per-origin connection limit (~6 over
 HTTP/1.1, shared across all tabs), which would otherwise starve both the extra streams and ordinary
 API calls. Browsers without Web Locks/`BroadcastChannel` fall back to one stream per tab.
+Custom widgets join this same transport through `@onno/widget-sdk`: `useWidgetUpdates(widget, load)`
+handles the normal entity-bound refresh with filtering and burst coalescing, while
+`events.subscribe`/`useUiEvents` cover unusual matching. A widget must not open its own
+`EventSource`, which would bypass cross-tab sharing, reconnect/session handling, and listener cleanup.
 
 ## Scaling out (horizontal)
 

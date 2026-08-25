@@ -160,7 +160,8 @@ Put your annotated model under the `@SpringBootApplication` package and start th
 onno scans the model, creates the schema, wires the repositories, and serves the UI.
 
 For a complete runnable project with seeded data, posting, role-specific layouts, dashboards,
-comments, media, and custom widgets, see the [Onno Books example](example).
+comments, media, and live custom widgets backed by the host's shared SSE stream, see the
+[Onno Books example](example).
 
 ## Business concepts
 

@@ -69,7 +69,6 @@ b.widget("Recent activity").type("eventLog").width("full").order(20)
 ```tsx
 import {
   Badge,
-  Button,
   Card,
   api,
   registerWidget,
@@ -77,6 +76,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useWidgetUpdates,
   type EntityRecord,
   type WidgetProps,
 } from "@onno/widget-sdk";
@@ -94,6 +94,7 @@ function EventLog({ widget }: WidgetProps) {
   }, [widget.entityName, widget.entityType]);
 
   useEffect(() => { void load(); }, [load]);
+  useWidgetUpdates(widget, load);
 
   const rows = useMemo(() => [...all]
     .sort((a, b) => String(b[dateField] ?? "").localeCompare(String(a[dateField] ?? "")))
@@ -103,9 +104,6 @@ function EventLog({ widget }: WidgetProps) {
     <Card className="p-3">
       <div className="flex items-center justify-between">
         <strong>{widget.title}</strong>
-        <Button size="sm" variant="ghost" onClick={() => void load()}>
-          Refresh
-        </Button>
       </div>
       <div className="mt-3 space-y-2">
         {rows.map((row, index) => (
@@ -127,23 +125,14 @@ Prefer SDK controls (`Button`, `Badge`, `Select`, `DatePicker`, etc.) over hand-
 ## SSE Updates
 
 ```tsx
-useEffect(() => {
-  const events = new EventSource("/api/events");
-  const reload = (event: MessageEvent) => {
-    try {
-      const change = JSON.parse(event.data);
-      if (change.entityName && change.entityName !== widget.entityName) return;
-    } catch { /* payload-free invalidations still reload */ }
-    void load();
-  };
-  for (const name of ["created", "updated", "deleted", "posted", "unposted", "changed"]) {
-    events.addEventListener(name, reload as EventListener);
-  }
-  return () => events.close();
-}, [load, widget.entityName]);
+useEffect(() => { void load(); }, [load]);
+useWidgetUpdates(widget, load);
 ```
 
-Events are named. `events.onmessage` will not fire for these updates.
+`useWidgetUpdates` reuses the host's one authenticated, reconnecting SSE connection across every
+widget and browser tab. It matches the widget's bound catalog/document/register, coalesces bursts,
+and unsubscribes on unmount. Never construct `EventSource` inside a widget. For a widget that
+depends on several entities or non-entity events, use `events.subscribe(...)` or `useUiEvents(...)`.
 
 ## Packaging And Verification
 
@@ -162,6 +151,7 @@ use semantic host tokens/radii.
   plugin instead of bundling another copy.
 - If the widget is blank, verify the `type` string, browser console, and plugin bundle URL under
   `{onno.ui.path}/plugins/**`.
-- If data is stale, subscribe to named SSE events or provide a refresh button.
+- If data is stale, ensure the stable loader used for the initial fetch is also passed to
+  `useWidgetUpdates(widget, load)` and that the widget is bound to the entity it reads.
 - Built-in `list` accepts catalogs/documents only. For register movements or low-resource counts,
   use a custom widget with `api.getMovements(...)` or `api.getBalance(...)`.

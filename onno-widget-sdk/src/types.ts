@@ -115,6 +115,33 @@ export interface ListRendererProps {
   openUrl: (row: EntityRecord) => string | null;
 }
 
+/** One event delivered by the host's shared, authenticated live-update stream. */
+export interface UiEvent {
+  type: string;
+  entityType?: string;
+  entityName?: string;
+  id?: string;
+  naturalKey?: string | null;
+  timestamp?: string;
+  [key: string]: unknown;
+}
+
+/** Optional narrowing applied before a live-event listener is invoked. */
+export interface UiEventFilter {
+  types?: readonly string[];
+  entityType?: string;
+  entityName?: string;
+  id?: string;
+}
+
+/**
+ * Live events exposed by the host. Every subscriber shares the SPA's reconnecting SSE transport,
+ * including its one-leader-across-tabs fan-out and session-expiry handling.
+ */
+export interface OnnoEvents {
+  subscribe(listener: (event: UiEvent) => void, filter?: UiEventFilter): () => void;
+}
+
 /**
  * The host's UI primitives, re-exposed to widgets so a custom widget renders the *real*
  * design-system controls (Radix-backed Select/Popover, the app's Button/Segmented/Badge/…) instead
@@ -169,5 +196,7 @@ export interface OnnoHost {
   api: OnnoReadApi;
   /** The host's UI component primitives (see {@link OnnoUi}). Present from host contract v2. */
   ui: OnnoUi;
+  /** Shared live-event facade. Present from host contract v3. */
+  events?: OnnoEvents;
   version: number;
 }
