@@ -3,6 +3,7 @@ package com.example.ui.pages;
 import com.example.domain.documents.Order;
 import su.onno.ui.Page;
 import su.onno.ui.PageBuilder;
+import su.onno.ui.ChartBuilder;
 
 import org.springframework.stereotype.Component;
 
@@ -67,7 +68,7 @@ public class DashboardPage implements Page {
                 .config("comparisonLabel", "vs previous period")
                 // System columns carry the `_` prefix in widget configs (cf. `_date` below): the
                 // posted flag is `_posted`, not `posted`.
-                .config("filter", "posted = true")
+                .config("filter", "_posted = true")
                 .hint("Sum of order totals across posted orders.");
 
         // ---- Charts -----------------------------------------------------------------------------
@@ -82,18 +83,22 @@ public class DashboardPage implements Page {
                 .config("kind", "area")
                 .groupBy(Order::getDate).config("groupByDate", "day")
                 .config("metric", "sum").metricField(Order::getTotal)
-                .config("filter", "posted = true")
+                .config("filter", "_posted = true")
                 .hint("Posted-order revenue over time.");
 
-        // Dual-axis: revenue (area, left axis, $) and order count (bars, right axis) on one chart —
-        // two very different magnitudes read cleanly because each measure has its own Y axis.
-        // config("measure2", …) adds the secondary measure.
-        b.widget("Orders & revenue").type("chart").width("full").order(12).document(Order.class)
-                .config("kind", "area").config("label", "Revenue")
-                .groupBy(Order::getDate).config("groupByDate", "week")
-                .config("metric", "sum").metricField(Order::getTotal)
-                .config("measure2", "count").config("kind2", "bar").config("label2", "Orders")
-                .config("filter", "posted = true")
+        // The typed chart facade keeps the ordinary case short, but exposes per-measure colour,
+        // axis formatting, thresholds and presentation controls without raw Recharts properties.
+        b.chart("Orders & revenue", Order.class).width("full").order(12)
+                .time(Order::getDate, ChartBuilder.TimeBucket.WEEK)
+                .sum(Order::getTotal).area().label("Revenue").color("primary").currency("USD")
+                .secondary("Orders", m -> m.count().bar().color("warning"))
+                .axis(ChartBuilder.Axis.LEFT, a -> a.minimum(0).label("Revenue"))
+                .axis(ChartBuilder.Axis.RIGHT, a -> a.minimum(0).label("Orders"))
+                .threshold("Weekly target", 5_000,
+                        t -> t.color("success").style(ChartBuilder.LineStyle.DASHED))
+                .legend(ChartBuilder.Legend.TOP)
+                .curve(ChartBuilder.Curve.LINEAR)
+                .filter("_posted = true")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------

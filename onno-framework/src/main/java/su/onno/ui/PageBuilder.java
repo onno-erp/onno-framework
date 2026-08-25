@@ -64,6 +64,11 @@ public final class PageBuilder {
         return widgetHost.widget(title);
     }
 
+    /** Add a typed built-in chart whose source kind is inferred from its model annotation. */
+    public <E> ChartBuilder<E> chart(String title, Class<E> source) {
+        return widgetHost.chart(title, source);
+    }
+
     /** Add a freeform text block. */
     public PageBuilder text(String text) {
         components.add(PageComponent.text(text));

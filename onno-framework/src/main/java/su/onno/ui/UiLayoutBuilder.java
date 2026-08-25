@@ -40,6 +40,11 @@ public class UiLayoutBuilder {
         return wb;
     }
 
+    /** Add a typed built-in chart whose source kind is inferred from its model annotation. */
+    public <E> ChartBuilder<E> chart(String title, Class<E> source) {
+        return ChartBuilder.create(widget(title), source);
+    }
+
     /**
      * Declare (or extend) a named persona profile. Its {@code section(...)} and
      * {@code widget(...)} calls are scoped to the profile and do not affect the

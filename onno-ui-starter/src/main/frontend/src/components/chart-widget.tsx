@@ -18,11 +18,13 @@ import {
   Cell,
   ComposedChart,
   Legend,
+  LabelList,
   Line,
   LineChart,
   Pie,
   PieChart,
   ReferenceArea,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -79,6 +81,15 @@ interface ChartConfig {
   kind: ChartKind;
   stacked: boolean;
   colors?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  primaryStrokeWidth: number;
+  secondaryStrokeWidth: number;
+  primaryLineStyle: "solid" | "dashed" | "dotted";
+  secondaryLineStyle: "solid" | "dashed" | "dotted";
+  primaryOpacity: number;
+  secondaryOpacity: number;
+  seriesColors: Record<string, string>;
   currency?: string;
   unit?: string;
   unitPosition?: string;
@@ -91,9 +102,84 @@ interface ChartConfig {
   secondaryKind: ChartKind;
   primaryLabel: string;
   secondaryLabel: string;
+  secondaryCurrency?: string;
+  secondaryUnit?: string;
+  secondaryFormat?: string;
+  maxSeries: number;
+  bucketMode: "auto" | "fixed";
+  height: number;
+  barSize: number;
+  donutHole: number;
+  grid: boolean;
+  points: boolean;
+  curve: "monotone" | "linear" | "step";
+  dataLabels: "hidden" | "auto" | "all";
+  legend: "top" | "right" | "bottom" | "left" | "hidden";
+  axes: { left: AxisConfig; right: AxisConfig };
+  thresholds: ThresholdConfig[];
 }
 
-function readConfig(widget: DashboardWidgetMeta): ChartConfig {
+interface AxisConfig {
+  min?: number;
+  max?: number;
+  label?: string;
+  scale: "linear" | "log";
+  visible: boolean;
+}
+
+interface ThresholdConfig {
+  value: number;
+  label?: string;
+  color?: string;
+  axis: "left" | "right";
+  style: "solid" | "dashed" | "dotted";
+  width: number;
+}
+
+const numberConfig = (value: string | undefined, fallback?: number) => {
+  const parsed = value == null ? NaN : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const lineStyle = (value: string | undefined): "solid" | "dashed" | "dotted" =>
+  value === "dashed" || value === "dotted" ? value : "solid";
+
+const dashArray = (style: "solid" | "dashed" | "dotted") =>
+  style === "solid" ? undefined : style === "dotted" ? "2 4" : "6 4";
+
+function axisConfig(cfg: Record<string, string>, prefix: "y" | "y2"): AxisConfig {
+  return {
+    min: numberConfig(cfg[`${prefix}Min`]),
+    max: numberConfig(cfg[`${prefix}Max`]),
+    label: cfg[`${prefix}Label`],
+    scale: cfg[`${prefix}Scale`] === "log" ? "log" : "linear",
+    visible: cfg[`${prefix}Visible`] !== "false",
+  };
+}
+
+function thresholdConfig(cfg: Record<string, string>): ThresholdConfig[] {
+  const indexes = new Set<number>();
+  for (const key of Object.keys(cfg)) {
+    const match = /^threshold\.(\d+)\.value$/.exec(key);
+    if (match) indexes.add(Number(match[1]));
+  }
+  return [...indexes].sort((a, b) => a - b).flatMap((i) => {
+    const prefix = `threshold.${i}.`;
+    const value = numberConfig(cfg[`${prefix}value`]);
+    if (value == null) return [];
+    const style = cfg[`${prefix}style`];
+    return [{
+      value,
+      label: cfg[`${prefix}label`],
+      color: cfg[`${prefix}color`],
+      axis: cfg[`${prefix}axis`] === "right" ? "right" as const : "left" as const,
+      style: style === "dotted" || style === "solid" ? style : "dashed" as const,
+      width: Math.min(12, Math.max(1, numberConfig(cfg[`${prefix}width`], 2) ?? 2)),
+    }];
+  });
+}
+
+export function readChartConfig(widget: DashboardWidgetMeta): ChartConfig {
   const cfg = widget.extraConfig ?? {};
   const fieldKey = widget.entityType === "register" ? (key: string) => key : logicalEntityKey;
   const explicit = (cfg.kind as ChartKind | undefined) ?? "bar";
@@ -108,6 +194,11 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
   const groupBy = fieldKey(
     cfg.groupBy ?? (widget.entityType === "register" ? "_period" : "date")
   );
+  const seriesColors = Object.fromEntries(Object.entries(cfg)
+    .filter(([key]) => key.startsWith("seriesColor."))
+    .map(([key, value]) => [key.slice("seriesColor.".length).replace(/\\\./g, "."), value]));
+  const legend = (["top", "right", "bottom", "left", "hidden"].includes(cfg.legend)
+    ? cfg.legend : "bottom") as ChartConfig["legend"];
   return {
     groupBy,
     groupByDate:
@@ -119,6 +210,15 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
     kind,
     stacked: cfg.stacked === "true",
     colors: cfg.colors,
+    primaryColor: cfg.color,
+    secondaryColor: cfg.color2,
+    primaryStrokeWidth: Math.min(12, Math.max(1, numberConfig(cfg.strokeWidth, 2) ?? 2)),
+    secondaryStrokeWidth: Math.min(12, Math.max(1, numberConfig(cfg.strokeWidth2, 2) ?? 2)),
+    primaryLineStyle: lineStyle(cfg.lineStyle),
+    secondaryLineStyle: lineStyle(cfg.lineStyle2),
+    primaryOpacity: Math.min(1, Math.max(0, numberConfig(cfg.opacity, 1) ?? 1)),
+    secondaryOpacity: Math.min(1, Math.max(0, numberConfig(cfg.opacity2, 1) ?? 1)),
+    seriesColors,
     currency: cfg.currency,
     unit: cfg.unit,
     unitPosition: cfg.unitPosition,
@@ -131,6 +231,21 @@ function readConfig(widget: DashboardWidgetMeta): ChartConfig {
     secondaryKind: ((cfg.kind2 as ChartKind) ?? "bar"),
     primaryLabel: cfg.label ?? widget.title ?? "Primary",
     secondaryLabel: cfg.label2 ?? "Secondary",
+    secondaryCurrency: cfg.currency2,
+    secondaryUnit: cfg.unit2,
+    secondaryFormat: cfg.format2,
+    maxSeries: Math.max(1, Math.floor(numberConfig(cfg.maxSeries, 8) ?? 8)),
+    bucketMode: cfg.bucketMode === "fixed" ? "fixed" : "auto",
+    height: Math.min(800, Math.max(120, Math.floor(numberConfig(cfg.height, 210) ?? 210))),
+    barSize: Math.min(160, Math.max(2, Math.floor(numberConfig(cfg.barSize, 48) ?? 48))),
+    donutHole: Math.min(90, Math.max(0, numberConfig(cfg.donutHole, 63) ?? 63)),
+    grid: cfg.grid !== "false",
+    points: cfg.points === "true",
+    curve: cfg.curve === "linear" || cfg.curve === "step" ? cfg.curve : "monotone",
+    dataLabels: cfg.dataLabels === "all" || cfg.dataLabels === "auto" ? cfg.dataLabels : "hidden",
+    legend,
+    axes: { left: axisConfig(cfg, "y"), right: axisConfig(cfg, "y2") },
+    thresholds: thresholdConfig(cfg),
   };
 }
 
@@ -148,15 +263,16 @@ interface ControlsSpec {
 }
 
 /**
- * Which per-chart controls a chart exposes, from `config("controls", "granularity,type,scale,series")`
- * ("all" = granularity,type,scale). The date range is the <em>shared</em> dashboard time picker, not a
- * per-chart control. Charts that declare no controls render exactly as before. The explore view shows
- * every control regardless. `config("seriesOptions", "field:Label,…")` tunes the series control.
+ * Which per-chart controls a chart exposes, from `config("controls", "type,scale,series")`
+ * ("all" = type,scale). The date range is the <em>shared</em> dashboard time picker, and date-bucket
+ * sizing is either automatic or fixed by the author rather than another compact card control.
+ * Charts that declare no controls render exactly as before. `config("seriesOptions",
+ * "field:Label,…")` tunes the series control.
  */
 function readControls(widget: DashboardWidgetMeta, base: ChartConfig): ControlsSpec {
   const cfg = widget.extraConfig ?? {};
   let raw = (cfg.controls ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  if (raw.includes("all")) raw = ["granularity", "type", "scale"];
+  if (raw.includes("all")) raw = ["type", "scale"];
   const enabled = new Set(raw);
   const series = (cfg.seriesOptions ?? "")
     .split(",")
@@ -176,12 +292,12 @@ function readControls(widget: DashboardWidgetMeta, base: ChartConfig): ControlsS
  * The register (rows) half of the chart data pipeline: window the rows (done by the caller),
  * bucket into a series (or a dual-axis combo), and rescale. Catalog/document charts build the
  * same shapes from server buckets instead — see {@link chartDataFromBuckets}. Both the dashboard
- * card and the explore view go through whichever half matches, so they show identical numbers.
+ * every rendering path goes through whichever half matches, so they show identical numbers.
  */
 function buildChartData(
   config: ChartConfig,
   rows: EntityRecord[],
-  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode }
+  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode; maxSeries: number }
 ): { data: SeriesData; comboData: ComboData | null } {
   if (config.combo) {
     return {
@@ -201,6 +317,7 @@ function buildChartData(
     seriesBy: round ? undefined : opts.seriesBy,
     metric: config.metric,
     metricField: config.metricField,
+    maxSeries: opts.maxSeries,
   });
   return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null };
 }
@@ -213,7 +330,7 @@ function buildChartData(
 function chartDataFromBuckets(
   config: ChartConfig,
   resp: AggregateBuckets | null,
-  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode }
+  opts: { granularity?: GroupByDate; kind: ChartKind; seriesBy?: string; scale: ScaleMode; maxSeries: number }
 ): { data: SeriesData; comboData: ComboData | null } {
   const buckets = resp ?? { buckets: [], truncated: false };
   if (config.combo) {
@@ -234,6 +351,7 @@ function chartDataFromBuckets(
     seriesBy: round ? undefined : opts.seriesBy,
     metric: config.metric,
     metricField: config.metricField,
+    maxSeries: opts.maxSeries,
   });
   return { data: applyScale(built, round ? "absolute" : opts.scale), comboData: null };
 }
@@ -390,7 +508,7 @@ function dataSpanDays(rows: EntityRecord[], dateField: string): number {
 
 export function ChartWidget({ widget }: ChartWidgetProps) {
   const t = useMessages();
-  const config = useMemo(() => readConfig(widget), [widget]);
+  const config = useMemo(() => readChartConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
   const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
   // Catalog/document charts fetch pre-aggregated buckets (#199); registers keep fetching turnover
@@ -455,7 +573,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // Effective settings: control state when that control is on, else the authored config. A time
   // chart (groupByDate set) always uses the auto/overridden granularity.
   const effKind = controls.enabled.has("type") ? kind : config.kind;
-  const effGranularity = config.groupByDate != null ? boundedGranularity ?? granularity : config.groupByDate;
+  const effGranularity = config.groupByDate != null
+    ? (config.bucketMode === "fixed" ? config.groupByDate : boundedGranularity ?? granularity)
+    : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
   // Matches what the data pipeline computes for itself (a combo is never round).
@@ -515,16 +635,26 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const { data, comboData } = useMemo(
     () =>
       isRegister
-        ? buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale })
-        : chartDataFromBuckets(config, bucketResp, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale }),
+        ? buildChartData(config, ranged, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale, maxSeries: config.maxSeries })
+        : chartDataFromBuckets(config, bucketResp, { granularity: effGranularity, kind: effKind, seriesBy: effSeriesBy, scale: effScale, maxSeries: config.maxSeries }),
     [isRegister, config, ranged, bucketResp, effGranularity, effKind, effSeriesBy, effScale]
   );
 
-  const colors = useMemo(
-    () => resolveColors(round ? data.rows.length : data.seriesKeys.length, config.colors),
-    [round, data, config.colors]
-  );
-  const comboColors = useMemo(() => resolveColors(2, config.colors), [config.colors]);
+  const colors = useMemo(() => {
+    const keys = round ? data.rows.map((row) => String(row.label)) : data.seriesKeys;
+    const defaults = resolveColors(keys.length, config.colors);
+    return keys.map((key, i) => {
+      const override = config.seriesColors[key] ?? (keys.length === 1 ? config.primaryColor : undefined);
+      return override ? resolveColors(1, override)[0] : defaults[i];
+    });
+  }, [round, data, config.colors, config.primaryColor, config.seriesColors]);
+  const comboColors = useMemo(() => {
+    const defaults = resolveColors(2, config.colors);
+    return [
+      config.primaryColor ? resolveColors(1, config.primaryColor)[0] : defaults[0],
+      config.secondaryColor ? resolveColors(1, config.secondaryColor)[0] : defaults[1],
+    ];
+  }, [config.colors, config.primaryColor, config.secondaryColor]);
 
   // A unique gradient-id prefix per widget instance — SVG ids are document-global, so two area
   // charts on one page would otherwise share (and clobber) the same <linearGradient>.
@@ -538,8 +668,8 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const zoomRows = config.combo ? comboData?.rows ?? [] : data.rows;
   const { dragProps, refArea } = useDragZoom(zoomRows, setAbsolute);
 
-  // Granularity is automatic on the card (it follows the shared range) — no button. A manual
-  // override lives in the explore view. Series / type / scale don't apply to a dual-axis combo.
+  // Granularity follows the shared range unless the author fixed it. Series / type / scale don't
+  // apply to a dual-axis combo.
   const controlNodes: React.ReactNode[] = [];
   if (controls.enabled.has("series") && controls.series.length > 0 && !config.combo)
     controlNodes.push(<Segmented key="series" size="sm" value={seriesBy} onChange={setSeriesBy} options={controls.series} />);
@@ -576,10 +706,10 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
         {(config.combo ? (comboData?.rows.length ?? 0) === 0 : data.rows.length === 0) ? (
           <div className="flex h-[210px] items-center justify-center text-xs text-muted-foreground">{t("empty.noData")}</div>
         ) : (
-          <ResponsiveChart height={round && !config.combo ? 230 : 210}>
+          <ResponsiveChart height={round && !config.combo && !widget.extraConfig?.height ? 230 : config.height}>
             {config.combo && comboData
               ? renderCombo(comboData, config, fmt, fmtAxis, fmts.fmtSecondary, fmts.fmtSecondaryAxis, comboColors, gradientPrefix, dragProps, refArea)
-              : renderChart(effKind, data, colors, fmt, fmtAxis, config.stacked, gradientPrefix, hidden, toggleSeries, config.primaryLabel, dragProps, refArea)}
+              : renderChart(effKind, data, colors, fmt, fmtAxis, config, gradientPrefix, hidden, toggleSeries, config.primaryLabel, dragProps, refArea)}
           </ResponsiveChart>
         )}
       </CardContent>
@@ -600,7 +730,10 @@ function useChartFormatters(config: ChartConfig): ChartFormatters {
     () => ({ currency: config.currency, unit: config.unit, unitPosition: config.unitPosition, format: config.format, locale: config.locale }),
     [config]
   );
-  const secondaryOpts = useMemo(() => ({ format: "integer" }), []);
+  const secondaryOpts = useMemo(
+    () => ({ currency: config.secondaryCurrency, unit: config.secondaryUnit, format: config.secondaryFormat ?? (config.secondaryMetric === "count" ? "integer" : undefined), locale: config.locale }),
+    [config.secondaryCurrency, config.secondaryUnit, config.secondaryFormat, config.secondaryMetric, config.locale]
+  );
   return useMemo(
     () => ({
       // Full figures in the tooltip/header; compact on the axis, where a full currency value clips.
@@ -718,7 +851,7 @@ function renderChart(
   colors: string[],
   fmt: (n: number) => string,
   fmtAxis: (n: number) => string,
-  stacked: boolean,
+  config: ChartConfig,
   gradientPrefix: string,
   hidden: Set<string>,
   onToggle: (key: string) => void,
@@ -730,6 +863,18 @@ function renderChart(
   const { seriesKeys } = data;
   const multi = seriesKeys.length > 1 || seriesKeys[0] !== SINGLE_SERIES;
   const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 12, tickLine: false, axisLine: false } as const;
+  const stacked = config.stacked;
+  const y = config.axes.left;
+  const domain: [number | "auto", number | "auto"] = [y.min ?? "auto", y.max ?? "auto"];
+  const showLabels = config.dataLabels === "all" ||
+    (config.dataLabels === "auto" && data.rows.length <= 12 && seriesKeys.length === 1);
+  const thresholdLines = config.thresholds.filter((threshold) => threshold.axis === "left").map((threshold, i) => (
+    <ReferenceLine key={`threshold-${i}`} y={threshold.value} ifOverflow="extendDomain"
+      stroke={threshold.color ? resolveColors(1, threshold.color)[0] : "hsl(var(--destructive))"}
+      strokeWidth={threshold.width}
+      strokeDasharray={dashArray(threshold.style)}
+      label={threshold.label ? { value: threshold.label, position: "insideTopRight", fill: "hsl(var(--muted-foreground))", fontSize: 11 } : undefined} />
+  ));
 
   // Clicking a legend item toggles its series off/on. We pass an explicit, stable `payload` so a
   // hidden series keeps its (greyed, `inactive`) legend entry to click back on — relying on a child's
@@ -740,9 +885,10 @@ function renderChart(
   };
   // recharts keeps a hidden series in the auto-legend (the canonical toggle pattern), so we just
   // click-to-toggle and grey the hidden ones via the formatter.
-  const seriesLegend = multi ? (
+  const seriesLegend = multi && config.legend !== "hidden" ? (
     <Legend
-      wrapperStyle={{ fontSize: 12, paddingTop: 6, cursor: "pointer" }}
+      {...legendPlacement(config.legend)}
+      wrapperStyle={{ fontSize: 12, paddingTop: config.legend === "bottom" ? 6 : 0, cursor: "pointer" }}
       iconType="circle"
       iconSize={8}
       onClick={onLegendClick}
@@ -768,7 +914,8 @@ function renderChart(
     return (
       <PieChart>
         <Tooltip wrapperStyle={TOOLTIP_WRAPPER} content={<ChartTooltipContent format={pieValue} />} />
-        <Legend
+        {config.legend !== "hidden" && <Legend
+          {...legendPlacement(config.legend)}
           wrapperStyle={{ fontSize: 12, cursor: "pointer" }}
           iconType="circle"
           iconSize={8}
@@ -780,12 +927,12 @@ function renderChart(
           formatter={(value: unknown) => (
             <span style={{ opacity: hidden.has(String(value)) ? 0.45 : 1 }}>{String(value)}</span>
           )}
-        />
+        />}
         <Pie
           data={pieRows}
           dataKey={SINGLE_SERIES}
           nameKey="label"
-          innerRadius={kind === "pie" ? 0 : 52}
+          innerRadius={kind === "pie" ? 0 : `${config.donutHole}%`}
           outerRadius={82}
           paddingAngle={kind === "pie" ? 0 : 2}
           stroke="hsl(var(--card))"
@@ -793,6 +940,7 @@ function renderChart(
           // recharts' Pie enter-animation is fragile — a re-render during it (e.g. a width change)
           // can drop every sector and never restore them. The slices matter more than the flourish.
           isAnimationActive={false}
+          label={showLabels ? ({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${Math.round((percent ?? 0) * 100)}%` : false}
         >
           {pieRows.map((_, i) => (
             <Cell key={i} fill={colors[i % colors.length]} />
@@ -811,43 +959,53 @@ function renderChart(
           <defs>
             {seriesKeys.map((_, i) => (
               <linearGradient key={i} id={`${gradientPrefix}-${i}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={colors[i]} stopOpacity={0.3} />
-                <stop offset="95%" stopColor={colors[i]} stopOpacity={0.02} />
+                <stop offset="5%" stopColor={colors[i]} stopOpacity={0.3 * config.primaryOpacity} />
+                <stop offset="95%" stopColor={colors[i]} stopOpacity={0.02 * config.primaryOpacity} />
               </linearGradient>
             ))}
           </defs>
         )}
-        <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} strokeDasharray="3 3" />
+        {config.grid && <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} strokeDasharray="3 3" />}
         <XAxis dataKey="label" {...axis} />
-        <YAxis {...axis} width={40} tickFormatter={fmtAxis} />
+        {y.visible && <YAxis {...axis} width={40} tickFormatter={fmtAxis} domain={domain} scale={y.scale}
+          label={y.label ? { value: y.label, angle: -90, position: "insideLeft" } : undefined} />}
         <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ stroke: "hsl(var(--border))" }} content={<ChartTooltipContent format={tooltipValue} fallbackName={seriesName} />} />
         {seriesLegend}
+        {thresholdLines}
         {seriesKeys.map((key, i) =>
           kind === "line" ? (
             <Line
               key={key}
-              type="monotone"
+              type={config.curve}
               dataKey={key}
               name={key === SINGLE_SERIES ? undefined : key}
               stroke={colors[i]}
-              strokeWidth={2}
-              dot={false}
+              strokeWidth={config.primaryStrokeWidth}
+              strokeDasharray={dashArray(config.primaryLineStyle)}
+              opacity={config.primaryOpacity}
+              dot={config.points}
               activeDot={{ r: 4 }}
               hide={hidden.has(key)}
-            />
+            >
+              {showLabels && <LabelList dataKey={key} position="top" formatter={(value: unknown) => fmt(toNumber(value) ?? 0)} />}
+            </Line>
           ) : (
             <Area
               key={key}
-              type="monotone"
+              type={config.curve}
               dataKey={key}
               name={key === SINGLE_SERIES ? undefined : key}
               stroke={colors[i]}
-              strokeWidth={2}
+              strokeWidth={config.primaryStrokeWidth}
+              strokeDasharray={dashArray(config.primaryLineStyle)}
+              opacity={config.primaryOpacity}
               fill={`url(#${gradientPrefix}-${i})`}
               stackId={stacked ? "stack" : undefined}
-              dot={false}
+              dot={config.points}
               hide={hidden.has(key)}
-            />
+            >
+              {showLabels && <LabelList dataKey={key} position="top" formatter={(value: unknown) => fmt(toNumber(value) ?? 0)} />}
+            </Area>
           )
         )}
       </ChartImpl>
@@ -857,11 +1015,13 @@ function renderChart(
   return (
     <BarChart data={data.rows} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} {...dragProps}>
       {refArea && <ReferenceArea x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
-      <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+      {config.grid && <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />}
       <XAxis dataKey="label" {...axis} />
-      <YAxis {...axis} width={52} tickFormatter={fmtAxis} />
+      {y.visible && <YAxis {...axis} width={52} tickFormatter={fmtAxis} domain={domain} scale={y.scale}
+        label={y.label ? { value: y.label, angle: -90, position: "insideLeft" } : undefined} />}
       <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ fill: "hsl(var(--accent) / 0.4)" }} content={<ChartTooltipContent format={tooltipValue} fallbackName={seriesName} />} />
       {seriesLegend}
+      {thresholdLines}
       {seriesKeys.map((key, i) => {
         // Round only the exposed top: the last series in a stack, or every bar when not stacked.
         const top = !stacked || i === seriesKeys.length - 1;
@@ -871,15 +1031,25 @@ function renderChart(
             dataKey={key}
             name={key === SINGLE_SERIES ? undefined : key}
             fill={colors[i]}
+            fillOpacity={config.primaryOpacity}
             stackId={stacked ? "stack" : undefined}
             radius={top ? [3, 3, 0, 0] : [0, 0, 0, 0]}
-            maxBarSize={48}
+            maxBarSize={config.barSize}
             hide={hidden.has(key)}
-          />
+          >
+            {showLabels && <LabelList dataKey={key} position="top" formatter={(value: unknown) => fmt(toNumber(value) ?? 0)} />}
+          </Bar>
         );
       })}
     </BarChart>
   );
+}
+
+function legendPlacement(position: ChartConfig["legend"]) {
+  if (position === "top") return { verticalAlign: "top" as const, align: "center" as const };
+  if (position === "left") return { verticalAlign: "middle" as const, align: "left" as const, layout: "vertical" as const };
+  if (position === "right") return { verticalAlign: "middle" as const, align: "right" as const, layout: "vertical" as const };
+  return { verticalAlign: "bottom" as const, align: "center" as const };
 }
 
 // A dual-axis combo chart: a primary measure on the left axis and a secondary on the right, each
@@ -898,24 +1068,38 @@ function renderCombo(
   refArea?: RefAreaSel | null
 ): React.ReactElement {
   const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 12, tickLine: false, axisLine: false } as const;
+  const left = config.axes.left;
+  const right = config.axes.right;
+  const showLabels = config.dataLabels === "all" || (config.dataLabels === "auto" && data.rows.length <= 10);
   const [pColor, sColor] = colors;
   const measures = [
-    { id: "left", key: "primary", kind: config.kind, color: pColor, name: config.primaryLabel },
-    { id: "right", key: "secondary", kind: config.secondaryKind, color: sColor, name: config.secondaryLabel },
+    { id: "left", key: "primary", kind: config.kind, color: pColor, name: config.primaryLabel,
+      strokeWidth: config.primaryStrokeWidth, lineStyle: config.primaryLineStyle, opacity: config.primaryOpacity },
+    { id: "right", key: "secondary", kind: config.secondaryKind, color: sColor, name: config.secondaryLabel,
+      strokeWidth: config.secondaryStrokeWidth, lineStyle: config.secondaryLineStyle, opacity: config.secondaryOpacity },
   ];
   // Bars behind lines/areas so a line isn't hidden by the other measure's bars.
   const ordered = [...measures].sort((a, b) => (a.kind === "bar" ? 0 : 1) - (b.kind === "bar" ? 0 : 1));
   const renderMeasure = (m: (typeof measures)[number]) => {
+    const labelFormat = m.id === "right" ? fmtSecondary : fmtPrimary;
     if (m.kind === "bar") {
-      return <Bar key={m.key} yAxisId={m.id} dataKey={m.key} name={m.name} fill={m.color} radius={[3, 3, 0, 0]} maxBarSize={36} />;
+      return <Bar key={m.key} yAxisId={m.id} dataKey={m.key} name={m.name} fill={m.color} fillOpacity={m.opacity} radius={[3, 3, 0, 0]} maxBarSize={config.barSize}>
+        {showLabels && <LabelList dataKey={m.key} position="top" formatter={(value: unknown) => labelFormat(toNumber(value) ?? 0)} />}
+      </Bar>;
     }
     if (m.kind === "area") {
       return (
-        <Area key={m.key} yAxisId={m.id} type="monotone" dataKey={m.key} name={m.name} stroke={m.color} strokeWidth={2}
-          fill={`url(#${gradientPrefix}-combo-${m.key})`} dot={false} />
+        <Area key={m.key} yAxisId={m.id} type={config.curve} dataKey={m.key} name={m.name} stroke={m.color} strokeWidth={m.strokeWidth}
+          strokeDasharray={dashArray(m.lineStyle)} opacity={m.opacity}
+          fill={`url(#${gradientPrefix}-combo-${m.key})`} dot={config.points}>
+          {showLabels && <LabelList dataKey={m.key} position="top" formatter={(value: unknown) => labelFormat(toNumber(value) ?? 0)} />}
+        </Area>
       );
     }
-    return <Line key={m.key} yAxisId={m.id} type="monotone" dataKey={m.key} name={m.name} stroke={m.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />;
+    return <Line key={m.key} yAxisId={m.id} type={config.curve} dataKey={m.key} name={m.name} stroke={m.color} strokeWidth={m.strokeWidth}
+      strokeDasharray={dashArray(m.lineStyle)} opacity={m.opacity} dot={config.points} activeDot={{ r: 4 }}>
+      {showLabels && <LabelList dataKey={m.key} position="top" formatter={(value: unknown) => labelFormat(toNumber(value) ?? 0)} />}
+    </Line>;
   };
   const tooltipValue = (value: unknown, name: unknown) =>
     name === config.secondaryLabel ? fmtSecondary(toNumber(value) ?? 0) : fmtPrimary(toNumber(value) ?? 0);
@@ -924,26 +1108,37 @@ function renderCombo(
       {refArea && <ReferenceArea yAxisId="left" x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
       <defs>
         <linearGradient id={`${gradientPrefix}-combo-primary`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor={pColor} stopOpacity={0.3} />
-          <stop offset="95%" stopColor={pColor} stopOpacity={0.02} />
+          <stop offset="5%" stopColor={pColor} stopOpacity={0.3 * config.primaryOpacity} />
+          <stop offset="95%" stopColor={pColor} stopOpacity={0.02 * config.primaryOpacity} />
         </linearGradient>
         <linearGradient id={`${gradientPrefix}-combo-secondary`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="5%" stopColor={sColor} stopOpacity={0.3} />
-          <stop offset="95%" stopColor={sColor} stopOpacity={0.02} />
+          <stop offset="5%" stopColor={sColor} stopOpacity={0.3 * config.secondaryOpacity} />
+          <stop offset="95%" stopColor={sColor} stopOpacity={0.02 * config.secondaryOpacity} />
         </linearGradient>
       </defs>
-      <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />
+      {config.grid && <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />}
       <XAxis dataKey="label" {...axis} />
-      <YAxis yAxisId="left" {...axis} width={40} tickFormatter={fmtPrimaryAxis} />
-      <YAxis yAxisId="right" orientation="right" {...axis} width={36} tickFormatter={fmtSecondaryAxis} />
+      {left.visible && <YAxis yAxisId="left" {...axis} width={40} tickFormatter={fmtPrimaryAxis}
+        domain={[left.min ?? "auto", left.max ?? "auto"]} scale={left.scale}
+        label={left.label ? { value: left.label, angle: -90, position: "insideLeft" } : undefined} />}
+      {right.visible && <YAxis yAxisId="right" orientation="right" {...axis} width={36} tickFormatter={fmtSecondaryAxis}
+        domain={[right.min ?? "auto", right.max ?? "auto"]} scale={right.scale}
+        label={right.label ? { value: right.label, angle: 90, position: "insideRight" } : undefined} />}
       <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ fill: "hsl(var(--accent) / 0.2)" }} content={<ChartTooltipContent format={tooltipValue} />} />
-      <Legend wrapperStyle={{ fontSize: 12, paddingTop: 6 }} iconType="circle" iconSize={8} />
+      {config.legend !== "hidden" && <Legend {...legendPlacement(config.legend)} wrapperStyle={{ fontSize: 12, paddingTop: config.legend === "bottom" ? 6 : 0 }} iconType="circle" iconSize={8} />}
+      {config.thresholds.map((threshold, i) => (
+        <ReferenceLine key={`threshold-${i}`} yAxisId={threshold.axis} y={threshold.value} ifOverflow="extendDomain"
+          stroke={threshold.color ? resolveColors(1, threshold.color)[0] : "hsl(var(--destructive))"}
+          strokeWidth={threshold.width}
+          strokeDasharray={dashArray(threshold.style)}
+          label={threshold.label ? { value: threshold.label, position: "insideTopRight", fill: "hsl(var(--muted-foreground))", fontSize: 11 } : undefined} />
+      ))}
       {ordered.map(renderMeasure)}
     </ComposedChart>
   );
 }
 
-// ----- shared time range + explore view -------------------------------------------------------
+// ----- shared time range ----------------------------------------------------------------------
 
 /**
  * The shared dashboard time picker (widget type "timeRange"): the {@link TimeRangeFacet} chip —

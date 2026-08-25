@@ -855,6 +855,45 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 > (`metric`/`metricField`, `groupBy`/`groupByDate`); `stat`/`sparkline` also take `kind` =
 > `area` (default) or `line` for the sparkline shape, and `gauge` takes a `target`.
 
+### Typed chart authoring
+
+Prefer `b.chart(title, Source.class)` for built-in charts. It infers document/catalog/register from
+the model annotation and keeps fields, aggregates and presentation choices compiler checked. The
+short path stays short:
+
+```java
+b.chart("Revenue", Order.class)
+ .time(Order::getDate)
+ .sum(Order::getTotal)
+ .area()
+ .currency("USD");
+```
+
+Fine control is progressive: add a second measure, independent colours/formats, axis bounds and
+labels, any number of horizontal thresholds, explicit series colours, legend/data-label placement,
+curve/point/grid choices, fixed time buckets and sizing only when the chart needs them:
+
+```java
+b.chart("Orders & revenue", Order.class).width("full")
+ .time(Order::getDate, ChartBuilder.TimeBucket.WEEK)
+ .sum(Order::getTotal).area().label("Revenue").color("primary").currency("USD")
+ .strokeWidth(3).lineStyle(ChartBuilder.LineStyle.SOLID).opacity(0.85)
+ .secondary("Orders", m -> m.count().bar().color("warning").opacity(0.7))
+ .axis(ChartBuilder.Axis.LEFT, a -> a.minimum(0).maximum(50_000).label("Revenue"))
+ .axis(ChartBuilder.Axis.RIGHT, a -> a.minimum(0).label("Orders"))
+ .threshold("Target", 20_000,
+     t -> t.color("success").style(ChartBuilder.LineStyle.DASHED))
+ .seriesColor("Wholesale", "#7c3aed")
+ .legend(ChartBuilder.Legend.TOP)
+ .dataLabels(ChartBuilder.DataLabels.AUTO)
+ .curve(ChartBuilder.Curve.LINEAR)
+ .points(true).grid(true).height(320);
+```
+
+The DSL exposes chart semantics rather than Recharts properties. Existing
+`widget(...).type("chart").config(...)` declarations remain supported, and `.config(...)` is also
+available at the end of a typed chart for forward-compatible experimental options.
+
 ### `config(key, value)` reference
 
 | Key | Applies to | Effect |
@@ -867,11 +906,18 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
 | `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
 | `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. For `stat`/`sparkline` it picks the sparkline shape (`area` default, or `line`). |
-| `groupBy`, `groupByDate` | chart, stat, sparkline | Bucket field, and `minute`/`hour`/`day`/`week`/`month` for date buckets (date buckets are ordered chronologically, and **empty periods zero-fill**: every period in the window — or, unbounded, between the first and last bucket with data — plots as `0` instead of vanishing, capped at the server's 1000-bucket limit; #246). On a chart the granularity auto-follows the shared time range — sub-day windows bucket by hour/minute — and stays overridable in the explore view. Pies/donuts drop the zero periods (no axis). |
+| `groupBy`, `groupByDate`, `bucketMode` | chart, stat, sparkline | Bucket field, `minute`/`hour`/`day`/`week`/`month`, and `auto` (default) versus `fixed`. Date buckets are chronological and empty periods zero-fill, capped at 1000; pies/donuts drop zero periods. Typed `.time(field, TimeBucket.WEEK)` selects fixed while `.time(field)` selects auto. |
 | `presets`, `default` | timeRange | The shared picker's quick-picks and starting window. `presets` is a comma list of duration ids (`<n><unit>` where `s`/`m`/`h`/`d`/`w`/`M`/`y` are second…year — note `m`=minute, `M`=month — plus `all`), e.g. `15m,1h,24h,7d,30d,90d,1y,all`. `default` names one of them (e.g. `30d`). Omit both for the built-in ladder defaulting to the last 30 days; a user's saved selection always wins over `default`. |
 | `seriesBy` | chart | Field that splits the chart into one colored series per distinct value (multi-series `bar`/`line`/`area`). Ignored by `pie`/`donut`. Series rank by total; the tail beyond the palette folds into "Other". |
 | `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
 | `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |
+| `color`, `color2`, `seriesColor.<label>`, `maxSeries` | chart | Primary/secondary colours, stable per-business-series overrides, and the visible-series cap before the tail folds into `Other`. Prefer the typed methods. |
+| `strokeWidth`, `lineStyle`, `opacity` and `…2` | chart | Per-measure line width/style (`solid`/`dashed`/`dotted`) and line/area/bar opacity. |
+| `measure2`, `field2`, `kind2`, `label2`, `currency2`, `unit2`, `format2` | chart | Optional independently styled/formatted right-axis measure. Prefer `.secondary(label, m -> ...)`. |
+| `yMin`/`yMax`/`yLabel`/`yScale`/`yVisible` and `y2…` | chart | Left/right axis domain, title, `linear`/`log` scale and visibility. Prefer `.axis(...)`. |
+| `threshold.<n>.*` | chart | Horizontal reference lines: `value`, optional `label`/`color`, `axis=left|right`, and `style=solid|dashed|dotted`. Typed `.threshold(...)` allocates the indexes. |
+| `legend`, `dataLabels`, `curve`, `points`, `grid` | chart | Legend position/visibility, label density, line/area interpolation, point markers and grid visibility. |
+| `height`, `barSize`, `donutHole` | chart | Plot height (120–800 px), maximum bar width (2–160 px), and donut hole percentage (0–90). |
 | `target` | gauge | The 100% mark the ring fills toward; with none, the gauge shows the bare value in a full ring. |
 | `titleTemplate` | list | `"{guestName} — {propertyDisplay}"`; unknown fields render empty. |
 | `secondaryField` | list, calendar | Comma-list of fields for the second line (first non-empty wins). |

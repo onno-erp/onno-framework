@@ -265,7 +265,10 @@ because they are not Java field references.
     the asset. Serve logo assets from `classpath:/static/ui/...` (see the static-asset note below).
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.bare()` / `b.header(false)` (drop the title/subtitle row),
-  `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, `b.text`,
+  `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, or the
+  typed `b.chart(title, Source.class)` → `.time/category(…)`, `.count/sum/average/minimum/maximum(…)`,
+  `.bar/line/area/donut/pie()`, optional `.secondary(…)`, `.axis(…)`, `.threshold(…)`, per-measure /
+  per-series colours, legend/labels/curve/points/grid/height; `b.text`,
   Grid: widgets flow into rows by `width("1/4"|"1/3"|"1/2"|"2/3"|"full"|any "n/m")` in `order(n)`;
   a row closes when fractions sum to 1. Cells are weights, so a row that doesn't sum to 1 stretches
   its widgets proportionally past their declared width — `rowBreak()` forces the widget to start a
