@@ -32,12 +32,14 @@ public class InventoryPage implements Page {
                 .config("metric", "count")
                 .config("filter", "status != 'CANCELLED'");
 
-        b.widget("Stock by warehouse").type("chart").width("2/3").order(1)
-                .register(StockRegister.class)
-                .config("kind", "bar")
-                .config("groupBy", "warehouse_display")
-                .config("metric", "sum")
-                .config("metricField", "quantity");
+        b.chart("Stock by warehouse", StockRegister.class).width("2/3").order(1)
+                .category(StockRegister::getWarehouse)
+                .sum(StockRegister::getQuantity)
+                .bar()
+                .seriesColor("Main warehouse", "primary")
+                .axis(ChartBuilder.Axis.LEFT, a -> a.minimum(0).label("Quantity"))
+                .threshold("Reorder level", 100,
+                        t -> t.color("warning").style(ChartBuilder.LineStyle.DASHED));
 
         b.widget("Recent receipts").type("list").width("full").order(2)
                 .document(GoodsReceipt.class)
