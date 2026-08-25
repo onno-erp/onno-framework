@@ -77,6 +77,14 @@ class UiResourceRoutingTest {
     }
 
     @Test
+    void bundledViteAssetLoads() throws Exception {
+        mvc.perform(get("/assets/routing-test.css"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/css"))
+                .andExpect(content().string(".routing-test { color: green; }\n"));
+    }
+
+    @Test
     void consumerStaticResourceIsNotShadowed() throws Exception {
         mvc.perform(get("/consumer-static.txt"))
                 .andExpect(status().isOk())
