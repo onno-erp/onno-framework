@@ -894,6 +894,11 @@ The DSL exposes chart semantics rather than Recharts properties. Existing
 `widget(...).type("chart").config(...)` declarations remain supported, and `.config(...)` is also
 available at the end of a typed chart for forward-compatible experimental options.
 
+The compact figure beside a chart title is shown only when it is a valid summary. Grouped
+`count`/`sum` charts show their additive period total. Grouped `avg`/`min`/`max` charts omit
+the figure instead of adding bucket values together; an ungrouped, unsplit non-additive aggregate
+still shows its single value.
+
 ### `config(key, value)` reference
 
 | Key | Applies to | Effect |
