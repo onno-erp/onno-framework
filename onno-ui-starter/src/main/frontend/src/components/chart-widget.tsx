@@ -68,6 +68,17 @@ interface ChartWidgetProps {
   widget: DashboardWidgetMeta;
 }
 
+/**
+ * The compact figure beside a chart title must be a valid summary of the rendered data. Count and
+ * sum are additive across buckets; avg/min/max are not. A non-additive measure remains meaningful
+ * only when the response is one unsplit aggregate rather than a grouped series.
+ */
+export function chartHeadlineValue(metric: string, data: SeriesData): number | null {
+  const additive = metric === "count" || metric === "sum";
+  const singleAggregate = data.rows.length === 1 && data.seriesKeys.length === 1;
+  return additive || singleAggregate ? data.total : null;
+}
+
 // "pie" is an alias of "donut" with a zero inner radius (a filled circle).
 type ChartKind = "bar" | "line" | "area" | "donut" | "pie";
 const CHART_KINDS: ChartKind[] = ["bar", "line", "area", "donut", "pie"];
@@ -661,8 +672,12 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const gradientPrefix = `chart-${useId().replace(/:/g, "")}`;
 
   // Once rescaled the grand total mixes units / is relative — hide the header figure then. A combo
-  // chart has two measures, so no single grand total applies either.
-  const showTotal = effScale === "absolute" && data.rows.length > 0 && !config.combo;
+  // chart has two measures, so no single total applies either. Grouped avg/min/max measures are
+  // non-additive, so adding their buckets would produce a misleading headline (#353).
+  const headlineValue =
+    effScale === "absolute" && data.rows.length > 0 && !config.combo
+      ? chartHeadlineValue(config.metric, data)
+      : null;
 
   // Drag-select a region to set the shared absolute range (Grafana-style zoom).
   const zoomRows = config.combo ? comboData?.rows ?? [] : data.rows;
@@ -694,9 +709,9 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
               the figure there instead. */}
           {controlNodes.length > 0 ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">{controlNodes}</div>
-          ) : showTotal ? (
+          ) : headlineValue != null ? (
             <AnimatedNumber
-              value={fmt(data.total)}
+              value={fmt(headlineValue)}
               className="text-[13px] font-semibold tabular-nums text-foreground"
             />
           ) : null}

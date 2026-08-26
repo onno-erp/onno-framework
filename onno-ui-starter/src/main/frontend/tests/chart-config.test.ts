@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { readChartConfig } from "@/components/chart-widget";
+import { chartHeadlineValue, readChartConfig } from "@/components/chart-widget";
+import { SINGLE_SERIES, type SeriesData } from "@/lib/widget-data";
 import type { DashboardWidgetMeta } from "@/lib/types";
 
 const widget = (extraConfig: Record<string, string>): DashboardWidgetMeta => ({
@@ -80,5 +81,40 @@ describe("typed chart appearance config", () => {
       primaryLineStyle: "dashed",
       primaryOpacity: 0.7,
     });
+  });
+});
+
+describe("chart headline summary", () => {
+  const series = (values: number[]): SeriesData => ({
+    rows: values.map((value, index) => ({ label: `Bucket ${index + 1}`, value })),
+    seriesKeys: [SINGLE_SERIES],
+    total: values.reduce((sum, value) => sum + value, 0),
+  });
+
+  it("keeps additive totals across grouped buckets", () => {
+    expect(chartHeadlineValue("count", series([2, 3, 4]))).toBe(9);
+    expect(chartHeadlineValue("sum", series([100, 100, 100, 100, 100]))).toBe(500);
+  });
+
+  it("hides misleading grouped non-additive totals", () => {
+    const percentages = series([100, 100, 100, 100, 100]);
+
+    expect(chartHeadlineValue("avg", percentages)).toBeNull();
+    expect(chartHeadlineValue("min", percentages)).toBeNull();
+    expect(chartHeadlineValue("max", percentages)).toBeNull();
+  });
+
+  it("keeps one unsplit non-additive aggregate", () => {
+    expect(chartHeadlineValue("max", series([100]))).toBe(100);
+  });
+
+  it("hides a non-additive total split into several series", () => {
+    const split: SeriesData = {
+      rows: [{ label: "All", Current: 40, Previous: 60 }],
+      seriesKeys: ["Current", "Previous"],
+      total: 100,
+    };
+
+    expect(chartHeadlineValue("avg", split)).toBeNull();
   });
 });
