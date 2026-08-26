@@ -156,7 +156,9 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets.
+  impact on the UI build and generated assets. `CI` gates advisories at `high` on main and every PR, so they
+  surface as a merge-blocker; the release workflow only stops at `critical`, because a tag that fails to
+  publish burns a version number Maven Central will not let us reuse.
 
 ### AI-Friendly Change Style
 

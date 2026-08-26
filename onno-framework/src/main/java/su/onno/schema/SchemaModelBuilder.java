@@ -304,10 +304,8 @@ public class SchemaModelBuilder {
         for (AttributeDescriptor attr : register.attributes()) {
             columns.add(attributeColumn(attr, false));
         }
-        List<String> constraints = uniqueCols.isEmpty()
-                ? List.of()
-                : List.of("UNIQUE (" + String.join(", ", uniqueCols) + ")");
-        return new TableModel(register.tableName(), columns, constraints, List.of());
+        return new TableModel(register.tableName(), columns, List.of(), List.of(),
+                List.copyOf(uniqueCols));
     }
 
     private TableModel constantsTable() {

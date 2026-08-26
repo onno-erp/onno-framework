@@ -484,8 +484,11 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 
 - `SchemaMode{APPLY,PLAN,VALIDATE,OFF}` ← `onno.schema.mode`. `SchemaUpgrader.run(jdbi)` diffs
   desired `SchemaModel` vs previous `SchemaSnapshot` (JSON in `onno_schema_history`) vs live DB.
-- `SchemaChange.Type{CREATE_TABLE,RENAME_TABLE,RENAME_COLUMN,ADD_COLUMN,ALTER_COLUMN_TYPE,DROP_COLUMN,DROP_TABLE}`;
+- `SchemaChange.Type{CREATE_TABLE,RENAME_TABLE,RENAME_COLUMN,ADD_COLUMN,ALTER_COLUMN_TYPE,ALTER_COLUMN_NULLABILITY,ALTER_UNIQUE_KEY,DROP_COLUMN,DROP_TABLE}`;
   `MigrationPlan.safe()/destructive()`.
+- `ALTER_UNIQUE_KEY` reconciles an information register's `(_period, dimensions…)` key with the live
+  `UNIQUE` constraints, so a changed `periodicity`/`@Dimension` moves the key on an existing database.
+  Widening it applies by default; narrowing it is destructive-gated.
 - `AppMigration` — `version()` (segment-wise compare), `description()`, `migrate(MigrationContext)`;
   `MigrationContext.execute(sql)`. Runs once per DB, in version order, recorded in history.
 
