@@ -404,6 +404,7 @@ public class UiLayoutBuilder {
         private Integer logoHeight;
         private String markUrl;
         private String markUrlDark;
+        private boolean markFramed = true;
         private String faviconUrl;
         private final PaletteBuilder light = new PaletteBuilder();
         private final PaletteBuilder dark = new PaletteBuilder();
@@ -443,6 +444,15 @@ public class UiLayoutBuilder {
         public ShellBuilder mark(String light, String dark) {
             this.markUrl = light;
             this.markUrlDark = dark;
+            return this;
+        }
+
+        /**
+         * Whether the shell draws a border around the compact app mark. Disable this when the
+         * supplied artwork already includes its own enclosing shape or frame.
+         */
+        public ShellBuilder markFrame(boolean framed) {
+            this.markFramed = framed;
             return this;
         }
 
@@ -486,7 +496,7 @@ public class UiLayoutBuilder {
         ShellConfig build() {
             BrandingConfig branding = new BrandingConfig(
                     appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
-                    light.build(), dark.build(), markUrl, markUrlDark);
+                    light.build(), dark.build(), markUrl, markUrlDark, markFramed);
             return new ShellConfig(nav, branding);
         }
     }

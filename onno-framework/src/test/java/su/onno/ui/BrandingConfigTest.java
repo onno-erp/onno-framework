@@ -20,6 +20,7 @@ class BrandingConfigTest {
                 .brand("Acme")
                 .logo("/logo.svg", "/logo-dark.svg")
                 .mark("/mark.svg", "/mark-dark.svg")
+                .markFrame(false)
                 .favicon("/favicon.svg")
                 .light(c -> c.primary("#2563EB").surface("#FFFFFF"))
                 .dark(c -> c.primary("#3B82F6"));
@@ -30,6 +31,7 @@ class BrandingConfigTest {
         assertThat(branding.hasLogo()).isTrue();
         assertThat(branding.hasMark()).isTrue();
         assertThat(branding.markFor("dark")).isEqualTo("/mark-dark.svg");
+        assertThat(branding.markFramed()).isFalse();
         assertThat(branding.faviconUrl()).isEqualTo("/favicon.svg");
         assertThat(branding.light().primary()).isEqualTo("#2563EB");
         assertThat(branding.light().surface()).isEqualTo("#FFFFFF");
@@ -78,6 +80,7 @@ class BrandingConfigTest {
 
         assertThat(branding.hasAppName()).isFalse();
         assertThat(branding.hasLogo()).isFalse();
+        assertThat(branding.markFramed()).isTrue();
         assertThat(branding.light().isEmpty()).isTrue();
         assertThat(branding.dark().isEmpty()).isTrue();
     }

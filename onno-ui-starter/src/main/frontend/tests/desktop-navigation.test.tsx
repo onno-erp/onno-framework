@@ -34,13 +34,14 @@ const t = (key: string) =>
     "nav.dashboard": "Dashboard",
   })[key] ?? key;
 
-function renderNavigation(activePath = "/inbox") {
+function renderNavigation(activePath = "/inbox", markFramed = true) {
   const onNavigate = vi.fn();
   const onSectionFocus = vi.fn();
   const result = render(
     <DesktopNavigation
       brand="Onno Desk"
       mark="/branding/mark.svg"
+      markFramed={markFramed}
       navigation={navigation}
       activePath={activePath}
       home="/inbox"
@@ -93,6 +94,12 @@ describe("DesktopNavigation", () => {
 
     expect(home).toHaveTextContent("O");
     expect(home.querySelector("img")).not.toBeInTheDocument();
+  });
+
+  it("can render supplied mark artwork without a shell frame", () => {
+    renderNavigation("/inbox", false);
+
+    expect(screen.getByRole("button", { name: "Onno Desk" })).not.toHaveClass("border");
   });
 
   it("switches drawers without marking a second workspace active and persists collapse", () => {

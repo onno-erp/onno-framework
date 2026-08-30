@@ -429,7 +429,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   Viewport-specific beans augment universal contributions for that viewport.
   Branding distinguishes the full theme-aware `logo(...)` from the compact theme-aware
   `mark(...)` used by the two-tier desktop app rail; an unconfigured mark falls back to the favicon,
-  then the logo, so existing applications remain usable in the new shell.
+  then the logo, so existing applications remain usable in the new shell. The rail frames marks by
+  default for compatibility; `markFrame(false)` removes that shell border when the artwork already
+  supplies its own enclosing shape.
   **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
   sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
   catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions

@@ -20,6 +20,7 @@ export type ShellNavSection = {
 type DesktopNavigationProps = {
   brand?: string;
   mark?: string;
+  markFramed?: boolean;
   navigation: ShellNavSection[];
   activePath: string;
   home: string;
@@ -57,6 +58,7 @@ function brandMark(brand: string): string {
 export function DesktopNavigation({
   brand = "",
   mark = "",
+  markFramed = true,
   navigation,
   activePath,
   home,
@@ -117,8 +119,11 @@ export function DesktopNavigation({
           onClick={() => onNavigate(home)}
           aria-label={brand || t("nav.dashboard")}
           title={brand || t("nav.dashboard")}
-          className="mb-2 flex h-8 w-8 items-center justify-center overflow-hidden rounded-field border text-sm font-medium text-foreground hover:bg-muted"
-          style={{ borderColor: border }}
+          className={cn(
+            "mb-2 flex h-8 w-8 items-center justify-center overflow-hidden rounded-field text-sm font-medium text-foreground hover:bg-muted",
+            markFramed && "border"
+          )}
+          style={markFramed ? { borderColor: border } : undefined}
         >
           {mark && !markFailed ? (
             <img

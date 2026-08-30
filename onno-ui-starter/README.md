@@ -307,7 +307,7 @@ data-bearing surfaces.
 
 | Path | Surface |
 |------|---------|
-| `GET /shell` | Nav + account chrome. Alongside the portable DivKit `nav` card it returns the same RBAC-filtered sections as `navigation` plus `brand`/`logo`/`mark`, used by the desktop app rail and collapsible nested drawer. |
+| `GET /shell` | Nav + account chrome. Alongside the portable DivKit cards it returns the same RBAC-filtered sections as `navigation`, `brand`/`logo`/`mark`, and structured `accountInfo`; the web desktop shell uses these for its native rail, nested drawer, and fixed account dock. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
 | `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
@@ -336,7 +336,8 @@ global shell or identity mapping, so the configuration cannot be silently ignore
 Brand horizontal and compact surfaces separately. `logo(light, dark)` is the full wordmark used by
 login and portable shell surfaces; `mark(light, dark)` is the square-oriented desktop app-rail
 asset. Both variants are optional. When no mark is authored, the rail falls back to `favicon(...)`,
-then to the theme-resolved logo, and finally to the first letter of `brand(...)`:
+then to the theme-resolved logo, and finally to the first letter of `brand(...)`. Marks are framed
+by default; use `markFrame(false)` when the asset already has its own circle, tile, or border:
 
 ```java
 spec.shell()
@@ -344,6 +345,7 @@ spec.shell()
         .brand("Acme ERP")
         .logo("/branding/logo.svg", "/branding/logo-dark.svg")
         .mark("/branding/mark.svg", "/branding/mark-dark.svg")
+        .markFrame(false)
         .favicon("/branding/favicon.svg")
         .light(p -> p.primary("#2563EB").primarySoft("#DBEAFE"))
         .dark(p -> p.primary("#60A5FA").primarySoft("#172554"));

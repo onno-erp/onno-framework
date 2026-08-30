@@ -262,7 +262,8 @@ because they are not Java field references.
     wordmark; `.logoWidth(px)` / `.logoHeight(px)` (or `.logoSize(w, h)`) sizes portable/login
     surfaces. `spec.shell().mark(url)` or `.mark(lightUrl, darkUrl)` supplies the compact square
     desktop app-rail mark. Without one, the rail falls back to the favicon, then the logo, then the
-    first brand letter. Serve assets from `classpath:/static/ui/...`.
+    first brand letter. The mark is framed by default; `.markFrame(false)` removes the shell border
+    for artwork that already includes its own circle or tile. Serve assets from `classpath:/static/ui/...`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.bare()` / `b.header(false)` (drop the title/subtitle row),
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, or the

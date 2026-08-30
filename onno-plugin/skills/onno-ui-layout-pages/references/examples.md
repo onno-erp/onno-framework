@@ -22,6 +22,7 @@ public class MainLayout implements Layout {
                 .brand("Acme ERP")
                 .logo("/branding/logo.svg", "/branding/logo-dark.svg")
                 .mark("/branding/mark.svg", "/branding/mark-dark.svg")
+                .markFrame(false)
                 .favicon("/branding/favicon.svg")
                 .light(c -> c.primary("#2563EB").primarySoft("#DBEAFE"))
                 .dark(c -> c.primary("#60A5FA").primarySoft("#172554"));

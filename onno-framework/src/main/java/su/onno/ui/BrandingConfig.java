@@ -11,6 +11,7 @@ package su.onno.ui;
  *     .brand("VetoVet")
  *     .logo("/branding/logo.svg")
  *     .mark("/branding/mark.svg")
+ *     .markFrame(false)
  *     .favicon("/branding/favicon.svg")
  *     .light(c -> c.primary("#2563EB"))
  *     .dark(c -> c.primary("#3B82F6"));
@@ -32,12 +33,13 @@ package su.onno.ui;
  * @param dark        brand color overrides for dark mode
  * @param markUrl     optional compact mark for square app-rail/home affordances
  * @param markUrlDark optional dark-mode compact mark; falls back to {@code markUrl}
+ * @param markFramed  whether the shell draws its own border around the compact mark
  */
 public record BrandingConfig(
         String appName, String logoUrl, String logoUrlDark,
         Integer logoWidth, Integer logoHeight, String faviconUrl,
         BrandPalette light, BrandPalette dark,
-        String markUrl, String markUrlDark) {
+        String markUrl, String markUrlDark, boolean markFramed) {
 
     public BrandingConfig {
         light = light == null ? BrandPalette.empty() : light;
@@ -46,7 +48,7 @@ public record BrandingConfig(
 
     public static BrandingConfig defaults() {
         return new BrandingConfig(null, null, null, null, null, null,
-                BrandPalette.empty(), BrandPalette.empty(), null, null);
+                BrandPalette.empty(), BrandPalette.empty(), null, null, true);
     }
 
     /** Source-compatible constructor for branding authored before compact app marks were added. */
@@ -54,7 +56,16 @@ public record BrandingConfig(
                           Integer logoWidth, Integer logoHeight, String faviconUrl,
                           BrandPalette light, BrandPalette dark) {
         this(appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
-                light, dark, null, null);
+                light, dark, null, null, true);
+    }
+
+    /** Source-compatible constructor for branding authored before mark framing was configurable. */
+    public BrandingConfig(String appName, String logoUrl, String logoUrlDark,
+                          Integer logoWidth, Integer logoHeight, String faviconUrl,
+                          BrandPalette light, BrandPalette dark,
+                          String markUrl, String markUrlDark) {
+        this(appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
+                light, dark, markUrl, markUrlDark, true);
     }
 
     /** Whether a non-blank app name was authored (else callers fall back to the profile title). */

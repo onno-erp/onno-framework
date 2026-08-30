@@ -240,6 +240,7 @@ export interface Branding {
   logoHeight?: number | null;
   markUrl?: string | null;
   markUrlDark?: string | null;
+  markFramed?: boolean;
   faviconUrl?: string | null;
   palette?: { light?: BrandColors; dark?: BrandColors };
 }

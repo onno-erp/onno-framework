@@ -127,6 +127,7 @@ public class ThemeController {
         out.put("logoHeight", branding.logoHeight());
         out.put("markUrl", branding.markUrl());
         out.put("markUrlDark", branding.markUrlDark());
+        out.put("markFramed", branding.markFramed());
         out.put("faviconUrl", branding.faviconUrl());
         Map<String, Object> palette = new LinkedHashMap<>();
         palette.put("light", paletteMap(branding.light()));

@@ -53,6 +53,7 @@ public class MainLayout implements Layout {
                 // Two files keep the mark and label legible in both shell themes.
                 .logo("/ui/branding/logo.svg", "/ui/branding/logo-dark.svg")
                 .mark("/ui/branding/favicon.svg")
+                .markFrame(false)
                 .favicon("/ui/branding/favicon.svg")
                 .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))
                 .dark(c -> c.primary("#6366F1").primarySoft("#1E1B4B"));

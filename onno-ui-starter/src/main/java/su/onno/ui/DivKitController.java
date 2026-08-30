@@ -191,6 +191,7 @@ public class DivKitController implements DisposableBean {
         out.put("brand", brand);
         out.put("logo", logo.present() ? logo.url() : "");
         out.put("mark", Objects.requireNonNullElse(branding.markFor(theme), ""));
+        out.put("markFramed", branding.markFramed());
         out.put("navigation", nav);
         out.put("nav", DivCard.of("onno-nav",
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));

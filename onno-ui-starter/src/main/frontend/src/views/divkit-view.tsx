@@ -99,6 +99,7 @@ type ShellData = {
   brand?: string;
   logo?: string;
   mark?: string;
+  markFramed?: boolean;
   // RBAC-filtered Layout sections. The desktop shell renders these as a narrow app rail whose
   // selected section opens a nested route drawer; the DivKit nav remains the portable fallback.
   navigation?: ShellNavSection[];
@@ -1967,6 +1968,7 @@ export function DivKitView() {
           <DesktopNavigation
             brand={shell.brand}
             mark={shell.mark}
+            markFramed={shell.markFramed}
             navigation={shell.navigation}
             activePath={commandPane?.activePath ?? ""}
             home={shell.home}
