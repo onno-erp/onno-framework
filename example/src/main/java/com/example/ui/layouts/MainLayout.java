@@ -35,15 +35,15 @@ public class MainLayout implements Layout {
     public void configure(LayoutSpec layout) {
         // No roles() here: the default profile is the baseline every user can resolve to. The admin
         // profile (AdminLayout) is additive and higher-priority, so an ADMIN lands there instead.
-        build(layout, false);
+        configureShell(layout);
+        buildNavigation(layout, false);
     }
 
     /**
-     * Builds the shared shell, branding, sections and identity link. {@code includeEmployees} adds the
-     * {@link Employee} catalog to the "People" section — true only for the admin profile, since staff
-     * management is ADMIN-only. Keeping both profiles on one builder stops their navs from drifting.
+     * Configures application-wide shell and identity metadata. Named profiles inherit this default
+     * contribution and only provide their own role-specific navigation.
      */
-    static void build(LayoutSpec layout, boolean includeEmployees) {
+    private static void configureShell(LayoutSpec layout) {
         // Branding configured in Java: app name, brand colors retinting the DivKit chrome accent in
         // light and dark modes, plus a logo/favicon served from src/main/resources/static/ui.
         layout.shell()
@@ -55,6 +55,19 @@ public class MainLayout implements Layout {
                 .favicon("/branding/favicon.svg")
                 .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))
                 .dark(c -> c.primary("#6366F1").primarySoft("#1E1B4B"));
+
+        // Link a signed-in login to its Employee row by email, so the person can be greeted and shown
+        // as a comment author. The lookup reads the row directly, bypassing @AccessControl, so it
+        // resolves for MANAGERs too even though they have no Employees nav entry.
+        layout.identity(Employee.class, "email");
+    }
+
+    /**
+     * Builds the profile navigation. {@code includeEmployees} adds the {@link Employee} catalog to
+     * the "People" section for administrators. Keeping both profiles on one builder prevents their
+     * shared route structure from drifting while leaving shell ownership on the default layout.
+     */
+    static void buildNavigation(LayoutSpec layout, boolean includeEmployees) {
 
         layout.section("Sales")
                 .order(0)
@@ -109,9 +122,5 @@ public class MainLayout implements Layout {
                     .page("/settings", "Settings", "settings");
         }
 
-        // Link a signed-in login to its Employee row by email, so the person can be greeted and shown
-        // as a comment author. The lookup reads the row directly, bypassing @AccessControl, so it
-        // resolves for MANAGERs too even though they have no Employees nav entry.
-        layout.identity(Employee.class, "email");
     }
 }

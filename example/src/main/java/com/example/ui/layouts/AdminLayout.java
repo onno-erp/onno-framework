@@ -32,9 +32,10 @@ public class AdminLayout implements Layout {
 
     @Override
     public void configure(LayoutSpec layout) {
-        // Same shell + sections as the default profile, but with the Employees catalog in "People"
-        // and the admin-only Settings page in "System".
-        MainLayout.build(layout, true);
+        // Same route structure as the default profile, but with the Employees catalog in "People"
+        // and the admin-only Settings page in "System". Shell and identity come from MainLayout's
+        // default contribution and therefore remain application-wide.
+        MainLayout.buildNavigation(layout, true);
 
         // Restrict to ADMIN and outrank the default profile, so an ADMIN resolves to this profile
         // (and its dashboard home) rather than the manager baseline.
