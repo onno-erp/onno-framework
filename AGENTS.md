@@ -36,6 +36,7 @@ to future agents that may not have the full conversation context.
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
+| `onno-crm-starter` | Reusable CRM business module with customers, agents, unified multi-channel inboxes, comments/activity, opportunities, commands, additive UI metadata, and a packaged widget. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
@@ -46,6 +47,7 @@ to future agents that may not have the full conversation context.
 | `onno-widgets-gradle-plugin` | Gradle plugin (`su.onno.widgets`) that compiles consumer `src/main/widgets/*.tsx` into onno UI widget plugins; bundles `@onno/widget-sdk`. |
 | `onno-widget-sdk` | npm `@onno/widget-sdk` — the custom-widget authoring API (types, hooks, UI primitives, read-only data client) resolving to the host SPA at runtime. |
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
+| `crm-example` | Thin local development consumer for `onno-crm-starter`; owns H2 sample data and demo auth/shell. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
 Commercial vertical connectors (`onno-guesty-starter`, `onno-hospedajes-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
@@ -55,7 +57,7 @@ Community extensions (connectors, SPI implementations, UI add-ons, skills) are b
 ### Before Editing
 
 1. Read the relevant module's `build.gradle.kts`.
-2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or the example app.
+2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or one of the example apps.
 3. Prefer extending existing framework concepts over adding parallel mechanisms.
 4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass — see [Keeping docs in sync](#keeping-docs-in-sync).
 5. Preserve user changes in the working tree. Do not reset, checkout, or clean files unless the user explicitly asks.

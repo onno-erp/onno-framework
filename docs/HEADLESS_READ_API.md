@@ -42,6 +42,21 @@ POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-recor
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
 
+The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
+
+```text
+GET  /api/crm/conversations/{id}/messages
+POST /api/crm/conversations/{id}/messages       body: {"body":"…"}
+POST /api/crm/conversations/{id}/read
+POST /api/crm/conversations/{id}/closed         body: {"closed":true}
+POST /api/crm/conversations/{id}/assign-to-me
+```
+
+These routes require `CRM_AGENT`, `CRM_MANAGER`, or the framework-wide `ADMIN` superuser role.
+The module resolves `assign-to-me` through its replaceable `CrmAgentIdentityResolver`; it never
+accepts an agent id from the request body. See
+[onno-crm-starter/README.md](../onno-crm-starter/README.md) for the module integration contract.
+
 Process actors are always derived from the authenticated principal; usernames and roles are never
 accepted from the request body. Starting is authorized by the definition's typed
 `startAssignment(payload)`. `GET /api/tasks` returns open candidate work plus work already

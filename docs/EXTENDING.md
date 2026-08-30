@@ -35,6 +35,12 @@ managed widget build installs and bundles that dependency; the extension author 
 for its license, security, browser support, and bundle size. Do not attempt to replace React,
 React DOM, `@onno/widget-sdk`, or the plugin's build tools, which are framework-managed.
 
+Official model-bearing business modules are a separate composition surface from connectors. For
+example, `su.onno:onno-crm-starter` intentionally contributes catalogs, repositories, commands,
+pages, and a compiled widget when an application opts into that business capability. A provider
+connector consumed by the CRM still owns only the external binding; it must not redefine the CRM
+model. Keep module UI additive so an enterprise host retains its shell, identity, and theme.
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.

@@ -21,6 +21,8 @@ include(
     "onno-cluster-starter",
     "onno-kafka-starter",
     "onno-observability-starter",
+    "onno-crm-starter",
     "onno-desktop-starter",
-    "example"
+    "example",
+    "crm-example"
 )

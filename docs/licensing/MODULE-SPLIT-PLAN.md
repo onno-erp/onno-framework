@@ -17,6 +17,10 @@ published Maven artifacts.
 > stays entirely in the open-source `onno-auth-starter`. An earlier draft of this plan proposed
 > carving an `onno-enterprise-auth-starter` out of it; that was **descoped**. Only the vertical
 > connectors (Guesty, SES.HOSPEDAJES) are commercial.
+> The reusable `onno-crm-starter` and its thin `crm-example` development consumer are Apache-2.0
+> and unaffected by this split. `onno-enterprise` applications consume the public CRM artifact as
+> an ordinary dependency; production channel delivery may be supplied by separate open or
+> commercial connector starters.
 
 Net result: this repo's `settings.gradle.kts` drops `onno-guesty-starter` and
 `onno-hospedajes-starter`; the `example` drops its `:onno-hospedajes-starter` dependency and the

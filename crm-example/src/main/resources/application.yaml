@@ -1,0 +1,53 @@
+spring:
+  application:
+    name: onno-crm
+  datasource:
+    url: jdbc:h2:file:./data/crm;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+
+server:
+  address: 127.0.0.1
+  port: 8080
+  error:
+    include-message: always
+
+onno:
+  ui:
+    locale: en
+    login:
+      demo-accounts:
+        - label: Sign in as Alice (agent)
+          username: alice@onno.crm
+          password: agent
+        - label: Sign in as Maya (manager)
+          username: maya@onno.crm
+          password: manager
+  comments:
+    enabled: true
+  notifications:
+    enabled: true
+    mentions:
+      enabled: true
+    assignments:
+      enabled: true
+  auth:
+    mode: in-memory
+    session:
+      remember-me:
+        allow-ephemeral-key: true
+    demo:
+      auto-login-username: alice@onno.crm
+    users:
+      - username: alice@onno.crm
+        password: agent
+        roles: [CRM_AGENT]
+      - username: ben@onno.crm
+        password: agent
+        roles: [CRM_AGENT]
+      - username: maya@onno.crm
+        password: manager
+        roles: [CRM_MANAGER]
+      - username: admin@onno.crm
+        password: admin
+        roles: [ADMIN]

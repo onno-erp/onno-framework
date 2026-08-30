@@ -36,6 +36,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-framework-starter` | `su.onno` | Spring Boot auto-configuration that wires the core: metadata registry, repositories, schema initializer, posting and process services, timer/subprocess polling, number generation, secret cipher, background jobs. |
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the UI starter but disabled by default. |
+| `onno-crm-starter` | `su.onno` | Reusable CRM business module: customers, agents, inboxes, conversations/messages, opportunities, commands, additive UI metadata, and a packaged unified-inbox widget. Registers its model package through Boot auto-configuration so external consumers need only the dependency. |
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
@@ -46,6 +47,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
 | `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, a read-only data client, and shared live-event subscriptions that resolve to the host SPA at runtime. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
+| `crm-example` | (not published) | Thin H2 development consumer for `onno-crm-starter`: sample data and demo auth/shell. |
 | `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
 ## Boot pipeline
@@ -69,7 +71,9 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
    `Layout`/`Page`/`EntityView` UI model beans.
 5. **Layer on optional starters.** `onno-ui-starter` adds the REST + DivKit + SPA surface;
    `onno-auth-starter` adds the security chain; the integration starters add their endpoints and
-   beans, each gated by an `onno.<module>.enabled` flag (default on).
+   beans. Model-bearing modules such as `onno-crm-starter` additionally register their own metadata
+   package, repositories, additive UI beans, and packaged widget assets without expanding the
+   consuming application's component scan.
 
 ## Domain concepts → annotations
 

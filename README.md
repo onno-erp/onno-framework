@@ -33,6 +33,8 @@
     ·
     <a href="example"><strong>Example app</strong></a>
     ·
+    <a href="crm-example"><strong>CRM example</strong></a>
+    ·
     <a href="CONTRIBUTING.md"><strong>Contributing</strong></a>
   </p>
 </div>
@@ -161,7 +163,13 @@ onno scans the model, creates the schema, wires the repositories, and serves the
 
 For a complete runnable project with seeded data, posting, role-specific layouts, dashboards,
 comments, media, and live custom widgets backed by the host's shared SSE stream, see the
-[Onno Books example](example).
+[Onno Books example](example). For a high-density customer workspace with a unified seeded
+multi-channel inbox, replies, internal notes, assignment, lifecycle stages, and opportunities, see
+the separate [Onno CRM example](crm-example).
+
+Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
+with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
+and bundles them while keeping React and `@onno/widget-sdk` host-owned.
 
 Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
 with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
@@ -191,10 +199,11 @@ interfaces, and UI metadata lives in focused `Layout`, `Page`, and `EntityView` 
 | --- | --- |
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
 | Application surface | [`onno-ui-starter`](onno-ui-starter), [`onno-auth-starter`](onno-auth-starter) |
+| Ready business modules | [`onno-crm-starter`](onno-crm-starter) |
 | Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
 | AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
 | Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-widgets-gradle-plugin`](onno-widgets-gradle-plugin), [`@onno/widget-sdk`](onno-widget-sdk) |
-| Reference application | [`example`](example) |
+| Consumer examples | [`example`](example), [`crm-example`](crm-example) |
 
 Spring Boot starters expose auto-configuration through
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`; adding a starter
@@ -202,6 +211,12 @@ is enough to make its conditional beans available.
 
 Commercial vertical connectors are distributed separately from the private `onno-enterprise`
 repository. Authentication—including OIDC and SSO—remains in the Apache-2.0 open core.
+
+Applications that need a ready CRM can add
+`implementation("su.onno:onno-crm-starter:$onnoVersion")`. The starter contributes its model,
+repositories, command API, additive navigation, entity views, pages, and compiled inbox widget while
+leaving the host's shell, theme, authentication, and identity decisions intact. The same public
+artifact is intended for composition inside `onno-enterprise` applications.
 
 ## Designed for humans and AI agents
 
@@ -275,6 +290,8 @@ frontend.
 ./gradlew clean check
 ./gradlew publishToMavenLocal
 ./gradlew :example:bootRun
+# or run the thin development consumer for the reusable CRM module
+./gradlew :crm-example:bootRun
 ```
 
 `publishToMavenLocal` is part of the verification loop: it catches sources, Javadoc, POM, and binary
