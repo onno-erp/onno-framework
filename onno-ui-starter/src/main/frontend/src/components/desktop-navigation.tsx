@@ -73,6 +73,9 @@ export function DesktopNavigation({
   const sections = useMemo(() => navigation.filter((section) => section.items.length > 0), [navigation]);
   const activeSection = sectionForPath(sections, activePath);
   const [selected, setSelected] = useState(() => (activeSection >= 0 ? activeSection : 0));
+  const [markFailed, setMarkFailed] = useState(false);
+
+  useEffect(() => setMarkFailed(false), [mark]);
   const [expanded, setExpanded] = useState(() => {
     try {
       return window.localStorage.getItem(STORAGE_KEY) !== "false";
@@ -117,7 +120,16 @@ export function DesktopNavigation({
           className="mb-2 flex h-8 w-8 items-center justify-center overflow-hidden rounded-field border text-sm font-medium text-foreground hover:bg-muted"
           style={{ borderColor: border }}
         >
-          {mark ? <img src={mark} alt="" className="h-6 w-6 object-contain" /> : brandMark(brand)}
+          {mark && !markFailed ? (
+            <img
+              src={mark}
+              alt=""
+              className="h-6 w-6 object-contain"
+              onError={() => setMarkFailed(true)}
+            />
+          ) : (
+            brandMark(brand)
+          )}
         </button>
 
         <nav aria-label={t("shell.menu")} className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">

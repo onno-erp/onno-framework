@@ -51,9 +51,9 @@ public class MainLayout implements Layout {
                 .brand("Onno Books")
                 // The compact onno mark keeps the demo shell recognizable without crowding its name.
                 // Two files keep the mark and label legible in both shell themes.
-                .logo("/branding/logo.svg", "/branding/logo-dark.svg")
-                .mark("/branding/favicon.svg")
-                .favicon("/branding/favicon.svg")
+                .logo("/ui/branding/logo.svg", "/ui/branding/logo-dark.svg")
+                .mark("/ui/branding/favicon.svg")
+                .favicon("/ui/branding/favicon.svg")
                 .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))
                 .dark(c -> c.primary("#6366F1").primarySoft("#1E1B4B"));
 

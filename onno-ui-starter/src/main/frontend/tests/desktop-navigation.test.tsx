@@ -85,6 +85,16 @@ describe("DesktopNavigation", () => {
     expect(onNavigate).toHaveBeenCalledWith("/catalogs/customers");
   });
 
+  it("falls back to the brand initial when the configured mark cannot load", () => {
+    renderNavigation();
+
+    const home = screen.getByRole("button", { name: "Onno Desk" });
+    fireEvent.error(home.querySelector("img")!);
+
+    expect(home).toHaveTextContent("O");
+    expect(home.querySelector("img")).not.toBeInTheDocument();
+  });
+
   it("switches drawers without marking a second workspace active and persists collapse", () => {
     const { onNavigate, onSectionFocus } = renderNavigation();
 
