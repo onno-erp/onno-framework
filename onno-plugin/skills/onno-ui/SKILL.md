@@ -32,6 +32,11 @@ links and `.page("/ops", "Sales Ops", "activity")` for authored pages. Use `prof
 `spec.roles(...).priority(...)` selects it. Keep the default layout (`profile() == null`) for shared
 shell/identity and back-office users.
 
+With desktop `NavStyle.SIDEBAR`, each authored section is a workspace icon in the collapsible app
+rail and its entries fill the nested drawer. Name sections after user jobs/bounded workspaces
+(`Inbox`, `Sales`, `Configuration`), not framework storage kinds (`Catalogs`, `Documents`). Do not
+rebuild a second navigation shell inside a custom widget.
+
 ## Page
 
 Everything is a page: `/`, `/settings`, arbitrary routes, and default entity routes such as
@@ -55,6 +60,10 @@ form/row-aware badges, disabled reasons, and filtering), `.uniqueWithinSection()
 built-in action placement, and related lists. Use
 `fields.validation(key, FormValidator.class).dependsOn(...).debounce(...)` for advisory live
 cross-record error/warning/info feedback; keep hard invariants in the authoritative write path.
+
+Field widths serve two surfaces. Use `half`/`1/2`/`50%` for a half-row form field; the list ignores
+those tokens. Use a positive whole-pixel width such as `240` or `240px` only when a table column must
+be fixed. Never treat a form fraction as table pixels.
 
 Use `detail(DetailSpec)` to place registry-backed custom widgets below the fields of a saved
 catalog/document record. The widget receives `widget.record` (`kind`, `name`, `id`, loaded `data`,
@@ -87,6 +96,20 @@ Author app widgets in `src/main/widgets/*.tsx`, use `@onno/widget-sdk`, and appl
 `su.onno.widgets` Gradle plugin. Prefer SDK UI primitives over lookalike controls. Literal Tailwind
 classes inside `src/main/widgets` are compiled into the widget CSS; dynamic classes are not scanned.
 
+Declare optional browser libraries in the consuming Gradle build with
+`onnoWidgets { npmDependencies.put("package", "version") }`, then import them normally from TSX.
+They are bundled into the widget; React, React DOM, `@onno/widget-sdk`, and compiler packages remain
+framework-managed and cannot be overridden.
+
+Route-level operational workspaces should declare
+`page.list(Entity.class, view -> view.fill())`, consume that height (`h-full min-h-0`),
+keep headers/toolbars/composers fixed, and give scrolling only to bounded inner panes. Avoid widget
+`max-height`/viewport clamps and ever-growing feeds that make the entire tab scroll. Embedded
+dashboard widgets remain content-sized. Reuse entity avatar fields, resolved Ref `*Avatar`
+sidecars, and comment/profile avatar payloads; use Onno's Glass fallback only when no stored or
+source image exists. A conversation timeline should merge messages, Onno comments, and durable
+domain/system events chronologically.
+
 Data-backed custom widgets use `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`; it filters
 and coalesces the host's shared live-event stream. Never open `new EventSource("/api/events")` in a
 widget. For unusual multi-entity or non-entity subscriptions, use the SDK's `events.subscribe` or
@@ -117,6 +140,8 @@ schedule lane/event rectangle, generic row, empty-state box, or other large cont
 - Format money, percentages, dates, booleans, statuses, and references deliberately.
 - Hide noisy fields from list/form/detail surfaces.
 - Verify text fits and controls remain stable on mobile and desktop.
+- Inspect the real rendered list after adding field widths; headers and representative row values
+  must remain visible, and no grid track may collapse to `1px`/`2px`.
 
 Read `../onno/reference/cheatsheet.md` for the full UI DSL and `onno-ui-starter/README.md` for widget
 configuration.

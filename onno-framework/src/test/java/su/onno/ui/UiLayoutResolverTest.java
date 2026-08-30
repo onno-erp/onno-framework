@@ -67,27 +67,27 @@ class UiLayoutResolverTest {
     }
 
     @Test
-    void resolve_emitsPageLinksAsPageItems() {
+    void resolve_preservesMixedEntityAndPageDeclarationOrder() {
         UiLayoutBuilder layout = new UiLayoutBuilder();
         layout.section("Reports")
-                .catalog(TestProduct.class)
                 .page("/ops", "Sales Ops", "activity")
+                .catalog(TestProduct.class)
                 .page("/kpi", "KPIs");
 
         var sections = resolver.resolve(buildLayout(layout));
 
         assertThat(sections).hasSize(1);
         var items = sections.get(0).items();
-        // The entity resolves first, then the two page links in declaration order.
         assertThat(items).hasSize(3);
-        assertThat(items.get(0).type()).isEqualTo("catalog");
 
-        UiLayout.ResolvedItem ops = items.get(1);
+        UiLayout.ResolvedItem ops = items.get(0);
         assertThat(ops.type()).isEqualTo("page");
         assertThat(ops.href()).isEqualTo("/ops");        // route used verbatim as the nav href
         assertThat(ops.title()).isEqualTo("Sales Ops");
         assertThat(ops.icon()).isEqualTo("activity");
         assertThat(ops.javaClass()).isNull();            // a page link resolves by route, not metadata
+
+        assertThat(items.get(1).type()).isEqualTo("catalog");
 
         UiLayout.ResolvedItem kpi = items.get(2);
         assertThat(kpi.type()).isEqualTo("page");

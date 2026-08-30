@@ -16,6 +16,11 @@ belong in `EntityView`, not here.
 
 - Nav is curated. A catalog/document/register appears in the sidebar only if a layout section lists
   it.
+- Desktop `NavStyle.SIDEBAR` is two-tier: each `section(...)` becomes an icon in the collapsible app
+  rail, and the section's routes appear in its nested drawer. Group sections by user job/workspace,
+  not Java entity type. Keep workflow-local controls inside the page/widget; do not duplicate the
+  shell. Mixed `.page(...)`, `.catalog(...)`, `.document(...)`, and `.register(...)` calls retain
+  declaration order inside the drawer.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
 - A custom page route appears in nav only when a layout section links it with `.page(...)`.
 - `Layout.profile()` names the persona; call `spec.roles(...).priority(...)` inside `configure` to

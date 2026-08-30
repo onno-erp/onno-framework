@@ -3,11 +3,14 @@ package su.onno.ui;
 import su.onno.metadata.*;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class UiLayoutResolver {
+
+    private record OrderedItem(int order, UiLayout.ResolvedItem item) {}
 
     private final MetadataRegistry registry;
 
@@ -61,23 +64,28 @@ public class UiLayoutResolver {
         List<UiLayout.ResolvedSection> result = new ArrayList<>();
 
         for (UiLayout.Section section : sections) {
-            List<UiLayout.ResolvedItem> items = new ArrayList<>();
+            List<OrderedItem> ordered = new ArrayList<>();
             for (UiLayoutBuilder.EntityRef ref : section.entityRefs()) {
                 String name = resolveEntityName(ref);
                 if (name != null) {
                     String title = resolveEntityTitleByClass(ref.type(), ref.javaClass());
                     // Route key stays derived from the URL-safe name; the title is display-only.
                     String href = "/" + ref.type() + "s/" + toSnakeCase(name);
-                    items.add(new UiLayout.ResolvedItem(name, title, ref.type(), href, ref.javaClass(), ref.icon()));
+                    ordered.add(new OrderedItem(ref.navOrder(),
+                            new UiLayout.ResolvedItem(name, title, ref.type(), href, ref.javaClass(), ref.icon())));
                 }
             }
-            // Authored-page links follow the entities in declaration order. They carry no java class
-            // (they resolve to a Page bean by route, not to entity metadata); the route is used
-            // verbatim as the href so the client navigates onno://<route>.
+            // Page links and entity links share one authored navigation sequence. They remain stored
+            // in separate typed collections for entity hint resolution, but merge here in the exact
+            // order the Layout DSL declared them.
             for (UiLayout.PageRef page : section.pageRefs()) {
-                items.add(new UiLayout.ResolvedItem(
-                        page.label(), page.label(), "page", page.route(), null, page.icon()));
+                ordered.add(new OrderedItem(page.navOrder(), new UiLayout.ResolvedItem(
+                        page.label(), page.label(), "page", page.route(), null, page.icon())));
             }
+            List<UiLayout.ResolvedItem> items = ordered.stream()
+                    .sorted(Comparator.comparingInt(OrderedItem::order))
+                    .map(OrderedItem::item)
+                    .toList();
             result.add(new UiLayout.ResolvedSection(
                     section.name(),
                     section.order(),

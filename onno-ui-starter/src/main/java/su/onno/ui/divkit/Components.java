@@ -356,16 +356,24 @@ final class Components {
         return widths;
     }
 
-    /** Leading-integer pixel width of a hint ({@code "260"}, {@code "260px"}); -1 if none. */
-    private static int parseWidth(String hint) {
+    /** Strict pixel width ({@code "260"}, {@code "260px"}); form fractions are not table widths. */
+    static int parseWidth(String hint) {
         if (hint == null) {
             return -1;
         }
-        int end = 0;
-        while (end < hint.length() && Character.isDigit(hint.charAt(end))) {
-            end++;
+        String trimmed = hint.trim();
+        String digits = trimmed.endsWith("px")
+                ? trimmed.substring(0, trimmed.length() - 2).trim()
+                : trimmed;
+        if (digits.isEmpty() || !digits.chars().allMatch(Character::isDigit)) {
+            return -1;
         }
-        return end == 0 ? -1 : Integer.parseInt(hint.substring(0, end));
+        try {
+            int width = Integer.parseInt(digits);
+            return width > 0 ? width : -1;
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
     }
 
     /** A fixed-width, single-line table cell — columns stay aligned and never wrap. */

@@ -185,6 +185,12 @@ public class DivKitController implements DisposableBean {
         // Where "/" should land: the dashboard if there is one, else the first real nav
         // item, so a dashboard-less app opens on a real screen instead of a phantom one.
         out.put("home", landingPath(nav));
+        // The web desktop shell consumes the same RBAC-filtered structure directly to render its
+        // two-tier app rail + collapsible section drawer. Other clients keep consuming the DivKit
+        // card below, so this is an additive representation of one navigation source of truth.
+        out.put("brand", brand);
+        out.put("logo", logo.present() ? logo.url() : "");
+        out.put("navigation", nav);
         out.put("nav", DivCard.of("onno-nav",
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",
@@ -561,6 +567,9 @@ public class DivKitController implements DisposableBean {
                     // Embedded in a page the list carries no outer spacing: PageDivBuilder owns
                     // content padding and sibling gaps, keeping the table aligned with adjacent cards.
                     descriptor.put("embedded", true);
+                    if (Boolean.TRUE.equals(c.payload().get("fill"))) {
+                        descriptor.put("fill", true);
+                    }
                     applyListDefaults(descriptor, c.payload());
                     out.add(PageComponent.custom("onno-list", Map.of("list", descriptor)));
                 }

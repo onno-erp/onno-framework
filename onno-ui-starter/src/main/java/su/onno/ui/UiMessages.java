@@ -154,6 +154,8 @@ public final class UiMessages {
         d.put("shell.signOut", "Sign out");
         d.put("shell.menu", "Menu");
         d.put("shell.more", "More");
+        d.put("shell.collapseNavigation", "Collapse navigation");
+        d.put("shell.expandNavigation", "Expand navigation");
 
         // Register surface (the virtualized movements/balance lists).
         d.put("register.period", "Period");

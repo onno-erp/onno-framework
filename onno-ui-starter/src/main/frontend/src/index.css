@@ -61,6 +61,9 @@
        feeling linear; reduced-motion overrides live beside the component treatment below. */
     --duration-fast: 250ms;
     --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+    /* transitions.dev card-resize: desktop navigation drawer compact ↔ expanded. */
+    --resize-dur: 300ms;
+    --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
     /* transitions.dev number-pop: formatted KPI characters re-enter on live value changes. */
     --digit-dur: 500ms;
     --digit-distance: 8px;
@@ -100,6 +103,17 @@
     --sidebar-accent-foreground: 0 0% 9%;
     --sidebar-border: 0 0% 92%;
     --sidebar-ring: 0 0% 9%;
+  }
+
+  .t-resize {
+    transition:
+      width var(--resize-dur) var(--resize-ease),
+      height var(--resize-dur) var(--resize-ease);
+    will-change: width, height;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .t-resize { transition: none !important; }
   }
 
   .dark {

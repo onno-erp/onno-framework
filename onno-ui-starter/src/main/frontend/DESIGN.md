@@ -123,6 +123,19 @@ mean “any interactive container.”
 - Workspace tab reordering keeps native cross-pane drag semantics, but supplies a lifted custom drag
   image, leaves the source as a real-width placeholder, and shifts neighboring tabs with FLIP using
   `--duration-fast` / `--ease-smooth-out`. Preserve its reduced-motion treatment.
+- Workspace tabs distinguish visibility from command focus: the active tab in the focused island
+  uses the brand accent; an active tab in another island uses the neutral `muted` surface; and a
+  merely open, inactive tab stays unfilled until hover. Exactly one tab is the command target for
+  global actions such as Escape. The fixed tab strip scrolls horizontally when needed and must
+  always hide vertical overflow.
+- Desktop rail highlighting follows the focused tab's authored Layout section. When the focused
+  pane is empty or its route is outside authored navigation, the selected drawer section becomes
+  the single highlighted fallback; never paint both the routed and selected sections as active.
+  Opening a rail section transfers command focus to navigation without closing pane tabs: their
+  active tabs remain visible with the muted pane-active treatment, and global commands such as
+  Escape do not target a tab until a drawer destination or pane is focused again. Pointer/touch
+  interaction anywhere in a pane, or keyboard focus entering one of its controls, restores that
+  pane as the command target.
 - `Segmented` uses one measured sliding pill with the same motion tokens; first paint and geometry
   changes snap, value changes tween. KPI value cards and `StatWidget` use `AnimatedNumber`; both
   primitives must retain their reduced-motion guards.

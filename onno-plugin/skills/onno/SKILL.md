@@ -262,6 +262,9 @@ formatting. Close that gap in the same pass you model the business, not "later":
   `geojson`), `.format()` (`currency:EUR`, `dd-MM-yyyy`, `percent`), `.placeholder()`/`.hint()`, and
   `hideInList/Form/Detail()` to suppress noise. A money column rendered as a bare number, or a status
   shown as a dropdown of UUIDs, reads as unfinished.
+  Width hints cross form and list metadata but have different meanings: `half`/`1/2`/`50%` makes a
+  half-row form field and is ignored by list sizing; only a positive whole-pixel width (`240` or
+  `240px`) fixes a list column. Never infer table pixels from a fractional form token.
 
 - **Model the real nouns — never keep placeholder/scaffold names.** Name attributes after what the
   business actually tracks (`invoiceNumber`, `checkInDate`), not generic stand-ins (`name`, `field1`,

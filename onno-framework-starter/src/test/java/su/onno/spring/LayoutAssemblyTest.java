@@ -7,9 +7,27 @@ import su.onno.ui.NavStyle;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class LayoutAssemblyTest {
+
+    @Test
+    void composesHostShellWithReusableModuleNavigation() {
+        Layout host = spec -> spec.shell().nav(NavStyle.SIDEBAR).brand("Host CRM");
+        Layout crmModule = spec -> spec.section("Inbox")
+                .page("/inbox", "Inbox", "inbox");
+
+        var resolved = OnnoAutoConfiguration.buildUiLayout(List.of(host, crmModule));
+
+        assertThat(resolved.shell().nav()).isEqualTo(NavStyle.SIDEBAR);
+        assertThat(resolved.shell().branding().appName()).isEqualTo("Host CRM");
+        assertThat(resolved.sections()).singleElement().satisfies(section -> {
+            assertThat(section.name()).isEqualTo("Inbox");
+            assertThat(section.pageRefs()).singleElement()
+                    .satisfies(page -> assertThat(page.route()).isEqualTo("/inbox"));
+        });
+    }
 
     @Test
     void namedProfileCannotSilentlyDiscardShellConfiguration() {

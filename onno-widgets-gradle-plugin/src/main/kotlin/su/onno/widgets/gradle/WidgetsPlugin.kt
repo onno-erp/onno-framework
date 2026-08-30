@@ -7,6 +7,7 @@ import java.io.File
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.kotlin.dsl.register
@@ -20,6 +21,65 @@ internal fun widgetStyleFileName(group: String, projectName: String): String {
         .ifBlank { "onno" }
     return "$coordinate-widgets.css"
 }
+
+internal fun workspacePackageJson(npmDependencies: Map<String, String>): String {
+    val managed = linkedMapOf("@onno/widget-sdk" to "file:./sdk")
+    npmDependencies.toSortedMap().forEach { (name, version) ->
+        require(name.isNotBlank()) { "onnoWidgets.npmDependencies contains a blank package name" }
+        require(version.isNotBlank()) { "onnoWidgets.npmDependencies['$name'] must not be blank" }
+        require(name !in MANAGED_NPM_PACKAGES) {
+            "onnoWidgets.npmDependencies must not override framework-managed package '$name'"
+        }
+        managed[name] = version
+    }
+    val dependencyLines = managed.entries.joinToString(",\n") { (name, version) ->
+        "            \"${jsonEscape(name)}\": \"${jsonEscape(version)}\""
+    }
+    return """
+        {
+          "name": "onno-widgets-workspace",
+          "private": true,
+          "type": "module",
+          "dependencies": {
+$dependencyLines
+          },
+          "devDependencies": {
+            "esbuild": "^0.28.1",
+            "typescript": "~5.6.2",
+            "@types/react": "^19.2.17",
+            "react": "^19.2.7",
+            "tailwindcss": "^3.4.17",
+            "postcss": "^8.4.49",
+            "tailwindcss-animate": "^1.0.7"
+          }
+        }
+    """.trimIndent() + "\n"
+}
+
+private fun jsonEscape(value: String): String = buildString {
+    value.forEach { character ->
+        when (character) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> append(character)
+        }
+    }
+}
+
+private val MANAGED_NPM_PACKAGES = setOf(
+    "@onno/widget-sdk",
+    "@types/react",
+    "esbuild",
+    "postcss",
+    "react",
+    "react-dom",
+    "tailwindcss",
+    "tailwindcss-animate",
+    "typescript",
+)
 
 /**
  * User-facing configuration for [WidgetsPlugin], exposed as the `onnoWidgets {}` block. Conventions
@@ -37,6 +97,13 @@ abstract class WidgetsExtension {
      * `@onno/widget-sdk` and `react` types. Default true; never overwrites an existing file.
      */
     abstract val generateIdeConfig: Property<Boolean>
+
+    /**
+     * Additional npm packages bundled into consumer widgets, keyed by package name with an npm
+     * version/range (for example `"date-fns" to "^4.1.0"`). React and the widget SDK remain
+     * framework-managed so a plugin cannot ship a second runtime into the host SPA.
+     */
+    abstract val npmDependencies: MapProperty<String, String>
 }
 
 /**
@@ -60,6 +127,7 @@ class WidgetsPlugin : Plugin<Project> {
         ext.sourceDir.convention(project.layout.projectDirectory.dir("src/main/widgets"))
         ext.nodeVersion.convention(NODE_VERSION)
         ext.generateIdeConfig.convention(true)
+        ext.npmDependencies.convention(emptyMap())
 
         val workDir = project.layout.buildDirectory.dir("onno-widgets")
         // Compiled bundles land under a generated resources root at onno-plugins/<name>.js; that root
@@ -80,12 +148,13 @@ class WidgetsPlugin : Plugin<Project> {
         val prepare = project.tasks.register("onnoWidgetsPrepare") {
             group = GROUP
             description = "Materialise the widget build workspace (SDK, package.json, esbuild driver)."
+            inputs.property("npmDependencies", ext.npmDependencies)
             outputs.dir(workDir)
             doLast {
                 val work = workDir.get().asFile
                 work.mkdirs()
                 materializeSdk(project, work)
-                writeIfChanged(File(work, "package.json"), WORKSPACE_PACKAGE_JSON)
+                writeIfChanged(File(work, "package.json"), workspacePackageJson(ext.npmDependencies.get()))
                 writeIfChanged(File(work, "build.mjs"), BUILD_MJS)
                 if (ext.generateIdeConfig.get()) {
                     writeIdeConfig(ext.sourceDir.get().asFile, work)
@@ -129,6 +198,12 @@ class WidgetsPlugin : Plugin<Project> {
                 project.extensions.findByType(SourceSetContainer::class.java)
                     ?.findByName("main")?.resources?.srcDir(resourcesRoot)
                 project.tasks.withType<ProcessResources>().configureEach { dependsOn(compile) }
+                // Java's sourcesJar includes the main resource source set. Because that set now
+                // contains our generated widget directory, publication must build it first too;
+                // otherwise Gradle correctly rejects the implicit generated-output dependency.
+                project.tasks.matching { it.name == "sourcesJar" }.configureEach {
+                    dependsOn(compile)
+                }
             }
         }
     }
@@ -191,7 +266,8 @@ class WidgetsPlugin : Plugin<Project> {
                   "@onno/widget-sdk": ["$sdk/src/index.ts"],
                   "@onno/widget-sdk/*": ["$sdk/*"],
                   "react": ["$nm/@types/react"],
-                  "react/*": ["$nm/@types/react/*"]
+                  "react/*": ["$nm/@types/react/*"],
+                  "*": ["$nm/*"]
                 }
               },
               "include": ["**/*.ts", "**/*.tsx", "**/*.jsx"]
@@ -204,26 +280,6 @@ class WidgetsPlugin : Plugin<Project> {
         private const val GROUP = "onno widgets"
         private const val NODE_VERSION = "22.22.0"
         private val WIDGET_EXT = Regex(".*\\.(tsx|jsx)$")
-
-        private val WORKSPACE_PACKAGE_JSON = """
-            {
-              "name": "onno-widgets-workspace",
-              "private": true,
-              "type": "module",
-              "dependencies": {
-                "@onno/widget-sdk": "file:./sdk"
-              },
-              "devDependencies": {
-                "esbuild": "^0.28.1",
-                "typescript": "~5.6.2",
-                "@types/react": "^19.2.17",
-                "react": "^19.2.7",
-                "tailwindcss": "^3.4.17",
-                "postcss": "^8.4.49",
-                "tailwindcss-animate": "^1.0.7"
-              }
-            }
-        """.trimIndent() + "\n"
 
         private val BUILD_MJS = """
             // Generated by su.onno.widgets. Bundles each widget in <srcDir> into <outDir>/<name>.js as an

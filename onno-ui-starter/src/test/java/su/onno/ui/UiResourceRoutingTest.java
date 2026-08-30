@@ -47,6 +47,16 @@ class UiResourceRoutingTest {
     }
 
     @Test
+    void exactUiMountReturnsSpaShell() throws Exception {
+        mvc.perform(get("/ui").accept(TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(TEXT_HTML));
+        mvc.perform(get("/ui/").accept(TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(TEXT_HTML));
+    }
+
+    @Test
     void uiPathWithoutHtmlAcceptDoesNotReturnSpaShell() throws Exception {
         mvc.perform(get("/ui/documents/orders/123"))
                 .andExpect(status().isNotFound());
@@ -85,6 +95,14 @@ class UiResourceRoutingTest {
     }
 
     @Test
+    void packagedWidgetPluginLoadsFromTheUiMount() throws Exception {
+        mvc.perform(get("/ui/plugins/TestWidget.js"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/javascript"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("registerWidget")));
+    }
+
+    @Test
     void consumerStaticResourceIsNotShadowed() throws Exception {
         mvc.perform(get("/consumer-static.txt"))
                 .andExpect(status().isOk())
@@ -97,6 +115,7 @@ class UiResourceRoutingTest {
 
         new UiAutoConfiguration(new UiProperties()).addResourceHandlers(registry);
 
+        assertThat(registry.hasMappingForPattern("/ui")).isTrue();
         assertThat(registry.hasMappingForPattern("/ui/**")).isTrue();
         assertThat(registry.hasMappingForPattern("/**")).isFalse();
     }

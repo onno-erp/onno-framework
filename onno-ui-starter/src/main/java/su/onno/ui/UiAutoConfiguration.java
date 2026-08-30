@@ -59,8 +59,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/static/ui/")
                 .resourceChain(true);
 
-        String navigationPattern = base.isEmpty() ? "/**" : base + "/**";
-        var navigation = registry.addResourceHandler(navigationPattern);
+        String[] navigationPatterns = base.isEmpty()
+                ? new String[]{"/**"}
+                : new String[]{base, base + "/", base + "/**"};
+        var navigation = registry.addResourceHandler(navigationPatterns);
         if (base.isEmpty()) {
             navigation.addResourceLocations("classpath:/META-INF/resources/", "classpath:/resources/",
                     "classpath:/static/", "classpath:/public/", "classpath:/static/ui/");

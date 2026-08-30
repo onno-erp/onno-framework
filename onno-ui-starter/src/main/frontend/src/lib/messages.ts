@@ -128,6 +128,8 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "shell.signOut": "Sign out",
   "shell.menu": "Menu",
   "shell.more": "More",
+  "shell.collapseNavigation": "Collapse navigation",
+  "shell.expandNavigation": "Expand navigation",
 
   // Register surface (the virtualized movements/balance lists).
   "register.period": "Period",

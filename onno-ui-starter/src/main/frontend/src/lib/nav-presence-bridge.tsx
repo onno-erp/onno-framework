@@ -92,7 +92,7 @@ function navIdentity(path: string): { kind: string; name: string } {
 }
 
 /** A compact face-pile of the route's viewers — up to three tiny avatars, pinned to the slot's right. */
-function NavPresenceIndicator({ path }: { path: string }) {
+export function NavPresenceIndicator({ path }: { path: string }) {
   const { kind, name } = navIdentity(path);
   const viewers = useEntityViewers(kind, name);
   return <PresenceAvatars viewers={viewers} size={20} max={3} overlap className="h-full w-full justify-end" />;

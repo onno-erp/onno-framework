@@ -49,7 +49,9 @@ class SpaResourceResolver extends AbstractResourceResolver {
         if (request == null || !HttpMethod.GET.matches(request.getMethod())) {
             return false;
         }
-        if (requestPath.contains(".") || isExcludedRootPath(requestPath)) {
+        // Spring represents an exact resource-handler root such as /ui or /ui/ as ".". That is
+        // the mount itself, not a file-shaped request, so it must receive the SPA shell too.
+        if ((!requestPath.equals(".") && requestPath.contains(".")) || isExcludedRootPath(requestPath)) {
             return false;
         }
         return MediaType.parseMediaTypes(request.getHeader(HttpHeaders.ACCEPT)).stream()

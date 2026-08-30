@@ -211,7 +211,13 @@ function TypePills({ value, types }: { value: TypeFilter; types: string[] }) {
  * sizes mirror the DivKit nav rows (14 regular label, muted 16 glyph) so the whole rail reads as
  * one column of chrome.
  */
-export function NotificationTrigger({ style }: { style?: React.CSSProperties }) {
+export function NotificationTrigger({
+  style,
+  compact = false,
+}: {
+  style?: React.CSSProperties;
+  compact?: boolean;
+}) {
   const t = useMessages();
   const { unreadCount, available, panelOpen } = useNotifications();
 
@@ -227,15 +233,20 @@ export function NotificationTrigger({ style }: { style?: React.CSSProperties }) 
       // Hover/open tint is an ::after overlay, not a brightness filter — a filter brightens
       // the border along with the background, which made the border vanish on hover.
       className={cn(
-        "relative flex w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-card border px-3 py-2.5 text-sm text-foreground",
+        compact
+          ? "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-field text-foreground after:rounded-field"
+          : "relative flex w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-card border px-3 py-2.5 text-sm text-foreground after:rounded-card",
         "after:pointer-events-none after:absolute after:inset-0 after:bg-foreground/[0.04] after:opacity-0 after:transition-opacity",
         panelOpen ? "after:opacity-100" : "hover:after:opacity-100"
       )}
     >
       <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="flex-1 text-left">{t("notifications.title")}</span>
-      <NotificationBadgeMotion count={unreadCount} className="!static">
-        <span className="flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">
+      {compact ? null : <span className="flex-1 text-left">{t("notifications.title")}</span>}
+      <NotificationBadgeMotion count={unreadCount} className={compact ? "absolute -right-1 -top-1" : "!static"}>
+        <span className={cn(
+          "flex items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground",
+          compact ? "min-w-4 px-1 text-[9px] leading-4" : "min-w-5 px-1.5 text-[11px] leading-5"
+        )}>
           {unreadCount > 99 ? "99+" : unreadCount}
         </span>
       </NotificationBadgeMotion>

@@ -111,6 +111,21 @@ entity list's icon. Only the record-tab verbs are chrome — `tab.new` / `tab.ed
 `tab.duplicate` (`New {entity}` etc.) wrap that localized name. An unlisted entity falls back to
 the humanized route segment and a surface-type icon.
 
+On desktop, `NavStyle.SIDEBAR` renders authored `Layout` sections as a two-tier workspace shell:
+each section is one icon in a narrow app rail, and its catalogs/documents/registers/pages appear in
+the adjacent nested drawer under the authored section name. The drawer can be collapsed and its preference is remembered in the
+browser. Mixed entity and page links retain their exact declaration order inside the drawer. Choose
+section names/icons for user jobs or bounded workspaces (`Inbox`, `Sales`,
+`Configuration`), rather than grouping by Java entity type. Mobile retains the bottom bar and full
+"More" hub generated from those same sections.
+
+Default `Layout` beans are additive. A reusable module may contribute navigation sections without
+owning the application's shell; the host app can supply another default layout with branding,
+`NavStyle`, theme, and identity configuration. Leave the module layout's shell at its defaults so it
+does not override the host. Viewport-specific layouts augment the universal contributions for that
+viewport. This lets a starter such as a CRM module bring its Inbox/Sales routes into an existing
+application while preserving that application's shell.
+
 The home/dashboard entry is the one nav/tab label that can also be chrome: it uses the authored `/`
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
 widget-grid dashboard with no authored page still localizes its sidebar item and tab via
@@ -292,7 +307,7 @@ data-bearing surfaces.
 
 | Path | Surface |
 |------|---------|
-| `GET /shell` | Nav + account chrome. |
+| `GET /shell` | Nav + account chrome. Alongside the portable DivKit `nav` card it returns the same RBAC-filtered sections as `navigation` plus `brand`/`logo`, used by the desktop app rail and collapsible nested drawer. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
 | `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
@@ -658,6 +673,9 @@ The generic edit form honors the `FieldHintBuilder` layout hints:
   card. Long forms read as sections instead of one endless column.
 - `.width("half")` (or `"1/2"`) — the field takes half a row on wide screens, so short fields
   (dates, amounts, refs) sit side by side. Anything else spans the full row.
+- The same hint can size a list column only when it is a positive whole-pixel width such as
+  `.width("240")` or `.width("240px")`. Form tokens (`half`, `1/2`, `50%`) are deliberately ignored
+  by list sizing, so a two-column form cannot collapse its table into narrow tracks.
 - `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
   unbounded) gets a textarea automatically even without the hint.
 - `.widget("color")` — a React color popover plus a text input that stores canonical
@@ -940,7 +958,19 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
    ```kotlin
    // build.gradle.kts
    plugins { id("su.onno.widgets") }
+
+   onnoWidgets {
+       // Optional: installed in the managed workspace and bundled into the widget.
+       npmDependencies.put("date-fns", "^4.1.0")
+   }
    ```
+
+   Widget source may then import declared packages normally, for example
+   `import { formatDistanceToNow } from "date-fns"`. The app still needs no `package.json` or local
+   Node installation. Package code is bundled into the widget module, so the app author owns its
+   license, browser compatibility, security updates, and bundle-size impact. React, React DOM,
+   `@onno/widget-sdk`, and compiler packages are framework-managed and cannot be overridden; use
+   the SDK's host React hooks and UI primitives instead of adding another React runtime.
 
 2. Write the widget in `src/main/widgets/EventLog.tsx` using `@onno/widget-sdk` (types + hooks + a
    read-only data client; the SDK is bundled in the Gradle plugin, so it resolves with no npm access):
@@ -997,7 +1027,10 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
 the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
 The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises
 them as `pluginScripts` from `GET /api/config`; the SPA dynamic-imports each at boot and each
-self-registers. An unregistered `type(...)` renders a labelled placeholder rather than vanishing.
+self-registers. At startup the UI starter stages discovered plugin JS/CSS into a stable temporary
+serve directory. This prevents a Gradle continuous build from rewriting a dependency JAR while
+Spring is serving a plugin resource. An unregistered `type(...)` renders a labelled placeholder
+rather than vanishing.
 
 Config: `onno.ui.plugins.enabled` (default true), `onno.ui.plugins.extra-urls` (load extra modules,
 e.g. from a CDN). Dev loop: `./gradlew compileWidgetsWatch` rebuilds on change. Plugin JS runs
@@ -1093,6 +1126,13 @@ the map toggle; the toggle's label falls back to the `list.customView` message (
 `list.custom("bookTiles").label("Shelf")` and `example/src/main/widgets/BookTiles.tsx` renders the
 shelf. The same styling gotcha as widgets applies: compile happens outside the SPA's Tailwind
 build, so inline styles for layout, theme variables for color.
+
+A route-level operational renderer (inbox, scheduler, editor) should opt in with
+`page.list(Entity.class, view -> view.fill())` and take the height the list surface allocates
+instead of calculating its own viewport cap: make the renderer root
+`h-full min-h-0 overflow-hidden`, keep toolbars/composers fixed, and put `overflow-y-auto` on its
+bounded inner panes. This keeps the tab stationary and uses all remaining space. Content-oriented
+card/gallery renderers such as `BookTiles` should continue to flow and use the framework scroller.
 
 ## Maps
 
@@ -1422,8 +1462,8 @@ prefix-relative while the browser URL carries the prefix (e.g. `/ui/catalogs/Pro
 
 `SpaResourceResolver` is registered under `onno.ui.path` and falls back to that injected
 `index.html` only for `GET` navigation requests whose `Accept` header includes `text/html`, so
-client-side **deep links cold-load** straight onto their surface without swallowing API or asset
-errors.
+the exact mount (`/ui` or `/ui/`) and client-side **deep links cold-load** straight onto their
+surface without swallowing API or asset errors.
 `SpaIndexController` serves the root: when a base path is configured it redirects `/` → the base
 path (React Router renders nothing for a URL outside its `basename`, so the bare root must bounce
 into it); when `onno.ui.path` is `/` it serves the shell directly. Bundled assets (JS/CSS/icons) are

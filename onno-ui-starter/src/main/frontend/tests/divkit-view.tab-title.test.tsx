@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { DivKitView } from "@/views/divkit-view";
+import { DivKitView, workspaceTabState } from "@/views/divkit-view";
 
 vi.mock("@divkitframework/react", () => ({
   DivKit: ({
@@ -13,9 +13,14 @@ vi.mock("@divkitframework/react", () => ({
   }) => (
     <div data-testid={`divkit-${id}`}>
       {id.startsWith("nav:") ? (
-        <button type="button" onClick={() => onCustomAction?.({ url: "onno://" })}>
-          App logo
-        </button>
+        <>
+          <button type="button" onClick={() => onCustomAction?.({ url: "onno://" })}>
+            App logo
+          </button>
+          <button type="button" onClick={() => onCustomAction?.({ url: "onno://catalogs/products" })}>
+            Open products
+          </button>
+        </>
       ) : null}
     </div>
   ),
@@ -105,6 +110,13 @@ describe("DivKitView tab titles", () => {
     vi.restoreAllMocks();
   });
 
+  it("separates pane-active tabs from the one global command target", () => {
+    expect(workspaceTabState(true, true)).toBe("command-target");
+    expect(workspaceTabState(true, false)).toBe("pane-active");
+    expect(workspaceTabState(false, true)).toBe("open");
+    expect(workspaceTabState(false, false)).toBe("open");
+  });
+
   it("routes the logo home intent to a dashboard-less profile's real landing page", async () => {
     mockShell("/documents/orders");
     render(
@@ -152,6 +164,26 @@ describe("DivKitView tab titles", () => {
     expect(tab.closest("section")).toHaveStyle({ borderColor: "#EBEBEB" });
     expect(tab).toHaveClass("font-medium");
     expect(screen.getByTestId("icon-users").parentElement).toHaveClass("opacity-100");
+  });
+
+  it("keeps merely open tabs neutral without making the strip scroll vertically", async () => {
+    render(
+      <MemoryRouter initialEntries={["/catalogs/customers"]}>
+        <DivKitView />
+      </MemoryRouter>
+    );
+
+    const customers = await screen.findByTitle("Клиенты");
+    const strip = customers.closest("[data-tab-strip]");
+    expect(strip).toHaveClass("h-11", "overflow-x-auto", "overflow-y-hidden");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open products" }));
+
+    expect(await screen.findByTitle("Products")).toHaveAttribute("data-active", "true");
+    expect(customers).toHaveAttribute("data-active", "false");
+    expect(customers).toHaveClass("text-muted-foreground");
+    expect(customers).not.toHaveClass("bg-muted");
+    expect(customers).not.toHaveStyle({ background: "hsl(var(--accent))" });
   });
 
   it("falls back to the humanized route token for an entity absent from the map", async () => {

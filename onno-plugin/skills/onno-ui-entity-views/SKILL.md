@@ -29,9 +29,28 @@ Use `EntityView<E>` and getter references. Prefer `field/refField/rowField/rowRe
 overloads; raw types and string Java-field names are only dynamic escape hatches. Expression text
 such as `refFilter("customer = ${customer}")` intentionally remains a string.
 
+Treat every `list.columns(...)` entry as requiring an explicit human-facing
+`list.label(getter, "...")`. Keep the first descriptive column readable and limit operational lists
+to the columns that fit the viewport; move secondary data to detail views.
+
+Field widths cross form and list metadata but use distinct syntax. `half`/`1/2`/`50%` makes a
+half-row form field and is ignored for list sizing. Only a positive whole-pixel value such as `240`
+or `240px` fixes a list column. Do not parse or reinterpret fractional form tokens as table pixels.
+
 For a server row action with `label(row -> ...)`, also set a human-facing `label(String)`. Batch
 selection has no single `ActionRow`, so its menu and progress messages use the static label and
 otherwise fall back to the action key. If one operation is not deterministic across mixed record
 states, expose separate actions instead of a toggle.
 
 Read [references/examples.md](references/examples.md) for a full view with actions and forms.
+
+## Verify The Rendered Table
+
+- Open every changed list route at desktop width and confirm one visible header per configured column.
+- Reject raw property names, headerless cells, clipped badges, and columns compressed against an edge.
+- Inspect the computed grid when columns collapse; form-layout fractions must resolve to flexible
+  tracks, never `1px`/`2px` tracks.
+- Inspect the served DivKit/list descriptor when the visual table differs from `ListSpec`; verify the
+  expected column keys, labels, and width hints before changing CSS.
+- Fix metadata or shared width parsing first. Do not compensate with a custom table widget or
+  application-wide CSS.

@@ -38,6 +38,10 @@ import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "@/l
 import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/dialog-shell";
+import {
+  DesktopNavigation,
+  type ShellNavSection,
+} from "@/components/desktop-navigation";
 import "@divkitframework/divkit/dist/client.css";
 
 // The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
@@ -92,6 +96,11 @@ type ShellData = {
   // real nav item — so a dashboard-less app opens on a real screen instead of a phantom
   // "Dashboard". The client redirects "/" here on load (see the redirect effect).
   home: string;
+  brand?: string;
+  logo?: string;
+  // RBAC-filtered Layout sections. The desktop shell renders these as a narrow app rail whose
+  // selected section opens a nested route drawer; the DivKit nav remains the portable fallback.
+  navigation?: ShellNavSection[];
   nav: DivKitProps["json"];
   account: DivKitProps["json"];
   // Route path → localized entity title (e.g. "/catalogs/customers" → "Клиенты"), from the same
@@ -111,7 +120,18 @@ type Pane = { id: string; tabs: WorkspaceTab[]; activePath: string };
 
 // The desktop content area: islands left-to-right, their flex weights, and which one
 // has focus (the island the URL/navigation drives).
-type Workspace = { panes: Pane[]; sizes: number[]; focused: string };
+type Workspace = { panes: Pane[]; sizes: number[]; focused: string | null };
+
+export type WorkspaceTabState = "command-target" | "pane-active" | "open";
+
+/**
+ * A tab may be visible in its island without owning global keyboard commands. Keeping this
+ * classification explicit prevents pane focus from being collapsed into ordinary tab selection.
+ */
+export function workspaceTabState(active: boolean, focused: boolean): WorkspaceTabState {
+  if (!active) return "open";
+  return focused ? "command-target" : "pane-active";
+}
 
 // A pending confirmation shown in the in-app modal (replaces window.confirm), e.g.
 // delete confirmations. onConfirm runs the action; the modal closes either way.
@@ -376,7 +396,7 @@ export function DivKitView() {
   // per-pane mounted component) means closing/opening/Esc-ing panes only changes its `path` — the hook
   // never remounts, so the "this tab's own route" marker moves old→new without flashing through null
   // (the self-dot no longer blinks on rapid pane churn).
-  usePanePresence((workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0])?.activePath ?? "");
+  usePanePresence(workspace.panes.find((p) => p.id === workspace.focused)?.activePath ?? "");
   // Right-click menu for a list row: screen position + the row's onno:// open url.
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; url: string; writable: boolean } | null>(null);
   // Right-click menu for a workspace tab: screen position + the tab's route path.
@@ -417,7 +437,7 @@ export function DivKitView() {
   // without re-fetching the shell. The icon bridge gets the same value, so glyphs and
   // labels can't disagree about which item is active.
   useEffect(() => {
-    const focused = workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0];
+    const focused = workspace.panes.find((p) => p.id === workspace.focused);
     const path = focused?.activePath ?? "";
     activePathVar.setValue(path);
     setIconActivePath(path);
@@ -625,6 +645,50 @@ export function DivKitView() {
     },
     [navigate]
   );
+
+  // Opening a rail section transfers command focus to navigation without closing or hiding
+  // any pane. Each pane keeps its visible active tab, but no tab receives global commands until
+  // the user picks a destination or interacts with a pane again.
+  const focusNavigation = useCallback(() => {
+    setWorkspace((ws) => (ws.focused === null ? ws : { ...ws, focused: null }));
+  }, []);
+
+  // DivKit custom components and consumer widgets mount their own React roots. React's synthetic
+  // capture handlers on the outer pane therefore do not reliably observe interaction inside those
+  // roots, even though the native event still crosses the pane in the DOM. Capture once at the
+  // document boundary and resolve the owning pane from the composed path so every body interaction
+  // (mouse, touch, or keyboard focus) transfers command focus consistently.
+  useEffect(() => {
+    const activateOwningPane = (event: Event) => {
+      const path = event.composedPath();
+      // Tab-strip controls already have precise activate/close/drag behavior; let those handlers
+      // own the transition instead of briefly navigating to the pane's previously active tab.
+      if (path.some((target) => target instanceof HTMLElement && target.hasAttribute("data-tab-strip"))) {
+        return;
+      }
+      const paneElement = path.find(
+        (target) => target instanceof HTMLElement && target.dataset.workspacePaneId
+      ) as HTMLElement | undefined;
+      const paneId = paneElement?.dataset.workspacePaneId;
+      if (!paneId) return;
+      const pane = wsRef.current.panes.find((candidate) => candidate.id === paneId);
+      if (!pane) return;
+      setWorkspace((ws) => (ws.focused === paneId ? ws : { ...ws, focused: paneId }));
+      if (pane.activePath && window.location.pathname !== pane.activePath) {
+        navigate(pane.activePath);
+      }
+    };
+    document.addEventListener("pointerdown", activateOwningPane, true);
+    document.addEventListener("focusin", activateOwningPane, true);
+    // Also supports accessibility/test environments whose semantic click does not synthesize a
+    // preceding pointer or focus event.
+    document.addEventListener("click", activateOwningPane, true);
+    return () => {
+      document.removeEventListener("pointerdown", activateOwningPane, true);
+      document.removeEventListener("focusin", activateOwningPane, true);
+      document.removeEventListener("click", activateOwningPane, true);
+    };
+  }, [navigate]);
 
   // Open a record beside the focused island, master-detail style — but cap auto-opened
   // columns at two so nested opens (a form, then "+ New" from a dropdown, then its edit…)
@@ -1346,7 +1410,7 @@ export function DivKitView() {
         return;
       }
       const ws = wsRef.current;
-      const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
+      const focused = ws.panes.find((p) => p.id === ws.focused);
       if (focused?.activePath) closeTab(focused.id, focused.activePath);
     };
     window.addEventListener("keydown", onKey);
@@ -1479,7 +1543,8 @@ export function DivKitView() {
   // first mount (initialWorkspace) and mirrors location changes (popstate/back) via the
   // URL-mirror effect above, so deep links and history navigation still land here; the
   // URL itself is just a cosmetic sync.
-  const focusedPane = workspace.panes.find((p) => p.id === workspace.focused) ?? workspace.panes[0];
+  const commandPane = workspace.panes.find((p) => p.id === workspace.focused);
+  const focusedPane = commandPane ?? workspace.panes[0];
   const plainContent = (
     <ContentPane
       path={focusedPane?.activePath || location.pathname}
@@ -1660,11 +1725,9 @@ export function DivKitView() {
     }
     return (
       <section
+        data-workspace-pane-id={pane.id}
         className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-card border transition-colors"
         style={{ background: surfaceBg, borderColor }}
-        onMouseDownCapture={() => {
-          if (!focused) setWorkspace((ws) => ({ ...ws, focused: pane.id }));
-        }}
         onDragOver={(e) => {
           if (!dragRef.current) return;
           e.preventDefault();
@@ -1687,7 +1750,7 @@ export function DivKitView() {
         <div
           data-tab-strip
           data-reordering={dragState ? "true" : undefined}
-          className="flex min-h-11 shrink-0 items-center gap-1 overflow-x-auto border-b px-2 py-1.5"
+          className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b px-2 py-1.5"
           style={{ background: tabStripBg, borderColor }}
           onDragOver={(e) => {
             if (!dragRef.current) return;
@@ -1728,17 +1791,26 @@ export function DivKitView() {
             const label = tabTitle(tab.path);
             const icon = tabIcon(tab.path);
             const active = tab.path === pane.activePath;
+            // Every island has an active (visible) tab, but only the focused island owns
+            // global commands such as Escape. Keep those states visually distinct: brand
+            // accent for the command target, muted surface for another island's active tab,
+            // and neutral chrome for a merely open background tab.
+            const tabState = workspaceTabState(active, focused);
+            const commandTarget = tabState === "command-target";
             const dragging = dragState?.fromPaneId === pane.id && dragState.path === tab.path;
             // Selection reads in the configured brand accent. With an explicit
             // primarySoft this matches the server-rendered DivKit tabs/nav; otherwise it
             // falls back to the shadcn accent variable that BrandingProvider derives from
             // the brand primary.
-            const fill = active ? activeTabBg : "transparent";
-            const activeText = active ? activeTabText : undefined;
+            const fill = commandTarget ? activeTabBg : undefined;
+            const activeText = commandTarget ? activeTabText : undefined;
             return (
               <div
                 key={tab.path}
                 data-tab={tab.path}
+                data-active={active ? "true" : "false"}
+                data-command-target={commandTarget ? "true" : "false"}
+                data-tab-state={tabState}
                 data-flip={`${pane.id}:${tab.path}`}
                 title={label}
                 draggable
@@ -1752,9 +1824,11 @@ export function DivKitView() {
                 className={cn(
                   "onno-workspace-tab group flex h-8 max-w-56 shrink-0 cursor-grab items-center rounded-field border border-transparent pl-1 text-sm active:cursor-grabbing",
                   dragging && "onno-workspace-tab--dragging",
-                  active
+                  tabState === "command-target"
                     ? "font-medium text-foreground"
-                    : "font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    : tabState === "pane-active"
+                      ? "bg-muted font-medium text-foreground hover:bg-muted/80"
+                      : "font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 )}
                 style={{ background: fill, color: activeText }}
               >
@@ -1888,24 +1962,36 @@ export function DivKitView() {
   if (navStyle === "sidebar") {
     return (
       <div className="flex h-screen w-full overflow-hidden" style={{ background: pageBg }}>
-        <aside className="flex h-screen w-64 shrink-0 flex-col gap-3 p-3">
-          {/* The rounded border and the scrolling live on SEPARATE elements on purpose: a classic
-              (space-occupying) scrollbar is painted as browser chrome in the scroller's own gutter,
-              and `border-radius` on that same element does NOT clip it — the bar runs through both
-              right-hand corner arcs. Clipping it takes an ancestor, so the radius sits on this
-              wrapper with overflow-hidden and the scroller inside is plain. Machines with overlay
-              scrollbars (macOS default) render both forms identically, so don't "simplify" this
-              back into one element on the strength of how it looks there. */}
-          <div
-            className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border"
-            style={{ background: surfaceBg, borderColor }}
-          >
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{navEl}</div>
-          </div>
-          <NotificationTrigger style={{ background: surfaceBg, borderColor }} />
-          {accountEl}
-        </aside>
-        <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-3 pr-3">
+        {shell?.navigation ? (
+          <DesktopNavigation
+            brand={shell.brand}
+            logo={shell.logo}
+            navigation={shell.navigation}
+            activePath={commandPane?.activePath ?? ""}
+            home={shell.home}
+            onNavigate={openPath}
+            onSectionFocus={focusNavigation}
+            account={accountEl}
+            notification={<NotificationTrigger compact />}
+            surface={surfaceBg}
+            border={borderColor}
+            primary={accent}
+            primarySoft={activeTabBg}
+            t={t}
+          />
+        ) : (
+          <aside className="flex h-screen w-64 shrink-0 flex-col gap-3 p-3">
+            <div
+              className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-panel border"
+              style={{ background: surfaceBg, borderColor }}
+            >
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">{navEl}</div>
+            </div>
+            <NotificationTrigger style={{ background: surfaceBg, borderColor }} />
+            {accountEl}
+          </aside>
+        )}
+        <div ref={containerRef} className="flex min-w-0 flex-1 items-stretch py-2 pr-2">
           {workspace.panes.map((pane, i) => (
             <div
               key={pane.id}
