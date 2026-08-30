@@ -402,6 +402,8 @@ public class UiLayoutBuilder {
         private String logoUrlDark;
         private Integer logoWidth;
         private Integer logoHeight;
+        private String markUrl;
+        private String markUrlDark;
         private String faviconUrl;
         private final PaletteBuilder light = new PaletteBuilder();
         private final PaletteBuilder dark = new PaletteBuilder();
@@ -428,6 +430,19 @@ public class UiLayoutBuilder {
         public ShellBuilder logo(String light, String dark) {
             this.logoUrl = light;
             this.logoUrlDark = dark;
+            return this;
+        }
+
+        /** Compact square-oriented mark used by the desktop app rail. */
+        public ShellBuilder mark(String url) {
+            this.markUrl = url;
+            return this;
+        }
+
+        /** Compact app mark with a distinct dark-mode variant. */
+        public ShellBuilder mark(String light, String dark) {
+            this.markUrl = light;
+            this.markUrlDark = dark;
             return this;
         }
 
@@ -471,7 +486,7 @@ public class UiLayoutBuilder {
         ShellConfig build() {
             BrandingConfig branding = new BrandingConfig(
                     appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
-                    light.build(), dark.build());
+                    light.build(), dark.build(), markUrl, markUrlDark);
             return new ShellConfig(nav, branding);
         }
     }

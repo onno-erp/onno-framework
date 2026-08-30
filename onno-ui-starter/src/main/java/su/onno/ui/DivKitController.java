@@ -190,6 +190,7 @@ public class DivKitController implements DisposableBean {
         // card below, so this is an additive representation of one navigation source of truth.
         out.put("brand", brand);
         out.put("logo", logo.present() ? logo.url() : "");
+        out.put("mark", Objects.requireNonNullElse(branding.markFor(theme), ""));
         out.put("navigation", nav);
         out.put("nav", DivCard.of("onno-nav",
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));

@@ -31,5 +31,8 @@ belong in `EntityView`, not here.
   settings use the ADMIN-only settings API.
 - Canonical entity routes use lowercase snake case, for example `/catalogs/product_groups`.
 - Keep branding/static assets under `classpath:/static/ui/...`.
+- For the two-tier desktop shell, author both a horizontal `.logo(light, dark)` and a compact square
+  `.mark(light, dark)`. The rail falls back to the favicon, then the logo, but a dedicated mark keeps
+  a wordmark from being squeezed into the 24px home affordance.
 
 Read [references/examples.md](references/examples.md) before writing layout/page code.

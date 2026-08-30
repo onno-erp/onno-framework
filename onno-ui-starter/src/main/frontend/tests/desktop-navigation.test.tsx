@@ -40,6 +40,7 @@ function renderNavigation(activePath = "/inbox") {
   const result = render(
     <DesktopNavigation
       brand="Onno Desk"
+      mark="/branding/mark.svg"
       navigation={navigation}
       activePath={activePath}
       home="/inbox"
@@ -72,6 +73,10 @@ describe("DesktopNavigation", () => {
     expect(screen.getByTestId("icon-inbox").parentElement).not.toHaveClass("text-muted-foreground");
     expect(screen.getByTestId("icon-users").parentElement).toHaveClass("text-muted-foreground");
     expect(screen.queryByText("Onno Desk")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onno Desk" }).querySelector("img")).toHaveAttribute(
+      "src",
+      "/branding/mark.svg"
+    );
     expect(screen.getByTestId("desktop-navigation-notifications")).toHaveTextContent("Notifications");
     expect(screen.getByTestId("desktop-navigation-drawer")).not.toContainElement(
       screen.getByTestId("desktop-navigation-account")

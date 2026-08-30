@@ -427,6 +427,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   layout owns the non-default shell, branding, theme, and identity settings. A module that only adds
   navigation leaves its shell at `ShellConfig.defaults()`, which is treated as no shell contribution.
   Viewport-specific beans augment universal contributions for that viewport.
+  Branding distinguishes the full theme-aware `logo(...)` from the compact theme-aware
+  `mark(...)` used by the two-tier desktop app rail; an unconfigured mark falls back to the favicon,
+  then the logo, so existing applications remain usable in the new shell.
   **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
   sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
   catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions

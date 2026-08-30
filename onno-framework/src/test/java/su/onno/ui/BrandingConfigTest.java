@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The {@code shell()} branding DSL (issue #97) captures an app name, a logo (with an optional
- * dark variant), a favicon, and per-mode brand color overrides into the {@link ShellConfig}'s
+ * dark variant), a compact mark, a favicon, and per-mode brand color overrides into the {@link ShellConfig}'s
  * {@link BrandingConfig}. An unconfigured shell carries empty (no-op) branding so unbranded
  * apps are unaffected.
  */
@@ -19,6 +19,7 @@ class BrandingConfigTest {
                 .nav(NavStyle.SIDEBAR)
                 .brand("Acme")
                 .logo("/logo.svg", "/logo-dark.svg")
+                .mark("/mark.svg", "/mark-dark.svg")
                 .favicon("/favicon.svg")
                 .light(c -> c.primary("#2563EB").surface("#FFFFFF"))
                 .dark(c -> c.primary("#3B82F6"));
@@ -27,6 +28,8 @@ class BrandingConfigTest {
         assertThat(branding.appName()).isEqualTo("Acme");
         assertThat(branding.hasAppName()).isTrue();
         assertThat(branding.hasLogo()).isTrue();
+        assertThat(branding.hasMark()).isTrue();
+        assertThat(branding.markFor("dark")).isEqualTo("/mark-dark.svg");
         assertThat(branding.faviconUrl()).isEqualTo("/favicon.svg");
         assertThat(branding.light().primary()).isEqualTo("#2563EB");
         assertThat(branding.light().surface()).isEqualTo("#FFFFFF");
@@ -54,6 +57,17 @@ class BrandingConfigTest {
         BrandingConfig branding = b.buildShell().branding();
 
         assertThat(branding.logoFor("dark")).isEqualTo("/logo.svg");
+    }
+
+    @Test
+    void markFor_fallsBackToFaviconThenLogo() {
+        UiLayoutBuilder favicon = new UiLayoutBuilder();
+        favicon.shell().logo("/wordmark.svg").favicon("/favicon.svg");
+        assertThat(favicon.buildShell().branding().markFor("dark")).isEqualTo("/favicon.svg");
+
+        UiLayoutBuilder legacy = new UiLayoutBuilder();
+        legacy.shell().logo("/wordmark.svg", "/wordmark-dark.svg");
+        assertThat(legacy.buildShell().branding().markFor("dark")).isEqualTo("/wordmark-dark.svg");
     }
 
     @Test

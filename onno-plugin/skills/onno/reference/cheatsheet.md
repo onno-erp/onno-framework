@@ -258,11 +258,11 @@ because they are not Java field references.
   startup rejects those settings on a named profile.
   `spec.section(name).page(route, label, icon)` adds a sidebar link to an authored `Page` at an
   arbitrary route (the nav peer of `.catalog(...)`) — e.g. a custom dashboard `.page("/ops", "Sales Ops", "activity")`.
-  - Branding logo: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)`, plus `.logoWidth(px)` /
-    `.logoHeight(px)` (or `.logoSize(w, h)`). ⚠️ The sidebar wraps the logo in a **left-aligned**
-    (flex-start) box with fixed margins — there is no centering option, so a logo only looks centred if
-    `logoWidth` equals the sidebar content width. Size the image to fill it, or bake the padding into
-    the asset. Serve logo assets from `classpath:/static/ui/...` (see the static-asset note below).
+  - Branding: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)` supplies the horizontal
+    wordmark; `.logoWidth(px)` / `.logoHeight(px)` (or `.logoSize(w, h)`) sizes portable/login
+    surfaces. `spec.shell().mark(url)` or `.mark(lightUrl, darkUrl)` supplies the compact square
+    desktop app-rail mark. Without one, the rail falls back to the favicon, then the logo, then the
+    first brand letter. Serve assets from `classpath:/static/ui/...`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.bare()` / `b.header(false)` (drop the title/subtitle row),
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, or the

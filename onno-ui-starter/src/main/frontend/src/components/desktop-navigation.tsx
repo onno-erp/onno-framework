@@ -19,7 +19,7 @@ export type ShellNavSection = {
 
 type DesktopNavigationProps = {
   brand?: string;
-  logo?: string;
+  mark?: string;
   navigation: ShellNavSection[];
   activePath: string;
   home: string;
@@ -56,7 +56,7 @@ function brandMark(brand: string): string {
  */
 export function DesktopNavigation({
   brand = "",
-  logo = "",
+  mark = "",
   navigation,
   activePath,
   home,
@@ -117,7 +117,7 @@ export function DesktopNavigation({
           className="mb-2 flex h-8 w-8 items-center justify-center overflow-hidden rounded-field border text-sm font-medium text-foreground hover:bg-muted"
           style={{ borderColor: border }}
         >
-          {logo ? <img src={logo} alt="" className="h-6 w-6 object-contain" /> : brandMark(brand)}
+          {mark ? <img src={mark} alt="" className="h-6 w-6 object-contain" /> : brandMark(brand)}
         </button>
 
         <nav aria-label={t("shell.menu")} className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">

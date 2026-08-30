@@ -2,7 +2,7 @@ package su.onno.ui;
 
 /**
  * Declarative back-office branding for a {@link Layout}'s shell: an explicit app
- * name, a logo (with an optional dark-mode variant), a favicon, and brand color
+ * name, a horizontal logo, a compact app mark, a favicon, and brand color
  * overrides for the light and dark {@link BrandPalette}s. Authored via
  * {@code UiLayoutBuilder.shell()} — e.g.
  *
@@ -10,6 +10,7 @@ package su.onno.ui;
  * s.shell().nav(NavStyle.SIDEBAR)
  *     .brand("VetoVet")
  *     .logo("/branding/logo.svg")
+ *     .mark("/branding/mark.svg")
  *     .favicon("/branding/favicon.svg")
  *     .light(c -> c.primary("#2563EB"))
  *     .dark(c -> c.primary("#3B82F6"));
@@ -29,11 +30,14 @@ package su.onno.ui;
  * @param faviconUrl  optional favicon the web client installs at runtime
  * @param light       brand color overrides for light mode
  * @param dark        brand color overrides for dark mode
+ * @param markUrl     optional compact mark for square app-rail/home affordances
+ * @param markUrlDark optional dark-mode compact mark; falls back to {@code markUrl}
  */
 public record BrandingConfig(
         String appName, String logoUrl, String logoUrlDark,
         Integer logoWidth, Integer logoHeight, String faviconUrl,
-        BrandPalette light, BrandPalette dark) {
+        BrandPalette light, BrandPalette dark,
+        String markUrl, String markUrlDark) {
 
     public BrandingConfig {
         light = light == null ? BrandPalette.empty() : light;
@@ -42,7 +46,15 @@ public record BrandingConfig(
 
     public static BrandingConfig defaults() {
         return new BrandingConfig(null, null, null, null, null, null,
-                BrandPalette.empty(), BrandPalette.empty());
+                BrandPalette.empty(), BrandPalette.empty(), null, null);
+    }
+
+    /** Source-compatible constructor for branding authored before compact app marks were added. */
+    public BrandingConfig(String appName, String logoUrl, String logoUrlDark,
+                          Integer logoWidth, Integer logoHeight, String faviconUrl,
+                          BrandPalette light, BrandPalette dark) {
+        this(appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
+                light, dark, null, null);
     }
 
     /** Whether a non-blank app name was authored (else callers fall back to the profile title). */
@@ -55,12 +67,34 @@ public record BrandingConfig(
         return logoUrl != null && !logoUrl.isBlank();
     }
 
+    /** Whether a dedicated compact app mark was authored. */
+    public boolean hasMark() {
+        return markUrl != null && !markUrl.isBlank();
+    }
+
     /** The logo for the requested theme: the dark variant in dark mode when set, else {@link #logoUrl}. */
     public String logoFor(String theme) {
         if ("dark".equalsIgnoreCase(theme) && logoUrlDark != null && !logoUrlDark.isBlank()) {
             return logoUrlDark;
         }
         return logoUrl;
+    }
+
+    /**
+     * Compact mark for the requested theme. A favicon is already square-oriented and is the first
+     * compatibility fallback; the horizontal logo remains the final fallback for older apps.
+     */
+    public String markFor(String theme) {
+        if ("dark".equalsIgnoreCase(theme) && markUrlDark != null && !markUrlDark.isBlank()) {
+            return markUrlDark;
+        }
+        if (markUrl != null && !markUrl.isBlank()) {
+            return markUrl;
+        }
+        if (faviconUrl != null && !faviconUrl.isBlank()) {
+            return faviconUrl;
+        }
+        return logoFor(theme);
     }
 
     /** The brand color overrides for the requested theme. */

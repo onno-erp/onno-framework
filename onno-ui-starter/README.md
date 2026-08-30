@@ -307,7 +307,7 @@ data-bearing surfaces.
 
 | Path | Surface |
 |------|---------|
-| `GET /shell` | Nav + account chrome. Alongside the portable DivKit `nav` card it returns the same RBAC-filtered sections as `navigation` plus `brand`/`logo`, used by the desktop app rail and collapsible nested drawer. |
+| `GET /shell` | Nav + account chrome. Alongside the portable DivKit `nav` card it returns the same RBAC-filtered sections as `navigation` plus `brand`/`logo`/`mark`, used by the desktop app rail and collapsible nested drawer. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
 | `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
@@ -332,6 +332,25 @@ Shell configuration, branding, and `Layout.identity(...)` are application-wide. 
 on the default layout (`profile() == null`); named persona layouts should contain their role-scoped
 sections and presentation metadata. Startup rejects a named layout that tries to configure the
 global shell or identity mapping, so the configuration cannot be silently ignored.
+
+Brand horizontal and compact surfaces separately. `logo(light, dark)` is the full wordmark used by
+login and portable shell surfaces; `mark(light, dark)` is the square-oriented desktop app-rail
+asset. Both variants are optional. When no mark is authored, the rail falls back to `favicon(...)`,
+then to the theme-resolved logo, and finally to the first letter of `brand(...)`:
+
+```java
+spec.shell()
+        .nav(NavStyle.SIDEBAR)
+        .brand("Acme ERP")
+        .logo("/branding/logo.svg", "/branding/logo-dark.svg")
+        .mark("/branding/mark.svg", "/branding/mark-dark.svg")
+        .favicon("/branding/favicon.svg")
+        .light(p -> p.primary("#2563EB").primarySoft("#DBEAFE"))
+        .dark(p -> p.primary("#60A5FA").primarySoft("#172554"));
+```
+
+Keep branding assets under `classpath:/static/ui/...`; application paths such as
+`/branding/mark.svg` are served from there.
 
 ### List row actions
 
