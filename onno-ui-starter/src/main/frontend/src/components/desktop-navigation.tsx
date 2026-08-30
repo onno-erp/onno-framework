@@ -146,7 +146,9 @@ export function DesktopNavigation({
             // A focused tab owns the rail highlight whenever its route belongs to a section.
             // If the focused pane is empty (or its route is outside authored navigation), keep
             // the currently selected drawer section highlighted as the shell-level fallback.
-            const highlighted = activeSection >= 0 ? routeActive : sectionSelected;
+            // The filled background means the drawer is visibly selected, so it must disappear
+            // with the drawer. A focused tab may still keep its owning icon accented below.
+            const highlighted = expanded && (activeSection >= 0 ? routeActive : sectionSelected);
             const navigationState = routeActive
               ? "route-active"
               : highlighted
@@ -182,7 +184,9 @@ export function DesktopNavigation({
                 }}
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-field transition-colors",
-                  highlighted ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  highlighted || routeActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
                 style={highlighted ? { background: primarySoft, color: primary } : undefined}
               >

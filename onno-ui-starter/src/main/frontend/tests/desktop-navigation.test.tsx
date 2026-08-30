@@ -126,6 +126,12 @@ describe("DesktopNavigation", () => {
     expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
     expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
     expect(window.localStorage.getItem("onno.desktop-navigation.expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveStyle({
+      background: "#f0eeff",
+    });
+    expect(screen.getByRole("button", { name: "Sales" })).not.toHaveStyle({
+      background: "#f0eeff",
+    });
   });
 
   it("opens on the section that owns a detail route", () => {
