@@ -150,10 +150,18 @@ public final class UiMessages {
 
         // App shell / account island.
         d.put("shell.signedInAs", "Signed in as");
+        d.put("shell.accountMenu", "Account menu");
+        d.put("shell.appearance", "Appearance");
         d.put("shell.theme", "Theme");
+        d.put("shell.themeLight", "Light");
+        d.put("shell.themeDark", "Dark");
+        d.put("shell.themeSystem", "System");
+        d.put("shell.profiles", "Workspace");
         d.put("shell.signOut", "Sign out");
         d.put("shell.menu", "Menu");
         d.put("shell.more", "More");
+        d.put("shell.collapseNavigation", "Collapse navigation");
+        d.put("shell.expandNavigation", "Expand navigation");
 
         // Register surface (the virtualized movements/balance lists).
         d.put("register.period", "Period");

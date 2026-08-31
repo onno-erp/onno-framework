@@ -71,10 +71,15 @@ public record UiLayout(List<Section> sections,
      * carries its own {@code route}, display {@code label}, and {@code icon}. Lets a Layout surface a
      * custom dashboard or report page ({@code section("Reports").page("/ops", "Operations", "activity")}).
      */
-    public record PageRef(String route, String label, String icon) {
+    public record PageRef(String route, String label, String icon, int navOrder) {
         public PageRef {
             icon = icon == null ? "" : icon;
             label = label == null ? "" : label;
+        }
+
+        /** Back-compatible constructor for callers that do not participate in mixed nav ordering. */
+        public PageRef(String route, String label, String icon) {
+            this(route, label, icon, Integer.MAX_VALUE);
         }
     }
 

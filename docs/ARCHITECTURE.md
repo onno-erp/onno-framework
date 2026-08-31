@@ -423,12 +423,27 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   optional `viewport()` (DESKTOP/TABLET/MOBILE). The default layout (`profile() == null`) is the
   back-office shell. Shell, branding, and `identity(...)` are application-wide and therefore belong
   on that default layout; startup rejects them on a named profile instead of silently dropping them.
+  Default-layout beans compose additively: reusable modules may contribute sections while a host
+  layout owns the non-default shell, branding, theme, and identity settings. A module that only adds
+  navigation leaves its shell at `ShellConfig.defaults()`, which is treated as no shell contribution.
+  Viewport-specific beans augment universal contributions for that viewport.
+  Branding distinguishes the full theme-aware `logo(...)` from the compact theme-aware
+  `mark(...)` used by the two-tier desktop app rail; an unconfigured mark falls back to the favicon,
+  then the logo, so existing applications remain usable in the new shell. The rail frames marks by
+  default for compatibility; `markFrame(false)` removes that shell border when the artwork already
+  supplies its own enclosing shape.
   **The nav is curated:** `UiLayoutResolver` builds the sidebar only from the
   sections you declare (`spec.section(...).catalog(X.class)`), with no auto-list fallback — a
   catalog/document/register appears in the sidebar only if a section lists it. (Earlier versions
   auto-listed unclaimed catalogs under default `CATALOGS`/`REGISTERS` groups; that was removed.) A
   section can also link an authored `Page` at an arbitrary route with
-  `section(...).page(route, label, icon)` — the nav peer of a catalog/document entry.
+  `section(...).page(route, label, icon)` — the nav peer of a catalog/document entry. On desktop,
+  `SIDEBAR` uses each section as an app-rail workspace whose items open in a collapsible nested
+  drawer; `/api/divkit/shell` returns that RBAC-filtered structure as `navigation` and the signed-in
+  identity/profile metadata as `accountInfo` for the native desktop account dock, while retaining
+  the portable DivKit nav/account cards for non-web clients and other nav styles. Entity and page entries
+  share one authored sequence, so a mixed chain such as `.page(...).catalog(...).page(...)` renders
+  in exactly that order.
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
   chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `actions`, `custom`,
   and `bare()`/`header(false)` to drop the title row. A page is served at **any** route — the home
@@ -438,7 +453,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   **arbitrary custom route** (`/ops`, `/reports`) reached through the catch-all page endpoint. So a
   dashboard, the settings screen, and a list page are all just pages: the framework serves a sensible
   default and any registered `Page` bean at that route replaces it. A custom route is surfaced in the
-  sidebar with `spec.section(...).page("/ops", "Sales Ops", "activity")`.
+  sidebar with `spec.section(...).page("/ops", "Sales Ops", "activity")`. An embedded operational
+  list may opt into the host's remaining height with `list(Entity.class, view -> view.fill())`; its
+  toolbar stays fixed and its list/custom body scrolls internally instead of growing the page.
 - **`EntityView`** — per-entity `list(ListSpec)` columns/filters, `fields(EntityConfigBuilder)`
   hints, and record-aware custom widgets through `detail(DetailSpec)`
   hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
@@ -471,7 +488,14 @@ the classpath. The starter scans that location (`onno.ui.plugins.*`), serves the
 `{onno.ui.path}/plugins/**`, and advertises them as `pluginScripts` from `GET /api/config`; the SPA
 dynamic-imports each at boot, where it self-registers via the `window.onno` host bridge. Authoring
 uses `@onno/widget-sdk` (bundled in the Gradle plugin — no npm needed). See the README's
-"Authoring a custom widget" section.
+"Authoring a custom widget" section. Discovered plugin assets are copied to a stable temporary serve
+directory at startup so continuous builds cannot corrupt an in-flight classpath JAR read.
+
+Consumer widgets may opt into additional browser packages with
+`onnoWidgets.npmDependencies.put(name, version)`. The plugin writes them into its isolated managed
+npm workspace and esbuild bundles them into the consumer's widget module. React, React DOM, the
+widget SDK, and build-tool packages remain framework-managed so plugins share the host runtime
+rather than loading incompatible duplicates.
 
 The same registry also serves **custom list renderers**: an `EntityView` may declare
 `list.custom("type")` to delegate the list *body* (tiles/cards/gallery) to a component registered

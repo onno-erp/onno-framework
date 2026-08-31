@@ -238,6 +238,9 @@ export interface Branding {
   // Optional fixed logo size in px; null keeps the intrinsic aspect ratio / default size.
   logoWidth?: number | null;
   logoHeight?: number | null;
+  markUrl?: string | null;
+  markUrlDark?: string | null;
+  markFramed?: boolean;
   faviconUrl?: string | null;
   palette?: { light?: BrandColors; dark?: BrandColors };
 }

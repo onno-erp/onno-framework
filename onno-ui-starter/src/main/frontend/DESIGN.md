@@ -119,17 +119,42 @@ Anti-pattern: `rounded-control`/`rounded-pill` on a schedule viewport or event b
 9999px capsule that can obscure the grid. The word “control” in the compatibility alias does not
 mean “any interactive container.”
 
+Semantic radii are mandatory on themeable form boundaries. Every text input, textarea, search field,
+date input, and select/combobox/listbox trigger—including `RefSelect` and calendar month/year
+triggers—uses `rounded-field`. Do not use raw Tailwind radius utilities such as `rounded-sm`,
+`rounded-md`, `rounded-lg`, `rounded-xl`, or `rounded-2xl` there; they bypass `onno.ui.theme`
+branding. Closed enum and reference pickers share `selectTriggerClassName` from
+`components/ui/select.tsx`; change that primitive instead of styling `RefSelect` separately.
+Intrinsic shapes such as checkboxes, avatars, and calendar selection geometry are explicit
+exceptions. Keep component tests for every custom picker trigger.
+
 ## Misc conventions
 
 - Search bars sit right-aligned in the island toolbar; search covers all columns.
 - Workspace tab reordering keeps native cross-pane drag semantics, but supplies a lifted custom drag
   image, leaves the source as a real-width placeholder, and shifts neighboring tabs with FLIP using
   `--duration-fast` / `--ease-smooth-out`. Preserve its reduced-motion treatment.
+- Workspace tabs distinguish visibility from command focus: the active tab in the focused island
+  uses the brand accent; an active tab in another island uses the neutral `muted` surface; and a
+  merely open, inactive tab stays unfilled until hover. Exactly one tab is the command target for
+  global actions such as Escape. The fixed tab strip scrolls horizontally when needed and must
+  always hide vertical overflow.
+- Desktop rail highlighting follows the focused tab's authored Layout section. When the focused
+  pane is empty or its route is outside authored navigation, the selected drawer section becomes
+  the single highlighted fallback; never paint both the routed and selected sections as active.
+  Opening a rail section transfers command focus to navigation without closing pane tabs: their
+  active tabs remain visible with the muted pane-active treatment, and global commands such as
+  Escape do not target a tab until a drawer destination or pane is focused again. Pointer/touch
+  interaction anywhere in a pane, or keyboard focus entering one of its controls, restores that
+  pane as the command target.
 - `Segmented` uses one measured sliding pill with the same motion tokens; first paint and geometry
   changes snap, value changes tween. KPI value cards and `StatWidget` use `AnimatedNumber`; both
   primitives must retain their reduced-motion guards.
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
+- Keep notification rows quiet and single-purpose: one avatar/type icon, one title/body hierarchy,
+  and a lightweight destination affordance rather than a repeated type chip. The notification bell
+  owns unread state; do not repeat it across workspace tabs or navigation.
 - Toast calls use the local `toast` API and render through the one Base UI `Toaster`; do not mount
   another host. Base UI owns the manager, focus, swipe state, measurements, and lifecycle
   attributes; `index.css` composes those attributes into the onno stack motion. Keep the surface

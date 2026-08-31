@@ -438,22 +438,14 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     /**
-     * Choose one {@link Layout} per profile for this viewport: a viewport-specific
-     * layout wins over the universal ({@code viewport()==null}) one.
+     * Choose every layout contribution that applies to this viewport. Reusable business modules
+     * contribute universal navigation alongside the host application's shell layout; a
+     * viewport-specific contribution augments those universal sections for that device.
      */
     private static List<Layout> selectForViewport(List<Layout> layouts, Viewport viewport) {
-        Map<String, Layout> chosen = new LinkedHashMap<>();
-        for (Layout l : layouts) {
-            if (l.viewport() == null) {
-                chosen.putIfAbsent(profileKey(l), l);
-            }
-        }
-        for (Layout l : layouts) {
-            if (l.viewport() == viewport) {
-                chosen.put(profileKey(l), l);
-            }
-        }
-        return new ArrayList<>(chosen.values());
+        return layouts.stream()
+                .filter(layout -> layout.viewport() == null || layout.viewport() == viewport)
+                .toList();
     }
 
     private static String profileKey(Layout l) {
@@ -479,7 +471,11 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
             layout.configure(spec);
             if (layout.profile() == null) {
                 defaultSections.addAll(spec.sections());
-                shell = spec.shellConfig();
+                // A module that only contributes navigation must not reset shell branding/theme
+                // authored by the host application. Defaults mean "no shell contribution" here.
+                if (!ShellConfig.defaults().equals(spec.shellConfig())) {
+                    shell = spec.shellConfig();
+                }
                 if (spec.identity() != null) {
                     identity = spec.identity();
                 }

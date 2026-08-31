@@ -24,9 +24,13 @@ class WidgetPluginScannerTest {
     }
 
     @Test
-    void resolvesToASingleClasspathServeLocation() {
+    void stagesPluginsAtAStableExplodedServeLocation() throws Exception {
         WidgetPluginScanner scanner = new WidgetPluginScanner("classpath*:/onno-plugins/");
-        assertThat(scanner.serveLocation()).isEqualTo("classpath:/onno-plugins/");
+        assertThat(scanner.serveLocation()).startsWith("file:");
+        assertThat(java.nio.file.Files.readString(java.nio.file.Path.of(
+                java.net.URI.create(scanner.serveLocation())).resolve("TestWidget.js")))
+                .contains("registerWidget");
+        scanner.close();
     }
 
     @Test

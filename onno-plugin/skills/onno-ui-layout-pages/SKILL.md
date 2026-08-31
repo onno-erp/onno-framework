@@ -16,6 +16,11 @@ belong in `EntityView`, not here.
 
 - Nav is curated. A catalog/document/register appears in the sidebar only if a layout section lists
   it.
+- Desktop `NavStyle.SIDEBAR` is two-tier: each `section(...)` becomes an icon in the collapsible app
+  rail, and the section's routes appear in its nested drawer. Group sections by user job/workspace,
+  not Java entity type. Keep workflow-local controls inside the page/widget; do not duplicate the
+  shell. Mixed `.page(...)`, `.catalog(...)`, `.document(...)`, and `.register(...)` calls retain
+  declaration order inside the drawer.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
 - A custom page route appears in nav only when a layout section links it with `.page(...)`.
 - `Layout.profile()` names the persona; call `spec.roles(...).priority(...)` inside `configure` to
@@ -26,5 +31,9 @@ belong in `EntityView`, not here.
   settings use the ADMIN-only settings API.
 - Canonical entity routes use lowercase snake case, for example `/catalogs/product_groups`.
 - Keep branding/static assets under `classpath:/static/ui/...`.
+- For the two-tier desktop shell, author both a horizontal `.logo(light, dark)` and a compact square
+  `.mark(light, dark)`. The rail falls back to the favicon, then the logo, but a dedicated mark keeps
+  a wordmark from being squeezed into the 24px home affordance. Marks receive a shell border by
+  default; add `.markFrame(false)` when the artwork already contains its own frame or enclosing shape.
 
 Read [references/examples.md](references/examples.md) before writing layout/page code.

@@ -29,6 +29,12 @@ Custom UI extensions compile against `@onno/widget-sdk`. Data-backed widgets sho
 stream; `events.subscribe`/`useUiEvents` handle unusual matching. Never create a per-widget
 `EventSource`, which bypasses the host's cross-tab sharing and session recovery.
 
+If a widget needs a third-party browser library, declare it in the consuming Gradle build with
+`onnoWidgets { npmDependencies.put("package", "version") }` and import it normally from TSX. The
+managed widget build installs and bundles that dependency; the extension author remains responsible
+for its license, security, browser support, and bundle size. Do not attempt to replace React,
+React DOM, `@onno/widget-sdk`, or the plugin's build tools, which are framework-managed.
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.

@@ -122,7 +122,7 @@ function HeaderDropdown({
         aria-label={ariaLabel}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md px-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
+        className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-field px-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-1 focus-visible:ring-ring"
       >
         {current?.label ?? value}
         <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />

@@ -293,6 +293,7 @@ public final class PageBuilder {
         private String filter;
         private String groupBy;
         private DateGranularity groupByDateGranularity;
+        private boolean fill;
         private final Map<String, List<String>> defaultFilters = new LinkedHashMap<>();
         private final List<String> defaultFirstFilterOptions = new ArrayList<>();
         private String sortColumn;
@@ -301,6 +302,17 @@ public final class PageBuilder {
         /** A base filter constraint on the feed, in the {@code col op value} grammar (AND-chained). */
         public ListDefaults filter(String filter) {
             this.filter = filter;
+            return this;
+        }
+
+        /**
+         * Make this list an operational page surface: it consumes the host's remaining height and
+         * keeps scrolling inside its own body/custom renderer instead of growing the whole page.
+         * Use for inboxes, schedulers, editors, and similar fixed workspaces; leave card/gallery
+         * lists content-sized.
+         */
+        public ListDefaults fill() {
+            this.fill = true;
             return this;
         }
 
@@ -359,6 +371,9 @@ public final class PageBuilder {
 
         Map<String, Object> build() {
             Map<String, Object> m = new LinkedHashMap<>();
+            if (fill) {
+                m.put("fill", true);
+            }
             if (filter != null && !filter.isBlank()) {
                 m.put("filter", filter);
             }

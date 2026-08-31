@@ -11,6 +11,7 @@ import {
 } from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
 import { initialFilterState, type FilterState } from "@/components/list-defaults";
+import { listColumnPixelWidth } from "@/components/list-column-width";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { useViewersById } from "@/lib/presence-store";
 import { Input } from "@/components/ui/input";
@@ -246,6 +247,8 @@ export type ListDescriptor = {
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
   // with the page's other full-width components (setting widgets, action sections).
   embedded?: boolean;
+  /** Embedded operational surface that fills the host height and scrolls internally. */
+  fill?: boolean;
   // Override the data feed URL. Catalogs/documents page from /api/list/{kind}/{name}; a register
   // has no such route, so its descriptor points the island at /api/list/registers/{name}/movements
   // (or /balance). When unset, the default {kind}/{name} feed is used.
@@ -1414,7 +1417,8 @@ export function EntityListWidget({
   const feedBase = list.feed ?? `/api/list/${kind}/${name}`;
   // Route surface (own page) vs embedded in an authored dashboard page. Only the route surface takes
   // over the viewport height and scrolls internally; embedded flows with the host page.
-  const surfaceMode = !list.embedded;
+  const surfaceMode = !list.embedded || list.fill === true;
+  const ownsSurfacePadding = !list.embedded;
 
   // Last successfully resolved late-bound descriptors. A failed menu-open refresh deliberately
   // keeps this snapshot (or the startup static descriptors before the first success).
@@ -1576,8 +1580,8 @@ export function EntityListWidget({
   const template =
     columns
       .map((c) => {
-        const px = parseInt(c.width, 10);
-        return Number.isFinite(px) && px > 0 ? `${px}px` : "minmax(0,1fr)";
+        const px = listColumnPixelWidth(c.width);
+        return px == null ? "minmax(0,1fr)" : `${px}px`;
       })
       .concat(ACTION_COL_W ? [`${ACTION_COL_W}px`] : [])
       .join(" ");
@@ -1597,8 +1601,8 @@ export function EntityListWidget({
   const trackCount = columns.length + (ACTION_COL_W ? 1 : 0);
   const minTableWidth =
     columns.reduce((sum, c) => {
-      const px = parseInt(c.width, 10);
-      return sum + (Number.isFinite(px) && px > 0 ? px : DATA_COL_MIN);
+      const px = listColumnPixelWidth(c.width);
+      return sum + (px ?? DATA_COL_MIN);
     }, 0) +
     ACTION_COL_W +
     Math.max(0, trackCount - 1) * 12 +
@@ -2479,7 +2483,8 @@ export function EntityListWidget({
       ref={rootRef}
       className={cn(
         "pointer-events-auto flex min-h-0 flex-col",
-        surfaceMode && "overflow-hidden p-4 sm:p-6"
+        surfaceMode && "overflow-hidden",
+        surfaceMode && ownsSurfacePadding && "p-4 sm:p-6"
       )}
       style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
     >

@@ -258,11 +258,12 @@ because they are not Java field references.
   startup rejects those settings on a named profile.
   `spec.section(name).page(route, label, icon)` adds a sidebar link to an authored `Page` at an
   arbitrary route (the nav peer of `.catalog(...)`) — e.g. a custom dashboard `.page("/ops", "Sales Ops", "activity")`.
-  - Branding logo: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)`, plus `.logoWidth(px)` /
-    `.logoHeight(px)` (or `.logoSize(w, h)`). ⚠️ The sidebar wraps the logo in a **left-aligned**
-    (flex-start) box with fixed margins — there is no centering option, so a logo only looks centred if
-    `logoWidth` equals the sidebar content width. Size the image to fill it, or bake the padding into
-    the asset. Serve logo assets from `classpath:/static/ui/...` (see the static-asset note below).
+  - Branding: `spec.shell().logo(url)` or `.logo(lightUrl, darkUrl)` supplies the horizontal
+    wordmark; `.logoWidth(px)` / `.logoHeight(px)` (or `.logoSize(w, h)`) sizes portable/login
+    surfaces. `spec.shell().mark(url)` or `.mark(lightUrl, darkUrl)` supplies the compact square
+    desktop app-rail mark. Without one, the rail falls back to the favicon, then the logo, then the
+    first brand letter. The mark is framed by default; `.markFrame(false)` removes the shell border
+    for artwork that already includes its own circle or tile. Serve assets from `classpath:/static/ui/...`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.bare()` / `b.header(false)` (drop the title/subtitle row),
   `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, or the
@@ -303,6 +304,11 @@ because they are not Java field references.
     only `src/main/widgets` is scanned (class names in imported helpers or built by string
     concatenation aren't seen — keep them literal), and dynamic colors still want inline `style` with
     `hsl(var(--primary))` / `hsl(var(--border))`.
+  - **Third-party packages:** declare
+    `onnoWidgets { npmDependencies.put("package", "version") }` in the consuming Gradle build, then
+    import the package normally from TSX. It is installed in the managed workspace and bundled into
+    the widget. React, React DOM, `@onno/widget-sdk`, and compiler packages remain framework-managed
+    and cannot be overridden.
   - **Live updates:** the SDK `api` is read-only (no event subscription). A widget that must react to
     others' writes uses `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`, which filters and
     coalesces the host's shared SSE stream. Never open a per-widget `EventSource`; use
@@ -347,7 +353,12 @@ because they are not Java field references.
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
     `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live
-    refresh, and an unregistered type degrades to the default grid (no toggle); `rowStyle(row →
+    refresh, and an unregistered type degrades to the default grid (no toggle). A route-level
+    operational renderer should opt in with `page.list(Entity.class, v -> v.fill())`, fill the host
+    allocation (`h-full min-h-0 overflow-hidden`), and
+    scroll only its bounded inner panes; do not cap it with viewport clamps or grow the whole page.
+    Use entity/ref/comment avatar payloads and merge durable system activity into communication
+    timelines. `rowStyle(row →
     RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow` as
     state-aware actions), returns `ListSpec.RowStyle.DANGER/WARNING/SUCCESS/ACCENT/MUTED` or `null`
     (default look); the grid renders a theme-aware translucent wash (e.g. urgent rows red, cancelled
@@ -428,8 +439,9 @@ because they are not Java field references.
     `.via(field)` (Ref scoping rows to the parent, required), `.display(field)` (Ref shown/picked per
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
   - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
-    card with that heading on the edit form), `width(String)` (`half`/`1/2` = half a row on wide
-    screens; else full), `widget(String)` (`switch`,
+    card with that heading on the edit form), `width(String)` (`half`/`1/2`/`50%` = half a row on
+    wide screens; else full; a list column uses only a positive whole-pixel value such as `240` or
+    `240px`, and ignores form-layout tokens), `widget(String)` (`switch`,
     `textarea`; `color` (visual picker + `#RRGGBB` input); media:
     `image`/`avatar`/`images`/`gallery`/`file` — streamed to
     `POST /api/media`, the attribute stores the returned URL; `geojson`), `placeholder`, `format`

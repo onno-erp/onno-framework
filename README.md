@@ -163,6 +163,10 @@ For a complete runnable project with seeded data, posting, role-specific layouts
 comments, media, and live custom widgets backed by the host's shared SSE stream, see the
 [Onno Books example](example).
 
+Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
+with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
+and bundles them while keeping React and `@onno/widget-sdk` host-owned.
+
 ## Business concepts
 
 | If the business has… | Model it as… |

@@ -114,4 +114,5 @@ describe("DivKitView tab dragging", () => {
     expect(document.querySelector(".onno-workspace-tab-drag-image")).not.toBeInTheDocument();
     expect(screen.getByTestId("content-/catalogs/products")).toBeEnabled();
   });
+
 });

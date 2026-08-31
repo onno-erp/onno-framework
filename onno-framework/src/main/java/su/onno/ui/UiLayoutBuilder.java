@@ -105,6 +105,7 @@ public class UiLayoutBuilder {
         private UiLayout.Placement placement = UiLayout.Placement.SIDEBAR;
         private final List<EntityRef> entities = new ArrayList<>();
         private final List<UiLayout.PageRef> pages = new ArrayList<>();
+        private int navSequence;
 
         SectionBuilder(String name) {
             this.name = name;
@@ -126,7 +127,7 @@ public class UiLayoutBuilder {
         }
 
         public SectionBuilder catalog(Class<?> clazz) {
-            entities.add(new EntityRef("catalog", clazz));
+            entities.add(new EntityRef("catalog", clazz, Map.of(), "", navSequence++));
             return this;
         }
 
@@ -136,12 +137,12 @@ public class UiLayoutBuilder {
 
         /** Add a catalog with an explicit nav icon (a lucide icon name, honored over the heuristic). */
         public SectionBuilder catalog(Class<?> clazz, String icon) {
-            entities.add(new EntityRef("catalog", clazz, Map.of(), icon));
+            entities.add(new EntityRef("catalog", clazz, Map.of(), icon, navSequence++));
             return this;
         }
 
         public SectionBuilder document(Class<?> clazz) {
-            entities.add(new EntityRef("document", clazz));
+            entities.add(new EntityRef("document", clazz, Map.of(), "", navSequence++));
             return this;
         }
 
@@ -151,12 +152,12 @@ public class UiLayoutBuilder {
 
         /** Add a document with an explicit nav icon (a lucide icon name, honored over the heuristic). */
         public SectionBuilder document(Class<?> clazz, String icon) {
-            entities.add(new EntityRef("document", clazz, Map.of(), icon));
+            entities.add(new EntityRef("document", clazz, Map.of(), icon, navSequence++));
             return this;
         }
 
         public SectionBuilder register(Class<?> clazz) {
-            entities.add(new EntityRef("register", clazz));
+            entities.add(new EntityRef("register", clazz, Map.of(), "", navSequence++));
             return this;
         }
 
@@ -166,7 +167,7 @@ public class UiLayoutBuilder {
 
         /** Add a register with an explicit nav icon (a lucide icon name, honored over the heuristic). */
         public SectionBuilder register(Class<?> clazz, String icon) {
-            entities.add(new EntityRef("register", clazz, Map.of(), icon));
+            entities.add(new EntityRef("register", clazz, Map.of(), icon, navSequence++));
             return this;
         }
 
@@ -174,7 +175,7 @@ public class UiLayoutBuilder {
                                        Consumer<EntityConfigBuilder> configurer) {
             EntityConfigBuilder<Object> cfg = new EntityConfigBuilder<>();
             configurer.accept(cfg);
-            entities.add(new EntityRef(type, clazz, cfg.buildFieldHints(), cfg.buildIcon()));
+            entities.add(new EntityRef(type, clazz, cfg.buildFieldHints(), cfg.buildIcon(), navSequence++));
             return this;
         }
 
@@ -189,7 +190,7 @@ public class UiLayoutBuilder {
 
         /** Add a page link with an explicit nav icon (a lucide icon name). */
         public SectionBuilder page(String route, String label, String icon) {
-            pages.add(new UiLayout.PageRef(route, label, icon));
+            pages.add(new UiLayout.PageRef(route, label, icon, navSequence++));
             return this;
         }
 
@@ -401,6 +402,9 @@ public class UiLayoutBuilder {
         private String logoUrlDark;
         private Integer logoWidth;
         private Integer logoHeight;
+        private String markUrl;
+        private String markUrlDark;
+        private boolean markFramed = true;
         private String faviconUrl;
         private final PaletteBuilder light = new PaletteBuilder();
         private final PaletteBuilder dark = new PaletteBuilder();
@@ -427,6 +431,28 @@ public class UiLayoutBuilder {
         public ShellBuilder logo(String light, String dark) {
             this.logoUrl = light;
             this.logoUrlDark = dark;
+            return this;
+        }
+
+        /** Compact square-oriented mark used by the desktop app rail. */
+        public ShellBuilder mark(String url) {
+            this.markUrl = url;
+            return this;
+        }
+
+        /** Compact app mark with a distinct dark-mode variant. */
+        public ShellBuilder mark(String light, String dark) {
+            this.markUrl = light;
+            this.markUrlDark = dark;
+            return this;
+        }
+
+        /**
+         * Whether the shell draws a border around the compact app mark. Disable this when the
+         * supplied artwork already includes its own enclosing shape or frame.
+         */
+        public ShellBuilder markFrame(boolean framed) {
+            this.markFramed = framed;
             return this;
         }
 
@@ -470,7 +496,7 @@ public class UiLayoutBuilder {
         ShellConfig build() {
             BrandingConfig branding = new BrandingConfig(
                     appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
-                    light.build(), dark.build());
+                    light.build(), dark.build(), markUrl, markUrlDark, markFramed);
             return new ShellConfig(nav, branding);
         }
     }
@@ -532,7 +558,8 @@ public class UiLayoutBuilder {
         }
     }
 
-    public record EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints, String icon) {
+    public record EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints,
+                            String icon, int navOrder) {
         public EntityRef {
             fieldHints = fieldHints == null ? Map.of() : Map.copyOf(fieldHints);
             icon = icon == null ? "" : icon;
@@ -540,12 +567,17 @@ public class UiLayoutBuilder {
 
         /** Convenience constructor for callers that don't provide field hints. */
         public EntityRef(String type, Class<?> javaClass) {
-            this(type, javaClass, Map.of(), "");
+            this(type, javaClass, Map.of(), "", Integer.MAX_VALUE);
         }
 
         /** Convenience constructor for callers that provide hints but no explicit icon. */
         public EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints) {
-            this(type, javaClass, fieldHints, "");
+            this(type, javaClass, fieldHints, "", Integer.MAX_VALUE);
+        }
+
+        /** Back-compatible constructor for callers that do not participate in mixed nav ordering. */
+        public EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints, String icon) {
+            this(type, javaClass, fieldHints, icon, Integer.MAX_VALUE);
         }
     }
 

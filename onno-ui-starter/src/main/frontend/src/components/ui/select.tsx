@@ -62,6 +62,10 @@ const Select = ({ open: openProp, defaultOpen, onOpenChange, ...props }: React.C
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 
+/** Shared closed-trigger geometry for enum selects and searchable reference pickers. */
+export const selectTriggerClassName =
+  "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-field border border-input bg-muted px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
 const SelectTrigger = React.forwardRef<
   React.ComponentRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
@@ -69,7 +73,8 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-field border border-input bg-muted px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      selectTriggerClassName,
+      "[&>span]:line-clamp-1",
       className
     )}
     {...props}

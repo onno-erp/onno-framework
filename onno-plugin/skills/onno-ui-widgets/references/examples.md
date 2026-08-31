@@ -66,6 +66,21 @@ b.widget("Recent activity").type("eventLog").width("full").order(20)
 
 `type("eventLog")` must match the custom widget registration name expected by the widget bundle.
 
+## Third-Party Packages
+
+Declare optional browser packages in the consuming Gradle build:
+
+```kotlin
+onnoWidgets {
+    npmDependencies.put("date-fns", "^4.1.0")
+}
+```
+
+Then import them normally from widget TSX. The plugin installs them in its managed workspace and
+bundles them into the widget module; the app still needs no `package.json` or local Node install.
+The app author owns package licensing, security, browser support, and bundle-size impact. React,
+React DOM, `@onno/widget-sdk`, and compiler packages are framework-managed and cannot be overridden.
+
 ## Custom Widget TSX
 
 ```tsx
