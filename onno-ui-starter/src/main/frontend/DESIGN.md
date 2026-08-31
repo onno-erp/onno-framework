@@ -150,6 +150,9 @@ exceptions. Keep component tests for every custom picker trigger.
   primitives must retain their reduced-motion guards.
 - Notification triggers and server-emitted notification indicator islands share
   `NotificationBadgeMotion`; keep the trigger stationary and animate only its dot/count badge.
+- Keep notification rows quiet and single-purpose: one avatar/type icon, one title/body hierarchy,
+  and a lightweight destination affordance rather than a repeated type chip. The notification bell
+  owns unread state; do not repeat it across workspace tabs or navigation.
 - Toast calls use the local `toast` API and render through the one Base UI `Toaster`; do not mount
   another host. Base UI owns the manager, focus, swipe state, measurements, and lifecycle
   attributes; `index.css` composes those attributes into the onno stack motion. Keep the surface

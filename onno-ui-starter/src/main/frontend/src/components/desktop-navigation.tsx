@@ -239,6 +239,7 @@ export function DesktopNavigation({
                 <button
                   key={item.path}
                   type="button"
+                  aria-label={item.label}
                   onClick={() => onNavigate(item.path)}
                   aria-current={active ? "page" : undefined}
                   className="flex w-full items-center gap-2 rounded-field px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted"

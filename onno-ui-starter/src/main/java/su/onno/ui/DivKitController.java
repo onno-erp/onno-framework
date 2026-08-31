@@ -193,6 +193,12 @@ public class DivKitController implements DisposableBean {
         out.put("mark", Objects.requireNonNullElse(branding.markFor(theme), ""));
         out.put("markFramed", branding.markFramed());
         out.put("navigation", nav);
+        Map<String, Object> accountInfo = new LinkedHashMap<>();
+        accountInfo.put("displayName", user.displayName());
+        accountInfo.put("avatarUrl", Objects.requireNonNullElse(user.avatarUrl(), ""));
+        accountInfo.put("profiles", profileLinks);
+        accountInfo.put("activeProfileId", activeProfile.id());
+        out.put("accountInfo", accountInfo);
         out.put("nav", DivCard.of("onno-nav",
                 ShellLayoutBuilder.nav(brand, logo, nav, navStyle, vp == Viewport.TABLET, p, messages)));
         out.put("account", DivCard.of("onno-account",

@@ -124,7 +124,13 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
 
   // App shell / account island.
   "shell.signedInAs": "Signed in as",
+  "shell.accountMenu": "Account menu",
+  "shell.appearance": "Appearance",
   "shell.theme": "Theme",
+  "shell.themeLight": "Light",
+  "shell.themeDark": "Dark",
+  "shell.themeSystem": "System",
+  "shell.profiles": "Workspace",
   "shell.signOut": "Sign out",
   "shell.menu": "Menu",
   "shell.more": "More",

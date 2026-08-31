@@ -42,6 +42,7 @@ import {
   DesktopNavigation,
   type ShellNavSection,
 } from "@/components/desktop-navigation";
+import { DesktopAccountDock, type ShellAccountInfo } from "@/components/desktop-account-dock";
 import "@divkitframework/divkit/dist/client.css";
 
 // The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
@@ -103,6 +104,9 @@ type ShellData = {
   // RBAC-filtered Layout sections. The desktop shell renders these as a narrow app rail whose
   // selected section opens a nested route drawer; the DivKit nav remains the portable fallback.
   navigation?: ShellNavSection[];
+  // Structured account metadata lets the desktop shell use native controls that match its rail;
+  // the DivKit card below remains the portable/mobile representation.
+  accountInfo?: ShellAccountInfo;
   nav: DivKitProps["json"];
   account: DivKitProps["json"];
   // Route path → localized entity title (e.g. "/catalogs/customers" → "Клиенты"), from the same
@@ -1400,17 +1404,14 @@ export function DivKitView() {
     };
   }, [clearTabDrag, dragState]);
 
-  // Esc closes the focused island's active tab (unless you're typing in a field).
+  // Esc closes the focused island's active tab. Higher interactive layers and components that
+  // deliberately consume Escape prevent the event first; a plain form control does not.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (e.key !== "Escape" || viewport !== "desktop") return;
       if (dragRef.current || dragState) return;
       if (isInteractiveLayerOpen()) return;
-      const el = document.activeElement as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) {
-        return;
-      }
       const ws = wsRef.current;
       const focused = ws.panes.find((p) => p.id === ws.focused);
       if (focused?.activePath) closeTab(focused.id, focused.activePath);
@@ -1536,6 +1537,25 @@ export function DivKitView() {
 
   const navEl = useMemo(() => (shell ? shellCard(shell.nav, "nav") : null), [shell, shellCard]);
   const accountEl = useMemo(() => (shell ? shellCard(shell.account, "account") : null), [shell, shellCard]);
+  const desktopAccountEl = shell?.accountInfo ? (
+    <DesktopAccountDock
+      account={shell.accountInfo}
+      theme={theme}
+      surface={surfaceBg}
+      border={borderColor}
+      onThemeChange={setTheme}
+      onSignOut={() => {
+        shellCache.clear();
+        logout().finally(() => navigate("/login"));
+      }}
+      onProfileChange={(nextProfile) => {
+        setProfile(nextProfile);
+        setWorkspace(initialWorkspace());
+        if (location.pathname !== "/") navigate("/");
+      }}
+      t={t}
+    />
+  ) : accountEl;
 
   // A single content surface for the non-desktop layouts (no islands/tabs there).
   // Driven by the focused pane's activePath — which openPath() updates synchronously in
@@ -1836,6 +1856,7 @@ export function DivKitView() {
               >
                 <button
                   type="button"
+                  aria-label={label}
                   className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left"
                   onClick={() => activateTab(pane.id, tab.path)}
                 >
@@ -1974,7 +1995,7 @@ export function DivKitView() {
             home={shell.home}
             onNavigate={openPath}
             onSectionFocus={focusNavigation}
-            account={accountEl}
+            account={desktopAccountEl}
             notification={<NotificationTrigger compact />}
             surface={surfaceBg}
             border={borderColor}

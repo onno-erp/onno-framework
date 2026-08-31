@@ -30,6 +30,16 @@ function isVisibleElement(el: Element): boolean {
   return node.offsetParent !== null || node.getClientRects().length > 0 || getComputedStyle(node).position === "fixed";
 }
 
+function isOpenInteractiveLayer(el: Element): boolean {
+  if (!isVisibleElement(el)) return false;
+  if (el.getAttribute("data-state") === "closed") return false;
+  if (el.hasAttribute("data-radix-popper-content-wrapper")) {
+    const content = el.querySelector<HTMLElement>("[data-state]");
+    if (content?.dataset.state === "closed") return false;
+  }
+  return true;
+}
+
 export function isInteractiveLayerOpen(): boolean {
   if (typeof document === "undefined") return false;
   return Array.from(
@@ -42,7 +52,7 @@ export function isInteractiveLayerOpen(): boolean {
         '[data-radix-popper-content-wrapper]',
       ].join(",")
     )
-  ).some(isVisibleElement);
+  ).some(isOpenInteractiveLayer);
 }
 
 /**

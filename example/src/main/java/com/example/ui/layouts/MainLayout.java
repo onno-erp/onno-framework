@@ -52,7 +52,7 @@ public class MainLayout implements Layout {
                 // The compact onno mark keeps the demo shell recognizable without crowding its name.
                 // Two files keep the mark and label legible in both shell themes.
                 .logo("/ui/branding/logo.svg", "/ui/branding/logo-dark.svg")
-                .mark("/ui/branding/favicon.svg")
+                .mark("/ui/branding/mark-light.svg", "/ui/branding/mark-dark.svg")
                 .markFrame(false)
                 .favicon("/ui/branding/favicon.svg")
                 .light(c -> c.primary("#4F46E5").primarySoft("#EEF2FF"))

@@ -1,10 +1,9 @@
 import { useEffect } from "react";
-import { AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
+import { ArrowUpRight, AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { glassAvatar, initials, tint } from "@/components/presence-avatars";
 import { Segmented } from "@/components/ui/segmented";
 import { NotificationBadgeMotion } from "@/components/ui/notification-badge-motion";
-import { AnimatedNumber } from "@/components/ui/animated-number";
 import {
   Drawer,
   DrawerClose,
@@ -106,32 +105,22 @@ function bucketOf(iso: string): Bucket {
 function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n: NotificationView) => void }) {
   const t = useMessages();
   const Icon = typeIcon(item.type);
-  // Known types keep their curated (singular) tag label; a custom type shows a humanized pill so its
-  // category is still visible in the row.
-  const typeLabel =
-    item.type === "mention"
-      ? t("notifications.tagMention")
-      : item.type === "assignment"
-      ? t("notifications.tagAssignment")
-      : item.type === "reply"
-      ? t("notifications.tagReply")
-      : humanizeType(item.type);
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
-      className="group relative flex w-full items-start gap-3.5 rounded-card px-3 py-3 text-left transition-colors hover:bg-muted/60"
+      className="group relative flex w-full items-start gap-3 rounded-field px-3 py-3 text-left transition-colors hover:bg-muted/40"
     >
       {item.actorName ? (
-        <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
+        <Avatar className="h-9 w-9 shrink-0 border border-border">
           <AvatarImage src={item.actorAvatar || glassAvatar(item.actorName)} alt={item.actorName} />
           <AvatarFallback className="text-xs font-semibold text-white" style={{ backgroundColor: tint(item.actorName) }}>
             {initials(item.actorName)}
           </AvatarFallback>
         </Avatar>
       ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border/60">
-          <Icon className="h-4 w-4" />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-muted-foreground">
+          <Icon className="h-5 w-5" />
         </span>
       )}
       <span className="min-w-0 flex-1">
@@ -139,21 +128,19 @@ function NotificationItem({ item, onOpen }: { item: NotificationView; onOpen: (n
           <span className={cn("text-sm leading-snug text-foreground", item.unread ? "font-semibold" : "font-medium")}>
             {item.title}
           </span>
-          {/* Unread marker rides in the flow next to the timestamp — absolutely positioning it at
-              the card corner overlapped the timestamp text. Unread emphasis = dot + semibold
-              title; no row tint, so color still means "action/brand", not "new". */}
+          {/* Keep the timestamp and unread dot in the flow so they never overlap the title. */}
           <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
-            <span className="text-[11px] tabular-nums text-muted-foreground/70">{timeAgo(item.createdAt)}</span>
+            <span className="text-xs tabular-nums text-muted-foreground/70">{timeAgo(item.createdAt)}</span>
             {item.unread ? <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden /> : null}
           </span>
         </span>
         {item.body ? (
           <span className="mt-1 line-clamp-2 block text-[13px] leading-relaxed text-muted-foreground">{item.body}</span>
         ) : null}
-        {typeLabel ? (
-          <span className="mt-2 inline-flex items-center gap-1 rounded-control bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            <Icon className="h-2.5 w-2.5" />
-            {typeLabel}
+        {item.link ? (
+          <span className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground/75 transition-colors group-hover:text-foreground">
+            {typeLabelOf(item.type, t)}
+            <ArrowUpRight className="h-3 w-3" aria-hidden />
           </span>
         ) : null}
       </span>
@@ -317,19 +304,13 @@ export function NotificationCenter() {
         }}
         swipeDirection="right"
       >
-        <DrawerContent className="right-3 top-3 bottom-3 w-[400px] max-w-[calc(100vw-1.5rem)] rounded-card">
+        <DrawerContent className="bottom-3 right-3 top-3 w-[420px] max-w-[calc(100vw-1.5rem)] rounded-panel">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pb-4 pt-5">
           <div className="flex items-center gap-2.5">
             <DrawerTitle className="text-base font-semibold text-foreground">
               {t("notifications.title")}
             </DrawerTitle>
-            {unreadCount > 0 ? (
-              <AnimatedNumber
-                value={String(unreadCount)}
-                className="rounded-control bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-              />
-            ) : null}
           </div>
           <div className="flex items-center gap-1">
             {unreadCount > 0 ? (
@@ -374,7 +355,7 @@ export function NotificationCenter() {
               if (group.length === 0) return null;
               return (
                 <div key={bucket} className="mb-1">
-                  <div className="px-3 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <div className="px-3 pb-1 pt-3 text-xs font-medium text-muted-foreground/70">
                     {label}
                   </div>
                   {group.map((n) => (

@@ -64,7 +64,12 @@ export function PresenceAvatars({
           {shown.map((v) => (
             <Tooltip key={v.userId}>
               <TooltipTrigger asChild>
-                <Avatar style={dim} className="border border-border">
+                <Avatar
+                  style={dim}
+                  className="border border-border"
+                  role="img"
+                  aria-label={v.displayName}
+                >
                   <AvatarImage src={v.avatarUrl || glassAvatar(v.userId || v.displayName)} alt={v.displayName} />
                   <AvatarFallback className="text-white" style={{ backgroundColor: tint(v.userId), fontSize }}>
                     {initials(v.displayName)}
@@ -77,7 +82,12 @@ export function PresenceAvatars({
           {overflow > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Avatar style={dim} className="border border-border">
+                <Avatar
+                  style={dim}
+                  className="border border-border"
+                  role="img"
+                  aria-label={`${overflow} more viewers`}
+                >
                   <AvatarFallback style={{ fontSize }}>+{overflow}</AvatarFallback>
                 </Avatar>
               </TooltipTrigger>
