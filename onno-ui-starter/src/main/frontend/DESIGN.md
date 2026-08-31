@@ -69,6 +69,8 @@ of the row keeps the full context menu. Flat table view only.
   charts on a board (`providers/time-range-provider.tsx`, persisted).
 - Axis labels are real dates per granularity ("HH:mm", "MMM d", "MMM yyyy") — never "Wk 1".
 - Legend entries toggle series (hidden ones stay greyed in the legend).
+- Chart headlines show additive period totals for grouped `count`/`sum`; grouped
+  `avg`/`min`/`max` omit the figure rather than summing non-additive buckets.
 - Stat tiles compare **vs the previous period of equal span** (`stat-widget.tsx`), disabled for
   unbounded ranges.
 
