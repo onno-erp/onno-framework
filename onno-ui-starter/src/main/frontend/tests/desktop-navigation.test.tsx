@@ -132,6 +132,10 @@ describe("DesktopNavigation", () => {
     expect(screen.getByRole("button", { name: "Sales" })).not.toHaveStyle({
       background: "#f0eeff",
     });
+    expect(screen.getByRole("button", { name: "Inbox" })).toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveClass("text-primary");
+    expect(screen.getByRole("button", { name: "Sales" })).toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Sales" })).not.toHaveClass("text-primary");
   });
 
   it("opens on the section that owns a detail route", () => {

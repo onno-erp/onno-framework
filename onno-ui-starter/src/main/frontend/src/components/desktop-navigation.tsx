@@ -184,7 +184,7 @@ export function DesktopNavigation({
                 }}
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-field transition-colors",
-                  highlighted || routeActive
+                  highlighted
                     ? "text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
