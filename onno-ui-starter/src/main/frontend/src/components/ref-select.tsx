@@ -5,6 +5,7 @@ import { cn, toSnakeCase } from "@/lib/utils";
 import { logicalEntityKey } from "@/lib/entity-keys";
 import type { EntityRecord, RefOptionSearch } from "@/lib/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { selectTriggerClassName } from "@/components/ui/select";
 import { FacetSheet, useTouchLayout } from "@/components/ui/facet-sheet";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useMessages } from "@/providers/messages-provider";
@@ -187,7 +188,7 @@ export function RefSelect({
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-md border border-input bg-muted px-3 py-2 text-sm shadow-sm transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+      className={cn(selectTriggerClassName, "min-w-0 gap-2 overflow-hidden transition-colors hover:bg-accent")}
     >
       {selected ? (
         <RefRow item={selected} />

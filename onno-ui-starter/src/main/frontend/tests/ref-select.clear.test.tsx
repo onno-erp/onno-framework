@@ -31,6 +31,19 @@ afterEach(() => {
 });
 
 describe("RefSelect nullable values (#270)", () => {
+  it("uses the same configurable field radius as enum selects", () => {
+    render(
+      <RefSelect
+        targetName="Shows"
+        onChange={vi.fn()}
+      />
+    );
+
+    const trigger = screen.getByRole("button", { name: /Select Shows/ });
+    expect(trigger).toHaveClass("rounded-field");
+    expect(trigger).not.toHaveClass("rounded-md");
+  });
+
   it("clears an existing optional value to null", () => {
     getCatalogItem.mockReturnValue(new Promise(() => {}));
     searchCatalog.mockResolvedValue([]);

@@ -131,6 +131,12 @@ Radius tiers are `rounded-pill` (9999px compact actions/chips/badges), `rounded-
 (inputs/selects/rows/compact events), and `rounded-panel` (cards/bounded surfaces). The old
 `rounded-control` alias means **pill**, not “any control”; never use it on a panel, table/grid,
 schedule lane/event rectangle, generic row, empty-state box, or other large container.
+For host form controls, semantic radii are mandatory: inputs and every select, combobox, listbox,
+reference, and date trigger use `rounded-field`. Raw Tailwind radius utilities and literal radii are
+forbidden on those boundaries because they bypass branding tokens. Closed enum and catalog/document
+reference pickers share `selectTriggerClassName` from `components/ui/select.tsx`; extend that
+primitive rather than styling `RefSelect` independently, and add a component regression test when
+changing picker geometry.
 
 ## Polish Checklist
 

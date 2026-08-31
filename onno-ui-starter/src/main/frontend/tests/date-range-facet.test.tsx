@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { CalendarDate, parseDate } from "@internationalized/date";
 import { I18nProvider } from "react-aria-components";
 import { calendarRangeForTimeRange } from "@/components/date-range-facet";
@@ -34,6 +34,22 @@ describe("calendarRangeForTimeRange", () => {
 });
 
 describe("calendar day states", () => {
+  it("uses the semantic field radius for month and year picker triggers", () => {
+    render(
+      <I18nProvider locale="en-US">
+        <Calendar aria-label="Date" />
+      </I18nProvider>
+    );
+
+    for (const trigger of [
+      screen.getByRole("button", { name: /month/i }),
+      screen.getByRole("button", { name: /year/i }),
+    ]) {
+      expect(trigger).toHaveClass("rounded-field");
+      expect(trigger).not.toHaveClass("rounded-md");
+    }
+  });
+
   it("marks today with the shared dot styling", () => {
     const { container } = render(
       <I18nProvider locale="en-US">

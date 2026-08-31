@@ -117,6 +117,15 @@ Anti-pattern: `rounded-control`/`rounded-pill` on a schedule viewport or event b
 9999px capsule that can obscure the grid. The word “control” in the compatibility alias does not
 mean “any interactive container.”
 
+Semantic radii are mandatory on themeable form boundaries. Every text input, textarea, search field,
+date input, and select/combobox/listbox trigger—including `RefSelect` and calendar month/year
+triggers—uses `rounded-field`. Do not use raw Tailwind radius utilities such as `rounded-sm`,
+`rounded-md`, `rounded-lg`, `rounded-xl`, or `rounded-2xl` there; they bypass `onno.ui.theme`
+branding. Closed enum and reference pickers share `selectTriggerClassName` from
+`components/ui/select.tsx`; change that primitive instead of styling `RefSelect` separately.
+Intrinsic shapes such as checkboxes, avatars, and calendar selection geometry are explicit
+exceptions. Keep component tests for every custom picker trigger.
+
 ## Misc conventions
 
 - Search bars sit right-aligned in the island toolbar; search covers all columns.
