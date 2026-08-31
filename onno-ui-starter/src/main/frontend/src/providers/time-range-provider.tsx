@@ -2,8 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   DEFAULT_PRESETS,
   FALLBACK_RANGE,
+  autoGranularityForRange,
   presetById,
   type RangePreset,
+  type TimeGranularity,
+  type TimeGranularityMode,
   type TimeRange,
 } from "@/lib/time-range";
 
@@ -16,9 +19,14 @@ import {
  */
 interface TimeRangeContextValue {
   range: TimeRange;
+  /** Shared override for auto-bucketed time charts; fixed authored buckets remain fixed. */
+  granularity: TimeGranularityMode;
+  /** The concrete bucket represented by `auto` for the current selected period. */
+  resolvedGranularity: TimeGranularity;
   /** The quick-picks the picker renders — defaults until a dashboard {@link configure}s its own. */
   presets: RangePreset[];
   setRange: (range: TimeRange) => void;
+  setGranularity: (granularity: TimeGranularityMode) => void;
   /** Apply a preset by id (no-op if the id isn't in the current list). */
   setPreset: (id: string) => void;
   /** Set an absolute window; clearing both bounds reverts to the configured default. */
@@ -32,11 +40,15 @@ interface TimeRangeContextValue {
 }
 
 const STORAGE_KEY = "onno.dashboard.timeRange";
+const GRANULARITY_STORAGE_KEY = "onno.dashboard.granularity";
 
 const TimeRangeContext = createContext<TimeRangeContextValue>({
   range: FALLBACK_RANGE,
+  granularity: "auto",
+  resolvedGranularity: autoGranularityForRange(FALLBACK_RANGE),
   presets: DEFAULT_PRESETS,
   setRange: () => {},
+  setGranularity: () => {},
   setPreset: () => {},
   setAbsolute: () => {},
   configure: () => {},
@@ -52,6 +64,18 @@ function load(): TimeRange | null {
   return null;
 }
 
+function loadGranularity(): TimeGranularityMode {
+  try {
+    const value = localStorage.getItem(GRANULARITY_STORAGE_KEY);
+    if (["auto", "minute", "hour", "day", "week", "month"].includes(value ?? "")) {
+      return value as TimeGranularityMode;
+    }
+  } catch {
+    // ignore malformed / unavailable storage
+  }
+  return "auto";
+}
+
 /** Two preset lists describe the same picker iff their id sequences match (a preset is its id). */
 function samePresetIds(a: RangePreset[], b: RangePreset[]): boolean {
   return a.length === b.length && a.every((p, i) => p.id === b[i].id);
@@ -61,6 +85,7 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
   // Whether the user has a persisted selection — gates whether a dashboard's default applies.
   const persisted = useRef<TimeRange | null>(load());
   const [range, setRange] = useState<TimeRange>(persisted.current ?? FALLBACK_RANGE);
+  const [granularity, setGranularity] = useState<TimeGranularityMode>(loadGranularity);
   const [presets, setPresets] = useState<RangePreset[]>(DEFAULT_PRESETS);
   // Mirror of `presets` so the callbacks below can read the current list without depending on it —
   // their identities must stay stable across re-renders. The `timeRange` widget calls configure()
@@ -80,6 +105,16 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   }, [range]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRANULARITY_STORAGE_KEY, granularity);
+    } catch {
+      // ignore
+    }
+  }, [granularity]);
+
+  const resolvedGranularity = useMemo(() => autoGranularityForRange(range), [range]);
 
   const setPreset = useCallback((id: string) => {
     const p = presetById(presetsRef.current, id);
@@ -111,8 +146,18 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ range, presets, setRange, setPreset, setAbsolute, configure }),
-    [range, presets, setPreset, setAbsolute, configure]
+    () => ({
+      range,
+      granularity,
+      resolvedGranularity,
+      presets,
+      setRange,
+      setGranularity,
+      setPreset,
+      setAbsolute,
+      configure,
+    }),
+    [range, granularity, resolvedGranularity, presets, setPreset, setAbsolute, configure]
   );
   return <TimeRangeContext.Provider value={value}>{children}</TimeRangeContext.Provider>;
 }

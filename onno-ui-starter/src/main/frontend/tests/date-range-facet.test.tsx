@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { CalendarDate, parseDate } from "@internationalized/date";
 import { I18nProvider } from "react-aria-components";
 import { calendarRangeForTimeRange } from "@/components/date-range-facet";
+import { autoGranularityForSpan } from "@/lib/time-range";
 import { Calendar, RangeCalendar } from "@/components/ui/calendar";
 
 afterEach(cleanup);
@@ -30,6 +31,20 @@ describe("calendarRangeForTimeRange", () => {
       currentDay
     )).toEqual({ from: "2026-07-01", to: "2026-07-12" });
     expect(calendarRangeForTimeRange({ kind: "all" }, currentDay)).toBeNull();
+  });
+});
+
+describe("dashboard auto granularity", () => {
+  it("keeps investigative windows minute-level through six hours", () => {
+    expect(autoGranularityForSpan(1 / 24)).toBe("minute");
+    expect(autoGranularityForSpan(6 / 24)).toBe("minute");
+    expect(autoGranularityForSpan(7 / 24)).toBe("hour");
+  });
+
+  it("steps up for long periods", () => {
+    expect(autoGranularityForSpan(2)).toBe("day");
+    expect(autoGranularityForSpan(70)).toBe("week");
+    expect(autoGranularityForSpan(300)).toBe("month");
   });
 });
 

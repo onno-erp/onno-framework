@@ -63,7 +63,9 @@ of the row keeps the full context menu. Flat table view only.
 
 `components/chart-widget.tsx` + `lib/time-range.ts` + `lib/widget-data.ts`:
 
-- Auto-granularity picks the coarsest unit yielding **≥10 points** (`MIN_POINTS`).
+- Auto-granularity uses minute buckets through 6h, hour through 2d, day through 70d, week through
+  300d, then month. The shared time-range footer displays the resolved interval and lets the viewer
+  override it for every auto-bucketed chart; authored fixed buckets stay fixed.
 - Date-bucketed axes are **zero-filled** server-side; pies drop zero slices.
 - One grafana-style time picker (`TimeRangeWidget`, presets `15m…1y,all`, default 30d) drives all
   charts on a board (`providers/time-range-provider.tsx`, persisted).

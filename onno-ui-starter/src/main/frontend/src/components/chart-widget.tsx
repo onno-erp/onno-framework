@@ -54,7 +54,7 @@ import {
   type ScaleMode,
   type SeriesData,
 } from "@/lib/widget-data";
-import { presetsFromConfig, resolveRange } from "@/lib/time-range";
+import { autoGranularityForSpan, presetsFromConfig, resolveRange } from "@/lib/time-range";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { useTimeRange } from "@/providers/time-range-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -476,25 +476,6 @@ function useDragZoom(
   return { dragProps, refArea };
 }
 
-/** Min buckets a chart should show before stepping up to a coarser (week/month) granularity. */
-const MIN_POINTS = 10;
-
-/**
- * Pick the bucket size for a span (in days) of the data actually in the window: the COARSEST
- * granularity that still yields at least {@link MIN_POINTS} bars. Sizing off the data present (not
- * the nominal window length) keeps a wide range over sparse data readable — a 1-year range over
- * ~3 months of data shows weekly bars, not 3 monthly ones. Below week, "day" is the floor for any
- * multi-day span regardless of {@link MIN_POINTS} — a 4-day window must show 4 daily bars, not
- * 96 hourly slivers; hour/minute apply only once the span itself is sub-day-scale.
- */
-function granularityForSpan(days: number): GroupByDate {
-  if (days / 30 >= MIN_POINTS) return "month";
-  if (days / 7 >= MIN_POINTS) return "week";
-  if (days >= 2) return "day";
-  if (days * 24 >= 2) return "hour";
-  return "minute";
-}
-
 // Existing dashboards may still author status_display; logical metadata emits statusDisplay.
 // The aggregate endpoint groups by the real field and resolves labels itself.
 const stripDisplay = (column: string) => column.replace(/(?:_display|Display)$/, "");
@@ -521,7 +502,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const t = useMessages();
   const config = useMemo(() => readChartConfig(widget), [widget]);
   const controls = useMemo(() => readControls(widget, config), [widget, config]);
-  const { range, setAbsolute } = useTimeRange(); // the shared dashboard time window
+  const { range, setAbsolute, granularity: granularityMode } = useTimeRange(); // shared dashboard controls
   // Catalog/document charts fetch pre-aggregated buckets (#199); registers keep fetching turnover
   // rows and bucketing client-side (no aggregate endpoint exists for them).
   const isRegister = widget.entityType === "register";
@@ -539,7 +520,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // itself from the data span because its nominal window is intentionally unbounded.
   const boundedGranularity = useMemo<GroupByDate | null>(() => {
     if (windowRange.from === -Infinity || windowRange.to === Infinity) return null;
-    return granularityForSpan(Math.max(1 / 1440, (windowRange.to - windowRange.from) / 86_400_000));
+    return autoGranularityForSpan(Math.max(1 / 1440, (windowRange.to - windowRange.from) / 86_400_000));
   }, [windowRange]);
   const registerTurnoverRange = useMemo(
     () =>
@@ -585,7 +566,11 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   // chart (groupByDate set) always uses the auto/overridden granularity.
   const effKind = controls.enabled.has("type") ? kind : config.kind;
   const effGranularity = config.groupByDate != null
-    ? (config.bucketMode === "fixed" ? config.groupByDate : boundedGranularity ?? granularity)
+    ? (config.bucketMode === "fixed"
+        ? config.groupByDate
+        : granularityMode === "auto"
+          ? boundedGranularity ?? granularity
+          : granularityMode)
     : config.groupByDate;
   const effSeriesBy = controls.enabled.has("series") ? seriesBy || undefined : config.seriesBy;
   const effScale: ScaleMode = controls.enabled.has("scale") ? scale : "absolute";
@@ -635,7 +620,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
     const span = bucketResp?.span;
     return span ? (Date.parse(span.max) - Date.parse(span.min)) / 86_400_000 + 1 : 1;
   }, [isRegister, ranged, windowField, bucketResp]);
-  const autoGran = useMemo(() => granularityForSpan(spanDays), [spanDays]);
+  const autoGran = useMemo(() => autoGranularityForSpan(spanDays), [spanDays]);
   useEffect(() => {
     if (boundedGranularity == null) setGranularity(autoGran);
   }, [autoGran, boundedGranularity]);
@@ -1165,7 +1150,16 @@ function renderCombo(
  */
 export function TimeRangeWidget({ widget }: ChartWidgetProps) {
   const t = useMessages();
-  const { range, presets, setPreset, setAbsolute, configure } = useTimeRange();
+  const {
+    range,
+    granularity,
+    resolvedGranularity,
+    presets,
+    setGranularity,
+    setPreset,
+    setAbsolute,
+    configure,
+  } = useTimeRange();
   const presetsCsv = widget.extraConfig?.presets;
   const defaultId = widget.extraConfig?.default;
   useEffect(() => {
@@ -1177,6 +1171,9 @@ export function TimeRangeWidget({ widget }: ChartWidgetProps) {
         label={t("timeRange.dateRange")}
         presets={presets}
         range={range}
+        granularity={granularity}
+        resolvedGranularity={resolvedGranularity}
+        onGranularity={setGranularity}
         onPreset={setPreset}
         onAbsolute={setAbsolute}
       />
