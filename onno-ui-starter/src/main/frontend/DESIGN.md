@@ -144,6 +144,11 @@ exceptions. Keep component tests for every custom picker trigger.
 - Desktop rail highlighting follows the focused tab's authored Layout section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
   the single highlighted fallback; never paint both the routed and selected sections as active.
+  An untitled section with one item is a direct rail destination: clicking it navigates immediately
+  and leaves the nested drawer closed because there is no submenu to reveal.
+  While that direct destination is selected, its rail footer shows the signed-in user's avatar in
+  place of the unavailable collapse arrow; it opens the identity, Appearance, profile, and Sign out
+  menu. Sections with submenus retain the collapse arrow and the full account dock below the drawer.
   Opening a rail section transfers command focus to navigation without closing pane tabs: their
   active tabs remain visible with the muted pane-active treatment, and global commands such as
   Escape do not target a tab until a drawer destination or pane is focused again. Pointer/touch

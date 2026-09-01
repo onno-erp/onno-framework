@@ -1537,10 +1537,11 @@ export function DivKitView() {
 
   const navEl = useMemo(() => (shell ? shellCard(shell.nav, "nav") : null), [shell, shellCard]);
   const accountEl = useMemo(() => (shell ? shellCard(shell.account, "account") : null), [shell, shellCard]);
-  const desktopAccountEl = shell?.accountInfo ? (
+  const desktopAccountEl = (compact: boolean) => shell?.accountInfo ? (
     <DesktopAccountDock
       account={shell.accountInfo}
       theme={theme}
+      compact={compact}
       surface={surfaceBg}
       border={borderColor}
       onThemeChange={setTheme}

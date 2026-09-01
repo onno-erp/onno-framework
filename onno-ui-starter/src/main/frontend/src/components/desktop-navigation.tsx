@@ -26,7 +26,7 @@ type DesktopNavigationProps = {
   home: string;
   onNavigate: (path: string) => void;
   onSectionFocus?: () => void;
-  account: ReactNode;
+  account: (compact: boolean) => ReactNode;
   notification: ReactNode;
   surface: string;
   border: string;
@@ -44,6 +44,10 @@ function isItemActive(activePath: string, itemPath: string): boolean {
 
 function sectionForPath(sections: ShellNavSection[], path: string): number {
   return sections.findIndex((section) => section.items.some((item) => isItemActive(path, item.path)));
+}
+
+function isDirectSection(section: ShellNavSection | undefined): boolean {
+  return Boolean(section && !section.title && section.items.length === 1);
 }
 
 function brandMark(brand: string): string {
@@ -101,14 +105,16 @@ export function DesktopNavigation({
   }, [expanded]);
 
   const selectedSection = sections[selected] ?? sections[0];
+  const selectedSectionIsDirect = isDirectSection(selectedSection);
+  const drawerOpen = expanded && !selectedSectionIsDirect;
   const toggleLabel = t(expanded ? "shell.collapseNavigation" : "shell.expandNavigation");
 
   return (
     <aside
       data-testid="desktop-navigation"
-      data-expanded={expanded}
+      data-expanded={drawerOpen}
       className="t-resize flex h-screen shrink-0 gap-2 overflow-hidden p-2"
-      style={{ width: expanded ? 280 : 64 }}
+      style={{ width: drawerOpen ? 280 : 64 }}
     >
       <div
         className="flex h-full w-12 shrink-0 flex-col items-center rounded-panel border py-1.5"
@@ -139,7 +145,7 @@ export function DesktopNavigation({
 
         <nav aria-label={t("shell.menu")} className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
           {sections.map((section, index) => {
-            const direct = !section.title && section.items.length === 1;
+            const direct = isDirectSection(section);
             const item = section.items[0];
             const routeActive = section.items.some((candidate) => isItemActive(activePath, candidate.path));
             const sectionSelected = index === selected;
@@ -167,6 +173,7 @@ export function DesktopNavigation({
                 title={label}
                 onClick={() => {
                   if (direct && item) {
+                    setSelected(index);
                     onNavigate(item.path);
                     return;
                   }
@@ -200,22 +207,28 @@ export function DesktopNavigation({
           {notification}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-          className="mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-field text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {expanded ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
-        </button>
+        {selectedSectionIsDirect ? (
+          <div data-testid="desktop-navigation-account" className="mt-1.5 flex shrink-0 items-center justify-center">
+            {account(true)}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            aria-label={toggleLabel}
+            title={toggleLabel}
+            className="mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-field text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {expanded ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
+          </button>
+        )}
       </div>
 
       <div
-        aria-hidden={!expanded}
+        aria-hidden={!drawerOpen}
         className={cn(
           "flex h-full w-52 shrink-0 flex-col gap-2 overflow-hidden",
-          !expanded && "invisible pointer-events-none"
+          !drawerOpen && "invisible pointer-events-none"
         )}
       >
         <div
@@ -258,9 +271,11 @@ export function DesktopNavigation({
           </nav>
         </div>
 
-        <div data-testid="desktop-navigation-account" className="shrink-0">
-          {account}
-        </div>
+        {!selectedSectionIsDirect ? (
+          <div data-testid="desktop-navigation-account" className="shrink-0">
+            {account(false)}
+          </div>
+        ) : null}
       </div>
     </aside>
   );

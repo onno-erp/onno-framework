@@ -47,7 +47,35 @@ function renderNavigation(activePath = "/inbox", markFramed = true) {
       home="/inbox"
       onNavigate={onNavigate}
       onSectionFocus={onSectionFocus}
-      account={<div>Account</div>}
+      account={(compact) => <div>{compact ? "Compact account" : "Account"}</div>}
+      notification={<div>Notifications</div>}
+      surface="#fff"
+      border="#eee"
+      primary="#6757f5"
+      primarySoft="#f0eeff"
+      t={t}
+    />
+  );
+  return { ...result, onNavigate, onSectionFocus };
+}
+
+function renderNavigationWithStandalone(activePath = "/inbox") {
+  const onNavigate = vi.fn();
+  const onSectionFocus = vi.fn();
+  const result = render(
+    <DesktopNavigation
+      brand="Onno Desk"
+      navigation={[
+        ...navigation,
+        {
+          items: [{ label: "Dashboard", icon: "house", path: "/" }],
+        },
+      ]}
+      activePath={activePath}
+      home="/inbox"
+      onNavigate={onNavigate}
+      onSectionFocus={onSectionFocus}
+      account={(compact) => <div>{compact ? "Compact account" : "Account"}</div>}
       notification={<div>Notifications</div>}
       surface="#fff"
       border="#eee"
@@ -79,6 +107,7 @@ describe("DesktopNavigation", () => {
       "/branding/mark.svg"
     );
     expect(screen.getByTestId("desktop-navigation-notifications")).toHaveTextContent("Notifications");
+    expect(screen.getByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
     expect(screen.getByTestId("desktop-navigation-drawer")).not.toContainElement(
       screen.getByTestId("desktop-navigation-account")
     );
@@ -121,7 +150,7 @@ describe("DesktopNavigation", () => {
     expect(screen.getByRole("heading", { name: "Sales" })).toBeInTheDocument();
     expect(screen.getByText("Pipeline")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sales" }));
     expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "false");
     expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
     expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
@@ -142,6 +171,28 @@ describe("DesktopNavigation", () => {
     renderNavigation("/pipeline/42");
     expect(screen.getByText("Pipeline")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pipeline" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("navigates a standalone item directly without showing a drawer", () => {
+    const { onNavigate, onSectionFocus } = renderNavigationWithStandalone();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+
+    expect(onNavigate).toHaveBeenCalledWith("/");
+    expect(onSectionFocus).not.toHaveBeenCalled();
+    expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "false");
+    expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
+    expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
+    expect(screen.queryByRole("navigation", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("desktop-navigation-account")).toHaveTextContent("Compact account");
+    expect(screen.queryByRole("button", { name: "Collapse navigation" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sales" }));
+
+    expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "true");
+    expect(screen.getByRole("heading", { name: "Sales" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
+    expect(screen.getByTestId("desktop-navigation-account")).toHaveTextContent("Account");
   });
 
   it("falls back to highlighting the selected section when no active tab maps to navigation", () => {
