@@ -440,7 +440,7 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   `section(...).page(route, label, icon)` — the nav peer of a catalog/document entry. On desktop,
   `SIDEBAR` uses each section as an app-rail workspace whose items open in a collapsible nested
   drawer; `/api/divkit/shell` returns that RBAC-filtered structure as `navigation` and the signed-in
-  identity/profile metadata as `accountInfo` for the native desktop account dock, while retaining
+  identity/profile metadata as `accountInfo` for the native desktop account controls, while retaining
   the portable DivKit nav/account cards for non-web clients and other nav styles. Entity and page entries
   share one authored sequence, so a mixed chain such as `.page(...).catalog(...).page(...)` renders
   in exactly that order.

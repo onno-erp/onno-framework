@@ -114,7 +114,8 @@ the humanized route segment and a surface-type icon.
 On desktop, `NavStyle.SIDEBAR` renders authored `Layout` sections as a two-tier workspace shell:
 each section is one icon in a narrow app rail, and its catalogs/documents/registers/pages appear in
 the adjacent nested drawer under the authored section name. The drawer can be collapsed and its preference is remembered in the
-browser. Mixed entity and page links retain their exact declaration order inside the drawer. Choose
+browser. A standalone untitled entry, such as the dashboard, navigates directly from the rail and
+does not open an empty one-item drawer. Mixed entity and page links retain their exact declaration order inside the drawer. Choose
 section names/icons for user jobs or bounded workspaces (`Inbox`, `Sales`,
 `Configuration`), rather than grouping by Java entity type. Mobile retains the bottom bar and full
 "More" hub generated from those same sections.
@@ -307,7 +308,7 @@ data-bearing surfaces.
 
 | Path | Surface |
 |------|---------|
-| `GET /shell` | Nav + account chrome. Alongside the portable DivKit cards it returns the same RBAC-filtered sections as `navigation`, `brand`/`logo`/`mark`, and structured `accountInfo`; the web desktop shell uses these for its native rail, nested drawer, and fixed account dock. |
+| `GET /shell` | Nav + account chrome. Alongside the portable DivKit cards it returns the same RBAC-filtered sections as `navigation`, `brand`/`logo`/`mark`, and structured `accountInfo`; the web desktop shell uses these for its native rail, nested drawer, and context-sensitive account control. |
 | `GET /home` | Dashboard / authored home page. |
 | `GET /account`, `GET /menu` | Mobile account card and "More" nav hub. |
 | `GET /catalogs/{name}`, `/catalogs/{name}/{id}`, `/catalogs/{name}/new` | Catalog list, record surface and create form. The record surface **is the editable form** (1C-style object form): writers edit in place and Save stays on the page; a viewer without write access gets the same form disabled. An authored `Page` at `/catalogs/{name}` **overrides** the default list surface (compose widgets around `b.list(...)`). |
