@@ -299,6 +299,15 @@ function nearestScrollAncestor(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** Bottom padding contributed by layout wrappers between an island and its page scroller. */
+function trailingPaddingTo(el: HTMLElement, boundary: HTMLElement): number {
+  let padding = 0;
+  for (let p = el.parentElement; p && p !== boundary; p = p.parentElement) {
+    padding += Number.parseFloat(getComputedStyle(p).paddingBottom) || 0;
+  }
+  return padding;
+}
+
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
 function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string {
   const key = responseKey(col);
@@ -1735,7 +1744,9 @@ export function EntityListWidget({
   //
   // The limit is the enclosing scroller's content box, NOT window.innerHeight: the shell keeps
   // padding below the scroller, so sizing to the window overshoots by that padding and leaves the
-  // page a few px of scroll play (the whole card wiggles and the gaps look uneven). The offset is
+  // page a few px of scroll play (the whole card wiggles and the gaps look uneven). Authored pages
+  // also wrap embedded blocks in padded DivKit regions; subtract their trailing padding because it
+  // sits after the island but still contributes to the scroller's content height. The offset is
   // computed in the scroller's content coordinates (scroll-invariant), so the height converges to
   // exactly zero page scroll even if measured while the page is scrolled.
   //
@@ -1756,7 +1767,8 @@ export function EntityListWidget({
       const sc = nearestScrollAncestor(el);
       if (sc) {
         const offsetInContent = top - sc.getBoundingClientRect().top - sc.clientTop + sc.scrollTop;
-        setSurfaceH(Math.max(240, Math.floor(sc.clientHeight - offsetInContent)));
+        const trailingPadding = trailingPaddingTo(el, sc);
+        setSurfaceH(Math.max(240, Math.floor(sc.clientHeight - offsetInContent - trailingPadding)));
       } else {
         setSurfaceH(Math.max(240, Math.floor(window.innerHeight - top)));
       }
