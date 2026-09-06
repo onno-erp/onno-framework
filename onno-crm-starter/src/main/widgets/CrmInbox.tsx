@@ -319,7 +319,7 @@ function CustomerPanel({ customer, row }: { customer: EntityRecord | null; row: 
   const avatarUrl = string(customer, "avatarUrl", string(row, "customerAvatar"));
   const tags = string(customer, "tags").split(",").map((tag) => tag.trim()).filter(Boolean);
   return (
-    <aside className="hidden min-h-0 min-w-0 overflow-y-auto border-l border-border bg-card xl:!block">
+    <aside className="hidden min-h-0 min-w-0 overflow-y-auto overscroll-contain border-l border-border bg-card xl:!block">
       <div className="border-b border-border px-4 py-4 text-center">
         <div className="flex justify-center">
           <Avatar
@@ -516,15 +516,15 @@ function CrmInbox({ rows, open }: ListRendererProps) {
   return (
     <div
       data-testid="crm-inbox-workspace"
-      className="grid h-full min-h-0 w-full max-h-full !grid-cols-1 overflow-hidden rounded-panel border border-border bg-background md:!grid-cols-[260px_minmax(360px,1fr)] xl:!grid-cols-[300px_minmax(420px,1fr)_280px]"
-      style={{ height: "100%" }}
+      className="grid h-full min-h-0 max-h-full w-full !grid-cols-1 overflow-hidden overscroll-none rounded-panel border border-border bg-background md:!grid-cols-[260px_minmax(360px,1fr)] xl:!grid-cols-[300px_minmax(420px,1fr)_280px]"
+      style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
       <section className="hidden min-h-0 min-w-0 flex-col border-r border-border bg-card md:!flex">
         <div className="shrink-0 border-b border-border px-3 py-3">
           <div className="text-sm font-semibold text-foreground">Conversations</div>
           <div className="mt-0.5 text-[11px] text-muted-foreground">{rows.length} in the current view</div>
         </div>
-        <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+        <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto overscroll-contain">
           {rows.map((row) => (
             <ConversationRow
               key={String(row.id)}
@@ -551,7 +551,7 @@ function CrmInbox({ rows, open }: ListRendererProps) {
             </Button>
           </header>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-5">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-5">
             <div className="mx-auto w-fit rounded-pill bg-muted px-3 py-1 text-[10px] text-muted-foreground">Today</div>
             {timeline.map((entry) => entry.message ? (
               entry.message.kind === "SYSTEM_EVENT" ? (
