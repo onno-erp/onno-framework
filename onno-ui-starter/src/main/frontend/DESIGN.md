@@ -108,6 +108,15 @@ Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/widget-
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
 (`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR).
 
+List selection actions appear inline in the scrolling facet rail, using shared `Button`
+`size="toolbar"` (32px, compact text) and `variant="subtle"`: a solid neutral pill shared with filter triggers.
+Connection-card secondary actions share this variant and size, with leading icons. Keep title/count and primary actions
+visible; selection must not change toolbar height. Batch delete retains two-step confirmation.
+
+Checkboxes follow the shadcn/Radix primitive: 16px square, 4px corners, a neutral input border
+and subtle dark fill while unchecked, and primary fill for checked or mixed states. Use the shared
+`Checkbox` for forms and list selection; do not add accent borders to unchecked instances.
+
 ### Radius mapping
 
 | Structure | Class |
@@ -143,7 +152,9 @@ exceptions. Keep component tests for every custom picker trigger.
   always hide vertical overflow.
 - Desktop rail highlighting follows the focused tab's authored Layout section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
-  the single highlighted fallback; never paint both the routed and selected sections as active.
+  the single highlighted fallback only while its submenu is visible; never paint both the routed
+  and selected sections as active. Collapsing a submenu preserves the focused page’s rail highlight.
+  Direct links highlight only for a focused page, and become inactive when its last tab closes.
   An untitled section with one item is a direct rail destination: clicking it navigates immediately
   and leaves the nested drawer closed because there is no submenu to reveal.
   While that direct destination is selected, its rail footer shows the signed-in user's avatar in
@@ -177,3 +188,20 @@ exceptions. Keep component tests for every custom picker trigger.
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.
 - Custom widgets import host primitives from `@onno/widget-sdk` (`Button`, `Segmented`,
   `Select`, …) — never rebuild lookalikes inside a widget.
+
+### Shared button settings
+
+Use `Button` (also exported through `@onno/widget-sdk`) for inbox, list and connection
+actions. `variant="subtle" size="toolbar"` is the compact neutral pill. Its automatic
+outline is solid; set `outlineStyle="solid"`, `"dashed"`, `"dotted"` or `"none"` to
+choose explicitly. `outlineStyle="auto"` preserves the variant default. Configure these
+appearances in `components/ui/button.tsx`, not individual page class strings. Filter
+triggers reuse `buttonVariants` for the same dimensions and neutral appearance.
+
+List selection checkboxes retain a 16px visible box and use a transparent 36px hit area.
+Unchecked boxes use an opaque background and a muted-foreground border so row hover and
+selection fills do not muddy their appearance. Pointer events stay on the checkbox, not row navigation.
+
+`Badge` accepts an optional configured hex `color`, using the shared `enumPillStyle` contrast calculation. CRM contact stages and entity tags use this filled pill treatment; unknown colors fall back to the semantic badge variant.
+
+Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.

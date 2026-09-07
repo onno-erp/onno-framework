@@ -62,7 +62,7 @@ function renderNavigation(activePath = "/inbox", markFramed = true) {
 function renderNavigationWithStandalone(activePath = "/inbox") {
   const onNavigate = vi.fn();
   const onSectionFocus = vi.fn();
-  const result = render(
+  const view = (path: string) => (
     <DesktopNavigation
       brand="Onno Desk"
       navigation={[
@@ -71,7 +71,7 @@ function renderNavigationWithStandalone(activePath = "/inbox") {
           items: [{ label: "Dashboard", icon: "house", path: "/" }],
         },
       ]}
-      activePath={activePath}
+      activePath={path}
       home="/inbox"
       onNavigate={onNavigate}
       onSectionFocus={onSectionFocus}
@@ -84,7 +84,8 @@ function renderNavigationWithStandalone(activePath = "/inbox") {
       t={t}
     />
   );
-  return { ...result, onNavigate, onSectionFocus };
+  const result = render(view(activePath));
+  return { ...result, onNavigate, onSectionFocus, setActivePath: (path: string) => result.rerender(view(path)) };
 }
 
 describe("DesktopNavigation", () => {
@@ -155,14 +156,14 @@ describe("DesktopNavigation", () => {
     expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
     expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
     expect(window.localStorage.getItem("onno.desktop-navigation.expanded")).toBe("false");
-    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveStyle({
+    expect(screen.getByRole("button", { name: "Inbox" })).toHaveStyle({
       background: "#f0eeff",
     });
     expect(screen.getByRole("button", { name: "Sales" })).not.toHaveStyle({
       background: "#f0eeff",
     });
-    expect(screen.getByRole("button", { name: "Inbox" })).toHaveClass("text-muted-foreground");
-    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveClass("text-primary");
+    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Inbox" })).toHaveClass("text-primary");
     expect(screen.getByRole("button", { name: "Sales" })).toHaveClass("text-muted-foreground");
     expect(screen.getByRole("button", { name: "Sales" })).not.toHaveClass("text-primary");
   });
@@ -193,6 +194,32 @@ describe("DesktopNavigation", () => {
     expect(screen.getByRole("heading", { name: "Sales" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
     expect(screen.getByTestId("desktop-navigation-account")).toHaveTextContent("Account");
+  });
+
+  it("clears a direct link after its last tab closes and restores it on reopening", () => {
+    const { setActivePath } = renderNavigationWithStandalone("/");
+    const dashboard = screen.getByRole("button", { name: "Dashboard" });
+    expect(dashboard).toHaveAttribute("aria-current", "page");
+    expect(dashboard).toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("");
+    expect(dashboard).toHaveAttribute("data-navigation-state", "inactive");
+    expect(dashboard).not.toHaveAttribute("aria-current");
+    expect(dashboard).not.toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("/");
+    expect(dashboard).toHaveAttribute("aria-current", "page");
+    expect(dashboard).toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("/pipeline");
+    expect(dashboard).toHaveAttribute("data-navigation-state", "inactive");
+    const sales = screen.getByRole("button", { name: "Sales" });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    expect(sales).toHaveAttribute("aria-current", "page");
+    expect(sales).toHaveStyle({ background: "#f0eeff" });
+    setActivePath("");
+    expect(sales).toHaveAttribute("data-navigation-state", "inactive");
+    expect(sales).not.toHaveStyle({ background: "#f0eeff" });
   });
 
   it("falls back to highlighting the selected section when no active tab maps to navigation", () => {

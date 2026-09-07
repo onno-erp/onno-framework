@@ -1,3 +1,4 @@
+import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
@@ -59,6 +60,7 @@ export function GroupedList({
   selected,
   setSelected,
   clearSelection,
+  selectionCheckboxes = false,
   openRowMenu,
 }: {
   feedBase: string;
@@ -79,6 +81,7 @@ export function GroupedList({
   surfaceMode: boolean;
   scrollCap: number;
   /** Batch selection, shared with the island so the toolbar chip / batch menu / ⌘-shortcuts see it. */
+  selectionCheckboxes?: boolean;
   selected: Set<string>;
   setSelected: Dispatch<SetStateAction<Set<string>>>;
   clearSelection: () => void;
@@ -283,6 +286,11 @@ export function GroupedList({
             className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
             style={{ gridTemplateColumns: template }}
           >
+            {selectionCheckboxes ? <ListSelectionCheckbox label={t("list.selectLoaded")}
+              disabled={flat.ids.filter(Boolean).length === 0}
+              checked={loadedSelectionState(flat.ids.filter(Boolean), selected)}
+              onChange={checked => setSelected(prev => selectLoaded(prev, flat.ids.filter(Boolean), checked))}
+            /> : null}
             {columns.map((c) => (
               <span key={c.columnName} className="truncate text-xs font-medium text-muted-foreground">
                 {c.label}
@@ -435,6 +443,15 @@ export function GroupedList({
                         )}
                         style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                       >
+                        {selectionCheckboxes ? <ListSelectionCheckbox
+                          label={t("list.selectRow", { row: String(row.description ?? row._description ?? row[columns[0]?.columnName] ?? absIdx + 1) })}
+                          disabled={!rowId} checked={isSelected}
+                          onChange={checked => {
+                            if (!rowId) return;
+                            selAnchorRef.current = absIdx;
+                            setSelected(prev => selectLoaded(prev, [rowId], checked));
+                          }}
+                        /> : null}
                         {columns.map((c) =>
                           c.cellMenu && rowId && url ? (
                             // ListSpec.cellMenu: right-clicking this cell opens just its submenu's

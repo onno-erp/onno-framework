@@ -74,6 +74,8 @@ val publishedModules = mapOf(
     "onno-kafka-starter" to "Kafka integration starter publishing onno entity-change events to topics.",
     "onno-import-starter" to "Data import starter for onno: xlsx / csv ingestion into catalogs and documents.",
     "onno-observability-starter" to "Privacy-safe operational, UX, and business-outcome instrumentation exported through OpenTelemetry.",
+    "onno-crm-channels-starter" to "Opt-in Telegram, Gmail, Instagram and WhatsApp adapters for the onno CRM inbox.",
+    "onno-crm-starter" to "Reusable CRM module for onno with customers, opportunities, unified inboxes, comments, activity timelines, and a packaged workspace UI.",
     "onno-desktop-starter" to "Desktop (Tauri) packaging starter bundling the onno shell for native app builds.",
 )
 
@@ -328,7 +330,7 @@ val configNotesDir = file("docs/_config")
 val configModuleProjects = listOf(
     "onno-framework-starter", "onno-ui-starter", "onno-auth-starter", "onno-mcp-starter",
     "onno-import-starter", "onno-cluster-starter", "onno-kafka-starter",
-    "onno-observability-starter", "onno-desktop-starter",
+    "onno-observability-starter", "onno-desktop-starter", "onno-crm-channels-starter",
 )
 
 // Make property descriptions deterministic. spring-boot-configuration-processor reads each

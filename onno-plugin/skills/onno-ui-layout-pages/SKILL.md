@@ -23,6 +23,10 @@ belong in `EntityView`, not here.
   declaration order inside the drawer.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
 - A custom page route appears in nav only when a layout section links it with `.page(...)`.
+- For an entity-backed fullscreen workspace, use `page.list(Entity.class, view -> view.fill())`.
+  `page.bare()` only removes the authored page header; it does not allocate height or remove page
+  padding. Read [the full-height recipe](../onno-ui-widgets/references/full-height-workspaces.md)
+  before implementing or verifying this layout.
 - `Layout.profile()` names the persona; call `spec.roles(...).priority(...)` inside `configure` to
   select it. Named profiles replace the default navigation, so share/repeat all desired sections.
 - `Page.profile()` must match the persona for profile-only reachability. A page with no profile is

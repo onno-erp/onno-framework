@@ -28,6 +28,8 @@ public final class ListSpec<E> {
     private final Set<String> hidden = new LinkedHashSet<>();
     private final Map<String, String> labels = new LinkedHashMap<>();
     private boolean searchable = true;
+    private boolean selectionCheckboxes;
+    private String selectionWidget;
     private String sortField;
     private boolean sortDescending = false;
     private final List<FilterBuilder> filters = new ArrayList<>();
@@ -50,6 +52,28 @@ public final class ListSpec<E> {
         this.searchable = searchable;
         return this;
     }
+
+    /**
+     * Show Onno row-selection checkboxes in flat and grouped catalog/document tables.
+     * The header selects only loaded rows, never unseen server matches. Selected records use the
+     * existing batch actions and authorization checks. Off by default; keyboard selection remains.
+     */
+    public ListSpec<E> selectionCheckboxes(boolean enabled) {
+        this.selectionCheckboxes = enabled;
+        return this;
+    }
+
+    /** Add a registered widget to the selection toolbar. It receives selected ids and completion callbacks. */
+    public ListSpec<E> selectionWidget(String type) {
+        if (type == null || type.isBlank()) throw new IllegalArgumentException("Selection widget type is required");
+        selectionWidget = type;
+        return this;
+    }
+
+    public String selectionWidget() { return selectionWidget; }
+
+    /** Whether the standard table exposes its selection checkbox column. */
+    public boolean selectionCheckboxes() { return selectionCheckboxes; }
 
     /** Turn the search bar off for this list. */
     public ListSpec noSearch() {

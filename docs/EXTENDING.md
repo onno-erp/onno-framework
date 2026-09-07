@@ -35,6 +35,12 @@ managed widget build installs and bundles that dependency; the extension author 
 for its license, security, browser support, and bundle size. Do not attempt to replace React,
 React DOM, `@onno/widget-sdk`, or the plugin's build tools, which are framework-managed.
 
+Official model-bearing business modules are a separate composition surface from connectors. For
+example, `su.onno:onno-crm-starter` intentionally contributes catalogs, repositories, commands,
+pages, and a compiled widget when an application opts into that business capability. A provider
+connector consumed by the CRM still owns only the external binding; it must not redefine the CRM
+model. Keep module UI additive so an enterprise host retains its shell, identity, and theme.
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.
@@ -169,3 +175,147 @@ registry. To get listed:
    issue and a maintainer will help.
 
 Listed projects are maintained by their authors and are not endorsed by the onno-framework team.
+
+
+### CRM channel delivery
+
+A CRM host can supply `CrmMessageTransport` to expose a channel connection and enqueue a reply
+inside the CRM save transaction. Keep provider clients independent of CRM entities and put contact
+mapping, checkpoints, and outbox ownership in the host adapter. The default transport disables
+external replies until connected. See [the CRM contract](../onno-crm-starter/README.md#message-delivery-contract)
+and [the channel starter](../onno-crm-channels-starter/README.md).
+
+CRM hosts may register ordered `CrmWorkspaceCustomizer` beans for inbox presentation and custom-field
+definitions. `CrmChannelConnection` is the connector-owned status/setup SPI used by the Channels page.
+Its public view must never include credentials, and commands must validate provider identity before
+changing routing or persisted secrets. The starter role-gates commands; connectors own secret storage
+and OAuth/token verification. See `onno-crm-starter/README.md` for the current contract.
+
+Widget action feedback can use `toast.success(message)` (or `error`, `info`, `warning`)
+from `@onno/widget-sdk`. It delegates to the shared host notification stack through
+`window.onno.toast`; this additive capability requires an updated UI host.
+
+`CrmInboxWorkspace` beans define application-owned team inbox views, with typed conversation
+selection, explicit read/write roles and independent `CrmWorkspaceService.Config` customization.
+They can combine multiple channel accounts without changing transport destinations. See the CRM
+README for scoped endpoint and shared-contact boundaries.
+
+For generic entity surfaces, `UiEntityAccessPolicy` supplies an additional deny-only gate to
+`UiAccessService`. Policies cannot grant rights absent from annotation RBAC and ADMIN bypasses the
+additional gate. Keep policy beans lightweight and avoid circular dependencies on UI access.
+
+`OptionsFacet` is available from `@onno/widget-sdk`: the same filter chip used by entity lists.
+Pass `label`, `options` (`value`, `label`, optional `color`/`avatarUrl`), `multi`, `selected: string[]`,
+and `onChange`. Empty selection means no constraint; the consuming widget owns data filtering.
+
+`EntityListWidget` is also exposed through the widget SDK for scoped operational lists. Supply the
+host list descriptor (`list`, including a scoped `feed`), optional `renderer` component for the
+custom body, and optional numeric `refreshKey` to trigger a soft live refresh. The host retains
+ownership of the entire standard list header, filtering, sorting and table/custom-view switching.
+
+### Packaged CRM channel adapters
+
+`onno-crm-channels-starter` is an optional Apache-2.0 module depending on `onno-crm-starter`. It supplies provider clients plus CRM-specific mapping/transport adapters through auto-configuration, with all providers disabled by default. Adopters configure credentials and workspace predicates instead of copying example classes. See [the module guide](../onno-crm-channels-starter/README.md). Its current single-account/single-worker constraints are explicit; third-party connectors can still implement `CrmMessageTransport` and `CrmChannelConnection`.
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+CRM message bodies support `registerChatMessageRenderer` from `@onno/widget-sdk` (UI host v4+), with predicate/priority selection, live registration, and plain-text error fallback. See [the SDK guide](../onno-widget-sdk/README.md#custom-crm-chat-message-bodies).
+
+The SDK also exposes host `ContextMenuContent` and `ContextMenuItem` primitives for pointer-positioned and keyboard-invoked widget menus.
+
+### Structured record tags
+
+`EntityTags` is a host/SDK component with `{ kind: "catalogs" | "documents", name, id,
+readOnly? }`. It displays colored chips and supports selecting existing catalog tags and adding/removing
+individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
+widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail configuration.
+
+The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
+`onno_tag_links`. Libraries are scoped to the canonical entity kind/name, so tags can be reused
+across its records. Case-insensitive names reuse a definition; removing a chip only removes that
+record's assignment. Standard entity read/write permissions apply. Optional `TagAccessPolicy`
+beans add record-level checks; the CRM uses its workspace customer permissions.
+
+Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
+legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging
+service owns record assignments. CRM provides `CrmTags`, available under Configuration → Tags.
+The Add tag picker only searches/selects existing catalog entries. Legacy IDs and assignments
+survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
+
+Internal CRM notes keep the inbox composer and use a compact inline reference picker: `@` selects people, `#` selects catalog/document records, and pasted local record links become references. Notes remain ordinary Onno comments, including permission checks and mention notifications. The host `CommentBody` renderer accepts a stored `body` and resolves links for the current viewer. CRM reply drafts and internal-note drafts stay separate.
+
+### UI contributions (host contract v5)
+
+Use `registerExtension` from `@onno/widget-sdk` to add buttons or content without editing a host
+component. A contribution declares a globally unique namespaced `id`, `slot`, optional ascending
+`order`, optional synchronous `visible(context)`, and a React `component({context})`.
+Registration returns an unregister function. Re-registering an ID replaces its contribution; an old
+unregister callback cannot remove the replacement. Empty outlets add no content. Failed visibility
+predicates hide only that contribution; render errors produce an isolated unavailable message.
+Async work, loading state, and action errors belong to the contribution. Components unmount when
+removed or when the outlet's record/workspace/page changes; unrelated registrations preserve state.
+
+| Outlet | Context / operations |
+| --- | --- |
+| `page.actions` | Existing PageActionsBar route; execute only authored server button keys, navigate |
+| `entity.list.actions` | Entity kind/name, selection, canWrite, refresh, navigate, authored toolbar commands |
+| `entity.list.selection` | Shown with a selection; execute authored row commands for the selected IDs |
+| `entity.list.context-menu` | Clicked record plus selection; close menu, refresh, navigate, authored row commands |
+| `entity.form.actions` | Persisted record snapshot and canWrite; navigate |
+| `entity.form.aside` | Right-side content next to the ordinary entity form; same form context |
+| `crm.chat.header` | Selected conversation, workspace, canWrite/canReply, refresh, navigate, insertDraft, execute |
+| `crm.chat.composer` | Same conversation context; draft insertion never sends and enforces the channel limit |
+| `crm.chat.aside` | Same context, below the default content in the toggleable contact-details panel |
+| `crm.contact.actions` | Customer record and permissions for application-authored content; no predefined workflow commands |
+| `crm.chat.context-menu` | Clicked conversation and workspace, canWrite, navigation, closeMenu |
+
+`context.execute` is optional and accepts a command name plus input. The CRM exposes `assign`, `close`, `reopen`, `status`, and
+`logActivity` and fixes the target conversation itself; a contribution cannot redirect that command
+by supplying a different conversationId. Existing backend roles, record/workspace checks, CSRF,
+and business validation still authorize every write. Client visibility/permissions are presentation
+hints, not a security boundary. Plugins are trusted application code, not sandboxed third-party code.
+Form outlets deliberately omit refresh/write callbacks that could discard an unsaved form.
+
+```tsx
+import { registerExtension, Button } from "@onno/widget-sdk";
+const remove = registerExtension({
+  id: "mycompany.contact-insights",
+  slot: "entity.form.aside",
+  order: 20,
+  visible: context => context.name === "crm_customers" && !!context.recordId,
+  component: ({ context }) => <section>Insights for {String(context.record?.description ?? "Contact")}</section>,
+});
+// Call remove() when unloading a dynamically managed plugin.
+```
+
+Compile the contribution in the consuming application's `src/main/widgets/*.tsx` with
+`su.onno.widgets`; the normal plugin loader discovers it. Provider-specific contributions belong
+in consuming applications, not in the reusable CRM starter.
+The existing `registerChatMessageRenderer` API remains the timeline-body extension point; retain
+readable fallbacks for installations without a provider's renderer. Applications can expose extra
+namespaced locations using SDK `ExtensionSlot` and an explicit `ExtensionContext`.
+
+Application header contributions can use IDs `example.crm.action.assign`, `.details`, `.close`,
+`.reopen`, `.status`, and `.logActivity`. The contact action slot is empty by default; applications own any buttons and workflows they add.
+They consume `context.actions` and the supplied callbacks. These TSX files belong to the consuming
+app; the CRM starter installs no default action-button contributions.
+
+An application may own a Templates catalog, picker, and button, registering `example.crm.composer.templates` in `crm.chat.composer`; the CRM starter
+contains no template catalog or picker. Replace that contribution
+ID to customize it, or register additional IDs to add neighboring buttons. The
+composer supplies `insertDraft` only in reply mode; the host preserves the existing
+draft, enforces the channel length limit, and never sends on insertion. Empty
+template catalogs remain hidden.
+
+Applications define stage/status choices and transitions with a `CrmStateConfiguration` Java bean.
+Define stable UUIDs once, then change
+labels/colors freely; target those UUIDs for incoming messages, replies, close, and reopen. The
+starter validates the transition targets and provides read-only projection for reference rendering.
+
+Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.
+
+The CRM starter leaves its header-action and template-picker slots empty.
+The inbox contact panel and context menu do not display tag controls; saved tag and template data is retained.

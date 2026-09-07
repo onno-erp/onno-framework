@@ -1,5 +1,8 @@
 import type { ComponentType } from "react";
 import type {
+  ChatMessage,
+  ChatMessageRenderer,
+  ChatMessageRendererProps,
   DashboardWidgetMeta,
   ListRendererProps,
   OnnoEvents,
@@ -11,6 +14,9 @@ import type {
 } from "./types";
 
 export type {
+  ChatMessage,
+  ChatMessageRenderer,
+  ChatMessageRendererProps,
   DashboardWidgetMeta,
   EntityRecord,
   ListRendererColumn,
@@ -111,6 +117,13 @@ export const registerListRenderer = (
   // The host registry stores both prop shapes; the list island renders this entry with
   // ListRendererProps (dashboards never resolve a type an EntityView declared for its list).
   host.registerWidget(rendererType, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
+
+/** Props for a ListSpec.selectionWidget: current selection and a callback after a successful operation. */
+export type ListSelectionProps = { ids: string[]; complete: () => void };
+
+/** Register a selection toolbar component; server commands must still enforce authorization. */
+export const registerListSelection = (type: string, component: ComponentType<ListSelectionProps>): void =>
+  host.registerWidget(type, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
 
 /** `htm` bound to the host's `React.createElement` — JSX-like markup with no build step, if wanted. */
 export const html = host.html;
@@ -245,11 +258,15 @@ export const ui: OnnoUi = host.ui;
  *   import { Segmented, DatePicker, Button } from "@onno/widget-sdk";
  */
 export const {
+  EntityListWidget,
+  OptionsFacet,
   Button,
   Badge,
   Input,
   Label,
   Textarea,
+  CommentComposer,
+  CommentBody,
   Checkbox,
   Switch,
   Segmented,
@@ -259,7 +276,13 @@ export const {
   CardTitle,
   CardDescription,
   CardContent,
+  EntityTagMenu,
+  ContextMenuSub,
+  EntityTags,
+  ContextMenuContent,
+  ContextMenuItem,
   Popover,
+  PopoverAnchor,
   PopoverTrigger,
   PopoverContent,
   Select,
@@ -274,3 +297,29 @@ export const {
 export interface WidgetProps {
   widget: DashboardWidgetMeta;
 }
+
+/** Show action feedback in the host toast stack. Requires a host exposing `onno.toast`. */
+export const toast = Object.fromEntries(
+  (["success", "error", "info", "warning"] as const).map(kind => [kind, (message: string) => {
+    if (!host.toast) throw new Error("Widget toasts require an updated onno-ui-starter.");
+    return host.toast[kind](message);
+  }])
+) as Record<"success" | "error" | "info" | "warning", (message: string) => string | number>;
+
+/** Register a custom CRM message body. Returns an unregister function. Requires host v4. */
+export function registerChatMessageRenderer(renderer: ChatMessageRenderer): () => void {
+  if (!host.chatMessages) throw new Error("Custom chat renderers require onno UI host v4 or newer");
+  return host.chatMessages.register(renderer);
+}
+
+/** CRM body outlet; older hosts retain the supplied plain-text fallback. */
+export const ChatMessageBody: ComponentType<ChatMessageRendererProps> =
+  host.chatMessages?.Body ?? (({ fallback }) => React.createElement(React.Fragment, null, fallback));
+
+export type { UiExtension, ExtensionContext, ExtensionProps, ExtensionSlotProps, ExtensionSlotName } from "./extensions";
+/** Register an opt-in UI contribution. Requires host contract v5. */
+export function registerExtension(extension: import("./extensions").UiExtension): () => void {
+  if (!host.extensions) throw new Error("UI extensions require onno UI host v5 or newer");
+  return host.extensions.register(extension);
+}
+export const ExtensionSlot: ComponentType<import("./extensions").ExtensionSlotProps> = host.extensions?.Slot ?? (() => null);

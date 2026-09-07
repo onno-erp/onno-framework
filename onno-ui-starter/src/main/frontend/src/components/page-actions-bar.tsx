@@ -1,3 +1,4 @@
+import { ExtensionSlot } from "@/lib/ui-extensions";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -77,7 +78,9 @@ export function PageActionsBar({
       .finally(() => setPending((s) => ({ ...s, [b.key]: false })));
   };
 
-  if (!buttons.length) return null;
+
+
+  if (!buttons.length) return <ExtensionSlot name="page.actions" context={{surface:"page",route,permissions:{},execute:async(key,input)=>{const b=buttons.find(b=>b.key===key&&b.server);if(!b)throw new Error("Unknown page command");await run(b,input as ActionFormValues,true);},openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} className="pointer-events-auto flex flex-wrap gap-2" />;
 
   return (
     // DivKit wraps custom blocks in pointer-events:none spans — re-assert so the buttons work.
@@ -86,6 +89,7 @@ export function PageActionsBar({
         <h2 className="mb-2 text-sm font-semibold text-foreground">{heading}</h2>
       ) : null}
       <div className="flex flex-wrap gap-2 rounded-card border border-border bg-card p-4">
+        <ExtensionSlot name="page.actions" context={{surface:"page",route,permissions:{},execute:async(key,input)=>{const b=buttons.find(b=>b.key===key&&b.server);if(!b)throw new Error("Unknown page command");await run(b,input as ActionFormValues,true);},openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} className="flex flex-wrap gap-2" />
         {buttons.map((b) => {
           const busy = pending[b.key];
           return (

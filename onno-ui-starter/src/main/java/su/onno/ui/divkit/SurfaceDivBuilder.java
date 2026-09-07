@@ -127,6 +127,8 @@ public final class SurfaceDivBuilder {
         descriptor.put("title", view.title());
         descriptor.put("columns", columns);
         descriptor.put("searchable", view.searchable());
+        descriptor.put("selectionCheckboxes", view.selectionCheckboxes());
+        descriptor.put("selectionWidget", view.selectionWidget());
         descriptor.put("sort", sort);
         descriptor.put("filters", filters);
         descriptor.put("newUrl", newUrl);

@@ -661,7 +661,7 @@ export const api = {
 
   // The ambient-presence snapshot: every viewed record the caller may read. Loaded once on startup;
   // live `presence` SSE deltas keep the client store current after that.
-  getPresenceSnapshot: () => fetchJson<PresenceSnapshot>(`${BASE}/presence`),
+  getPresenceSnapshot: () => fetchJson<PresenceSnapshot>(`${BASE}/presence`, undefined, { silent: true }),
   // Presence — route-level collaboration markers (see PresenceController). Post the pane's route `path`;
   // the server derives the presence identity (record / entity list / page). `enter` on open and a periodic
   // `heartbeat` keep the viewer alive (the server expires them by TTL once heartbeats stop); both return the
@@ -671,7 +671,7 @@ export const api = {
     fetchJson<PresenceState>(`${BASE}/presence`, {
       method: "POST",
       body: JSON.stringify({ path, action }),
-    }),
+    }, { silent: true }),
   // Best-effort leave on page/island teardown: `keepalive` lets the request outlive the unloading
   // document (and still carry the CSRF header, unlike sendBeacon). A dropped leave is harmless — the
   // server's presence TTL reaps the viewer anyway; this just makes them vanish for others promptly.

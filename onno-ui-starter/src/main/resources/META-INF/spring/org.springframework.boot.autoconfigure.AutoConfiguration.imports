@@ -2,3 +2,5 @@ su.onno.ui.UiAutoConfiguration
 su.onno.ui.media.MediaAutoConfiguration
 su.onno.ui.comments.CommentsAutoConfiguration
 su.onno.ui.notifications.NotificationsAutoConfiguration
+
+su.onno.ui.tags.TagsAutoConfiguration

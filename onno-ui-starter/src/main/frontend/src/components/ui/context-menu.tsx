@@ -120,6 +120,20 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       ctx?.setOpen(false);
     }, [ctx, onOpenChange]);
 
+    const menuId = React.useId();
+    const closeRef = React.useRef(close);
+    closeRef.current = close;
+    React.useEffect(() => {
+      if (!open) return;
+      // One root menu per page. Flyouts remain children of their owning root.
+      window.dispatchEvent(new CustomEvent("onno-context-menu-open", { detail: menuId }));
+      const dismiss = (event: Event) => {
+        if ((event as CustomEvent<string>).detail !== menuId) closeRef.current();
+      };
+      window.addEventListener("onno-context-menu-open", dismiss);
+      return () => window.removeEventListener("onno-context-menu-open", dismiss);
+    }, [open, menuId]);
+
     React.useEffect(() => {
       if (!open) return;
       const onKey = (e: KeyboardEvent) => {

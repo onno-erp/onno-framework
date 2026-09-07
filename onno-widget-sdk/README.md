@@ -155,3 +155,92 @@ b.widget("Recent activity").type("eventLog").document(Payment.class)
 
 Plugin JS runs first-party in the app origin with the user's full session — author it as trusted
 code. Licensed Apache-2.0.
+
+### Action notifications
+
+Import `toast` from `@onno/widget-sdk` to use the host's shared notification stack:
+`toast.success("Telegram connection verified.")`. `error`, `info`, and `warning` also accept
+a message string. This requires an updated host exposing `window.onno.toast`; older hosts
+continue supporting existing widgets, but cannot display notifications through this API.
+
+`OptionsFacet` is available from `@onno/widget-sdk`: the same filter chip used by entity lists.
+Pass `label`, `options` (`value`, `label`, optional `color`/`avatarUrl`), `multi`, `selected: string[]`,
+and `onChange`. Empty selection means no constraint; the consuming widget owns data filtering.
+
+`EntityListWidget` is also exposed through the widget SDK for scoped operational lists. Supply the
+host list descriptor (`list`, including a scoped `feed`), optional `renderer` component for the
+custom body, and optional numeric `refreshKey` to trigger a soft live refresh. The host retains
+ownership of the entire standard list header, filtering, sorting and table/custom-view switching.
+
+Use `registerListSelection(type, Component)` with `ListSelectionProps` (`ids`, `complete`)
+to provide an authored `ListSpec.selectionWidget(type)` toolbar action for selected rows.
+
+### Custom CRM chat message bodies
+
+Apps can register React message components from `src/main/widgets/*.tsx` with
+`registerChatMessageRenderer` in `@onno/widget-sdk` (UI host v4+). CRM retains the
+avatar, author, timestamp, delivery status, and retry controls. Internal notes and
+system events retain their existing renderers. This is a display extension; it does
+not add rich-message transport or a new stored payload format.
+
+```tsx
+import { registerChatMessageRenderer, type ChatMessageRendererProps } from "@onno/widget-sdk";
+
+function TelegramBody({ message }: ChatMessageRendererProps) {
+  return <div className="whitespace-pre-wrap text-sm">{message.body}</div>;
+}
+
+registerChatMessageRenderer({
+  id: "myapp.telegramBody",
+  priority: 10,
+  matches: message => message.channel === "TELEGRAM",
+  component: TelegramBody,
+});
+```
+
+The component receives read-only `message` data and a `fallback` React node. It may
+use SDK hooks/primitives and load application data using the message ID. Higher
+priority matches win; ties sort by ID. Registration replaces the same ID and returns
+an unregister callback. Late registrations update visible messages. Missing matches,
+failed predicates, and render errors preserve text display (failed predicates are
+skipped). Never render untrusted message bodies as raw HTML. Interactive components
+must call authenticated application commands for changes; registration grants no
+additional backend permissions.
+
+The SDK also exposes host `ContextMenuContent` and `ContextMenuItem` primitives for pointer-positioned and keyboard-invoked widget menus.
+
+### Structured record tags
+
+`EntityTags` is a host/SDK component with `{ kind: "catalogs" | "documents", name, id,
+readOnly? }`. It displays colored chips and supports selecting existing catalog tags and adding/removing
+individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
+widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail configuration.
+
+The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
+`onno_tag_links`. Libraries are scoped to the canonical entity kind/name, so tags can be reused
+across its records. Case-insensitive names reuse a definition; removing a chip only removes that
+record's assignment. Standard entity read/write permissions apply. Optional `TagAccessPolicy`
+beans add record-level checks; the CRM uses its workspace customer permissions.
+
+Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
+legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging
+service owns record assignments. CRM provides `CrmTags`, available under Configuration → Tags.
+The Add tag picker only searches/selects existing catalog entries. Legacy IDs and assignments
+survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
+
+Internal CRM notes keep the inbox composer and use a compact inline reference picker: `@` selects people, `#` selects catalog/document records, and pasted local record links become references. Notes remain ordinary Onno comments, including permission checks and mention notifications. The host `CommentBody` renderer accepts a stored `body` and resolves links for the current viewer. CRM reply drafts and internal-note drafts stay separate.
+
+`ContextMenuSub` and `EntityTagMenu` expose a catalog-tag checkbox flyout for custom widgets. Host context menus automatically dismiss other root context menus when opened.
+
+### UI extension outlets
+
+Host contract v5 adds `registerExtension` and `ExtensionSlot`: opt-in contributions to page/list/form
+controls, entity and CRM context menus, composer tools, and right-panel sections. Contributions
+receive scoped context and supported host callbacks, have deterministic ordering and isolated
+render failures, and can be replaced/unregistered without modifying the host. Backend authorization
+continues to govern commands. Timeline bodies retain `registerChatMessageRenderer`.
+See the UI contributions section of `docs/EXTENDING.md` for outlet names, context, and examples.
+
+`Badge` accepts an optional configured hex `color`, using the shared `enumPillStyle` contrast calculation. CRM contact stages and entity tags use this filled pill treatment; unknown colors fall back to the semantic badge variant.
+
+Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.
