@@ -49,6 +49,20 @@ verbs into framework concepts, then implement one vertical slice end to end and 
 interview script and per-domain question sets live in [AGENTS.md](https://github.com/onno-erp/onno-framework/blob/main/AGENTS.md) — follow it
 when a user asks you to model a business.
 
+## Reuse the official CRM module
+
+When the requested scope includes customers, agents, opportunities, or a unified inbox, start from
+`su.onno:onno-crm-starter` (or `project(":onno-crm-starter")` inside this repository). Extend its
+`su.onno.crm` model, services, UI metadata, and packaged widget instead of defining parallel CRM
+catalogs. The host application owns shell branding, theme, authentication, and identity; override
+`CrmAgentIdentityResolver` when its identity catalog differs. Keep provider delivery and external
+sync in connectors rather than coupling those APIs to the CRM business module.
+
+For ready-made channel delivery, add `su.onno:onno-crm-channels-starter`. See the focused
+`onno-crm-adopt`, `onno-crm-channel-setup`, and `onno-crm-channel-debug` sibling skills.
+All providers default disabled; configure `onno.crm.channels.<provider>.*` and explicit workspace
+channel predicates. The current adapters are single-account/single-worker per application.
+
 ## Concept → annotation cheat sheet
 
 | If it is… | Use | Base class |

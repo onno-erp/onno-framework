@@ -1,3 +1,10 @@
+import { extensions } from "./ui-extensions";
+import { CommentComposer, CommentBody } from "@/components/entity-comments-widget";
+import { EntityTagMenu, EntityTags } from "@/components/entity-tags";
+import { ContextMenuSub, ContextMenuContent, ContextMenuItem } from "@/components/ui/context-menu";
+import { chatMessages } from "./chat-message-renderers";
+import { EntityListWidget, OptionsFacet } from "@/components/entity-list-widget";
+import { toast } from "@/components/ui/toast";
 import * as React from "react";
 import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
@@ -15,7 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/segmented";
 import { DatePicker } from "@/components/date-picker";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,11 +52,20 @@ import {
  * never drifts from the product's look. Curated subset; grow it as widgets need more (issue #243).
  */
 export interface OnnoUi {
+  ContextMenuContent: typeof ContextMenuContent;
+  ContextMenuItem: typeof ContextMenuItem;
+  EntityTagMenu: typeof EntityTagMenu;
+  ContextMenuSub: typeof ContextMenuSub;
+  EntityTags: typeof EntityTags;
   Button: typeof Button;
   Badge: typeof Badge;
   Input: typeof Input;
   Label: typeof Label;
   Textarea: typeof Textarea;
+  CommentComposer: typeof CommentComposer;
+  CommentBody: typeof CommentBody;
+  EntityListWidget: typeof EntityListWidget;
+  OptionsFacet: typeof OptionsFacet;
   Checkbox: typeof Checkbox;
   Switch: typeof Switch;
   Segmented: typeof Segmented;
@@ -60,6 +76,7 @@ export interface OnnoUi {
   CardDescription: typeof CardDescription;
   CardContent: typeof CardContent;
   Popover: typeof Popover;
+  PopoverAnchor: typeof PopoverAnchor;
   PopoverTrigger: typeof PopoverTrigger;
   PopoverContent: typeof PopoverContent;
   Select: typeof Select;
@@ -81,6 +98,8 @@ export interface OnnoHost {
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   /** Read-only slice of the REST client — safe surface for first-party widgets. */
   api: OnnoReadApi;
+  /** Shared notification manager for widget action feedback. */
+  toast: Pick<typeof toast, "success" | "error" | "info" | "warning">;
   /** The host's UI component primitives (see {@link OnnoUi}) — the real design-system controls. */
   ui: OnnoUi;
   /** Shared live updates; added in host contract v3. */
@@ -88,6 +107,8 @@ export interface OnnoHost {
     subscribe(listener: (event: UiEvent) => void, filter?: UiEventFilter): () => void;
   };
   /** Host contract version; bump on a breaking change to this shape. */
+  chatMessages: typeof chatMessages;
+  extensions: typeof extensions;
   version: number;
 }
 
@@ -132,11 +153,20 @@ declare global {
 // The curated UI primitives handed to widgets. Same instances the host renders with, so a widget's
 // controls are the product's controls — see {@link OnnoUi}.
 const ui: OnnoUi = {
+  EntityTagMenu,
+  ContextMenuSub,
+  EntityTags,
+  ContextMenuContent,
+  ContextMenuItem,
+  EntityListWidget,
+  OptionsFacet,
   Button,
   Badge,
   Input,
   Label,
   Textarea,
+  CommentComposer,
+  CommentBody,
   Checkbox,
   Switch,
   Segmented,
@@ -147,6 +177,7 @@ const ui: OnnoUi = {
   CardDescription,
   CardContent,
   Popover,
+  PopoverAnchor,
   PopoverTrigger,
   PopoverContent,
   Select,
@@ -179,10 +210,13 @@ export function installPluginHost(): OnnoHost {
     registerWidget,
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
+    toast,
     ui,
     events,
-    // v3: added the shared live-event facade. Additive — existing widgets keep working.
-    version: 3,
+    // v4: added custom chat body renderers. Additive — existing widgets keep working.
+    chatMessages,
+    extensions,
+    version: 5,
   });
   window.onno = host;
   return host;

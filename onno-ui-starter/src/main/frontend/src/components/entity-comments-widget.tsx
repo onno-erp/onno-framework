@@ -208,7 +208,10 @@ function ReactionButton({
  * fan-out (divkit-view's single SSE stream) the list islands use, so it adds no second connection and
  * never touches the content-pane machinery.
  */
-export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
+export function EntityCommentsWidget({ target, composerOnly = false, onPosted, onDraftChange, disabled = false }: {
+  target: CommentTarget; composerOnly?: boolean; onPosted?: () => void;
+  onDraftChange?: (body: string) => void; disabled?: boolean;
+}) {
   const { kind, name, id } = target;
   const [comments, setComments] = useState<CommentView[] | null>(null);
   const [body, setBody] = useState("");
@@ -227,6 +230,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   const caretToRestore = useRef<number | null>(null);
 
   const load = useCallback(() => {
+    if (composerOnly) return;
     let cancelled = false;
     api
       .listComments(kind, name, id)
@@ -239,9 +243,10 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
     return () => {
       cancelled = true;
     };
-  }, [kind, name, id]);
+  }, [kind, name, id, composerOnly]);
 
   useEffect(() => load(), [load]);
+  useEffect(() => { onDraftChange?.(body); }, [body, onDraftChange]);
 
   // Live-sync: refetch when the server signals a comment changed on this thread. We reuse the shared
   // `onno:dataevent` fan-out (divkit-view's one SSE stream) the list islands consume rather than
@@ -260,11 +265,11 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   // Debounced typeahead fetch whenever the active mention query changes. A stale response (a slower
   // earlier request resolving last) is ignored via the request sequence guard.
   useEffect(() => {
+    const seq = ++reqSeq.current;
     if (mq === null) {
       setSuggestions([]);
       return;
     }
-    const seq = ++reqSeq.current;
     const t = setTimeout(() => {
       api
         // `@` suggests people (the identity catalog); `#` references any record — documents and
@@ -377,11 +382,12 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
 
   const submit = async () => {
     const text = body.trim();
-    if (!text || busy) return;
+    if (!text || busy || disabled) return;
     setBusy(true);
     try {
       const saved = await api.addComment(kind, name, id, toTokenBody(text, picks), replyTo?.id ?? null);
       setComments((prev) => [...(prev ?? []), saved]);
+      onPosted?.();
       setBody("");
       setPicks([]);
       setReplyTo(null);
@@ -452,7 +458,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
   };
 
   const count = comments?.length ?? 0;
-  const canSend = body.trim() !== "" && !busy;
+  const canSend = body.trim() !== "" && !busy && !disabled;
   const topLevel = useMemo(() => {
     const ids = new Set((comments ?? []).map((c) => c.id));
     return (comments ?? []).filter((c) => !c.parentId || !ids.has(c.parentId));
@@ -570,7 +576,8 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
     // pointer-events-auto: this widget is portaled into a DivKit div-custom whose container blocks
     // are rendered pointer-events:none; opt the panel back in so the textarea and Send button are
     // focusable/clickable (matches entity-list-widget, page-actions-bar, setting-widget, login).
-    <div className="pointer-events-auto mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
+    <div className={composerOnly ? "pointer-events-auto" : "pointer-events-auto mt-4 rounded-card border border-border bg-card p-4 sm:p-5"}>
+      {!composerOnly && <>
       <div className="mb-4 flex items-center gap-2">
         <MessageSquare className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-sm font-semibold text-foreground">Comments</h2>
@@ -603,7 +610,8 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
         </ul>
       )}
 
-      <div className="relative mt-4">
+      </>}
+      <div className={composerOnly ? "relative" : "relative mt-4"}>
         {replyTo ? (
           <div className="mb-2 flex items-center gap-2 rounded-card border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
             <Reply className="size-3.5 shrink-0" aria-hidden="true" />
@@ -630,7 +638,7 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
               aria-label="Add mention or reference"
               aria-expanded={insertMenuOpen}
               className="grid size-9 shrink-0 place-items-center rounded-control border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              disabled={busy}
+              disabled={busy || disabled}
             >
               <Plus className="size-4" aria-hidden="true" />
             </button>
@@ -668,15 +676,16 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
               onPaste={onPaste}
               onBlur={() => setMq(null)}
               rows={1}
-              placeholder="Write a comment..."
+              placeholder={composerOnly ? "Leave an internal note…" : "Write a comment..."}
+              aria-label={composerOnly ? "Write an internal note" : "Write a comment"}
               className="flex max-h-32 min-h-9 w-full resize-none border-0 bg-transparent px-1 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-50"
-              disabled={busy}
+              disabled={busy || disabled}
             />
             <button
               type="button"
               onClick={submit}
               disabled={!canSend}
-              aria-label={busy ? "Posting" : "Send comment"}
+              aria-label={busy ? "Posting" : composerOnly ? "Send internal note" : "Send comment"}
               className="grid size-9 shrink-0 place-items-center rounded-control bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               <Send className="size-4" aria-hidden="true" />
@@ -731,4 +740,25 @@ export function EntityCommentsWidget({ target }: { target: CommentTarget }) {
       </div>
     </div>
   );
+}
+
+/** The canonical comment composer, without a separate thread panel. */
+export function CommentComposer(props: {target: CommentTarget; onPosted?: () => void; onDraftChange?: (body: string) => void; disabled?: boolean}) {
+  return <EntityCommentsWidget {...props} composerOnly />;
+}
+
+/** Render stored references through the same permission-checked resolver as comments. */
+export function CommentBody({body}: {body: string}) {
+  const [mentions, setMentions] = useState<CommentMention[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    setMentions([]);
+    const refs = [...body.matchAll(new RegExp(MENTION_TOKEN))];
+    void Promise.all(refs.map(async m => {
+      try { return await api.resolveMention(m[3] as "catalogs" | "documents", m[4], m[5]); }
+      catch { return null; }
+    })).then(results => { if (!cancelled) setMentions(results.filter((r): r is NonNullable<typeof r> => r !== null)); });
+    return () => { cancelled = true; };
+  }, [body]);
+  return <>{renderBody(body, mentions)}</>;
 }

@@ -159,11 +159,19 @@ export interface OnnoEvents {
  *   const { Select, SelectTrigger, SelectContent, SelectItem, Button, Segmented } = ui;
  */
 export interface OnnoUi {
+  EntityTagMenu: import("react").ComponentType<{kind: "catalogs" | "documents"; name: string; id: string; readOnly?: boolean}>;
+  ContextMenuSub: import("react").ComponentType<any>;
+  EntityTags: import("react").ComponentType<{kind: "catalogs" | "documents"; name: string; id: string; readOnly?: boolean}>;
+  ContextMenuContent: import("react").ComponentType<any>;
+  ContextMenuItem: import("react").ComponentType<any>;
+
   Button: import("react").ComponentType<any>;
   Badge: import("react").ComponentType<any>;
   Input: import("react").ComponentType<any>;
   Label: import("react").ComponentType<any>;
   Textarea: import("react").ComponentType<any>;
+  CommentComposer: import("react").ComponentType<{target: {kind: "catalogs" | "documents"; name: string; id: string}; onPosted?: () => void; onDraftChange?: (body: string) => void; disabled?: boolean}>;
+  CommentBody: import("react").ComponentType<{body: string}>;
   Checkbox: import("react").ComponentType<any>;
   Switch: import("react").ComponentType<any>;
   Segmented: import("react").ComponentType<any>;
@@ -174,8 +182,12 @@ export interface OnnoUi {
   CardDescription: import("react").ComponentType<any>;
   CardContent: import("react").ComponentType<any>;
   Popover: import("react").ComponentType<any>;
+  PopoverAnchor: import("react").ComponentType<any>;
   PopoverTrigger: import("react").ComponentType<any>;
   PopoverContent: import("react").ComponentType<any>;
+  /** Standard list surface with its host-owned header, filters and view controls. */
+  EntityListWidget: import("react").ComponentType<any>;
+  OptionsFacet: import("react").ComponentType<{label: string; options: {value: string; label: string; color?: string; avatarUrl?: string}[]; multi: boolean; selected: string[]; onChange: (next: string[]) => void}>;
   Select: import("react").ComponentType<any>;
   SelectContent: import("react").ComponentType<any>;
   SelectGroup: import("react").ComponentType<any>;
@@ -186,6 +198,10 @@ export interface OnnoUi {
 
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
+  extensions?: {
+    register(extension: import("./extensions").UiExtension): () => void;
+    Slot: import("react").ComponentType<import("./extensions").ExtensionSlotProps>;
+  };
   React: typeof import("react");
   jsxRuntime: unknown;
   registerWidget: (
@@ -194,9 +210,40 @@ export interface OnnoHost {
   ) => void;
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   api: OnnoReadApi;
+  /** Optional on older hosts; shared notification manager. */
+  toast?: Record<"success" | "error" | "info" | "warning", (message: string) => string | number>;
   /** The host's UI component primitives (see {@link OnnoUi}). Present from host contract v2. */
   ui: OnnoUi;
   /** Shared live-event facade. Present from host contract v3. */
   events?: OnnoEvents;
+  /** Custom chat bodies; optional for compatibility with older hosts. */
+  chatMessages?: {
+    register(renderer: ChatMessageRenderer): () => void;
+    Body: import("react").ComponentType<ChatMessageRendererProps>;
+  };
   version: number;
+}
+
+/** Read-only message data supplied by the CRM timeline. */
+export interface ChatMessage {
+  id: string;
+  kind: "CUSTOMER_MESSAGE" | "AGENT_REPLY" | "SYSTEM_EVENT";
+  direction: "INBOUND" | "OUTBOUND" | "INTERNAL";
+  channel: string;
+  authorName: string;
+  body: string;
+  sentAt: string;
+  deliveryStatus: string;
+}
+export interface ChatMessageRendererProps {
+  message: Readonly<ChatMessage>;
+  fallback: import("react").ReactNode;
+}
+export interface ChatMessageRenderer {
+  /** Unique namespaced ID; registering it again replaces the renderer. */
+  id: string;
+  /** Higher priority wins; equal priorities resolve by ID for stable load order. */
+  priority?: number;
+  matches: (message: Readonly<ChatMessage>) => boolean;
+  component: import("react").ComponentType<ChatMessageRendererProps>;
 }

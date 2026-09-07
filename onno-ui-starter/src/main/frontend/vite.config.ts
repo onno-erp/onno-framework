@@ -22,6 +22,7 @@ export default defineConfig({
     },
   },
   test: {
+    alias: [{ find: "@onno/widget-sdk", replacement: path.resolve(__dirname, "../../../../onno-widget-sdk/src/index.ts") }, { find: /^lucide-react$/, replacement: path.resolve(__dirname, "node_modules/lucide-react/dist/esm/lucide-react.js") }],
     environment: "jsdom",
     globals: true,
     setupFiles: ["./tests/setup.ts"],

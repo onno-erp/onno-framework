@@ -1,3 +1,6 @@
+import { ExtensionSlot } from "@/lib/ui-extensions";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
@@ -242,6 +245,8 @@ export type ListDescriptor = {
   defaultFilters?: Record<string, string[]>;
   /** Per-group subtotals shown on each group header (and their display format). */
   aggregates?: ListAggregate[];
+  selectionCheckboxes?: boolean;
+  selectionWidget?: string;
   pageSize: number;
   // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
@@ -297,6 +302,15 @@ function nearestScrollAncestor(el: HTMLElement): HTMLElement | null {
     if (o === "auto" || o === "scroll") return p;
   }
   return null;
+}
+
+/** Bottom padding contributed by layout wrappers between an island and its page scroller. */
+function trailingPaddingTo(el: HTMLElement, boundary: HTMLElement): number {
+  let padding = 0;
+  for (let p = el.parentElement; p && p !== boundary; p = p.parentElement) {
+    padding += Number.parseFloat(getComputedStyle(p).paddingBottom) || 0;
+  }
+  return padding;
 }
 
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
@@ -401,10 +415,10 @@ export function eventMatches(event: UiEvent, kind: string, name: string): boolea
  */
 const facetTriggerCls = (active: boolean) =>
   cn(
-    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-control border px-3 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+    buttonVariants({ variant: "subtle", size: "toolbar" }),
     active
       ? "border-solid border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10"
-      : "border-dashed border-input bg-transparent text-muted-foreground hover:border-solid hover:border-input hover:bg-accent hover:text-foreground"
+      : ""
   );
 
 // Options-facet lists longer than this get a search row; shorter ones stay a plain scan.
@@ -511,7 +525,7 @@ function FacetOptionRow({
  * the prior value and closes; multi-select toggles and stays open. Values are keyed by {@code value}
  * (what the query binds); labels are what the user reads. Empty → no constraint.
  */
-function OptionsFacet({
+export function OptionsFacet({
   label,
   options,
   multi,
@@ -1271,8 +1285,12 @@ const OVERSCAN = 8;
 export function EntityListWidget({
   list,
   headerExtra,
+  renderer,
+  refreshKey,
 }: {
   list: ListDescriptor;
+  renderer?: ComponentType<ListRendererProps>;
+  refreshKey?: number;
   // Host-provided control rendered in the control island right after the title — the register
   // surface parks its Balance/Movements toggle here so the view switch lives with the list's own
   // controls instead of floating above the card.
@@ -1376,6 +1394,7 @@ export function EntityListWidget({
     row: EntityRecord;
     /** Set by a cell-menu right-click (ListSpec.cellMenu): render ONLY this submenu's actions, flat. */
     only?: string;
+    batch?: boolean;
   } | null>(null);
   // Two-step batch delete: first click arms ("sure?"), second click runs.
   const [armedDelete, setArmedDelete] = useState(false);
@@ -1397,11 +1416,14 @@ export function EntityListWidget({
   // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
   // list degrades to the default grid rather than failing (no toggle, no blank body).
   const registryVersion = useSyncExternalStore(subscribeRegistry, getRegistryVersion);
+  const SelectionWidget = useMemo(() => list.selectionWidget
+    ? resolveWidget(list.selectionWidget) as ComponentType<{ ids: string[]; complete: () => void }> | undefined
+    : undefined, [list.selectionWidget, registryVersion]);
   const customType = list.custom?.type ?? "";
   const CustomRenderer = useMemo(
-    () => (customType ? (resolveWidget(customType) as ComponentType<ListRendererProps> | undefined) : undefined),
+    () => renderer ?? (customType ? (resolveWidget(customType) as ComponentType<ListRendererProps> | undefined) : undefined),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customType, registryVersion]
+    [customType, registryVersion, renderer]
   );
   const customMode = view === "custom" && !!CustomRenderer;
   // Grouped view replaces the flat table (never shown together with the map or a custom body).
@@ -1577,7 +1599,8 @@ export function EntityListWidget({
   // than that, the table scrolls horizontally instead of cramming the columns.
   const DATA_COL_MIN = 150;
   const ACTION_COL_W = rowButtonActions.length ? rowButtonActions.length * 36 + 8 : 0;
-  const template =
+  const showSelectionCheckboxes = list.selectionCheckboxes === true && openable;
+  const template = (showSelectionCheckboxes ? "20px " : "") +
     columns
       .map((c) => {
         const px = listColumnPixelWidth(c.width);
@@ -1598,13 +1621,13 @@ export function EntityListWidget({
   // Natural minimum width of the table: each column at its authored width (or DATA_COL_MIN),
   // plus the action column, the 12px inter-column gaps and the 32px (px-4) row padding. When the
   // card is wider, the grid fills it (1fr expands); when narrower, this drives a horizontal scroll.
-  const trackCount = columns.length + (ACTION_COL_W ? 1 : 0);
+  const trackCount = columns.length + (ACTION_COL_W ? 1 : 0) + (showSelectionCheckboxes ? 1 : 0);
   const minTableWidth =
     columns.reduce((sum, c) => {
       const px = listColumnPixelWidth(c.width);
       return sum + (px ?? DATA_COL_MIN);
     }, 0) +
-    ACTION_COL_W +
+    ACTION_COL_W + (showSelectionCheckboxes ? 20 : 0) +
     Math.max(0, trackCount - 1) * 12 +
     32;
 
@@ -1718,6 +1741,8 @@ export function EntityListWidget({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig]);
 
+  useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
+
   // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
     const el = rootRef.current;
@@ -1735,7 +1760,9 @@ export function EntityListWidget({
   //
   // The limit is the enclosing scroller's content box, NOT window.innerHeight: the shell keeps
   // padding below the scroller, so sizing to the window overshoots by that padding and leaves the
-  // page a few px of scroll play (the whole card wiggles and the gaps look uneven). The offset is
+  // page a few px of scroll play (the whole card wiggles and the gaps look uneven). Authored pages
+  // also wrap embedded blocks in padded DivKit regions; subtract their trailing padding because it
+  // sits after the island but still contributes to the scroller's content height. The offset is
   // computed in the scroller's content coordinates (scroll-invariant), so the height converges to
   // exactly zero page scroll even if measured while the page is scrolled.
   //
@@ -1756,7 +1783,8 @@ export function EntityListWidget({
       const sc = nearestScrollAncestor(el);
       if (sc) {
         const offsetInContent = top - sc.getBoundingClientRect().top - sc.clientTop + sc.scrollTop;
-        setSurfaceH(Math.max(240, Math.floor(sc.clientHeight - offsetInContent)));
+        const trailingPadding = trailingPaddingTo(el, sc);
+        setSurfaceH(Math.max(240, Math.floor(sc.clientHeight - offsetInContent - trailingPadding)));
       } else {
         setSurfaceH(Math.max(240, Math.floor(window.innerHeight - top)));
       }
@@ -1897,7 +1925,7 @@ export function EntityListWidget({
   // element itself renders once at the island root, so either body can drive it). Right-clicking
   // outside an active selection drops the selection first, like the flat rows always did.
   const openRowMenu = useCallback(
-    (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string }) => {
+    (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string; batch?: boolean }) => {
       if (selected.size && !selected.has(menu.id)) clearSelection();
       setArmedDelete(false);
       setRowMenu(menu);
@@ -1922,7 +1950,18 @@ export function EntityListWidget({
   // A changed query invalidates the selection's row set — indices shift, rows drop out.
   useEffect(() => {
     clearSelection();
-  }, [kind, name, debounced, filterSig, sort.column, sort.descending, clearSelection]);
+  }, [kind, name, debounced, filterSig, sort.column, sort.descending, groupBy, granularity, view, clearSelection]);
+
+  // A confirmation applies only to the exact selection that armed it.
+  useEffect(() => { setArmedDelete(false); }, [selected]);
+  useEffect(() => {
+    if (!list.dynamicActions || !selected.size) return;
+    let cancelled = false;
+    void api.getEntityActions<ListAction, RowActionState>(kind, name, [...selected][0])
+      .then(response => { if (!cancelled) setResolvedActions(response.actions); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selected, list.dynamicActions, kind, name]);
 
   // Esc clears the selection. Captured + consumed: the shell's own Esc handler closes the
   // focused tab (and only yields to an already-defaultPrevented event), so clearing a selection
@@ -2284,7 +2323,7 @@ export function EntityListWidget({
   // server actions run over every selected id, and Delete becomes a two-step "Delete N".
   const rowMenuEl = rowMenu
     ? (() => {
-        const batch = selected.size > 1 && selected.has(rowMenu.id);
+        const batch = (rowMenu.batch || selected.size > 1) && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
         const openBatch = () => {
           for (const id of ids) dispatchAction(rowOpenUrl(kind, name, id));
@@ -2353,6 +2392,7 @@ export function EntityListWidget({
             width={216}
             estimatedHeight={itemCount * 38 + 24}
           >
+            {!onlyMenuActions && <ExtensionSlot name="entity.list.context-menu" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown row command");if(batch)await runBatchAction(a,[...selected],input as ActionFormValues,true);else await runAction(a,rowMenu.id,input as ActionFormValues,true);},surface:"entity-list",kind,name,recordId:rowMenu.id,record:rowMenu.row,selectedIds:[...selected],permissions:{canWrite},refresh:reload,closeMenu:close,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
             {onlyMenuActions ? (
               // Cell-menu mode: the pill's right-click IS the choice list — nothing else.
               onlyMenuActions.map(actionItem)
@@ -2496,9 +2536,11 @@ export function EntityListWidget({
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
-        <div className="mr-1 flex shrink-0 items-center gap-2">
+        <div className="mr-1 flex min-h-8 shrink-0 items-center gap-2">
           <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>
           {headerExtra}
+          <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />
+          {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
           <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
           </span>
@@ -2513,6 +2555,7 @@ export function EntityListWidget({
               <X className="size-3" aria-hidden="true" />
             </button>
           ) : null}
+
         </div>
 
         {/* Flexible facet rail — the only horizontally scrolling zone. Keeping it min-w-0 lets it
@@ -2526,6 +2569,29 @@ export function EntityListWidget({
             onScroll={measureRail}
             className="-mx-1 -my-1 flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
+          {selected.size > 0 && !mapMode && !customMode ? (
+            <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
+              {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
+              <Button size="toolbar" variant="subtle" onClick={() => {
+                for (const id of selected) dispatchAction(rowOpenUrl(kind, name, id));
+              }}><ExternalLink />{t("action.open")}</Button>
+              {rowActions.filter(a => a.server).map(a => (
+                <Button key={a.key} size="toolbar" variant="subtle" disabled={pending.has(`batch:${a.key}`)}
+                  onClick={() => { setArmedDelete(false); void runBatchAction(a, [...selected]); }}>
+                  {pending.has(`batch:${a.key}`) ? <Loader2 className="animate-spin" />
+                    : a.logo ? <img src={a.logo} alt="" className="size-4 object-contain" />
+                    : a.color ? <span className="size-3 rounded-full" style={{ backgroundColor: a.color }} />
+                    : <DynamicLucide name={a.icon || "zap"} size={16} />}
+                  {a.label}
+                </Button>
+              ))}
+              {canWrite ? <Button size="toolbar" variant="subtle" className="hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                disabled={pending.has("batch:__delete")} onClick={() => {
+                  if (!armedDelete) { setArmedDelete(true); return; }
+                  setArmedDelete(false); void runBatchDelete([...selected]);
+                }}><Trash2 />{armedDelete ? t("batch.deleteConfirm", { n: selected.size }) : t("action.delete")}</Button> : null}
+            </div>
+          ) : null}
           {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
               Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
               grouped table, which the custom renderer replaces). */}
@@ -2786,6 +2852,7 @@ export function EntityListWidget({
           selected={selected}
           setSelected={setSelected}
           clearSelection={clearSelection}
+          selectionCheckboxes={showSelectionCheckboxes}
           openRowMenu={openRowMenu}
         />
       ) : (
@@ -2822,6 +2889,12 @@ export function EntityListWidget({
               className={cn("sticky top-0 z-10 grid items-center gap-3 rounded-t-card border-b border-border bg-card py-2.5", leftPad)}
               style={{ gridTemplateColumns: template }}
             >
+              {showSelectionCheckboxes ? <ListSelectionCheckbox
+                label={t("list.selectLoaded")}
+                disabled={loadedRows.length === 0}
+                checked={loadedSelectionState(loadedRows.map(entityRowId).filter((id): id is string => id != null), selected)}
+                onChange={checked => setSelected(prev => selectLoaded(prev, loadedRows.map(entityRowId).filter((id): id is string => id != null), checked))}
+              /> : null}
               {columns.map((c) => {
                 const active = sort.column === c.columnName;
                 // The help "?" sits beside (not inside) the sort button — nesting buttons is
@@ -2866,6 +2939,7 @@ export function EntityListWidget({
                   className={cn("grid items-center gap-3 border-b border-border/50", leftPad)}
                   style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                 >
+                  {showSelectionCheckboxes ? <span aria-hidden="true" /> : null}
                   {columns.map((c) => (
                     <span key={c.columnName} className="h-3.5 w-2/3 rounded bg-muted/60" />
                   ))}
@@ -2956,6 +3030,16 @@ export function EntityListWidget({
                       )}
                       style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                     >
+                      {showSelectionCheckboxes ? <ListSelectionCheckbox
+                        label={t("list.selectRow", { row: String(row.description ?? row._description ?? row[columns[0]?.columnName] ?? absIdx + 1) })}
+                        disabled={!recordId}
+                        checked={isSelected}
+                        onChange={checked => {
+                          if (!recordId) return;
+                          selAnchorRef.current = absIdx;
+                          setSelected(prev => selectLoaded(prev, [recordId], checked));
+                        }}
+                      /> : null}
                       {columns.map((c) =>
                         c.cellMenu ? (
                           // ListSpec.cellMenu: right-clicking THIS cell (e.g. the status pill)

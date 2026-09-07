@@ -11,7 +11,23 @@ public record ResolvedListView(String title, List<Column> columns,
                                boolean searchable, String sortColumn, boolean sortDescending,
                                List<Filter> filters, MapView mapView,
                                int pageSize, Grouping grouping,
-                               CustomView customView) {
+                               CustomView customView, boolean selectionCheckboxes, String selectionWidget) {
+
+    public ResolvedListView(String title, List<Column> columns, boolean searchable,
+                            String sortColumn, boolean sortDescending, List<Filter> filters,
+                            MapView mapView, int pageSize, Grouping grouping, CustomView customView,
+                            boolean selectionCheckboxes) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView,
+                pageSize, grouping, customView, selectionCheckboxes, null);
+    }
+
+    /** Backward-compatible constructor: selection checkboxes are opt-in. */
+    public ResolvedListView(String title, List<Column> columns, boolean searchable,
+                            String sortColumn, boolean sortDescending, List<Filter> filters,
+                            MapView mapView, int pageSize, Grouping grouping, CustomView customView) {
+        this(title, columns, searchable, sortColumn, sortDescending, filters, mapView,
+                pageSize, grouping, customView, false);
+    }
 
     public ResolvedListView {
         filters = filters == null ? List.of() : List.copyOf(filters);

@@ -240,7 +240,7 @@ public class UiViewResolver {
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,
-                pageSize, grouping, customView);
+                pageSize, grouping, customView, spec.selectionCheckboxes(), spec.selectionWidget());
     }
 
     /**

@@ -192,6 +192,7 @@ public class CommentController {
     public ResponseEntity<Void> delete(@PathVariable UUID commentId, Principal principal) {
         Comment comment = comments.find(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        requireRead(comment.entityType(), comment.entityName(), principal);
         if (!canDelete(comment, currentUser.resolve(principal), isAdmin(principal))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the author or an administrator can delete this comment");

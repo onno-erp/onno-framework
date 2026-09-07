@@ -36,6 +36,7 @@ to future agents that may not have the full conversation context.
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
+| `onno-crm-starter` | Reusable CRM business module with customers, agents, unified multi-channel inboxes, comments/activity, opportunities, commands, additive UI metadata, and a packaged widget. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
@@ -55,7 +56,7 @@ Community extensions (connectors, SPI implementations, UI add-ons, skills) are b
 ### Before Editing
 
 1. Read the relevant module's `build.gradle.kts`.
-2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or the example app.
+2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or one of the example apps.
 3. Prefer extending existing framework concepts over adding parallel mechanisms.
 4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass — see [Keeping docs in sync](#keeping-docs-in-sync).
 5. Preserve user changes in the working tree. Do not reset, checkout, or clean files unless the user explicitly asks.
@@ -1114,3 +1115,58 @@ Two framework behaviors you *will* hit the moment you write import or sync code:
   the document row won't be committed yet, the `_posted` update runs on a different connection that
   can't see it, and you silently end up with register movements but `_posted = false`. **Save (let it
   commit), then post.**
+
+### CRM workspace and consolidation
+
+`onno-crm-starter` owns developer-authored layout/custom-field definitions and explicit customer merge
+commands. Use host `CrmWorkspaceCustomizer` beans for presentation. The Channels page manages installed
+`CrmChannelConnection` providers; unavailable connectors must not offer fake sign-in buttons. Keep widget visibility separate from permission checks. Preserve identity scopes and each
+conversation's provider destination when merging; never merge by display name automatically. Merge
+previews and contact edits carry revision fingerprints. Undo must refuse to overwrite later work.
+Built-in transfers cover conversations, opportunities, contact identities and customer comments;
+additional host customer references require an explicit consolidation policy. See the module README
+for starter-owned infrastructure tables and public command contracts.
+
+Standard catalog/document tables may opt into visual selection with
+`ListSpec.selectionCheckboxes(true)`. Reuse the host Checkbox and the existing selection/batch
+command state; do not add a second bulk-action backend. Select-all covers loaded rows only, including
+expanded loaded groups. Default-off lists retain their keyboard selection behavior.
+
+### CRM workspace authorization
+
+`CrmInboxWorkspace` beans define team inbox views independently of `Inbox` channel accounts. Keep
+provider routing on `Conversation.inbox`; workspace selection predicates never mutate it. With
+workspace beans, use scoped CRM endpoints and pass `workspace` on commands. Non-admin generic
+conversation/message reads are intentionally denied by `UiEntityAccessPolicy`. Contacts remain
+shared master data; filter related conversation collections and authorize every affected chat
+before a merge. Keep event invalidations content-free for workspace subscribers.
+
+The local Gmail adapter groups email threads by canonical customer within its own mailbox.
+Startup consolidates earlier thread-per-chat imports transactionally: messages and comments move,
+thread routes remain intact, superseded conversations are soft-deleted, and source/target IDs are
+recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when queued.
+
+
+The Instagram adapter in `onno-crm-channels-starter` owns the opt-in `onno.crm.channels.instagram.enabled`
+connection, private token-file reads, and additive `onno_crm_ig_*` tables. `Channel.INSTAGRAM` is
+append-only; preserve existing enum constants. Provider-visible polling messages deduplicate by
+account/message ID and route by account/peer, preserving contact canonicalization. Outbound sends
+are queued transactionally and enforce a 24-hour reply window; uncertain sends require explicit
+retry. This adapter does not configure public webhooks or publish the Meta app.
+
+Packaged channels now live in `onno-crm-channels-starter` (Apache-2.0). Use canonical `onno.crm.channels.<provider>.*` keys and preserve private external credentials during migration. WhatsApp accepts only signed raw-body webhooks, scopes them to its WABA/number, deduplicates message IDs and queues replies after commit. `DeliveryStatus.READ` is additive. Adopter guidance lives in the three `onno-crm-*` skills.
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+Record tags are a UI-starter extension: `detail.widget("Tags").type("entityTags")` or SDK `EntityTags`.
+Use stable tag definitions/assignments through `TagService` and `/api/tags`, not delimiter-based
+fields for new tagging features. TagAccessPolicy adds record-level authorization.
+
+CRM contact stages are catalog references (`LifecycleStage` / `CrmCustomerStages`).
+The stage-catalog migration reuses old enum UUIDs and does not rewrite customer
+assignments. Do not restore enum choices in UI code; labels and colors come from application code.
+
+CRM stage and conversation-status choices are supplied by application `CrmStateConfiguration` code. Backing catalogs are read-only projections; do not expose them as configuration editors. The consuming app owns action-button contributions and legacy-data migrations.

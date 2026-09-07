@@ -149,12 +149,9 @@ export function DesktopNavigation({
             const item = section.items[0];
             const routeActive = section.items.some((candidate) => isItemActive(activePath, candidate.path));
             const sectionSelected = index === selected;
-            // A focused tab owns the rail highlight whenever its route belongs to a section.
-            // If the focused pane is empty (or its route is outside authored navigation), keep
-            // the currently selected drawer section highlighted as the shell-level fallback.
-            // The filled background means the drawer is visibly selected, so it must disappear
-            // with the drawer. A focused tab may still keep its owning icon accented below.
-            const highlighted = expanded && (activeSection >= 0 ? routeActive : sectionSelected);
+            // Route selection survives drawer collapse. Only a visible submenu may supply
+            // a fallback when no page is focused; a direct link has no drawer to select.
+            const highlighted = routeActive || (drawerOpen && activeSection < 0 && sectionSelected);
             const navigationState = routeActive
               ? "route-active"
               : highlighted

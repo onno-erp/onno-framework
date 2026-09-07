@@ -1,3 +1,4 @@
+import { EntityTags } from "@/components/entity-tags";
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import type { DashboardWidgetMeta } from "@/lib/types";
@@ -40,6 +41,7 @@ export { registerWidget, registeredWidgetTypes, resolveWidget, subscribeRegistry
  * forking the framework. The server emits {@code .type("gauge")} as an {@code
  * onno-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
  */
+registerWidget("entityTags", ({ widget }: { widget: DashboardWidgetMeta }) => widget.record ? <EntityTags {...widget.record} /> : null);
 registerWidget("count", ValueWidget);
 registerWidget("metric", ValueWidget);
 registerWidget("chart", ChartWidget);

@@ -192,6 +192,9 @@ public final class UiMessages {
         // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The
         // selection count itself reuses "list.selected" below (shared with the filter badge).
         d.put("list.clearSelection", "Clear selection");
+        d.put("list.selectLoaded", "Select loaded rows");
+        d.put("list.selectRow", "Select {row}");
+        d.put("list.selectionActions", "Actions for selected");
         d.put("batch.delete", "Delete {n}");
         d.put("batch.deleteConfirm", "Sure? Delete {n}");
         d.put("batch.running", "{label} — running on {n}…");

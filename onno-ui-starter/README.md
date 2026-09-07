@@ -1500,3 +1500,84 @@ route depth. Standard Spring Boot consumer static locations remain available.
 Missing `.js`, `.css`, image, font, and other file-shaped paths return `404`; unknown `/api/**`
 routes also remain `404`. Requests outside the configured UI mount are left to application
 controllers and Spring Boot's normal static-resource handling.
+
+
+### Transaction-safe live updates
+
+Repository and command entity events reach local SSE subscribers after the publishing Spring
+transaction commits. Browser refetches therefore see the committed row; rollbacks emit no local
+SSE invalidation. Events published outside a transaction still dispatch immediately. This applies
+to background integrations, including incoming CRM conversations and message delivery updates.
+
+### Optional visual row selection
+
+Enable the standard Onno checkbox column from an entity view:
+
+```java
+@Override
+public void list(ListSpec<Customer> list) {
+    list.selectionCheckboxes(true);
+    list.columns(Customer::getDescription, Customer::getEmail);
+}
+```
+
+It is off by default and applies to flat and grouped catalog/document tables. Checking a row
+selects it without opening its record. The header has a mixed state and selects/deselects only
+loaded rows (expanded loaded groups in grouped mode), never all unseen server matches. Paging
+loads more records without implicitly selecting them. Inline selection buttons expose
+Open, authored server ROW actions and a two-step Delete action in the toolbar; one checked row also uses the batch
+command path. Actions with forms collect values once for the selected IDs. Existing permissions,
+per-record validation, failure summaries and the 500-ID request limit still apply. Keyboard
+selection remains available when checkboxes are off. Changing query, sort, grouping or view clears
+selection. Custom list renderers and maps own their own presentation and do not receive a checkbox
+column automatically; register balance/movement rows do not have selectable catalog/document IDs.
+
+Generic entity access can be further restricted by `UiEntityAccessPolicy` beans. Their deny-only
+checks apply through `UiAccessService` to REST/UI/MCP access and entity event visibility; ADMIN
+remains a superuser. The CRM uses this to close unrestricted conversation endpoints when scoped
+inbox workspaces are configured. Comment deletion requires current read access to its target in
+addition to author/admin ownership.
+
+`OptionsFacet` is available from `@onno/widget-sdk`: the same filter chip used by entity lists.
+Pass `label`, `options` (`value`, `label`, optional `color`/`avatarUrl`), `multi`, `selected: string[]`,
+and `onChange`. Empty selection means no constraint; the consuming widget owns data filtering.
+
+`EntityListWidget` is also exposed through the widget SDK for scoped operational lists. Supply the
+host list descriptor (`list`, including a scoped `feed`), optional `renderer` component for the
+custom body, and optional numeric `refreshKey` to trigger a soft live refresh. The host retains
+ownership of the entire standard list header, filtering, sorting and table/custom-view switching.
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+### Structured record tags
+
+`EntityTags` is a host/SDK component with `{ kind: "catalogs" | "documents", name, id,
+readOnly? }`. It displays colored chips and supports selecting existing catalog tags and adding/removing
+individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
+widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail configuration.
+
+The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
+`onno_tag_links`. Libraries are scoped to the canonical entity kind/name, so tags can be reused
+across its records. Case-insensitive names reuse a definition; removing a chip only removes that
+record's assignment. Standard entity read/write permissions apply. Optional `TagAccessPolicy`
+beans add record-level checks; the CRM uses its workspace customer permissions.
+
+Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
+legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging
+service owns record assignments. CRM provides `CrmTags`, available under Configuration → Tags.
+The Add tag picker only searches/selects existing catalog entries. Legacy IDs and assignments
+survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
+
+### UI extension outlets
+
+Host contract v5 adds `registerExtension` and `ExtensionSlot`: opt-in contributions to page/list/form
+controls, entity and CRM context menus, composer tools, and right-panel sections. Contributions
+receive scoped context and supported host callbacks, have deterministic ordering and isolated
+render failures, and can be replaced/unregistered without modifying the host. Backend authorization
+continues to govern commands. Timeline bodies retain `registerChatMessageRenderer`.
+See the UI contributions section of `docs/EXTENDING.md` for outlet names, context, and examples.
+
+Presence is best-effort: background snapshot/heartbeat failures do not display error toasts. A 403 stops heartbeats for that route until navigation/remount; record content continues to enforce its own access checks. This supports scoped custom record views whose users cannot read the entire catalog.
