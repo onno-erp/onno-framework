@@ -507,6 +507,13 @@ sorting), the feed (infinite/paged + pager), and live refresh — the component 
 current window of rows, the list descriptor, and an open-record callback. An unregistered type
 degrades to the default grid. See the README's "Custom list renderers" section.
 
+Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
+props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
+provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
+`loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+
+
 It also serves **record detail widgets**. `EntityView.detail(DetailSpec)` declares widgets below the
 fields on the combined catalog/document record form. They render only for saved records and receive
 `widget.record` with `kind`, logical `name`, record `id`, already-loaded `data`, and `readOnly`.

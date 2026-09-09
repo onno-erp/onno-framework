@@ -338,3 +338,11 @@ with `{inputs:{...}}`). It checks workspace write access, application read-only 
 and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
+
+### Pagination in custom list panes
+
+Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
+props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
+provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
+`loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.

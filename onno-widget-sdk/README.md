@@ -244,3 +244,11 @@ See the UI contributions section of `docs/EXTENDING.md` for outlet names, contex
 `Badge` accepts an optional configured hex `color`, using the shared `enumPillStyle` contrast calculation. CRM contact stages and entity tags use this filled pill treatment; unknown colors fall back to the semantic badge variant.
 
 Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.
+
+### Pagination in custom list panes
+
+Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
+props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
+provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
+`loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.

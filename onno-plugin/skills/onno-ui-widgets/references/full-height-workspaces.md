@@ -55,6 +55,11 @@ function ConversationWorkspace({ rows }: ListRendererProps) {
 registerListRenderer("conversationWorkspace", ConversationWorkspace);
 ```
 
+A nested list pane owns pagination too: consume `ListRendererProps.hasMore`, `loadingMore`,
+`loadMoreFailed` and `loadMore()` from the host. Call `loadMore()` near the pane's bottom and
+provide a visible keyboard-accessible load-more/retry button. Stop automatic retry after a failure;
+do not depend on the outer list container scrolling or replace the host's scoped query with your own.
+
 Every intermediate flex/grid pane must be able to shrink (`min-h-0`, and `min-w-0` horizontally).
 Keep headers/composers in normal layout with `shrink-0`; only the content bodies scroll.
 Containment assumes a host-allocated height; applying it to a content-sized card can collapse it.

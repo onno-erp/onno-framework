@@ -1,3 +1,4 @@
+import { ConversationList, type ConversationPagination } from "./ConversationList";
 import { composerState } from "./composerState";
 import { useConversationStatuses } from "./ConversationStatuses";
 import { ExtensionSlot, type ExtensionContext } from "@onno/widget-sdk";
@@ -9,7 +10,7 @@ import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
 import { ChatMessageBody } from "@onno/widget-sdk";
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
 import { ChannelLogo } from "./ChannelLogo";
 import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
 import {
@@ -193,11 +194,6 @@ function ChannelIcon({ channel, comment = false, avatarBadge = false }: { channe
   </span>;
 }
 
-/** Shared sizing/scroll contract for both the root and folder chat lists. */
-function ConversationList({ children }: { children: ReactNode }) {
-  return <div className="min-h-0 min-w-0 w-full max-w-full flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto overscroll-contain p-1.5">{children}</div>;
-}
-
 function conversationChannel(row: EntityRecord | null): string {
   return string(row,"channel","Channel");
 }
@@ -337,7 +333,7 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<ListRendererProps, "rows" | "open"> & { scopedConfig?: Config; workspaceKey?: string }) {
+function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey, ...pagination }: Pick<ListRendererProps, "rows" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string }) {
   const rows = useMemo(() => contactChats(channelRows), [channelRows]);
   const { workspace, error: configError } = useWorkspace();
   const config = scopedConfig ?? workspace?.config;
@@ -658,7 +654,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
               <div className="text-sm font-semibold">Conversations</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{rows.length} chats{folders.length ? ` · ${folders.length} folders` : ""}</div>
             </div>
-            <ConversationList>
+            <ConversationList {...pagination} active={!activeFolder}>
               {(() => {
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
@@ -683,7 +679,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
               <div className="min-w-0"><div className="truncate text-sm font-semibold">{displayedFolder?.label}</div><div className="mt-0.5 text-[11px] text-muted-foreground">{detailRows.length} chats in the current view</div></div>
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
-            <ConversationList>
+            <ConversationList {...pagination} active={!!activeFolder}>
               {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
               {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No chats in this folder match the current filters.</p>}
             </ConversationList>
@@ -844,7 +840,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   },[configuredKey,conversationPath]);
   useUiEvents(()=>setRefreshKey(value=>value+1),{types:["updated"],entityType:"page",entityName:"crm-inbox-workspaces"});
   const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {
-    return feed ? <CrmInbox rows={props.rows} open={()=>{}} scopedConfig={feed.config} workspaceKey={feed.key} /> : null;
+    return feed ? <CrmInbox {...props} open={()=>{}} scopedConfig={feed.config} workspaceKey={feed.key} /> : null;
   },[feed]);
   const list = useMemo(()=>feed ? {
     ...feed.list,
