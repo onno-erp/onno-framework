@@ -67,9 +67,7 @@ public class CrmInboxWorkspaceController {
             members=members.stream().filter(c->target.getCustomer()==null?c.getId().equals(target.getId()):target.getCustomer().equals(c.getCustomer())).toList();
         }
         var descriptor=catalogs.forClass(Conversation.class);
-        // Authoritative membership is checked before even resolving row references.
-        var records=members.stream().filter(c->workspaces.canAccess(c,principal,false))
-            .map(conversation->{
+        java.util.function.Function<Conversation,Map<String,Object>> decorate = conversation -> {
             var raw=catalogs.get(descriptor,conversation.getId());
             Map<String,Object> row=new LinkedHashMap<>();
             row.put("id",conversation.getId());row.put("description",conversation.getDescription());
@@ -100,7 +98,15 @@ public class CrmInboxWorkspaceController {
                 row.put("assigneeDisplay",agent.catalog().fields(conversation.getAssignee()).get("description"));
             } else { row.remove("assignee"); }
             return row;
-        }).filter(filters).filter(row->search.isEmpty()||(Objects.toString(row.get("customerDisplay"),"")+" "+Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)).toList();
+        };
+        // Authorization still precedes counting, filtering, pagination and decoration.
+        var authorized=members.stream().filter(c->workspaces.canAccess(c,principal,false)).toList();
+        String requestedSort=params.containsKey("sort")?params.getFirst("sort"):spec.sortField();
+        boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
+        var byId=new HashMap<UUID,Conversation>();
+        authorized.forEach(c->byId.put(c.getId(),c));
+        var records=authorized.stream().map(pageBeforeDecoration?CrmInboxRows::raw:decorate)
+            .filter(filters).filter(row->search.isEmpty()||(Objects.toString(row.get("customerDisplay"),"")+" "+Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)).toList();
         String sort=params.getFirst("sort");
         if(sort==null)sort=spec.sortField();
         final String sortField=sort;
@@ -122,6 +128,8 @@ public class CrmInboxWorkspaceController {
         config=config.withActions(config.actions().stream().map(a->new CrmWorkspaceService.Action(a.key(),a.label(),
             a.visible()&&!a.key().equals("history")&&(canWrite||Set.of("reply","note","details").contains(a.key())))).toList());
         int end=(int)Math.min(records.size(),(long)offset+limit);
+        var page=records.subList(Math.min(offset,records.size()),end);
+        if(pageBeforeDecoration)page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id")))).toList();
         var resolved=listViews.catalogList(descriptor,spec);
         Map<String,String> fieldNames=new HashMap<>();
         descriptor.attributes().forEach(a->fieldNames.put(a.columnName(),a.fieldName()));
@@ -136,7 +144,7 @@ public class CrmInboxWorkspaceController {
             .map(f->Map.of("key",f.key(),"label",Objects.toString(f.label(),f.key()),"column",fieldNames.getOrDefault(f.columnName(),f.columnName()),"type",f.type(),"options",f.options())).toList());
         list.put("custom",resolved.customView());
         return Map.of("list",list,"key",workspace.key(),"label",workspace.label(),"filters",declared,"config",config,"canWrite",canWrite,
-            "rows",records.subList(Math.min(offset,records.size()),end),"total",records.size(),"hasMore",end<records.size(),"nextCursor",end<records.size()?Integer.toString(end):"");
+            "rows",page,"total",records.size(),"hasMore",end<records.size(),"nextCursor",end<records.size()?Integer.toString(end):"");
     }
     @GetMapping("/{key}/conversations/{id}/comments") public Object notes(@PathVariable String key,@PathVariable UUID id,Principal principal) {
         workspaces.requireConversation(key,id,principal,false);

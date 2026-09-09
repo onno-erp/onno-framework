@@ -138,3 +138,8 @@ List windows coalesce live invalidations while a first-page or pagination reques
 The completed window renders before one queued refresh runs, so continuous connector imports
 cannot starve initial loading. Query and filter changes still invalidate stale responses.
 A failed soft refresh retains visible rows.
+
+Inbox page reads authorize workspace members before counting or pagination. Queries using raw
+conversation fields (including channel filters and message-time sorting) resolve full customer and
+reference details only for the selected page. Customer-name search and display-field sorting retain
+the fully decorated query path so their matching and authorization semantics remain unchanged.
