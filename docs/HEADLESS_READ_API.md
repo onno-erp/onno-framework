@@ -392,6 +392,8 @@ than relying on unbounded Java predicate scans.
 Every existing `/api/crm/conversations/{id}/...` command/read requires the
 `workspace` query parameter. Membership and the workspace's read/write roles are independently
 checked; missing scope, an inaccessible workspace, a foreign chat or read-only mutation returns 403.
+The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
+
 `GET|POST /api/crm/inbox-workspaces/{key}/conversations/{id}/comments` accesses the existing internal
 notes, with POST body `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
 

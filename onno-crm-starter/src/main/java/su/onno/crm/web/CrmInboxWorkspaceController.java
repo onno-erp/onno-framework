@@ -66,6 +66,19 @@ public class CrmInboxWorkspaceController {
             var target=workspaces.requireConversation(key,requested,principal,false);
             members=members.stream().filter(c->target.getCustomer()==null?c.getId().equals(target.getId()):target.getCustomer().equals(c.getCustomer())).toList();
         }
+        // The list host uses ids for live row patches, including read acknowledgements.
+        // Intersect with workspace membership; never expand the authorized scope.
+        if(params.containsKey("ids")) {
+            var requested=new HashSet<UUID>();
+            try {
+                for(String value:params.get("ids"))
+                    for(String id:value.split(",",-1)) requested.add(UUID.fromString(id.strip()));
+            } catch(IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid conversation ids");
+            }
+            if(requested.size()>500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Too many conversation ids");
+            members=members.stream().filter(c->requested.contains(c.getId())).toList();
+        }
         var descriptor=catalogs.forClass(Conversation.class);
         java.util.function.Function<Conversation,Map<String,Object>> decorate = conversation -> {
             var raw=catalogs.get(descriptor,conversation.getId());

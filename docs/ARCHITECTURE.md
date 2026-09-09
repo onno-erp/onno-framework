@@ -689,6 +689,8 @@ Both `check` and `generateIntegrationsDoc` validate registry structure, allowed 
 coordinates, and duplicate ids before accepting it.
 
 
+The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
+
 ### CRM delivery adapters
 
 `CrmMessageTransport` is the CRM's provider-neutral message boundary. The default is disconnected;

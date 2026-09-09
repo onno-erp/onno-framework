@@ -61,6 +61,29 @@ class CrmInboxReadPerformanceTest {
         verify(catalogs,times(2)).get(any(),any());
         verify(contacts,never()).get(members.get(98).getCustomer(),principal);
     }
+    @Test void liveReadPatchReturnsOnlyRequestedAuthorizedConversation() {
+        var params=new LinkedMultiValueMap<String,String>();
+        params.set("ids",members.get(75).getId().toString());
+        var result=(Map<?,?>)controller.read("support","",0,params,principal);
+        var rows=(List<Map<String,Object>>)result.get("rows");
+        assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(75).getId());
+        assertThat(result.get("total")).isEqualTo(1);
+        verify(contacts,times(1)).get(members.get(75).getCustomer(),principal);
+    }
+    @Test void requestedIdsCannotExposeForeignOrUnauthorizedConversations() {
+        when(workspaces.canAccess(members.get(75),principal,false)).thenReturn(false);
+        var params=new LinkedMultiValueMap<String,String>();
+        params.set("ids",members.get(75).getId()+","+UUID.randomUUID());
+        var result=(Map<?,?>)controller.read("support","",0,params,principal);
+        assertThat((List<?>)result.get("rows")).isEmpty();
+        assertThat(result.get("total")).isEqualTo(0);
+        verifyNoInteractions(contacts);
+    }
+    @Test void rejectsMalformedPatchIds() {
+        var params=new LinkedMultiValueMap<String,String>();params.set("ids","invalid");
+        assertThatThrownBy(()->controller.read("support","",0,params,principal))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
     @Test void customerNameSearchStillResolvesNamesBeforePaging() {
         var params=new LinkedMultiValueMap<String,String>();params.set("limit","1");
         var result=(Map<?,?>)controller.read("support","customer-99",0,params,principal);
