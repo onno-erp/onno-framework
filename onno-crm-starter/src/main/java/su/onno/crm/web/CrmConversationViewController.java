@@ -20,8 +20,7 @@ public class CrmConversationViewController {
     public CrmConversationViewController(CrmInboxWorkspaceService workspaces,UiAccessService access,org.springframework.beans.factory.ObjectProvider<DivKitController> generic){this.workspaces=workspaces;this.access=access;this.generic=generic;}
     @GetMapping({"/api/divkit/catalogs/crm_conversations/{id}","/api/divkit/catalogs/CrmConversations/{id}","/api/divkit/catalogs/crmconversations/{id}"})
     public Map<String,Object> open(@PathVariable UUID id,@RequestParam(required=false) String profile,Principal principal) {
-        if(!workspaces.enabled())return generic.getObject().catalogDetail("CrmConversations",id,profile,principal);
-        if(!access.hasAnyRole(principal,List.of("CRM_AGENT","CRM_MANAGER")))throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        workspaces.requireAccess(principal,false);
         var conversation=workspaces.requireConversation(id,principal,false);
         var workspace=workspaces.available(principal).stream().filter(w->w.selection().test(conversation)).findFirst()
             .orElseThrow(()->new ResponseStatusException(HttpStatus.FORBIDDEN,"Conversation is outside your inbox workspaces"));

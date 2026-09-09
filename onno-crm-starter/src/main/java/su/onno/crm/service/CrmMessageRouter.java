@@ -18,9 +18,10 @@ public final class CrmMessageRouter implements CrmMessageTransport {
         Route selected = null;
         Connection unavailable = new Connection(false, "Messaging channel is not connected", 8000);
         for (CrmMessageTransport transport : transports) {
+            if (!transport.supports(conversation)) continue;
             Connection connection = transport.connection(conversation);
             if (!connection.connected()) {
-                if (transports.size() == 1) unavailable = connection;
+                unavailable = connection;
                 continue;
             }
             if (selected != null) {
@@ -37,7 +38,7 @@ public final class CrmMessageRouter implements CrmMessageTransport {
 
     @Override public void enqueue(Conversation conversation, ConversationMessage message) {
         Route route = resolve(conversation);
-        if (route.transport() == null) throw new IllegalArgumentException(route.connection().label());
+        if (route.transport() == null || !route.connection().canSend()) throw new IllegalArgumentException(route.connection().unavailableReason());
         route.transport().enqueue(conversation, message);
     }
 }

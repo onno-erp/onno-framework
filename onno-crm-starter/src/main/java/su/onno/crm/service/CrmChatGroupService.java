@@ -14,17 +14,22 @@ public class CrmChatGroupService {
     public record Group(String key, String label, List<UUID> customerIds) {}
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
-    public CrmChatGroupService(JdbcTemplate jdbc, ObjectMapper json) { this.jdbc=jdbc;this.json=json; }
+    private final CrmFeatures features;
+    public CrmChatGroupService(JdbcTemplate jdbc, ObjectMapper json, CrmFeatures features) { this.jdbc=jdbc;this.json=json;this.features=features; }
+    public void requireEnabled() { if(!features.chatGroups())throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND,"Chat groups are not enabled"); }
     @PostConstruct public void initialize() {
+        if(!features.chatGroups())return;
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_chat_groups (owner VARCHAR(500) NOT NULL, scope VARCHAR(80) NOT NULL, data TEXT NOT NULL, PRIMARY KEY(owner,scope))");
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_chat_group_guard (id INT PRIMARY KEY)");
         jdbc.execute("INSERT INTO onno_crm_chat_group_guard (id) SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM onno_crm_chat_group_guard WHERE id=1)");
     }
     public List<Group> list(String owner,String scope) {
+        requireEnabled();
         return jdbc.query("SELECT data FROM onno_crm_chat_groups WHERE owner=? AND scope=?",(rs,n)->decode(rs.getString(1)),owner,scope).stream().findFirst().orElse(List.of());
     }
     /** Serialize read-modify-write commands so concurrent tabs never lose each other's changes. */
     @Transactional public List<Group> change(String owner,String scope,String operation,String key,String label,UUID customer) {
+        requireEnabled();
         jdbc.queryForObject("SELECT id FROM onno_crm_chat_group_guard WHERE id=1 FOR UPDATE",Integer.class);
         var groups=new ArrayList<>(list(owner,scope));
         if ("create".equals(operation)||"rename".equals(operation)) {

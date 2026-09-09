@@ -28,17 +28,18 @@ import su.onno.types.Ref;
 public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport {
     private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(WhatsAppBridge.class);
     private final WhatsAppClient client;private final JdbcTemplate jdbc;private final TransactionTemplate tx;
-    private final InboxRepository inboxes;private final CustomerRepository customers;private final ConversationRepository conversations;
+    private final InboxRepository inboxes;private final ConversationRepository conversations;
     private final ConversationMessageRepository messages;private final ContactIdentityRepository identities;
     private final CrmContactService contacts;private final CrmWorkspaceService workspace;
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-whatsapp");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";private Instant retryAt=Instant.EPOCH;
     private final su.onno.crm.service.CrmConversationStatuses statuses;
+    public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("WHATSAPP","WhatsApp","/crm/channels/whatsapp.svg"); }
     public WhatsAppBridge(WhatsAppClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
-        CustomerRepository customers,ConversationRepository conversations,ConversationMessageRepository messages,
+        ConversationRepository conversations,ConversationMessageRepository messages,
         ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
         this.statuses=statuses;
-        this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;this.customers=customers;
+        this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.identities=identities;this.contacts=contacts;this.workspace=workspace;
     }
     private record Account(String id,String scoped,String username,UUID inbox,boolean active,String cursor){}
@@ -64,13 +65,15 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
         var a=account();if(a==null)throw new IllegalArgumentException("Connect WhatsApp first");if(action.equals("resume"))connect();boolean active=action.equals("resume");
         tx.executeWithoutResult(s->{workspace.lock();jdbc.update("UPDATE onno_crm_wa_account SET active=? WHERE account_id=?",active,a.id);inboxes.findActiveById(a.inbox).ifPresent(i->{i.setActive(active);inboxes.save(i);});});failure="";retryAt=Instant.EPOCH;
     }
-    public Connection connection(Conversation c){if(!ready||c.getChannel()!=Channel.WHATSAPP||c.getInbox()==null)return new Connection(false,"WhatsApp is not connected",4096);var a=account();
+    public boolean supports(Conversation conversation) { return Channel.WHATSAPP.equals(conversation.getChannel()); }
+
+    public Connection connection(Conversation c){if(!ready||!Channel.WHATSAPP.equals(c.getChannel())||c.getInbox()==null)return new Connection(false,"WhatsApp is not connected",4096);var a=account();
         if(a==null||!a.active||!a.inbox.equals(c.getInbox().id())||!client.configured()||!failure.isBlank())return new Connection(false,"WhatsApp is paused or unavailable",4096);
         var times=jdbc.query("SELECT last_inbound FROM onno_crm_wa_peer WHERE account_id=? AND conversation_id=?",(r,n)->r.getTimestamp(1)==null?null:r.getTimestamp(1).toLocalDateTime(),a.id,c.getId());
         boolean open=times.stream().anyMatch(t->t!=null&&t.atZone(ZoneId.systemDefault()).toInstant().isAfter(Instant.now().minus(Duration.ofHours(24))));
-        return new Connection(open,open?"WhatsApp":"WhatsApp's 24-hour reply window has expired",4096);
+        return new Connection(true,"WhatsApp",4096,open?ReplyCapability.AVAILABLE:ReplyCapability.WINDOW_CLOSED,open?"":"WhatsApp's 24-hour reply window has expired");
     }
-    public void enqueue(Conversation c,ConversationMessage m){if(!connection(c).connected())throw new IllegalArgumentException(connection(c).label());var a=account();
+    public void enqueue(Conversation c,ConversationMessage m){if(!connection(c).canSend())throw new IllegalArgumentException(connection(c).unavailableReason());var a=account();
         String peer=jdbc.queryForObject("SELECT peer_id FROM onno_crm_wa_peer WHERE account_id=? AND conversation_id=? ORDER BY last_inbound DESC NULLS LAST FETCH FIRST 1 ROW ONLY",String.class,a.id,c.getId());
         if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_wa_outbox WHERE message_id=?",Integer.class,m.getId())==0)jdbc.update("INSERT INTO onno_crm_wa_outbox (message_id,account_id,peer_id,state) VALUES (?,?,?,'QUEUED')",m.getId(),a.id,peer);
         else if(jdbc.update("UPDATE onno_crm_wa_outbox SET state='QUEUED' WHERE message_id=? AND state='FAILED'",m.getId())!=1)throw new IllegalArgumentException("Message is already queued or sent");
@@ -129,13 +132,13 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
             var ids=jdbc.query("SELECT conversation_id FROM onno_crm_wa_peer WHERE account_id=? AND peer_id=?",(r,n)->r.getObject(1,UUID.class),a.id,peerId);Conversation c;
             if(ids.isEmpty()){
                 UUID identityId=UUID.nameUUIDFromBytes(("WHATSAPP\n"+a.inbox+"\n"+peerId).getBytes(StandardCharsets.UTF_8));var identity=identities.findActiveById(identityId).orElse(null);
-                Customer customer=identity==null?null:customers.findActiveById(contacts.canonical(identity.getCustomer().id())).orElse(null);
-                if(customer==null){customer=new Customer();customer.setDescription(cut(name,200));customer.setSource("WhatsApp "+a.username);customer.setPhone("+"+peerId);customers.save(customer);}
-                contacts.link(customer.getId(),Channel.WHATSAPP,a.inbox.toString(),peerId,name,true);
-                c=new Conversation();c.setCustomer(Ref.of(Customer.class,customer.getId()));c.setInbox(Ref.of(Inbox.class,a.inbox));c.setChannel(Channel.WHATSAPP);c.setSubject("WhatsApp · "+cut(name,200));c.setDescription(c.getSubject());c.setLastMessageAt(sent);conversations.save(c);
+                UUID customer=contacts.resolveIncoming(new CrmCustomerBinding.IncomingContact(Channel.WHATSAPP,
+                        a.inbox.toString(),peerId,cut(name,200),null,"+"+peerId,null,"WHATSAPP"));
+                contacts.link(customer,Channel.WHATSAPP,a.inbox.toString(),peerId,name,true);
+                c=new Conversation();c.setCustomer(customer);c.setInbox(Ref.of(Inbox.class,a.inbox));c.setChannel(Channel.WHATSAPP);c.setSubject("WhatsApp · "+cut(name,200));c.setDescription(c.getSubject());c.setLastMessageAt(sent);conversations.save(c);
                 jdbc.update("INSERT INTO onno_crm_wa_peer VALUES (?,?,?,NULL)",a.id,peerId,c.getId());
             }else c=conversations.findActiveById(ids.getFirst()).orElse(null);
-            if(c!=null){c.setCustomer(Ref.of(Customer.class,contacts.canonical(c.getCustomer().id())));var m=new ConversationMessage();m.setConversation(Ref.of(Conversation.class,c.getId()));m.setChannel(Channel.WHATSAPP);
+            if(c!=null){c.setCustomer(contacts.canonical(c.getCustomer()));var m=new ConversationMessage();m.setConversation(Ref.of(Conversation.class,c.getId()));m.setChannel(Channel.WHATSAPP);
                 m.setKind(outbound?MessageKind.AGENT_REPLY:MessageKind.CUSTOMER_MESSAGE);m.setDirection(outbound?MessageDirection.OUTBOUND:MessageDirection.INBOUND);m.setAuthorName(cut(outbound?a.username:name,200));m.setBody(text);m.setDescription(cut(text,100));m.setSentAt(sent);m.setDeliveryStatus(outbound?DeliveryStatus.SENT:DeliveryStatus.RECEIVED);m.setExternalMessageId(externalKey(external));messages.save(m);
                 if(!outbound){jdbc.update("UPDATE onno_crm_wa_peer SET last_inbound=? WHERE account_id=? AND peer_id=? AND (last_inbound IS NULL OR last_inbound<?)",sent,a.id,peerId,sent);c.setUnreadCount(c.getUnreadCount()+1);c.setStatus(statuses.incoming());}
                 if(c.getLastMessageAt()==null||!sent.isBefore(c.getLastMessageAt())){c.setLastMessageAt(sent);c.setLastMessagePreview(cut(text,180));}conversations.save(c);}
@@ -144,7 +147,7 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
     }
     private void deliver(Account a){for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_wa_outbox WHERE account_id=? AND state='QUEUED'",(r,n)->r.getObject(1,UUID.class),a.id)){
         if(jdbc.update("UPDATE onno_crm_wa_outbox SET state='SENDING' WHERE message_id=? AND state='QUEUED'",id)!=1)continue;
-        try{var m=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(m.getConversation().id()).orElseThrow();if(!connection(c).connected())throw new IllegalStateException();
+        try{var m=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(m.getConversation().id()).orElseThrow();if(!connection(c).canSend())throw new IllegalStateException();
             String peer=jdbc.queryForObject("SELECT peer_id FROM onno_crm_wa_outbox WHERE message_id=?",String.class,id);
             var time=jdbc.queryForObject("SELECT last_inbound FROM onno_crm_wa_peer WHERE account_id=? AND peer_id=?",java.sql.Timestamp.class,a.id,peer);
             if(time==null||time.toInstant().isBefore(Instant.now().minus(Duration.ofHours(24))))throw new IllegalStateException();

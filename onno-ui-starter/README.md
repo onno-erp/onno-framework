@@ -1581,3 +1581,9 @@ continues to govern commands. Timeline bodies retain `registerChatMessageRendere
 See the UI contributions section of `docs/EXTENDING.md` for outlet names, context, and examples.
 
 Presence is best-effort: background snapshot/heartbeat failures do not display error toasts. A 403 stops heartbeats for that route until navigation/remount; record content continues to enforce its own access checks. This supports scoped custom record views whose users cannot read the entire catalog.
+
+### Composable inbox integration
+
+The CRM widgets use explicit host catalog bindings and scoped inbox feeds. Contact panels open the
+host's ordinary catalog form. Optional list checkboxes and the top selection toolbar remain generic
+`ListSpec` features, independent of CRM. See [the CRM guide](../onno-crm-starter/README.md).

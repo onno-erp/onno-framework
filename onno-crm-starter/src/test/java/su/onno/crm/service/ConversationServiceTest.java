@@ -19,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import su.onno.crm.domain.Channel;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.domain.ConversationMessage;
-import su.onno.crm.domain.ConversationStatus;
 import su.onno.crm.domain.DeliveryStatus;
 import su.onno.crm.domain.MessageDirection;
 import su.onno.crm.domain.MessageKind;
@@ -28,6 +27,7 @@ import su.onno.crm.repository.ConversationRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ConversationServiceTest {
+    enum ConversationStatus { OPEN, WAITING_CUSTOMER, CLOSED }
 
     @Mock CrmMessageTransport transport;
     @Mock ConversationRepository conversations;
@@ -40,7 +40,7 @@ class ConversationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ConversationService(conversations, messages, transport, statuses);
+        service = new ConversationService(conversations, messages, transport, statuses,su.onno.crm.TestBindings.agents());
         lenient().when(transport.connection(any())).thenReturn(new CrmMessageTransport.Connection(true, "Test", 4096));
         conversationId = UUID.randomUUID();
         conversation = new Conversation();
@@ -48,8 +48,6 @@ class ConversationServiceTest {
         conversation.setChannel(Channel.EMAIL);
         conversation.setStatus(statusRef(ConversationStatus.OPEN));
         when(statuses.reply()).thenReturn(statusRef(ConversationStatus.WAITING_CUSTOMER));
-        when(statuses.close()).thenReturn(statusRef(ConversationStatus.CLOSED));
-        when(statuses.reopen()).thenReturn(statusRef(ConversationStatus.OPEN));
         conversation.setUnreadCount(3);
         when(conversations.findActiveById(conversationId)).thenReturn(Optional.of(conversation));
         lenient().when(messages.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -112,43 +110,7 @@ class ConversationServiceTest {
         verify(transport, never()).enqueue(any(), any());
     }
 
-    @Test
-    void closingConversationAddsAVisibleSystemEvent() {
-        service.setClosed(conversationId, true, "Alice Morgan");
-
-        ArgumentCaptor<ConversationMessage> event = ArgumentCaptor.forClass(ConversationMessage.class);
-        verify(messages).save(event.capture());
-        assertThat(conversation.getStatus()).isEqualTo(statusRef(ConversationStatus.CLOSED));
-        assertThat(event.getValue().getKind()).isEqualTo(MessageKind.SYSTEM_EVENT);
-        assertThat(event.getValue().getDirection()).isEqualTo(MessageDirection.INTERNAL);
-        assertThat(event.getValue().getBody()).isEqualTo("Alice Morgan closed the conversation");
-    }
-
-    @Test
-    void assignmentAddsAVisibleLeadActivityEvent() {
-        UUID agentId = UUID.randomUUID();
-
-        service.assign(conversationId, agentId, "Alice Morgan");
-
-        ArgumentCaptor<ConversationMessage> event = ArgumentCaptor.forClass(ConversationMessage.class);
-        verify(messages).save(event.capture());
-        assertThat(conversation.getAssignee().id()).isEqualTo(agentId);
-        assertThat(event.getValue().getKind()).isEqualTo(MessageKind.SYSTEM_EVENT);
-        assertThat(event.getValue().getBody())
-                .isEqualTo("Alice Morgan assigned the conversation to themselves");
-    }
-
-    @Test
-    void assigningToCurrentAgentIsIdempotent() {
-        UUID agentId = UUID.randomUUID();
-        conversation.setAssignee(su.onno.types.Ref.of(su.onno.crm.domain.Agent.class, agentId));
-
-        assertThat(service.assign(conversationId, agentId, "Alice Morgan")).isSameAs(conversation);
-
-        verify(conversations, never()).save(any());
-        verify(messages, never()).save(any());
-    }
-    private static su.onno.types.Ref<su.onno.crm.domain.ChatStatus> statusRef(ConversationStatus status) {
-        return su.onno.types.Ref.of(su.onno.crm.domain.ChatStatus.class,su.onno.repository.EnumerationPersistence.resolveId(ConversationStatus.class,status));
+    private static java.util.UUID statusRef(ConversationStatus status) {
+        return su.onno.repository.EnumerationPersistence.resolveId(ConversationStatus.class,status);
     }
 }

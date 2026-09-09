@@ -8,13 +8,12 @@ plugins {
 }
 
 dependencies {
-    // Core only. The example deliberately depends on framework + UI + auth and nothing else, so the
-    // "simple features" (catalogs, documents, posting, the generated REST API and DivKit UI, role
-    // profiles) are shown working end-to-end without the optional starters
-    // (mcp/import/desktop) in the way. Add a starter here when you want to demo that module.
+    // Core features run by default; the crm Spring profile binds the optional messaging module.
     implementation(project(":onno-framework-starter"))
     implementation(project(":onno-ui-starter"))
     implementation(project(":onno-auth-starter"))
+    // The crm profile explicitly binds the existing Customer and Employee catalogs.
+    implementation(project(":onno-crm-starter"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
     implementation("com.h2database:h2")
@@ -51,4 +50,9 @@ tasks.register("devClasspath") {
     doLast {
         println(classpath.asPath)
     }
+}
+
+// Optional ordinary sales model; the inbox example does not install opportunities or metrics.
+if (providers.gradleProperty("salesExample").isPresent) {
+    sourceSets["main"].java.srcDir("src/sales/java")
 }

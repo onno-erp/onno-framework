@@ -16,19 +16,23 @@ public class CrmInboxWorkspaceService {
     private final ConversationRepository conversations;
     private final UiAccessService access;
     private final CrmWorkspaceService configuration;
+    private final CrmContactService contacts;
     public CrmInboxWorkspaceService(List<CrmInboxWorkspace> definitions, ConversationRepository conversations,
-                                    UiAccessService access, CrmWorkspaceService configuration) {
-        this.definitions=List.copyOf(definitions);this.conversations=conversations;this.access=access;this.configuration=configuration;
+                                    UiAccessService access, CrmWorkspaceService configuration, CrmContactService contacts) {
+        this.definitions=List.copyOf(definitions);this.conversations=conversations;this.access=access;this.configuration=configuration;this.contacts=contacts;
         Set<String> keys=new HashSet<>();
         for(var definition:definitions) {
             if(!keys.add(definition.key())) throw new IllegalArgumentException("Duplicate inbox workspace key: "+definition.key());
         }
     }
+    public void requireAccess(Principal principal, boolean write) {
+        if(principal==null || definitions.stream().noneMatch(w->permitted(w,principal,write)))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Inbox workspace access required");
+    }
     public boolean enabled(){return !definitions.isEmpty();}
     public boolean permitted(CrmInboxWorkspace workspace, Principal principal, boolean write) {
         var roles=access.roles(principal);
         if(roles.contains("ADMIN"))return true;
-        if(Collections.disjoint(roles,Set.of("CRM_AGENT","CRM_MANAGER")))return false;
         return !Collections.disjoint(roles,workspace.readRoles()) && (!write || !Collections.disjoint(roles,workspace.writeRoles()));
     }
     public List<CrmInboxWorkspace> available(Principal principal){return definitions.stream().filter(w->permitted(w,principal,false)).toList();}
@@ -46,7 +50,8 @@ public class CrmInboxWorkspaceService {
             Comparator.comparing(Conversation::getLastMessageAt,Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(Conversation::getId)).toList();
     }
     public boolean canAccess(Conversation conversation,Principal principal,boolean write) {
-        return !enabled() || definitions.stream().anyMatch(w->permitted(w,principal,write)&&w.selection().test(conversation));
+        return conversation.getCustomer()!=null && contacts.canRead(conversation.getCustomer(),principal)
+            && definitions.stream().anyMatch(w->permitted(w,principal,write)&&w.selection().test(conversation));
     }
     public Conversation requireConversation(UUID id,Principal principal,boolean write) {
         var conversation=conversations.findActiveById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
@@ -60,13 +65,17 @@ public class CrmInboxWorkspaceService {
         return conversation;
     }
     public void requireCustomer(UUID customer,Principal principal,boolean write) {
-        if(!enabled())return;
-        var related=conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&customer.equals(c.getCustomer().id())).toList();
+        customer=contacts.canonical(customer);
+        contacts.requireRead(customer,principal);
+        final UUID canonicalCustomer=customer;
+        var related=conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&canonicalCustomer.equals(c.getCustomer())).toList();
         if(related.stream().noneMatch(c->canAccess(c,principal,write)))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Contact is outside your inbox workspaces");
     }
     public void requireAllCustomerConversations(UUID customer,Principal principal) {
-        if(!enabled())return;
-        if(conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&customer.equals(c.getCustomer().id())).anyMatch(c->!canAccess(c,principal,true)))
+        customer=contacts.canonical(customer);
+        contacts.requireRead(customer,principal);
+        final UUID canonicalCustomer=customer;
+        if(conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&canonicalCustomer.equals(c.getCustomer())).anyMatch(c->!canAccess(c,principal,true)))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"All affected conversations must be writable");
     }
 }

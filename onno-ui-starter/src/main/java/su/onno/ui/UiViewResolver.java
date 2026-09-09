@@ -130,6 +130,16 @@ public class UiViewResolver {
             view.list(spec);
         }
 
+        return resolveList(spec, meta);
+    }
+
+    /** Resolve an explicitly authored embedded list through the standard metadata pipeline. */
+    public ResolvedListView catalogList(CatalogDescriptor descriptor, ListSpec<?> spec) {
+        return resolveList(spec, metadata.describeCatalog(descriptor));
+    }
+
+    @SuppressWarnings("unchecked")
+    private ResolvedListView resolveList(ListSpec<?> spec, Map<String,Object> meta) {
         // Available columns by field name: built-in system columns first, then custom.
         Map<String, ColumnMeta> available = new LinkedHashMap<>();
         for (Map<String, Object> sc : (List<Map<String, Object>>) meta.getOrDefault("systemColumns", List.of())) {

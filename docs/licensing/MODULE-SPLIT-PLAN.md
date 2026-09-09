@@ -143,3 +143,6 @@ No auth code moves; nothing to do here.
   via a small published BOM avoids drift.
 
 The optional `onno-crm-channels-starter` (Telegram, Gmail, Instagram and WhatsApp adapters) also stays Apache-2.0 in this repository. It is distinct from the commercial vertical connectors and contains no tenant credentials.
+
+The CRM artifact supplies composable messaging through explicit host catalog bindings. Customer,
+employee and sales business models remain in consuming applications; this changes no license boundary.
