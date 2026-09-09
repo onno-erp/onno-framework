@@ -138,3 +138,25 @@ WhatsApp send failures log the CRM message ID, HTTP status and numeric Meta erro
 For a Meta test-number allowlist formatting mismatch, the private WhatsApp JSON may include `"test_recipient_aliases": {"<inbound wa_id>": "<verified test destination>"}`. Only configure a destination verified to belong to the same person. This changes outbound addressing only; contact identities remain canonical. Omit this test workaround for normal production setup.
 
 WhatsApp replies wake the sender immediately after the enclosing transaction commits (including explicit retries). Rollbacks never dispatch a reply. The 15-second worker scan remains a recovery fallback; a provider backoff or pause still takes precedence.
+
+## Host catalog binding
+
+The channel starter activates only when the host registers `CrmCustomerBinding`. Every adapter uses
+`CrmContactService.resolveIncoming` to resolve a scoped channel identity; unknown peers invoke the
+binding's explicit inbound-contact callback. No adapter creates or updates a CRM customer catalog.
+The host owns customer creation/validation, record permissions, employee identity and page routes.
+Telegram avatars remain identity-owned. Channel management and Gmail OAuth use `CrmChannelAccess`
+(ADMIN by default); cached Telegram avatars require host customer and inbox workspace access.
+See [the composition guide](../onno-crm-starter/README.md). No compatibility layer for the old CRM
+customer/agent model is provided.
+
+Gmail authorization accepts `{returnPath:"/your/settings/page"}` and returns to that local page after
+the callback. The settings widget supplies its current path; the host need not define `/crm-settings`.
+
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.

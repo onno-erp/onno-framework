@@ -1,3 +1,4 @@
+import { composerState } from "./composerState";
 import { useConversationStatuses } from "./ConversationStatuses";
 import { ExtensionSlot, type ExtensionContext } from "@onno/widget-sdk";
 import { ChatGroupActions } from "./ChatGroupActions";
@@ -10,7 +11,7 @@ import { useConversationRead } from "./useConversationRead";
 import { ChatMessageBody } from "@onno/widget-sdk";
 import { useId, type ReactNode } from "react";
 import { ChannelLogo } from "./ChannelLogo";
-import { ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
+import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
 import {
   Badge,
   Input,
@@ -51,7 +52,7 @@ type Message = {
   deliveryStatus: string;
 };
 
-type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number };
+type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string };
 
 type Comment = {
   id: string;
@@ -197,10 +198,8 @@ function ConversationList({ children }: { children: ReactNode }) {
   return <div className="min-h-0 min-w-0 w-full max-w-full flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto overscroll-contain p-1.5">{children}</div>;
 }
 
-// Gmail's connector names its inbox "Gmail · <account>"; generic email stays unbranded.
 function conversationChannel(row: EntityRecord | null): string {
-  const channel = string(row, "channelDisplay", string(row, "channel", "Channel"));
-  return channel.toLowerCase() === "email" && /^Gmail\s*·/i.test(string(row, "inboxDisplay")) ? "Gmail" : channel;
+  return string(row,"channel","Channel");
 }
 
 function ConversationRow({
@@ -221,7 +220,7 @@ function ConversationRow({
   const unread = Number(row.unreadCount ?? 0);
   const channel = conversationChannel(row);
   return (
-    <ContactRowMenu record={row} workspaceKey={workspaceKey} groups={groups} groupKey={groupKey} conversationId={String(row.id)} onGroupChange={onGroupChange} id={String(row.customer ?? "")} canEdit={!!action(config, "edit") && !!config?.fields.some(field => field.key === "customer.tags" && field.visible && field.editable)} onOpen={onSelect}>
+    <ContactRowMenu record={row} workspaceKey={workspaceKey} groups={groups} groupKey={groupKey} conversationId={String(row.id)} onGroupChange={onGroupChange} id={String(row.customer ?? "")} canEdit={!!action(config, "edit")} onOpen={onSelect}>
     <Button variant="ghost"
       type="button"
       onClick={onSelect}
@@ -375,6 +374,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   const [selectedId, setSelectedId] = useState<string | null>(rows.length ? String(rows[0].id) : null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
+  const [deliveryFailed, setDeliveryFailed] = useState(false);
   const [delivery, setDelivery] = useState<DeliveryConnection | null>(null);
   const selectionDismissedRef = useRef(false);
   const inboxRootRef = useRef<HTMLDivElement | null>(null);
@@ -382,7 +382,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   selectionRef.current = selectedId;
   const [comments, setComments] = useState<Comment[]>([]);
   const [customer, setCustomer] = useState<EntityRecord | null>(null);
-  const [agents, setAgents] = useState<EntityRecord[]>([]);
+
   const [mode, setMode] = useState<ComposerMode>("reply");
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
@@ -426,9 +426,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   const dismissFolder = useCallback(() => setFolderKey(null), []);
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
 
-  const agentAvatars = useMemo(() => new Map(
-    agents.map((agent) => [string(agent, "description"), string(agent, "avatarUrl")])
-  ), [agents]);
+  const agentAvatars = new Map<string,string>();
 
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
 
@@ -459,7 +457,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   }, [rows, channelRows, selectedId]);
 
   useEffect(() => {
-    void api.listCatalog("crm_agents").then(setAgents).catch(() => setAgents([]));
+
   }, []);
 
   const loadSelected = useCallback(async () => {
@@ -471,6 +469,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
     }
     const id = String(selected.id);
     const customerId = String(selected.customer ?? "");
+    setDeliveryFailed(false);
     try {
       const [activity, nextCustomer, nextDelivery] = await Promise.all([
         (async () => {
@@ -483,7 +482,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
           }
           return {entries,hasMore};
         })(),
-        customerId ? api.getCatalogItem("crm_customers", customerId) : Promise.resolve(null),
+        customerId ? request<{fields: EntityRecord}>(`/contacts/${customerId}`).then(c=>c.fields) : Promise.resolve(null),
         fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" }).then(async (response) => {
           if (!response.ok) throw new Error("Could not check channel connection");
           return response.json() as Promise<DeliveryConnection>;
@@ -505,6 +504,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
     } catch (loadError) {
       if (selectionRef.current !== id) return;
       setDelivery(null);
+      setDeliveryFailed(true);
       setError(loadError instanceof Error ? loadError.message : "Could not load the conversation");
     }
   }, [selected, workspaceKey, channelRows, historyPages]);
@@ -522,6 +522,10 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   );
 
   useUiEvents(() => { void loadSelected(); }, { types: ["updated"], entityType: "page", entityName: "crm-inbox-workspaces" });
+
+  const replyState = composerState({canReply:!!action(config,"reply") && !!action(config,"sendReply"), busy,
+    loaded:loadedConversationId === selectedId, failed:deliveryFailed, delivery});
+  const composerStatusId = useId();
 
   const acknowledgeRead = useCallback(() => Promise.all(channelRows.filter(row => String(row.customer) === String(selected?.customer) && Number(row.unreadCount || 0)>0).map(row => command(`/api/crm/conversations/${row.id}/read`))), [channelRows, selected?.customer, workspaceKey]);
   const readRevision = selected && loadedConversationId === selectedId
@@ -542,7 +546,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
   };
 
   const submit = async () => {
-    if (!action(config, mode) || !action(config, mode === "reply" ? "sendReply" : "sendNote") || !selected || !(mode === "note" ? noteDraft : draft).trim() || busy || (mode === "reply" && !delivery?.connected)) return;
+    if (!action(config, mode) || !action(config, mode === "reply" ? "sendReply" : "sendNote") || !selected || !(mode === "note" ? noteDraft : draft).trim() || busy || (mode === "reply" && replyState.disabled)) return;
     setBusy(true);
     setError(null);
     try {
@@ -581,21 +585,24 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
     if (config && !action(config, mode)) { const next = config.actions.find(a => a.visible && ["reply", "note"].includes(a.key)); if (next) setMode(next.key as ComposerMode); }
   }, [config, mode]);
 
+  const [hostActions,setHostActions]=useState<{id:string;label:string;enabled:boolean}[]>([]);
+  useEffect(()=>{
+    let live=true;setHostActions([]);
+    if(selectedId && workspaceKey)void request<{id:string;label:string;enabled:boolean}[]>(
+      `/inbox-workspaces/${encodeURIComponent(workspaceKey)}/conversations/${selectedId}/actions`)
+      .then(items=>{if(live)setHostActions(items);}).catch(()=>{});
+    return()=>{live=false;};
+  },[selectedId,workspaceKey,selected]);
   const extensionContext: ExtensionContext = {
     surface:"crm-chat", kind:"catalogs", name:"crm_conversations", recordId:selected ? String(selected.id) : undefined,
-    record:selected ? {...selected,statusClosed:conversationStatuses.find(status=>String(status.id)===String(selected.status))?.closed===true} : undefined, workspaceKey, permissions:{canWrite:!!action(config,"edit"),canReply:!!action(config,"reply"),canChangeStatus:!busy&&!!(action(config,"close")||action(config,"reopen"))},
-    actions:config?.actions.filter(a=>a.visible).map(a=>({id:a.key,label:a.label,enabled:!busy})),
+    record:selected ?? undefined, workspaceKey, permissions:{canWrite:!!action(config,"edit"),canReply:!!action(config,"reply")},
+    actions:hostActions.map(a=>({...a,enabled:a.enabled&&!busy})),
     refresh:loadSelected,
     openRecord:(kind,name,id)=>window.dispatchEvent(new CustomEvent("onno:action",{detail:`onno://${kind}/${name}/${id}`})),
-    insertDraft:text=>{if(busy||!action(config,"reply"))throw new Error("Reply editing is unavailable");const next=draft.trim()?`${draft}\n\n${text}`:text;if(next.length>(delivery?.maxTextLength??4096))throw new Error("The reply is too long. Shorten the draft first.");setMode("reply");setDraft(next);},
+    insertDraft:text=>{if(replyState.disabled)throw new Error("Reply editing is unavailable");const next=draft.trim()?`${draft}\n\n${text}`:text;if(next.length>(delivery?.maxTextLength??4096))throw new Error("The reply is too long. Shorten the draft first.");setMode("reply");setDraft(next);},
     execute:async (name,input)=>{
-      if(!selected||!(name==="status" ? action(config,"close")||action(config,"reopen") : action(config,name)))throw new Error("Chat action is unavailable");
-      let result:unknown;
-      if(name==="status")result=await command(`/api/crm/conversations/${selected.id}/status`,{status:input.status});
-      else if(name==="logActivity")result=await command(`/api/crm/contacts/${selected.customer}/activity`,{...input,conversationId:String(selected.id)});
-      else if(name==="assign")result=await command(`/api/crm/conversations/${selected.id}/assign-to-me`);
-      else if(name==="close"||name==="reopen")result=await command(`/api/crm/conversations/${selected.id}/closed`,{closed:name==="close"});
-      else throw new Error("Unsupported chat command");
+      if(!selected || !workspaceKey || busy || !hostActions.some(a=>a.id===name&&a.enabled))throw new Error("Action unavailable");
+      const result=await command(`/api/crm/inbox-workspaces/${encodeURIComponent(workspaceKey)}/conversations/${selected.id}/actions/${encodeURIComponent(name)}`,{inputs:input});
       await loadSelected();return result;
     },
   };
@@ -725,7 +732,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
             <div className="mb-2 flex items-center justify-between gap-3">
               <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
                 onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label="Send from"
+                <SelectTrigger aria-label="Send from" className="w-auto max-w-full min-w-0"
                   title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
                   <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{"From: " + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
                 </SelectTrigger>
@@ -741,7 +748,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
                 </SelectContent>
               </Select>
               <span title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
-                {mode === "note" ? "Visible to your team only" : delivery?.connected ? "" : delivery ? "Channel unavailable" : "Checking connection…"}
+                {mode === "note" ? "Visible to your team only" : ""}
               </span>
             </div>
             <div hidden={mode !== "note"}>
@@ -751,7 +758,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
             </div>
             {mode === "reply" && <Textarea
               value={draft}
-              disabled={!action(config, mode)}
+              disabled={replyState.disabled}
               onChange={(event: { target: { value: string } }) => setDraft(event.target.value)}
               onKeyDown={(event: { key: string; metaKey: boolean; ctrlKey: boolean; preventDefault: () => void }) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -759,11 +766,16 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
                   void submit();
                 }
               }}
-              placeholder={mode === "reply" ? "Write a reply…" : "Leave an internal note…"}
+              placeholder={replyState.placeholder}
+              aria-describedby={replyState.message ? composerStatusId : undefined}
               maxLength={mode === "reply" ? delivery?.maxTextLength ?? 4096 : 8000}
               aria-label={mode === "reply" ? "Write a reply" : "Write an internal note"}
               className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
             />}
+            {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className="flex items-center gap-2 rounded-field bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <span className="flex-1">{replyState.message}</span>
+              {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>Check again</Button>}
+            </div>}
             {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Segmented
@@ -775,7 +787,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey }: Pick<
                 insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
               }} className="flex items-center gap-2" />
               <span className="flex-1" />
-              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || !(mode === "note" ? noteDraft : draft).trim() || (mode === "reply" && !delivery?.connected)} onClick={() => void submit()}>
+              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || !(mode === "note" ? noteDraft : draft).trim() || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
                 {busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
               </Button>}
             </div>
@@ -806,7 +818,7 @@ registerListRenderer("crmInbox", CrmInbox);
 
 
 type WorkspaceSummary = { key: string; label: string; canWrite: boolean };
-type WorkspaceFeed = { key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean };
+type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean };
 async function workspaceRead<T>(path: string): Promise<T> {
   const response = await fetch(`/api/crm/inbox-workspaces${path}`, {credentials:"same-origin"});
   if (!response.ok) throw new Error(response.status === 403 ? "You do not have access to this inbox." : "Could not load inbox.");
@@ -835,20 +847,9 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     return feed ? <CrmInbox rows={props.rows} open={()=>{}} scopedConfig={feed.config} workspaceKey={feed.key} /> : null;
   },[feed]);
   const list = useMemo(()=>feed ? {
-    kind:"catalogs", name:"crm_conversations", title:widget.title || "Unified inbox",
-    embedded:true, fill:true, searchable:true, canWrite:false, newUrl:null, pageSize:100,
+    ...feed.list,
+    kind:"catalogs", name:"crm_conversations", embedded:true, fill:true, canWrite:false, newUrl:null,
     feed:`/api/crm/inbox-workspaces/${encodeURIComponent(feed.key)}${conversationPath}`,
-    sort:{column:"lastMessageAt",descending:true},
-    columns:[
-      ["customerDisplay","Customer"],["channel","Channel"],["subject","Subject"],
-      ["status","Status"],["priority","Priority"],["assigneeDisplay","Assignee"],["lastMessageAt","Last message"],["unreadCount","Unread"],
-    ].map(([columnName,label])=>({columnName,fieldName:columnName,label,width:"",...(columnName==="lastMessageAt"?{format:"dd MMM yyyy HH:mm"}:{})})),
-    filters:([
-      ["status","Status",statuses.map(status=>[String(status.id),String(status.description)])],
-      ["channel","Channel",[["TELEGRAM","Telegram"],["EMAIL","Email"],["WEB_CHAT","Web chat"],["WHATSAPP","WhatsApp"],["PHONE","Phone"]]],
-      ["priority","Priority",[["LOW","Low"],["NORMAL","Normal"],["HIGH","High"],["URGENT","Urgent"]]],
-    ] as [string,string,string[][]][]).map(([key,label,options])=>({key,column:key,label,type:"multiOptions",options:options.map(([value,label])=>({value,label}))})),
-    custom:{type:"crmInbox",label:"Inbox",defaultView:true},
   } : null,[feed,widget.title,conversationPath,statuses]);
   if(error)return <p role="alert">{error}</p>;
   return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} /> : <p>Loading inbox…</p>;

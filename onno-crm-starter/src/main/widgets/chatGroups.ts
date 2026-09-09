@@ -8,6 +8,7 @@ export function useChatGroups(workspace?: string) {
   const [error, setError] = useState("");
   const load = useCallback(async () => {
     const response = await fetch(url, {credentials: "same-origin"});
+    if (response.status === 404) { setGroups([]);setReady(false);setError("");return; }
     if (!response.ok) throw new Error("Could not load chat groups");
     const data: ChatGroup[] = await response.json();
     setGroups(data); setReady(true); setError("");

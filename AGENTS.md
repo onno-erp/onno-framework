@@ -36,7 +36,7 @@ to future agents that may not have the full conversation context.
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
-| `onno-crm-starter` | Reusable CRM business module with customers, agents, unified multi-channel inboxes, comments/activity, opportunities, commands, additive UI metadata, and a packaged widget. |
+| `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
@@ -1116,16 +1116,22 @@ Two framework behaviors you *will* hit the moment you write import or sync code:
   can't see it, and you silently end up with register movements but `_posted = false`. **Save (let it
   commit), then post.**
 
-### CRM workspace and consolidation
+### CRM composition
 
-`onno-crm-starter` owns developer-authored layout/custom-field definitions and explicit customer merge
-commands. Use host `CrmWorkspaceCustomizer` beans for presentation. The Channels page manages installed
-`CrmChannelConnection` providers; unavailable connectors must not offer fake sign-in buttons. Keep widget visibility separate from permission checks. Preserve identity scopes and each
-conversation's provider destination when merging; never merge by display name automatically. Merge
-previews and contact edits carry revision fingerprints. Undo must refuse to overwrite later work.
-Built-in transfers cover conversations, opportunities, contact identities and customer comments;
-additional host customer references require an explicit consolidation policy. See the module README
-for starter-owned infrastructure tables and public command contracts.
+Enable messaging with a typed `CrmCustomerBinding` for the host's existing catalog. Optional
+`CrmAgentBinding` reuses its employee/identity catalog. No CRM customer/agent catalog, sales pipeline,
+customer-stage model, EAV custom fields, business merge editor or navigation is installed. Fields
+and CRUD remain ordinary host catalogs and EntityViews. Provider imports call an explicit host
+inbound-contact policy. Customer UUIDs in CRM are scoped to the persisted binding identity; do not
+rebind a database to another catalog without migrating links. Workspace roles and host customer
+permissions both apply. Personal chat groups require `CrmFeatures(true)`; conversation statuses
+require optional `CrmStateConfiguration`. Sales is an opt-in example source set (`-PsalesExample`).
+
+The host owns consolidation, audit and any reversal. Its transaction may call
+`CrmContactService.transferLinks` before deleting the source; that command moves only CRM links and
+canonical redirects while retaining provider destinations. It has no automatic undo or HTTP merge
+surface. Customer comments, sales records and other host references stay the host's responsibility.
+See `onno-crm-starter/README.md` for the full contract.
 
 Standard catalog/document tables may opt into visual selection with
 `ListSpec.selectionCheckboxes(true)`. Reuse the host Checkbox and the existing selection/batch
@@ -1165,8 +1171,25 @@ Record tags are a UI-starter extension: `detail.widget("Tags").type("entityTags"
 Use stable tag definitions/assignments through `TagService` and `/api/tags`, not delimiter-based
 fields for new tagging features. TagAccessPolicy adds record-level authorization.
 
-CRM contact stages are catalog references (`LifecycleStage` / `CrmCustomerStages`).
-The stage-catalog migration reuses old enum UUIDs and does not rewrite customer
-assignments. Do not restore enum choices in UI code; labels and colors come from application code.
+Customer stages are ordinary host fields. Optional CRM conversation-status choices and transitions
+come from application `CrmStateConfiguration` code. The host owns pages and action contributions.
 
-CRM stage and conversation-status choices are supplied by application `CrmStateConfiguration` code. Backing catalogs are read-only projections; do not expose them as configuration editors. The consuming app owns action-button contributions and legacy-data migrations.
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(...)` or
+`.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
+implicit column/filter is installed. The priority UUID is scoped to that host source.
+Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
+Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
+buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
+`/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
+with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles
+and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
+messages for these actions. Hosts own the handler and any desired history records. Connector code
+can still use the low-level identity-link service for provider routing.

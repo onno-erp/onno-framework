@@ -17,6 +17,7 @@ public class TelegramChannelConnection implements CrmChannelConnection {
     private final TelegramInboxBridge bridge;
     private final ObjectMapper json;
     private final Path credentialFile;
+    public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("TELEGRAM","Telegram","/crm/channels/telegram.png"); }
     public TelegramChannelConnection(TelegramInboxBridge bridge,ObjectMapper json,
             @Value("${spring.config.additional-location:}") String location) {
         this.bridge=bridge;this.json=json;

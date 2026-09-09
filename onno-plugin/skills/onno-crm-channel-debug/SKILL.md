@@ -6,7 +6,7 @@ description: Diagnose onno CRM channel connection, missing chats, duplicate cont
 # Diagnose CRM messaging
 
 Start with the observed symptom and the running app/version. Inspect connection-card state through
-`GET /api/crm/channels` as an authorized CRM user. Manager commands require CRM_MANAGER/ADMIN.
+`GET /api/crm/channels` as an authorized CRM user. Connection commands require host CrmChannelAccess (ADMIN by default).
 Check which process, port, database and external configuration actually run before restarting.
 Preserve database files and credentials; stop the actual old listener before starting a replacement.
 
@@ -16,8 +16,7 @@ generic conversation lists can be intentional workspace isolation. Do not broade
 make a diagnostic call succeed. Distinguish provider polling delay from CRM SSE invalidation.
 
 Duplicate chat/contact: provider IDs and connection scopes own identity, not display names. Gmail
-can preserve several thread routes under one contact chat. Use the CRM merge preview/conflict
-choices and audit/undo path; do not blindly merge by a shared name or rewrite provider routing IDs.
+can preserve several thread routes under one contact chat. Use the host consolidation policy and audit/reversal path; do not blindly merge by a shared name or rewrite provider routing IDs.
 Check canonical contact resolution when messages arrive after a merge.
 
 Failed replies: inspect durable QUEUED/SENDING/FAILED state, channel ownership, connection pause,

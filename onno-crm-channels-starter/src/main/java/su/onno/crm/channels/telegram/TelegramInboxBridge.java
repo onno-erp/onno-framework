@@ -1,4 +1,5 @@
 package su.onno.crm.channels.telegram;
+import su.onno.crm.service.CrmCustomerBinding;
 
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
@@ -30,7 +31,7 @@ public class TelegramInboxBridge implements CrmMessageTransport {
     private final su.onno.crm.service.CrmWorkspaceService workspace;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
-    private final CustomerRepository customers;
+
     private final InboxRepository inboxes;
     private final ConversationRepository conversations;
     private final ConversationMessageRepository messages;
@@ -46,14 +47,14 @@ public class TelegramInboxBridge implements CrmMessageTransport {
 
     private final su.onno.crm.service.CrmConversationStatuses statuses;
     public TelegramInboxBridge(TelegramClient client, JdbcTemplate jdbc, PlatformTransactionManager transactions,
-            CustomerRepository customers, InboxRepository inboxes, ConversationRepository conversations,
+             InboxRepository inboxes, ConversationRepository conversations,
             ConversationMessageRepository messages, su.onno.crm.service.CrmContactService contacts, su.onno.crm.service.CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
         this.statuses=statuses;
         this.client = client;
         this.contacts = contacts; this.workspace = workspace;
         this.jdbc = jdbc;
         this.tx = new TransactionTemplate(transactions);
-        this.customers = customers;
+
         this.inboxes = inboxes;
         this.conversations = conversations;
         this.messages = messages;
@@ -95,7 +96,7 @@ public class TelegramInboxBridge implements CrmMessageTransport {
                 jdbc.update("INSERT INTO onno_crm_telegram_connection VALUES (?, 0, ?)", bot.id(), inbox.getId());
             }
             jdbc.query("SELECT chat_id,conversation_id FROM onno_crm_telegram_chat WHERE bot_id=?", (rs,n) -> new Object[]{rs.getLong(1),rs.getObject(2,UUID.class)},bot.id()).forEach(mapping -> {
-                conversations.findActiveById((UUID)mapping[1]).ifPresent(c -> contacts.link(c.getCustomer().id(),Channel.TELEGRAM,Long.toString(bot.id()),mapping[0].toString(),"Telegram " + mapping[0],true));
+                conversations.findActiveById((UUID)mapping[1]).ifPresent(c -> contacts.link(c.getCustomer(),Channel.TELEGRAM,Long.toString(bot.id()),mapping[0].toString(),"Telegram " + mapping[0],true));
             });
             List<UUID> uncertain = jdbc.query("SELECT message_id FROM onno_crm_telegram_outbox WHERE bot_id=? AND state='SENDING'",
                     (rs, row) -> rs.getObject(1, UUID.class), bot.id());
@@ -116,7 +117,7 @@ public class TelegramInboxBridge implements CrmMessageTransport {
             var mapped=jdbc.query("SELECT chat_id,conversation_id FROM onno_crm_telegram_chat WHERE bot_id=?",(rs,n)->new Object[]{rs.getLong(1),rs.getObject(2,UUID.class)},bot.id());
             for(var mapping:mapped) {
                 var conversation=conversations.findActiveById((UUID)mapping[1]).orElse(null);if(conversation==null)continue;
-                var identity=contacts.link(conversation.getCustomer().id(),Channel.TELEGRAM,Long.toString(bot.id()),mapping[0].toString(),"Telegram "+mapping[0],true);
+                var identity=contacts.link(conversation.getCustomer(),Channel.TELEGRAM,Long.toString(bot.id()),mapping[0].toString(),"Telegram "+mapping[0],true);
                 var recent=jdbc.query("SELECT checked_at FROM onno_crm_telegram_avatar WHERE identity_id=?",(rs,n)->rs.getTimestamp(1).toInstant(),identity.getId());
                 if(!recent.isEmpty()&&recent.getFirst().isAfter(Instant.now().minusSeconds(3600)))continue;
                 byte[] image=client.profilePhoto((Long)mapping[0]);
@@ -125,12 +126,7 @@ public class TelegramInboxBridge implements CrmMessageTransport {
                     workspace.lock();
                     if(jdbc.update("UPDATE onno_crm_telegram_avatar SET content=?,checked_at=CURRENT_TIMESTAMP WHERE identity_id=?",encoded,identity.getId())==0)
                         jdbc.update("INSERT INTO onno_crm_telegram_avatar VALUES (?,?,CURRENT_TIMESTAMP)",identity.getId(),encoded);
-                    Customer customer=customers.findActiveById(contacts.canonical(identity.getCustomer().id())).orElse(null);
-                    if(customer!=null) {
-                        String url="/api/crm/telegram/avatars/"+identity.getId();
-                        if(image!=null&&(customer.getAvatarUrl()==null||customer.getAvatarUrl().isBlank())) {customer.setAvatarUrl(url);customers.save(customer);}
-                        else if(image==null&&url.equals(customer.getAvatarUrl())) {customer.setAvatarUrl(null);customers.save(customer);}
-                    }
+                    contacts.setIdentityAvatar(identity.getId(), image==null?null:"/api/crm/telegram/avatars/"+identity.getId());
                 });
             }
         } catch(RuntimeException e) {log.debug("Telegram profile photo refresh deferred ({})",e.getClass().getSimpleName());}
@@ -181,8 +177,10 @@ public class TelegramInboxBridge implements CrmMessageTransport {
     }
 
     @Override
+    public boolean supports(Conversation conversation) { return Channel.TELEGRAM.equals(conversation.getChannel()); }
+
     public Connection connection(Conversation conversation) {
-        if (!ready || conversation.getChannel() != Channel.TELEGRAM || conversation.getInbox() == null) {
+        if (!ready || !Channel.TELEGRAM.equals(conversation.getChannel()) || conversation.getInbox() == null) {
             return new Connection(false, "Messaging channel is not connected", 4096);
         }
         boolean mapped = jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_telegram_chat WHERE bot_id=? AND conversation_id=?",
@@ -238,25 +236,24 @@ public class TelegramInboxBridge implements CrmMessageTransport {
                     (rs, row) -> rs.getObject(1, UUID.class), bot.id(), update.chatId());
             Conversation conversation;
             if (ids.isEmpty()) {
-                Customer customer = new Customer();
-                customer.setDescription(cut(update.name().isBlank() ? "Telegram " + update.senderId() : update.name(), 200));
-                customer.setSource("Telegram @" + bot.username());
-                customers.save(customer);
+                String name=cut(update.name().isBlank() ? "Telegram " + update.senderId() : update.name(),200);
+                UUID customer=contacts.resolveIncoming(new CrmCustomerBinding.IncomingContact(Channel.TELEGRAM,
+                        Long.toString(bot.id()),Long.toString(update.chatId()),name,null,null,null,"Telegram @"+bot.username()));
                 conversation = new Conversation();
-                conversation.setCustomer(Ref.of(Customer.class, customer.getId()));
+                conversation.setCustomer(customer);
                 conversation.setInbox(Ref.of(Inbox.class, inboxId()));
                 conversation.setChannel(Channel.TELEGRAM);
-                conversation.setSubject(cut("Telegram · " + customer.getDescription(), 240));
+                conversation.setSubject(cut("Telegram · " + name, 240));
                 conversation.setDescription(conversation.getSubject());
                 conversations.save(conversation);
-                jdbc.update("INSERT INTO onno_crm_telegram_chat VALUES (?, ?, ?, ?)", bot.id(), update.chatId(), customer.getId(), conversation.getId());
+                jdbc.update("INSERT INTO onno_crm_telegram_chat VALUES (?, ?, ?, ?)", bot.id(), update.chatId(), customer, conversation.getId());
             } else {
                 // Deleted conversations are never silently revived by an external sender.
                 conversation = conversations.findActiveById(ids.getFirst()).orElse(null);
             }
             if (conversation != null) {
-                UUID canonical = contacts.canonical(conversation.getCustomer().id());
-                conversation.setCustomer(Ref.of(Customer.class,canonical));
+                UUID canonical = contacts.canonical(conversation.getCustomer());
+                conversation.setCustomer(canonical);
                 contacts.link(canonical,Channel.TELEGRAM,Long.toString(bot.id()),Long.toString(update.chatId()),update.username().isBlank()?update.name():"@"+update.username(),true);
                 ConversationMessage message = new ConversationMessage();
                 message.setConversation(Ref.of(Conversation.class, conversation.getId()));

@@ -26,20 +26,20 @@ class CrmInboxWorkspaceSecurityTest {
     CrmInboxWorkspaceService workspaces;
     MockMvc http;
     @BeforeEach void setup() {
-        sales.setId(UUID.randomUUID());sales.setChannel(Channel.TELEGRAM);
-        support.setId(UUID.randomUUID());support.setChannel(Channel.EMAIL);
+        sales.setId(UUID.randomUUID());sales.setCustomer(UUID.randomUUID());sales.setChannel(Channel.TELEGRAM);
+        support.setId(UUID.randomUUID());support.setCustomer(UUID.randomUUID());support.setChannel(Channel.EMAIL);
         when(repository.findAllActive()).thenReturn(List.of(sales,support));
         when(repository.findActiveById(sales.getId())).thenReturn(Optional.of(sales));
         when(repository.findActiveById(support.getId())).thenReturn(Optional.of(support));
-        when(access.roles(alice)).thenReturn(Set.of("CRM_AGENT","SALES"));
+        when(access.roles(alice)).thenReturn(Set.of("SALES"));
         when(access.hasAnyRole(eq(alice),anyList())).thenReturn(true);
-        var definitions=List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->c.getChannel()==Channel.TELEGRAM),
-                new CrmInboxWorkspace("support","Support",Set.of("SUPPORT"),c->c.getChannel()==Channel.EMAIL));
-        workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class));
+        var definitions=List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel())),
+                new CrmInboxWorkspace("support","Support",Set.of("SUPPORT"),c->Channel.EMAIL.equals(c.getChannel())));
+        workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
         var users=mock(CurrentUserResolver.class);
         var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces);
         var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),users,comments,
-                mock(CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class));
+                mock(CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
         http=MockMvcBuilders.standaloneSetup(controller,scoped).build();
     }
     @Test void listsOnlyPermittedWorkspaces() throws Exception {
@@ -50,7 +50,7 @@ class CrmInboxWorkspaceSecurityTest {
         http.perform(get("/api/crm/inbox-workspaces/support").principal(alice)).andExpect(status().isForbidden());
         for(String suffix:List.of("messages","delivery"))
             http.perform(get("/api/crm/conversations/"+support.getId()+"/"+suffix).param("workspace","sales").principal(alice)).andExpect(status().isForbidden());
-        for(String suffix:List.of("messages","read","closed","status","assign-to-me","messages/"+UUID.randomUUID()+"/retry"))
+        for(String suffix:List.of("messages","read","messages/"+UUID.randomUUID()+"/retry"))
             http.perform(post("/api/crm/conversations/"+support.getId()+"/"+suffix).param("workspace","sales").principal(alice).contentType("application/json").content("{\"body\":\"test\",\"closed\":true}")).andExpect(status().isForbidden());
         http.perform(get("/api/crm/conversations/"+sales.getId()+"/messages").principal(alice)).andExpect(status().isForbidden());
         verifyNoInteractions(commands);
@@ -63,7 +63,7 @@ class CrmInboxWorkspaceSecurityTest {
     }
     @Test void readOnlyRoleDoesNotGrantWriteAccessAndRoutingRemainsUntouched() {
         var workspace=new CrmInboxWorkspace("audit","Audit",Set.of("SALES"),Set.of("SUPPORT"),c->true,c->c);
-        var scoped=new CrmInboxWorkspaceService(List.of(workspace),repository,access,mock(CrmWorkspaceService.class));
+        var scoped=new CrmInboxWorkspaceService(List.of(workspace),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
         assertThat(scoped.requireConversation("audit",sales.getId(),alice,false)).isSameAs(sales);
         assertThatThrownBy(()->scoped.requireConversation("audit",sales.getId(),alice,true)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         verify(repository,never()).save(any());
@@ -71,7 +71,7 @@ class CrmInboxWorkspaceSecurityTest {
     @Test void genericGateBlocksAgentsAndLeavesAdminToolsAvailable() {
         var provider=mock(org.springframework.beans.factory.ObjectProvider.class);
         when(provider.orderedStream()).thenAnswer(invocation->java.util.stream.Stream.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->true)));
-        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(provider);
+        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess();
         assertThat(policy.allows(Set.of("CRM_AGENT"),"catalog","crmconversations",false)).isFalse();
         assertThat(policy.allows(Set.of("CRM_MANAGER"),"catalog","crmconversationmessages",true)).isFalse();
         assertThat(policy.allows(Set.of("ADMIN"),"catalog","crmconversations",true)).isTrue();

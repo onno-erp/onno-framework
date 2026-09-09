@@ -41,8 +41,7 @@ public class CrmActivityController {
                         String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine) {}
     public record Feed(List<Entry> entries,int total,boolean hasMore) {}
     private void require(Principal principal){
-        if(!access.hasAnyRole(principal,List.of("CRM_AGENT","CRM_MANAGER")))
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,"CRM access required");
+        workspaces.requireAccess(principal,false);
     }
     @GetMapping public Feed read(@PathVariable UUID customer,@RequestParam(defaultValue="0") int offset,
                                 @RequestParam(defaultValue="100") int limit,Principal principal) {
@@ -52,13 +51,9 @@ public class CrmActivityController {
         List<Entry> entries=new ArrayList<>();
         var me=users.resolve(principal);
         for(var conversation:conversations.findAllActive()) {
-            if(conversation.getCustomer()==null||!canonical.equals(contacts.canonical(conversation.getCustomer().id()))||
+            if(conversation.getCustomer()==null||!canonical.equals(contacts.canonical(conversation.getCustomer()))||
                     !workspaces.canAccess(conversation,principal,false))continue;
-            String channel=conversation.getChannel().name();
-            if(conversation.getChannel()==Channel.EMAIL&&conversation.getInbox()!=null) {
-                var inbox=inboxes.findActiveById(conversation.getInbox().id()).orElse(null);
-                if(inbox!=null&&Objects.toString(inbox.getDescription(),"").startsWith("Gmail ·"))channel="Gmail";
-            }
+            String channel=conversation.getChannel();
             for(var message:messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,conversation.getId())))
                 entries.add(new Entry("message:"+message.getId(),conversation.getId(),conversation.getSubject(),channel,
                     message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
@@ -85,8 +80,9 @@ public class CrmActivityController {
         require(principal);
         if(request.conversationId()==null||request.type()==null||request.details()==null||request.details().isBlank()||request.details().length()>7000)
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"Choose an event type and enter details (up to 7000 characters)");
+        workspaces.requireCustomer(customer,principal,true);
         var conversation=workspaces.requireConversation(request.conversationId(),principal,true);
-        if(conversation.getCustomer()==null||!contacts.canonical(customer).equals(contacts.canonical(conversation.getCustomer().id())))
+        if(conversation.getCustomer()==null||!contacts.canonical(customer).equals(contacts.canonical(conversation.getCustomer())))
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Conversation belongs to another contact");
         String body=request.type().label;
         if(request.scheduledFor()!=null)body+=" · Scheduled for "+request.scheduledFor().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm",Locale.ENGLISH));

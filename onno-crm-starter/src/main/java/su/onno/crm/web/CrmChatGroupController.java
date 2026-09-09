@@ -19,7 +19,8 @@ public class CrmChatGroupController {
         this.groups=groups;this.workspaces=workspaces;this.access=access;
     }
     private String scope(String workspace,Principal principal) {
-        if(principal==null||!access.hasAnyRole(principal,List.of("CRM_AGENT","CRM_MANAGER")))throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        groups.requireEnabled();
+        workspaces.requireAccess(principal,false);
         if(workspace!=null&&!workspace.isBlank()) {workspaces.requireWorkspace(workspace,principal,false);return workspace;}
         return "";
     }
@@ -34,7 +35,7 @@ public class CrmChatGroupController {
             if(request.conversationId()==null)throw new IllegalArgumentException("Choose a chat");
             var conversation=scope.isEmpty()?workspaces.requireConversation(request.conversationId(),principal,false):workspaces.requireConversation(scope,request.conversationId(),principal,false);
             if(conversation.getCustomer()==null)throw new IllegalArgumentException("Chat has no contact");
-            customer=conversation.getCustomer().id();
+            customer=conversation.getCustomer();
         }
         return groups.change(principal.getName(),scope,request.operation(),request.key(),request.label(),customer);
     }

@@ -24,16 +24,17 @@ import su.onno.types.Ref;
 public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(GmailBridge.class);
     private final GmailClient client;private final JdbcTemplate jdbc;private final TransactionTemplate tx;
-    private final InboxRepository inboxes;private final CustomerRepository customers;
+    private final InboxRepository inboxes;
     private final ConversationRepository conversations;private final ConversationMessageRepository messages;
     private final ContactIdentityRepository identities;private final CrmContactService contacts;private final CrmWorkspaceService workspace;
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-gmail");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";
     private final su.onno.crm.service.CrmConversationStatuses statuses;
+    public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("EMAIL","Email","/crm/channels/gmail.svg"); }
     public GmailBridge(GmailClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
-        CustomerRepository customers,ConversationRepository conversations,ConversationMessageRepository messages,CrmContactService contacts,CrmWorkspaceService workspace,ContactIdentityRepository identities, su.onno.crm.service.CrmConversationStatuses statuses) {
+        ConversationRepository conversations,ConversationMessageRepository messages,CrmContactService contacts,CrmWorkspaceService workspace,ContactIdentityRepository identities, su.onno.crm.service.CrmConversationStatuses statuses) {
         this.statuses=statuses;
-        this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;this.customers=customers;
+        this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.contacts=contacts;this.workspace=workspace;this.identities=identities;
     }
     @EventListener(ApplicationReadyEvent.class) public void start() {
@@ -66,7 +67,9 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         boolean active=action.equals("resume");if(active)client.get("profile");
         tx.executeWithoutResult(s->{workspace.lock();jdbc.update("UPDATE onno_crm_gmail_account SET active=? WHERE account=?",active,a.email);inboxes.findActiveById(a.inbox).ifPresent(i->{i.setActive(active);inboxes.save(i);});});failure="";
     }
-    public Connection connection(Conversation c){if(!ready||c.getChannel()!=Channel.EMAIL||c.getInbox()==null)return new Connection(false,"Gmail is not connected",8000);var a=account();
+    public boolean supports(Conversation conversation) { return Channel.EMAIL.equals(conversation.getChannel()); }
+
+    public Connection connection(Conversation c){if(!ready||!Channel.EMAIL.equals(c.getChannel())||c.getInbox()==null)return new Connection(false,"Gmail is not connected",8000);var a=account();
         boolean mapped=a!=null&&a.inbox.equals(c.getInbox().id())&&a.active&&client.authorized()&&jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=?",Integer.class,a.email,c.getId())>0;
         return new Connection(mapped,mapped?"Gmail":"Gmail is not connected or is paused",8000);}
     public void enqueue(Conversation c,ConversationMessage message){if(!connection(c).connected())throw new IllegalArgumentException("Gmail is not connected");var a=account();
@@ -92,17 +95,15 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         tx.executeWithoutResult(s->{workspace.lock();if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_seen WHERE account=? AND external_id=?",Integer.class,a.email,id)>0)return;
             var ids=jdbc.query("SELECT conversation_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=?",(rs,n)->rs.getObject(1,UUID.class),a.email,thread);Conversation c;
             if(ids.isEmpty()){
-                UUID identityId=UUID.nameUUIDFromBytes(("EMAIL\n"+a.inbox+"\n"+mail.sender().toLowerCase(Locale.ROOT)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                var identity=identities.findActiveById(identityId).orElse(null);
-                Customer customer=identity==null?null:customers.findActiveById(contacts.canonical(identity.getCustomer().id())).orElse(null);
-                if(customer==null){customer=new Customer();customer.setDescription(cut(mail.name(),200));customer.setEmail(mail.sender());customer.setSource("Gmail "+a.email);customers.save(customer);}
-                c=conversationForCustomer(a,customer.getId());
-                if(c==null){c=new Conversation();c.setLastMessageAt(LocalDateTime.ofInstant(mail.sentAt(),ZoneId.systemDefault()));c.setCustomer(Ref.of(Customer.class,customer.getId()));c.setInbox(Ref.of(Inbox.class,a.inbox));c.setChannel(Channel.EMAIL);c.setSubject(cut(mail.subject(),240));c.setDescription(c.getSubject());conversations.save(c);}
+                UUID customer=contacts.resolveIncoming(new CrmCustomerBinding.IncomingContact(Channel.EMAIL,
+                        a.inbox.toString(),mail.sender(),cut(mail.name(),200),mail.sender(),null,null,"Gmail "+a.email));
+                c=conversationForCustomer(a,customer);
+                if(c==null){c=new Conversation();c.setLastMessageAt(LocalDateTime.ofInstant(mail.sentAt(),ZoneId.systemDefault()));c.setCustomer(customer);c.setInbox(Ref.of(Inbox.class,a.inbox));c.setChannel(Channel.EMAIL);c.setSubject(cut(mail.subject(),240));c.setDescription(c.getSubject());conversations.save(c);}
                 jdbc.update("INSERT INTO onno_crm_gmail_thread (account,thread_id,conversation_id,reply_to,subject,reference_id,last_received) VALUES (?,?,?,?,?,?,?)",a.email,thread,c.getId(),cut(mail.replyTo(),320),cut(mail.subject(),998),cut(mail.messageId(),998),LocalDateTime.ofInstant(mail.sentAt(),ZoneId.systemDefault()));
             }else c=conversations.findActiveById(ids.getFirst()).orElse(null);
-            if(c!=null){UUID canonical=contacts.canonical(c.getCustomer().id());c.setCustomer(Ref.of(Customer.class,canonical));UUID senderIdentity=UUID.nameUUIDFromBytes(("EMAIL\n"+a.inbox+"\n"+mail.sender().toLowerCase(Locale.ROOT)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if(c!=null){UUID canonical=contacts.canonical(c.getCustomer());c.setCustomer(canonical);UUID senderIdentity=UUID.nameUUIDFromBytes(("EMAIL\n"+a.inbox+"\n"+mail.sender().toLowerCase(Locale.ROOT)).getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 var linked=identities.findActiveById(senderIdentity).orElse(null);
-                if(linked==null||contacts.canonical(linked.getCustomer().id()).equals(canonical))contacts.link(canonical,Channel.EMAIL,a.inbox.toString(),mail.sender().toLowerCase(Locale.ROOT),mail.sender(),false);
+                if(linked==null||contacts.canonical(linked.getCustomer()).equals(canonical))contacts.link(canonical,Channel.EMAIL,a.inbox.toString(),mail.sender().toLowerCase(Locale.ROOT),mail.sender(),false);
                 var message=new ConversationMessage();message.setConversation(Ref.of(Conversation.class,c.getId()));message.setChannel(Channel.EMAIL);message.setKind(MessageKind.CUSTOMER_MESSAGE);message.setDirection(MessageDirection.INBOUND);message.setAuthorName(cut(mail.name(),200));
                 message.setBody(cut(mail.text(),8000));message.setDescription(cut(mail.text(),100));message.setSentAt(LocalDateTime.ofInstant(mail.sentAt(),ZoneId.systemDefault()));message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));messages.save(message);
                 if(c.getLastMessageAt()==null||!message.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(message.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
@@ -123,7 +124,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         UUID canonical=contacts.canonical(customer);
         for(UUID id:jdbc.query("SELECT DISTINCT conversation_id FROM onno_crm_gmail_thread WHERE account=?",(rs,n)->rs.getObject(1,UUID.class),a.email)) {
             var c=conversations.findActiveById(id).orElse(null);
-            if(c!=null&&contacts.canonical(c.getCustomer().id()).equals(canonical))return c;
+            if(c!=null&&contacts.canonical(c.getCustomer()).equals(canonical))return c;
         }
         return null;
     }
@@ -136,13 +137,13 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 var history=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,id));
                 LocalDateTime latest=history.isEmpty()?source.getLastMessageAt():history.getLast().getSentAt();
                 jdbc.update("UPDATE onno_crm_gmail_thread SET last_received=? WHERE conversation_id=? AND last_received IS NULL",latest,id);
-                UUID customer=contacts.canonical(source.getCustomer().id());var target=groups.get(customer);
+                UUID customer=contacts.canonical(source.getCustomer());var target=groups.get(customer);
                 if(target==null){groups.put(customer,source);continue;}
                 for(var message:history){message.setConversation(Ref.of(Conversation.class,target.getId()));messages.save(message);}
                 if(jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE LOWER(TABLE_NAME)='onno_comments' AND TABLE_SCHEMA=CURRENT_SCHEMA()",Integer.class)>0)
                     jdbc.update("UPDATE onno_comments SET _entity_id=? WHERE _entity_type='catalogs' AND _entity_name='crm_conversations' AND _entity_id=?",target.getId(),id);
                 if(target.getAssignee()==null)target.setAssignee(source.getAssignee());
-                if(source.getPriority().ordinal()>target.getPriority().ordinal())target.setPriority(source.getPriority());
+                if(target.getPriority()==null)target.setPriority(source.getPriority());
                 target.setUnreadCount(target.getUnreadCount()+source.getUnreadCount());
                 if(source.getLastMessageAt().isAfter(target.getLastMessageAt())){target.setLastMessageAt(source.getLastMessageAt());target.setLastMessagePreview(source.getLastMessagePreview());target.setSubject(source.getSubject());target.setStatus(source.getStatus());}
                 conversations.save(target);

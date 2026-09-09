@@ -199,7 +199,7 @@ interfaces, and UI metadata lives in focused `Layout`, `Page`, and `EntityView` 
 | --- | --- |
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
 | Application surface | [`onno-ui-starter`](onno-ui-starter), [`onno-auth-starter`](onno-auth-starter) |
-| Ready business modules | [`onno-crm-starter`](onno-crm-starter) |
+| Composable messaging | [`onno-crm-starter`](onno-crm-starter) |
 | Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
 | AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
 | Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-widgets-gradle-plugin`](onno-widgets-gradle-plugin), [`@onno/widget-sdk`](onno-widget-sdk) |
@@ -212,11 +212,12 @@ is enough to make its conditional beans available.
 Commercial vertical connectors are distributed separately from the private `onno-enterprise`
 repository. Authentication—including OIDC and SSO—remains in the Apache-2.0 open core.
 
-Applications that need a ready CRM can add
-`implementation("su.onno:onno-crm-starter:$onnoVersion")`. The starter contributes its model,
-repositories, command API, additive navigation, entity views, pages, and compiled inbox widget while
-leaving the host's shell, theme, authentication, and identity decisions intact. The same public
-artifact is intended for composition inside `onno-enterprise` applications.
+Applications add `implementation("su.onno:onno-crm-starter:$onnoVersion")` and explicitly bind
+their existing customer catalog with `CrmCustomerBinding`. The starter supplies messaging and the
+inbox widget; the host owns customers, employees, fields, permissions, pages and navigation.
+Assignment, conversation statuses and personal groups are optional. The sales pipeline is an
+ordinary onno recipe under `example/src/sales/java`, not part of the CRM artifact. See the
+[composition guide](onno-crm-starter/README.md).
 
 ## Designed for humans and AI agents
 
@@ -247,6 +248,7 @@ hand-written guides, generated configuration reference, and aggregated Javadocs.
 | [Configuration](docs/CONFIGURATION.md) | Every `onno.*` property and default, generated from source metadata |
 | [Headless Read API](docs/HEADLESS_READ_API.md) | JSON contracts, reference expansion, redaction, and keyset pagination |
 | [Running and verification](docs/RUNNING.md) | Local development and authenticated runtime smoke tests |
+| [3.0 release notes](docs/RELEASE_NOTES_3_0.md) | Composable CRM, breaking changes, and upgrade requirements |
 | [2.0 release notes](docs/RELEASE_NOTES_2_0.md) | Highlights, breaking changes, and the release gate |
 | [Migrating to 2.0](docs/MIGRATING_TO_2_0.md) | Source, data, and client migration checklist |
 | [Extending onno](docs/EXTENDING.md) | Community connectors, SPI implementations, UI add-ons, and skills |
@@ -409,4 +411,12 @@ The example application owns Templates as a `crm.chat.composer` contribution
 (`example.crm.composer.templates`), including its catalog and picker. The CRM
 starter supplies the empty composer slot and controls draft insertion and limits.
 
-CRM stage/status definitions, colors, and transitions are authored in application Java (`CrmStateConfiguration`); application TSX owns header and Templates buttons. See [the extension guide](docs/EXTENDING.md).
+CRM conversation-status definitions, colors, and transitions are authored in application Java (`CrmStateConfiguration`); application TSX owns header and Templates buttons. See [the extension guide](docs/EXTENDING.md).
+
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.

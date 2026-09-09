@@ -10,11 +10,12 @@ import su.onno.ui.UiEventPublisher;
 @Component
 public class CrmWorkspaceEvents {
     private final UiEventPublisher events;
-    public CrmWorkspaceEvents(UiEventPublisher events){this.events=events;}
+    private final CrmCustomerBinding<?> customers;
+    public CrmWorkspaceEvents(UiEventPublisher events,CrmCustomerBinding<?> customers){this.events=events;this.customers=customers;}
     @TransactionalEventListener(phase=TransactionPhase.AFTER_COMMIT,fallbackExecution=true)
     public void changed(EntityChangedEvent event) {
         String name=event.entityName().replace("_","").toLowerCase(java.util.Locale.ROOT);
-        if(java.util.Set.of("crmconversations","crmconversationmessages","crmcustomers").contains(name))
+        if(java.util.Set.of("crmconversations","crmconversationmessages").contains(name) || name.equals(customers.catalog().name().replace("_", "").toLowerCase(java.util.Locale.ROOT)))
             events.publish(EntityChangedEvent.UPDATED,"page","crm-inbox-workspaces",null);
     }
 }

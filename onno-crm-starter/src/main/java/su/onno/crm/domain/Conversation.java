@@ -11,32 +11,31 @@ import su.onno.model.CatalogObject;
 import su.onno.rules.BusinessRule;
 import su.onno.rules.Validated;
 import su.onno.types.Ref;
-import su.onno.ui.notifications.AssigneeField;
 
 @Catalog(name = "CrmConversations", title = "Conversation", codePrefix = "CV-", context = "CRM")
-@AccessControl(readRoles = {"CRM_AGENT", "CRM_MANAGER"}, writeRoles = {"CRM_AGENT", "CRM_MANAGER"})
+@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class Conversation extends CatalogObject implements Validated {
 
     @Attribute(displayName = "Customer", required = true)
-    private Ref<Customer> customer;
+    // UUID is scoped to CrmCustomerBinding.catalog(); CRM never introduces a shadow customer.
+    private java.util.UUID customer;
 
     @Attribute(displayName = "Inbox", required = true)
     private Ref<Inbox> inbox;
 
     @Attribute(displayName = "Channel", required = true)
-    private Channel channel;
+    private String channel;
 
     @Attribute(displayName = "Assigned to")
-    @AssigneeField
-    private Ref<Agent> assignee;
+    private java.util.UUID assignee;
 
     @Attribute(displayName = "Status")
-    private Ref<ChatStatus> status;
+    private java.util.UUID status;
 
-    @Attribute(displayName = "Priority", required = true)
-    private ConversationPriority priority = ConversationPriority.NORMAL;
+    @Attribute(displayName = "Priority")
+    private java.util.UUID priority;
 
     @Attribute(displayName = "Subject", required = true, length = 240)
     private String subject;

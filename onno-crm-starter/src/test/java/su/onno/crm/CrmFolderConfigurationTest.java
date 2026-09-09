@@ -15,27 +15,27 @@ class CrmFolderConfigurationTest {
         var folders = List.of(Folder.channel("telegram", "Telegram", Channel.TELEGRAM),
                 new Folder("unread", "Unread", List.of(), List.of(), List.of(), true));
         var service = new CrmWorkspaceService(mock(JdbcTemplate.class), new ObjectMapper(),
-                List.of(c -> c.withFolders(folders), c -> c.withActions(c.actions())));
+                List.of(c -> c.withFolders(folders), c -> c.withActions(c.actions())),TestBindings.customers(),TestBindings.noAgents(),su.onno.crm.service.CrmStateConfiguration.empty());
         service.initialize();
         assertThat(service.get().config().folders()).containsExactlyElementsOf(folders);
     }
     @Test void duplicateFolderKeysAreRejected() {
         var folder = Folder.channel("telegram", "Telegram", Channel.TELEGRAM);
         var service = new CrmWorkspaceService(mock(JdbcTemplate.class), new ObjectMapper(),
-                List.of(c -> c.withFolders(List.of(folder, folder))));
+                List.of(c -> c.withFolders(List.of(folder, folder))),TestBindings.customers(),TestBindings.noAgents(),su.onno.crm.service.CrmStateConfiguration.empty());
         assertThatIllegalArgumentException().isThrownBy(service::initialize).withMessageContaining("unique stable keys");
     }
     @Test void folderPayloadIncludesFrameworkEnumIdsAndExplicitMembers() throws Exception {
         var folder = Folder.channel("telegram", "Telegram", Channel.TELEGRAM);
         var payload = new ObjectMapper().readTree(new ObjectMapper().writeValueAsString(folder));
         assertThat(payload.get("channelIds").get(0).asText()).isEqualTo(
-                su.onno.repository.EnumerationPersistence.resolveId(Channel.class, Channel.TELEGRAM).toString());
+                Channel.TELEGRAM);
         var id = java.util.UUID.randomUUID();
         assertThat(Folder.conversations("team", "Team", List.of(id)).conversationIds()).containsExactly(id);
         assertThatIllegalArgumentException().isThrownBy(() -> Folder.conversations("team", "Team", List.of()));
     }
     @Test void foldersAreOptIn() {
-        var service = new CrmWorkspaceService(mock(JdbcTemplate.class), new ObjectMapper(), List.of());
+        var service = new CrmWorkspaceService(mock(JdbcTemplate.class), new ObjectMapper(), List.of(),TestBindings.customers(),TestBindings.noAgents(),su.onno.crm.service.CrmStateConfiguration.empty());
         service.initialize();
         assertThat(service.get().config().folders()).isEmpty();
     }

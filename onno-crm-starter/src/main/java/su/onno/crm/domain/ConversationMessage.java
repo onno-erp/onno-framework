@@ -13,7 +13,7 @@ import su.onno.rules.Validated;
 import su.onno.types.Ref;
 
 @Catalog(name = "CrmConversationMessages", title = "Conversation message", codePrefix = "MSG-", context = "CRM")
-@AccessControl(readRoles = {"CRM_AGENT", "CRM_MANAGER"}, writeRoles = {"CRM_AGENT", "CRM_MANAGER"})
+@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class ConversationMessage extends CatalogObject implements Validated {
@@ -28,7 +28,7 @@ public class ConversationMessage extends CatalogObject implements Validated {
     private MessageDirection direction;
 
     @Attribute(displayName = "Channel", required = true)
-    private Channel channel;
+    private String channel;
 
     @Attribute(displayName = "Author", required = true, length = 200)
     private String authorName;

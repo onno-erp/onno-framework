@@ -24,7 +24,7 @@ class CrmActivityControllerTest {
  final Principal principal=()->"agent";
  final UUID customer=UUID.randomUUID();
  CrmActivityController controller(){when(access.hasAnyRole(eq(principal),any())).thenReturn(true);when(contacts.canonical(any())).thenAnswer(i->i.getArgument(0));return new CrmActivityController(contacts,conversations,messages,inboxes,workspaces,access,users,comments,avatars);}
- Conversation conversation(Channel channel){var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(Ref.of(Customer.class,customer));c.setChannel(channel);return c;}
+ Conversation conversation(String channel){var c=new Conversation();c.setId(UUID.randomUUID());c.setCustomer(customer);c.setChannel(channel);return c;}
  ConversationMessage message(Conversation c,String body){var m=new ConversationMessage();m.setId(UUID.randomUUID());m.setConversation(Ref.of(Conversation.class,c.getId()));m.setKind(MessageKind.CUSTOMER_MESSAGE);m.setDirection(MessageDirection.INBOUND);m.setChannel(c.getChannel());m.setBody(body);m.setSentAt(LocalDateTime.now());return m;}
  @Test void combinesChannelsWithoutReadingHiddenConversations(){
   var controller=controller();var first=conversation(Channel.EMAIL);var second=conversation(Channel.WHATSAPP);var hidden=conversation(Channel.TELEGRAM);

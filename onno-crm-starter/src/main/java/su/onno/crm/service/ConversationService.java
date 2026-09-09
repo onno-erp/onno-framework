@@ -5,10 +5,8 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import su.onno.crm.domain.Agent;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.domain.ConversationMessage;
-import su.onno.crm.domain.ConversationStatus;
 import su.onno.crm.domain.DeliveryStatus;
 import su.onno.crm.domain.MessageDirection;
 import su.onno.crm.domain.MessageKind;
@@ -25,21 +23,24 @@ public class ConversationService {
 
     private final CrmMessageTransport transport;
     private final CrmConversationStatuses statuses;
+    private final org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ConversationService(ConversationRepository conversations, ConversationMessageRepository messages,
-            List<CrmMessageTransport> transports, CrmConversationStatuses statuses) {
-        this(conversations, messages, new CrmMessageRouter(transports), statuses);
+            List<CrmMessageTransport> transports, CrmConversationStatuses statuses,
+            org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents) {
+        this(conversations, messages, new CrmMessageRouter(transports), statuses, agents);
     }
 
     public ConversationService(
             ConversationRepository conversations,
             ConversationMessageRepository messages,
-            CrmMessageTransport transport, CrmConversationStatuses statuses
+            CrmMessageTransport transport, CrmConversationStatuses statuses,
+            org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents
     ) {
         this.conversations = conversations;
         this.messages = messages;
-        this.transport = transport; this.statuses = statuses;
+        this.transport = transport; this.statuses = statuses;this.agents = agents;
     }
 
     public List<ConversationMessage> messages(UUID conversationId) {
@@ -61,7 +62,7 @@ public class ConversationService {
         }
 
         var connection = transport.connection(conversation);
-        if (!connection.connected()) throw new IllegalArgumentException(connection.label());
+        if (!connection.canSend()) throw new IllegalArgumentException(connection.unavailableReason());
         if (normalized.length() > Math.min(8000, connection.maxTextLength())) {
             throw new IllegalArgumentException("Message is too long (maximum " + connection.maxTextLength() + " characters)");
         }
@@ -103,7 +104,7 @@ public class ConversationService {
             throw new IllegalArgumentException("Only a failed reply in this conversation can be retried");
         }
         var connection = transport.connection(conversation);
-        if (!connection.connected()) throw new IllegalArgumentException(connection.label());
+        if (!connection.canSend()) throw new IllegalArgumentException(connection.unavailableReason());
         transport.enqueue(conversation, message);
         message.setDeliveryStatus(DeliveryStatus.QUEUED);
         return messages.save(message);
@@ -117,65 +118,6 @@ public class ConversationService {
             conversations.save(conversation);
         }
         return conversation;
-    }
-
-    @Transactional
-    public Conversation setClosed(UUID conversationId, boolean closed, String actorName) {
-        Conversation conversation = requireConversation(conversationId);
-        var next = closed ? statuses.close() : statuses.reopen();
-        if (java.util.Objects.equals(conversation.getStatus(), next)) {
-            return conversation;
-        }
-        conversation.setStatus(next);
-        Conversation saved = conversations.save(conversation);
-        addSystemEvent(conversation, displayActor(actorName) + (closed
-                ? " closed the conversation"
-                : " reopened the conversation"));
-        return saved;
-    }
-
-    @Transactional
-    public Conversation setStatus(UUID id, UUID statusId, String actorName) {
-        var conversation=requireConversation(id);
-        var next=statuses.active(statusId);
-        if(java.util.Objects.equals(conversation.getStatus(),next))return conversation;
-        conversation.setStatus(next);
-        var saved=conversations.save(conversation);
-        addSystemEvent(conversation,displayActor(actorName)+" changed the conversation status");
-        return saved;
-    }
-
-    @Transactional
-    public Conversation assign(UUID conversationId, UUID agentId, String actorName) {
-        Conversation conversation = requireConversation(conversationId);
-        UUID currentAgentId = conversation.getAssignee() == null ? null : conversation.getAssignee().id();
-        if (java.util.Objects.equals(currentAgentId, agentId)) {
-            return conversation;
-        }
-        conversation.setAssignee(agentId == null ? null : Ref.of(Agent.class, agentId));
-        Conversation saved = conversations.save(conversation);
-        addSystemEvent(conversation, agentId == null
-                ? displayActor(actorName) + " removed the assignee"
-                : displayActor(actorName) + " assigned the conversation to themselves");
-        return saved;
-    }
-
-    private void addSystemEvent(Conversation conversation, String body) {
-        ConversationMessage event = new ConversationMessage();
-        event.setConversation(Ref.of(Conversation.class, conversation.getId()));
-        event.setKind(MessageKind.SYSTEM_EVENT);
-        event.setDirection(MessageDirection.INTERNAL);
-        event.setChannel(conversation.getChannel());
-        event.setAuthorName("CRM");
-        event.setBody(body);
-        event.setDescription(preview(body, 100));
-        event.setSentAt(LocalDateTime.now());
-        event.setDeliveryStatus(DeliveryStatus.NOT_APPLICABLE);
-        messages.save(event);
-    }
-
-    private static String displayActor(String actorName) {
-        return actorName == null || actorName.isBlank() ? "A team member" : actorName;
     }
 
     private Conversation requireConversation(UUID id) {

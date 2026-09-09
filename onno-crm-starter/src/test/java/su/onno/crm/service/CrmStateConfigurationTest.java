@@ -1,29 +1,36 @@
 package su.onno.crm.service;
 import java.util.*;
 import org.junit.jupiter.api.Test;
-import su.onno.crm.service.CrmStateConfiguration.*;
+import su.onno.annotations.*;
+import su.onno.model.CatalogObject;
+import su.onno.repository.EnumerationPersistence;
 import static org.assertj.core.api.Assertions.*;
 class CrmStateConfigurationTest {
-    @Test void transitionsUseApplicationIdsRatherThanNamesOrBuiltInChoices(){
-        var incoming=new Status(new Choice(UUID.randomUUID(),"Needs an agent","#123456"),false);
-        var reply=new Status(new Choice(UUID.randomUUID(),"Partner reviewing","#AA7700"),false);
-        var closed=new Status(new Choice(UUID.randomUUID(),"Finished","#334455"),true);
-        var t=new Transitions(incoming.choice().id(),reply.choice().id(),closed.choice().id(),incoming.choice().id());
-        var config=new CrmStateConfiguration(List.of(new Choice(UUID.randomUUID(),"Contract review","#ABCDEF")),List.of(incoming,reply,closed),t);
-        var service=new CrmConversationStatuses(config);
-        assertThat(service.reply().id()).isEqualTo(reply.choice().id());
-        assertThat(service.close().id()).isEqualTo(closed.choice().id());
-        assertThat(service.incoming().id()).isEqualTo(incoming.choice().id());
-        assertThatThrownBy(()->service.active(UUID.randomUUID())).hasMessageContaining("configured");
-        assertThatThrownBy(()->new CrmStateConfiguration(List.of(),List.of(incoming,closed),t)).hasMessageContaining("Transition");
-        assertThatThrownBy(()->new CrmStateConfiguration(List.of(),List.of(incoming,incoming),t)).hasMessageContaining("Duplicate");
-    }
-    @Test void genericStateCatalogWritesAreDeniedEvenForAdmins(){
-        var policy=new su.onno.crm.OnnoCrmAutoConfiguration().crmCodeOwnedStateAccess();
-        for(String name:List.of("crmcustomerstages","crmconversationstatuses")) {
-            assertThat(policy.allows(Set.of("ADMIN"),"catalog",name,true)).isFalse();
-            assertThat(policy.allows(Set.of("CRM_AGENT"),"catalog",name,false)).isTrue();
-        }
-        assertThat(policy.allows(Set.of("CRM_MANAGER"),"catalog","crmcustomers",true)).isTrue();
-    }
+ @su.onno.annotations.Enumeration(name="SupportStates") enum State {
+  @EnumLabel(value="Needs attention",color="#123456") OPEN,
+  @EnumLabel("Done") CLOSED
+ }
+ @Catalog(name="HostStatuses") static class Status extends CatalogObject {}
+ @Test void usesNormalEnumerationIdentityAndLabels() {
+  var open=EnumerationPersistence.resolveId(State.class,State.OPEN);
+  var closed=EnumerationPersistence.resolveId(State.class,State.CLOSED);
+  var config=CrmStateConfiguration.enumeration(State.class,s->s==State.CLOSED,
+    new CrmStateConfiguration.Transitions(open,open,closed,open));
+  var statuses=new CrmConversationStatuses(config);
+  assertThat(statuses.incoming()).isEqualTo(open);
+  assertThat(statuses.close()).isEqualTo(closed);
+  assertThat(config.conversationStatuses().getFirst().choice().label()).isEqualTo("Needs attention");
+  assertThatThrownBy(()->statuses.active(UUID.randomUUID())).hasMessageContaining("configured");
+ }
+ @Test void readsLiveHostCatalogWithoutCopyingRowsAndRejectsDeletedChoices() {
+  var row=new Status();row.setId(UUID.randomUUID());row.setDescription("Waiting");
+  var config=CrmStateConfiguration.catalog(Status.class,()->List.of(row),r->null,r->false,null);
+  assertThat(config.source()).isEqualTo("HostStatuses");
+  row.setDescription("Review");
+  assertThat(config.conversationStatuses().getFirst().choice().label()).isEqualTo("Review");
+  row.setDeletionMark(true);
+  assertThat(config.conversationStatuses()).isEmpty();
+  assertThatThrownBy(()->new CrmConversationStatuses(config).active(row.getId())).hasMessageContaining("configured");
+  assertThat(CrmStateConfiguration.empty().source()).isEmpty();
+ }
 }

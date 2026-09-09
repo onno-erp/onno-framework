@@ -1,14 +1,7 @@
 package su.onno.crm.domain;
-
-import su.onno.annotations.EnumLabel;
-import su.onno.annotations.Enumeration;
-
-@Enumeration(name = "CrmChannels", title = "Channel")
-public enum Channel {
-    @EnumLabel(value = "Telegram", color = "#229ED9") TELEGRAM,
-    @EnumLabel(value = "WhatsApp", color = "#25D366") WHATSAPP,
-    @EnumLabel(value = "Email", color = "#6366F1") EMAIL,
-    @EnumLabel(value = "Web chat", color = "#8B5CF6") WEB_CHAT,
-    @EnumLabel(value = "Phone", color = "#F59E0B") PHONE,
-    @EnumLabel(value = "Instagram", color = "#E1306C") INSTAGRAM
+/** Conventional connector keys. Any connector may use its own stable namespaced key. Not model metadata. */
+public final class Channel {
+    private Channel() {}
+    public static final String TELEGRAM="TELEGRAM", WHATSAPP="WHATSAPP", EMAIL="EMAIL",
+        WEB_CHAT="WEB_CHAT", PHONE="PHONE", INSTAGRAM="INSTAGRAM";
 }

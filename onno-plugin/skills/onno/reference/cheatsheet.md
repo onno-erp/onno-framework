@@ -525,3 +525,10 @@ Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
 `registerListSelection("type", Component)` component when rows are selected and the viewer has
 write access. It receives `ids` and `complete()` (clear selection and reload after success).
 Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+## Composable CRM messaging
+
+`CrmCustomerBinding<T>` wraps a `CrmCatalogBinding<T>` of an existing host catalog; an optional
+inbound callback returns a saved `Ref<T>`. `CrmAgentBinding<T>` adds host identity assignment.
+No CRM customer/employee/sales catalogs or navigation are installed. Customer fields, stages,
+forms and sales metrics use ordinary onno metadata. See `onno-crm-starter/README.md`.

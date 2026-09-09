@@ -8,13 +8,13 @@ import su.onno.annotations.Catalog;
 import su.onno.model.CatalogObject;
 
 @Catalog(name = "CrmInboxes", title = "Inbox", codePrefix = "IN-", context = "CRM")
-@AccessControl(readRoles = {"CRM_AGENT", "CRM_MANAGER"}, writeRoles = {"CRM_MANAGER"})
+@AccessControl(readRoles = {"ADMIN"}, writeRoles = {"ADMIN"})
 @Getter
 @Setter
 public class Inbox extends CatalogObject {
 
     @Attribute(displayName = "Channel", required = true)
-    private Channel channel;
+    private String channel;
 
     @Attribute(displayName = "Address / handle", required = true, length = 240)
     private String address;
