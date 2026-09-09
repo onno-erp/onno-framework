@@ -27,6 +27,11 @@ closed reply window. The composer explains the restriction, preserves drafts and
 notes independent of external delivery. Sending and retrying enforce the same restrictions on
 the server. The sender picker remains compact.
 
+## Dependency security
+
+MapLibre GL is updated to 6.8 and Vitest to 4.1.11 to resolve the release audit findings.
+Map consumers use the new named-export API.
+
 ## Upgrade requirements
 
 1. Read the [CRM integration contract](../onno-crm-starter/README.md) and supply explicit host bindings and UI definitions.
