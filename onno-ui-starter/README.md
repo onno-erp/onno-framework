@@ -1587,3 +1587,13 @@ Presence is best-effort: background snapshot/heartbeat failures do not display e
 The CRM widgets use explicit host catalog bindings and scoped inbox feeds. Contact panels open the
 host's ordinary catalog form. Optional list checkboxes and the top selection toolbar remain generic
 `ListSpec` features, independent of CRM. See [the CRM guide](../onno-crm-starter/README.md).
+
+### Excluding large document payloads from generated reads
+
+`onno.ui.document-read-exclusions` maps logical document names to Java attribute names.
+For example, `Reports: [promptText, rawResponse]` omits these attributes in SQL for generated
+list, detail, reference-picker and row-refresh reads, and excludes them from generated search,
+filters and sorting. Hide the same fields in `EntityView` list/form/detail metadata.
+The default is empty (existing read contracts are unchanged). This is a payload control, not
+an authorization boundary: repository reads, domain actions, writes and tabular sections retain
+the full model. Existing stored values are not removed. System fields cannot be excluded.

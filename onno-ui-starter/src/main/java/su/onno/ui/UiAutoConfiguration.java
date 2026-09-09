@@ -304,8 +304,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public DocumentQueryService documentQueryService(MetadataRegistry registry, Jdbi jdbi) {
-        return new DocumentQueryService(registry, jdbi);
+    public DocumentQueryService documentQueryService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties) {
+        DocumentQueryService service = new DocumentQueryService(registry, jdbi);
+        service.setReadExclusions(properties.getDocumentReadExclusions());
+        return service;
     }
 
     @Bean
