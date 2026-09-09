@@ -241,3 +241,8 @@ The root conversation pane and folder panes load the next keyset window as you s
 visible **Load more conversations** button for keyboard access and short panes. A failed page keeps
 existing conversations visible and offers **Retry loading conversations**. All windows use the
 workspace's authorized feed and current list filters; changing filters discards stale requests.
+
+Inbox page reads authorize workspace members before counting or pagination. Queries using raw
+conversation fields (including channel filters and message-time sorting) resolve full customer and
+reference details only for the selected page. Customer-name search and display-field sorting retain
+the fully decorated query path so their matching and authorization semantics remain unchanged.
