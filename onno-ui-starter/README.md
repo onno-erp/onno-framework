@@ -1587,3 +1587,7 @@ Presence is best-effort: background snapshot/heartbeat failures do not display e
 The CRM widgets use explicit host catalog bindings and scoped inbox feeds. Contact panels open the
 host's ordinary catalog form. Optional list checkboxes and the top selection toolbar remain generic
 `ListSpec` features, independent of CRM. See [the CRM guide](../onno-crm-starter/README.md).
+
+Live list refreshes coalesce while a window is loading, including custom inbox pagination.
+The current response renders before a queued refresh; filter changes still discard stale responses,
+and failed background refreshes preserve the visible rows.

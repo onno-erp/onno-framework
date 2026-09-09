@@ -98,6 +98,59 @@ describe("CRM inner-pane keyset pagination", () => {
     expect(requested.searchParams.get("cursor")).toBe("new-cursor");
     expect(requested.searchParams.get("like")).toBe("subject,new");
   });
+  it("renders a slow first window despite continuous refresh events and coalesces the follow-up", async () => {
+    const first = deferred(), refresh = deferred();
+    const fetcher = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(refresh.promise);
+    vi.stubGlobal("fetch", fetcher);
+    const { rerender } = render(<EntityListWidget list={list} renderer={Inbox} refreshKey={0} />);
+    for (let key = 1; key <= 5; key++) {
+      rerender(<EntityListWidget list={list} renderer={Inbox} refreshKey={key} />);
+      act(() => window.dispatchEvent(new CustomEvent("onno:dataevent", { detail: {
+        type: "created", entityType: "catalog", entityName: "crm_conversations", id: `new-${key}`,
+      } })));
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await act(async () => first.resolve(page(["first-visible"], "next")));
+    await screen.findByText("first-visible");
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    await act(async () => refresh.resolve(page(["refreshed"], null)));
+    await screen.findByText("refreshed");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it("allows a pending next page to render before a queued live refresh", async () => {
+    const next = deferred(), refresh = deferred();
+    const fetcher = vi.fn().mockResolvedValueOnce(page(["one", "two"], "next"))
+      .mockReturnValueOnce(next.promise).mockReturnValueOnce(refresh.promise);
+    vi.stubGlobal("fetch", fetcher);
+    const { rerender } = render(<EntityListWidget list={list} renderer={Inbox} refreshKey={0} />);
+    await screen.findByText("one"); scroll();
+    rerender(<EntityListWidget list={list} renderer={Inbox} refreshKey={1} />);
+    rerender(<EntityListWidget list={list} renderer={Inbox} refreshKey={2} />);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await act(async () => next.resolve(page(["three", "four"], null)));
+    await screen.findByText("four");
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    expect(new URL(fetcher.mock.calls[2][0], "http://localhost").searchParams.get("limit")).toBe("4");
+    await act(async () => refresh.resolve(new Response(null, { status: 503 })));
+    expect(screen.getByText("four")).toBeInTheDocument();
+  });
+  it("lets the user load more while a slow background refresh is running", async () => {
+    const staleRefresh = deferred(), next = deferred(), refresh = deferred();
+    const fetcher = vi.fn().mockResolvedValueOnce(page(["one", "two"], "next"))
+      .mockReturnValueOnce(staleRefresh.promise).mockReturnValueOnce(next.promise).mockReturnValueOnce(refresh.promise);
+    vi.stubGlobal("fetch", fetcher);
+    const { rerender } = render(<EntityListWidget list={list} renderer={Inbox} refreshKey={0} />);
+    await screen.findByText("one");
+    rerender(<EntityListWidget list={list} renderer={Inbox} refreshKey={1} />);
+    scroll(); expect(fetcher).toHaveBeenCalledTimes(3);
+    await act(async () => staleRefresh.resolve(page(["stale"], null)));
+    expect(screen.queryByText("stale")).not.toBeInTheDocument();
+    await act(async () => next.resolve(page(["three", "four"], null)));
+    await screen.findByText("four");
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
+    await act(async () => refresh.resolve(page(["one", "two", "three", "four"], null)));
+    expect(screen.getByText("four")).toBeInTheDocument();
+  });
   it("does not page hidden folder panes and works without pagination props", () => {
     const loadMore = vi.fn();
     const { rerender } = render(<ConversationList active={false} hasMore loadMore={loadMore}>Folder</ConversationList>);

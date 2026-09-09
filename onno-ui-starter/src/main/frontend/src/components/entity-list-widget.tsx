@@ -1311,6 +1311,18 @@ export function EntityListWidget({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gen = useRef(0); // bumped on each query so a stale window fetch is ignored
+  const windowRequest = useRef<number | null>(null);
+  const refreshQueued = useRef(false);
+  const [queuedRefresh, setQueuedRefresh] = useState(0);
+  const finishWindow = useCallback((generation: number) => {
+    if (generation !== gen.current) return;
+    windowRequest.current = null;
+    if (refreshQueued.current) {
+      refreshQueued.current = false;
+      // Run after the completed rows have rendered, including an appended page.
+      setQueuedRefresh(value => value + 1);
+    }
+  }, []);
 
   // ---- URL-persisted view state (standalone list routes only) ----
   // A non-embedded list owns its route, so we mirror its search / sort / filters / view into the
@@ -1689,12 +1701,22 @@ export function EntityListWidget({
   // rows on screen and swaps them in place when data lands.
   const loadInitial = useCallback(
     (soft = false) => {
+      // Live events must not supersede a request for the same query: a busy inbox
+      // could otherwise discard every response forever. Keep one follow-up refresh.
+      if (soft && (windowRequest.current !== null || loadingMoreRef.current)) {
+        refreshQueued.current = true;
+        return;
+      }
+      refreshQueued.current = false;
       const myGen = ++gen.current;
+      windowRequest.current = myGen;
       loadingMoreRef.current = false;
       setLoadingMore(false);
       setLoadMoreFailed(false);
-      cursorRef.current = null;
-      if (!soft) setPageRows(null);
+      if (!soft) {
+        cursorRef.current = null;
+        setPageRows(null);
+      }
       const params = buildParams();
       // A soft reload re-fetches everything already loaded in one window (so a live change
       // doesn't yank the user back to the top); a hard load fetches just the first window.
@@ -1713,16 +1735,24 @@ export function EntityListWidget({
           if (!soft && scrollRef.current) scrollRef.current.scrollTop = 0;
         })
         .catch(() => {
-          if (myGen === gen.current) setPageRows([]);
-        });
+          if (myGen === gen.current && !soft) setPageRows([]);
+        })
+        .finally(() => finishWindow(myGen));
     },
-    [feedBase, pageSize, buildParams]
+    [feedBase, pageSize, buildParams, finishWindow]
   );
 
   // Append the next window, seeking from the current cursor. Guarded so only one
   // load-more runs at a time and a window from a superseded query is dropped.
   const loadMore = useCallback(() => {
     if (loadingMoreRef.current || !cursorRef.current) return;
+    if (windowRequest.current !== null) {
+      // An explicit next-page request takes priority over a background refresh.
+      // Its response must not later replace the page we are about to append.
+      ++gen.current;
+      windowRequest.current = null;
+      refreshQueued.current = true;
+    }
     loadingMoreRef.current = true;
     setLoadingMore(true);
     setLoadMoreFailed(false);
@@ -1753,8 +1783,9 @@ export function EntityListWidget({
         if (myGen !== gen.current) return;
         loadingMoreRef.current = false;
         setLoadingMore(false);
+        finishWindow(myGen);
       });
-  }, [feedBase, pageSize, buildParams]);
+  }, [feedBase, pageSize, buildParams, finishWindow]);
 
   // Load the initial window on first mount or query change. Reset the cursor so the query re-seeks
   // from the top rather than an old position.
@@ -1766,6 +1797,12 @@ export function EntityListWidget({
   }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig]);
 
   useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
+  useEffect(() => { if (queuedRefresh) loadInitial(true); }, [queuedRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    ++gen.current;
+    windowRequest.current = null;
+    refreshQueued.current = false;
+  }, []);
 
   // Track the island width so the toolbar can stack / collapse responsively (see below).
   useLayoutEffect(() => {
