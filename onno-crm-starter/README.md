@@ -237,6 +237,8 @@ can still use the low-level identity-link service for provider routing.
 
 ### Conversation pagination
 
+The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
+
 The root conversation pane and folder panes load the next keyset window as you scroll, with a
 visible **Load more conversations** button for keyboard access and short panes. A failed page keeps
 existing conversations visible and offers **Retry loading conversations**. All windows use the

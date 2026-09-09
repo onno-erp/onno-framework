@@ -2141,7 +2141,7 @@ export function EntityListWidget({
         fetch(`${feedBase}?ids=${encodeURIComponent(id)}`, { credentials: "include" })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
           .then((data: { rows: EntityRecord[] }) => {
-            const fresh = data.rows?.[0];
+            const fresh = data.rows?.find((row) => entityRowId(row) === id);
             if (fresh) {
               setPageRows((rows) =>
                 rows ? rows.map((r) => (entityRowId(r) === id ? fresh : r)) : rows
