@@ -6,10 +6,18 @@ import {
 } from "@internationalized/date";
 import { DateInput } from "@/components/ui/date-input";
 
-interface DatePickerProps {
+export interface DatePickerProps {
   value?: string;
   onChange: (val: string) => void;
+  /** @deprecated Use DateTimePicker for date-and-time fields. */
   includeTime?: boolean;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  isDisabled?: boolean;
+  isReadOnly?: boolean;
+  isRequired?: boolean;
+  isInvalid?: boolean;
+  className?: string;
 }
 
 function parseValue(value: string | undefined, includeTime: boolean):
@@ -45,15 +53,15 @@ function formatValue(
   return value.toString();
 }
 
-export function DatePicker({ value, onChange, includeTime = false }: DatePickerProps) {
+export function DatePicker({ value, onChange, includeTime = false, ...props }: DatePickerProps) {
   const parsed = parseValue(value, includeTime);
   return (
     <DateInput
+      {...props}
       value={parsed}
       onChange={(next) => onChange(formatValue(next, includeTime))}
       granularity={includeTime ? "minute" : "day"}
       hourCycle={24}
-      // Anchor times to the local zone when the caller asked for time.
       shouldForceLeadingZeros
       placeholderValue={
         includeTime

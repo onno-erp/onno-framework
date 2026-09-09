@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/segmented";
 import { DatePicker } from "@/components/date-picker";
+import { DateTimePicker } from "@/components/date-time-picker";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
@@ -70,6 +71,7 @@ export interface OnnoUi {
   Switch: typeof Switch;
   Segmented: typeof Segmented;
   DatePicker: typeof DatePicker;
+  DateTimePicker: typeof DateTimePicker;
   Card: typeof Card;
   CardHeader: typeof CardHeader;
   CardTitle: typeof CardTitle;
@@ -171,6 +173,7 @@ const ui: OnnoUi = {
   Switch,
   Segmented,
   DatePicker,
+  DateTimePicker,
   Card,
   CardHeader,
   CardTitle,

@@ -221,6 +221,11 @@ Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
 write access. It receives `ids` and `complete()` (clear selection and reload after success).
 Commands must enforce their own server-side authorization; unknown widget types are omitted.
 
+Custom widgets can import `DatePicker` (date only) and `DateTimePicker` (local date and
+24-hour time) from `@onno/widget-sdk`. They share the host calendar and emit ISO strings
+at day and minute precision, respectively. Generated `LocalDateTime` fields use
+`DateTimePicker`. See the [SDK date/time guide](../onno-widget-sdk/README.md#date-and-time-fields).
+
 CRM message bodies support `registerChatMessageRenderer` from `@onno/widget-sdk` (UI host v4+), with predicate/priority selection, live registration, and plain-text error fallback. See [the SDK guide](../onno-widget-sdk/README.md#custom-crm-chat-message-bodies).
 
 The SDK also exposes host `ContextMenuContent` and `ContextMenuItem` primitives for pointer-positioned and keyboard-invoked widget menus.

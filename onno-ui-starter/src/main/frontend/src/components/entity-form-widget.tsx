@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { RefSelect } from "@/components/ref-select";
 import { DatePicker } from "@/components/date-picker";
+import { DateTimePicker } from "@/components/date-time-picker";
 import { MapEditor } from "@/components/map-editor";
 import { ImagePicker, GalleryPicker } from "@/components/image-picker";
 import { FilePicker } from "@/components/file-picker";
@@ -1379,11 +1380,13 @@ function AttrControl({
   }
 
   if (attr.javaType === "LocalDate" || attr.javaType === "LocalDateTime") {
+    const Picker = attr.javaType === "LocalDateTime" ? DateTimePicker : DatePicker;
     return (
-      <DatePicker
+      <Picker
         value={(value as string) ?? ""}
         onChange={onChange}
-        includeTime={attr.javaType === "LocalDateTime"}
+        aria-label={attr.displayName}
+        isInvalid={invalid}
       />
     );
   }

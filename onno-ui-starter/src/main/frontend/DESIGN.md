@@ -100,7 +100,7 @@ of the row keeps the full context menu. Flat table view only.
 | `RefSelect` | `components/ref-select.tsx` | Searchable ref picker: server typeahead, avatars, cascading `refFilter`, quick-create, and an accessible clear choice for nullable fields. |
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |
 | `Avatar` / `PresenceAvatars` | `components/ui/avatar.tsx`, `components/presence-avatars.tsx` | Avatar primitive; face-pile + dicebear default. |
-| `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |
+| `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateTimePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-time-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |
 | `ContextMenu` | `components/ui/context-menu.tsx` | Right-click menus (list rows). |
 | `Attachment` | `components/ui/attachment.tsx` | File chips. |
 | `EntityListWidget` | `components/entity-list-widget.tsx` | The list island (see above). |
@@ -212,3 +212,6 @@ selection fills do not muddy their appearance. Pointer events stay on the checkb
 `Badge` accepts an optional configured hex `color`, using the shared `enumPillStyle` contrast calculation. CRM contact stages and entity tags use this filled pill treatment; unknown colors fall back to the semantic badge variant.
 
 Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.
+
+Use `DatePicker` for date-only values and `DateTimePicker` for local date plus 24-hour time.
+Both share `DateInput` and the calendar; the legacy `DatePicker includeTime` prop remains supported.

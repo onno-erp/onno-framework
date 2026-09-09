@@ -252,3 +252,27 @@ props. A renderer with its own scrolling pane must call `loadMore()` near that p
 provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
 query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+
+### Date and time fields
+
+Import `DatePicker` for dates and `DateTimePicker` for local dates with 24-hour time:
+
+```tsx
+import { DatePicker, DateTimePicker, useState } from "@onno/widget-sdk";
+
+function ScheduleFields() {
+  const [day, setDay] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  return <>
+    <DatePicker aria-label="Day" value={day} onChange={setDay} />
+    <DateTimePicker aria-label="Starts at" value={startsAt} onChange={setStartsAt} />
+  </>;
+}
+```
+
+Values are `YYYY-MM-DD` and `YYYY-MM-DDTHH:mm`, respectively; clearing emits an empty string.
+Date/time values are local wall times without timezone conversion. A date-only initial value
+starts at midnight; seconds are omitted. Both support `isDisabled`, `isReadOnly`,
+`isRequired`, `isInvalid`, and accessible labels. Generated `LocalDateTime` fields use
+`DateTimePicker`; the legacy `DatePicker includeTime` prop remains compatible.
+The host must include the `DateTimePicker` export to use it from a custom widget.
