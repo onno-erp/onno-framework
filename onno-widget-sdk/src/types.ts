@@ -184,6 +184,17 @@ export interface OnnoUi {
   Switch: import("react").ComponentType<any>;
   Segmented: import("react").ComponentType<any>;
   DatePicker: import("react").ComponentType<any>;
+  DateTimePicker: import("react").ComponentType<{
+    value?: string;
+    onChange: (value: string) => void;
+    "aria-label"?: string;
+    "aria-labelledby"?: string;
+    isDisabled?: boolean;
+    isReadOnly?: boolean;
+    isRequired?: boolean;
+    isInvalid?: boolean;
+    className?: string;
+  }>;
   Card: import("react").ComponentType<any>;
   CardHeader: import("react").ComponentType<any>;
   CardTitle: import("react").ComponentType<any>;

@@ -271,6 +271,7 @@ export const {
   Switch,
   Segmented,
   DatePicker,
+  DateTimePicker,
   Card,
   CardHeader,
   CardTitle,
