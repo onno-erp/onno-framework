@@ -193,6 +193,14 @@ export type ListCustomConfig = { type: string; label?: string; defaultView?: boo
  * draws the rows it's handed and opens a record through the callback.
  */
 export type ListRendererProps = {
+  /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
+  hasMore?: boolean;
+  /** A next-window request is in flight. */
+  loadingMore?: boolean;
+  /** The last next-window request failed; keep a visible explicit retry control. */
+  loadMoreFailed?: boolean;
+  /** Request/retry the next window using the host's current query and cursor. */
+  loadMore?: () => void;
   /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   /** The list's descriptor slice: entity route, title, resolved columns (labels/widgets/formats), write access. */
@@ -1330,6 +1338,7 @@ export function EntityListWidget({
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
   // so the toolbar layout is driven by the measured container width, not a media query.
   const [toolbarWidth, setToolbarWidth] = useState<number | null>(null);
@@ -1682,6 +1691,9 @@ export function EntityListWidget({
     (soft = false) => {
       const myGen = ++gen.current;
       loadingMoreRef.current = false;
+      setLoadingMore(false);
+      setLoadMoreFailed(false);
+      cursorRef.current = null;
       if (!soft) setPageRows(null);
       const params = buildParams();
       // A soft reload re-fetches everything already loaded in one window (so a live change
@@ -1713,6 +1725,7 @@ export function EntityListWidget({
     if (loadingMoreRef.current || !cursorRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
+    setLoadMoreFailed(false);
     const myGen = gen.current;
     const params = buildParams();
     params.set("limit", String(pageSize));
@@ -1723,12 +1736,23 @@ export function EntityListWidget({
         if (myGen !== gen.current) return; // a newer query superseded this window
         cursorRef.current = data.nextCursor ?? null;
         setHasMore(!!data.hasMore);
-        setPageRows((cur) => (cur ? [...cur, ...(data.rows ?? [])] : data.rows ?? []));
+        setPageRows((cur) => {
+          const seen = new Set((cur ?? []).map(entityRowId).filter(Boolean));
+          const appended = (data.rows ?? []).filter(row => {
+            const id = entityRowId(row);
+            if (!id) return true; // Register rows may have no entity id.
+            if (seen.has(id)) return false;
+            seen.add(id);
+            return true;
+          });
+          return [...(cur ?? []), ...appended];
+        });
       })
-      .catch(() => {})
+      .catch(() => { if (myGen === gen.current) setLoadMoreFailed(true); })
       .finally(() => {
+        if (myGen !== gen.current) return;
         loadingMoreRef.current = false;
-        if (myGen === gen.current) setLoadingMore(false);
+        setLoadingMore(false);
       });
   }, [feedBase, pageSize, buildParams]);
 
@@ -2802,7 +2826,7 @@ export function EntityListWidget({
         // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps
         // the toolbar (search, filters, sort) and keyset feed. No card chrome: the renderer owns
         // its own look.
-        <div className={cn("flex flex-col", surfaceMode && "min-h-0 flex-1")}>
+        <div className={cn("relative flex flex-col", surfaceMode && "min-h-0 flex-1")}>
           <div
             ref={scrollRef}
             onScroll={onScroll}
@@ -2819,10 +2843,11 @@ export function EntityListWidget({
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
-              <CustomRenderer rows={loadedRows} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl} />
+              <CustomRenderer rows={loadedRows} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
+                hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
             {loadingMore ? (
-              <div className="flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground">
+              <div className={cn("flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground", surfaceMode && "pointer-events-none absolute bottom-0 inset-x-0")}>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}
               </div>

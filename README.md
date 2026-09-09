@@ -420,3 +420,6 @@ setup and branding live in the channels starter. Workspace `.list(...)`/`.view(.
 `ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
 catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
 CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+Custom list renderers with nested scroll panes can use the SDK's optional pagination state and
+`loadMore()` callback; see [pagination in custom list panes](onno-widget-sdk/README.md#pagination-in-custom-list-panes).

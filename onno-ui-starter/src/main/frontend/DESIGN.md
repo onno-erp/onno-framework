@@ -42,6 +42,13 @@ sort, group-by), keyset infinite scroll, virtual
 windowing, context menu, batch actions. Server search spans every non-secret column — scalars as
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
+
+Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
+props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
+provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
+`loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+
 Selections larger than the server's 500-id per-request safety cap are split sequentially by the
 shared API client and folded into one batch summary; screens must not implement their own chunking.
 The island owns padding only on standalone entity routes. When embedded with `PageBuilder.list`,

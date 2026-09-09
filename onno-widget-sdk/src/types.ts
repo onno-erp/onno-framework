@@ -106,6 +106,14 @@ export interface ListRendererDescriptor {
  * the renderer only draws the current window of rows and opens records through the callback.
  */
 export interface ListRendererProps {
+  /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
+  hasMore?: boolean;
+  /** A next-window request is in flight. */
+  loadingMore?: boolean;
+  /** The last next-window request failed; keep a visible explicit retry control. */
+  loadMoreFailed?: boolean;
+  /** Request/retry the next window using the host's current query and cursor. */
+  loadMore?: () => void;
   /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   list: ListRendererDescriptor;
