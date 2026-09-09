@@ -14,6 +14,18 @@ public class UiProperties {
     private boolean enabled = true;
 
     /**
+     * Document attributes omitted from generated read queries, keyed by logical document name.
+     * Values are Java field names. Applies to list, detail, picker, live refresh, search and
+     * filter surfaces; repository reads and writes are unchanged. Use for large diagnostic text
+     * that should not be sent to clients. Hide these fields in EntityView as well. Empty by default.
+     */
+    private Map<String, List<String>> documentReadExclusions = new LinkedHashMap<>();
+
+    public Map<String, List<String>> getDocumentReadExclusions() { return documentReadExclusions; }
+    public void setDocumentReadExclusions(Map<String, List<String>> value) { documentReadExclusions = value; }
+
+
+    /**
      * URL prefix the SPA is mounted under. Baked into the served {@code index.html} (and returned as
      * {@code basePath} from {@code GET /api/config}) so the web client adopts it as its router
      * basename and deep-link prefix; the bare root redirects here. Default {@code /ui}; set to
@@ -338,6 +350,9 @@ public class UiProperties {
 
         /** Whether to scan for, serve, and advertise custom widget plugins. */
         private boolean enabled = true;
+
+
+
 
         /**
          * Classpath location holding the compiled plugin modules ({@code *.js}). The Gradle plugin

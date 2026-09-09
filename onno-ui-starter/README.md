@@ -1499,3 +1499,13 @@ route depth. Standard Spring Boot consumer static locations remain available.
 Missing `.js`, `.css`, image, font, and other file-shaped paths return `404`; unknown `/api/**`
 routes also remain `404`. Requests outside the configured UI mount are left to application
 controllers and Spring Boot's normal static-resource handling.
+
+### Excluding large document payloads from generated reads
+
+`onno.ui.document-read-exclusions` maps logical document names to Java attribute names.
+For example, `Reports: [promptText, rawResponse]` omits these attributes in SQL for generated
+list, detail, reference-picker and row-refresh reads, and excludes them from generated search,
+filters and sorting. Hide the same fields in `EntityView` list/form/detail metadata.
+The default is empty (existing read contracts are unchanged). This is a payload control, not
+an authorization boundary: repository reads, domain actions, writes and tabular sections retain
+the full model. Existing stored values are not removed. System fields cannot be excluded.

@@ -34,6 +34,30 @@ public class DocumentQueryService {
         this.refResolver = new RefResolver(registry, jdbi);
     }
 
+
+    private Map<String, List<String>> readExclusions = Map.of();
+
+    /** Configure generated reads only; never modify the registry used by persistence and commands. */
+    public void setReadExclusions(Map<String, List<String>> exclusions) {
+        this.readExclusions = Map.copyOf(exclusions);
+    }
+
+    private DocumentDescriptor readDescriptor(DocumentDescriptor d) {
+        List<String> excluded = readExclusions.getOrDefault(d.logicalName(), List.of());
+        if (excluded.isEmpty()) return d;
+        return new DocumentDescriptor(d.logicalName(), d.displayTitle(), d.tableName(), d.javaClass(),
+                d.numberLength(), d.autoNumber(), d.numberPrefix(), d.context(), d.readRoles(), d.writeRoles(),
+                d.attributes().stream().filter(a -> !excluded.contains(a.fieldName())).toList(),
+                d.tabularSections(), d.previousNames());
+    }
+
+    private String readColumns(DocumentDescriptor desc) {
+        if (!readExclusions.containsKey(desc.logicalName())) return "*";
+        return "_id, _number, _date, _posted, _deletion_mark, _version" +
+                readDescriptor(desc).attributes().stream().map(a -> ", " + a.columnName())
+                        .collect(java.util.stream.Collectors.joining());
+    }
+
     public DocumentDescriptor require(String name) {
         String normalized = name.replace("_", "").replace(" ", "").toLowerCase();
         return registry.allDocuments().stream()
@@ -74,7 +98,7 @@ public class DocumentQueryService {
                 + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")")
                 + searchClause(surface, query);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+            var q = h.createQuery("SELECT " + readColumns(desc) + " FROM " + desc.tableName() +
                             " WHERE " + where +
                             " ORDER BY _date DESC LIMIT :limit")
                     .bind("limit", limit);
@@ -82,7 +106,7 @@ public class DocumentQueryService {
             EntityQuerySupport.bindSearch(q, query);
             return q.mapToMap().list();
         });
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
+        EntityQuerySupport.decorateRows(refResolver, readDescriptor(desc).attributes(), rows);
         return rows;
     }
 
@@ -101,9 +125,9 @@ public class DocumentQueryService {
      * resolution — so a deep link like {@code …/new?startsAt=…&room=<id>} pre-fills those fields.
      */
     public Map<String, Object> newDraft(DocumentDescriptor desc, Map<String, String> prefill) {
-        Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), desc.attributes(), registry);
-        NewEntityDefaults.applyPrefill(row, desc.attributes(), prefill);
-        refResolver.resolveAttributes(List.of(row), desc.attributes());
+        Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), readDescriptor(desc).attributes(), registry);
+        NewEntityDefaults.applyPrefill(row, readDescriptor(desc).attributes(), prefill);
+        refResolver.resolveAttributes(List.of(row), readDescriptor(desc).attributes());
         return row;
     }
 
@@ -145,7 +169,7 @@ public class DocumentQueryService {
         int lim = Keyset.clampLimit(limit);
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
+            var q = h.createQuery("SELECT " + readColumns(desc) + " FROM " + desc.tableName() +
                             " WHERE " + where +
                             " ORDER BY " + plan.orderBy() +
                             " LIMIT :limit")
@@ -169,7 +193,7 @@ public class DocumentQueryService {
         String nextCursor = (hasMore && !rows.isEmpty())
                 ? Cursor.from(col, dirDesc, rows.get(rows.size() - 1)).encode()
                 : null;
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
+        EntityQuerySupport.decorateRows(refResolver, readDescriptor(desc).attributes(), rows);
         return new KeysetPage(rows, nextCursor, hasMore);
     }
 
@@ -195,7 +219,13 @@ public class DocumentQueryService {
      * re-paging the whole window. Returns only the rows that still exist and aren't deletion-marked.
      */
     public List<Map<String, Object>> rowsByIds(DocumentDescriptor desc, List<UUID> ids) {
-        return EntityQuerySupport.rowsByIds(jdbi, refResolver, surface(desc), ids);
+        if (ids == null || ids.isEmpty()) return List.of();
+        List<Map<String, Object>> rows = jdbi.withHandle(h ->
+                h.createQuery("SELECT " + readColumns(desc) + " FROM " + desc.tableName() +
+                                " WHERE _deletion_mark = false AND _id IN (<ids>)")
+                        .bindList("ids", ids).mapToMap().list());
+        EntityQuerySupport.decorateRows(refResolver, readDescriptor(desc).attributes(), rows);
+        return rows;
     }
 
     /** Total live rows matching the search (+ optional date range, declarative filters, widget filter). */
@@ -328,19 +358,19 @@ public class DocumentQueryService {
         return EntityQuerySupport.aggregateBuckets(jdbi, refResolver, surface(desc), request);
     }
 
-    private static EntitySurfaceDescriptor surface(DocumentDescriptor desc) {
-        return EntitySurfaceDescriptor.document(desc);
+    private EntitySurfaceDescriptor surface(DocumentDescriptor desc) {
+        return EntitySurfaceDescriptor.document(readDescriptor(desc));
     }
 
     public Map<String, Object> get(DocumentDescriptor desc, UUID id) {
         Map<String, Object> doc = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")
+                h.createQuery("SELECT " + readColumns(desc) + " FROM " + desc.tableName() + " WHERE _id = :id")
                         .bind("id", id)
                         .mapToMap()
                         .findOne()
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), List.of(doc));
+        EntityQuerySupport.decorateRows(refResolver, readDescriptor(desc).attributes(), List.of(doc));
 
         for (TabularSectionDescriptor ts : desc.tabularSections()) {
             List<Map<String, Object>> rows = jdbi.withHandle(h ->

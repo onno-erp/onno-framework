@@ -322,3 +322,13 @@ There is no separate "public projection" endpoint yet; the generic read API is t
 is auth-gated. To expose a curated, anonymous read surface, front it with your own controller that
 maps the logical entity to your DTOs, and (if it also accepts writes) add its path to
 `onno.auth.public-paths` and `onno.auth.csrf-ignored-paths`.
+
+### Excluding large document payloads from generated reads
+
+`onno.ui.document-read-exclusions` maps logical document names to Java attribute names.
+For example, `Reports: [promptText, rawResponse]` omits these attributes in SQL for generated
+list, detail, reference-picker and row-refresh reads, and excludes them from generated search,
+filters and sorting. Hide the same fields in `EntityView` list/form/detail metadata.
+The default is empty (existing read contracts are unchanged). This is a payload control, not
+an authorization boundary: repository reads, domain actions, writes and tabular sections retain
+the full model. Existing stored values are not removed. System fields cannot be excluded.

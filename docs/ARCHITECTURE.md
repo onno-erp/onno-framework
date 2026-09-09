@@ -673,3 +673,13 @@ and the `su.onno.*` packages reserved, and a definition of done — is in
 [`community/registry.json`](../community/registry.json) by the `generateIntegrationsDoc` Gradle task.
 Both `check` and `generateIntegrationsDoc` validate registry structure, allowed values, URLs,
 coordinates, and duplicate ids before accepting it.
+
+### Excluding large document payloads from generated reads
+
+`onno.ui.document-read-exclusions` maps logical document names to Java attribute names.
+For example, `Reports: [promptText, rawResponse]` omits these attributes in SQL for generated
+list, detail, reference-picker and row-refresh reads, and excludes them from generated search,
+filters and sorting. Hide the same fields in `EntityView` list/form/detail metadata.
+The default is empty (existing read contracts are unchanged). This is a payload control, not
+an authorization boundary: repository reads, domain actions, writes and tabular sections retain
+the full model. Existing stored values are not removed. System fields cannot be excluded.
