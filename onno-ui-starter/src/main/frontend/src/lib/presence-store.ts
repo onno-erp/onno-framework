@@ -209,9 +209,13 @@ export function usePanePresence(path: string) {
     const myId = routeStoreId(path);
     setMyRoute(myId);
     let active = true;
-    api.presence(path, "enter").catch(() => {});
+    let denied = false;
+    const onFailure = (error: unknown) => {
+      if ((error as { status?: number })?.status === 403) denied = true;
+    };
+    api.presence(path, "enter").catch(onFailure);
     const beat = window.setInterval(() => {
-      if (active) api.presence(path, "heartbeat").catch(() => {});
+      if (active && !denied) api.presence(path, "heartbeat").catch(onFailure);
     }, HEARTBEAT_MS);
     // Closing the browser tab (or navigating the whole document away) does NOT run React cleanup, so the
     // unmount-time leave below never fires — the viewer would linger until the server TTL reaps them.
@@ -219,7 +223,7 @@ export function usePanePresence(path: string) {
     // request outlives the unloading document. TTL still backstops a crash / lost network.
     const onPageHide = () => {
       active = false;
-      api.leavePresence(path);
+      if (!denied) api.leavePresence(path);
     };
     window.addEventListener("pagehide", onPageHide);
     return () => {
@@ -229,7 +233,7 @@ export function usePanePresence(path: string) {
       removeSelfFrom(myId); // optimistically drop self from the route we're leaving (no flash)
       // Don't clear myRouteId here — on a path change the next effect sets the new route directly, so it
       // never passes through null (the !path branch above clears it when there is genuinely no focused route).
-      api.leavePresence(path);
+      if (!denied) api.leavePresence(path);
     };
   }, [path]);
 }

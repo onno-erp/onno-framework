@@ -1,0 +1,30 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+const mocks = vi.hoisted(() => ({ search: vi.fn(), add: vi.fn(), resolve: vi.fn(), list: vi.fn() }));
+vi.mock("@/lib/api", () => ({api: {searchMentions: mocks.search, addComment: mocks.add, resolveMention: mocks.resolve, listComments: mocks.list}, ApiError: class extends Error {}}));
+import { CommentComposer, CommentBody } from "../src/components/entity-comments-widget";
+const id = "12345678-1234-1234-1234-123456789012";
+afterEach(() => {cleanup(); vi.clearAllMocks();});
+it("reuses people/record lookup, serializes references and posts only an internal comment", async () => {
+  mocks.search.mockImplementation((_q, kind) => Promise.resolve([{kind: kind === "people" ? "catalogs" : "documents", name: kind === "people" ? "agents" : "quotes", id, display: kind === "people" ? "Alice" : "Quote 42", entity: kind === "people" ? "Agent" : "Quote", avatarUrl: null}]));
+  mocks.add.mockResolvedValue({id: "note", body: "Saved", mentions: [], reactions: []});
+  const posted = vi.fn();
+  render(<CommentComposer target={{kind:"catalogs", name:"crm_conversations", id}} onPosted={posted} />);
+  const input = screen.getByRole("textbox", {name:"Write an internal note"});
+  fireEvent.change(input, {target:{value:"@Al", selectionStart:3}});
+  fireEvent.mouseDown(await screen.findByRole("option"));
+  expect(input).toHaveProperty("value", "@Alice ");
+  fireEvent.change(input, {target:{value:"@Alice #Qu", selectionStart:10}});
+  await waitFor(() => expect(mocks.search).toHaveBeenLastCalledWith("Qu", undefined));
+  fireEvent.keyDown(input, {key:"Enter"});
+  fireEvent.click(screen.getByRole("button", {name:"Send internal note"}));
+  await waitFor(() => expect(mocks.add).toHaveBeenCalledWith("catalogs", "crm_conversations", id, `@[Alice](catalogs/agents/${id}) #[Quote 42](documents/quotes/${id})`, null));
+  expect(posted).toHaveBeenCalledOnce();
+  expect(mocks.list).not.toHaveBeenCalled();
+});
+it("renders permitted records as links and denied references as plain labels", async () => {
+  mocks.resolve.mockImplementation((kind, name, recordId) => Promise.resolve({kind,name,id:recordId,readable:name === "quotes",display:name === "quotes" ? "Quote 42" : null,entity:null,avatarUrl:null}));
+  render(<CommentBody body={`See #[Quote 42](documents/quotes/${id}) and @[Alice](catalogs/agents/22345678-1234-1234-1234-123456789012)`} />);
+  expect(await screen.findByRole("button", {name:"Quote 42"})).toBeTruthy();
+  expect(screen.queryByRole("button", {name:"Alice"})).toBeNull();
+});

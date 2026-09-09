@@ -87,6 +87,13 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "timeRange.lastMonths": "Last {n} months",
   "timeRange.lastYear": "Last year",
   "timeRange.lastYears": "Last {n} years",
+  "timeRange.granularity.label": "Interval",
+  "timeRange.granularity.autoResolved": "Auto ({value})",
+  "timeRange.granularity.minute": "1 min",
+  "timeRange.granularity.hour": "1 hour",
+  "timeRange.granularity.day": "1 day",
+  "timeRange.granularity.week": "1 week",
+  "timeRange.granularity.month": "1 month",
 
   // Shared select/bottom-sheet accessibility labels.
   "select.option": "Select option",
@@ -158,6 +165,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The selection
   // count itself reuses "list.selected" below (shared with the multi-select filter badge).
   "list.clearSelection": "Clear selection",
+  "list.selectLoaded": "Select loaded rows",
+  "list.selectRow": "Select {row}",
+  "list.selectionActions": "Actions for selected",
   "batch.delete": "Delete {n}",
   "batch.deleteConfirm": "Sure? Delete {n}",
   "batch.running": "{label} — running on {n}…",

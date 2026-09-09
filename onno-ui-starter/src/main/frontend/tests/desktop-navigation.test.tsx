@@ -47,7 +47,7 @@ function renderNavigation(activePath = "/inbox", markFramed = true) {
       home="/inbox"
       onNavigate={onNavigate}
       onSectionFocus={onSectionFocus}
-      account={<div>Account</div>}
+      account={(compact) => <div>{compact ? "Compact account" : "Account"}</div>}
       notification={<div>Notifications</div>}
       surface="#fff"
       border="#eee"
@@ -57,6 +57,35 @@ function renderNavigation(activePath = "/inbox", markFramed = true) {
     />
   );
   return { ...result, onNavigate, onSectionFocus };
+}
+
+function renderNavigationWithStandalone(activePath = "/inbox") {
+  const onNavigate = vi.fn();
+  const onSectionFocus = vi.fn();
+  const view = (path: string) => (
+    <DesktopNavigation
+      brand="Onno Desk"
+      navigation={[
+        ...navigation,
+        {
+          items: [{ label: "Dashboard", icon: "house", path: "/" }],
+        },
+      ]}
+      activePath={path}
+      home="/inbox"
+      onNavigate={onNavigate}
+      onSectionFocus={onSectionFocus}
+      account={(compact) => <div>{compact ? "Compact account" : "Account"}</div>}
+      notification={<div>Notifications</div>}
+      surface="#fff"
+      border="#eee"
+      primary="#6757f5"
+      primarySoft="#f0eeff"
+      t={t}
+    />
+  );
+  const result = render(view(activePath));
+  return { ...result, onNavigate, onSectionFocus, setActivePath: (path: string) => result.rerender(view(path)) };
 }
 
 describe("DesktopNavigation", () => {
@@ -79,6 +108,7 @@ describe("DesktopNavigation", () => {
       "/branding/mark.svg"
     );
     expect(screen.getByTestId("desktop-navigation-notifications")).toHaveTextContent("Notifications");
+    expect(screen.getByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
     expect(screen.getByTestId("desktop-navigation-drawer")).not.toContainElement(
       screen.getByTestId("desktop-navigation-account")
     );
@@ -121,19 +151,19 @@ describe("DesktopNavigation", () => {
     expect(screen.getByRole("heading", { name: "Sales" })).toBeInTheDocument();
     expect(screen.getByText("Pipeline")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sales" }));
     expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "false");
     expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
     expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
     expect(window.localStorage.getItem("onno.desktop-navigation.expanded")).toBe("false");
-    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveStyle({
+    expect(screen.getByRole("button", { name: "Inbox" })).toHaveStyle({
       background: "#f0eeff",
     });
     expect(screen.getByRole("button", { name: "Sales" })).not.toHaveStyle({
       background: "#f0eeff",
     });
-    expect(screen.getByRole("button", { name: "Inbox" })).toHaveClass("text-muted-foreground");
-    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveClass("text-primary");
+    expect(screen.getByRole("button", { name: "Inbox" })).not.toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("button", { name: "Inbox" })).toHaveClass("text-primary");
     expect(screen.getByRole("button", { name: "Sales" })).toHaveClass("text-muted-foreground");
     expect(screen.getByRole("button", { name: "Sales" })).not.toHaveClass("text-primary");
   });
@@ -142,6 +172,54 @@ describe("DesktopNavigation", () => {
     renderNavigation("/pipeline/42");
     expect(screen.getByText("Pipeline")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pipeline" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("navigates a standalone item directly without showing a drawer", () => {
+    const { onNavigate, onSectionFocus } = renderNavigationWithStandalone();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+
+    expect(onNavigate).toHaveBeenCalledWith("/");
+    expect(onSectionFocus).not.toHaveBeenCalled();
+    expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "false");
+    expect(screen.getByTestId("desktop-navigation")).toHaveStyle({ width: "64px" });
+    expect(screen.getByTestId("desktop-navigation-drawer").parentElement).toHaveClass("invisible");
+    expect(screen.queryByRole("navigation", { name: "Dashboard" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("desktop-navigation-account")).toHaveTextContent("Compact account");
+    expect(screen.queryByRole("button", { name: "Collapse navigation" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sales" }));
+
+    expect(screen.getByTestId("desktop-navigation")).toHaveAttribute("data-expanded", "true");
+    expect(screen.getByRole("heading", { name: "Sales" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse navigation" })).toBeInTheDocument();
+    expect(screen.getByTestId("desktop-navigation-account")).toHaveTextContent("Account");
+  });
+
+  it("clears a direct link after its last tab closes and restores it on reopening", () => {
+    const { setActivePath } = renderNavigationWithStandalone("/");
+    const dashboard = screen.getByRole("button", { name: "Dashboard" });
+    expect(dashboard).toHaveAttribute("aria-current", "page");
+    expect(dashboard).toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("");
+    expect(dashboard).toHaveAttribute("data-navigation-state", "inactive");
+    expect(dashboard).not.toHaveAttribute("aria-current");
+    expect(dashboard).not.toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("/");
+    expect(dashboard).toHaveAttribute("aria-current", "page");
+    expect(dashboard).toHaveStyle({ background: "#f0eeff" });
+
+    setActivePath("/pipeline");
+    expect(dashboard).toHaveAttribute("data-navigation-state", "inactive");
+    const sales = screen.getByRole("button", { name: "Sales" });
+    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+    expect(sales).toHaveAttribute("aria-current", "page");
+    expect(sales).toHaveStyle({ background: "#f0eeff" });
+    setActivePath("");
+    expect(sales).toHaveAttribute("data-navigation-state", "inactive");
+    expect(sales).not.toHaveStyle({ background: "#f0eeff" });
   });
 
   it("falls back to highlighting the selected section when no active tab maps to navigation", () => {

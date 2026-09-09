@@ -123,3 +123,11 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   unknown keys and bad values are skipped silently. Prefill applies after `OnFillingHandler` and
   field initializers. This is the way to seed a `Ref` default (a `Ref` can't be a literal field
   initializer).
+
+
+## Live lists and transaction visibility
+
+The local `UiEventPublisher` dispatches entity-change SSE notifications after the publishing Spring
+transaction commits (and immediately outside a transaction). Never push a controller-only SSE event
+from the middle of a transaction: a fast browser can refetch before the inserted row is visible.
+Rolled-back repository changes must not emit a client invalidation.

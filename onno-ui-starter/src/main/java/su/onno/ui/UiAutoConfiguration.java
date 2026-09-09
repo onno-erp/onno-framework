@@ -212,8 +212,8 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public UiAccessService uiAccessService(MetadataRegistry registry) {
-        return new UiAccessService(registry);
+    public UiAccessService uiAccessService(MetadataRegistry registry, org.springframework.beans.factory.ObjectProvider<UiEntityAccessPolicy> policies) {
+        return new UiAccessService(registry, () -> policies.orderedStream().toList());
     }
 
     @Bean

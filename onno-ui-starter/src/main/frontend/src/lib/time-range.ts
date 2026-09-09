@@ -18,6 +18,10 @@ export type AllTimeRange = { kind: "all" };
 /** A window of time: a rolling "last N <unit>", a fixed from/to, or unbounded. */
 export type TimeRange = RelativeRange | AbsoluteRange | AllTimeRange;
 
+/** Date bucket selected for every auto-bucketed time chart on a dashboard. */
+export type TimeGranularity = "minute" | "hour" | "day" | "week" | "month";
+export type TimeGranularityMode = "auto" | TimeGranularity;
+
 /** A labelled quick-pick bound to a relative (or all-time) range; the picker renders a list of these. */
 export interface RangePreset {
   id: string;
@@ -131,4 +135,21 @@ export function rangeSpanDays(range: TimeRange, spanDaysForAll: number, now = Da
   if (range.kind === "all") return spanDaysForAll;
   const { from, to } = resolveRange(range, now);
   return Math.max(1 / 1440, (to - from) / MS.d); // floor at one minute, expressed in days
+}
+
+/**
+ * Pick the shared automatic bucket for a bounded dashboard window. Short investigative windows
+ * stay minute-level through six hours; removing point markers keeps those dense lines readable.
+ */
+export function autoGranularityForSpan(days: number): TimeGranularity {
+  if (days >= 300) return "month";
+  if (days >= 70) return "week";
+  if (days >= 2) return "day";
+  if (days * 24 > 6) return "hour";
+  return "minute";
+}
+
+/** Resolve the picker-visible automatic bucket, using a year as the all-time sizing fallback. */
+export function autoGranularityForRange(range: TimeRange, now = Date.now()): TimeGranularity {
+  return autoGranularityForSpan(rangeSpanDays(range, 365, now));
 }

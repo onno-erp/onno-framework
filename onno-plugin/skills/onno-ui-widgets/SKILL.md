@@ -5,7 +5,8 @@ description: >-
   widget DSL, built-in count/chart/list/timeRange/widgets, WidgetBuilder config, custom widget
   payloads, src/main/widgets/*.tsx files, @onno/widget-sdk, su.onno.widgets Gradle plugin, widget
   Tailwind styling, host UI primitives, read-only SDK data client, SSE live updates, plugin bundle
-  loading, or debugging why a custom widget does not render.
+  loading, full-height/fullscreen workspaces with internal scrolling, or debugging why a custom
+  widget does not render.
 ---
 
 # onno UI Widgets
@@ -22,6 +23,12 @@ toolbar, pane headers, and composer fixed; make each content pane `min-h-0`; put
 only on the conversation/list/timeline/detail bodies that should scroll. Do not add a viewport
 `clamp`, arbitrary maximum height, or expanding message stack that leaves unused space and turns the
 whole page into the scroller. Let ordinary embedded dashboard widgets remain content-sized.
+
+For a fullscreen inbox, scheduler, or editor, read
+[references/full-height-workspaces.md](references/full-height-workspaces.md) before implementation.
+Here fullscreen means filling the active tab below the shell, unless the user requests browser
+fullscreen. Verify every enclosing page/tab scroller, not just `document.scrollHeight`: padded
+DivKit wrappers can leave a small outer scroll range even when the document fits perfectly.
 
 Use authored avatar/image fields and resolved Ref sidecars such as `customerAvatar`, plus framework
 payloads such as comment `authorAvatarUrl`, before inventing an avatar. Use the same deterministic
@@ -57,3 +64,14 @@ Built-in `list` accepts catalogs/documents, not registers. Register KPI filters 
 use a custom widget with `api.getBalance`/`getMovements` for resource-threshold or movement-list UI.
 
 Read [references/examples.md](references/examples.md) for full Java and TSX examples.
+
+## Contribute to an existing surface
+
+On host v5, prefer `registerExtension({id, slot, order, visible, component})` from the SDK to
+editing CRM or shell components for provider-specific buttons/panels. Use the documented page,
+entity list/form, `crm.contact.actions`, and `crm.chat.*` outlets in `docs/EXTENDING.md`. The host supplies record/workspace
+context and optional navigation, refresh, draft insertion, and named command callbacks. Keep demo
+registrations in the example/consumer bundle. Retain unregister callbacks for dynamically loaded
+plugins; use `registerChatMessageRenderer` for timeline bodies. Visibility never replaces backend
+authorization, and contributions handle their own async errors. Verify an ordinary entity surface
+as well as CRM, and check that removing a plugin leaves no dead controls in the reusable bundle.

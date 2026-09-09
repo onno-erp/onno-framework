@@ -1,3 +1,5 @@
+import { ExtensionSlot } from "@/lib/ui-extensions";
+import type { ExtensionContext } from "../../../../../../onno-widget-sdk/src/extensions";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import { toast } from "@/components/ui/toast";
 import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
@@ -712,8 +714,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const isHalf = (f: Field) =>
     f.kind === "attr" && /^(half|1\/2|50%?)$/i.test((f.attr.widthHint ?? "").trim());
 
+  const extensionContext: ExtensionContext = {surface:"entity-form",kind,name,recordId:isEdit ? id : undefined,record:record ?? undefined,permissions:{canWrite:!readOnly},openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)};
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-5"><div className="w-full min-w-0 max-w-2xl flex-1">
       <div className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
@@ -732,6 +735,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         {/* Record-level actions (unpost / duplicate / delete / custom DETAIL actions) — the same
             cluster the old read-only detail header rendered, now pinned beside the form title. */}
         {form.actions?.length ? <ActionsCluster items={form.actions} /> : null}
+        <ExtensionSlot name="entity.form.actions" context={extensionContext} className="flex items-center gap-2" />
       </div>
       {/* The record changed elsewhere while the user has unsaved edits — offer a non-destructive
           reload rather than silently overwriting their input (#244). Reload re-seeds from the
@@ -869,7 +873,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           ) : null}
         </div>
       )}
-    </div>
+    </div><ExtensionSlot name="entity.form.aside" context={extensionContext} className="w-72 max-w-full space-y-4" /></div>
   );
 }
 

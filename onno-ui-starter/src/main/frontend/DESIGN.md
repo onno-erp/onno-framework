@@ -42,6 +42,13 @@ sort, group-by), keyset infinite scroll, virtual
 windowing, context menu, batch actions. Server search spans every non-secret column — scalars as
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
+
+Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
+props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
+provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
+`loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+
 Selections larger than the server's 500-id per-request safety cap are split sequentially by the
 shared API client and folded into one batch summary; screens must not implement their own chunking.
 The island owns padding only on standalone entity routes. When embedded with `PageBuilder.list`,
@@ -63,7 +70,9 @@ of the row keeps the full context menu. Flat table view only.
 
 `components/chart-widget.tsx` + `lib/time-range.ts` + `lib/widget-data.ts`:
 
-- Auto-granularity picks the coarsest unit yielding **≥10 points** (`MIN_POINTS`).
+- Auto-granularity uses minute buckets through 6h, hour through 2d, day through 70d, week through
+  300d, then month. The shared time-range footer displays the resolved interval and lets the viewer
+  override it for every auto-bucketed chart; authored fixed buckets stay fixed.
 - Date-bucketed axes are **zero-filled** server-side; pies drop zero slices.
 - One grafana-style time picker (`TimeRangeWidget`, presets `15m…1y,all`, default 30d) drives all
   charts on a board (`providers/time-range-provider.tsx`, persisted).
@@ -106,6 +115,15 @@ Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/widget-
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
 (`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR).
 
+List selection actions appear inline in the scrolling facet rail, using shared `Button`
+`size="toolbar"` (32px, compact text) and `variant="subtle"`: a solid neutral pill shared with filter triggers.
+Connection-card secondary actions share this variant and size, with leading icons. Keep title/count and primary actions
+visible; selection must not change toolbar height. Batch delete retains two-step confirmation.
+
+Checkboxes follow the shadcn/Radix primitive: 16px square, 4px corners, a neutral input border
+and subtle dark fill while unchecked, and primary fill for checked or mixed states. Use the shared
+`Checkbox` for forms and list selection; do not add accent borders to unchecked instances.
+
 ### Radius mapping
 
 | Structure | Class |
@@ -141,7 +159,14 @@ exceptions. Keep component tests for every custom picker trigger.
   always hide vertical overflow.
 - Desktop rail highlighting follows the focused tab's authored Layout section. When the focused
   pane is empty or its route is outside authored navigation, the selected drawer section becomes
-  the single highlighted fallback; never paint both the routed and selected sections as active.
+  the single highlighted fallback only while its submenu is visible; never paint both the routed
+  and selected sections as active. Collapsing a submenu preserves the focused page’s rail highlight.
+  Direct links highlight only for a focused page, and become inactive when its last tab closes.
+  An untitled section with one item is a direct rail destination: clicking it navigates immediately
+  and leaves the nested drawer closed because there is no submenu to reveal.
+  While that direct destination is selected, its rail footer shows the signed-in user's avatar in
+  place of the unavailable collapse arrow; it opens the identity, Appearance, profile, and Sign out
+  menu. Sections with submenus retain the collapse arrow and the full account dock below the drawer.
   Opening a rail section transfers command focus to navigation without closing pane tabs: their
   active tabs remain visible with the muted pane-active treatment, and global commands such as
   Escape do not target a tab until a drawer destination or pane is focused again. Pointer/touch
@@ -170,3 +195,20 @@ exceptions. Keep component tests for every custom picker trigger.
 - No hardcoded English in chrome — every string goes through the `UiMessages` key set.
 - Custom widgets import host primitives from `@onno/widget-sdk` (`Button`, `Segmented`,
   `Select`, …) — never rebuild lookalikes inside a widget.
+
+### Shared button settings
+
+Use `Button` (also exported through `@onno/widget-sdk`) for inbox, list and connection
+actions. `variant="subtle" size="toolbar"` is the compact neutral pill. Its automatic
+outline is solid; set `outlineStyle="solid"`, `"dashed"`, `"dotted"` or `"none"` to
+choose explicitly. `outlineStyle="auto"` preserves the variant default. Configure these
+appearances in `components/ui/button.tsx`, not individual page class strings. Filter
+triggers reuse `buttonVariants` for the same dimensions and neutral appearance.
+
+List selection checkboxes retain a 16px visible box and use a transparent 36px hit area.
+Unchecked boxes use an opaque background and a muted-foreground border so row hover and
+selection fills do not muddy their appearance. Pointer events stay on the checkbox, not row navigation.
+
+`Badge` accepts an optional configured hex `color`, using the shared `enumPillStyle` contrast calculation. CRM contact stages and entity tags use this filled pill treatment; unknown colors fall back to the semantic badge variant.
+
+Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.

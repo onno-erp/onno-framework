@@ -42,6 +42,24 @@ POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-recor
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
 
+The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
+
+```text
+GET  /api/crm/conversations/{id}/delivery       response: {"connected":true,"label":"Telegram @bot","maxTextLength":4096}
+POST /api/crm/conversations/{id}/messages/{messageId}/retry
+GET  /api/crm/conversations/{id}/messages
+POST /api/crm/conversations/{id}/messages       body: {"body":"…"}
+POST /api/crm/conversations/{id}/read
+```
+
+Disconnected replies and retries of non-failed or foreign-conversation messages return 422.
+Delivery enqueues in the same transaction as the CRM message through `CrmMessageTransport`.
+A successful provider send is `SENT`; it does not imply a delivery/read receipt.
+
+These routes require a permitted host `CrmInboxWorkspace`, `?workspace=<key>`, and host customer read access. Writes also require workspace write permission.
+Business actions are host-authored through ordinary `ActionSpec` handlers. See
+[onno-crm-starter/README.md](../onno-crm-starter/README.md) for the module integration contract.
+
 Process actors are always derived from the authenticated principal; usernames and roles are never
 accepted from the request body. Starting is authorized by the definition's typed
 `startAssignment(payload)`. `GET /api/tasks` returns open candidate work plus work already
@@ -286,11 +304,7 @@ POST /api/documents/{name}/{id}/post      post, or atomically repost an already-
 
 Two more contracts worth knowing:
 
-- **Tabular sections replace, they don't merge.** Submitting a section (keyed by its section name)
-  deletes and re-inserts that whole section; a section absent from the body is left untouched.
-- **Lifecycle hooks re-run on every write.** `beforeWrite` runs on create *and* update (and
-  `onFilling` on create), then `afterWrite` runs after a successful persist; validation previews do
-  not call `afterWrite`. `beforePost` runs on post/repost. Don't assume hooks only fire once.
+Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
 
 ## Filtering & deletion
 
@@ -322,6 +336,180 @@ There is no separate "public projection" endpoint yet; the generic read API is t
 is auth-gated. To expose a curated, anonymous read surface, front it with your own controller that
 maps the logical entity to your DTOs, and (if it also accepts writes) add its path to
 `onno.auth.public-paths` and `onno.auth.csrf-ignored-paths`.
+
+### CRM workspace and contacts (optional CRM starter)
+
+`GET /api/crm/workspace` returns `{workspace:{version,config,availableFields},canConfigure:false,customerCatalog}`.
+It exposes developer-authored presentation from `CrmWorkspaceCustomizer`; no layout write API or
+CRM custom-value storage exists. `GET /api/crm/contacts/{id}` returns
+`{catalogName,fields,identities,conversations,canWrite}`. The bound host catalog supplies selected
+fields and permissions; related conversations are workspace-filtered. Canonical redirects resolve
+host-initiated link consolidation. Customer CRUD/search use the host's generic catalog endpoints.
+There are no CRM contact edit, duplicate-search, merge-preview, merge, history or undo endpoints.
+
+`GET /api/crm/statuses` returns configured `{id,description,color,closed}` choices (empty if disabled).
+`GET /api/crm/channels` returns `{channels,canManage}` for enabled connectors only, with no credentials.
+`POST /api/crm/channels/{key}` accepts `{action,credential?}` and enforces host `CrmChannelAccess`
+(ADMIN by default). Unknown connectors return 404; invalid commands return 422.
+`POST /api/crm/contacts/{id}/identities` accepts manual `{channel,address}` email/phone identities,
+requiring writable workspace membership and host customer write permission. Telegram's cached JPEG
+endpoint `/api/crm/telegram/avatars/{identityId}` requires customer/workspace access as well.
+
+The starter activates only with a `CrmCustomerBinding`; it creates no customer, employee or sales
+catalog. Customer/assignee keys in CRM persistence are UUIDs scoped to explicit host bindings.
+Dedicated inbox feeds add `customerDisplay`, `customerRef:{type,display,id} (type is the host catalog logical name)` and `customerAvatar` from
+the binding, and resolve assignee labels only when the caller may read the bound employee.
+
+The UI `onno-list` descriptor may carry `selectionCheckboxes: true` to display an optional Onno
+selection column in catalog/document tables. This changes presentation only: selected actions use
+the existing `POST /api/actions/{kind}/{name}/{key}/batch` contract and role/validation checks.
+Select-all operates on loaded rows rather than requesting an unbounded set of matching IDs.
+
+The CRM workspace response's `config.folders` contains ordered developer-authored folders:
+`key`, `label`, `channels`, `statuses`, `priorities` (status UUID and channel/priority enum-name arrays), `conversationIds` (UUID array), and `unreadOnly`. Matching enum UUIDs are also exposed as
+`channelIds`, `statusIds`, `priorityIds` for the host list representation.
+Empty arrays are unrestricted; criteria intersect. An empty folders array selects the flat inbox
+list. The first matching folder wins. These are client views over the current authorized list, not additional read permissions.
+
+### Optional Gmail adapter (`onno-crm-channels-starter`)
+
+When `onno.crm.channels.gmail.enabled=true`, `CrmChannelAccess`-protected `POST /api/crm/gmail/authorize` (normal CSRF protection)
+returns `{ "url": "https://accounts.google.com/…" }`. The session-bound, single-use GET callback at
+`/api/crm/gmail/callback` exchanges the authorization code and returns to the local `returnPath` supplied to the authorize request.
+Credentials are never returned. Existing `/api/crm/channels` includes Gmail health and actions;
+message reading and reply enqueueing retain the standard CRM endpoints and authorization.
+
+### CRM inbox workspace API
+
+`CrmInboxWorkspace` beans activate scoped inbox mode, separate from persisted channel accounts.
+`GET /api/crm/inbox-workspaces` returns only accessible `{key,label,canWrite}` entries.
+`GET /api/crm/inbox-workspaces/{key}?q=&offset=0` returns `{key,label,config,canWrite,rows,total,hasMore}`;
+rows use widget camel-case fields and `...Display`/`...Color`/`...Ref` sidecars, with at most 100 rows
+per page by default. A negative offset is 400. Workspace rules are evaluated over active conversations before
+reference resolution. Large deployments should supply a future SQL-backed selection layer rather
+than relying on unbounded Java predicate scans.
+
+Every existing `/api/crm/conversations/{id}/...` command/read requires the
+`workspace` query parameter. Membership and the workspace's read/write roles are independently
+checked; missing scope, an inaccessible workspace, a foreign chat or read-only mutation returns 403.
+`GET|POST /api/crm/inbox-workspaces/{key}/conversations/{id}/comments` accesses the existing internal
+notes, with POST body `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
+
+Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
+
+Inbox workspace pages accept `widget.config("workspace", "support")` to bind a page to one workspace.
+The scoped feed accepts `status` UUIDs and `channel`/`priority` enum names (`all` by default);
+filters apply after workspace membership and before pagination.
+
+Inbox filters accept comma-separated status UUIDs or channel/priority enum names (OR within a field,
+AND between fields); omitted values default to `all`. The inbox reuses the host `OptionsFacet`
+multi-select chips through the widget SDK.
+
+The scoped inbox renders the standard `EntityListWidget` header and body-view controls. Its feed
+also accepts host list parameters: repeated `in=field,value`, `sort`, `dir`, `limit` (1–500, default
+100), and an offset cursor returned as `nextCursor`. Membership is checked before filtering, sorting
+and pagination. This cursor is an offset, not a stable snapshot under concurrent inserts.
+
+### Optional WhatsApp webhook
+
+With `onno.crm.channels.whatsapp.enabled=true`, `GET /api/crm/whatsapp/webhook` accepts `hub.mode=subscribe`, `hub.verify_token`, and `hub.challenge`, returning the plain challenge only after token validation. `POST` accepts Meta JSON with `X-Hub-Signature-256`, verifies the raw-body HMAC before parsing, limits payloads to 1 MiB, and returns 200 after applying recognized configured-account events. Missing/invalid signatures return 403; malformed payloads return 400. This exact path needs public access and a CSRF exemption in cookie-auth hosts. Other CRM endpoints retain their normal authorization.
+
+UI list descriptors may include `selectionWidget`, an optional registered widget type for the
+selected-row toolbar. It does not alter generated record reads or grant command authorization.
+
+### Unified contact activity
+
+The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
+
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+
+`POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
+
+### Record tag API
+
+`GET /api/tags/{kind}/{name}` lists selectable tag definitions. Definitions are managed through
+the owning tag catalog’s ordinary CRUD API; the tag picker does not create definitions. `GET /api/tags/{kind}/{name}/{id}` lists a record's tags.
+`POST /api/tags/{kind}/{name}/{id}/{tagId}` adds an assignment; `DELETE` removes it.
+Kinds are `catalogs` and `documents`; names normalize to the owning entity. Responses contain
+`{id,name,color}`. Definitions have stable UUIDs; assignment mutations are idempotent and reject
+tags from another entity library. All reads require entity read access; mutations require write
+access, existing live records, and applicable `TagAccessPolicy` checks. Invalid input returns 400;
+missing/deleted records return 404; denied access returns 403. Tag assignment changes emit an
+`updated` SSE event with entity type `tag` and the record ID.
+
+Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
+
+Unified contact activity entries include `authorAvatarUrl` and `mine` for internal notes. Ownership matches the signed-in identity record ID, not the display name; photos resolve from the live identity catalog using the standard comment avatar resolver. The inbox preserves both fields when rendering notes.
+
+### Personal CRM chat groups
+
+The inbox right-click menu offers **Move to group**, **New group…**, and **Remove from group**.
+Groups organize unified contact chats and persist per authenticated username and inbox workspace,
+without changing shared folder configuration or conversation access. Group headers offer rename
+and delete; deleting a group keeps its chats. Personal groups take precedence over configured
+folder rules, and an empty personal group matches no chats.
+
+`GET /api/crm/chat-groups?workspace=<key>` returns `{key,label,customerIds}[]` for the current user.
+`POST` to the same route accepts `{operation,key?,label?,conversationId?}` with operations
+`create`, `move`, `rename`, or `delete`; create/move require an accessible conversation and move
+with a null key removes membership. The server resolves its contact; clients cannot submit an
+owner or arbitrary contact IDs. Names must be unique ignoring case within a workspace and contain
+1–80 characters; each user can create up to 30 groups per workspace. Mutations return the updated
+list and serialize read-modify-write operations transactionally. Host customer and workspace
+read access checks apply, and the ordinary CSRF protection covers writes. Grouping does not alter
+contact data or send messages. The UI refreshes groups after changes and when the window regains focus.
+
+### Opening a workspace conversation
+
+In workspace mode, `/api/divkit/catalogs/crm_conversations/{id}` (also the logical-name aliases)
+is a CRM-owned conversation view. It verifies host customer permissions and workspace membership, then renders the
+chat using an accessible inbox workspace. Its feed is
+`GET /api/crm/inbox-workspaces/{key}/conversation/{id}`; it returns only that contact's conversations
+within the authorized workspace and retains normal filtering/pagination. Foreign records return
+403 and missing records return 404. Generic catalog/message read and export restrictions remain
+unchanged. Without workspace definitions, the normal framework catalog view remains in use.
+
+Host applications contribute header actions through the shared extension slots. The CRM starter
+supplies authorized commands but no default action-button contributions. Customer lifecycle stages,
+forms and any template catalog belong to the host, with the standard generic read/write contracts.
+
+`Conversation.status` is a UUID scoped to the host status catalog or enumeration. Logical reads include `statusDisplay`,
+`statusColor`, and `statusRef`. `POST /api/crm/conversations/{id}/status?workspace={key}` accepts
+`{"status":"configured-uuid"}` and requires the same host customer read permission and writable-workspace membership
+as other conversation commands. The target must occur in application `CrmStateConfiguration`.
+The host owns status records and editing; `CrmStateConfiguration` binds them without copying them.
+
+Inbox workspaces declare optional toolbar filters with `CrmInboxWorkspace.list(list -> ...)`,
+using `ListSpec.filter` and its standard options/text/date controls. Scoped feeds return `filters`
+and accept `eq/in/like/prefix/ge/le` only for declared filters; membership and contact access are
+checked before filtering. No toolbar filters are supplied implicitly.
+
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+Reply capability is independent of connectivity. The delivery response carries `connected`,
+`replyCapability` (`AVAILABLE`, `READ_ONLY`, `WINDOW_CLOSED`) and `replyReason`.
+For example, `new Connection(true, "Archive", 8000, ReplyCapability.READ_ONLY,
+"This archive accepts incoming messages only.")` represents a healthy read-only channel.
+A disconnected provider reports `connected=false`; workspace reply permission is checked separately.
+The composer distinguishes these states, and reply/retry commands enforce `canSend()` on the server.
+
+Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(...)` or
+`.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
+implicit column/filter is installed. The priority UUID is scoped to that host source.
+Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
+Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
+buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
+`/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
+with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles
+and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
+messages for these actions. Hosts own the handler and any desired history records. Connector code
+can still use the low-level identity-link service for provider routing.
 
 ### Excluding large document payloads from generated reads
 

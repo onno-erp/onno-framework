@@ -22,37 +22,46 @@ public class UiAccessService {
     private static final String SUPERUSER_ROLE = "ADMIN";
 
     private final MetadataRegistry registry;
+    private final java.util.function.Supplier<List<UiEntityAccessPolicy>> policies;
+
+    public UiAccessService(MetadataRegistry registry, java.util.function.Supplier<List<UiEntityAccessPolicy>> policies) {
+        this.registry = registry;
+        this.policies = policies;
+    }
+    private boolean allowed(Set<String> roles, String type, String name, boolean write) {
+        return roles.contains(SUPERUSER_ROLE) || policies.get().stream().allMatch(policy -> policy.allows(roles, type, normalizeName(name), write));
+    }
 
     public UiAccessService(MetadataRegistry registry) {
-        this.registry = registry;
+        this(registry, List::of);
     }
 
     public boolean canRead(Principal principal, CatalogDescriptor descriptor) {
-        return hasAnyRole(principal, descriptor.readRoles());
+        return allowed(roles(principal), "catalog", descriptor.logicalName(), false) && hasAnyRole(principal, descriptor.readRoles());
     }
 
     public boolean canWrite(Principal principal, CatalogDescriptor descriptor) {
-        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+        return allowed(roles(principal), "catalog", descriptor.logicalName(), true) && hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
     }
 
     public boolean canRead(Principal principal, DocumentDescriptor descriptor) {
-        return hasAnyRole(principal, descriptor.readRoles());
+        return allowed(roles(principal), "document", descriptor.logicalName(), false) && hasAnyRole(principal, descriptor.readRoles());
     }
 
     public boolean canWrite(Principal principal, DocumentDescriptor descriptor) {
-        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+        return allowed(roles(principal), "document", descriptor.logicalName(), true) && hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
     }
 
     public boolean canRead(Principal principal, AccumulationRegisterDescriptor descriptor) {
-        return hasAnyRole(principal, descriptor.readRoles());
+        return allowed(roles(principal), "register", descriptor.logicalName(), false) && hasAnyRole(principal, descriptor.readRoles());
     }
 
     public boolean canWrite(Principal principal, AccumulationRegisterDescriptor descriptor) {
-        return hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
+        return allowed(roles(principal), "register", descriptor.logicalName(), true) && hasAnyRole(principal, effectiveWriteRoles(descriptor.readRoles(), descriptor.writeRoles()));
     }
 
     public boolean canRead(Principal principal, InformationRegisterDescriptor descriptor) {
-        return hasAnyRole(principal, descriptor.readRoles());
+        return allowed(roles(principal), "information register", descriptor.logicalName(), false) && hasAnyRole(principal, descriptor.readRoles());
     }
 
     public void requireRead(Principal principal, CatalogDescriptor descriptor) {
@@ -93,6 +102,7 @@ public class UiAccessService {
      */
     public boolean canWrite(Principal principal, String type, String name) {
         Set<String> roles = roles(principal);
+        if (!allowed(roles,type,name,true)) return false;
         String normalized = normalizeName(name);
         return switch (type) {
             case "catalog" -> registry.allCatalogs().stream()
@@ -129,6 +139,7 @@ public class UiAccessService {
      * just because its display name isn't already lower-cased (#127).
      */
     public boolean canRead(Set<String> roles, String type, String name) {
+        if (!allowed(roles,type,name,false)) return false;
         String normalized = normalizeName(name);
         return switch (type) {
             case "catalog" -> registry.allCatalogs().stream()

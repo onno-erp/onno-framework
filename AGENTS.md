@@ -36,6 +36,7 @@ to future agents that may not have the full conversation context.
 | `onno-framework-starter` | Spring Boot auto-configuration for the core framework. |
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
+| `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
@@ -55,7 +56,7 @@ Community extensions (connectors, SPI implementations, UI add-ons, skills) are b
 ### Before Editing
 
 1. Read the relevant module's `build.gradle.kts`.
-2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or the example app.
+2. Check whether the change belongs in core, a starter, the desktop plugin, the UI frontend, or one of the example apps.
 3. Prefer extending existing framework concepts over adding parallel mechanisms.
 4. Keep public API changes intentional. If you change annotations, model base classes, repository contracts, or auto-configuration properties, update docs and tests in the same pass — see [Keeping docs in sync](#keeping-docs-in-sync).
 5. Preserve user changes in the working tree. Do not reset, checkout, or clean files unless the user explicitly asks.
@@ -1114,3 +1115,81 @@ Two framework behaviors you *will* hit the moment you write import or sync code:
   the document row won't be committed yet, the `_posted` update runs on a different connection that
   can't see it, and you silently end up with register movements but `_posted = false`. **Save (let it
   commit), then post.**
+
+### CRM composition
+
+Enable messaging with a typed `CrmCustomerBinding` for the host's existing catalog. Optional
+`CrmAgentBinding` reuses its employee/identity catalog. No CRM customer/agent catalog, sales pipeline,
+customer-stage model, EAV custom fields, business merge editor or navigation is installed. Fields
+and CRUD remain ordinary host catalogs and EntityViews. Provider imports call an explicit host
+inbound-contact policy. Customer UUIDs in CRM are scoped to the persisted binding identity; do not
+rebind a database to another catalog without migrating links. Workspace roles and host customer
+permissions both apply. Personal chat groups require `CrmFeatures(true)`; conversation statuses
+require optional `CrmStateConfiguration`. Sales is an opt-in example source set (`-PsalesExample`).
+
+The host owns consolidation, audit and any reversal. Its transaction may call
+`CrmContactService.transferLinks` before deleting the source; that command moves only CRM links and
+canonical redirects while retaining provider destinations. It has no automatic undo or HTTP merge
+surface. Customer comments, sales records and other host references stay the host's responsibility.
+See `onno-crm-starter/README.md` for the full contract.
+
+Standard catalog/document tables may opt into visual selection with
+`ListSpec.selectionCheckboxes(true)`. Reuse the host Checkbox and the existing selection/batch
+command state; do not add a second bulk-action backend. Select-all covers loaded rows only, including
+expanded loaded groups. Default-off lists retain their keyboard selection behavior.
+
+### CRM workspace authorization
+
+`CrmInboxWorkspace` beans define team inbox views independently of `Inbox` channel accounts. Keep
+provider routing on `Conversation.inbox`; workspace selection predicates never mutate it. With
+workspace beans, use scoped CRM endpoints and pass `workspace` on commands. Non-admin generic
+conversation/message reads are intentionally denied by `UiEntityAccessPolicy`. Contacts remain
+shared master data; filter related conversation collections and authorize every affected chat
+before a merge. Keep event invalidations content-free for workspace subscribers.
+
+The local Gmail adapter groups email threads by canonical customer within its own mailbox.
+Startup consolidates earlier thread-per-chat imports transactionally: messages and comments move,
+thread routes remain intact, superseded conversations are soft-deleted, and source/target IDs are
+recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when queued.
+
+
+The Instagram adapter in `onno-crm-channels-starter` owns the opt-in `onno.crm.channels.instagram.enabled`
+connection, private token-file reads, and additive `onno_crm_ig_*` tables. `Channel.INSTAGRAM` is
+append-only; preserve existing enum constants. Provider-visible polling messages deduplicate by
+account/message ID and route by account/peer, preserving contact canonicalization. Outbound sends
+are queued transactionally and enforce a 24-hour reply window; uncertain sends require explicit
+retry. This adapter does not configure public webhooks or publish the Meta app.
+
+Packaged channels now live in `onno-crm-channels-starter` (Apache-2.0). Use canonical `onno.crm.channels.<provider>.*` keys and preserve private external credentials during migration. WhatsApp accepts only signed raw-body webhooks, scopes them to its WABA/number, deduplicates message IDs and queues replies after commit. `DeliveryStatus.READ` is additive. Adopter guidance lives in the three `onno-crm-*` skills.
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+Record tags are a UI-starter extension: `detail.widget("Tags").type("entityTags")` or SDK `EntityTags`.
+Use stable tag definitions/assignments through `TagService` and `/api/tags`, not delimiter-based
+fields for new tagging features. TagAccessPolicy adds record-level authorization.
+
+Customer stages are ordinary host fields. Optional CRM conversation-status choices and transitions
+come from application `CrmStateConfiguration` code. The host owns pages and action contributions.
+
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(...)` or
+`.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
+implicit column/filter is installed. The priority UUID is scoped to that host source.
+Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
+Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
+buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
+`/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
+with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles
+and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
+messages for these actions. Hosts own the handler and any desired history records. Connector code
+can still use the low-level identity-link service for provider routing.

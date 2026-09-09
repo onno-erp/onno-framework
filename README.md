@@ -33,6 +33,8 @@
     ·
     <a href="example"><strong>Example app</strong></a>
     ·
+    <a href="onno-crm-starter"><strong>CRM module</strong></a>
+    ·
     <a href="CONTRIBUTING.md"><strong>Contributing</strong></a>
   </p>
 </div>
@@ -161,7 +163,13 @@ onno scans the model, creates the schema, wires the repositories, and serves the
 
 For a complete runnable project with seeded data, posting, role-specific layouts, dashboards,
 comments, media, and live custom widgets backed by the host's shared SSE stream, see the
-[Onno Books example](example).
+[Onno Books example](example). For a high-density customer workspace with a unified seeded
+multi-channel inbox, replies, internal notes, assignment, lifecycle stages, and opportunities, see
+the reusable [CRM starter](onno-crm-starter).
+
+Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
+with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
+and bundles them while keeping React and `@onno/widget-sdk` host-owned.
 
 Custom widgets can import ordinary npm libraries without adding a frontend project: declare them
 with `onnoWidgets { npmDependencies.put("package", "version") }`; the managed widget build installs
@@ -191,10 +199,11 @@ interfaces, and UI metadata lives in focused `Layout`, `Page`, and `EntityView` 
 | --- | --- |
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
 | Application surface | [`onno-ui-starter`](onno-ui-starter), [`onno-auth-starter`](onno-auth-starter) |
+| Composable messaging | [`onno-crm-starter`](onno-crm-starter) |
 | Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
 | AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
 | Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-widgets-gradle-plugin`](onno-widgets-gradle-plugin), [`@onno/widget-sdk`](onno-widget-sdk) |
-| Reference application | [`example`](example) |
+| Consumer examples | [`example`](example) |
 
 Spring Boot starters expose auto-configuration through
 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`; adding a starter
@@ -202,6 +211,13 @@ is enough to make its conditional beans available.
 
 Commercial vertical connectors are distributed separately from the private `onno-enterprise`
 repository. Authentication—including OIDC and SSO—remains in the Apache-2.0 open core.
+
+Applications add `implementation("su.onno:onno-crm-starter:$onnoVersion")` and explicitly bind
+their existing customer catalog with `CrmCustomerBinding`. The starter supplies messaging and the
+inbox widget; the host owns customers, employees, fields, permissions, pages and navigation.
+Assignment, conversation statuses and personal groups are optional. The sales pipeline is an
+ordinary onno recipe under `example/src/sales/java`, not part of the CRM artifact. See the
+[composition guide](onno-crm-starter/README.md).
 
 ## Designed for humans and AI agents
 
@@ -232,6 +248,7 @@ hand-written guides, generated configuration reference, and aggregated Javadocs.
 | [Configuration](docs/CONFIGURATION.md) | Every `onno.*` property and default, generated from source metadata |
 | [Headless Read API](docs/HEADLESS_READ_API.md) | JSON contracts, reference expansion, redaction, and keyset pagination |
 | [Running and verification](docs/RUNNING.md) | Local development and authenticated runtime smoke tests |
+| [3.0 release notes](docs/RELEASE_NOTES_3_0.md) | Composable CRM, breaking changes, and upgrade requirements |
 | [2.0 release notes](docs/RELEASE_NOTES_2_0.md) | Highlights, breaking changes, and the release gate |
 | [Migrating to 2.0](docs/MIGRATING_TO_2_0.md) | Source, data, and client migration checklist |
 | [Extending onno](docs/EXTENDING.md) | Community connectors, SPI implementations, UI add-ons, and skills |
@@ -354,3 +371,55 @@ and are governed by a separate commercial license. The
   <br />
   <sub><a href="https://onno.su/">onno.su</a> · <a href="https://docs.onno.su/">docs</a> · <a href="https://github.com/onno-erp/onno-framework/issues">issues</a></sub>
 </div>
+
+
+The [CRM channel starter](onno-crm-channels-starter) can receive and reply to
+private Telegram text chats using an opt-in bot connection. The reusable CRM module exposes
+[`CrmMessageTransport`](onno-crm-starter/README.md#message-delivery-contract) for host-owned channel
+adapters.
+
+Custom widgets can show action feedback with the shared `toast` export from
+`@onno/widget-sdk`; see [widget SDK](onno-widget-sdk/README.md#action-notifications).
+
+The CRM starter supports application-authored inbox workspaces with independent chat-selection
+rules, folders, presentation and team read/write permissions. See
+[the CRM workspace contract](onno-crm-starter/README.md#inbox-workspaces-and-channel-accounts).
+
+### Ready-made CRM channels
+
+`su.onno:onno-crm-channels-starter` packages opt-in Telegram, Gmail, Instagram, and WhatsApp adapters on top of the reusable CRM. See [setup, limitations, and local webhook testing](onno-crm-channels-starter/README.md). Adopter skills are in [onno-crm-adopt](onno-plugin/skills/onno-crm-adopt/SKILL.md), [channel setup](onno-plugin/skills/onno-crm-channel-setup/SKILL.md), and [channel debugging](onno-plugin/skills/onno-crm-channel-debug/SKILL.md).
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+CRM message bodies support `registerChatMessageRenderer` from `@onno/widget-sdk` (UI host v4+), with predicate/priority selection, live registration, and plain-text error fallback. See [the SDK guide](onno-widget-sdk/README.md#custom-crm-chat-message-bodies).
+
+Onno UI supports reusable colored record tags with stable IDs, a shared chip picker, and authorized record assignments; see `onno-ui-starter/README.md` for the `entityTags` widget.
+
+### UI extension outlets
+
+Host contract v5 adds `registerExtension` and `ExtensionSlot`: opt-in contributions to page/list/form
+controls, entity and CRM context menus, composer tools, and right-panel sections. Contributions
+receive scoped context and supported host callbacks, have deterministic ordering and isolated
+render failures, and can be replaced/unregistered without modifying the host. Backend authorization
+continues to govern commands. Timeline bodies retain `registerChatMessageRenderer`.
+See [the extension guide](docs/EXTENDING.md#ui-contributions-host-contract-v5).
+
+The example application owns Templates as a `crm.chat.composer` contribution
+(`example.crm.composer.templates`), including its catalog and picker. The CRM
+starter supplies the empty composer slot and controls draft insertion and limits.
+
+CRM conversation-status definitions, colors, and transitions are authored in application Java (`CrmStateConfiguration`); application TSX owns header and Templates buttons. See [the extension guide](docs/EXTENDING.md).
+
+CRM channels use extensible string keys with connector-owned `CrmChannelDefinition` metadata
+(`GET /api/crm/channels/types`); no fixed channel enumeration or Channels page is installed.
+The optional settings widget uses `crm.channel.settings` extension contributions; bundled provider
+setup and branding live in the channels starter. Workspace `.list(...)`/`.view(...)` uses ordinary
+`ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
+catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
+CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+Custom list renderers with nested scroll panes can use the SDK's optional pagination state and
+`loadMore()` callback; see [pagination in custom list panes](onno-widget-sdk/README.md#pagination-in-custom-list-panes).

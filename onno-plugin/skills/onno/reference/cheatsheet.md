@@ -514,3 +514,21 @@ Catalog/document lists are keyset-paged. Register movements and balances are cap
 Add application tools with `@McpTool` on public Spring bean methods and describe inputs with
 `@McpToolParam`; `Principal`/`McpToolContext` are injectable, `roles` restricts callers, and
 `readOnly = false` opts into the global write gate. Use `McpToolProvider` for direct SDK tools.
+
+For optional visual selection in standard catalog/document lists, declare
+`list.selectionCheckboxes(true)` inside `EntityView.list(...)`. It defaults off, works in flat and
+grouped tables, and uses the existing batch server ROW actions via inline toolbar buttons. The
+mixed-state header selects only loaded rows, not all unseen matches. Maps/custom renderers keep
+their own selection UI. Use a static human label for batch actions, even with per-row dynamic labels.
+
+Selection toolbar extensions: `ListSpec.selectionWidget("type")` mounts an SDK
+`registerListSelection("type", Component)` component when rows are selected and the viewer has
+write access. It receives `ids` and `complete()` (clear selection and reload after success).
+Commands must enforce their own server-side authorization; unknown widget types are omitted.
+
+## Composable CRM messaging
+
+`CrmCustomerBinding<T>` wraps a `CrmCatalogBinding<T>` of an existing host catalog; an optional
+inbound callback returns a saved `Ref<T>`. `CrmAgentBinding<T>` adds host identity assignment.
+No CRM customer/employee/sales catalogs or navigation are installed. Customer fields, stages,
+forms and sales metrics use ordinary onno metadata. See `onno-crm-starter/README.md`.

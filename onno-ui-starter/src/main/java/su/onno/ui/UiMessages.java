@@ -112,6 +112,13 @@ public final class UiMessages {
         d.put("timeRange.lastMonths", "Last {n} months");
         d.put("timeRange.lastYear", "Last year");
         d.put("timeRange.lastYears", "Last {n} years");
+        d.put("timeRange.granularity.label", "Interval");
+        d.put("timeRange.granularity.autoResolved", "Auto ({value})");
+        d.put("timeRange.granularity.minute", "1 min");
+        d.put("timeRange.granularity.hour", "1 hour");
+        d.put("timeRange.granularity.day", "1 day");
+        d.put("timeRange.granularity.week", "1 week");
+        d.put("timeRange.granularity.month", "1 month");
 
         // Shared select/bottom-sheet accessibility labels.
         d.put("select.option", "Select option");
@@ -185,6 +192,9 @@ public final class UiMessages {
         // Batch selection (⌘/Ctrl-click, Shift-click) and its context-menu operations. The
         // selection count itself reuses "list.selected" below (shared with the filter badge).
         d.put("list.clearSelection", "Clear selection");
+        d.put("list.selectLoaded", "Select loaded rows");
+        d.put("list.selectRow", "Select {row}");
+        d.put("list.selectionActions", "Actions for selected");
         d.put("batch.delete", "Delete {n}");
         d.put("batch.deleteConfirm", "Sure? Delete {n}");
         d.put("batch.running", "{label} — running on {n}…");

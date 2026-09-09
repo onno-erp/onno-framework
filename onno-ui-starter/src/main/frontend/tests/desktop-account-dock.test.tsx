@@ -35,6 +35,7 @@ describe("DesktopAccountDock", () => {
       <DesktopAccountDock
         account={{ displayName: "Mara Ellis" }}
         theme="dark"
+        compact
         surface="#121212"
         border="#242424"
         onThemeChange={onThemeToggle}
@@ -44,11 +45,14 @@ describe("DesktopAccountDock", () => {
       />
     );
 
-    expect(screen.getByText("Mara Ellis")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
+    const trigger = screen.getByRole("button", { name: "Account menu" });
+    expect(trigger).toHaveTextContent("ME");
+    expect(screen.queryByText("Mara Ellis")).not.toBeInTheDocument();
+    fireEvent.click(trigger);
     expect(screen.getByTestId("desktop-account-menu")).not.toHaveClass("is-open");
     act(() => enterFrame?.(16));
     expect(screen.getByTestId("desktop-account-menu")).toHaveClass("is-open");
+    expect(screen.getByText("Mara Ellis")).toBeInTheDocument();
     expect(screen.getByTestId("desktop-account-menu")).toHaveAttribute("data-side", "right");
     expect(screen.getByTestId("desktop-account-menu")).toHaveAttribute("data-origin", "bottom-left");
     expect(screen.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
@@ -87,6 +91,6 @@ describe("DesktopAccountDock", () => {
     fireEvent.click(screen.getByRole("button", { name: "Account menu" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Admin" }));
     expect(onProfileChange).toHaveBeenCalledWith("admin");
-    expect(screen.getByText("ME")).toBeInTheDocument();
+    expect(screen.getByText("Mara Ellis")).toBeInTheDocument();
   });
 });

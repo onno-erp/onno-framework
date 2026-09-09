@@ -49,6 +49,16 @@ verbs into framework concepts, then implement one vertical slice end to end and 
 interview script and per-domain question sets live in [AGENTS.md](https://github.com/onno-erp/onno-framework/blob/main/AGENTS.md) — follow it
 when a user asks you to model a business.
 
+## Reuse the official CRM module
+
+For unified messaging, use `su.onno:onno-crm-starter` with explicit `CrmCustomerBinding` and
+optional `CrmAgentBinding` beans pointing to existing host catalogs. Do not create duplicate CRM
+customers or require inheritance from a CRM model. Customer fields, stages, forms, sales pipelines
+and metrics are ordinary host onno models; the optional sales recipe is in `example/src/sales/java`.
+The module supplies conversations, channel identities, delivery and widgets; the host supplies
+workspace roles, permissions, pages, navigation and an optional inbound-contact resolution policy.
+Read the CRM module README for current binding and command contracts.
+
 ## Concept → annotation cheat sheet
 
 | If it is… | Use | Base class |

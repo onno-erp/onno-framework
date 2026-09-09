@@ -77,6 +77,7 @@ dependencies {
     testImplementation(libs.spring.boot.test)
     // In-memory engine for the read-path query-service tests (e.g. information-register
     // related-list rows) — same lightweight pattern the framework module uses.
+    testImplementation(libs.spring.jdbc) // Verify SSE observes only committed JDBC changes.
     testImplementation(libs.h2)
     // Postgres-portability checks: the date-bound register/document queries can only be
     // verified against a real PostgreSQL (H2 silently casts varchar↔timestamp, so it never

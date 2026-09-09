@@ -6,8 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FacetSheet, SheetDoneButton, useFacetOverlay } from "@/components/ui/facet-sheet";
 import { RangeCalendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppLocale, useMessages } from "@/providers/messages-provider";
-import { presetLabel, resolveRange, sameRange, type RangePreset, type TimeRange } from "@/lib/time-range";
+import {
+  presetLabel,
+  resolveRange,
+  sameRange,
+  type RangePreset,
+  type TimeGranularity,
+  type TimeGranularityMode,
+  type TimeRange,
+} from "@/lib/time-range";
 
 /**
  * Shared faceted-filter chrome, used by both the list toolbar (search/filter facets) and the
@@ -72,6 +81,7 @@ export function DateRangePanel({
   onChange,
   onClose,
   presetItems,
+  footerLeading,
   touch = false,
 }: {
   ariaLabel: string;
@@ -80,6 +90,8 @@ export function DateRangePanel({
   onChange: (next: { from: string; to: string }) => void;
   onClose: () => void;
   presetItems?: PanelPreset[];
+  /** Optional dashboard control placed on the left side of the desktop footer. */
+  footerLeading?: ReactNode;
   /** Sheet layout for phones/tablets: a preset chip grid over one finger-sized month. */
   touch?: boolean;
 }) {
@@ -175,21 +187,56 @@ export function DateRangePanel({
             if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
           }}
         />
-        {active ? (
-          <div className="flex justify-end border-t px-3 py-2">
-            <button
-              type="button"
-              onClick={() => {
-                onChange({ from: "", to: "" });
-                onClose();
-              }}
-              className="rounded-field px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              {t("list.clear")}
-            </button>
+        {active || footerLeading ? (
+          <div className="flex min-h-12 items-center justify-between gap-4 border-t px-3 py-2">
+            <div>{footerLeading}</div>
+            {active ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange({ from: "", to: "" });
+                  onClose();
+                }}
+                className="rounded-field px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                {t("list.clear")}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+const GRANULARITIES: TimeGranularity[] = ["minute", "hour", "day", "week", "month"];
+
+function GranularitySelect({
+  value,
+  resolved,
+  onChange,
+}: {
+  value: TimeGranularityMode;
+  resolved: TimeGranularity;
+  onChange: (value: TimeGranularityMode) => void;
+}) {
+  const t = useMessages();
+  const unitLabel = (unit: TimeGranularity) => t(`timeRange.granularity.${unit}`);
+  const autoLabel = t("timeRange.granularity.autoResolved", { value: unitLabel(resolved) });
+  return (
+    <div className="flex items-center gap-2">
+      <span className="whitespace-nowrap text-xs text-muted-foreground">{t("timeRange.granularity.label")}</span>
+      <Select value={value} onValueChange={(next) => onChange(next as TimeGranularityMode)}>
+        <SelectTrigger className="h-8 w-[9.5rem] bg-background px-2 text-xs" aria-label={t("timeRange.granularity.label")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="auto">{autoLabel}</SelectItem>
+          {GRANULARITIES.map((unit) => (
+            <SelectItem key={unit} value={unit}>{unitLabel(unit)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }
@@ -233,12 +280,18 @@ export function TimeRangeFacet({
   label,
   presets,
   range,
+  granularity,
+  resolvedGranularity,
+  onGranularity,
   onPreset,
   onAbsolute,
 }: {
   label: string;
   presets: RangePreset[];
   range: TimeRange;
+  granularity: TimeGranularityMode;
+  resolvedGranularity: TimeGranularity;
+  onGranularity: (value: TimeGranularityMode) => void;
   onPreset: (id: string) => void;
   onAbsolute: (from?: string, to?: string) => void;
 }) {
@@ -269,6 +322,9 @@ export function TimeRangeFacet({
   const overlay = useFacetOverlay();
   const framedOverlay = overlay !== "popover";
   const phoneSheet = overlay === "sheet";
+  const granularitySelect = (
+    <GranularitySelect value={granularity} resolved={resolvedGranularity} onChange={onGranularity} />
+  );
 
   const trigger = (
     <button
@@ -298,7 +354,12 @@ export function TimeRangeFacet({
           <FacetSheet
             label={label}
             onClose={() => setOpen(false)}
-            footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
+            footer={(
+              <div className="flex w-full items-center justify-between gap-3">
+                {granularitySelect}
+                <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
+              </div>
+            )}
           >
             <DateRangePanel
               ariaLabel={label}
@@ -326,6 +387,7 @@ export function TimeRangeFacet({
           onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
           onClose={() => setOpen(false)}
           presetItems={items}
+          footerLeading={granularitySelect}
         />
       </PopoverContent>
     </Popover>

@@ -110,6 +110,11 @@ sidecars, and comment/profile avatar payloads; use Onno's Glass fallback only wh
 source image exists. A conversation timeline should merge messages, Onno comments, and durable
 domain/system events chronologically.
 
+For fullscreen or full-height workspaces, read
+[the sizing and verification recipe](../onno-ui-widgets/references/full-height-workspaces.md)
+before implementation. Check all enclosing tab/page scroll containers; a viewport-sized document
+does not prove that the active tab has no scroll travel.
+
 Data-backed custom widgets use `useWidgetUpdates(widget, load)` from `@onno/widget-sdk`; it filters
 and coalesces the host's shared live-event stream. Never open `new EventSource("/api/events")` in a
 widget. For unusual multi-entity or non-entity subscriptions, use the SDK's `events.subscribe` or

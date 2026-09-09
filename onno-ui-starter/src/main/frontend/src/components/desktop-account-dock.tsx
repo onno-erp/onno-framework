@@ -15,6 +15,7 @@ export type ShellAccountInfo = {
 type DesktopAccountDockProps = {
   account: ShellAccountInfo;
   theme: "light" | "dark" | "system";
+  compact?: boolean;
   surface: string;
   border: string;
   onThemeChange: (theme: "light" | "dark" | "system") => void;
@@ -33,10 +34,11 @@ function initials(name: string): string {
     .toLocaleUpperCase() || "U";
 }
 
-/** Desktop-native account footer aligned with the compact controls in the two-tier shell. */
+/** Desktop-native account control, compact in the rail and expanded beneath a nested drawer. */
 export function DesktopAccountDock({
   account,
   theme,
+  compact = false,
   surface,
   border,
   onThemeChange,
@@ -92,52 +94,83 @@ export function DesktopAccountDock({
   return (
     <div
       data-testid="desktop-account-dock"
-      className="overflow-hidden rounded-panel border"
-      style={{ background: surface, borderColor: border }}
+      className={compact ? "flex items-center justify-center" : "overflow-hidden rounded-panel border"}
+      style={compact ? undefined : { background: surface, borderColor: border }}
     >
-      <div className="flex min-w-0 items-center gap-2 p-1.5">
-        <Avatar className="h-9 w-9 border" style={{ borderColor: border }}>
-          {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
-          <AvatarFallback>{initials(account.displayName)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[11px] font-medium text-muted-foreground">{t("shell.signedInAs")}</div>
-          <div className="truncate text-sm font-medium text-foreground">{account.displayName}</div>
-        </div>
-        <Popover open={open} onOpenChange={setMenuOpen}>
-          <PopoverTrigger asChild>
-            <button
-              ref={triggerRef}
-              type="button"
-              aria-label={t("shell.accountMenu")}
-              title={t("shell.accountMenu")}
-              aria-expanded={open}
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-field text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                open && "bg-muted text-foreground"
-              )}
-            >
+      <div className={cn(!compact && "flex min-w-0 items-center gap-2 p-1.5")}>
+        {!compact ? (
+          <>
+            <Avatar className="h-9 w-9 border" style={{ borderColor: border }}>
+              {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
+              <AvatarFallback>{initials(account.displayName)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="truncate text-[11px] font-medium text-muted-foreground">{t("shell.signedInAs")}</div>
+              <div className="truncate text-sm font-medium text-foreground">{account.displayName}</div>
+            </div>
+          </>
+        ) : null}
+      <Popover open={open} onOpenChange={setMenuOpen}>
+        <PopoverTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            aria-label={t("shell.accountMenu")}
+            title={t("shell.accountMenu")}
+            aria-expanded={open}
+            className={cn(
+              "flex shrink-0 items-center justify-center outline-none transition-colors",
+              compact
+                ? "h-8 w-8 rounded-full hover:ring-2 hover:ring-muted focus-visible:ring-2 focus-visible:ring-primary"
+                : "h-8 w-8 rounded-field text-muted-foreground hover:bg-muted hover:text-foreground",
+              open && "ring-2 ring-primary/30"
+            )}
+          >
+            {compact ? (
+              <Avatar className="h-6 w-6 border" style={{ borderColor: border }}>
+                {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
+                <AvatarFallback>{initials(account.displayName)}</AvatarFallback>
+              </Avatar>
+            ) : (
               <Settings size={16} />
-            </button>
-          </PopoverTrigger>
-          {open || closing ? (
-            <PopoverContent
-              ref={menuRef}
-              forceMount
-              role="menu"
-              side="right"
-              align="end"
-              sideOffset={12}
-              collisionPadding={12}
-              motion="none"
-              data-origin="bottom-left"
-              data-testid="desktop-account-menu"
-              className={cn(
-                "t-dropdown w-60 rounded-panel p-1.5 shadow-xl",
-                open && entered && "is-open",
-                closing && "is-closing"
-              )}
-            >
+            )}
+          </button>
+        </PopoverTrigger>
+        {open || closing ? (
+          <PopoverContent
+            ref={menuRef}
+            forceMount
+            role="menu"
+            side="right"
+            align="end"
+            sideOffset={12}
+            collisionPadding={12}
+            motion="none"
+            data-origin="bottom-left"
+            data-testid="desktop-account-menu"
+            className={cn(
+              "t-dropdown w-60 rounded-panel p-1.5 shadow-xl",
+              open && entered && "is-open",
+              closing && "is-closing"
+            )}
+          >
+            {compact ? (
+              <>
+                <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
+                  <Avatar className="h-8 w-8 border" style={{ borderColor: border }}>
+                    {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
+                    <AvatarFallback>{initials(account.displayName)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <div className="truncate text-[11px] font-medium text-muted-foreground">
+                      {t("shell.signedInAs")}
+                    </div>
+                    <div className="truncate text-sm font-medium text-foreground">{account.displayName}</div>
+                  </div>
+                </div>
+                <div className="-mx-1 my-1 h-px bg-border" />
+              </>
+            ) : null}
             <div className="px-2 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
               {t("shell.appearance")}
             </div>
@@ -194,9 +227,9 @@ export function DesktopAccountDock({
               <LogOut size={16} />
               {t("shell.signOut")}
             </button>
-            </PopoverContent>
-          ) : null}
-        </Popover>
+          </PopoverContent>
+        ) : null}
+      </Popover>
       </div>
     </div>
   );

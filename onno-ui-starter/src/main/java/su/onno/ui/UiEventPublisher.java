@@ -7,6 +7,8 @@ import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -174,10 +176,10 @@ public class UiEventPublisher {
 
     /**
      * Fans an {@link EntityChangedEvent} out to every open SSE stream whose viewer may read it.
-     * Registered as a Spring {@code @EventListener}, so anything that publishes the event (both write
-     * paths) reaches the browser — no direct coupling to the controllers.
+     * Transactional writes notify only after commit, so a browser refetch can see the new data.
+     * Non-transactional publishers still notify immediately; rolled-back writes never notify.
      */
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onEntityChanged(EntityChangedEvent event) {
         publish(event.changeType(), event.entityType(), event.entityName(), event.id(), event.naturalKey());
     }
