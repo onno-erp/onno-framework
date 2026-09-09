@@ -351,3 +351,8 @@ props. A renderer with its own scrolling pane must call `loadMore()` near that p
 provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
 query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+
+Custom list renderers receive optional `ListRendererProps.total`, the server count matching the
+current search and filters, independently of how many pages are loaded. A null/omitted total means
+unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
+rows and are labeled as the current view.

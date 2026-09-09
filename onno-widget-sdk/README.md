@@ -276,3 +276,8 @@ starts at midnight; seconds are omitted. Both support `isDisabled`, `isReadOnly`
 `isRequired`, `isInvalid`, and accessible labels. Generated `LocalDateTime` fields use
 `DateTimePicker`; the legacy `DatePicker includeTime` prop remains compatible.
 The host must include the `DateTimePicker` export to use it from a custom widget.
+
+Custom list renderers receive optional `ListRendererProps.total`, the server count matching the
+current search and filters, independently of how many pages are loaded. A null/omitted total means
+unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
+rows and are labeled as the current view.

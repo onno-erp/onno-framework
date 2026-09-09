@@ -246,3 +246,8 @@ Inbox page reads authorize workspace members before counting or pagination. Quer
 conversation fields (including channel filters and message-time sorting) resolve full customer and
 reference details only for the selected page. Customer-name search and display-field sorting retain
 the fully decorated query path so their matching and authorization semantics remain unchanged.
+
+Custom list renderers receive optional `ListRendererProps.total`, the server count matching the
+current search and filters, independently of how many pages are loaded. A null/omitted total means
+unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
+rows and are labeled as the current view.

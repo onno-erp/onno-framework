@@ -114,6 +114,8 @@ export interface ListRendererProps {
   loadMoreFailed?: boolean;
   /** Request/retry the next window using the host's current query and cursor. */
   loadMore?: () => void;
+  /** Total matching rows from the server, independent of loaded pages; null when unknown. */
+  total?: number | null;
   /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   list: ListRendererDescriptor;

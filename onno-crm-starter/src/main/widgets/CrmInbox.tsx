@@ -1,4 +1,4 @@
-import { ConversationList, type ConversationPagination } from "./ConversationList";
+import { conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
 import { composerState } from "./composerState";
 import { useConversationStatuses } from "./ConversationStatuses";
 import { ExtensionSlot, type ExtensionContext } from "@onno/widget-sdk";
@@ -333,7 +333,7 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey, ...pagination }: Pick<ListRendererProps, "rows" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string }) {
+function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string }) {
   const rows = useMemo(() => contactChats(channelRows), [channelRows]);
   const { workspace, error: configError } = useWorkspace();
   const config = scopedConfig ?? workspace?.config;
@@ -652,7 +652,7 @@ function CrmInbox({ rows: channelRows, open, scopedConfig, workspaceKey, ...pagi
           <div ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
               <div className="text-sm font-semibold">Conversations</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
-              <div className="mt-0.5 text-[11px] text-muted-foreground">{rows.length} chats{folders.length ? ` · ${folders.length} folders` : ""}</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
             </div>
             <ConversationList {...pagination} active={!activeFolder}>
               {(() => {
