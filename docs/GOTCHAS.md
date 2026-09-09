@@ -131,3 +131,10 @@ The local `UiEventPublisher` dispatches entity-change SSE notifications after th
 transaction commits (and immediately outside a transaction). Never push a controller-only SSE event
 from the middle of a transaction: a fast browser can refetch before the inserted row is visible.
 Rolled-back repository changes must not emit a client invalidation.
+
+## Live refresh during slow inbox reads
+
+List windows coalesce live invalidations while a first-page or pagination request is in flight.
+The completed window renders before one queued refresh runs, so continuous connector imports
+cannot starve initial loading. Query and filter changes still invalidate stale responses.
+A failed soft refresh retains visible rows.
