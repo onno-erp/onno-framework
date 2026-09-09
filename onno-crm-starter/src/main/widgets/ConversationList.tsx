@@ -21,3 +21,8 @@ export function ConversationList({ children, active = true, hasMore, loadingMore
     </div>}
   </div>;
 }
+
+/** An unknown server total must never masquerade as the total matching the current query. */
+export function conversationCount(total: number | null | undefined, loaded: number): string {
+  return total == null ? `${loaded} loaded chats` : `${total} chats`;
+}

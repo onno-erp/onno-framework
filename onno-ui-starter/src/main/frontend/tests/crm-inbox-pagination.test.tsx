@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EntityListWidget, type ListDescriptor, type ListRendererProps } from "@/components/entity-list-widget";
-import { ConversationList } from "../../../../../onno-crm-starter/src/main/widgets/ConversationList";
+import { conversationCount, ConversationList } from "../../../../../onno-crm-starter/src/main/widgets/ConversationList";
 
 vi.mock("@onno/widget-sdk", async () => ({ ...(await import("@/components/ui/button")) }));
 vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
@@ -17,7 +17,7 @@ const list: ListDescriptor = {
   filters: [{ key: "subject", column: "subject", label: "Subject", type: "contains", options: [] }],
 };
 function Inbox(props: ListRendererProps) {
-  return <ConversationList {...props}>{props.rows.map(row => <p key={String(row.id)}>{String(row.description)}</p>)}</ConversationList>;
+  return <ConversationList {...props}><span>{conversationCount(props.total, props.rows.length)}</span>{props.rows.map(row => <p key={String(row.id)}>{String(row.description)}</p>)}</ConversationList>;
 }
 function scroll() {
   const pane = screen.getByLabelText("Conversation list");
@@ -150,6 +150,27 @@ describe("CRM inner-pane keyset pagination", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
     await act(async () => refresh.resolve(page(["one", "two", "three", "four"], null)));
     expect(screen.getByText("four")).toBeInTheDocument();
+  });
+  it("shows the server total across pagination and replaces it when filters change", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ rows: [{id:"one",description:"one"}], total:5046, hasMore:true, nextCursor:"next" }))
+      .mockResolvedValueOnce(response({ rows: [{id:"two",description:"two"}], hasMore:false, nextCursor:null }))
+      .mockResolvedValueOnce(response({ rows: [{id:"filtered",description:"filtered"}], total:3206, hasMore:false, nextCursor:null }));
+    vi.stubGlobal("fetch",fetcher);
+    render(<EntityListWidget list={list} renderer={Inbox} />);
+    await screen.findByText("5046 chats");
+    scroll(); await screen.findByText("two");
+    expect(screen.getByText("5046 chats")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Subject" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "filtered" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    await screen.findByText("3206 chats");
+    expect(screen.queryByText("5046 chats")).not.toBeInTheDocument();
+  });
+  it("distinguishes an unknown total from a real zero", () => {
+    expect(conversationCount(undefined,50)).toBe("50 loaded chats");
+    expect(conversationCount(null,50)).toBe("50 loaded chats");
+    expect(conversationCount(0,0)).toBe("0 chats");
   });
   it("does not page hidden folder panes and works without pagination props", () => {
     const loadMore = vi.fn();

@@ -201,6 +201,8 @@ export type ListRendererProps = {
   loadMoreFailed?: boolean;
   /** Request/retry the next window using the host's current query and cursor. */
   loadMore?: () => void;
+  /** Total matching rows from the server, independent of loaded pages; null when unknown. */
+  total?: number | null;
   /** All keyset windows loaded so far. */
   rows: EntityRecord[];
   /** The list's descriptor slice: entity route, title, resolved columns (labels/widgets/formats), write access. */
@@ -2880,7 +2882,7 @@ export function EntityListWidget({
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
-              <CustomRenderer rows={loadedRows} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
+              <CustomRenderer rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
             {loadingMore ? (
