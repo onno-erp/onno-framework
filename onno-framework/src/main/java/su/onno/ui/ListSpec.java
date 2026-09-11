@@ -42,13 +42,13 @@ public final class ListSpec<E> {
     private final List<Aggregate> aggregates = new ArrayList<>();
     private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
 
-    public ListSpec title(String title) {
+    public ListSpec<E> title(String title) {
         this.title = title;
         return this;
     }
 
     /** Whether the list shows a search bar (server-side filter across text columns). Default on. */
-    public ListSpec searchable(boolean searchable) {
+    public ListSpec<E> searchable(boolean searchable) {
         this.searchable = searchable;
         return this;
     }
@@ -76,17 +76,17 @@ public final class ListSpec<E> {
     public boolean selectionCheckboxes() { return selectionCheckboxes; }
 
     /** Turn the search bar off for this list. */
-    public ListSpec noSearch() {
+    public ListSpec<E> noSearch() {
         return searchable(false);
     }
 
     /** The column the list is sorted by initially (a field name); ascending. */
-    public ListSpec sortBy(String field) {
+    public ListSpec<E> sortBy(String field) {
         return sortBy(field, false);
     }
 
     /** The initial sort column + direction. */
-    public ListSpec sortBy(String field, boolean descending) {
+    public ListSpec<E> sortBy(String field, boolean descending) {
         this.sortField = field;
         this.sortDescending = descending;
         return this;
@@ -103,7 +103,7 @@ public final class ListSpec<E> {
     }
 
     /** Take explicit control: only these fields, in this order. */
-    public ListSpec columns(String... fields) {
+    public ListSpec<E> columns(String... fields) {
         include.addAll(List.of(fields));
         return this;
     }
@@ -118,7 +118,7 @@ public final class ListSpec<E> {
     }
 
     /** Add an explicit column with a custom header label. */
-    public ListSpec column(String field, String label) {
+    public ListSpec<E> column(String field, String label) {
         include.add(field);
         labels.put(field, label);
         return this;
@@ -130,7 +130,7 @@ public final class ListSpec<E> {
     }
 
     /** Override a column's header label. */
-    public ListSpec label(String field, String label) {
+    public ListSpec<E> label(String field, String label) {
         labels.put(field, label);
         return this;
     }
@@ -141,7 +141,7 @@ public final class ListSpec<E> {
     }
 
     /** Hide fields from the default column set (ignored when {@link #columns} is used). */
-    public ListSpec hide(String... fields) {
+    public ListSpec<E> hide(String... fields) {
         hidden.addAll(List.of(fields));
         return this;
     }
@@ -259,7 +259,7 @@ public final class ListSpec<E> {
      * default ({@code onno.ui.list.page-size}, itself {@code 50}). Clamped to the server's list
      * ceiling.
      */
-    public ListSpec pageSize(int pageSize) {
+    public ListSpec<E> pageSize(int pageSize) {
         this.pageSize = pageSize;
         return this;
     }
@@ -289,7 +289,7 @@ public final class ListSpec<E> {
      * list.cellMenu("status", "Change status");   // right-click the pill → the status choices
      * </pre>
      */
-    public ListSpec cellMenu(String field, String submenuLabel) {
+    public ListSpec<E> cellMenu(String field, String submenuLabel) {
         cellMenus.put(field, submenuLabel);
         return this;
     }
@@ -303,7 +303,7 @@ public final class ListSpec<E> {
         return cellMenus;
     }
 
-    public ListSpec groupable(String... fields) {
+    public ListSpec<E> groupable(String... fields) {
         groupable.addAll(List.of(fields));
         return this;
     }
@@ -328,7 +328,7 @@ public final class ListSpec<E> {
      * list.groupable("status", "warehouse").defaultGroupBy("status");   // opens grouped by status
      * </pre>
      */
-    public ListSpec defaultGroupBy(String field) {
+    public ListSpec<E> defaultGroupBy(String field) {
         this.defaultGroupBy = field;
         return this;
     }
@@ -349,12 +349,12 @@ public final class ListSpec<E> {
      * list.groupable("region").aggregate("amount", Agg.AVG, "Avg");  // labelled average per region
      * </pre>
      */
-    public ListSpec aggregate(String field, Agg fn) {
+    public ListSpec<E> aggregate(String field, Agg fn) {
         return aggregate(field, fn, null);
     }
 
     /** As {@link #aggregate(String, Agg)} with an explicit header label (else the field name). */
-    public ListSpec aggregate(String field, Agg fn, String label) {
+    public ListSpec<E> aggregate(String field, Agg fn, String label) {
         aggregates.add(new Aggregate(field, fn, label));
         return this;
     }
@@ -383,7 +383,7 @@ public final class ListSpec<E> {
      *         : null);
      * </pre>
      */
-    public ListSpec rowStyle(java.util.function.Function<ActionRow, RowStyle> style) {
+    public ListSpec<E> rowStyle(java.util.function.Function<ActionRow, RowStyle> style) {
         this.rowStyleFn = style;
         return this;
     }
