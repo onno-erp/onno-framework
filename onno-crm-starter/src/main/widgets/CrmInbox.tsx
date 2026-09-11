@@ -13,7 +13,15 @@ import { contactChats, replySelection, type ReplySelection } from "./contactChat
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { ChatMessageBody } from "@onno/widget-sdk";
+import { ChatMessageBody, text as hostText, useTranslate } from "@onno/widget-sdk";
+
+/**
+ * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
+ * deployment's language instead of shipping hardcoded English. `t` is the non-hook accessor, usable
+ * in handlers and thrown errors; the root component calls {@link useTranslate} once so the whole
+ * tree re-renders when the server's `onno.ui.messages` overlay arrives.
+ */
+const t = hostText;
 import { useId } from "react";
 import { ChannelLogo } from "./ChannelLogo";
 import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
@@ -55,6 +63,7 @@ type Message = {
   direction: "INBOUND" | "OUTBOUND" | "INTERNAL";
   channel: string;
   authorName: string;
+  authorAvatarUrl?: string | null;
   body: string;
   sentAt: string;
   deliveryStatus: string;
@@ -149,7 +158,7 @@ async function loadMessages(id: string, workspaceKey?: string): Promise<Message[
   const response = await fetch(`/api/crm/conversations/${id}/messages${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, {
     credentials: "same-origin",
   });
-  if (!response.ok) throw new Error("Could not load this conversation");
+  if (!response.ok) throw new Error(t("crm.error.conversation"));
   return response.json() as Promise<Message[]>;
 }
 
@@ -157,7 +166,7 @@ async function loadComments(id: string, workspaceKey?: string): Promise<Comment[
   const response = await fetch(workspaceKey ? `/api/crm/inbox-workspaces/${workspaceKey}/conversations/${id}/comments` : `/api/comments/catalogs/crm_conversations/${id}`, {
     credentials: "same-origin",
   });
-  if (!response.ok) throw new Error("Could not load internal comments");
+  if (!response.ok) throw new Error(t("crm.error.notes"));
   return response.json() as Promise<Comment[]>;
 }
 
@@ -192,7 +201,7 @@ function ChannelIcon({ channel, comment = false, avatarBadge = false }: { channe
 }
 
 function conversationChannel(row: EntityRecord | null): string {
-  return string(row,"channel","Channel");
+  return string(row,"channel",t("crm.chat.channel"));
 }
 
 function ConversationRow({
@@ -209,7 +218,7 @@ function ConversationRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const customer = string(row, "customerDisplay", string(row, "description", "Unknown customer"));
+  const customer = string(row, "customerDisplay", string(row, "description", t("crm.chat.unknownCustomer")));
   const unread = Number(row.unreadCount ?? 0);
   const channel = conversationChannel(row);
   return (
@@ -236,7 +245,7 @@ function ConversationRow({
           </div>
           <div className="mt-1 flex items-center gap-1.5">
             <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-              {config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", "No messages yet")}
+              {config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
             </span>
             {unread > 0 ? (
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
@@ -277,7 +286,7 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
           {outbound && config?.showDeliveryStatus !== false ? <span>{["SENT", "DELIVERED"].includes(message.deliveryStatus) ? "✓ " : ""}{message.deliveryStatus.toLowerCase()}</span> : null}
           {outbound && message.deliveryStatus === "FAILED" && action(config, "retry") ? (
             <Button variant="ghost" type="button" disabled={busy} onClick={retry} className="h-auto p-0 text-inherit underline disabled:opacity-50"
-              title="Check Telegram before retrying: an interrupted attempt may already have sent the message.">{action(config, "retry")?.label}</Button>
+              title={t("crm.chat.retryWarning")}>{action(config, "retry")?.label}</Button>
           ) : null}
         </div>
       </div>
@@ -302,7 +311,7 @@ function TimelineSystemEvent({ message, config }: { message: Message; config?: C
 }
 
 function TimelineComment({ comment, config }: { comment: Comment; config?: Config }) {
-  const author = comment.authorName || "Team member";
+  const author = comment.authorName || t("crm.chat.teamMember");
   return (
     <div className={comment.mine ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={author} url={comment.authorAvatarUrl} />}
@@ -313,7 +322,7 @@ function TimelineComment({ comment, config }: { comment: Comment; config?: Confi
         <div className="flex items-center gap-1.5">
           <ChannelIcon channel="" comment />
           <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">{author}</span>
-          <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Internal</span>
+          <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{t("crm.chat.internal")}</span>
         </div>
         <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5"><CommentBody body={comment.body} /></p>
         <time className="mt-1 block text-right text-[10px] text-muted-foreground">
@@ -333,6 +342,9 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
 }
 
 function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string }) {
+  // Subscribe once at the root: `t` reads the store without subscribing, so this is what makes the
+  // whole widget re-render into the server's language when /api/config lands after first paint.
+  useTranslate();
   const rows = useMemo(() => contactChats(channelRows), [channelRows]);
   const { workspace, error: configError } = useWorkspace();
   const config = scopedConfig ?? workspace?.config;
@@ -430,8 +442,6 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const dismissFolder = useCallback(() => setFolderKey(null), []);
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
 
-  const agentAvatars = new Map<string,string>();
-
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
 
   const timeline = useMemo(() => [
@@ -481,14 +491,14 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           const entries:ActivityEntry[]=[];let hasMore=false;
           for(let page=0;page<historyPages;page++) {
             const response=await fetch(`/api/crm/contacts/${customerId}/activity?limit=100&offset=${page*100}`,{credentials:"same-origin"});
-            if(!response.ok)throw new Error("Could not load contact history");
+            if(!response.ok)throw new Error(t("crm.error.history"));
             const result=await response.json() as {entries:ActivityEntry[];hasMore:boolean};entries.push(...result.entries);hasMore=result.hasMore;if(!hasMore)break;
           }
           return {entries,hasMore};
         })(),
         customerId ? request<{fields: EntityRecord}>(`/contacts/${customerId}`).then(c=>c.fields) : Promise.resolve(null),
         fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" }).then(async (response) => {
-          if (!response.ok) throw new Error("Could not check channel connection");
+          if (!response.ok) throw new Error(t("crm.error.connection"));
           return response.json() as Promise<DeliveryConnection>;
         }),
       ]);
@@ -509,7 +519,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       if (selectionRef.current !== id) return;
       setDelivery(null);
       setDeliveryFailed(true);
-      setError(loadError instanceof Error ? loadError.message : "Could not load the conversation");
+      setError(loadError instanceof Error ? loadError.message : t("crm.error.conversation"));
     }
   }, [selected, workspaceKey, channelRows, historyPages]);
 
@@ -567,7 +577,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       if (mode === "note") { setNoteDraft(""); setNoteBody(""); } else setDraft("");
       await loadSelected();
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : "Could not send");
+      setError(sendError instanceof Error ? sendError.message : t("crm.error.send"));
     } finally {
       setBusy(false);
     }
@@ -581,7 +591,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       await command(`/api/crm/conversations/${conversationId || String(selected.id)}/messages/${messageId}/retry`);
       await loadSelected();
     } catch (retryError) {
-      setError(retryError instanceof Error ? retryError.message : "Could not retry");
+      setError(retryError instanceof Error ? retryError.message : t("crm.error.retry"));
     } finally { setBusy(false); }
   };
 
@@ -603,9 +613,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     actions:hostActions.map(a=>({...a,enabled:a.enabled&&!busy})),
     refresh:loadSelected,
     openRecord:(kind,name,id)=>window.dispatchEvent(new CustomEvent("onno:action",{detail:`onno://${kind}/${name}/${id}`})),
-    insertDraft:text=>{if(replyState.disabled)throw new Error("Reply editing is unavailable");const next=draft.trim()?`${draft}\n\n${text}`:text;if(next.length>(delivery?.maxTextLength??4096))throw new Error("The reply is too long. Shorten the draft first.");setMode("reply");setDraft(next);},
+    insertDraft:text=>{if(replyState.disabled)throw new Error(t("crm.error.replyUnavailable"));const next=draft.trim()?`${draft}\n\n${text}`:text;if(next.length>(delivery?.maxTextLength??4096))throw new Error(t("crm.error.replyTooLong"));setMode("reply");setDraft(next);},
     execute:async (name,input)=>{
-      if(!selected || !workspaceKey || busy || !hostActions.some(a=>a.id===name&&a.enabled))throw new Error("Action unavailable");
+      if(!selected || !workspaceKey || busy || !hostActions.some(a=>a.id===name&&a.enabled))throw new Error(t("crm.error.action"));
       const result=await command(`/api/crm/inbox-workspaces/${encodeURIComponent(workspaceKey)}/conversations/${selected.id}/actions/${encodeURIComponent(name)}`,{inputs:input});
       await loadSelected();return result;
     },
@@ -615,8 +625,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   if (!rows.length && !folders.length) {
     return (
       <div className="rounded-panel border border-dashed border-border px-6 py-16 text-center">
-        <div className="text-sm font-medium text-foreground">No conversations match these filters</div>
-        <div className="mt-1 text-xs text-muted-foreground">Clear a filter or create a conversation.</div>
+        <div className="text-sm font-medium text-foreground">{t("crm.inbox.noMatches")}</div>
+        <div className="mt-1 text-xs text-muted-foreground">{t("crm.inbox.noMatchesHint")}</div>
       </div>
     );
   }
@@ -630,7 +640,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       data-contact-open={!!(contactPanelOpen && selected && config)}
       style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
-      <section aria-label="Chat selection" className={`${islandSurface} my-1 ml-1 hidden min-h-0 min-w-0 flex-col overflow-hidden md:!flex`}>
+      <section aria-label={t("crm.inbox.chatSelection")} className={`${islandSurface} my-1 ml-1 hidden min-h-0 min-w-0 flex-col overflow-hidden md:!flex`}>
         <style>{`
           .crm-chat-layout { --chat-start-inset:4px; --chat-end-inset:4px; --contact-width: min(320px, 44vw); --contact-motion: 280ms; --contact-ease: cubic-bezier(.22,1,.36,1); grid-template-columns: 0px minmax(0,1fr) 0px; transition: grid-template-columns var(--contact-motion) var(--contact-ease); }
           .crm-chat-layout[data-contact-open="true"] { --chat-end-inset:8px; grid-template-columns: 0px minmax(0,1fr) var(--contact-width); }
@@ -659,7 +669,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
         <div className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
           <div ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
-              <div className="text-sm font-semibold">Conversations</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
+              <div className="text-sm font-semibold">{t("crm.inbox.conversations")}</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
             </div>
             <ConversationList {...pagination} active={!activeFolder}>
@@ -683,13 +693,13 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           </div>
           <div ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-border/50 px-3 py-3">
-              <Button variant="ghost" size="sm" aria-label="Back to conversations" onClick={() => setFolderKey(null)}><ArrowLeft className="size-4" /></Button>
+              <Button variant="ghost" size="sm" aria-label={t("crm.inbox.back")} onClick={() => setFolderKey(null)}><ArrowLeft className="size-4" /></Button>
               <div className="min-w-0"><div className="truncate text-sm font-semibold">{displayedFolder?.label}</div><div className="mt-0.5 text-[11px] text-muted-foreground">{detailRows.length} chats in the current view</div></div>
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
             <ConversationList {...pagination} active={!!activeFolder}>
               {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
-              {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">No chats in this folder match the current filters.</p>}
+              {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("crm.inbox.emptyFolder")}</p>}
             </ConversationList>
           </div>
         </div>
@@ -700,20 +710,20 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           <header className={`${islandSurface} crm-chat-header z-10 flex min-h-16 shrink-0 flex-wrap items-center gap-2 px-4 py-3`}>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
-              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">All channels · unified contact history</div>
+              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{t("crm.inbox.allChannelsSubtitle")}</div>
             </div>
             {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
               const ref = selected.customerRef as {type:string;id:string};
               window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
-            }}>Open contact</Button>}
+            }}>{t("crm.contact.open")}</Button>}
             {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />}
             {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
             <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />
-            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? "Hide contact details" : "Show contact details"} title="Contact details" aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
+            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
           </header>
           <div data-chat-history className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-5" style={{ paddingBottom: composerHeight + 16 }}>
 
-            {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>Load earlier activity</Button>}
+            {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>{t("crm.chat.loadEarlier")}</Button>}
             {timeline.map((entry) => entry.message ? (
               entry.message.kind === "SYSTEM_EVENT" ? (
                 config?.showSystemEvents !== false ? <ChatMessageBody key={entry.id} message={entry.message} fallback={<TimelineSystemEvent message={entry.message} config={config} />} /> : null
@@ -727,12 +737,12 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                   busy={busy || !delivery?.connected}
                   avatarUrl={entry.message.direction === "INBOUND"
                     ? customerAvatarUrl
-                    : agentAvatars.get(entry.message.authorName)}
+                    : entry.message.authorAvatarUrl}
                 />
               )
             ) : entry.comment ? <TimelineComment key={entry.id} comment={entry.comment} config={config} /> : null)}
             {!timeline.length && !error ? (
-              <div className="py-16 text-center text-xs text-muted-foreground">No messages yet</div>
+              <div className="py-16 text-center text-xs text-muted-foreground">{t("crm.chat.noMessages")}</div>
             ) : null}
             <div ref={timelineEndRef} style={{ scrollMarginBottom: composerHeight + 16 }} />
           </div>
@@ -742,7 +752,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             <div className="mb-2 flex items-center justify-between gap-3">
               <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
                 onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label="Send from" className="w-auto max-w-full min-w-0"
+                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className="w-auto max-w-full min-w-0"
                   title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
                   <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{"From: " + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
                 </SelectTrigger>
@@ -751,7 +761,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                     <SelectItem key={String(row.id)} value={String(row.id)}>
                       <span className="inline-flex items-center gap-2">
                         <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", "Conversation")}
+                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", t("crm.chat.conversation"))}
                       </span>
                     </SelectItem>
                   ))}
@@ -784,7 +794,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             />}
             {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className="flex items-center gap-2 rounded-field bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
               <span className="flex-1">{replyState.message}</span>
-              {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>Check again</Button>}
+              {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>{t("crm.chat.checkAgain")}</Button>}
             </div>}
             {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -804,15 +814,15 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             </div>
           </div>
         </main>
-      ) : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">Choose a conversation to start.</main>}
+      ) : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">{t("crm.chat.chooseConversation")}</main>}
 
       <div className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
-        {selected && config ? <aside id={contactPanelId} aria-label="Contact details"
+        {selected && config ? <aside id={contactPanelId} aria-label={t("crm.contact.details")}
           className={`${islandSurface} crm-contact-island flex flex-col overflow-hidden`}
           onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContactPanel(); } }}>
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
-            <span className="text-sm font-semibold">Contact details</span>
-            <Button size="sm" variant="ghost" aria-label="Close contact details" onClick={closeContactPanel}><X className="size-4" /></Button>
+            <span className="text-sm font-semibold">{t("crm.contact.details")}</span>
+            <Button size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <ContactPanel key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
@@ -892,7 +902,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       // to whatever this account can actually read.
       const available=new Set(items.map(item=>item.key));
       const key=[mode,configuredKey].find(candidate=>candidate && available.has(candidate)) || items[0]?.key;
-      if(!key) throw new Error("No inbox workspaces are available for your account.");
+      if(!key) throw new Error(t("crm.error.noWorkspaces"));
       const result=await workspaceRead<WorkspaceFeed>(`/${encodeURIComponent(key)}${conversationPath}`);
       if(live)setFeed(result);
     }).catch(e=>{if(live)setError(e.message);});
@@ -927,24 +937,24 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   const declaredFilters = feed?.filters ?? [];
   const channels = declaredFilters.find(filter => filter.field === "channel")?.options ?? [];
   const accountLabels = declaredFilters.find(filter => filter.field === "inbox")?.options ?? [];
-  const modeControls = modes.length > 1 ? <div className="flex flex-wrap items-center gap-1" aria-label="Inbox view">
+  const modeControls = modes.length > 1 ? <div className="flex flex-wrap items-center gap-1" aria-label={t("crm.inbox.view")}>
     {modes.map(entry => <Button key={entry.key} size="toolbar" variant={feed?.key === entry.key ? "secondary" : "ghost"}
       aria-pressed={feed?.key === entry.key} onClick={() => setMode(entry.key)}>
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
-  const channelControls = showChannelFilters ? <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="Channels and accounts">
-    <div className="flex flex-wrap items-center gap-1" aria-label="Channel">
-      <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>All channels</Button>
+  const channelControls = showChannelFilters ? <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
+    <div className="flex flex-wrap items-center gap-1" aria-label={t("crm.chat.channel")}>
+      <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
     </div>
     {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
-      <SelectTrigger aria-label="Account" className="w-52"><SelectValue /></SelectTrigger>
-      <SelectContent><SelectItem value="all">All accounts</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
+      <SelectTrigger aria-label={t("crm.inbox.account")} className="w-52"><SelectValue /></SelectTrigger>
+      <SelectContent><SelectItem value="all">{t("crm.inbox.allAccounts")}</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
     </Select>}
   </div> : undefined;
   if(error)return <p role="alert">{error}</p>;
   const headerExtra = modeControls || channelControls ? <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}</div> : undefined;
-  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>Loading inbox…</p>;
+  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>{t("crm.inbox.loading")}</p>;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

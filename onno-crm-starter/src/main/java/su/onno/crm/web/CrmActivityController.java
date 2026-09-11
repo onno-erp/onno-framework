@@ -56,16 +56,25 @@ public class CrmActivityController {
         UUID canonical=contacts.canonical(customer);workspaces.requireCustomer(canonical,principal,false);
         List<Entry> entries=new ArrayList<>();
         var me=users.resolve(principal);
+        // Agent replies get their author's photo here too, so one contact's history reads the same
+        // whether it is opened as a timeline or as a chat.
+        Map<String,String> messageAvatars=new HashMap<>();
         for(var conversation:conversations.findAllActive()) {
             if(conversation.getCustomer()==null||!canonical.equals(contacts.canonical(conversation.getCustomer()))||
                     !workspaces.canAccess(conversation,principal,false))continue;
             String channel=conversation.getChannel();
             String accountLabel=conversation.getInbox()==null ? channel : inboxes.findActiveById(conversation.getInbox().id())
                 .map(account -> account.getDescription()+" · "+account.getAddress()).orElse(channel);
-            for(var message:messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,conversation.getId())))
+            var thread=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,conversation.getId()));
+            var unresolved=thread.stream().map(ConversationMessage::getAuthorId).filter(Objects::nonNull)
+                .filter(id->!messageAvatars.containsKey(id)).distinct().toList();
+            if(!unresolved.isEmpty())messageAvatars.putAll(authorAvatars.avatarsFor(unresolved));
+            for(var message:thread)
                 entries.add(new Entry("message:"+message.getId(),conversation.getId(),conversation.getSubject(),channel,
                     message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
-                    message.getSentAt(),message.getDeliveryStatus().name(),null,false,accountLabel));
+                    message.getSentAt(),message.getDeliveryStatus().name(),
+                    message.getAuthorId()==null?null:messageAvatars.get(message.getAuthorId()),
+                    message.getAuthorId()!=null&&message.getAuthorId().equals(me.recordId()),accountLabel));
             var notes=comments.list("catalogs","crm_conversations",conversation.getId());
             var avatars=authorAvatars.avatarsFor(notes.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
             for(var note:notes)

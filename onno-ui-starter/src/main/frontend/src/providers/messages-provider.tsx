@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { I18nProvider } from "react-aria-components";
 import { api } from "@/lib/api";
 import { DEFAULT_MESSAGES, makeTranslate, type Translate } from "@/lib/messages";
+import { publishWidgetMessages } from "@/lib/widget-messages";
 
 /**
  * Supplies the framework's chrome strings (action buttons, dialogs, login form, empty/loading
@@ -28,7 +29,10 @@ export function MessagesProvider({ children }: { children: React.ReactNode }) {
         setLocale(cfg.locale || undefined);
         if (!cfg.messages) return;
         // Server map wins per key; any key the server omits keeps its bundled English default.
-        setMessages({ ...DEFAULT_MESSAGES, ...cfg.messages });
+        const resolved = { ...DEFAULT_MESSAGES, ...cfg.messages };
+        setMessages(resolved);
+        // Widget plugins live outside React context, so they read the same map through the store.
+        publishWidgetMessages(resolved);
       })
       .catch(() => {
         // No config / offline — keep the bundled English defaults.

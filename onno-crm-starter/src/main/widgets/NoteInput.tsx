@@ -1,3 +1,4 @@
+import { text as t, useTranslate } from "@onno/widget-sdk";
 import { Button, Popover, PopoverAnchor, PopoverContent, Textarea, useEffect, useRef, useState } from "@onno/widget-sdk";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 
@@ -97,8 +98,8 @@ export function NoteInput({value, disabled, onChange, onSubmit}: {
   return <Popover open={!!query} onOpenChange={(open: boolean) => { if (!open) setQuery(null); }}>
     <PopoverContent side="top" align="start" sideOffset={8} className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-32px)] p-1.5"
       onOpenAutoFocus={(event: Event) => event.preventDefault()} onCloseAutoFocus={(event: Event) => event.preventDefault()}>
-      {loading || error || !options.length ? <p role="status" className="px-2 py-2 text-xs text-muted-foreground">{loading ? "Searching…" : error ? "Could not load references" : "No matches"}</p> :
-        <div role="listbox" aria-label="Note references" className="max-h-48 overflow-y-auto">
+      {loading || error || !options.length ? <p role="status" className="px-2 py-2 text-xs text-muted-foreground">{loading ? "Searching…" : error ? t("crm.note.referencesError") : t("crm.note.noMatches")}</p> :
+        <div role="listbox" aria-label={t("crm.note.references")} className="max-h-48 overflow-y-auto">
           {options.map((option, index) => <Button variant="ghost" type="button" role="option" aria-selected={index === active}
             key={`${option.kind}/${option.name}/${option.id}`} onMouseDown={event => {event.preventDefault(); choose(option);}}
             onMouseEnter={() => setActive(index)}
@@ -109,7 +110,7 @@ export function NoteInput({value, disabled, onChange, onSubmit}: {
         </div>}
     </PopoverContent>
     <PopoverAnchor asChild><div><Textarea ref={input} value={value} disabled={disabled} maxLength={8000}
-      aria-label="Write an internal note" placeholder="Leave an internal note… @ mention · # reference"
+      aria-label={t("crm.note.write")} placeholder={t("crm.note.placeholder")}
       onChange={(event: {target: HTMLTextAreaElement}) => {change(event.target.value); locate(event.target.value, event.target.selectionStart);}}
       onKeyDown={keyDown} onPaste={paste} onBlur={() => setQuery(null)}
       className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none" />

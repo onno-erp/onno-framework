@@ -81,6 +81,7 @@ export const {
   useReducer,
   useContext,
   useLayoutEffect,
+  useSyncExternalStore,
 } = host.React;
 
 /**
@@ -306,6 +307,45 @@ export const toast = Object.fromEntries(
     return host.toast[kind](message);
   }])
 ) as Record<"success" | "error" | "info" | "warning", (message: string) => string | number>;
+
+/** A chrome-string lookup: the key, plus optional `{placeholder}` values. */
+export type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const identityTranslate: Translate = (key, params) => {
+  if (!params) return key;
+  return Object.entries(params).reduce(
+    (rendered, [name, value]) => rendered.replace(new RegExp(`\\{${name}\\}`, "g"), String(value)), key);
+};
+
+/**
+ * A chrome string, readable from anywhere — module scope, an event handler, a thrown Error — where a
+ * hook cannot go. Returns the current value without subscribing, so a component that must re-render
+ * when the server's overlay arrives should also call {@link useTranslate} once near its root.
+ */
+export const text: Translate = (key, params) =>
+  (host.messages ? host.messages.get() : identityTranslate)(key, params);
+
+/**
+ * The app's chrome strings, so a widget's labels localize with the rest of the shell rather than
+ * shipping hardcoded English. Keys resolve against the server's `onno.ui.messages` overlay on top of
+ * the framework's bundled defaults; an unknown key renders as itself, which keeps a typo visible
+ * instead of blank.
+ *
+ * ```tsx
+ * const t = useTranslate();
+ * <button>{t("crm.chat.reply")}</button>
+ * ```
+ *
+ * Re-renders when the server's overlay arrives, so a widget mounted before `/api/config` lands
+ * switches language by itself. On a host older than contract v6 it degrades to echoing the key.
+ */
+export function useTranslate(): Translate {
+  const bridge = host.messages;
+  const subscribe = useCallback(
+    (listener: () => void) => (bridge ? bridge.subscribe(listener) : () => {}), [bridge]);
+  const snapshot = useCallback(() => (bridge ? bridge.get() : identityTranslate), [bridge]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
 
 /** Register a custom CRM message body. Returns an unregister function. Requires host v4. */
 export function registerChatMessageRenderer(renderer: ChatMessageRenderer): () => void {

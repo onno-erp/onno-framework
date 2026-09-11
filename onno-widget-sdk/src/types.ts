@@ -238,6 +238,11 @@ export interface OnnoHost {
   /** Shared live-event facade. Present from host contract v3. */
   events?: OnnoEvents;
   /** Custom chat bodies; optional for compatibility with older hosts. */
+  /** Host chrome strings; present from host contract v6. */
+  messages?: {
+    get(): (key: string, params?: Record<string, string | number>) => string;
+    subscribe(listener: () => void): () => void;
+  };
   chatMessages?: {
     register(renderer: ChatMessageRenderer): () => void;
     Body: import("react").ComponentType<ChatMessageRendererProps>;

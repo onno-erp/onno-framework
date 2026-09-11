@@ -1,3 +1,4 @@
+import { text as t, useTranslate } from "@onno/widget-sdk";
 import type { ReactNode } from "react";
 import { ContactAvatarImage } from "./ContactAvatarImage";
 import { ExtensionSlot } from "@onno/widget-sdk";
@@ -39,7 +40,7 @@ function CrmSettings() {
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
   return <div className="space-y-4">
     {error && <p role="alert">{error}</p>}
-    {!channels.length && <p>No channel connectors are enabled.</p>}
+    {!channels.length && <p>{t("crm.settings.noConnectors")}</p>}
     {channels.map(channel=><section key={channel.key} className="space-y-3 rounded-panel border border-border p-4">
       <h3>{channel.label}</h3><p>{channel.account}</p><p>{channel.description}</p>
       <Badge>{channel.state}</Badge>
@@ -156,7 +157,7 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
       })}</dl>
     </section>)}
     {config.showIdentities && <section className="border-t border-border/60 py-3">
-      <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">Linked identities</h3>
+      <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{t("crm.contact.identities")}</h3>
       {contact.identities.length ? <ul className="space-y-1.5">{contact.identities.map(i => <li key={i.id} className="group flex items-center gap-2">
         <ChannelLogo channel={i.channel} className="size-4" />
         <span className="min-w-0 flex-1">
@@ -164,9 +165,9 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
           <span className="block text-[10px] leading-4 text-muted-foreground">{i.verified ? "Provider linked" : "Manually entered · unverified"}</span>
         </span>
         <CopyButton value={i.address || i.externalId} label={i.channel} />
-      </li>)}</ul> : <p className="text-[12px] text-muted-foreground">No channel identities linked yet</p>}
+      </li>)}</ul> : <p className="text-[12px] text-muted-foreground">{t("crm.contact.noIdentities")}</p>}
     </section>}
-    {inboxRoute && /^\/[a-zA-Z0-9_/-]+$/.test(inboxRoute) && contact.conversations.length > 0 && <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://${inboxRoute.slice(1)}?conversation=${encodeURIComponent(contact.conversations[0].id)}`}))}>Open conversation</Button>}
+    {inboxRoute && /^\/[a-zA-Z0-9_/-]+$/.test(inboxRoute) && contact.conversations.length > 0 && <Button variant="outline" size="sm" className="mt-3 w-full" onClick={() => window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://${inboxRoute.slice(1)}?conversation=${encodeURIComponent(contact.conversations[0].id)}`}))}>{t("crm.contact.openConversation")}</Button>}
     <ExtensionSlot name="crm.contact.actions" className="mt-3 space-y-2" context={{
       surface: "crm-contact", kind: "catalogs", name: contact.catalogName, recordId: currentId, record: contact.fields,
       permissions: { canWrite: contact.canWrite },

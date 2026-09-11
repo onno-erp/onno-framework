@@ -2,6 +2,7 @@ import * as React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 vi.mock("@onno/widget-sdk", async () => ({
+  ...(await import("./widget-sdk-text")),
   ...React,
   ...await import("../src/components/ui/button"),
   ...await import("../src/components/ui/input"),

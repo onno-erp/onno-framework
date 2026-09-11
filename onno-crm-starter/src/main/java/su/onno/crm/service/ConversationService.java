@@ -49,11 +49,22 @@ public class ConversationService {
                 Ref.of(Conversation.class, conversationId));
     }
 
+    /** Kept for callers that have no signed-in agent to attribute the reply to. */
     @Transactional
     public ConversationMessage addMessage(
             UUID conversationId,
             String body,
             String authorName
+    ) {
+        return addMessage(conversationId, body, authorName, null);
+    }
+
+    @Transactional
+    public ConversationMessage addMessage(
+            UUID conversationId,
+            String body,
+            String authorName,
+            String authorId
     ) {
         Conversation conversation = requireConversation(conversationId);
         String normalized = body == null ? "" : body.trim();
@@ -71,6 +82,7 @@ public class ConversationService {
         message.setConversation(Ref.of(Conversation.class, conversationId));
         message.setChannel(conversation.getChannel());
         message.setAuthorName(authorName == null || authorName.isBlank() ? "CRM agent" : authorName);
+        message.setAuthorId(authorId == null || authorId.isBlank() ? null : authorId);
         message.setBody(normalized);
         message.setDescription(preview(normalized, 100));
         message.setSentAt(now);

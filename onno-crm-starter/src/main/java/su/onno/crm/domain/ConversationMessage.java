@@ -33,6 +33,20 @@ public class ConversationMessage extends CatalogObject implements Validated {
     @Attribute(displayName = "Author", required = true, length = 200)
     private String authorName;
 
+    /**
+     * The identity record behind an agent reply, when there is one — the same id
+     * {@code CurrentUserResolver.CurrentUser.recordId()} carries and the same key comments store, so
+     * an author's avatar resolves through {@code CommentAuthorAvatars} for messages exactly as it
+     * already does for internal notes. Null for anything not written by a signed-in agent: every
+     * inbound customer message, and system events.
+     *
+     * <p>Deliberately an id rather than a lookup on {@link #authorName}: a display name is neither
+     * unique nor stable, so matching on it would attach the wrong face to a message the day two
+     * people share a name or one of them renames.</p>
+     */
+    @Attribute(displayName = "Author id", length = 64)
+    private String authorId;
+
     @Attribute(displayName = "Body", required = true, length = 8000)
     private String body;
 
