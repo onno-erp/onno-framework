@@ -934,3 +934,10 @@ with `{inputs:{...}}`). It checks workspace write access, application read-only 
 and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
+
+
+CRM's packaged inbox can compose a channel/account bar with the ordinary entity list using
+`EntityListWidget.queryParams`. Constraints use the existing validated filter protocol; account
+choices are derived only from readable workspace conversations. Manual call/meeting summaries use
+existing CRM internal events, while folder taxonomy and classification remain host-owned.
+See [unified inbox controls](../onno-crm-starter/README.md#unified-inbox-controls-and-manual-activity).

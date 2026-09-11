@@ -161,6 +161,10 @@ public final class SurfaceDivBuilder {
         if (!view.grouping().defaultColumn().isBlank()) {
             descriptor.put("defaultGroupBy", view.grouping().defaultColumn());
         }
+        // Whether those bands open expanded (ListSpec.groupsExpanded) rather than collapsed.
+        if (view.grouping().expanded()) {
+            descriptor.put("groupsExpanded", true);
+        }
         List<Map<String, Object>> aggregates = new ArrayList<>();
         for (ResolvedListView.Aggregate a : view.grouping().aggregates()) {
             Map<String, Object> agg = new LinkedHashMap<>();

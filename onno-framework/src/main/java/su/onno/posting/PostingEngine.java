@@ -394,7 +394,14 @@ public class PostingEngine {
                                      DocumentDescriptor descriptor,
                                      UUID documentId) {
         claimPostedDocument(handle, descriptor, documentId, true);
-        unpostMovements(handle, documentId);
+        // Unlike a repost, standalone unposting has no replacement movements to restore a
+        // constrained balance. Check while the original rows still identify the touched keys.
+        for (RegisterRepositoryImpl<?> repo : repositoryMap.values()) {
+            RegisterPersistence<?> persistence = repo.getPersistence();
+            persistence.reverseTotals(handle, documentId);
+            checkNonNegativeBalances(handle, persistence.getDescriptor(), documentId);
+            persistence.deactivateRecords(handle, documentId);
+        }
     }
 
     private void unpostMovements(Handle handle, UUID documentId) {

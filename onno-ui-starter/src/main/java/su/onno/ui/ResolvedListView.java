@@ -37,18 +37,25 @@ public record ResolvedListView(String title, List<Column> columns,
 
     /**
      * The list's grouping capability: the columns a user may group by (the "Group by ▾" picker),
-     * the per-group subtotals to show, and the {@code defaultColumn} the list opens grouped by
-     * (blank = opens flat). Empty {@link #columns()} means the list can't be grouped.
+     * the per-group subtotals to show, the {@code defaultColumn} the list opens grouped by
+     * (blank = opens flat), and whether those bands open {@code expanded} rather than collapsed.
+     * Empty {@link #columns()} means the list can't be grouped.
      */
-    public record Grouping(List<GroupColumn> columns, List<Aggregate> aggregates, String defaultColumn) {
+    public record Grouping(List<GroupColumn> columns, List<Aggregate> aggregates, String defaultColumn,
+                           boolean expanded) {
         public Grouping {
             columns = columns == null ? List.of() : List.copyOf(columns);
             aggregates = aggregates == null ? List.of() : List.copyOf(aggregates);
             defaultColumn = defaultColumn == null ? "" : defaultColumn;
         }
 
+        /** Backward-compatible constructor: group bands open collapsed. */
+        public Grouping(List<GroupColumn> columns, List<Aggregate> aggregates, String defaultColumn) {
+            this(columns, aggregates, defaultColumn, false);
+        }
+
         public static Grouping none() {
-            return new Grouping(List.of(), List.of(), "");
+            return new Grouping(List.of(), List.of(), "", false);
         }
 
         public boolean isEmpty() {

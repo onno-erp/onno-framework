@@ -486,6 +486,25 @@ class PostingTest {
     }
 
     @Test
+    void unpost_receiptAlreadyConsumed_rollsBackMovementsTotalsAndPostedFlag() {
+        UUID product = UUID.randomUUID();
+        UUID warehouse = UUID.randomUUID();
+        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
+        TestReceipt consumption = createReceipt(warehouse, product, new BigDecimal("-4"));
+        engine.post(receipt);
+        engine.post(consumption);
+        assertThatThrownBy(() -> engine.unpost(receipt))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("negative balance");
+        assertStockBalance(product, warehouse, "6");
+        assertThat(isPosted(receipt)).isTrue();
+        assertThat(stockPersistence.getRecordsByDocument(receipt.getId()))
+                .singleElement().matches(TestStockRegister::isActive);
+        engine.unpost(consumption);
+        engine.unpost(receipt);
+        assertStockBalance(product, warehouse, "0");
+    }
+
+    @Test
     void unpost_deactivatesRecords() {
         UUID product = UUID.randomUUID();
         UUID warehouse = UUID.randomUUID();

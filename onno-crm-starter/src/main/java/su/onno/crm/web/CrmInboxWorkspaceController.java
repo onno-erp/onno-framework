@@ -156,6 +156,17 @@ public class CrmInboxWorkspaceController {
         list.put("filters",resolved.filters().stream().filter(f->declared.stream().anyMatch(d->d.field().equals(f.key())))
             .map(f->Map.of("key",f.key(),"label",Objects.toString(f.label(),f.key()),"column",fieldNames.getOrDefault(f.columnName(),f.columnName()),"type",f.type(),"options",f.options())).toList());
         list.put("custom",resolved.customView());
+        // Scope before publishing account choices; filters and pagination must not hide other accounts.
+        // One sample per distinct account keeps the choices complete without decorating every
+        // authorized conversation, which would defeat the page-before-decoration fast path.
+        var accountSamples=new LinkedHashMap<UUID,Conversation>();
+        for(var conversation:authorized)
+            if(conversation.getInbox()!=null)accountSamples.putIfAbsent(conversation.getInbox().id(),conversation);
+        list.put("channelAccounts",accountSamples.values().stream().map(decorate)
+            .filter(row->row.get("inbox")!=null)
+            .map(row->Map.of("id",row.get("inbox").toString(),"channel",Objects.toString(row.get("channel"),""),
+                "label",Objects.toString(row.get("inboxDisplay"),row.get("inbox").toString())))
+            .distinct().toList());
         return Map.of("list",list,"key",workspace.key(),"label",workspace.label(),"filters",declared,"config",config,"canWrite",canWrite,
             "rows",page,"total",records.size(),"hasMore",end<records.size(),"nextCursor",end<records.size()?Integer.toString(end):"");
     }

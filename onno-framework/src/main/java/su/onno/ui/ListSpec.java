@@ -39,6 +39,7 @@ public final class ListSpec<E> {
     private final List<String> groupable = new ArrayList<>();
     private final Map<String, String> cellMenus = new LinkedHashMap<>();
     private String defaultGroupBy;
+    private boolean groupsExpanded;
     private final List<Aggregate> aggregates = new ArrayList<>();
     private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
 
@@ -339,6 +340,22 @@ public final class ListSpec<E> {
     }
 
     /**
+     * Open every group band already expanded instead of collapsed. Only meaningful alongside
+     * {@link #groupable}; the viewer can still collapse any band by hand. Off by default, because
+     * a grouped list loads each band's rows lazily and a list with many groups should not fetch
+     * them all at once — turn it on for a list whose whole point is the bands (a pipeline by
+     * stage), not for one that groups a long tail.
+     *
+     * <pre>
+     * list.groupable("stage").defaultGroupBy("stage").groupsExpanded(true);
+     * </pre>
+     */
+    public ListSpec<E> groupsExpanded(boolean expanded) {
+        this.groupsExpanded = expanded;
+        return this;
+    }
+
+    /**
      * Declare a per-group subtotal shown on each group header (and rolled up as a grand total): an
      * aggregate {@code fn} over a numeric {@code field}. Only meaningful alongside {@link #groupable};
      * every group always carries its row count regardless. The subtotal is formatted with the field's
@@ -412,6 +429,9 @@ public final class ListSpec<E> {
 
     /** The field the list opens grouped by, or {@code null} when it opens flat (the default). */
     public String defaultGroupBy() { return defaultGroupBy; }
+
+    /** Whether the grouped list opens with every band expanded ({@link #groupsExpanded}). */
+    public boolean groupsExpanded() { return groupsExpanded; }
 
     /** The declared per-group subtotals, in declaration order. */
     public List<Aggregate> aggregates() { return List.copyOf(aggregates); }

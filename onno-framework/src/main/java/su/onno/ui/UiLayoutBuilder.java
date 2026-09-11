@@ -34,6 +34,31 @@ public class UiLayoutBuilder {
         return sections.computeIfAbsent(name, SectionBuilder::new);
     }
 
+    /**
+     * A navigation entry that opens {@code route} directly — one rail icon, no section drawer to
+     * step through. Use it for a surface that is the whole destination (an inbox, a dashboard);
+     * {@link #section} is for a group of records the user picks from.
+     *
+     * <p>It is a section with no title and a single page, which is what the nav renders as a direct
+     * link. Sections are keyed by name, so unlike {@code section("")} several links coexist: each is
+     * keyed by its route and calling it again returns the same entry.</p>
+     *
+     * <pre>
+     * layout.link("/inbox", "Clients", "inbox").order(0);
+     * layout.link("/chats", "Conversations", "messages-square").order(1);
+     * </pre>
+     */
+    public SectionBuilder link(String route, String label, String icon) {
+        // The key is namespaced with a character no authored section name can carry, so a link
+        // never collides with a section of the same name.
+        SectionBuilder existing = sections.get("\u0000link:" + route);
+        if (existing != null) return existing;
+        SectionBuilder builder = new SectionBuilder("");
+        builder.icon(icon).page(route, label, icon);
+        sections.put("\u0000link:" + route, builder);
+        return builder;
+    }
+
     public WidgetBuilder<Void> widget(String title) {
         WidgetBuilder<Void> wb = new WidgetBuilder<>(this, title);
         widgets.add(wb);

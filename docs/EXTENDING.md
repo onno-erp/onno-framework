@@ -265,7 +265,7 @@ removed or when the outlet's record/workspace/page changes; unrelated registrati
 | Outlet | Context / operations |
 | --- | --- |
 | `page.actions` | Existing PageActionsBar route; execute only authored server button keys, navigate |
-| `entity.list.actions` | Entity kind/name, selection, canWrite, refresh, navigate, authored toolbar commands |
+| `entity.list.actions` | Right-side toolbar actions; entity kind/name, selection, canWrite, refresh, navigate, authored toolbar commands |
 | `entity.list.selection` | Shown with a selection; execute authored row commands for the selected IDs |
 | `entity.list.context-menu` | Clicked record plus selection; close menu, refresh, navigate, authored row commands |
 | `entity.form.actions` | Persisted record snapshot and canWrite; navigate |

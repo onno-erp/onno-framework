@@ -34,6 +34,12 @@ class CrmFolderConfigurationTest {
         assertThat(Folder.conversations("team", "Team", List.of(id)).conversationIds()).containsExactly(id);
         assertThatIllegalArgumentException().isThrownBy(() -> Folder.conversations("team", "Team", List.of()));
     }
+    @Test void explicitlyEmptyFolderSurvivesSerializationWithoutBecomingAnAllFolder() throws Exception {
+        var json = new ObjectMapper();
+        var empty = Folder.empty("partners", "Partners");
+        assertThat(json.readTree(json.writeValueAsString(empty)).get("matchNone").asBoolean()).isTrue();
+        assertThat(new Folder("all", "All", List.of(), List.of(), List.of(), false).matchNone()).isFalse();
+    }
     @Test void foldersAreOptIn() {
         var service = new CrmWorkspaceService(mock(JdbcTemplate.class), new ObjectMapper(), List.of(),TestBindings.customers(),TestBindings.noAgents(),su.onno.crm.service.CrmStateConfiguration.empty());
         service.initialize();

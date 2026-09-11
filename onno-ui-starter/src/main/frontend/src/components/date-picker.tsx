@@ -1,8 +1,10 @@
 import {
   CalendarDate,
   CalendarDateTime,
+  getLocalTimeZone,
   parseDate,
   parseDateTime,
+  today,
 } from "@internationalized/date";
 import { DateInput } from "@/components/ui/date-input";
 
@@ -53,6 +55,24 @@ function formatValue(
   return value.toString();
 }
 
+/**
+ * Where an empty picker starts: today.
+ *
+ * react-aria derives both the calendar's opening month and the unfilled segments from
+ * `value ?? placeholderValue`, so a literal date here is the month every empty field opens on,
+ * forever — the fixed 1 January 2026 this replaced meant a user picking a wedding date in November
+ * paged back ten months to reach the current one. Computed per render rather than hoisted to a
+ * module constant, so a tab left open overnight rolls over with the day.
+ */
+function placeholderFor(includeTime: boolean): CalendarDate | CalendarDateTime {
+  const now = today(getLocalTimeZone());
+  // Only the date rolls forward. The time segments stay at the start of the working day: seeding
+  // them with the current clock reads as a deliberate 14:37 rather than as an empty field.
+  return includeTime
+    ? new CalendarDateTime(now.year, now.month, now.day, 9, 0)
+    : now;
+}
+
 export function DatePicker({ value, onChange, includeTime = false, ...props }: DatePickerProps) {
   const parsed = parseValue(value, includeTime);
   return (
@@ -63,11 +83,7 @@ export function DatePicker({ value, onChange, includeTime = false, ...props }: D
       granularity={includeTime ? "minute" : "day"}
       hourCycle={24}
       shouldForceLeadingZeros
-      placeholderValue={
-        includeTime
-          ? new CalendarDateTime(2026, 1, 1, 9, 0)
-          : new CalendarDate(2026, 1, 1)
-      }
+      placeholderValue={placeholderFor(includeTime)}
     />
   );
 }

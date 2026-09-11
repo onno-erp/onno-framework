@@ -222,6 +222,16 @@ describe("DivKitView tab titles", () => {
     expect(await screen.findByTitle("Products")).toBeInTheDocument();
   });
 
+  it("preserves new-form prefills without opening a second blank tab", async () => {
+    render(<MemoryRouter initialEntries={["/catalogs/customers"]}><DivKitView /></MemoryRouter>);
+    await screen.findByTestId("content-/catalogs/customers");
+    const path = "/documents/event_invoices/new?event=example-event";
+    act(() => window.dispatchEvent(new CustomEvent("onno:action", { detail: "onno://" + path.slice(1) })));
+    await screen.findByTestId("content-" + path);
+    expect(screen.queryByTestId("content-/documents/event_invoices/new")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "New Event Invoices", exact: true })).toHaveLength(1);
+  });
+
   it("templates the new-record tab around the localized entity title", async () => {
     render(
       <MemoryRouter initialEntries={["/catalogs/customers/new"]}>

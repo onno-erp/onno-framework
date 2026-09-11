@@ -25,6 +25,14 @@ public final class LayoutSpec {
     }
 
     /**
+     * A navigation entry that opens {@code route} directly, with no section drawer in between.
+     * See {@link UiLayoutBuilder#link(String, String, String)}.
+     */
+    public UiLayoutBuilder.SectionBuilder link(String route, String label, String icon) {
+        return builder.link(route, label, icon);
+    }
+
+    /**
      * Configure the shared application shell. Use only from the default layout;
      * startup rejects shell customization on a named persona layout.
      */
