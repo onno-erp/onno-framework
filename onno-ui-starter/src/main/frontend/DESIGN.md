@@ -215,3 +215,14 @@ Widgets can anchor a shared `PopoverContent` to an existing field using SDK `Pop
 
 Use `DatePicker` for date-only values and `DateTimePicker` for local date plus 24-hour time.
 Both share `DateInput` and the calendar; the legacy `DatePicker includeTime` prop remains supported.
+
+Document tabular sections use `TabularSectionEditor` in `entity-form-widget.tsx`: a semantic
+table with one shared column sizing model, sticky headers, centered row numbers and an internally
+scrolling viewport. Keep the Add row / Undo remove footer outside the horizontal scroll.
+Cells reuse `AttrControl`; preserve native picker, textarea and IME key handling. Row keys
+must survive insertion/removal so neighboring picker state and focus stay attached to the
+same row. Keep a single muted Remove action per row. Localize row actions through `UiMessages`.
+
+Forms with tabular sections use the available pane width rather than the scalar form's
+`max-w-2xl` cap. Keep section titles and counts unbroken; show keyboard help through the shared `HintIcon`
+in the section header. The table remains the horizontal scroll boundary on narrow panes.

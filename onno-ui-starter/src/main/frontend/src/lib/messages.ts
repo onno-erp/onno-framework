@@ -41,6 +41,12 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   // Action buttons / row-menu items.
   "action.new": "New",
   "action.add": "Add",
+  "form.tabularKeyboardHint": "Tab to move between fields · Enter to continue from a text or number field",
+  "form.rowActions": "Row actions",
+  "form.rowField": "Row {row}: {field}",
+  "form.removeRow": "Remove row {row}",
+  "form.rowRemoved": "Row removed",
+  "form.undoRemoveRow": "Undo remove",
   "action.addRow": "Add row",
   "action.cancel": "Cancel",
   "action.save": "Write",
