@@ -761,7 +761,11 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                     <SelectItem key={String(row.id)} value={String(row.id)}>
                       <span className="inline-flex items-center gap-2">
                         <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", t("crm.chat.conversation"))}
+                        {/* The account only. Every option in this list is the same contact — the
+                            dropdown filters to one customer's conversations — so appending their
+                            name repeated it verbatim on every row and said nothing about where a
+                            reply would go out from, which is the whole question here. */}
+                        {string(row, "inboxDisplay", conversationChannel(row))}
                       </span>
                     </SelectItem>
                   ))}
