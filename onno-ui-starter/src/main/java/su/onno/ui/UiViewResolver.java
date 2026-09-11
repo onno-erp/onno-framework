@@ -245,8 +245,9 @@ public class UiViewResolver {
                         + "(declare it via groupable(...) too)", title, spec.defaultGroupBy());
             }
         }
-        ResolvedListView.Grouping grouping =
-                new ResolvedListView.Grouping(groupCols, aggregates, defaultGroup);
+        // Expanding bands only means anything once the list actually opens grouped.
+        ResolvedListView.Grouping grouping = new ResolvedListView.Grouping(groupCols, aggregates,
+                defaultGroup, spec.groupsExpanded() && !defaultGroup.isBlank());
 
         return new ResolvedListView(title, columns, spec.searchable(), sortColumn,
                 spec.sortDescending(), filters, mapView,

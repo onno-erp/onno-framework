@@ -11,6 +11,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UiLayoutBuilderTest {
 
     @Test
+    void linksAreTitlelessSingleItemSectionsAndCoexist() {
+        UiLayoutBuilder layout = new UiLayoutBuilder();
+
+        layout.link("/inbox", "Clients", "inbox").order(0);
+        layout.link("/chats", "Conversations", "messages-square").order(1);
+        layout.link("/inbox", "Clients", "inbox").order(0); // repeat: same entry, not a second page
+
+        var sections = layout.build();
+        assertThat(sections).hasSize(2);
+        // No title and exactly one item is what the nav renders as a direct link, with no drawer.
+        assertThat(sections).allSatisfy(section -> {
+            assertThat(section.name()).isEmpty();
+            assertThat(section.pageRefs()).hasSize(1);
+            assertThat(section.entityRefs()).isEmpty();
+        });
+        assertThat(sections.get(0).pageRefs().getFirst().route()).isEqualTo("/inbox");
+        assertThat(sections.get(0).icon()).isEqualTo("inbox");
+        assertThat(sections.get(1).pageRefs().getFirst().label()).isEqualTo("Conversations");
+    }
+
+    @Test
     void rejectsLegacyGeoAndImplicitCurrencyHints() {
         EntityConfigBuilder<Object> fields = new EntityConfigBuilder<>();
 

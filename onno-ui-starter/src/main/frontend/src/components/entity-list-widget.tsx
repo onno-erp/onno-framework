@@ -255,6 +255,8 @@ export type ListDescriptor = {
   defaultFilters?: Record<string, string[]>;
   /** Per-group subtotals shown on each group header (and their display format). */
   aggregates?: ListAggregate[];
+  /** Open every group band expanded instead of collapsed (ListSpec.groupsExpanded). */
+  groupsExpanded?: boolean;
   selectionCheckboxes?: boolean;
   selectionWidget?: string;
   pageSize: number;
@@ -1295,18 +1297,22 @@ const OVERSCAN = 8;
 export function EntityListWidget({
   list,
   headerExtra,
+  queryParams,
   renderer,
   refreshKey,
 }: {
   list: ListDescriptor;
   renderer?: ComponentType<ListRendererProps>;
   refreshKey?: number;
+  /** Additional server-validated constraints supplied by a composed workspace. */
+  queryParams?: Record<string, string[]>;
   // Host-provided control rendered in the control island right after the title — the register
   // surface parks its Balance/Movements toggle here so the view switch lives with the list's own
   // controls instead of floating above the card.
   headerExtra?: ReactNode;
 }) {
   const { kind, name, columns, pageSize } = list;
+  const queryParamSig = JSON.stringify(queryParams ?? {});
   const t = useMessages();
   // Ambient presence: other users viewing each row's record, looked up by row id at render time.
   const viewersById = useViewersById();
@@ -1664,6 +1670,7 @@ export function EntityListWidget({
   // parameters are added by the caller.
   const buildParams = useCallback(() => {
     const params = new URLSearchParams();
+    for (const [key, values] of Object.entries(queryParams ?? {})) for (const value of values) params.append(key, value);
     // A default-view base filter (PageBuilder.list) is a server-side constraint applied on top of the
     // viewer's own filters/search — sent on every window fetch, grouped or flat.
     if (list.baseFilter) params.set("filter", list.baseFilter);
@@ -1692,7 +1699,7 @@ export function EntityListWidget({
     }
     return params;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [list.baseFilter, sort.column, sort.descending, debounced, filters, filterSig]);
+  }, [queryParamSig, list.baseFilter, sort.column, sort.descending, debounced, filters, filterSig]);
 
   // The shared query (sort + search + filters) the grouped view fetches groups/rows with, as a
   // string so its effects can depend on it.
@@ -1796,7 +1803,7 @@ export function EntityListWidget({
     setHasMore(true);
     loadInitial(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig]);
+  }, [feedBase, pageSize, sort.column, sort.descending, debounced, filterSig, queryParamSig]);
 
   useEffect(() => { if (refreshKey) loadInitial(true); }, [refreshKey, loadInitial]);
   useEffect(() => { if (queuedRefresh) loadInitial(true); }, [queuedRefresh]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2013,7 +2020,7 @@ export function EntityListWidget({
   // A changed query invalidates the selection's row set — indices shift, rows drop out.
   useEffect(() => {
     clearSelection();
-  }, [kind, name, debounced, filterSig, sort.column, sort.descending, groupBy, granularity, view, clearSelection]);
+  }, [kind, name, debounced, filterSig, queryParamSig, sort.column, sort.descending, groupBy, granularity, view, clearSelection]);
 
   // A confirmation applies only to the exact selection that armed it.
   useEffect(() => { setArmedDelete(false); }, [selected]);
@@ -2599,10 +2606,9 @@ export function EntityListWidget({
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
-        <div className="mr-1 flex min-h-8 shrink-0 items-center gap-2">
+        <div className="mr-1 flex min-h-8 min-w-0 items-center gap-2">
           <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>
           {headerExtra}
-          <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />
           {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
           <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
@@ -2810,6 +2816,7 @@ export function EntityListWidget({
               ]}
             />
           ) : null}
+          <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />
           {toolbarActions.map((a) => {
             const busy = pending.has(a.key);
             const iconOnly = compact && (!!a.icon || !!a.logo);
@@ -2905,6 +2912,7 @@ export function EntityListWidget({
           minTableWidth={minTableWidth}
           leftPad={leftPad}
           aggregates={aggregates}
+          groupsExpanded={!!list.groupsExpanded}
           groupBy={groupBy}
           granularity={groupCol?.date ? granularity : ""}
           paramsBase={groupParamsBase}

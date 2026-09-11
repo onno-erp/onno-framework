@@ -49,6 +49,7 @@ export function GroupedList({
   minTableWidth,
   leftPad,
   aggregates,
+  groupsExpanded,
   groupBy,
   granularity,
   paramsBase,
@@ -71,6 +72,7 @@ export function GroupedList({
   minTableWidth: number;
   leftPad: string;
   aggregates: ListAggregate[];
+  groupsExpanded?: boolean;
   groupBy: string;
   granularity: string;
   paramsBase: string;
@@ -91,6 +93,8 @@ export function GroupedList({
   const t = useMessages();
   const [groups, setGroups] = useState<GroupHeader[] | null>(null);
   const [capped, setCapped] = useState(false);
+  // Set when a fresh set of headers lands and ListSpec.groupsExpanded is on; cleared once opened.
+  const autoExpand = useRef(false);
   // Loaded rows per expanded group, keyed by group index; absent = collapsed.
   const [expanded, setExpanded] = useState<Record<number, GroupRows>>({});
   const aggSig = JSON.stringify(aggregates);
@@ -110,6 +114,10 @@ export function GroupedList({
         if (!alive) return;
         setGroups(data.groups ?? []);
         setCapped(!!data.capped);
+        // ListSpec.groupsExpanded: these headers are a fresh set, so the bands are due to be
+        // opened once. The effect below owns that (it needs loadGroupRows, declared later), and
+        // the flag keeps a live refresh from re-opening a band the viewer has since collapsed.
+        autoExpand.current = !!groupsExpanded;
       })
       .catch(() => {
         if (alive) {
@@ -121,7 +129,7 @@ export function GroupedList({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedBase, groupBy, granularity, paramsBase, aggSig]);
+  }, [feedBase, groupBy, granularity, paramsBase, aggSig, groupsExpanded]);
 
   // Live updates: the flat table patches/reloads itself off the "onno:dataevent" fan-out, but this
   // grouped view owns its own data, so it must listen too — otherwise a grouped-by-default list
@@ -183,6 +191,24 @@ export function GroupedList({
     },
     [feedBase, paramsBase, pageSize]
   );
+
+  // Open every band of a freshly loaded header set when ListSpec.groupsExpanded is on. Runs after
+  // loadGroupRows is defined, and only while the flag the header fetch set is still standing — so
+  // a live refresh, or a band the viewer collapsed, is never re-opened behind their back.
+  useEffect(() => {
+    if (!autoExpand.current || !groups) return;
+    autoExpand.current = false;
+    const initial: Record<number, GroupRows> = {};
+    groups.forEach((group, index) => {
+      if (group.expand.length === 0) return; // a null group isn't expandable, as when clicked
+      initial[index] = { rows: [], cursor: null, hasMore: true, loading: true };
+    });
+    if (Object.keys(initial).length === 0) return;
+    setExpanded(initial);
+    groups.forEach((group, index) => {
+      if (initial[index]) loadGroupRows(index, group, null);
+    });
+  }, [groups, loadGroupRows]);
 
   // The soft refresh a live event triggers (see the listener above). Distinct from the hard-reset
   // header effect: it never blanks `groups`, so the visible bands stay put until fresh data lands.

@@ -38,12 +38,20 @@ public class CrmWorkspaceService {
     public record Action(String key, String label, boolean visible) {}
     /** Folder rules intersect; empty criteria match every value. Order in Config controls display order. */
     public record Folder(String key, String label, List<String> channels,
-                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds) {
+                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone) {
         public Folder {
             conversationIds = List.copyOf(conversationIds);
             channels = List.copyOf(channels);
             statuses = List.copyOf(statuses);
             priorities = List.copyOf(priorities);
+        }
+        /** Explicitly empty folders remain visible without matching the entire inbox. */
+        public static Folder empty(String key, String label) {
+            return new Folder(key,label,List.of(),List.of(),List.of(),false,List.of(),true);
+        }
+        public Folder(String key, String label, List<String> channels, List<String> statuses,
+                      List<String> priorities, boolean unreadOnly, List<UUID> conversationIds) {
+            this(key,label,channels,statuses,priorities,unreadOnly,conversationIds,false);
         }
         public Folder(String key, String label, List<String> channels, List<String> statuses,
                       List<String> priorities, boolean unreadOnly) {

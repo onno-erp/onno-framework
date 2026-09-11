@@ -49,6 +49,22 @@ class CrmActivityControllerTest {
   assertThat(feed.entries()).extracting(CrmActivityController.Entry::mine).containsExactly(true,false,false);
   assertThat(feed.entries()).extracting(CrmActivityController.Entry::authorAvatarUrl).containsExactly("/media/alice.png","/media/ben.png",null);
  }
+ @Test void accountContextComesOnlyFromReadableConversations() {
+  var controller=controller();var visible=conversation(Channel.EMAIL);var hidden=conversation(Channel.EMAIL);
+  var inbox=new Inbox();inbox.setId(UUID.randomUUID());inbox.setDescription("Sales");inbox.setAddress("sales@example.com");
+  visible.setInbox(Ref.of(Inbox.class,inbox.getId()));hidden.setInbox(Ref.of(Inbox.class,UUID.randomUUID()));
+  when(inboxes.findActiveById(inbox.getId())).thenReturn(Optional.of(inbox));
+  when(conversations.findAllActive()).thenReturn(List.of(visible,hidden));when(workspaces.canAccess(visible,principal,false)).thenReturn(true);
+  when(messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,visible.getId()))).thenReturn(List.of(message(visible,"Hello")));
+  assertThat(controller.read(customer,0,100,principal).entries()).extracting(CrmActivityController.Entry::accountLabel).containsExactly("Sales · sales@example.com");
+  verify(inboxes,never()).findActiveById(hidden.getInbox().id());
+ }
+ @Test void readOnlyModeRejectsManualActivities() {
+  var controller=controller();org.springframework.test.util.ReflectionTestUtils.setField(controller,"readOnly",true);
+  assertThatThrownBy(()->controller.log(customer,new CrmActivityController.LogEvent(UUID.randomUUID(),CrmActivityController.EventType.CALL_COMPLETED,"Notes",null),principal))
+    .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+  verifyNoInteractions(messages);
+ }
  @Test void logsAnInternalEventAndRejectsOtherContacts(){
   var controller=controller();var c=conversation(Channel.WHATSAPP);when(workspaces.requireConversation(c.getId(),principal,true)).thenReturn(c);
   var me=mock(CurrentUserResolver.CurrentUser.class);when(me.displayName()).thenReturn("Agent");when(users.resolve(principal)).thenReturn(me);

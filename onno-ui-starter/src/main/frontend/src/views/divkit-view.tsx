@@ -284,7 +284,7 @@ function shareableUrl(path: string): string {
 function initialWorkspace(): Workspace {
   // Router-relative path (prefix stripped) so the first tab matches the useLocation pathname the
   // mirror effect compares against — otherwise a cold-loaded deep link would open a duplicate tab.
-  const path = stripBasePath(window.location.pathname);
+  const path = stripBasePath(window.location.pathname) + window.location.search;
   const id = newPaneId();
   return { panes: [{ id, tabs: [tabForPath(path)], activePath: path }], sizes: [1], focused: id };
 }
@@ -387,6 +387,7 @@ function affectsSurface(event: UiEvent, pathname: string): boolean {
 
 export function DivKitView() {
   const location = useLocation();
+  const routePath = location.pathname + location.search;
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -457,16 +458,16 @@ export function DivKitView() {
       const focused = ws.panes.find((p) => p.id === ws.focused) ?? ws.panes[0];
       // An island intentionally emptied (last tab closed → URL reset to "/") stays blank;
       // don't re-open a "/" tab for it. Real routes still open normally.
-      if (location.pathname === "/" && focused.tabs.length === 0) {
+      if (routePath === "/" && focused.tabs.length === 0) {
         return ws;
       }
       if (
-        focused.activePath === location.pathname &&
-        focused.tabs.some((t) => t.path === location.pathname)
+        focused.activePath === routePath &&
+        focused.tabs.some((t) => t.path === routePath)
       ) {
         return ws;
       }
-      const tab = tabForPath(location.pathname);
+      const tab = tabForPath(routePath);
       const panes = ws.panes.map((p) => {
         if (p.id !== focused.id) return p;
         const tabs = p.tabs.some((t) => t.path === tab.path) ? p.tabs : [...p.tabs, tab];
@@ -474,7 +475,7 @@ export function DivKitView() {
       });
       return { ...ws, panes, focused: focused.id };
     });
-  }, [location.pathname]);
+  }, [routePath]);
 
   // The shell depends on (viewport, theme, profile) — not the active route — so it's
   // fetched once per combo and reused across navigations.
@@ -680,7 +681,7 @@ export function DivKitView() {
       const pane = wsRef.current.panes.find((candidate) => candidate.id === paneId);
       if (!pane) return;
       setWorkspace((ws) => (ws.focused === paneId ? ws : { ...ws, focused: paneId }));
-      if (pane.activePath && window.location.pathname !== pane.activePath) {
+      if (pane.activePath && window.location.pathname + window.location.search !== pane.activePath) {
         navigate(pane.activePath);
       }
     };
@@ -900,10 +901,14 @@ export function DivKitView() {
         op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
         return;
       }
-      const path = "/" + rest;
+      // "main/{kind}/{name}/{id}" — open the record in the focused pane rather than the detail
+      // island beside it. A surface that is itself a workspace (an event page, a project page)
+      // sends its records here: they replace the workspace instead of stacking next to it.
+      const inMain = rest.startsWith("main/");
+      const path = "/" + (inMain ? rest.slice("main/".length) : rest);
       // On the desktop islands layout, a record opens in its own island to the right;
       // elsewhere (single content pane) it just navigates.
-      if (shell?.navStyle === "sidebar" && recordBasePath(path)) {
+      if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
         openDetailRight(path);
       } else {
         openPath(path);

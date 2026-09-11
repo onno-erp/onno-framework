@@ -1,4 +1,8 @@
 import { conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
+import { CallActivityCard, callActivity } from "./CallActivityCard";
+import { ContactAvatarImage } from "./ContactAvatarImage";
+import { ScheduleCall } from "./ScheduleCall";
+import { LogActivity } from "./LogActivity";
 import { composerState } from "./composerState";
 import { useConversationStatuses } from "./ConversationStatuses";
 import { ExtensionSlot, type ExtensionContext } from "@onno/widget-sdk";
@@ -28,6 +32,7 @@ import {
   Textarea,
   CommentBody,
   api,
+  React,
   registerListRenderer,
   useCallback,
   useEffect,
@@ -44,6 +49,8 @@ import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X } from "lucide
 type Message = {
   id: string;
   conversationId?: string;
+  accountLabel?: string;
+  subject?: string;
   kind: "CUSTOMER_MESSAGE" | "AGENT_REPLY" | "SYSTEM_EVENT";
   direction: "INBOUND" | "OUTBOUND" | "INTERNAL";
   channel: string;
@@ -165,21 +172,11 @@ function Avatar({
   channel?: string | null;
   className?: string;
 }) {
-  const [broken, setBroken] = useState(false);
-  const source = url || null;
-  useEffect(() => setBroken(false), [source]);
   return (
     <span className={`relative ${className} shrink-0`}>
       <span className="relative flex size-full items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-[10px] font-semibold text-foreground">
         {initials(name)}
-        {source && !broken ? (
-          <img
-            src={source}
-            alt=""
-            className="absolute inset-0 size-full object-cover"
-            onError={() => setBroken(true)}
-          />
-        ) : null}
+        <ContactAvatarImage name={name} url={url} />
       </span>
       {channel ? <ChannelIcon channel={channel} avatarBadge /> : null}
     </span>
@@ -188,7 +185,7 @@ function Avatar({
 
 function ChannelIcon({ channel, comment = false, avatarBadge = false }: { channel: string; comment?: boolean; avatarBadge?: boolean }) {
   return <span title={comment ? "Internal note" : channel} className={avatarBadge
-    ? "absolute -bottom-0.5 -right-0.5 z-10 flex size-3.5 items-center justify-center rounded-full bg-card ring-1 ring-card"
+    ? "absolute -bottom-0.5 -right-0.5 z-10 flex size-[18px] items-center justify-center rounded-full bg-card ring-2 ring-card"
     : "flex size-6 shrink-0 items-center justify-center"}>
     <ChannelLogo channel={comment ? "internal" : channel} className={avatarBadge ? "size-3.5" : "size-4"} />
   </span>;
@@ -289,12 +286,14 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
 }
 
 function TimelineSystemEvent({ message, config }: { message: Message; config?: Config }) {
+  const activity = callActivity(message.body);
+  if (activity) return <CallActivityCard activity={activity} author={message.authorName} at={config?.showTimestamps !== false ? fullTime(message.sentAt) : undefined} />;
   return (
     <div className="flex items-center justify-center gap-2 px-6 py-1 text-center text-[10px] text-muted-foreground">
       <span className="h-px min-w-5 flex-1 bg-border" />
       <span className="inline-flex max-w-[78%] items-center gap-1.5 rounded-pill bg-muted px-2.5 py-1">
         <Activity size={12} className="shrink-0 text-primary" aria-hidden="true" />
-        <span>{message.body}</span>
+        <span className="whitespace-pre-wrap break-words text-left"><CommentBody body={message.body} /></span>
         {config?.showTimestamps !== false && <time className="shrink-0 text-muted-foreground/70">{fullTime(message.sentAt)}</time>}
       </span>
       <span className="h-px min-w-5 flex-1 bg-border" />
@@ -326,14 +325,14 @@ function TimelineComment({ comment, config }: { comment: Comment; config?: Confi
 }
 
 function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
-  return (!folder.conversationIds?.length || folder.conversationIds.includes(String(row.id)))
+  return !folder.matchNone && (!folder.conversationIds?.length || folder.conversationIds.includes(String(row.id)))
     && (!folder.channels.length || [...folder.channels, ...(folder.channelIds ?? [])].includes(String(row.channel)))
     && (!folder.statuses.length || [...folder.statuses, ...(folder.statusIds ?? [])].includes(String(row.status)))
     && (!folder.priorities.length || [...folder.priorities, ...(folder.priorityIds ?? [])].includes(String(row.priority)))
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string }) {
+function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string }) {
   const rows = useMemo(() => contactChats(channelRows), [channelRows]);
   const { workspace, error: configError } = useWorkspace();
   const config = scopedConfig ?? workspace?.config;
@@ -366,6 +365,15 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useEffect(() => {
     if (folderKey && !folders.some(folder => folder.key === folderKey)) setFolderKey(null);
   }, [config, folderKey, chatGroups.groups]);
+  // A routed folder opens once it actually exists in this feed, and never fights the reader
+  // afterwards: navigating away from it is their business.
+  const openedRoutedFolder = useRef("");
+  useEffect(() => {
+    if (!initialFolder || openedRoutedFolder.current === initialFolder) return;
+    if (!folders.some(folder => folder.key === initialFolder)) return;
+    openedRoutedFolder.current = initialFolder;
+    setFolderKey(initialFolder);
+  }, [initialFolder, folders]);
   const { statuses: conversationStatuses } = useConversationStatuses();
   const [selectedId, setSelectedId] = useState<string | null>(rows.length ? String(rows[0].id) : null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -694,6 +702,12 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
               <div className="mt-0.5 truncate text-[11px] text-muted-foreground">All channels · unified contact history</div>
             </div>
+            {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
+              const ref = selected.customerRef as {type:string;id:string};
+              window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
+            }}>Open contact</Button>}
+            {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />}
+            {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
             <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />
             {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? "Hide contact details" : "Show contact details"} title="Contact details" aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
           </header>
@@ -737,7 +751,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                     <SelectItem key={String(row.id)} value={String(row.id)}>
                       <span className="inline-flex items-center gap-2">
                         <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        {string(row, "inboxDisplay", conversationChannel(row))}
+                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", "Conversation")}
                       </span>
                     </SelectItem>
                   ))}
@@ -813,6 +827,26 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
 registerListRenderer("crmInbox", CrmInbox);
 
 
+/**
+ * Any lucide glyph by name, drawn by the shell's {@code onno-icon} bridge instead of bundling the
+ * icon set into this widget. The element takes its name/size as DOM properties (that is how DivKit
+ * feeds it), so they are assigned through a ref rather than written as JSX attributes.
+ */
+function ShellIcon({ name, size = 14 }: { name: string; size?: number }) {
+  const ref = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const element = ref.current as (HTMLElement & { name?: string; size?: number }) | null;
+    if (!element) return;
+    element.name = name;
+    element.size = size;
+  }, [name, size]);
+  return React.createElement("onno-icon", {
+    ref,
+    "aria-hidden": "true",
+    style: { display: "inline-flex", width: size, height: size },
+  });
+}
+
 type WorkspaceSummary = { key: string; label: string; canWrite: boolean };
 type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean };
 async function workspaceRead<T>(path: string): Promise<T> {
@@ -823,7 +857,29 @@ async function workspaceRead<T>(path: string): Promise<T> {
 function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   const { statuses } = useConversationStatuses();
   const configuredKey = widget.extraConfig?.workspace || "";
-  const conversationId = widget.extraConfig?.conversation || "";
+  // extraConfig.modes: workspace keys, comma-separated, offered as a switch above the list. One
+  // page then reads the same conversations through several foldings (by role, by project) without
+  // a separate route per folding. Labels come from the workspace summaries.
+  // Each entry is a workspace key, optionally with the lucide glyph to label it: "roles:users".
+  const modes = (widget.extraConfig?.modes || "").split(",").map(entry => {
+    const [key, icon] = entry.split(":");
+    return { key: (key || "").trim(), icon: (icon || "").trim() };
+  }).filter(entry => entry.key);
+  const modeKeys = modes.map(entry => entry.key);
+  const route = new URLSearchParams(window.location.search);
+  const conversationId = widget.extraConfig?.conversation || route.get("conversation") || "";
+  // "?mode=<workspace>&folder=<key>" — another surface (an event page, a report) can hand the inbox
+  // the folding and the folder it wants opened, instead of dropping the reader at the root list.
+  const routedMode = route.get("mode") || "";
+  const routedFolder = route.get("folder") || "";
+  const showChannelFilters = widget.extraConfig?.channelFilters === "true";
+  const showAccountFilter = widget.extraConfig?.accountFilter !== "false";
+  const [mode, setMode] = useState(
+    [routedMode, configuredKey].find(key => key && modeKeys.includes(key)) || modeKeys[0] || ""
+  );
+  const [modeLabels, setModeLabels] = useState<Record<string, string>>({});
+  const [channel, setChannel] = useState("");
+  const [account, setAccount] = useState("");
   const conversationPath = conversationId ? `/conversation/${encodeURIComponent(conversationId)}` : "";
   const [feed,setFeed] = useState<WorkspaceFeed | null>(null);
   const [error,setError] = useState("");
@@ -831,23 +887,64 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   useEffect(() => {
     let live=true;
     void workspaceRead<WorkspaceSummary[]>("").then(async items => {
-      const key=configuredKey || items[0]?.key;
+      if(live)setModeLabels(Object.fromEntries(items.map(item=>[item.key,item.label])));
+      // An unavailable mode must not strand the page: fall back to the configured workspace, then
+      // to whatever this account can actually read.
+      const available=new Set(items.map(item=>item.key));
+      const key=[mode,configuredKey].find(candidate=>candidate && available.has(candidate)) || items[0]?.key;
       if(!key) throw new Error("No inbox workspaces are available for your account.");
       const result=await workspaceRead<WorkspaceFeed>(`/${encodeURIComponent(key)}${conversationPath}`);
       if(live)setFeed(result);
     }).catch(e=>{if(live)setError(e.message);});
     return ()=>{live=false;};
-  },[configuredKey,conversationPath]);
+    // refreshKey: an inbox-page invalidation re-reads the workspace, not just its rows — folders are
+    // computed from application data (stage, event membership) and move when that data moves.
+  },[configuredKey,conversationPath,mode,refreshKey]);
   useUiEvents(()=>setRefreshKey(value=>value+1),{types:["updated"],entityType:"page",entityName:"crm-inbox-workspaces"});
+  // One component identity for the life of the island. A new function type here would remount the
+  // inbox on every feed refresh — reading a message refreshes the workspace, and the open folder,
+  // the selected chat and the draft would all reset. The body reads the current feed from a ref;
+  // the parent's own re-render is what carries a changed feed into it.
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+  // Honour the routed folder only while the feed it belongs to is the one on screen.
+  const folderRef = useRef(routedFolder);
+  folderRef.current = feed && routedMode && feed.key !== routedMode ? "" : routedFolder;
   const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {
-    return feed ? <CrmInbox {...props} open={()=>{}} scopedConfig={feed.config} workspaceKey={feed.key} /> : null;
-  },[feed]);
+    const current = feedRef.current;
+    return current ? <CrmInbox {...props} open={()=>{}} scopedConfig={current.config} workspaceKey={current.key}
+      initialFolder={folderRef.current} /> : null;
+  },[]);
   const list = useMemo(()=>feed ? {
     ...feed.list,
+    filters: showChannelFilters ? feed.list.filters.filter((filter: {key:string}) => !["channel", "inbox"].includes(filter.key)) : feed.list.filters,
     kind:"catalogs", name:"crm_conversations", embedded:true, fill:true, canWrite:false, newUrl:null,
     feed:`/api/crm/inbox-workspaces/${encodeURIComponent(feed.key)}${conversationPath}`,
-  } : null,[feed,widget.title,conversationPath,statuses]);
+  } : null,[feed,widget.title,conversationPath,statuses,showChannelFilters]);
+  const queryParams = useMemo(() => ({eq: [channel && `channel,${channel}`, showAccountFilter && account && `inbox,${account}`].filter(Boolean) as string[]}), [channel,account,showAccountFilter]);
+  const accounts = (feed?.list.channelAccounts ?? []) as {id:string;channel:string;label:string}[];
+  // A feed need not declare filters at all; the channel bar degrades to empty rather than throwing.
+  const declaredFilters = feed?.filters ?? [];
+  const channels = declaredFilters.find(filter => filter.field === "channel")?.options ?? [];
+  const accountLabels = declaredFilters.find(filter => filter.field === "inbox")?.options ?? [];
+  const modeControls = modes.length > 1 ? <div className="flex flex-wrap items-center gap-1" aria-label="Inbox view">
+    {modes.map(entry => <Button key={entry.key} size="toolbar" variant={feed?.key === entry.key ? "secondary" : "ghost"}
+      aria-pressed={feed?.key === entry.key} onClick={() => setMode(entry.key)}>
+      {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
+    </Button>)}
+  </div> : undefined;
+  const channelControls = showChannelFilters ? <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label="Channels and accounts">
+    <div className="flex flex-wrap items-center gap-1" aria-label="Channel">
+      <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>All channels</Button>
+      {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
+    </div>
+    {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
+      <SelectTrigger aria-label="Account" className="w-52"><SelectValue /></SelectTrigger>
+      <SelectContent><SelectItem value="all">All accounts</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
+    </Select>}
+  </div> : undefined;
   if(error)return <p role="alert">{error}</p>;
-  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} /> : <p>Loading inbox…</p>;
+  const headerExtra = modeControls || channelControls ? <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}</div> : undefined;
+  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>Loading inbox…</p>;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

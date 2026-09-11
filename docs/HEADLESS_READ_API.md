@@ -512,3 +512,12 @@ with `{inputs:{...}}`). It checks workspace write access, application read-only 
 and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
+
+### CRM account context and empty folders
+
+Scoped inbox feeds include `list.channelAccounts` (`id`, `channel`, `label`) from readable workspace
+conversations before applying filters/pagination. Hidden conversations never contribute account choices.
+Activity feed entries include `accountLabel` (inbox description and address) after conversation access
+checks. Manual activity writes honor `onno.ui.read-only` in addition to customer/workspace write checks.
+Folder configuration supports `matchNone: true` for visible empty categories; omitted/false preserves
+existing empty-criteria matching. See the [CRM guide](../onno-crm-starter/README.md#unified-inbox-controls-and-manual-activity).

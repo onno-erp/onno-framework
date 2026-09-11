@@ -29,6 +29,20 @@ class, copied customer, or fixed business-field set is required. `description` i
 apply to every projected contact and inbox row; `.readableWhen((customer, principal) -> ...)` adds
 an optional host record-level restriction. Deleted customers cannot be used.
 
+A five-argument `.field(key, label, section, format, getter)` files a projection under a named
+section; the contact panel groups its fields by section and draws one heading per group, so a host
+exposing more than a handful of fields can say which belong together instead of handing the reader
+one undifferentiated list. Fields declared with the four-argument form file under `Contact`.
+`.color(key, getter)` supplies the colour a `badge` field's value carries — an enumeration already
+names its own on `@EnumLabel` — so a stage reads as the same pill in the panel as it does elsewhere.
+The colour travels beside the value as `<key>Color` and is not itself a displayable field.
+
+```java
+var catalog = new CrmCatalogBinding<>(Customer.class, customers::findActiveById)
+    .field("stage", "Stage", "Pipeline", "badge", customer -> customer.getStage().label())
+    .color("stage", customer -> customer.getStage().color());
+```
+
 Contact editing, searching, validation, lifecycle hooks, tags and business actions use the host's
 normal catalog surfaces. The contact panel's **Open contact** button navigates to that catalog.
 Add `detail.widget("Messages").type("crmContactDetails")` to its `EntityView` if wanted. Extra fields
@@ -253,3 +267,43 @@ Custom list renderers receive optional `ListRendererProps.total`, the server cou
 current search and filters, independently of how many pages are loaded. A null/omitted total means
 unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
 rows and are labeled as the current view.
+
+## Unified inbox controls and manual activity
+
+For a workspace declaring ordinary `channel` and `inbox` option filters, enable the packaged
+channel bar with `.config("channelFilters", "true")` on its `crmInboxWorkspaces` widget.
+Channels remain visible; changing channel resets the account selection. Set
+`.config("accountFilter", "false")` to hide the account picker while keeping the channel bar. The account picker is
+restricted to accounts with readable conversations in the workspace, before search, filters and
+pagination. These are conversation accounts, not a claim that a connector is online. The response's
+`list.channelAccounts` contains `{id, channel, label}` choices. Empty connected accounts still belong
+in connector settings until the host gives them explicit workspace visibility.
+
+The controls use `EntityListWidget.queryParams` for additional server-validated query constraints,
+so pagination and ordinary text/date filters continue to run on the server. This property does not
+grant access or replace workspace selection rules.
+
+`Folder.empty(key, label)` displays an intentionally empty category (`matchNone: true`). Existing
+folder constructors retain their match-all semantics for empty criteria; the host owns category names
+and contact classification. Use a workspace configuration function to derive membership from host data.
+
+The conversation header's **Log activity** action records a phone call or meeting summary through
+`POST /api/crm/contacts/{id}/activity`, using the existing internal system-event model. An optional
+HTTPS recording link is stored with the summary; this is manual entry, not note-taker ingestion.
+The operation requires write access and rejects application read-only mode. Activity entries now
+include `accountLabel` from the readable conversation's inbox. Messages display this account context.
+
+Add `.config("inboxRoute", "/inbox")` to a host contact's `crmContactDetails` widget to expose
+**Open conversation**. It opens the authored inbox with `?conversation={id}`; the server verifies
+workspace and contact access before returning that contact's channels. Existing **Open contact**
+navigation returns to the bound host catalog. Choose a route whose workspace includes those contacts.
+
+
+The **Schedule Zoom** header control saves an existing HTTPS Zoom meeting link, future local date/time,
+duration and explicit time zone/UTC instant as a `MEETING_PLANNED` activity. It prepares an invitation
+in the reply composer without sending it. This prototype flow does not create a Zoom meeting or calendar
+booking; provider-backed scheduling remains a connector concern.
+
+Logged calls and meetings render as native timeline cards with a summary, author/time and an optional
+recording link. Long summaries expand on demand. Existing internal-event text remains compatible;
+other system events retain the compact timeline treatment. Summaries are manually entered, not AI-generated.

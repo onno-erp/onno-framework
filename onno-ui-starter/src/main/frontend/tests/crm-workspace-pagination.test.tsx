@@ -41,7 +41,9 @@ it.each([false, true])("keeps selection through pagination and live read patches
   render(<Workspace widget={{ extraConfig: { workspace: "support" } }} />);
   await screen.findByText("6 chats");
   await screen.findByText("Person 2");
-  fireEvent.click(screen.getByRole("button", { name: "Load more conversations" }));
+  const firstPane = screen.getAllByLabelText("Conversation list")[0];
+  Object.defineProperties(firstPane, { clientHeight: { configurable: true, value: 300 }, scrollHeight: { configurable: true, value: 1000 }, scrollTop: { configurable: true, value: 700 } });
+  fireEvent.scroll(firstPane);
   await screen.findByText("Person 4");
   expect(screen.getByText("6 chats")).toBeInTheDocument();
   const pane = screen.getAllByLabelText("Conversation list")[0];
@@ -49,7 +51,7 @@ it.each([false, true])("keeps selection through pagination and live read patches
   fireEvent.scroll(pane);
   await screen.findByText("Person 6");
   expect(screen.getByText("6 chats")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Load more conversations" })).not.toBeInTheDocument();
+  expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "false");
   expect(fetcher.mock.calls.filter(([input]) => String(input).includes("cursor="))).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /Person 6/ }));
   expect(screen.getByRole("button", { name: /Person 6/ })).toHaveAttribute("aria-current", "true");

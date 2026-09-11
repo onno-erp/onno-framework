@@ -29,6 +29,16 @@ describe("optional list selection checkboxes", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  it("reloads composed workspace constraints when the channel changes", async () => {
+    const descriptor = list();
+    const { rerender } = render(<EntityListWidget list={descriptor} queryParams={{eq:["channel,EMAIL", "inbox,first"]}} />);
+    await screen.findByText("First");
+    expect(new URL(String(fetchMock.mock.calls.at(-1)![0]), "http://localhost").searchParams.getAll("eq")).toEqual(["channel,EMAIL", "inbox,first"]);
+    fetchMock.mockClear();
+    rerender(<EntityListWidget list={descriptor} queryParams={{eq:["channel,WHATSAPP"]}} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(new URL(String(fetchMock.mock.calls.at(-1)![0]), "http://localhost").searchParams.getAll("eq")).toEqual(["channel,WHATSAPP"]);
+  });
   it("preserves the default table without checkboxes", async () => {
     render(<EntityListWidget list={list()} />);
     await screen.findByText("First");

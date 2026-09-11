@@ -45,10 +45,11 @@ describe("CRM inner-pane keyset pagination", () => {
     render(<EntityListWidget list={list} renderer={Inbox} />);
     await screen.findByText("one"); scroll(); scroll();
     await screen.findByText("four");
-    fireEvent.click(screen.getByRole("button", { name: "Load more conversations" }));
+    scroll();
     await screen.findByText("six");
     expect(screen.getAllByText("two")).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Load more conversations" })).not.toBeInTheDocument();
+    // Nothing is left to page, so the pane is idle and no control is offered.
+    expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "false");
     scroll(); expect(fetcher).toHaveBeenCalledTimes(3);
     expect(fetcher.mock.calls.map(([url]) => new URL(url, "http://localhost").searchParams.get("cursor"))).toEqual([null, "cursor-2", "cursor-3"]);
     for (const [url, options] of fetcher.mock.calls) {
@@ -68,7 +69,7 @@ describe("CRM inner-pane keyset pagination", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(screen.getByText("one")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry loading conversations" }));
-    expect(screen.getByRole("button", { name: "Loading conversations…" })).toBeDisabled();
+    expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "true");
     scroll(); expect(fetcher).toHaveBeenCalledTimes(3);
     await act(async () => pending.resolve(page(["three"], null)));
     await screen.findByText("three");
@@ -86,11 +87,12 @@ describe("CRM inner-pane keyset pagination", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "new" } });
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
     await screen.findByText("new-one");
-    expect(screen.getByRole("button", { name: "Load more conversations" })).toBeEnabled();
+    // Idle and ready to page the newer query.
+    expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "false");
     scroll();
     await act(async () => old.resolve(status === 200 ? page(["stale"], "stale-cursor") : new Response(null, { status })));
     expect(screen.queryByText("stale")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Loading conversations…" })).toBeDisabled();
+    expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "true");
     scroll(); expect(fetcher).toHaveBeenCalledTimes(4);
     await act(async () => current.resolve(page(["new-two"], null)));
     await screen.findByText("new-two");

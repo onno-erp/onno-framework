@@ -37,8 +37,14 @@ public class CrmActivityController {
         this.contacts=contacts;this.conversations=conversations;this.messages=messages;this.inboxes=inboxes;
         this.workspaces=workspaces;this.access=access;this.users=users;this.comments=comments;this.authorAvatars=authorAvatars;
     }
+    @org.springframework.beans.factory.annotation.Value("${onno.ui.read-only:false}") private boolean readOnly;
     public record Entry(String id,UUID conversationId,String subject,String channel,String kind,
-                        String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine) {}
+                        String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel) {
+        public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
+                String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine) {
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,null);
+        }
+    }
     public record Feed(List<Entry> entries,int total,boolean hasMore) {}
     private void require(Principal principal){
         workspaces.requireAccess(principal,false);
@@ -54,17 +60,19 @@ public class CrmActivityController {
             if(conversation.getCustomer()==null||!canonical.equals(contacts.canonical(conversation.getCustomer()))||
                     !workspaces.canAccess(conversation,principal,false))continue;
             String channel=conversation.getChannel();
+            String accountLabel=conversation.getInbox()==null ? channel : inboxes.findActiveById(conversation.getInbox().id())
+                .map(account -> account.getDescription()+" · "+account.getAddress()).orElse(channel);
             for(var message:messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,conversation.getId())))
                 entries.add(new Entry("message:"+message.getId(),conversation.getId(),conversation.getSubject(),channel,
                     message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
-                    message.getSentAt(),message.getDeliveryStatus().name(),null,false));
+                    message.getSentAt(),message.getDeliveryStatus().name(),null,false,accountLabel));
             var notes=comments.list("catalogs","crm_conversations",conversation.getId());
             var avatars=authorAvatars.avatarsFor(notes.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
             for(var note:notes)
                 entries.add(new Entry("note:"+note.id(),conversation.getId(),conversation.getSubject(),channel,"NOTE","INTERNAL",
                     note.authorName(),note.body(),LocalDateTime.ofInstant(note.createdAt(),ZoneId.systemDefault()),"NOT_APPLICABLE",
                     note.authorId()==null?null:avatars.get(note.authorId()),
-                    note.authorId()!=null&&note.authorId().equals(me.recordId())));
+                    note.authorId()!=null&&note.authorId().equals(me.recordId()),accountLabel));
         }
         entries.sort(Comparator.comparing(Entry::at).thenComparing(Entry::id).reversed());
         int end=(int)Math.min(entries.size(),(long)offset+limit);
@@ -78,6 +86,7 @@ public class CrmActivityController {
     public record LogEvent(UUID conversationId,EventType type,String details,LocalDateTime scheduledFor) {}
     @PostMapping @Transactional public Map<String,UUID> log(@PathVariable UUID customer,@RequestBody LogEvent request,Principal principal) {
         require(principal);
+        if(readOnly)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"The application is read-only");
         if(request.conversationId()==null||request.type()==null||request.details()==null||request.details().isBlank()||request.details().length()>7000)
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,"Choose an event type and enter details (up to 7000 characters)");
         workspaces.requireCustomer(customer,principal,true);
