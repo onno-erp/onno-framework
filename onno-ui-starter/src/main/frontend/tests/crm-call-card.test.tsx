@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-vi.mock("@onno/widget-sdk",async()=>({...React,...await import("../src/components/ui/button"),CommentBody:({body}:{body:string})=><span>{body}</span>}));
+vi.mock("@onno/widget-sdk",async()=>({...React,...await import("../src/components/ui/button"),CommentBody:({body}:{body:string})=><span>{body}</span>,...(await import("./widget-sdk-text"))}));
 import { callActivity, CallActivityCard } from "../../../../../onno-crm-starter/src/main/widgets/CallActivityCard";
 afterEach(cleanup);
 it("renders legacy call summaries and extracts only safe recording links",()=>{

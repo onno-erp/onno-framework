@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EntityListWidget, type ListDescriptor, type ListRendererProps } from "@/components/entity-list-widget";
 import { conversationCount, ConversationList } from "../../../../../onno-crm-starter/src/main/widgets/ConversationList";
 
-vi.mock("@onno/widget-sdk", async () => ({ ...(await import("@/components/ui/button")) }));
+vi.mock("@onno/widget-sdk", async () => ({ ...(await import("@/components/ui/button")), ...(await import("./widget-sdk-text")) }));
 vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
 vi.mock("@/components/list-map-view", () => ({ ListMapView: () => null }));
 class ResizeObserverMock { observe() {} unobserve() {} disconnect() {} }

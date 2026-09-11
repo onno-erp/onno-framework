@@ -8,6 +8,7 @@ vi.mock("@onno/widget-sdk",async()=>({
   ...await import("../src/components/ui/button"),
   ...await import("../src/components/ui/input"),
   EntityTagMenu:()=>null,
+  ...(await import("./widget-sdk-text")),
 }));
 import {ContactRowMenu} from "../../../../../onno-crm-starter/src/main/widgets/ContactRowMenu";
 afterEach(cleanup);

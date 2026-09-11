@@ -1,3 +1,4 @@
+import { text as t, useTranslate } from "@onno/widget-sdk";
 import type { ChatGroup, GroupChange } from "./chatGroups";
 import { ExtensionSlot, Button, Input } from "@onno/widget-sdk";
 import type { ReactNode } from "react";
@@ -27,16 +28,16 @@ export function ContactRowMenu({ id, canEdit, onOpen, groups, groupKey, conversa
     {children}
     <ContextMenuContent open={!!position} position={position} width={200}
       onOpenChange={(open: boolean) => { if (!open) setPosition(null); }}>
-      <ContextMenuItem onSelect={() => { setPosition(null); onOpen(); }}>Open conversation</ContextMenuItem>
+      <ContextMenuItem onSelect={() => { setPosition(null); onOpen(); }}>{t("crm.contact.openConversation")}</ContextMenuItem>
       {onGroupChange && <ContextMenuSub label="Move to group" width={240}>
         <div className="max-h-64 overflow-y-auto">
           {groups?.map(group => <ContextMenuItem key={group.key} disabled={busy || group.key === groupKey} onSelect={() => void changeGroup({operation:"move",key:group.key})}>{group.label}{group.key === groupKey ? " ✓" : ""}</ContextMenuItem>)}
         </div>
-        {groupKey && <ContextMenuItem disabled={busy} onSelect={() => void changeGroup({operation:"move",key:null})}>Remove from group</ContextMenuItem>}
+        {groupKey && <ContextMenuItem disabled={busy} onSelect={() => void changeGroup({operation:"move",key:null})}>{t("crm.group.remove")}</ContextMenuItem>}
         {creating ? <form className="space-y-2 p-2" onSubmit={event => {event.preventDefault();void changeGroup({operation:"create",label});}}>
-          <Input autoFocus aria-label="Group name" placeholder="Group name" maxLength={80} value={label} onChange={event => setLabel(event.target.value)} />
-          <Button size="sm" type="submit" disabled={busy || !label.trim()}>Create and move</Button>
-        </form> : <ContextMenuItem disabled={busy} onSelect={() => setCreating(true)}>New group…</ContextMenuItem>}
+          <Input autoFocus aria-label={t("crm.group.name")} placeholder={t("crm.group.name")} maxLength={80} value={label} onChange={event => setLabel(event.target.value)} />
+          <Button size="sm" type="submit" disabled={busy || !label.trim()}>{t("crm.group.createAndMove")}</Button>
+        </form> : <ContextMenuItem disabled={busy} onSelect={() => setCreating(true)}>{t("crm.group.new")}</ContextMenuItem>}
         {error && <p role="alert" className="p-2 text-xs text-destructive">{error}</p>}
       </ContextMenuSub>}
       <ExtensionSlot name="crm.chat.context-menu" context={{surface:"crm-chat",kind:"catalogs",name:"crm_conversations",recordId:conversationId,record:record??{id:conversationId,customer:id},workspaceKey,openRecord:(kind,name,id)=>window.dispatchEvent(new CustomEvent("onno:action",{detail:`onno://${kind}/${name}/${id}`})),permissions:{canWrite:canEdit},closeMenu:()=>setPosition(null)}} />

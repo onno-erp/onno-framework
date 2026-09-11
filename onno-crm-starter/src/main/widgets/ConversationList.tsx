@@ -1,3 +1,4 @@
+import { text as t, useTranslate } from "@onno/widget-sdk";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button, type ListRendererProps } from "@onno/widget-sdk";
 
@@ -28,7 +29,7 @@ export function ConversationList({ children, active = true, hasMore, loadingMore
     // window follows immediately, which is what makes a fast flick through 250 chats continuous.
   }, [ready, loadMore]);
 
-  return <div ref={pane} aria-label="Conversation list" aria-busy={!!loadingMore}
+  return <div ref={pane} aria-label={t("crm.inbox.list")} aria-busy={!!loadingMore}
     className="min-h-0 min-w-0 w-full max-w-full flex-1 space-y-0.5 overflow-x-hidden overflow-y-auto overscroll-contain p-1.5"
     onScroll={event => {
       // Belt and braces to the sentinel: a pane that scrolls without ever moving the sentinel into
@@ -40,8 +41,8 @@ export function ConversationList({ children, active = true, hasMore, loadingMore
     {active && hasMore && loadMore && <div className="px-3 py-2 text-center">
       {/* Only a failure earns a control: there is nothing to press while paging is working. */}
       {loadMoreFailed ? <>
-        <p role="alert" className="mb-2 text-xs text-destructive">Could not load more conversations.</p>
-        <Button type="button" variant="ghost" size="sm" onClick={loadMore}>Retry loading conversations</Button>
+        <p role="alert" className="mb-2 text-xs text-destructive">{t("crm.inbox.loadMoreError")}</p>
+        <Button type="button" variant="ghost" size="sm" onClick={loadMore}>{t("crm.inbox.loadMoreRetry")}</Button>
       </> : <p role="status" className="text-xs text-muted-foreground">
         {loadingMore ? "Loading more conversations…" : " "}
       </p>}

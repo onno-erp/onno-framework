@@ -37,7 +37,7 @@ class CrmInboxWorkspaceSecurityTest {
                 new CrmInboxWorkspace("support","Support",Set.of("SUPPORT"),c->Channel.EMAIL.equals(c.getChannel())));
         workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
         var users=mock(CurrentUserResolver.class);
-        var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces);
+        var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces,mock(CommentAuthorAvatars.class));
         var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),users,comments,
                 mock(CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
         http=MockMvcBuilders.standaloneSetup(controller,scoped).build();

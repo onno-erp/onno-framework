@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import * as React from "react";
-vi.mock("@onno/widget-sdk", async () => ({...React, ...(await import("../src/components/ui/textarea")), ...(await import("../src/components/ui/button")), ...(await import("../src/components/ui/popover"))}));
+vi.mock("@onno/widget-sdk", async () => ({...React, ...(await import("../src/components/ui/textarea")), ...(await import("../src/components/ui/button")), ...(await import("../src/components/ui/popover")), ...(await import("./widget-sdk-text"))}));
 import { NoteInput } from "../../../../../onno-crm-starter/src/main/widgets/NoteInput";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it("keeps the inbox input and inserts a person reference without introducing another send button", async () => {
