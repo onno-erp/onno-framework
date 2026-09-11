@@ -65,19 +65,25 @@ jobs:
             docs/package-lock.json
             onno-ui-starter/src/main/frontend/package-lock.json
 
+      # Scoped much tighter than the CI gate, which is where advisories are meant to be caught.
+      # Every npm dependency here is build-time — the jar ships the compiled bundle, not node_modules
+      # — so nothing short of critical is worth burning a version number that Maven Central will
+      # never let us reuse. (Note that `--omit=dev` would not be the lever it looks like: the nanoid
+      # advisory that blocked v2.2.0 came in through tailwindcss-animate → tailwindcss → postcss,
+      # which is a production dependency by npm's bookkeeping despite being purely build-time.)
       - name: Audit frontend dependencies
-        run: npm ci && npm audit
+        run: npm ci && npm audit --audit-level=critical
         working-directory: onno-ui-starter/src/main/frontend
 
       - name: Build and audit documentation
-        run: npm ci && npm audit && npm run docs:build
+        run: npm ci && npm audit --audit-level=critical && npm run docs:build
         working-directory: docs
 
       - name: Check
         run: ./gradlew clean check -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
       - name: Audit generated widget toolchain
-        run: npm audit --prefix example/build/onno-widgets
+        run: npm audit --prefix example/build/onno-widgets --audit-level=critical
 
       - name: Verify local publication and Javadoc
         env:
@@ -86,7 +92,11 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
         run: ./gradlew publishToMavenLocal aggregateJavadoc -PreleaseVersion="${{ steps.version.outputs.release_version }}"
 
+      # Everything above this line is a gate; everything below publishes. The boundary is marked so
+      # a new step lands on the right side of it: a gate added after publication starts leaves a
+      # half-completed release, with the artifact on Central and no GitHub release or mirror.
       - name: Publish to Maven Central
+        id: central
         # Uploads a signed deployment to the Central Portal. SONATYPE_AUTOMATIC_RELEASE=true
         # (gradle.properties) makes it release automatically once the Portal validates it — no
         # manual "Publish" click. Set that property to false to instead leave deployments staged.
@@ -132,3 +142,22 @@ jobs:
           ONNO_REGISTRY_USER: ${{ secrets.ONNO_REGISTRY_USER || 'publisher' }}
           ONNO_REGISTRY_TOKEN: ${{ secrets.ONNO_REGISTRY_TOKEN }}
         run: ./gradlew :onno-widgets-gradle-plugin:publishAllPublicationsToOnnoCloudRepository -PreleaseVersion="${{ steps.version.outputs.release_version }}" --no-configuration-cache
+
+      - name: Explain what a failure means for this version
+        if: failure()
+        env:
+          VERSION: ${{ steps.version.outputs.release_version }}
+          CENTRAL: ${{ steps.central.outcome }}
+        run: |
+          if [[ "${CENTRAL}" == "success" ]]; then
+            echo "::error::${VERSION} is on Maven Central but the run did not finish. Central" \
+                 "versions are immutable, so do not re-cut this tag — re-run the failed step" \
+                 "(the GitHub release and the onno-cloud mirror are both safe to repeat)."
+          else
+            echo "::error::${VERSION} was NOT published — a gate failed before publication." \
+                 "Nothing reached Maven Central, so the version number is still free, but the tag" \
+                 "is unreleasable as it stands: it points at a commit that cannot pass. Fix the" \
+                 "cause on main and cut a new tag, or force-move v${VERSION} onto the fix. Note" \
+                 "that a dependency advisory can fail a previously-green tag with no code change" \
+                 "of its own — the CI workflow gates those on main so they surface before release."
+          fi

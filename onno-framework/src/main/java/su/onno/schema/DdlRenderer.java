@@ -28,8 +28,32 @@ final class DdlRenderer {
         for (String constraint : table.constraints()) {
             sb.append(",\n    ").append(constraint);
         }
+        if (!table.uniqueKey().isEmpty()) {
+            // Named rather than left to the engine's auto-naming so a table created today and one
+            // migrated onto the same key end up with the same constraint name.
+            sb.append(",\n    ").append("CONSTRAINT ").append(uniqueKeyName(table.name()))
+                    .append(" UNIQUE (").append(String.join(", ", table.uniqueKey())).append(")");
+        }
         sb.append("\n)");
         return sb.toString();
+    }
+
+    /**
+     * Deterministic name for a table's business-key constraint, clipped to the 63-byte identifier
+     * limit PostgreSQL enforces (it silently truncates, which would make the name unpredictable).
+     */
+    static String uniqueKeyName(String tableName) {
+        String name = "uk_" + tableName;
+        return name.length() <= 63 ? name : name.substring(0, 63);
+    }
+
+    static String addUniqueConstraint(String tableName, List<String> columns) {
+        return "ALTER TABLE " + tableName + " ADD CONSTRAINT " + uniqueKeyName(tableName)
+                + " UNIQUE (" + String.join(", ", columns) + ")";
+    }
+
+    static String dropConstraint(String tableName, String constraintName) {
+        return "ALTER TABLE " + tableName + " DROP CONSTRAINT " + constraintName;
     }
 
     static String columnDefinition(ColumnModel column) {
