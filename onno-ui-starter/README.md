@@ -1615,3 +1615,18 @@ starts at midnight; seconds are omitted. Both support `isDisabled`, `isReadOnly`
 `isRequired`, `isInvalid`, and accessible labels. Generated `LocalDateTime` fields use
 `DateTimePicker`; the legacy `DatePicker includeTime` prop remains compatible.
 The host must include the `DateTimePicker` export to use it from a custom widget.
+
+### Editing document tabular sections
+
+Document sections use a numbered table with sticky headers, bounded scrolling and readable
+column widths. Forms containing sections expand to the available pane width. Positive pixel `widthHint` values are honored (minimum 80px); form fractions
+such as `half` use the type-based column default. Wide sections scroll inside the table.
+
+Add row focuses its first control. Tab follows the native control order; Enter in a text or
+number input advances to the next cell, adding a row after the final cell. Shift+Enter moves
+back. Multiline fields, pickers and IME composition retain their own keyboard behavior.
+Each row has a Remove action; keyboard guidance is available from the section header’s help icon.
+Undo remove restores the most
+recently removed row at its original position while preserving subsequent edits to other rows.
+These edits remain in the document draft until the document is saved. Read-only forms hide
+row actions and disable cells.

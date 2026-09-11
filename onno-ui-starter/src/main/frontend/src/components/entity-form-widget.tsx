@@ -1,11 +1,12 @@
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import type { ExtensionContext } from "../../../../../../onno-widget-sdk/src/extensions";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, useId } from "react";
 import { toast } from "@/components/ui/toast";
-import { Check, CircleCheck, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Check, CircleCheck, Undo2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { AttributeMeta, DashboardWidgetMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
 import { api, ApiError, type FormFeedback } from "@/lib/api";
 import { cn, enumPillStyle } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { HintIcon } from "@/components/ui/hint-icon";
@@ -597,16 +598,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     return errs;
   };
 
-  const addRow = (section: string) => {
+  const replaceRows = (section: string, rows: EntityRecord[]) => {
     markFormDirty(formPath);
-    setRowsBySection((prev) => ({ ...prev, [section]: [...(prev[section] ?? []), {}] }));
-  };
-  const removeRow = (section: string, idx: number) => {
-    markFormDirty(formPath);
-    setRowsBySection((prev) => ({
-      ...prev,
-      [section]: (prev[section] ?? []).filter((_, i) => i !== idx),
-    }));
+    setRowsBySection((prev) => ({ ...prev, [section]: rows }));
   };
   const setCell = (section: string, idx: number, key: string, value: unknown) => {
     markFormDirty(formPath);
@@ -717,7 +711,8 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
 
   const extensionContext: ExtensionContext = {surface:"entity-form",kind,name,recordId:isEdit ? id : undefined,record:record ?? undefined,permissions:{canWrite:!readOnly},openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)};
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-wrap justify-center gap-5"><div className="w-full min-w-0 max-w-2xl flex-1">
+    <div className={cn("mx-auto flex w-full flex-wrap justify-center gap-5", sections.length === 0 && "max-w-5xl")}>
+      <div className={cn("w-full min-w-0 flex-1", sections.length === 0 && "max-w-2xl")}>
       <div className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
@@ -793,8 +788,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
           headerValues={data}
           documentId={isEdit ? id ?? undefined : undefined}
           feedback={asyncFeedback}
-          onAdd={() => addRow(ts.name)}
-          onRemove={(idx) => removeRow(ts.name, idx)}
+          onRows={(rows) => replaceRows(ts.name, rows)}
           onCell={(idx, key, value) => setCell(ts.name, idx, key, value)}
         />
       ))}
@@ -936,104 +930,139 @@ function RecordDetailWidgets({
 // An editable grid for one tabular section: add/remove rows, with each cell rendered by the
 // same AttrControl the top-level fields use (so Ref pickers, enum selects, dates and typed
 // inputs all behave identically). Only visible-in-form attributes get a column.
-function TabularSectionEditor({
-  section,
-  rows,
-  readOnly,
-  headerValues,
-  documentId,
-  feedback,
-  onAdd,
-  onRemove,
-  onCell,
+export function TabularSectionEditor({
+  section, rows, readOnly, headerValues, documentId, feedback, onRows, onCell,
 }: {
   section: TabularSectionMeta;
   rows: EntityRecord[];
-  /** Viewer without write access: cells disable via the enclosing fieldset; hide add/remove too. */
   readOnly?: boolean;
-  /** The form's top-level values, so a cell's refFilter can cascade on a header field. */
   headerValues?: EntityRecord;
-  /** Current document id on edit; absent for a new document. */
   documentId?: string;
   feedback?: FormFeedback[];
-  onAdd: () => void;
-  onRemove: (idx: number) => void;
+  onRows: (rows: EntityRecord[]) => void;
   onCell: (idx: number, key: string, value: unknown) => void;
 }) {
   const t = useMessages();
-  const columns = useMemo<AttributeMeta[]>(
-    () =>
-      section.attributes
-        .filter((a) => a.visibleInForm !== false)
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-    [section]
-  );
+  const instanceId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<{ row: number; column: number } | null>(null);
+  // Keys belong to editor rows, never to their current index or persisted business values.
+  const nextKey = useRef(0);
+  const rowKeys = useRef<string[]>([]);
+  while (rowKeys.current.length < rows.length) rowKeys.current.push(String(nextKey.current++));
+  rowKeys.current.length = rows.length;
+  const [removed, setRemoved] = useState<{ row: EntityRecord; index: number; key: string } | null>(null);
+  const columns = useMemo(() => section.attributes
+    .filter((a) => a.visibleInForm !== false)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [section]);
   const title = section.name.charAt(0).toUpperCase() + section.name.slice(1);
-
-  // Booleans get a narrow, centered column; everything else flexes to share the width — so each
-  // row reads as a single compact line (like a spreadsheet) instead of a stacked card.
-  const isBoolCol = (a: AttributeMeta) => /^(boolean|Boolean)$/.test(a.javaType);
-  const colClass = (a: AttributeMeta) =>
-    isBoolCol(a) ? "shrink-0 basis-20" : "min-w-0 grow basis-44";
-
-  // The add-row control sits under the last row — where the new row will appear — so adding
-  // reads as "continue the grid downwards", not a jump back up to the header.
-  const addRowBtn = readOnly ? null : (
-    <button
-      type="button"
-      onClick={onAdd}
-      className="mt-1 flex w-full items-center gap-1.5 rounded-control border border-dashed border-border px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      <Plus className="size-4" aria-hidden="true" />
-      {t("action.addRow")}
-    </button>
-  );
+  const controls = (cell: Element) => Array.from(cell.querySelectorAll<HTMLElement>(
+    'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex="0"]'
+  )).filter((el) => el.getAttribute("aria-disabled") !== "true");
+  const focusCell = (row: number, column: number) => {
+    const cell = root.current?.querySelector(`[data-row="${row}"][data-column="${column}"]`);
+    const target = cell && controls(cell)[0];
+    if (!target) return false;
+    target.focus();
+    if (target instanceof HTMLInputElement && /^(text|number|email|url|tel)$/.test(target.type)) target.select();
+    return true;
+  };
+  useEffect(() => {
+    const destination = pendingFocus.current;
+    if (!destination) return;
+    pendingFocus.current = null;
+    if (!focusCell(destination.row, destination.column)) addButton.current?.focus();
+  });
+  const add = () => {
+    pendingFocus.current = { row: rows.length, column: 0 };
+    onRows([...rows, {}]);
+  };
+  const remove = (index: number) => {
+    setRemoved({ row: rows[index], index, key: rowKeys.current[index] });
+    rowKeys.current.splice(index, 1);
+    pendingFocus.current = { row: Math.min(index, rows.length - 2), column: 0 };
+    onRows(rows.filter((_, i) => i !== index));
+  };
+  const undo = () => {
+    if (!removed) return;
+    const index = Math.min(removed.index, rows.length);
+    rowKeys.current.splice(index, 0, removed.key);
+    pendingFocus.current = { row: index, column: 0 };
+    onRows([...rows.slice(0, index), removed.row, ...rows.slice(index)]);
+    setRemoved(null);
+  };
+  const columnWidth = (attr: AttributeMeta) => {
+    const hint = attr.widthHint?.trim() ?? "";
+    if (/^[1-9]\d*(px)?$/.test(hint)) return Math.max(80, parseInt(hint));
+    if (/^(boolean|Boolean)$/.test(attr.javaType)) return 96;
+    if (attr.isRef || attr.isEnum) return 240;
+    if (/^(BigDecimal|Integer|Long|Double|int|long|double)$/.test(attr.javaType)) return 144;
+    return 200;
+  };
 
   return (
-    <div className="mt-4 rounded-card border border-border bg-card p-4 sm:p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+    <div ref={root} className="mt-4 min-w-0 rounded-panel border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <h2 className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm font-medium">
+          {title}<span className="rounded-pill bg-muted px-2 py-0.5 text-xs text-muted-foreground">{rows.length}</span>
+        </h2>
+        {!readOnly && <HintIcon text={t("form.tabularKeyboardHint")} size={16} />}
       </div>
       {rows.length === 0 ? (
-        <>
-          <p className="text-sm text-muted-foreground">{t("empty.noRows")}</p>
-          {addRowBtn}
-        </>
+        <div className="border-t border-border px-4 py-6 text-sm text-muted-foreground">
+          {t(readOnly ? "empty.noRows" : "form.tabularEmptyHint")}
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-[28rem]">
-            {/* Column headers, shown once — aligned with the cells below via matching flex rules. */}
-            <div className="flex items-end gap-3 px-2 pb-1.5">
-              {columns.map((attr) => (
-                <div
-                  key={attr.fieldName}
-                  className={cn(colClass(attr), "text-xs font-medium text-muted-foreground", isBoolCol(attr) && "text-center")}
-                >
-                  {attr.displayName}
-                  {attr.required ? <span className="ml-0.5 text-destructive">*</span> : null}
-                </div>
-              ))}
-              <span className="w-8 shrink-0" aria-hidden="true" />
-            </div>
-            {/* One compact line per row; the remove control fades in on hover. */}
-            <div className="space-y-1">
+        <div className="max-h-[32rem] overflow-auto border-y border-border">
+          <table className="w-full table-fixed border-collapse text-sm"
+            style={{ minWidth: columns.reduce((width, attr) => width + columnWidth(attr), readOnly ? 48 : 96) }}>
+            <caption className="sr-only">{title}</caption>
+            <colgroup>
+              <col style={{ width: 48 }} />
+              {columns.map((attr) => <col key={attr.fieldName} style={{ width: columnWidth(attr) }} />)}
+              {!readOnly && <col style={{ width: 48 }} />}
+            </colgroup>
+            <thead className="sticky top-0 z-10 bg-muted">
+              <tr>
+                <th scope="col" className="px-2 py-3 text-xs font-medium text-muted-foreground">#</th>
+                {columns.map((attr) => (
+                  <th key={attr.fieldName} scope="col" className="px-2 py-3 text-left text-xs font-medium text-muted-foreground">
+                    {attr.displayName}{attr.required && <span className="ml-0.5 text-destructive">*</span>}
+                    <HintIcon text={attr.hint} size={13} />
+                  </th>
+                ))}
+                {!readOnly && <th scope="col"><span className="sr-only">{t("form.rowActions")}</span></th>}
+              </tr>
+            </thead>
+            <tbody>
               {rows.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="group flex items-center gap-3 rounded-sm px-2 py-1 transition-colors hover:bg-muted/40"
-                >
-                  {columns.map((attr) => (
-                    <div
-                      key={attr.fieldName}
-                      className={cn(colClass(attr), isBoolCol(attr) && "flex justify-center")}
-                      role="group"
-                      aria-describedby={`feedback-${section.name}-${idx}-${attr.fieldName}`}
-                    >
-                      <div className="min-w-0">
+                <tr key={rowKeys.current[idx]} className="border-t border-border hover:bg-muted/30 focus-within:bg-muted/50">
+                  <th scope="row" className="px-2 py-2 align-middle text-center text-xs font-normal tabular-nums text-muted-foreground">{idx + 1}</th>
+                  {columns.map((attr, column) => {
+                    const cellFeedback = feedback?.filter((item) => item.field === `${section.name}.${attr.fieldName}`) ?? [];
+                    const feedbackId = `${instanceId}-${rowKeys.current[idx]}-${attr.fieldName}`;
+                    return (
+                      <td key={attr.fieldName} data-row={idx} data-column={column} className="px-2 py-2 align-top"
+                        onKeyDown={(event) => {
+                          // Portaled pickers, multiline text and IME keep their native key behavior.
+                          if (readOnly || event.defaultPrevented || event.nativeEvent.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+                          if (!(event.target instanceof HTMLInputElement) || !event.currentTarget.contains(event.target)
+                              || event.target.getAttribute("role") === "combobox" || event.key !== "Enter") return;
+                          event.preventDefault();
+                          const step = event.shiftKey ? -1 : 1;
+                          const next = idx * columns.length + column + step;
+                          if (next < 0) return;
+                          if (next >= rows.length * columns.length) add();
+                          else focusCell(Math.floor(next / columns.length), next % columns.length);
+                        }}>
+                        <fieldset disabled={readOnly} aria-label={t("form.rowField", { row: idx + 1, field: attr.displayName })}
+                          aria-describedby={cellFeedback.length ? feedbackId : undefined} className="min-w-0">
                         <AttrControl
                           attr={attr}
                           value={row[attr.fieldName]}
                           compact
+                          placeholder={attr.placeholder}
                           invalid={feedback?.some(
                             (item) => item.field === `${section.name}.${attr.fieldName}` && item.severity === "ERROR"
                           )}
@@ -1057,36 +1086,34 @@ function TabularSectionEditor({
                           }
                           onChange={(v) => onCell(idx, attr.fieldName, v)}
                         />
-                        <div id={`feedback-${section.name}-${idx}-${attr.fieldName}`} aria-live="polite">
-                          <FeedbackMessages
-                            feedback={feedback?.filter(
-                              (item) => item.field === `${section.name}.${attr.fieldName}`
-                            ) ?? []}
-                          />
-                        </div>
-                      </div>
+                          {cellFeedback.length > 0 && <div id={feedbackId} aria-live="polite"><FeedbackMessages feedback={cellFeedback} /></div>}
+                        </fieldset>
+                      </td>
+                    );
+                  })}
+                  {!readOnly && <td className="px-1 py-2 align-top">
+                    <div className="flex">
+                      <Button type="button" variant="ghost" size="icon" className="size-9 text-muted-foreground hover:text-destructive" onClick={() => remove(idx)}
+                        aria-label={t("form.removeRow", { row: idx + 1 })} title={t("form.removeRow", { row: idx + 1 })}>
+                        <Trash2 className="size-4" />
+                      </Button>
                     </div>
-                  ))}
-                  {readOnly ? (
-                    <span className="w-8 shrink-0" aria-hidden="true" />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onRemove(idx)}
-                      aria-label={`Remove row ${idx + 1}`}
-                      title="Remove row"
-                      className="grid size-8 shrink-0 place-items-center rounded-control text-muted-foreground opacity-50 transition-colors hover:bg-accent hover:text-destructive group-hover:opacity-100"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
+                  </td>}
+                </tr>
               ))}
-            </div>
-            {addRowBtn}
-          </div>
+            </tbody>
+          </table>
         </div>
       )}
+      {!readOnly && <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <Button ref={addButton} type="button" variant="subtle" size="toolbar" onClick={add}>
+          <Plus className="size-4" />{t("action.addRow")}
+        </Button>
+        {removed && <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span role="status">{t("form.rowRemoved")}</span>
+          <Button type="button" variant="ghost" size="toolbar" onClick={undo}><Undo2 className="size-4" />{t("form.undoRemoveRow")}</Button>
+        </div>}
+      </div>}
     </div>
   );
 }

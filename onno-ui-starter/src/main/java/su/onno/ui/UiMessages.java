@@ -66,6 +66,12 @@ public final class UiMessages {
         // Action buttons / row-menu items.
         d.put("action.new", "New");
         d.put("action.add", "Add");
+        d.put("form.tabularKeyboardHint", "Tab to move between fields · Enter to continue from a text or number field");
+        d.put("form.rowActions", "Row actions");
+        d.put("form.rowField", "Row {row}: {field}");
+        d.put("form.removeRow", "Remove row {row}");
+        d.put("form.rowRemoved", "Row removed");
+        d.put("form.undoRemoveRow", "Undo remove");
         d.put("action.addRow", "Add row");
         d.put("action.cancel", "Cancel");
         d.put("action.save", "Write");
