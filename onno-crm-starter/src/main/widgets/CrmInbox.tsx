@@ -9,6 +9,7 @@ import { ExtensionSlot, type ExtensionContext } from "@onno/widget-sdk";
 import { ChatGroupActions } from "./ChatGroupActions";
 import { useChatGroups, type ChatGroup, type GroupChange } from "./chatGroups";
 import { NoteInput } from "./NoteInput";
+import "./InboxGrouping";
 import { contactChats, replySelection, type ReplySelection } from "./contactChats";
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
@@ -384,7 +385,7 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string }) {
+function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean }) {
   // Subscribe once at the root: `t` reads the store without subscribing, so this is what makes the
   // whole widget re-render into the server's language when /api/config lands after first paint.
   useTranslate();
@@ -396,8 +397,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const [lastFolderKey, setLastFolderKey] = useState<string | null>(null);
   const openFolder = (key: string) => { setLastFolderKey(key); setFolderKey(key); };
   const chatGroups = useChatGroups(workspaceKey);
-  const customFolders: ConversationFolder[] = chatGroups.groups.map(group => ({key:group.key,label:group.label,conversationIds:[],channelIds:[],statusIds:[],priorityIds:[],channels:[],statuses:[],priorities:[],unreadOnly:false}));
-  const folders = [...customFolders, ...(config?.folders ?? [])];
+  // "Everything" drops the grouping rather than the chats: no folder owns a row, so every row is listed.
+  const customFolders: ConversationFolder[] = flat ? [] : chatGroups.groups.map(group => ({key:group.key,label:group.label,conversationIds:[],channelIds:[],statusIds:[],priorityIds:[],channels:[],statuses:[],priorities:[],unreadOnly:false}));
+  const folders = flat ? [] : [...customFolders, ...(config?.folders ?? [])];
   const rootListRef = useRef<HTMLDivElement | null>(null);
   const detailListRef = useRef<HTMLDivElement | null>(null);
   const previousFolderRef = useRef<string | null>(null);
@@ -410,6 +412,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const activeFolder = folders.find(folder => folder.key === folderKey);
   // The first matching folder owns a chat in the list, avoiding duplicate entries.
   const owner = (row: EntityRecord) => {
+    if (flat) return undefined;
     const group = chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)));
     return group ? customFolders.find(folder => folder.key === group.key) : config?.folders.find(folder => matchesFolder(row, folder));
   };
@@ -1020,6 +1023,14 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     [routedMode, configuredKey].find(key => key && modeKeys.includes(key)) || modeKeys[0] || ""
   );
   const [modeLabels, setModeLabels] = useState<Record<string, string>>({});
+  // What a toolbar contribution has said about how this inbox is being read. Plain strings, so a
+  // control's choice is something the widget can act on without knowing which control set it.
+  const [view, setView] = useState<Record<string, string | undefined>>({});
+  const viewState = useMemo(() => ({
+    get: (key: string) => view[key],
+    set: (key: string, value: string | undefined) => setView(current => ({ ...current, [key]: value })),
+  }), [view]);
+  const flat = view.grouping === "flat";
   const [channel, setChannel] = useState("");
   const [account, setAccount] = useState("");
   const conversationPath = conversationId ? `/conversation/${encodeURIComponent(conversationId)}` : "";
@@ -1052,10 +1063,12 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   // Honour the routed folder only while the feed it belongs to is the one on screen.
   const folderRef = useRef(routedFolder);
   folderRef.current = feed && routedMode && feed.key !== routedMode ? "" : routedFolder;
+  const flatRef = useRef(flat);
+  flatRef.current = flat;
   const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {
     const current = feedRef.current;
     return current ? <CrmInbox {...props} open={()=>{}} scopedConfig={current.config} workspaceKey={current.key}
-      initialFolder={folderRef.current} /> : null;
+      initialFolder={folderRef.current} flat={flatRef.current} /> : null;
   },[]);
   const list = useMemo(()=>feed ? {
     ...feed.list,
@@ -1086,7 +1099,14 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     </Select>}
   </div> : undefined;
   if(error)return <p role="alert">{error}</p>;
-  const headerExtra = modeControls || channelControls ? <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}</div> : undefined;
+  // The toolbar is an outlet, not a fixed set of buttons: the CRM's own grouping switch arrives
+  // through it like any application's contribution, and `record` tells a contribution enough about
+  // this workspace to decide whether it belongs here at all.
+  const toolbar = <ExtensionSlot name="crm.inbox.toolbar" className="flex flex-wrap items-center gap-1"
+    context={{ surface: "crm-inbox", workspaceKey: feed?.key, route: route.get("mode") || "", permissions: {},
+      record: { folders: feed?.config.folders.length ?? 0, grouping: widget.extraConfig?.grouping ?? "true" },
+      view: viewState, refresh: () => setRefreshKey(key => key + 1) }} />;
+  const headerExtra = <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}{toolbar}</div>;
   return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>{t("crm.inbox.loading")}</p>;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

@@ -132,6 +132,9 @@ public final class UiMessages {
         d.put("crm.inbox.chatSelection", "Chat selection");
         d.put("crm.inbox.conversations", "Conversations");
         d.put("crm.inbox.emptyFolder", "No chats in this folder match the current filters.");
+        d.put("crm.inbox.everything", "Everything");
+        d.put("crm.inbox.folders", "Folders");
+        d.put("crm.inbox.grouping", "Grouping");
         d.put("crm.inbox.loading", "Loading inbox…");
         d.put("crm.inbox.noMatches", "No conversations match these filters");
         d.put("crm.inbox.noMatchesHint", "Clear a filter or create a conversation.");
