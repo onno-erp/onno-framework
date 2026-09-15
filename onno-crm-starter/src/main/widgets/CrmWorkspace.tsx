@@ -7,7 +7,7 @@ import { ChannelLogo } from "./ChannelLogo";
 import { Label, Button, Input, Badge, toast, registerWidget, useCallback, useEffect, useState, useUiEvents, type EntityRecord, type WidgetProps } from "@onno/widget-sdk";
 
 export type DisplayField = { key: string; label: string; section: string; format: string; visible: boolean; editable: boolean };
-export type ConversationFolder = { matchNone?: boolean; key: string; label: string; conversationIds: string[]; channelIds: string[]; statusIds: string[]; priorityIds: string[]; channels: string[]; statuses: string[]; priorities: string[]; unreadOnly: boolean };
+export type ConversationFolder = { matchNone?: boolean; key: string; label: string; icon?: string | null; color?: string | null; conversationIds: string[]; channelIds: string[]; statusIds: string[]; priorityIds: string[]; channels: string[]; statuses: string[]; priorities: string[]; unreadOnly: boolean };
 export type Config = { folders: ConversationFolder[]; fields: DisplayField[]; actions: { key: string; label: string; visible: boolean }[]; listTitle: string; listSubtitle: string; listPreview: string; showAvatar: boolean; showIdentities: boolean; showEmpty: boolean; showSystemEvents: boolean; showTimestamps: boolean; showDeliveryStatus: boolean };
 type Workspace = { version: number; config: Config; availableFields: DisplayField[] };
 type Contact = { catalogName: string; canWrite: boolean; fields: Record<string, unknown>; identities: { id: string; channel: string; address: string; externalId: string; verified: boolean }[]; conversations: { id: string; subject: string; channel: string }[] };

@@ -331,6 +331,21 @@ registerExtension({
 });
 ```
 
+### Folder identity
+
+A folder draws the plain folder glyph unless the workspace gives it one of its own:
+
+```java
+CrmWorkspaceService.Folder.conversations("booked", "Booked", ids).withIcon("party-popper", "#059669")
+```
+
+`icon` is a lucide glyph name, drawn through the shell's icon bridge; `color` is `#rrggbb`, used as
+the glyph's colour over a faded ground. Both are validated server-side and an unrecognised value
+falls back to the plain folder rather than rendering. Use it where the folders mean something the
+application already knows — a pipeline whose folders are its stages, each with the colour the
+planning team chose. Deliberately explicit rather than inferred from the label's wording: an
+inferred identity stops working the moment that label is written in another language.
+
 The controls use `EntityListWidget.queryParams` for additional server-validated query constraints,
 so pagination and ordinary text/date filters continue to run on the server. This property does not
 grant access or replace workspace selection rules.

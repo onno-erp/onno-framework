@@ -45,4 +45,23 @@ class CrmFolderConfigurationTest {
         service.initialize();
         assertThat(service.get().config().folders()).isEmpty();
     }
+
+    @Test
+    void aFolderMayCarryItsOwnGlyphAndHueWithoutLosingItsCriteria() {
+        var folder = Folder.channel("telegram", "Telegram", Channel.TELEGRAM).withIcon("party-popper", "#7C3AED");
+        assertThat(folder.icon()).isEqualTo("party-popper");
+        assertThat(folder.color()).isEqualTo("#7C3AED");
+        assertThat(folder.channelIds()).containsExactly(Channel.TELEGRAM);
+    }
+
+    /** Both reach the browser as an element property and an inline style, so neither is taken on trust. */
+    @Test
+    void anUnusableGlyphOrHueFallsBackToThePlainFolder() {
+        var folder = Folder.empty("partners", "Partners");
+        assertThat(folder.icon()).isNull();
+        assertThat(folder.color()).isNull();
+        assertThat(folder.withIcon("Party Popper", "#7C3AED").icon()).isNull();
+        assertThat(folder.withIcon("party-popper", "red").color()).isNull();
+        assertThat(folder.withIcon("party-popper\"); alert(1", "#7C3AED").icon()).isNull();
+    }
 }
