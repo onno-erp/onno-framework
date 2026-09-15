@@ -279,6 +279,34 @@ pagination. These are conversation accounts, not a claim that a connector is onl
 `list.channelAccounts` contains `{id, channel, label}` choices. Empty connected accounts still belong
 in connector settings until the host gives them explicit workspace visibility.
 
+### Inbox toolbar contributions
+
+The inbox header carries a `crm.inbox.toolbar` extension outlet, so an application can put its own
+control beside the workspace switcher instead of waiting for the CRM to grow one. A contribution
+receives `record.folders` (how many folders this workspace has) and `record.grouping` (the widget's
+`grouping` config) so it can decide whether it belongs on this particular inbox, and
+`context.view` — a small string map describing how the inbox is currently being read, which the
+renderer acts on.
+
+The CRM's own **Folders / Everything** switch is registered through that outlet as
+`onno.crm.inbox.grouping`; it writes `view.grouping`, and "Everything" drops the grouping without
+dropping any chat. Registering a contribution under the same id replaces it, and
+`.config("grouping", "false")` hides it where the folders carry the workspace's meaning rather than
+a reading preference — a sales pipeline whose folders are its stages, for example.
+
+```tsx
+registerExtension({
+  id: "acme.inbox.unassigned",
+  slot: "crm.inbox.toolbar",
+  component: ({ context }) => (
+    <Button size="toolbar" aria-pressed={context.view?.get("owner") === "none"}
+      onClick={() => context.view?.set("owner", context.view.get("owner") === "none" ? undefined : "none")}>
+      Unassigned
+    </Button>
+  ),
+});
+```
+
 The controls use `EntityListWidget.queryParams` for additional server-validated query constraints,
 so pagination and ordinary text/date filters continue to run on the server. This property does not
 grant access or replace workspace selection rules.
