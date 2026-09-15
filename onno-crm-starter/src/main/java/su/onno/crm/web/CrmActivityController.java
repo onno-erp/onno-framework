@@ -31,18 +31,34 @@ public class CrmActivityController {
     private final CurrentUserResolver users;
     private final CommentService comments;
     private final CommentAuthorAvatars authorAvatars;
+    private final su.onno.crm.service.CrmAttachments attachments;
     public CrmActivityController(CrmContactService contacts,ConversationRepository conversations,
             ConversationMessageRepository messages,InboxRepository inboxes,CrmInboxWorkspaceService workspaces,
-            UiAccessService access,CurrentUserResolver users,CommentService comments,CommentAuthorAvatars authorAvatars) {
+            UiAccessService access,CurrentUserResolver users,CommentService comments,CommentAuthorAvatars authorAvatars,
+            su.onno.crm.service.CrmAttachments attachments) {
         this.contacts=contacts;this.conversations=conversations;this.messages=messages;this.inboxes=inboxes;
         this.workspaces=workspaces;this.access=access;this.users=users;this.comments=comments;this.authorAvatars=authorAvatars;
+        this.attachments=attachments;
     }
     @org.springframework.beans.factory.annotation.Value("${onno.ui.read-only:false}") private boolean readOnly;
+    /**
+     * {@code attachments} carries the files on a message, empty for a note and for anything that has
+     * none. This feed is what the chat pane renders from, not just what a contact's history shows,
+     * so a reply's files have to arrive here or they are nowhere.
+     */
     public record Entry(String id,UUID conversationId,String subject,String channel,String kind,
-                        String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel) {
+                        String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
+                        List<su.onno.crm.service.CrmAttachments.View> attachments) {
+        public Entry {
+            attachments=attachments==null?List.of():List.copyOf(attachments);
+        }
+        public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
+                String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel) {
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,List.of());
+        }
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine) {
-            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,null);
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,null,List.of());
         }
     }
     public record Feed(List<Entry> entries,int total,boolean hasMore) {}
@@ -74,7 +90,8 @@ public class CrmActivityController {
                     message.getKind().name(),message.getDirection().name(),message.getAuthorName(),message.getBody(),
                     message.getSentAt(),message.getDeliveryStatus().name(),
                     message.getAuthorId()==null?null:messageAvatars.get(message.getAuthorId()),
-                    message.getAuthorId()!=null&&message.getAuthorId().equals(me.recordId()),accountLabel));
+                    message.getAuthorId()!=null&&message.getAuthorId().equals(me.recordId()),accountLabel,
+                    attachments.viewsOf(message)));
             var notes=comments.list("catalogs","crm_conversations",conversation.getId());
             var avatars=authorAvatars.avatarsFor(notes.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
             for(var note:notes)

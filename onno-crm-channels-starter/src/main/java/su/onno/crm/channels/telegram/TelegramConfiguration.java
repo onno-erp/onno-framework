@@ -23,7 +23,8 @@ public class TelegramConfiguration {
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
     TelegramInboxBridge telegramInboxBridge(TelegramClient client, JdbcTemplate jdbc,
             PlatformTransactionManager transactions, InboxRepository inboxes,
-            ConversationRepository conversations, ConversationMessageRepository messages, su.onno.crm.service.CrmContactService contacts, su.onno.crm.service.CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
-        return new TelegramInboxBridge(client, jdbc, transactions, inboxes, conversations, messages, contacts, workspace, statuses);
+            ConversationRepository conversations, ConversationMessageRepository messages, su.onno.crm.service.CrmContactService contacts, su.onno.crm.service.CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
+            su.onno.crm.service.CrmAttachments attachments) {
+        return new TelegramInboxBridge(client, jdbc, transactions, inboxes, conversations, messages, contacts, workspace, statuses, attachments);
     }
 }

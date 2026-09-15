@@ -45,6 +45,14 @@ Before upgrading, convert stored values with
 `Ui2MigrationTool.migrateDataUrlImages(...)` and rename those widgets to `image`/`images`. See
 [Migrating an application to onno 2.0](MIGRATING_TO_2_0.md).
 
+## Message attachments
+
+The CRM inbox uses the same endpoint for outbound attachments: the composer uploads each file and
+sends the returned URLs with the reply, which `ConversationMessage.attachments` stores newline-joined
+and the channel adapters read back through `MediaStorage.load` to upload to the provider. Only URLs
+this application issued are accepted. See
+[the CRM module contract](../onno-crm-starter/README.md#attachments).
+
 ## Configuration (`onno.media.*`)
 
 | Property | Default | Meaning |

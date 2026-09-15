@@ -59,10 +59,21 @@ public class ConversationMessage extends CatalogObject implements Validated {
     @Attribute(displayName = "External message id", length = 240)
     private String externalMessageId;
 
+    /**
+     * Files sent or received with this message, as newline-joined media URLs — the same shape the
+     * framework's {@code gallery} field widget persists, so an attachment is a reference to stored
+     * bytes rather than bytes inlined into the row.
+     */
+    @Attribute(displayName = "Attachments", length = 4000)
+    private String attachments;
+
     @Override
     public List<BusinessRule> rules() {
         return List.of(
                 BusinessRule.onField("conversation", "Choose a conversation", () -> conversation != null),
-                BusinessRule.onField("body", "Message cannot be empty", () -> body != null && !body.isBlank()));
+                // A file with no covering note is a message; a message with neither is not.
+                BusinessRule.onField("body", "Message cannot be empty",
+                        () -> (body != null && !body.isBlank())
+                                || (attachments != null && !attachments.isBlank())));
     }
 }

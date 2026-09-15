@@ -135,13 +135,37 @@ are installed automatically. Use `page.header(false)` when the list toolbar is s
 ## Message delivery contract
 
 `CrmMessageTransport.supports(conversation)` selects applicable providers, including unavailable ones.
-`CrmMessageTransport.connection(conversation)` reports connectivity, label and maximum text length.
+`CrmMessageTransport.connection(conversation)` reports connectivity, label, maximum text length, and
+how many files the provider carries on one message (`maxAttachments`, with `attachmentReason` when
+that is zero).
 When unavailable, the label explains why replies are blocked. The composer disables replies while
 checking, sending or unavailable, preserves drafts, and offers a connection recheck. Internal notes
 remain independent of channel connectivity.
 `enqueue(conversation, message)` runs in the same transaction as the outgoing message. Connectors
 write a durable outbox and deliver after commit. `CrmMessageRouter` rejects multiple providers
 claiming one conversation. Retries apply only to failed outbound replies in that conversation.
+
+### Attachments
+
+An outbound reply may carry files. They are stored as references, never as bytes on the message:
+the composer uploads each file through `POST /api/media` and sends back the returned URLs, which
+`ConversationMessage.attachments` keeps newline-joined — the same shape the `gallery` field widget
+persists. Only URLs this application's media endpoint issued are accepted, so nothing can point a
+delivery worker at an arbitrary address; a link typed by hand is refused.
+
+A reply may be files alone, with no covering note, and the conversation preview then names the
+files. The contact activity feed carries the files on every message entry, because that feed — not
+`GET /conversations/{id}/messages` — is what the chat pane renders from. At most ten files travel on one message, and a channel may allow fewer or none — the
+composer offers a paperclip only where `maxAttachments` is positive and otherwise explains why.
+Turning media ingestion off (`onno.media.enabled=false`) removes the capability entirely rather
+than failing at send time; messages already carrying files still render.
+
+| Channel | Outbound files |
+| --- | --- |
+| Telegram | Images as photos, everything else as documents; a note up to 1024 characters rides as the caption, a longer one is sent first as its own message |
+| Gmail | A `multipart/mixed` reply; refused above 25 MB of attachments, which is what Gmail accepts once base64 has inflated them |
+| WhatsApp | Uploaded to WhatsApp's own media store and sent by id, so files work without publishing your media; JPEG/PNG under 5 MB as images, the rest as documents |
+| Instagram | None — Instagram fetches attachments from a public URL, which the framework's media endpoint deliberately is not |
 
 `onno-crm-channels-starter` supplies opt-in Telegram, Gmail, Instagram and WhatsApp adapters. It also
 requires a host customer binding. Provider routing, deduplication, checkpoints and credential storage
@@ -161,11 +185,11 @@ requires `?workspace=<key>` and current membership; writes additionally require 
 | `GET /inbox-workspaces/{key}` | Authorized rows with filters, cursor/limit, totals, config and permissions |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body}` |
-| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength}` |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments}`; each message returns `attachments:[{url,filename,contentType,size,image}]` |
+| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,maxAttachments,attachmentReason}` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
 | `POST /conversations/{id}/read` | Acknowledge unread messages |
-| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity |
+| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape |
 | `GET/POST /chat-groups?workspace=...` | Personal grouping, only when enabled |
 | `GET /channels`, `POST /channels/{key}` | Credential-free status / authorized connector command |
 

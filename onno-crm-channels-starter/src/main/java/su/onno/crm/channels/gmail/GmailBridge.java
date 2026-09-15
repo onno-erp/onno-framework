@@ -30,10 +30,12 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-gmail");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";
     private final su.onno.crm.service.CrmConversationStatuses statuses;
+    private final su.onno.crm.service.CrmAttachments attachments;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("EMAIL","Email","/crm/channels/gmail.svg"); }
     public GmailBridge(GmailClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
-        ConversationRepository conversations,ConversationMessageRepository messages,CrmContactService contacts,CrmWorkspaceService workspace,ContactIdentityRepository identities, su.onno.crm.service.CrmConversationStatuses statuses) {
-        this.statuses=statuses;
+        ConversationRepository conversations,ConversationMessageRepository messages,CrmContactService contacts,CrmWorkspaceService workspace,ContactIdentityRepository identities, su.onno.crm.service.CrmConversationStatuses statuses,
+        su.onno.crm.service.CrmAttachments attachments) {
+        this.statuses=statuses;this.attachments=attachments;
         this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.contacts=contacts;this.workspace=workspace;this.identities=identities;
     }
@@ -71,7 +73,8 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
 
     public Connection connection(Conversation c){if(!ready||!Channel.EMAIL.equals(c.getChannel())||c.getInbox()==null)return new Connection(false,"Gmail is not connected",8000);var a=account();
         boolean mapped=a!=null&&a.inbox.equals(c.getInbox().id())&&a.active&&client.authorized()&&jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=?",Integer.class,a.email,c.getId())>0;
-        return new Connection(mapped,mapped?"Gmail":"Gmail is not connected or is paused",8000);}
+        return new Connection(mapped,mapped?"Gmail":"Gmail is not connected or is paused",8000)
+            .withAttachments(attachments.limit(),attachments.unavailableReason());}
     public void enqueue(Conversation c,ConversationMessage message){if(!connection(c).connected())throw new IllegalArgumentException("Gmail is not connected");var a=account();
         String thread=jdbc.queryForObject("SELECT thread_id FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=? ORDER BY last_received DESC NULLS LAST,thread_id DESC FETCH FIRST 1 ROW ONLY",String.class,a.email,c.getId());
         if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_outbox WHERE message_id=?",Integer.class,message.getId())==0)jdbc.update("INSERT INTO onno_crm_gmail_outbox VALUES (?,?,?,'QUEUED')",message.getId(),a.email,thread);
@@ -116,7 +119,13 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='SENDING' WHERE message_id=? AND state='QUEUED'",id)!=1)continue;
         try{var message=messages.findActiveById(id).orElseThrow();var c=conversations.findActiveById(message.getConversation().id()).orElseThrow();if(!connection(c).connected())throw new IllegalStateException();
             var row=jdbc.queryForMap("SELECT thread_id,reply_to,subject,reference_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=(SELECT thread_id FROM onno_crm_gmail_outbox WHERE message_id=?)",a.email,id);
-            var sent=client.send(GmailMail.reply(a.email,row.get("reply_to").toString(),row.get("subject").toString(),row.get("reference_id").toString(),message.getBody(),id),row.get("thread_id").toString());
+            var files=attachments.of(message).stream().map(file->new GmailMail.Outgoing(
+                file.filename(),file.contentType(),attachments.bytes(file))).toList();
+            // Base64 inflates by a third and Gmail refuses a message over 35 MB, so an oversized
+            // batch fails here with a reason rather than at the API with an opaque rejection.
+            long total=files.stream().mapToLong(f->f.content().length).sum();
+            if(total>25L*1024*1024)throw new IllegalStateException("Attachments exceed what Gmail accepts on one message");
+            var sent=client.send(GmailMail.reply(a.email,row.get("reply_to").toString(),row.get("subject").toString(),row.get("reference_id").toString(),message.getBody()==null?"":message.getBody(),files,id),row.get("thread_id").toString());
             tx.executeWithoutResult(s->finish(id,true,sent.path("id").asText()));
         }catch(Exception e){tx.executeWithoutResult(s->finish(id,false,null));}
     }}

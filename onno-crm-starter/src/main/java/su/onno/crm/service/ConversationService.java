@@ -22,25 +22,27 @@ public class ConversationService {
     private final ConversationMessageRepository messages;
 
     private final CrmMessageTransport transport;
+    private final CrmAttachments attachments;
     private final CrmConversationStatuses statuses;
     private final org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents;
 
     @org.springframework.beans.factory.annotation.Autowired
     public ConversationService(ConversationRepository conversations, ConversationMessageRepository messages,
-            List<CrmMessageTransport> transports, CrmConversationStatuses statuses,
+            List<CrmMessageTransport> transports, CrmAttachments attachments, CrmConversationStatuses statuses,
             org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents) {
-        this(conversations, messages, new CrmMessageRouter(transports), statuses, agents);
+        this(conversations, messages, new CrmMessageRouter(transports), attachments, statuses, agents);
     }
 
     public ConversationService(
             ConversationRepository conversations,
             ConversationMessageRepository messages,
-            CrmMessageTransport transport, CrmConversationStatuses statuses,
+            CrmMessageTransport transport, CrmAttachments attachments, CrmConversationStatuses statuses,
             org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents
     ) {
         this.conversations = conversations;
         this.messages = messages;
-        this.transport = transport; this.statuses = statuses;this.agents = agents;
+        this.transport = transport; this.attachments = attachments;
+        this.statuses = statuses;this.agents = agents;
     }
 
     public List<ConversationMessage> messages(UUID conversationId) {
@@ -49,26 +51,42 @@ public class ConversationService {
                 Ref.of(Conversation.class, conversationId));
     }
 
+    /**
+     * A reply as the agent composed it.
+     *
+     * <p>A record rather than four positional arguments: {@code authorName} and {@code authorId} are
+     * both strings and mean entirely different things, so a transposition at a call site would
+     * compile and quietly attach the wrong identity to a message.
+     *
+     * @param files media URLs this application's upload endpoint issued; a reply may be files alone,
+     *              because a quote sent with no covering note is still a message. The channel
+     *              decides whether files travel at all, and how many.
+     */
+    public record Reply(String body, List<String> files, String authorName, String authorId) {
+        public Reply {
+            files = files == null ? List.of() : List.copyOf(files);
+        }
+        public Reply(String body, String authorName) { this(body, List.of(), authorName, null); }
+    }
+
     /** Kept for callers that have no signed-in agent to attribute the reply to. */
     @Transactional
-    public ConversationMessage addMessage(
-            UUID conversationId,
-            String body,
-            String authorName
-    ) {
-        return addMessage(conversationId, body, authorName, null);
+    public ConversationMessage addMessage(UUID conversationId, String body, String authorName) {
+        return addMessage(conversationId, new Reply(body, authorName));
+    }
+
+    /** Kept for callers that attribute the reply but carry no files. */
+    @Transactional
+    public ConversationMessage addMessage(UUID conversationId, String body, String authorName, String authorId) {
+        return addMessage(conversationId, new Reply(body, List.of(), authorName, authorId));
     }
 
     @Transactional
-    public ConversationMessage addMessage(
-            UUID conversationId,
-            String body,
-            String authorName,
-            String authorId
-    ) {
+    public ConversationMessage addMessage(UUID conversationId, Reply reply) {
         Conversation conversation = requireConversation(conversationId);
-        String normalized = body == null ? "" : body.trim();
-        if (normalized.isEmpty()) {
+        String normalized = reply.body() == null ? "" : reply.body().trim();
+        List<String> accepted = attachments.accept(reply.files());
+        if (normalized.isEmpty() && accepted.isEmpty()) {
             throw new IllegalArgumentException("Message cannot be empty");
         }
 
@@ -77,14 +95,25 @@ public class ConversationService {
         if (normalized.length() > Math.min(8000, connection.maxTextLength())) {
             throw new IllegalArgumentException("Message is too long (maximum " + connection.maxTextLength() + " characters)");
         }
+        if (!accepted.isEmpty()) {
+            if (!connection.canAttach()) throw new IllegalArgumentException(connection.attachmentUnavailableReason());
+            if (accepted.size() > connection.maxAttachments())
+                throw new IllegalArgumentException("This channel carries at most "
+                        + connection.maxAttachments() + " file(s) per message");
+        }
         LocalDateTime now = LocalDateTime.now();
         ConversationMessage message = new ConversationMessage();
         message.setConversation(Ref.of(Conversation.class, conversationId));
         message.setChannel(conversation.getChannel());
-        message.setAuthorName(authorName == null || authorName.isBlank() ? "CRM agent" : authorName);
-        message.setAuthorId(authorId == null || authorId.isBlank() ? null : authorId);
+        message.setAuthorName(reply.authorName() == null || reply.authorName().isBlank()
+                ? "CRM agent" : reply.authorName());
+        message.setAuthorId(reply.authorId() == null || reply.authorId().isBlank() ? null : reply.authorId());
         message.setBody(normalized);
-        message.setDescription(preview(normalized, 100));
+        message.setAttachments(attachments.store(accepted));
+        // A files-only message still needs something to read in a conversation list, so the preview
+        // names the files rather than leaving the row blank.
+        String summary = normalized.isEmpty() ? filesSummary(accepted) : normalized;
+        message.setDescription(preview(summary, 100));
         message.setSentAt(now);
         message.setKind(MessageKind.AGENT_REPLY);
         message.setDirection(MessageDirection.OUTBOUND);
@@ -94,10 +123,15 @@ public class ConversationService {
         transport.enqueue(conversation, saved);
 
         conversation.setLastMessageAt(now);
-        conversation.setLastMessagePreview(preview(normalized, 180));
+        conversation.setLastMessagePreview(preview(summary, 180));
         conversation.setUnreadCount(0);
         conversations.save(conversation);
         return saved;
+    }
+
+    private String filesSummary(List<String> accepted) {
+        if (accepted.size() == 1) return attachments.describe(accepted.getFirst()).filename();
+        return accepted.size() + " files";
     }
 
     public CrmMessageTransport.Connection delivery(UUID conversationId) {

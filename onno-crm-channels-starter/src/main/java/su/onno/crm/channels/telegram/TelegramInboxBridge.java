@@ -29,6 +29,7 @@ public class TelegramInboxBridge implements CrmMessageTransport {
     private final java.util.concurrent.locks.ReentrantReadWriteLock credentialLock = new java.util.concurrent.locks.ReentrantReadWriteLock();
     private final su.onno.crm.service.CrmContactService contacts;
     private final su.onno.crm.service.CrmWorkspaceService workspace;
+    private final su.onno.crm.service.CrmAttachments attachments;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
 
@@ -48,8 +49,9 @@ public class TelegramInboxBridge implements CrmMessageTransport {
     private final su.onno.crm.service.CrmConversationStatuses statuses;
     public TelegramInboxBridge(TelegramClient client, JdbcTemplate jdbc, PlatformTransactionManager transactions,
              InboxRepository inboxes, ConversationRepository conversations,
-            ConversationMessageRepository messages, su.onno.crm.service.CrmContactService contacts, su.onno.crm.service.CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
-        this.statuses=statuses;
+            ConversationMessageRepository messages, su.onno.crm.service.CrmContactService contacts, su.onno.crm.service.CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
+            su.onno.crm.service.CrmAttachments attachments) {
+        this.statuses=statuses;this.attachments=attachments;
         this.client = client;
         this.contacts = contacts; this.workspace = workspace;
         this.jdbc = jdbc;
@@ -188,13 +190,18 @@ public class TelegramInboxBridge implements CrmMessageTransport {
         boolean active = conversation.getInbox().id().equals(inboxId())
                 && inboxes.findActiveById(conversation.getInbox().id()).map(Inbox::isActive).orElse(false);
         return new Connection(mapped && active, mapped && active ? "Telegram @" + bot.username()
-                : "No Telegram chat linked — message @" + bot.username() + " to start", 4096);
+                : "No Telegram chat linked — message @" + bot.username() + " to start", 4096)
+                .withAttachments(attachments.limit(), attachments.unavailableReason());
     }
 
     @Override
     public void enqueue(Conversation conversation, ConversationMessage message) {
         if (!connection(conversation).connected()) throw new IllegalArgumentException("Telegram chat is not connected");
-        if (message.getBody().length() > 4096) throw new IllegalArgumentException("Telegram allows up to 4096 characters");
+        if (message.getBody() != null && message.getBody().length() > 4096)
+            throw new IllegalArgumentException("Telegram allows up to 4096 characters");
+        if (attachments.of(message).size() > su.onno.crm.service.CrmAttachments.MAX_PER_MESSAGE)
+            throw new IllegalArgumentException("Telegram carries at most "
+                    + su.onno.crm.service.CrmAttachments.MAX_PER_MESSAGE + " files per message");
         long chatId = jdbc.queryForObject("SELECT chat_id FROM onno_crm_telegram_chat WHERE bot_id=? AND conversation_id=?",
                 Long.class, bot.id(), conversation.getId());
         int existing = jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_telegram_outbox WHERE message_id=?", Integer.class, message.getId());
@@ -298,11 +305,13 @@ public class TelegramInboxBridge implements CrmMessageTransport {
                     long chatId = jdbc.queryForObject("SELECT chat_id FROM onno_crm_telegram_outbox WHERE message_id=?", Long.class, id);
                     long currentChat = jdbc.queryForObject("SELECT chat_id FROM onno_crm_telegram_chat WHERE bot_id=? AND conversation_id=?",
                             Long.class, bot.id(), conversation.getId());
+                    var files = attachments.of(message);
+                    String text = message.getBody() == null ? "" : message.getBody();
                     if (currentChat != chatId || message.getDeliveryStatus() != DeliveryStatus.QUEUED
-                            || message.getBody() == null || message.getBody().isBlank() || message.getBody().length() > 4096) {
+                            || (text.isBlank() && files.isEmpty()) || text.length() > 4096) {
                         throw new IllegalStateException("Queued message no longer matches its destination or content limits");
                     }
-                    long externalId = client.send(chatId, message.getBody());
+                    long externalId = send(chatId, text, files);
                     tx.executeWithoutResult(status -> finish(id, DeliveryStatus.SENT, Long.toString(externalId), null));
                 } catch (RuntimeException ex) {
                     String error = ex instanceof TelegramClient.ApiFailure ? ex.getMessage()
@@ -317,6 +326,29 @@ public class TelegramInboxBridge implements CrmMessageTransport {
         } catch (RuntimeException ex) {
             log.warn("Telegram delivery worker paused ({})", ex.getClass().getSimpleName());
         }
+    }
+
+    /**
+     * Send one reply. With no files it is a plain message. With files, a short note rides as the
+     * caption of the first file — as it would if a person had sent it — and a note too long for a
+     * caption goes first as its own message, because Telegram would otherwise silently truncate it.
+     *
+     * <p>The id kept is the first message Telegram accepted. A failure partway through leaves the
+     * earlier files delivered, so the error says to check the chat rather than implying nothing was
+     * sent; the retry path is a person's decision, not an automatic resend.
+     */
+    private long send(long chatId, String text, List<su.onno.crm.service.CrmAttachments.Attachment> files) {
+        if (files.isEmpty()) return client.send(chatId, text);
+        boolean captioned = !text.isBlank() && text.length() <= TelegramClient.CAPTION_LIMIT;
+        long first = 0;
+        if (!text.isBlank() && !captioned) first = client.send(chatId, text);
+        for (int index = 0; index < files.size(); index++) {
+            var file = files.get(index);
+            long sent = client.sendFile(chatId, file.filename(), file.contentType(), attachments.bytes(file),
+                    captioned && index == 0 ? text : null);
+            if (first == 0) first = sent;
+        }
+        return first;
     }
 
     private void finish(UUID id, DeliveryStatus result, String externalId, String error) {

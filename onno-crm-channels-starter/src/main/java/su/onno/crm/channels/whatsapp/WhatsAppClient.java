@@ -33,6 +33,66 @@ public class WhatsAppClient {
   if(!alias.matches("[1-9][0-9]{6,14}"))throw new IllegalArgumentException("Invalid WhatsApp test recipient alias");
   return alias;
  }
+ /** WhatsApp's own caption ceiling; a longer note is sent as its own message before the file. */
+ public static final int CAPTION_LIMIT=1024;
+ /** Documents cap here on the Cloud API; images cap lower and are sent as documents instead. */
+ public static final int UPLOAD_LIMIT=100*1024*1024;
+ private static final int IMAGE_LIMIT=5*1024*1024;
+ private static final Set<String> IMAGE_TYPES=Set.of("image/jpeg","image/png");
+
+ /**
+  * Upload a file to the account's media store and send it to a recipient.
+  *
+  * <p>WhatsApp takes a file either as a public link or as a media id it holds itself. Uploading
+  * gets the id, which is what lets a deployment whose own media sits behind sign-in send files at
+  * all — the bytes go to WhatsApp directly rather than WhatsApp being asked to fetch a URL.
+  *
+  * <p>Only JPEG and PNG within WhatsApp's image ceiling travel as images; everything else — a PDF,
+  * a spreadsheet, a large photo — is a document, which is the type that carries a filename.
+  */
+ public String sendFile(String account,String recipient,String filename,String contentType,byte[] content,String caption){
+  if(content==null||content.length==0)throw new IllegalArgumentException("Attachment is empty");
+  if(content.length>UPLOAD_LIMIT)throw new IllegalArgumentException("File is larger than WhatsApp accepts (100 MB)");
+  String type=contentType==null||contentType.isBlank()?"application/octet-stream":contentType.toLowerCase(Locale.ROOT);
+  boolean image=IMAGE_TYPES.contains(type)&&content.length<=IMAGE_LIMIT;
+  String mediaId=upload(credentials(),filename,type,content);
+  var body=json.createObjectNode().put("messaging_product","whatsapp").put("recipient_type","individual")
+    .put("to",resolveRecipient(credentials(),recipient)).put("type",image?"image":"document");
+  var media=body.putObject(image?"image":"document").put("id",mediaId);
+  if(!image)media.put("filename",safeName(filename));
+  if(caption!=null&&!caption.isBlank())media.put("caption",caption);
+  return required(call(account+"/messages",body).path("messages").path(0),"id");
+ }
+ private String upload(JsonNode credentials,String filename,String contentType,byte[] content){
+  String boundary="onno"+UUID.randomUUID().toString().replace("-","");
+  var body=new java.io.ByteArrayOutputStream();
+  try{
+   body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"messaging_product\"\r\n\r\nwhatsapp\r\n").getBytes(StandardCharsets.UTF_8));
+   body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"type\"\r\n\r\n"+contentType+"\r\n").getBytes(StandardCharsets.UTF_8));
+   body.write(("--"+boundary+"\r\nContent-Disposition: form-data; name=\"file\"; filename=\""+safeName(filename)
+     +"\"\r\nContent-Type: "+contentType+"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+   body.write(content);
+   body.write(("\r\n--"+boundary+"--\r\n").getBytes(StandardCharsets.UTF_8));
+  }catch(java.io.IOException e){throw new IllegalStateException("Attachment could not be prepared");}
+  try{
+   String token=required(credentials,"access_token");String phone=required(credentials,"phone_number_id");
+   var request=HttpRequest.newBuilder(URI.create("https://graph.facebook.com/v25.0/"+phone+"/media"))
+     .timeout(Duration.ofSeconds(120)).header("Authorization","Bearer "+token)
+     .header("Content-Type","multipart/form-data; boundary="+boundary)
+     .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())).build();
+   var response=http.send(request,HttpResponse.BodyHandlers.ofString());
+   if(response.statusCode()<200||response.statusCode()>=300)
+    throw apiFailure(response.statusCode(),response.headers().firstValue("Retry-After").orElse("60"),response.body());
+   return required(json.readTree(response.body()),"id");
+  }catch(ApiFailure e){throw e;}
+  catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException("WhatsApp upload interrupted");}
+  catch(Exception e){throw new IllegalArgumentException("WhatsApp upload failed; check credentials and connection");}
+ }
+ /** The filename is quoted into a header and shown to the recipient, so it is kept plain. */
+ static String safeName(String name){
+  String leaf=name==null||name.isBlank()?"attachment":name.replaceAll("[\\r\\n\"\\\\/]","_").strip();
+  return leaf.isBlank()?"attachment":leaf.length()<=120?leaf:leaf.substring(0,120);
+ }
  public boolean verifyToken(String token){String expected=credentials().path("verify_token").asText();return !expected.isBlank()&&token!=null&&MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8),token.getBytes(StandardCharsets.UTF_8));}
  public boolean verifySignature(byte[] body,String signature){
   if(signature==null||!signature.matches("sha256=[0-9a-fA-F]{64}"))return false;
