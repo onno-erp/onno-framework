@@ -377,6 +377,26 @@ function TimelineComment({ comment, config }: { comment: Comment; config?: Confi
   );
 }
 
+/**
+ * A folder's own glyph and hue, when the workspace gave it one. Without them the plain folder is
+ * kept: guessing an identity from the wording of a label stops working the moment the label is
+ * written in another language.
+ */
+function FolderTile({ folder, size = "size-10", icon = 20 }: { folder: ConversationFolder; size?: string; icon?: number }) {
+  if (!folder.icon) return (
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-field bg-primary/10 text-primary`}>
+      <Folder className="size-5" />
+    </span>
+  );
+  const color = folder.color ?? undefined;
+  return (
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-field border`}
+      style={color ? { color, backgroundColor: `${color}1f`, borderColor: `${color}3d` } : undefined}>
+      <ShellIcon name={folder.icon} size={icon} />
+    </span>
+  );
+}
+
 function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
   return !folder.matchNone && (!folder.conversationIds?.length || folder.conversationIds.includes(String(row.id)))
     && (!folder.channels.length || [...folder.channels, ...(folder.channelIds ?? [])].includes(String(row.channel)))
@@ -785,18 +805,19 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                   shown.add(folder.key);
                   const members = folderRows(folder.key);
                   return <Button variant="ghost" key={`folder:${folder.key}`} data-folder-key={folder.key} type="button" onClick={() => openFolder(folder.key)} className="h-auto whitespace-normal font-normal flex w-full items-center gap-3 rounded-field px-3 py-3 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-field bg-primary/10 text-primary"><Folder className="size-5" /></span>
+                    <FolderTile folder={folder} />
                     <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{folder.label}</span><span className="mt-1 block truncate text-[11px] text-muted-foreground">{members.map(member => string(member, "customerDisplay", string(member, "description"))).join(", ")}</span></span>
                     <span className="text-xs tabular-nums text-muted-foreground">{members.length}</span><ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                   </Button>;
                 });
-                return <>{entries}{folders.filter(folder => !shown.has(folder.key)).map(folder => <Button variant="ghost" key={folder.key} data-folder-key={folder.key} type="button" onClick={() => openFolder(folder.key)} className="h-auto whitespace-normal font-normal flex w-full items-center gap-3 rounded-field px-3 py-3 text-left text-muted-foreground hover:bg-muted/50"><Folder className="size-5" /><span className="flex-1 text-sm">{folder.label}</span><span className="text-xs">0</span><ChevronRight className="size-4" /></Button>)}</>;
+                return <>{entries}{folders.filter(folder => !shown.has(folder.key)).map(folder => <Button variant="ghost" key={folder.key} data-folder-key={folder.key} type="button" onClick={() => openFolder(folder.key)} className="h-auto whitespace-normal font-normal flex w-full items-center gap-3 rounded-field px-3 py-3 text-left text-muted-foreground hover:bg-muted/50"><FolderTile folder={folder} size="size-9" icon={16} /><span className="flex-1 text-sm">{folder.label}</span><span className="text-xs">0</span><ChevronRight className="size-4" /></Button>)}</>;
               })()}
             </ConversationList>
           </div>
           <div ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-border/50 px-3 py-3">
               <Button variant="ghost" size="sm" aria-label={t("crm.inbox.back")} onClick={() => setFolderKey(null)}><ArrowLeft className="size-4" /></Button>
+              {displayedFolder && <FolderTile folder={displayedFolder} size="size-8" icon={16} />}
               <div className="min-w-0"><div className="truncate text-sm font-semibold">{displayedFolder?.label}</div><div className="mt-0.5 text-[11px] text-muted-foreground">{detailRows.length} chats in the current view</div></div>
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>

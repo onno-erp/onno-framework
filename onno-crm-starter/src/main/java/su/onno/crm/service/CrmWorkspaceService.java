@@ -38,16 +38,43 @@ public class CrmWorkspaceService {
     public record Action(String key, String label, boolean visible) {}
     /** Folder rules intersect; empty criteria match every value. Order in Config controls display order. */
     public record Folder(String key, String label, List<String> channels,
-                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone) {
+                         List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone,
+                         String icon, String color) {
+        /** Lucide glyph names, as the shell's icon bridge takes them elsewhere in the UI. */
+        private static final java.util.regex.Pattern ICON = java.util.regex.Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
+        private static final java.util.regex.Pattern COLOR = java.util.regex.Pattern.compile("#[0-9a-fA-F]{6}");
         public Folder {
             conversationIds = List.copyOf(conversationIds);
             channels = List.copyOf(channels);
             statuses = List.copyOf(statuses);
             priorities = List.copyOf(priorities);
+            // Both reach the browser as an element property and an inline style, so neither is taken
+            // on trust: an unrecognised value falls back to the plain folder rather than rendering.
+            icon = icon == null || !ICON.matcher(icon).matches() ? null : icon;
+            color = color == null || !COLOR.matcher(color).matches() ? null : color;
+        }
+        public Folder(String key, String label, List<String> channels,
+                      List<String> statuses, List<String> priorities, boolean unreadOnly, List<UUID> conversationIds, boolean matchNone) {
+            this(key,label,channels,statuses,priorities,unreadOnly,conversationIds,matchNone,null,null);
+        }
+        /**
+         * The same folder, showing a glyph and a hue of its own.
+         *
+         * <p>A column of folders that all draw the same grey folder reads as one repeated row. Where
+         * a workspace's folders mean something the application already knows — a pipeline whose
+         * folders are its stages, each with a colour the planning team chose — it can say so here
+         * rather than leaving the inbox to guess from the wording of a label, which no longer works
+         * the moment that label is written in another language.
+         *
+         * @param icon a lucide glyph name such as {@code party-popper}; null keeps the folder glyph
+         * @param color a {@code #rrggbb} hue, drawn as the glyph's colour over a faded ground
+         */
+        public Folder withIcon(String icon, String color) {
+            return new Folder(key,label,channels,statuses,priorities,unreadOnly,conversationIds,matchNone,icon,color);
         }
         /** Explicitly empty folders remain visible without matching the entire inbox. */
         public static Folder empty(String key, String label) {
-            return new Folder(key,label,List.of(),List.of(),List.of(),false,List.of(),true);
+            return new Folder(key,label,List.of(),List.of(),List.of(),false,List.of(),true,null,null);
         }
         public Folder(String key, String label, List<String> channels, List<String> statuses,
                       List<String> priorities, boolean unreadOnly, List<UUID> conversationIds) {
