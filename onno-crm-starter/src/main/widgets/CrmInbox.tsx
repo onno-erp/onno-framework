@@ -52,7 +52,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X } from "lucide-react";
+import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip } from "lucide-react";
 
 type Message = {
   id: string;
@@ -67,9 +67,13 @@ type Message = {
   body: string;
   sentAt: string;
   deliveryStatus: string;
+  attachments?: Attachment[];
 };
 
-type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string };
+/** A file on a message. The url is a reference issued by `/api/media`, never the bytes themselves. */
+type Attachment = { url: string; filename: string; contentType: string; size: number; image: boolean };
+
+type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string; maxAttachments?: number; attachmentReason?: string };
 
 type Comment = {
   id: string;
@@ -260,6 +264,43 @@ function ConversationRow({
   );
 }
 
+/** "2.4 MB" — a size a person can judge before clicking, not a byte count. */
+function fileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+/**
+ * The files on a message. An image shows itself, because that is what was sent; anything else is a
+ * named link, since a spreadsheet has no useful preview and a filename is what people look for.
+ */
+function Attachments({ files, outbound }: { files: Attachment[]; outbound: boolean }) {
+  if (!files.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-col gap-1.5">
+      {files.map(file => file.image ? (
+        <a key={file.url} href={file.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-field">
+          <img src={file.url} alt={file.filename} loading="lazy"
+            className="max-h-64 w-auto max-w-full rounded-field object-cover" />
+        </a>
+      ) : (
+        <a key={file.url} href={file.url} target="_blank" rel="noreferrer" download={file.filename}
+          className={outbound
+            ? "flex items-center gap-2 rounded-field bg-primary-foreground/15 px-2.5 py-2 text-[12px] hover:bg-primary-foreground/25"
+            : "flex items-center gap-2 rounded-field bg-muted px-2.5 py-2 text-[12px] hover:bg-muted/70"}>
+          <Paperclip className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate font-medium">{file.filename}</span>
+          {file.size > 0 && <span className="shrink-0 tabular-nums opacity-70">{fileSize(file.size)}</span>}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: { channel?: string; config?: Config; message: Message; avatarUrl?: string | null; retry: () => void; busy: boolean }) {
   const outbound = message.direction === "OUTBOUND";
   return (
@@ -277,7 +318,9 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
             {message.authorName}
           </span>
         </div>
-        <ChatMessageBody message={message} fallback={<p className="mt-1 whitespace-pre-wrap text-[13px] leading-5">{message.body}</p>} />
+        <ChatMessageBody message={message} fallback={message.body?.trim()
+          ? <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5">{message.body}</p> : null} />
+        <Attachments files={message.attachments ?? []} outbound={outbound} />
         <div className={outbound
           ? "mt-1 flex justify-end gap-1.5 text-[10px] text-primary-foreground/70"
           : "mt-1 flex justify-end gap-1.5 text-[10px] text-muted-foreground"}
@@ -403,6 +446,10 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
   const [noteBody, setNoteBody] = useState("");
+  // Files already uploaded and waiting to go with the next reply, and the ones still uploading.
+  const [pending, setPending] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyPages, setHistoryPages] = useState(1);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
@@ -487,7 +534,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     try {
       const [activity, nextCustomer, nextDelivery] = await Promise.all([
         (async () => {
-          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string};
+          // This feed, not /messages, is what the chat pane renders — so it has to carry the files.
+          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[]};
           const entries:ActivityEntry[]=[];let hasMore=false;
           for(let page=0;page<historyPages;page++) {
             const response=await fetch(`/api/crm/contacts/${customerId}/activity?limit=100&offset=${page*100}`,{credentials:"same-origin"});
@@ -539,6 +587,15 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
 
   const replyState = composerState({canReply:!!action(config,"reply") && !!action(config,"sendReply"), busy,
     loaded:loadedConversationId === selectedId, failed:deliveryFailed, delivery});
+  // The clip follows the channel: a full tray, a read-only channel and a channel that simply does
+  // not carry files are three different answers, and the button's title gives the right one.
+  const attachState = (() => {
+    if (replyState.disabled) return { disabled: true, reason: replyState.message || "Replies are unavailable" };
+    const limit = delivery?.maxAttachments ?? 0;
+    if (limit <= 0) return { disabled: true, reason: delivery?.attachmentReason || t("crm.chat.attachUnavailable") };
+    if (pending.length >= limit) return { disabled: true, reason: t("crm.chat.attachLimit", { count: limit }) };
+    return { disabled: false, reason: t("crm.chat.attach") };
+  })();
   const composerStatusId = useId();
 
   const acknowledgeRead = useCallback(() => Promise.all(channelRows.filter(row => String(row.customer) === String(selected?.customer) && Number(row.unreadCount || 0)>0).map(row => command(`/api/crm/conversations/${row.id}/read`))), [channelRows, selected?.customer, workspaceKey]);
@@ -555,12 +612,54 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     const id = String(row.id);
     setDelivery(null);
     setDraft("");
+    setPending([]);
     setError(null);
     setSelectedId(id);
   };
 
+  /**
+   * Upload what the agent picked, then keep it in the tray until the reply is sent. Uploading on
+   * pick rather than on send means the paperclip and the Send button never race, and a file that
+   * the server refuses says so while there is still a composer to say it in.
+   */
+  const attach = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = (delivery?.maxAttachments ?? 0) - pending.length;
+    const chosen = Array.from(files).slice(0, Math.max(0, room));
+    if (chosen.length < files.length) setError(t("crm.chat.attachTooMany", { count: delivery?.maxAttachments ?? 0 }));
+    else setError(null);
+    for (const file of chosen) {
+      setUploading(count => count + 1);
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const token = document.cookie.split(";").map(part => part.trim()).find(part => part.startsWith("XSRF-TOKEN="))?.slice(11);
+        const response = await fetch("/api/media", { method: "POST", credentials: "same-origin",
+          headers: token ? { "X-XSRF-TOKEN": decodeURIComponent(token) } : undefined, body: form });
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          throw new Error(failure.message || failure.detail || t("crm.chat.uploadFailedFile", { name: file.name }));
+        }
+        const stored = await response.json();
+        setPending(current => current.some(item => item.url === stored.url) ? current : [...current, {
+          url: stored.url, filename: stored.filename || file.name,
+          contentType: stored.contentType || file.type || "application/octet-stream",
+          size: stored.size ?? file.size,
+          image: /^image\/(png|jpeg|gif|webp|avif)$/.test(stored.contentType || file.type || ""),
+        }]);
+      } catch (uploadError) {
+        setError(uploadError instanceof Error ? uploadError.message : t("crm.chat.uploadFailed"));
+      } finally {
+        setUploading(count => count - 1);
+      }
+    }
+  };
+
   const submit = async () => {
-    if (!action(config, mode) || !action(config, mode === "reply" ? "sendReply" : "sendNote") || !selected || !(mode === "note" ? noteDraft : draft).trim() || busy || (mode === "reply" && replyState.disabled)) return;
+    const hasFiles = mode === "reply" && pending.length > 0;
+    if (!action(config, mode) || !action(config, mode === "reply" ? "sendReply" : "sendNote") || !selected
+      || (!(mode === "note" ? noteDraft : draft).trim() && !hasFiles) || busy || uploading > 0
+      || (mode === "reply" && replyState.disabled)) return;
     setBusy(true);
     setError(null);
     try {
@@ -572,9 +671,10 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       } else {
         await command(`/api/crm/conversations/${String(selected.id)}/messages`, {
           body: draft,
+          attachments: pending.map(file => file.url),
         });
       }
-      if (mode === "note") { setNoteDraft(""); setNoteBody(""); } else setDraft("");
+      if (mode === "note") { setNoteDraft(""); setNoteBody(""); } else { setDraft(""); setPending([]); }
       await loadSelected();
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : t("crm.error.send"));
@@ -792,6 +892,25 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               aria-label={mode === "reply" ? "Write a reply" : "Write an internal note"}
               className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
             />}
+            {/* What is about to go with the reply. It sits under the text because that is the order
+                it will arrive in, and each chip can be taken back out before sending. */}
+            {mode === "reply" && (pending.length > 0 || uploading > 0) && <div className="mt-1 flex flex-wrap gap-1.5 px-2">
+              {pending.map(file => (
+                <span key={file.url} className="inline-flex max-w-full items-center gap-1.5 rounded-pill bg-muted px-2 py-1 text-[11px]">
+                  <Paperclip className="size-3 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0 truncate font-medium">{file.filename}</span>
+                  {file.size > 0 && <span className="shrink-0 tabular-nums text-muted-foreground">{fileSize(file.size)}</span>}
+                  <Button variant="ghost" type="button" aria-label={t("crm.chat.removeFile", { name: file.filename })} disabled={busy}
+                    className="h-auto p-0 text-inherit"
+                    onClick={() => setPending(current => current.filter(item => item.url !== file.url))}>
+                    <X className="size-3" />
+                  </Button>
+                </span>
+              ))}
+              {uploading > 0 && <span role="status" className="inline-flex items-center gap-1.5 rounded-pill bg-muted px-2 py-1 text-[11px] text-muted-foreground">
+                {t("crm.chat.uploading", { count: uploading })}
+              </span>}
+            </div>}
             {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className="flex items-center gap-2 rounded-field bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
               <span className="flex-1">{replyState.message}</span>
               {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>{t("crm.chat.checkAgain")}</Button>}
@@ -803,11 +922,24 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                 onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
                 options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
               />
+              {/* Offered only where the channel actually carries files; the title says why not. */}
+              {mode === "reply" && action(config, "sendReply") && <>
+                <input ref={fileInputRef} type="file" multiple className="hidden"
+                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
+                    void attach(event.target.files); event.target.value = "";
+                  }} />
+                <Button variant="ghost" type="button" aria-label={t("crm.chat.attach")}
+                  title={attachState.disabled ? attachState.reason : t("crm.chat.attach")}
+                  disabled={attachState.disabled || busy}
+                  onClick={() => fileInputRef.current?.click()}>
+                  <Paperclip className="size-4" />
+                </Button>
+              </>}
               <ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
                 insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
               }} className="flex items-center gap-2" />
               <span className="flex-1" />
-              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || !(mode === "note" ? noteDraft : draft).trim() || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
+              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
                 {busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
               </Button>}
             </div>

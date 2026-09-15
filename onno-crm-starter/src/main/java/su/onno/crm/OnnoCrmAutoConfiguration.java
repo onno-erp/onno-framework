@@ -21,7 +21,8 @@ import su.onno.ui.UiEntityAccessPolicy;
         CrmInboxWorkspaceService.class, CrmInboxWorkspaceController.class, CrmConversationViewController.class,
         CrmWorkspaceService.class, CrmChatGroupService.class, CrmChatGroupController.class,
         CrmContactService.class, CrmContactController.class, CrmInboxController.class,
-        CrmActivityController.class, CrmChannelController.class, CrmActionController.class})
+        CrmActivityController.class, CrmChannelController.class, CrmActionController.class,
+        CrmAttachments.class})
 public class OnnoCrmAutoConfiguration {
     @Bean @ConditionalOnMissingBean
     public CrmPriorityBinding crmPriorityBinding() { return CrmPriorityBinding.empty(); }

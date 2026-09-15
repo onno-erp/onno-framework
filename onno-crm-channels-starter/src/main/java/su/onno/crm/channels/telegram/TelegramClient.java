@@ -65,6 +65,74 @@ public class TelegramClient {
         return call("sendMessage", Map.of("chat_id", chatId, "text", text)).path("message_id").asLong();
     }
 
+    /** Telegram truncates beyond this, so a longer note is sent as its own message before the file. */
+    public static final int CAPTION_LIMIT = 1024;
+    /** Telegram's own upload ceiling for a bot; a larger file is refused before any network call. */
+    public static final int UPLOAD_LIMIT = 50 * 1024 * 1024;
+    private static final int PHOTO_LIMIT = 10 * 1024 * 1024;
+
+    /**
+     * Upload one file to a chat. Images go as photos so they render in the chat; everything else
+     * goes as a document, which is also where an image too large to be a photo ends up — Telegram
+     * would otherwise reject it outright.
+     */
+    public long sendFile(long chatId, String filename, String contentType, byte[] content, String caption) {
+        if (content == null || content.length == 0) throw new ApiFailure(0, 0);
+        if (content.length > UPLOAD_LIMIT) throw new IllegalArgumentException("File is larger than Telegram accepts (50 MB)");
+        boolean photo = contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith("image/")
+                && !contentType.toLowerCase(java.util.Locale.ROOT).contains("svg")
+                && content.length <= PHOTO_LIMIT;
+        var fields = new java.util.LinkedHashMap<String, String>();
+        fields.put("chat_id", Long.toString(chatId));
+        if (caption != null && !caption.isBlank()) fields.put("caption", caption);
+        return multipart(photo ? "sendPhoto" : "sendDocument", fields, photo ? "photo" : "document",
+                filename == null || filename.isBlank() ? "attachment" : filename,
+                contentType == null || contentType.isBlank() ? "application/octet-stream" : contentType, content)
+                .path("message_id").asLong();
+    }
+
+    private JsonNode multipart(String method, Map<String, String> fields, String part,
+                               String filename, String contentType, byte[] content) {
+        String boundary = "onno" + java.util.UUID.randomUUID().toString().replace("-", "");
+        var body = new java.io.ByteArrayOutputStream();
+        try {
+            for (var field : fields.entrySet()) {
+                body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + field.getKey()
+                        + "\"\r\n\r\n" + field.getValue() + "\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            // The filename is quoted into a header, so quotes, newlines and path separators go first.
+            String safe = filename.replaceAll("[\"\\r\\n\\\\/]", "_");
+            body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + part
+                    + "\"; filename=\"" + safe + "\"\r\nContent-Type: " + contentType + "\r\n\r\n")
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            body.write(content);
+            body.write(("\r\n--" + boundary + "--\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException ex) {
+            throw new ApiFailure(0, 0);
+        }
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint + method))
+                    .timeout(Duration.ofSeconds(120))
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())).build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            JsonNode envelope = json.readTree(response.body());
+            if (response.statusCode() != 200 || !envelope.path("ok").asBoolean()) {
+                throw new ApiFailure(envelope.path("error_code").asInt(response.statusCode()),
+                        envelope.path("parameters").path("retry_after").asInt(0));
+            }
+            return envelope.path("result");
+        } catch (ApiFailure ex) {
+            throw ex;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new ApiFailure(0, 0);
+        } catch (Exception ex) {
+            // As in call(): JDK HTTP messages can carry the URL, and the URL carries the bot token.
+            throw new ApiFailure(0, 0);
+        }
+    }
+
     /** Smallest available profile image, bounded to 1 MiB, or null when none is available. */
     public byte[] profilePhoto(long userId) {
         JsonNode photos=call("getUserProfilePhotos",Map.of("user_id",userId,"limit",1)).path("photos");

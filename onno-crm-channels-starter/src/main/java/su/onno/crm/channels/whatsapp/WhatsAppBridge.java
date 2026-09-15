@@ -34,11 +34,13 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-whatsapp");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";private Instant retryAt=Instant.EPOCH;
     private final su.onno.crm.service.CrmConversationStatuses statuses;
+    private final su.onno.crm.service.CrmAttachments attachments;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("WHATSAPP","WhatsApp","/crm/channels/whatsapp.svg"); }
     public WhatsAppBridge(WhatsAppClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
         ConversationRepository conversations,ConversationMessageRepository messages,
-        ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
-        this.statuses=statuses;
+        ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
+        su.onno.crm.service.CrmAttachments attachments) {
+        this.statuses=statuses;this.attachments=attachments;
         this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.identities=identities;this.contacts=contacts;this.workspace=workspace;
     }
@@ -71,7 +73,8 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
         if(a==null||!a.active||!a.inbox.equals(c.getInbox().id())||!client.configured()||!failure.isBlank())return new Connection(false,"WhatsApp is paused or unavailable",4096);
         var times=jdbc.query("SELECT last_inbound FROM onno_crm_wa_peer WHERE account_id=? AND conversation_id=?",(r,n)->r.getTimestamp(1)==null?null:r.getTimestamp(1).toLocalDateTime(),a.id,c.getId());
         boolean open=times.stream().anyMatch(t->t!=null&&t.atZone(ZoneId.systemDefault()).toInstant().isAfter(Instant.now().minus(Duration.ofHours(24))));
-        return new Connection(true,"WhatsApp",4096,open?ReplyCapability.AVAILABLE:ReplyCapability.WINDOW_CLOSED,open?"":"WhatsApp's 24-hour reply window has expired");
+        return new Connection(true,"WhatsApp",4096,open?ReplyCapability.AVAILABLE:ReplyCapability.WINDOW_CLOSED,open?"":"WhatsApp's 24-hour reply window has expired")
+            .withAttachments(attachments.limit(),attachments.unavailableReason());
     }
     public void enqueue(Conversation c,ConversationMessage m){if(!connection(c).canSend())throw new IllegalArgumentException(connection(c).unavailableReason());var a=account();
         String peer=jdbc.queryForObject("SELECT peer_id FROM onno_crm_wa_peer WHERE account_id=? AND conversation_id=? ORDER BY last_inbound DESC NULLS LAST FETCH FIRST 1 ROW ONLY",String.class,a.id,c.getId());
@@ -151,12 +154,35 @@ public class WhatsAppBridge implements CrmChannelConnection,CrmMessageTransport 
             String peer=jdbc.queryForObject("SELECT peer_id FROM onno_crm_wa_outbox WHERE message_id=?",String.class,id);
             var time=jdbc.queryForObject("SELECT last_inbound FROM onno_crm_wa_peer WHERE account_id=? AND peer_id=?",java.sql.Timestamp.class,a.id,peer);
             if(time==null||time.toInstant().isBefore(Instant.now().minus(Duration.ofHours(24))))throw new IllegalStateException();
-            String external=client.send(a.id,peer,m.getBody());tx.executeWithoutResult(s->{finish(id,true,external);jdbc.update("INSERT INTO onno_crm_wa_seen VALUES (?,?)",a.id,external);});
+            String external=send(a.id,peer,m);tx.executeWithoutResult(s->{finish(id,true,external);jdbc.update("INSERT INTO onno_crm_wa_seen VALUES (?,?)",a.id,external);});
         }catch(Exception e){
             if(e instanceof WhatsAppClient.ApiFailure api)log.warn("WhatsApp reply {} failed: HTTP {}, provider code {}, subcode {}",id,api.status,api.code,api.subcode);
             else log.warn("WhatsApp reply {} failed before completion ({})",id,e.getClass().getSimpleName());
             tx.executeWithoutResult(s->finish(id,false,null));}
     }}
+    /**
+     * Send one reply. Files go one message each, as WhatsApp has no multi-file message; a short
+     * note rides as the caption of the first, and a longer one goes ahead of them as its own text
+     * message rather than being truncated into a caption.
+     *
+     * <p>The id kept is the first WhatsApp accepted, so a partial failure still records what was
+     * delivered instead of claiming the whole reply never left.
+     */
+    private String send(String account,String peer,ConversationMessage message){
+        var files=attachments.of(message);
+        String text=message.getBody()==null?"":message.getBody();
+        if(files.isEmpty())return client.send(account,peer,text);
+        boolean captioned=!text.isBlank()&&text.length()<=WhatsAppClient.CAPTION_LIMIT;
+        String first=null;
+        if(!text.isBlank()&&!captioned)first=client.send(account,peer,text);
+        for(int index=0;index<files.size();index++){
+            var file=files.get(index);
+            String sent=client.sendFile(account,peer,file.filename(),file.contentType(),attachments.bytes(file),
+                captioned&&index==0?text:null);
+            if(first==null)first=sent;
+        }
+        return first;
+    }
     private void finish(UUID id,boolean sent,String external){messages.findActiveById(id).ifPresent(m->{m.setDeliveryStatus(sent?DeliveryStatus.SENT:DeliveryStatus.FAILED);if(external!=null)m.setExternalMessageId(externalKey(external));messages.save(m);});jdbc.update("UPDATE onno_crm_wa_outbox SET state=?,external_id=? WHERE message_id=?",sent?"SENT":"FAILED",external,id);}
     static LocalDateTime parseTime(String value){
         OffsetDateTime time;

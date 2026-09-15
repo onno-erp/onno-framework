@@ -36,18 +36,20 @@ public class CrmInboxController {
     private final UiAccessService access;
     private final su.onno.crm.service.CrmInboxWorkspaceService workspaces;
     private final CommentAuthorAvatars authorAvatars;
+    private final su.onno.crm.service.CrmAttachments attachments;
 
     public CrmInboxController(
             ConversationService service,
             CurrentUserResolver currentUsers,
             CrmAgentIdentityResolver agentIdentities,
             UiAccessService access, su.onno.crm.service.CrmInboxWorkspaceService workspaces,
-            CommentAuthorAvatars authorAvatars
+            CommentAuthorAvatars authorAvatars,
+            su.onno.crm.service.CrmAttachments attachments
     ) {
         this.service = service;
         this.currentUsers = currentUsers;
         this.agentIdentities = agentIdentities;
-        this.access = access;this.workspaces=workspaces;
+        this.access = access;this.workspaces=workspaces;this.attachments=attachments;
         this.authorAvatars = authorAvatars;
     }
 
@@ -61,7 +63,7 @@ public class CrmInboxController {
         Map<String, String> avatars = authorAvatars.avatarsFor(thread.stream()
                 .map(ConversationMessage::getAuthorId).filter(Objects::nonNull).distinct().toList());
         return thread.stream()
-                .map(message -> MessageView.from(message, message.getAuthorId() == null
+                .map(message -> view(message, message.getAuthorId() == null
                         ? null : avatars.get(message.getAuthorId())))
                 .toList();
     }
@@ -75,11 +77,11 @@ public class CrmInboxController {
         requireCrmAccess(principal);
         workspaces.requireConversation(workspace,id,principal,true);
         var user = currentUsers.resolve(principal);
-        return MessageView.from(service.addMessage(
-                id,
+        return view(service.addMessage(id, new ConversationService.Reply(
                 request == null ? null : request.body(),
+                request == null ? java.util.List.of() : request.attachments(),
                 user.displayName(),
-                user.recordId()), user.avatarUrl());
+                user.recordId())), user.avatarUrl());
     }
 
     @GetMapping("/{id}/delivery")
@@ -94,7 +96,7 @@ public class CrmInboxController {
         requireCrmAccess(principal);
         workspaces.requireConversation(workspace,id,principal,true);
         ConversationMessage retried = service.retryMessage(id, messageId);
-        return MessageView.from(retried, retried.getAuthorId() == null
+        return view(retried, retried.getAuthorId() == null
                 ? null : authorAvatars.avatarFor(retried.getAuthorId()));
     }
 
@@ -115,7 +117,13 @@ public class CrmInboxController {
         return new ErrorView(error.getMessage());
     }
 
-    public record SendMessage(String body) {}
+    /** {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links. */
+    public record SendMessage(String body, List<String> attachments) {
+        public SendMessage {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+        public SendMessage(String body) { this(body, List.of()); }
+    }
 
 
 
@@ -142,23 +150,21 @@ public class CrmInboxController {
             /** The agent's photo, when the reply has a resolvable author; null leaves the widget on
              *  its generated fallback. Never set for an inbound message — that face is the contact's,
              *  and the renderer already has it. */
-            String authorAvatarUrl
-    ) {
-        static MessageView from(ConversationMessage message) {
-            return from(message, null);
-        }
+            String authorAvatarUrl,
+            List<su.onno.crm.service.CrmAttachments.View> attachments
+    ) {}
 
-        static MessageView from(ConversationMessage message, String authorAvatarUrl) {
-            return new MessageView(
-                    message.getId().toString(),
-                    message.getKind().name(),
-                    message.getDirection().name(),
-                    message.getChannel(),
-                    message.getAuthorName(),
-                    message.getBody(),
-                    message.getSentAt(),
-                    message.getDeliveryStatus().name(),
-                    authorAvatarUrl);
-        }
+    private MessageView view(ConversationMessage message, String authorAvatarUrl) {
+        return new MessageView(
+                message.getId().toString(),
+                message.getKind().name(),
+                message.getDirection().name(),
+                message.getChannel(),
+                message.getAuthorName(),
+                message.getBody(),
+                message.getSentAt(),
+                message.getDeliveryStatus().name(),
+                authorAvatarUrl,
+                attachments.viewsOf(message));
     }
 }

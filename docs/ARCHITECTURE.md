@@ -695,9 +695,20 @@ The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most
 
 `CrmMessageTransport` is the CRM's provider-neutral message boundary. The default is disconnected;
 a host supplies connection status and transactionally enqueues outbound agent replies, with external
-HTTP work after commit. `GET /api/crm/conversations/{id}/delivery` returns connected/label/maxTextLength;
+HTTP work after commit. `GET /api/crm/conversations/{id}/delivery` returns
+connected/label/maxTextLength plus `maxAttachments` and `attachmentReason`;
 `POST /api/crm/conversations/{id}/messages/{messageId}/retry` requeues a failed reply after checking
 conversation membership and host customer permissions. See [the read/API contract](HEADLESS_READ_API.md).
+
+Outbound replies may carry files. `POST /api/crm/conversations/{id}/messages` accepts
+`{body,attachments}`, where `attachments` are media URLs previously returned by `POST /api/media`
+([media uploads](MEDIA_UPLOADS.md)) — references, never bytes, and only ones this application issued,
+so no caller can aim a delivery worker at an arbitrary URL. They are stored newline-joined on
+`ConversationMessage.attachments`, at most ten per message and no more than the channel's own
+`maxAttachments`; a reply may be files alone. Message reads return
+`attachments:[{url,filename,contentType,size,image}]`. Telegram, Gmail and WhatsApp upload the bytes
+to the provider; Instagram declares zero, because it fetches attachments from a public URL. With
+`onno.media.enabled=false` the capability is reported as unavailable rather than failing on send.
 `onno-crm-channels-starter` includes an opt-in Telegram client and CRM bridge for private text chats, with durable
 checkpoint/contact/outbox tables and manual retry after ambiguous send failures. It never maps demo
 contacts to real recipients or replaces a configured webhook.

@@ -55,6 +55,8 @@ public final class UiMessages {
         d.put("crm.activity.tooLong", "Keep the summary and recording link under 7000 characters.");
         d.put("crm.activity.type", "Activity type");
         d.put("crm.activity.visibility", "Visible to your team in this client's history.");
+        d.put("crm.attachments.disabled", "File uploads are turned off for this deployment (onno.media.enabled).");
+        d.put("crm.channel.instagram.noFiles", "Instagram fetches files from a public URL, which this deployment does not publish. Send the file by email or WhatsApp.");
         d.put("crm.contact.identities", "Linked identities");
         d.put("crm.contact.noIdentities", "No channel identities linked yet");
         d.put("crm.contact.openConversation", "Open conversation");
@@ -87,6 +89,10 @@ public final class UiMessages {
         d.put("crm.zoom.save", "Save & prepare invitation");
         d.put("crm.zoom.schedule", "Schedule Zoom");
         d.put("crm.zoom.scheduleCall", "Schedule a Zoom call");
+        d.put("crm.chat.attach", "Attach files");
+        d.put("crm.chat.attachLimit", "At most {count} files per message");
+        d.put("crm.chat.attachTooMany", "This channel carries at most {count} files per message.");
+        d.put("crm.chat.attachUnavailable", "This channel does not carry attachments.");
         d.put("crm.chat.channel", "Channel");
         d.put("crm.chat.checkAgain", "Check again");
         d.put("crm.chat.chooseConversation", "Choose a conversation to start.");
@@ -94,10 +100,14 @@ public final class UiMessages {
         d.put("crm.chat.internal", "Internal");
         d.put("crm.chat.loadEarlier", "Load earlier activity");
         d.put("crm.chat.noMessages", "No messages yet");
+        d.put("crm.chat.removeFile", "Remove {name}");
         d.put("crm.chat.retryWarning", "Check the channel before retrying: an interrupted attempt may already have sent the message.");
         d.put("crm.chat.sendFrom", "Send from");
         d.put("crm.chat.teamMember", "Team member");
         d.put("crm.chat.unknownCustomer", "Unknown customer");
+        d.put("crm.chat.uploadFailed", "Upload failed");
+        d.put("crm.chat.uploadFailedFile", "{name} could not be uploaded");
+        d.put("crm.chat.uploading", "Uploading {count} file(s)…");
         d.put("crm.contact.close", "Close contact details");
         d.put("crm.contact.details", "Contact details");
         d.put("crm.contact.hide", "Hide contact details");

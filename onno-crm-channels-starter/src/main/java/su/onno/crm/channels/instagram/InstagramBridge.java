@@ -31,11 +31,13 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-instagram");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";private Instant retryAt=Instant.EPOCH;
     private final su.onno.crm.service.CrmConversationStatuses statuses;
+    private final su.onno.ui.UiMessages uiMessages;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("INSTAGRAM","Instagram","/crm/channels/instagram.png"); }
     public InstagramBridge(InstagramClient client,JdbcTemplate jdbc,PlatformTransactionManager transactions,InboxRepository inboxes,
         ConversationRepository conversations,ConversationMessageRepository messages,
-        ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses) {
-        this.statuses=statuses;
+        ContactIdentityRepository identities,CrmContactService contacts,CrmWorkspaceService workspace, su.onno.crm.service.CrmConversationStatuses statuses,
+        su.onno.ui.UiMessages uiMessages) {
+        this.statuses=statuses;this.uiMessages=uiMessages;
         this.client=client;this.jdbc=jdbc;this.tx=new TransactionTemplate(transactions);this.inboxes=inboxes;
         this.conversations=conversations;this.messages=messages;this.identities=identities;this.contacts=contacts;this.workspace=workspace;
     }
@@ -68,7 +70,10 @@ public class InstagramBridge implements CrmChannelConnection,CrmMessageTransport
         if(a==null||!a.active||!a.inbox.equals(c.getInbox().id())||!client.configured()||!failure.isBlank())return new Connection(false,"Instagram is paused or unavailable",1000);
         var times=jdbc.query("SELECT last_inbound FROM onno_crm_ig_peer WHERE account_id=? AND conversation_id=?",(r,n)->r.getTimestamp(1)==null?null:r.getTimestamp(1).toLocalDateTime(),a.id,c.getId());
         boolean open=times.stream().anyMatch(t->t!=null&&t.atZone(ZoneId.systemDefault()).toInstant().isAfter(Instant.now().minus(Duration.ofHours(24))));
-        return new Connection(true,"Instagram",1000,open?ReplyCapability.AVAILABLE:ReplyCapability.WINDOW_CLOSED,open?"":"Instagram's 24-hour reply window has expired");
+        // Instagram takes an attachment only as a URL it can fetch itself, and this application's
+        // media sits behind sign-in. Rather than publish it, the composer says so and offers no clip.
+        return new Connection(true,"Instagram",1000,open?ReplyCapability.AVAILABLE:ReplyCapability.WINDOW_CLOSED,open?"":"Instagram's 24-hour reply window has expired")
+            .withAttachments(0,uiMessages.get("crm.channel.instagram.noFiles"));
     }
     public void enqueue(Conversation c,ConversationMessage m){if(!connection(c).canSend())throw new IllegalArgumentException(connection(c).unavailableReason());var a=account();
         String peer=jdbc.queryForObject("SELECT peer_id FROM onno_crm_ig_peer WHERE account_id=? AND conversation_id=? ORDER BY last_inbound DESC NULLS LAST FETCH FIRST 1 ROW ONLY",String.class,a.id,c.getId());
