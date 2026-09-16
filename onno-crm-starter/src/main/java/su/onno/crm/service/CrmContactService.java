@@ -45,6 +45,52 @@ public class CrmContactService {
     public boolean canRead(UUID id, Principal principal) {
         return access.canRead(principal,"catalog",catalogName()) && binding.catalog().canRead(canonical(id),principal);
     }
+
+    /**
+     * Every merge redirect in one read, as a source → target map.
+     *
+     * <p>{@link #canonical(UUID)} costs a query, which is the right shape for one contact and the
+     * wrong one for a list: an inbox page asking it per conversation turned a single screen into
+     * hundreds of round trips. The table only holds contacts somebody merged, so it is small enough
+     * to resolve from memory, and the chain-walking and cycle guard are the same as the single-id
+     * path — they are simply applied to a map that was fetched once.</p>
+     */
+    public Map<UUID,UUID> redirects() {
+        var direct=new java.util.HashMap<UUID,UUID>();
+        jdbc.query("SELECT source,target FROM onno_crm_customer_redirect",(r,n)->
+            direct.put(r.getObject(1,UUID.class),r.getObject(2,UUID.class)));
+        return direct;
+    }
+
+    /** Follow {@code redirects} to the canonical id, with {@link #canonical(UUID)}'s cycle guard. */
+    public static UUID canonical(UUID id, Map<UUID,UUID> redirects) {
+        for(int n=0;n<100;n++) {
+            var target=redirects.get(id);
+            if(target==null) return id;
+            id=target;
+        }
+        throw new IllegalArgumentException("Contact redirect cycle");
+    }
+
+    /**
+     * Which of these customers the principal may read, answered without a query per customer.
+     *
+     * <p>The catalog-wide check is asked once rather than per id, the redirect table is read once,
+     * and the host's own per-record callback is asked once per <em>distinct</em> customer — a list
+     * of conversations usually names the same couple several times.</p>
+     */
+    public Set<UUID> readable(Collection<UUID> ids, Principal principal) {
+        if(ids.isEmpty() || !access.canRead(principal,"catalog",catalogName())) return Set.of();
+        var redirects=redirects();
+        var allowed=new java.util.HashSet<UUID>();
+        var decided=new java.util.HashMap<UUID,Boolean>();
+        for(UUID id:ids) {
+            if(id==null) continue;
+            if(decided.computeIfAbsent(canonical(id,redirects),canonicalId->
+                    binding.catalog().canRead(canonicalId,principal))) allowed.add(id);
+        }
+        return allowed;
+    }
     public void requireRead(UUID id, Principal principal) {
         if(!canRead(id,principal))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Customer access denied");
     }

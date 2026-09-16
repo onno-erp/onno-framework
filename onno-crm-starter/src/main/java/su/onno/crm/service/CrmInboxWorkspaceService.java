@@ -53,6 +53,29 @@ public class CrmInboxWorkspaceService {
         return conversation.getCustomer()!=null && contacts.canRead(conversation.getCustomer(),principal)
             && definitions.stream().anyMatch(w->permitted(w,principal,write)&&w.selection().test(conversation));
     }
+
+    /**
+     * The conversations this principal may see, filtered as a batch.
+     *
+     * <p>Same rule as {@link #canAccess}, asked once for a whole list instead of once per row. Per
+     * row it is three repeated questions — may this principal use this workspace, may it read this
+     * customer, and does any workspace claim this conversation — and only the last of them actually
+     * varies with the row. The first is hoisted out, and the second goes through
+     * {@link CrmContactService#readable}, which reads the redirect table once rather than once per
+     * conversation. An inbox of eight hundred chats was issuing eight hundred of those queries to
+     * paint twenty-five rows.</p>
+     */
+    public List<Conversation> accessible(List<Conversation> candidates,Principal principal,boolean write) {
+        if(candidates.isEmpty()) return List.of();
+        var workspaces=definitions.stream().filter(w->permitted(w,principal,write)).toList();
+        if(workspaces.isEmpty()) return List.of();
+        var readable=contacts.readable(candidates.stream().map(Conversation::getCustomer)
+            .filter(java.util.Objects::nonNull).distinct().toList(),principal);
+        return candidates.stream()
+            .filter(c->c.getCustomer()!=null && readable.contains(c.getCustomer()))
+            .filter(c->workspaces.stream().anyMatch(w->w.selection().test(c)))
+            .toList();
+    }
     public Conversation requireConversation(UUID id,Principal principal,boolean write) {
         var conversation=conversations.findActiveById(id).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND));
         if(!canAccess(conversation,principal,write)) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Conversation is outside your inbox workspaces");

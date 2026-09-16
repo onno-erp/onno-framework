@@ -176,6 +176,13 @@ remain connector-owned; all new-contact creation goes through the host inbound p
 All browser commands use normal session authentication and CSRF. Each conversation read/command
 requires `?workspace=<key>` and current membership; writes additionally require workspace write roles.
 
+Authorization on a feed read is a batch: `CrmInboxWorkspaceService.accessible` applies the same rule
+as `canAccess` to a whole list, asking which workspaces the principal may use once rather than per
+row, and resolving contact readability through `CrmContactService.readable` — one pass over the
+merge-redirect table instead of a query per conversation. An inbox of several hundred chats was
+otherwise issuing that many queries to paint one page, and paging did not help, because the
+authorization precedes it. `canAccess` remains for single-conversation checks.
+
 | Route under `/api/crm` | Behavior |
 | --- | --- |
 | `GET /workspace` | `{workspace:{version,config,availableFields},canConfigure:false,customerCatalog}` |
