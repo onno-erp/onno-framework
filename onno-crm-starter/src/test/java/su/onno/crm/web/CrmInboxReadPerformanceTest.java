@@ -28,6 +28,13 @@ class CrmInboxReadPerformanceTest {
         when(workspaces.requireWorkspace("support",principal,false)).thenReturn(workspace);
         when(workspaces.members(workspace)).thenReturn(members);
         when(workspaces.canAccess(any(),eq(principal),eq(false))).thenReturn(true);
+        // The controller filters the page as a batch now. The stub mirrors the real rule — which is
+        // per-row canAccess, proven equivalent in CrmInboxBatchAccessTest — so each test below keeps
+        // steering this through its own canAccess stubbing.
+        when(workspaces.accessible(anyList(),eq(principal),eq(false))).thenAnswer(invocation -> {
+            List<Conversation> candidates=invocation.getArgument(0);
+            return candidates.stream().filter(c->workspaces.canAccess(c,principal,false)).toList();
+        });
         when(workspaces.config(workspace)).thenReturn(new CrmWorkspaceService.Config(List.of(),List.of(),"","","",true,true,true,true,true,true));
         var descriptor=mock(CatalogDescriptor.class);when(descriptor.attributes()).thenReturn(List.of());
         when(catalogs.forClass(Conversation.class)).thenReturn(descriptor);

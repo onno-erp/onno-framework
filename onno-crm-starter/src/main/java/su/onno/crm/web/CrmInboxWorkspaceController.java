@@ -112,8 +112,9 @@ public class CrmInboxWorkspaceController {
             } else { row.remove("assignee"); }
             return row;
         };
-        // Authorization still precedes counting, filtering, pagination and decoration.
-        var authorized=members.stream().filter(c->workspaces.canAccess(c,principal,false)).toList();
+        // Authorization still precedes counting, filtering, pagination and decoration — as one pass
+        // over the list rather than a permission check and a contact read per row.
+        var authorized=workspaces.accessible(members,principal,false);
         String requestedSort=params.containsKey("sort")?params.getFirst("sort"):spec.sortField();
         boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
         var byId=new HashMap<UUID,Conversation>();
