@@ -3,6 +3,7 @@ package su.onno.crm.web;
 import java.security.Principal;
 import java.util.*;
 import org.junit.jupiter.api.*;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -21,6 +22,7 @@ class CrmInboxReadPerformanceTest {
     final CatalogQueryService catalogs=mock(CatalogQueryService.class);
     final CrmContactService contacts=mock(CrmContactService.class);
     final List<Conversation> members=new ArrayList<>();
+    final Map<UUID,String> names=new HashMap<>();
     CrmInboxWorkspaceController controller;
     @BeforeEach void setup() {
         var workspace=new CrmInboxWorkspace("support","Support",Set.of("READER"),c->true)
@@ -53,8 +55,28 @@ class CrmInboxReadPerformanceTest {
             c.setDescription("chat-"+i);c.setChannel(i%2==0?"WILDBERRIES":"TELEGRAM");c.setUnreadCount(i);members.add(c);
             when(contacts.get(c.getCustomer(),principal)).thenReturn(new CrmContactService.Contact("Customers",
                 Map.of("id",c.getCustomer().toString(),"description","customer-"+i),List.of(),List.of(),false));
+            names.put(c.getCustomer(),"customer-"+i);
         }
+        // Rows are decorated from the page-wide lookup now; it answers for whatever it is handed.
+        when(contacts.summaries(anyCollection(),eq(principal))).thenAnswer(invocation -> {
+            Collection<UUID> asked=invocation.getArgument(0);
+            var answer=new LinkedHashMap<UUID,CrmContactService.Summary>();
+            for(UUID id:asked)
+                answer.put(id,new CrmContactService.Summary("Customers",id,
+                    Map.of("id",id.toString(),"description",names.getOrDefault(id,"customer-?")),""));
+            return answer;
+        });
     }
+    /** Every customer the controller asked about, across however many batches it used. */
+    @SuppressWarnings("unchecked")
+    private Set<UUID> resolvedCustomers() {
+        var captor=ArgumentCaptor.forClass(Collection.class);
+        verify(contacts,atLeastOnce()).summaries(captor.capture(),eq(principal));
+        var asked=new LinkedHashSet<UUID>();
+        for(Object batch:captor.getAllValues()) asked.addAll((Collection<UUID>)batch);
+        return asked;
+    }
+
     @Test void decoratesOnlyTheAuthorizedFilteredSortedPage() {
         when(workspaces.canAccess(members.get(98),principal,false)).thenReturn(false);
         var params=new LinkedMultiValueMap<String,String>();params.set("limit","2");params.set("cursor","1");
@@ -64,9 +86,10 @@ class CrmInboxReadPerformanceTest {
         assertThat(result.get("nextCursor")).isEqualTo("3");
         var rows=(List<Map<String,Object>>)result.get("rows");
         assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(94).getId(),members.get(92).getId());
-        verify(contacts,times(2)).get(any(),eq(principal));
         verify(catalogs,times(2)).get(any(),any());
-        verify(contacts,never()).get(members.get(98).getCustomer(),principal);
+        assertThat(resolvedCustomers())
+            .containsExactlyInAnyOrder(members.get(94).getCustomer(),members.get(92).getCustomer())
+            .doesNotContain(members.get(98).getCustomer());
     }
     @Test void liveReadPatchReturnsOnlyRequestedAuthorizedConversation() {
         var params=new LinkedMultiValueMap<String,String>();
@@ -75,7 +98,7 @@ class CrmInboxReadPerformanceTest {
         var rows=(List<Map<String,Object>>)result.get("rows");
         assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(75).getId());
         assertThat(result.get("total")).isEqualTo(1);
-        verify(contacts,times(1)).get(members.get(75).getCustomer(),principal);
+        assertThat(resolvedCustomers()).containsExactly(members.get(75).getCustomer());
     }
     @Test void requestedIdsCannotExposeForeignOrUnauthorizedConversations() {
         when(workspaces.canAccess(members.get(75),principal,false)).thenReturn(false);

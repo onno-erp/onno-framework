@@ -80,6 +80,8 @@ public class CrmInboxWorkspaceController {
             members=members.stream().filter(c->requested.contains(c.getId())).toList();
         }
         var descriptor=catalogs.forClass(Conversation.class);
+        // Filled in below, once the page is known: decoration reads from it rather than querying.
+        final Map<UUID,su.onno.crm.service.CrmContactService.Summary> rowContacts=new HashMap<>();
         java.util.function.Function<Conversation,Map<String,Object>> decorate = conversation -> {
             var raw=catalogs.get(descriptor,conversation.getId());
             Map<String,Object> row=new LinkedHashMap<>();
@@ -100,11 +102,14 @@ public class CrmInboxWorkspaceController {
                 .filter(s->s.choice().id().equals(conversation.getPriority())).findFirst().ifPresent(s->{
                     row.put("priorityDisplay",s.choice().label());row.put("priorityColor",s.choice().color());
                 });
-            var contact=contacts.get(conversation.getCustomer(),principal);
-            row.put("customerDisplay",contact.fields().get("description"));
-            row.put("customerRef",Map.of("type",contact.catalogName(),"display",Objects.toString(contact.fields().get("description"),""),"id",contact.fields().get("id")));
-            row.put("customerAvatar",contact.fields().getOrDefault("avatarUrl",contact.identities().stream()
-                    .map(su.onno.crm.domain.ContactIdentity::getAvatarUrl).filter(Objects::nonNull).findFirst().orElse("")));
+            // Resolved for the page, not the row: the full contact read fetches identities, every
+            // conversation the customer has and a write check, none of which a row shows.
+            var contact=rowContacts.get(conversation.getCustomer());
+            if(contact!=null) {
+                row.put("customerDisplay",contact.fields().get("description"));
+                row.put("customerRef",Map.of("type",contact.catalogName(),"display",Objects.toString(contact.fields().get("description"),""),"id",contact.fields().get("id")));
+                row.put("customerAvatar",contact.avatarUrl());
+            }
             var agent=agents.getIfAvailable();
             if(agent!=null && conversation.getAssignee()!=null && access.canRead(principal,"catalog",agent.catalog().name())
                     && agent.catalog().canRead(conversation.getAssignee(),principal)) {
@@ -119,6 +124,17 @@ public class CrmInboxWorkspaceController {
         boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
         var byId=new HashMap<UUID,Conversation>();
         authorized.forEach(c->byId.put(c.getId(),c));
+        // Contacts are fetched for whatever is about to be decorated, in a few queries for the lot.
+        // Searching and sorting on a decorated field still decorates everything, so it prefetches
+        // everything; the ordinary path prefetches only the page, further down.
+        java.util.function.Consumer<java.util.Collection<Conversation>> prefetchContacts = batch -> {
+            var customers=batch.stream().map(Conversation::getCustomer).filter(Objects::nonNull)
+                .filter(id->!rowContacts.containsKey(id)).distinct().toList();
+            // Nothing left to decorate means nothing to ask: a page whose contacts are already
+            // resolved — and an empty one — must not touch contacts at all.
+            if(!customers.isEmpty()) rowContacts.putAll(contacts.summaries(customers,principal));
+        };
+        if(!pageBeforeDecoration) prefetchContacts.accept(authorized);
         var records=authorized.stream().map(pageBeforeDecoration?CrmInboxRows::raw:decorate)
             .filter(filters).filter(row->search.isEmpty()||(Objects.toString(row.get("customerDisplay"),"")+" "+Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)).toList();
         String sort=params.getFirst("sort");
@@ -143,7 +159,11 @@ public class CrmInboxWorkspaceController {
             a.visible()&&!a.key().equals("history")&&(canWrite||Set.of("reply","note","details").contains(a.key())))).toList());
         int end=(int)Math.min(records.size(),(long)offset+limit);
         var page=records.subList(Math.min(offset,records.size()),end);
-        if(pageBeforeDecoration)page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id")))).toList();
+        if(pageBeforeDecoration) {
+            var onPage=page.stream().map(row->byId.get((UUID)row.get("id"))).filter(Objects::nonNull).toList();
+            prefetchContacts.accept(onPage);
+            page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id")))).toList();
+        }
         var resolved=listViews.catalogList(descriptor,spec);
         Map<String,String> fieldNames=new HashMap<>();
         descriptor.attributes().forEach(a->fieldNames.put(a.columnName(),a.fieldName()));
@@ -163,6 +183,7 @@ public class CrmInboxWorkspaceController {
         var accountSamples=new LinkedHashMap<UUID,Conversation>();
         for(var conversation:authorized)
             if(conversation.getInbox()!=null)accountSamples.putIfAbsent(conversation.getInbox().id(),conversation);
+        prefetchContacts.accept(accountSamples.values());
         list.put("channelAccounts",accountSamples.values().stream().map(decorate)
             .filter(row->row.get("inbox")!=null)
             .map(row->Map.of("id",row.get("inbox").toString(),"channel",Objects.toString(row.get("channel"),""),
