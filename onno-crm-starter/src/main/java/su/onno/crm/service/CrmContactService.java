@@ -103,6 +103,54 @@ public class CrmContactService {
         return new Contact(catalogName(),binding.catalog().fields(id),identities.findByCustomerAndDeletionMarkFalse(id),
                 conversations.findByCustomerAndDeletionMarkFalse(id),canWrite(id,principal));
     }
+    /** What a list row needs of a contact: a name to show, a reference to open, and a face. */
+    public record Summary(String catalogName,UUID id,Map<String,Object> fields,String avatarUrl) {}
+
+    /**
+     * Contacts for a page of rows, in a handful of queries rather than a handful per row.
+     *
+     * <p>{@link #get} answers everything about one contact — its identities, its conversations, and
+     * whether the principal may write to it — which is right for a contact panel and ruinous for a
+     * list. Rendering twenty-five inbox rows through it meant seven queries each, one of them
+     * loading every conversation the customer has, to print a name and an avatar.
+     *
+     * <p>So this reads only what a row shows: readability once for the whole page, the redirect
+     * table once, each distinct contact's fields once, and every identity in a single query — then
+     * only for the contacts whose own record carries no avatar.</p>
+     */
+    public Map<UUID,Summary> summaries(Collection<UUID> ids,Principal principal) {
+        var wanted=ids.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        if(wanted.isEmpty()) return Map.of();
+        var allowed=readable(wanted,principal);
+        var redirects=redirects();
+        var resolved=new java.util.LinkedHashMap<UUID,UUID>();
+        for(UUID id:wanted) if(allowed.contains(id)) resolved.put(id,canonical(id,redirects));
+
+        var fields=new java.util.HashMap<UUID,Map<String,Object>>();
+        for(UUID canonicalId:new java.util.LinkedHashSet<>(resolved.values()))
+            fields.put(canonicalId,binding.catalog().fields(canonicalId));
+
+        // Only the contacts whose own record has no avatar need their channel identities consulted.
+        var needFace=resolved.values().stream().distinct()
+            .filter(canonicalId->Objects.toString(fields.get(canonicalId).get("avatarUrl"),"").isBlank()).toList();
+        var faces=new java.util.HashMap<UUID,String>();
+        if(!needFace.isEmpty()) {
+            for(var identity:identities.findByCustomerInAndDeletionMarkFalse(needFace)) {
+                if(identity.getAvatarUrl()==null||identity.getAvatarUrl().isBlank()) continue;
+                faces.putIfAbsent(identity.getCustomer(),identity.getAvatarUrl());
+            }
+        }
+
+        var summaries=new java.util.LinkedHashMap<UUID,Summary>();
+        resolved.forEach((id,canonicalId)->{
+            var own=fields.get(canonicalId);
+            String avatar=Objects.toString(own.get("avatarUrl"),"");
+            if(avatar.isBlank()) avatar=faces.getOrDefault(canonicalId,"");
+            summaries.put(id,new Summary(catalogName(),canonicalId,own,avatar));
+        });
+        return summaries;
+    }
+
     public Map<String,Object> fields(UUID id,Principal principal) {
         requireRead(id,principal);return binding.catalog().fields(canonical(id));
     }
