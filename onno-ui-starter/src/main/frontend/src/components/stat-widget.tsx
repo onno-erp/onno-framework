@@ -21,6 +21,7 @@ import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { logicalEntityKey } from "@/lib/entity-keys";
+import { useMessages } from "@/providers/messages-provider";
 
 /**
  * A KPI tile with momentum: the headline figure (the same aggregate the `metric` card shows),
@@ -43,6 +44,7 @@ function granularityForStat(spanDays: number): GroupByDate {
 }
 
 export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
+  const t = useMessages();
   const cfg = widget.extraConfig ?? {};
   const calculation = cfg.calculation;
   // A ratio is calculated from two independently filtered aggregates. It deliberately renders as
@@ -258,7 +260,7 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
             <span className={`flex items-center gap-1 rounded-control border border-border/70 bg-muted/30 px-2 py-0.5 text-[11px] font-medium tabular-nums ${deltaClass}`}>
               <Arrow size={12} />
               {delta > 0 ? "+" : delta < 0 ? "−" : ""}{Math.abs(delta * 100).toFixed(1)}%
-              <span className="text-muted-foreground">{cfg.comparisonLabel ?? "vs previous period"}</span>
+              <span className="text-muted-foreground">{cfg.comparisonLabel ?? t("widget.stat.comparison")}</span>
             </span>
           )}
         </div>
@@ -268,7 +270,9 @@ export function StatWidget({ widget }: { widget: DashboardWidgetMeta }) {
           </div>
         ) : null}
         {showTrend && delta != null && (
-          <div className="mt-1 text-[11px] text-muted-foreground">vs previous period</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {cfg.comparisonLabel ?? t("widget.stat.comparison")}
+          </div>
         )}
       </CardContent>
     </Card>
