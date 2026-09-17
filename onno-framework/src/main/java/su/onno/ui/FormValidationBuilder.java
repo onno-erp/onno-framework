@@ -28,7 +28,7 @@ public final class FormValidationBuilder<E> {
      * Re-run only when one of these values changes. Dot paths address every value in a tabular
      * section column, for example {@code participants.employee}.
      */
-    public FormValidationBuilder dependsOn(String... fields) {
+    public FormValidationBuilder<E> dependsOn(String... fields) {
         dependencies.clear();
         dependencies.addAll(Arrays.asList(fields));
         return this;

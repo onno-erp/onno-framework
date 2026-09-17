@@ -120,7 +120,7 @@ public class EntityConfigBuilder<E> {
      * {@code "calendar-check"}). Honored over the keyword heuristic, so an authored
      * icon always wins. Blank means "fall back to the heuristic".
      */
-    public EntityConfigBuilder icon(String icon) {
+    public EntityConfigBuilder<E> icon(String icon) {
         this.icon = icon;
         return this;
     }
