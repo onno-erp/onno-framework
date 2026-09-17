@@ -330,7 +330,9 @@ because they are not Java field references.
     registered custom widget below the fields of a saved catalog/document record. Its
     `WidgetProps.widget.record` carries `kind`, `name`, `id`, loaded `data`, and `readOnly`;
     New/Duplicate forms omit detail widgets until a record has been saved.
-  - `ListSpec`: `title`, `searchable/noSearch`, `sortBy(field, desc)`, `columns(...)`,
+  - `ListSpec` (every builder method returns `ListSpec<E>`, so string and compiler-checked
+    getter-reference calls chain in any order): `title`, `searchable/noSearch`,
+    `sortBy(field, desc)`, `columns(...)`,
     `column(field,label)`, `label(field,label)`, `hide(...)`, `pageSize(n)` (rows per keyset window;
     else `onno.ui.list.page-size`; lists are always cursor/keyset-scrolled),
     `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by

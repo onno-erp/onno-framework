@@ -217,4 +217,57 @@ class ListSpecTest {
                         tuple("total", ListSpec.Agg.SUM, null),      // label defaults later (to the field label)
                         tuple("amount", ListSpec.Agg.AVG, "Average"));
     }
+
+    /** Minimal entity for the compiler-checked getter-reference DSL. */
+    public static class Item {
+        private String name;
+        private String status;
+        private java.math.BigDecimal total;
+
+        public String getName() { return name; }
+        public String getStatus() { return status; }
+        public java.math.BigDecimal getTotal() { return total; }
+    }
+
+    /**
+     * Regression guard for #343: the string-taking builder methods used to return a raw
+     * {@code ListSpec}, so the next compiler-checked call saw {@code Field<Object, ?>} and javac
+     * rejected the getter reference. This test exists to be compiled — if any of these methods
+     * loses its {@code <E>} again, this file stops compiling and the build fails.
+     */
+    @Test
+    void stringBuilderMethodsKeepTheEntityTypeForChaining() {
+        ListSpec<Item> spec = new ListSpec<>();
+
+        spec.title("Items")
+                .searchable(true)
+                .pageSize(50)
+                .sortBy("name")
+                .columns("name")
+                .column("status", "Status")
+                .label("total", "Total")
+                .hide("status")
+                .cellMenu("name", "More")
+                .groupable("status")
+                .defaultGroupBy("status")
+                .aggregate("total", ListSpec.Agg.SUM)
+                .rowStyle(row -> null)
+                .columns(Item::getName, Item::getTotal);
+
+        assertThat(spec.title()).isEqualTo("Items");
+        assertThat(spec.include()).containsExactly("name", "status", "name", "total");
+        assertThat(spec.labels()).containsEntry("status", "Status").containsEntry("total", "Total");
+    }
+
+    /** {@code noSearch()} is the other no-typed-overload method on the chain. */
+    @Test
+    void noSearchKeepsTheEntityTypeForChaining() {
+        ListSpec<Item> spec = new ListSpec<>();
+
+        spec.noSearch().sortBy(Item::getName, true);
+
+        assertThat(spec.searchable()).isFalse();
+        assertThat(spec.sortField()).isEqualTo("name");
+        assertThat(spec.sortDescending()).isTrue();
+    }
 }
