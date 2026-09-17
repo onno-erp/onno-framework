@@ -11,6 +11,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.statement.Update;
 
 import java.lang.reflect.Field;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
@@ -302,6 +303,14 @@ public class InformationRegisterPersistence<T extends InformationRecord> {
             return rs.getLong(col);
         } else if (type == boolean.class || type == Boolean.class) {
             return rs.getBoolean(col);
+        } else if (type == LocalDate.class) {
+            // DATE columns come back as java.sql.Date; the reflective field.set in mapRecord
+            // only accepts java.time, so convert here rather than via the getObject fallback.
+            java.sql.Date val = rs.getDate(col);
+            return val != null ? val.toLocalDate() : null;
+        } else if (type == LocalDateTime.class) {
+            java.sql.Timestamp val = rs.getTimestamp(col);
+            return val != null ? val.toLocalDateTime() : null;
         } else if (type.isEnum()) {
             // Enum attributes are stored as their stable UUID — resolve back to the constant
             // rather than leaking the raw UUID through the getObject(...) fallback.

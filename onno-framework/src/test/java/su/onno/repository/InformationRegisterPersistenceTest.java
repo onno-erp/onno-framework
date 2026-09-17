@@ -19,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -95,10 +96,47 @@ class InformationRegisterPersistenceTest {
         }
     }
 
+    @InformationRegister(name = "SubscriptionState", periodicity = Periodicity.DAY)
+    public static class SubscriptionState extends InformationRecord {
+        @Dimension
+        private UUID client;
+
+        @su.onno.annotations.Attribute
+        private LocalDate endDate;
+
+        @su.onno.annotations.Attribute
+        private LocalDateTime checkedAt;
+
+        public UUID getClient() {
+            return client;
+        }
+
+        public void setClient(UUID client) {
+            this.client = client;
+        }
+
+        public LocalDate getEndDate() {
+            return endDate;
+        }
+
+        public void setEndDate(LocalDate endDate) {
+            this.endDate = endDate;
+        }
+
+        public LocalDateTime getCheckedAt() {
+            return checkedAt;
+        }
+
+        public void setCheckedAt(LocalDateTime checkedAt) {
+            this.checkedAt = checkedAt;
+        }
+    }
+
     private Jdbi jdbi;
     private InformationRegisterPersistence<TestPriceRegister> pricePersistence;
     private InformationRegisterPersistence<TaskStatusHistory> historyPersistence;
     private InformationRegisterPersistence<TestSettingRegister> settingPersistence;
+    private InformationRegisterPersistence<SubscriptionState> subscriptionPersistence;
     private UUID productA = UUID.randomUUID();
     private UUID productB = UUID.randomUUID();
     private UUID warehouseA = UUID.randomUUID();
@@ -115,6 +153,7 @@ class InformationRegisterPersistenceTest {
         registry.registerInformationRegister(scanner.scanInformationRegister(TestPriceRegister.class));
         registry.registerInformationRegister(scanner.scanInformationRegister(TestSettingRegister.class));
         registry.registerInformationRegister(scanner.scanInformationRegister(TaskStatusHistory.class));
+        registry.registerInformationRegister(scanner.scanInformationRegister(SubscriptionState.class));
 
         new SchemaGenerator(registry).execute(jdbi);
 
@@ -126,6 +165,10 @@ class InformationRegisterPersistenceTest {
 
         InformationRegisterDescriptor historyDesc = registry.getInformationRegisterDescriptor(TaskStatusHistory.class);
         historyPersistence = new InformationRegisterPersistence<>(jdbi, historyDesc);
+
+        InformationRegisterDescriptor subscriptionDesc =
+                registry.getInformationRegisterDescriptor(SubscriptionState.class);
+        subscriptionPersistence = new InformationRegisterPersistence<>(jdbi, subscriptionDesc);
     }
 
     @Test
@@ -443,6 +486,58 @@ class InformationRegisterPersistenceTest {
                 LocalDateTime.of(2024, 7, 15, 14, 30),
                 su.onno.model.Periodicity.YEAR
         )).isEqualTo(LocalDateTime.of(2024, 1, 1, 0, 0));
+    }
+
+    @Test
+    void read_mapsTemporalAttributes() {
+        UUID client = UUID.randomUUID();
+        SubscriptionState record = new SubscriptionState();
+        record.setPeriod(LocalDateTime.of(2024, 5, 10, 9, 30));
+        record.setClient(client);
+        record.setEndDate(LocalDate.of(2025, 3, 1));
+        record.setCheckedAt(LocalDateTime.of(2024, 5, 10, 9, 31, 15));
+
+        subscriptionPersistence.write(record);
+
+        List<SubscriptionState> records = subscriptionPersistence.getRecords(Collections.emptyMap());
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getEndDate()).isEqualTo(LocalDate.of(2025, 3, 1));
+        assertThat(records.get(0).getCheckedAt()).isEqualTo(LocalDateTime.of(2024, 5, 10, 9, 31, 15));
+    }
+
+    @Test
+    void getSliceLast_mapsTemporalAttributes() {
+        UUID client = UUID.randomUUID();
+        writeSubscription(client, LocalDateTime.of(2024, 1, 5, 0, 0), LocalDate.of(2024, 6, 30));
+        writeSubscription(client, LocalDateTime.of(2024, 2, 5, 0, 0), LocalDate.of(2024, 12, 31));
+
+        List<SubscriptionState> slice = subscriptionPersistence.getSliceLast(
+                LocalDateTime.of(2024, 3, 1, 0, 0), Collections.emptyMap());
+
+        assertThat(slice).hasSize(1);
+        assertThat(slice.get(0).getEndDate()).isEqualTo(LocalDate.of(2024, 12, 31));
+    }
+
+    @Test
+    void read_leavesNullTemporalAttributesNull() {
+        SubscriptionState record = new SubscriptionState();
+        record.setPeriod(LocalDateTime.of(2024, 5, 10, 9, 30));
+        record.setClient(UUID.randomUUID());
+
+        subscriptionPersistence.write(record);
+
+        List<SubscriptionState> records = subscriptionPersistence.getRecords(Collections.emptyMap());
+        assertThat(records).hasSize(1);
+        assertThat(records.get(0).getEndDate()).isNull();
+        assertThat(records.get(0).getCheckedAt()).isNull();
+    }
+
+    private void writeSubscription(UUID client, LocalDateTime period, LocalDate endDate) {
+        SubscriptionState record = new SubscriptionState();
+        record.setPeriod(period);
+        record.setClient(client);
+        record.setEndDate(endDate);
+        subscriptionPersistence.write(record);
     }
 
     private void writePrice(UUID product, UUID warehouse, String date, String price) {
