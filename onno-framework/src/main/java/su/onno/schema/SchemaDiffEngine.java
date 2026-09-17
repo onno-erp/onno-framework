@@ -1,6 +1,7 @@
 package su.onno.schema;
 
 import su.onno.schema.DatabaseIntrospector.DbState;
+import su.onno.schema.DatabaseIntrospector.UniqueConstraint;
 import su.onno.schema.SchemaChange.Type;
 
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static su.onno.schema.DatabaseIntrospector.upper;
 
@@ -26,6 +28,12 @@ import static su.onno.schema.DatabaseIntrospector.upper;
  * <p>Renames are recognized through {@code previousNames} on {@code @Attribute},
  * {@code @Catalog} and {@code @Document}: when the new name is missing from the database
  * but a former name is present, the plan renames (keeping data) instead of creating fresh.
+ *
+ * <p>A table's business key ({@link TableModel#uniqueKey()}, today the information registers') is
+ * diffed against the live database's {@code UNIQUE} constraints rather than against the snapshot, so
+ * a mismatch is caught even on the first boot after the framework learned to look. Without this an
+ * information register whose key tuple changed — a new {@code periodicity}, an added or removed
+ * {@code @Dimension} — kept enforcing the old key, and its upserts silently collapsed rows onto it.
  *
  * <p>Anything that can lose data — dropping tables/columns, narrowing a type — is flagged
  * {@link SchemaChange#destructive()} and only executed when explicitly allowed. Drops are
@@ -134,6 +142,11 @@ public class SchemaDiffEngine {
             }
         }
 
+        // Between the two column loops: the key has to be reconciled after the columns it names have
+        // been added, and before a dropped dimension's column goes — a column a constraint still
+        // references cannot be dropped.
+        diffUniqueKey(table, existingName, db, changes);
+
         for (String dbColumn : dbColumns) {
             if (!desiredColumnsUpper.contains(dbColumn)
                     && !renamedAwayColumns.contains(dbColumn)
@@ -145,6 +158,81 @@ public class SchemaDiffEngine {
                         List.of(DdlRenderer.dropColumn(table.name(), columnName))));
             }
         }
+    }
+
+    /**
+     * Reconciles a table's declared business key with the {@code UNIQUE} constraints the database
+     * actually holds. A table that declares a key is generated storage the framework owns outright,
+     * so every {@code UNIQUE} constraint on it that is not the declared key is treated as a leftover
+     * and dropped. (Constraints, not indexes: a {@code CREATE UNIQUE INDEX} someone added themselves
+     * is not reported by {@code TABLE_CONSTRAINTS} and is left alone.)
+     *
+     * <p>Looked up under {@code existingName} because the database still holds the table under its
+     * former name when this same plan renames it, while the DDL targets the new name the rename —
+     * emitted earlier — will have already applied. Key columns need no such mapping of their own:
+     * {@code previousNames} lives on {@code @Attribute}, and a register's key is built from
+     * {@code @Dimension} fields, so a key column is never renamed in place.
+     */
+    private void diffUniqueKey(TableModel table, String existingName, DbState db,
+                               List<SchemaChange> changes) {
+        List<String> desired = table.uniqueKey();
+        if (desired.isEmpty()) {
+            return;
+        }
+        Set<String> desiredUpper = new HashSet<>();
+        for (String column : desired) {
+            desiredUpper.add(upper(column));
+        }
+
+        boolean satisfied = false;
+        List<UniqueConstraint> stale = new ArrayList<>();
+        for (UniqueConstraint constraint : db.uniqueConstraints(existingName)) {
+            if (constraint.columns().equals(desiredUpper)) {
+                satisfied = true;
+            } else {
+                stale.add(constraint);
+            }
+        }
+        if (satisfied && stale.isEmpty()) {
+            return;
+        }
+
+        List<String> sql = new ArrayList<>();
+        for (UniqueConstraint constraint : stale) {
+            sql.add(DdlRenderer.dropConstraint(table.name(), constraint.name()));
+        }
+        if (!satisfied) {
+            sql.add(DdlRenderer.addUniqueConstraint(table.name(), desired));
+        }
+
+        // Adding a constraint is the only step that can fail, and it cannot when one of the
+        // constraints being dropped covered a subset of the new key: uniqueness on a subset already
+        // implies uniqueness on the whole tuple. That is the shape of every key-widening change — a
+        // finer periodicity, an added dimension — so those apply by default. Everything else may meet
+        // rows that duplicate under the new key, and is gated like the other narrowing changes.
+        boolean impliedByAnExistingKey =
+                stale.stream().anyMatch(constraint -> desiredUpper.containsAll(constraint.columns()));
+        boolean destructive = !satisfied && !impliedByAnExistingKey;
+
+        StringBuilder detail = new StringBuilder();
+        if (stale.isEmpty()) {
+            detail.append("no unique key");
+        } else {
+            for (int i = 0; i < stale.size(); i++) {
+                detail.append(i == 0 ? "" : ", ").append(columnTuple(stale.get(i).columns()));
+            }
+        }
+        detail.append(" -> (").append(String.join(", ", desired)).append(')');
+        if (destructive) {
+            detail.append("; fails unless existing rows are already unique on the new key");
+        }
+
+        changes.add(new SchemaChange(Type.ALTER_UNIQUE_KEY, table.name(), null,
+                detail.toString(), destructive, List.copyOf(sql)));
+    }
+
+    private static String columnTuple(Set<String> columns) {
+        return "(" + String.join(", ", new TreeSet<>(columns)).toLowerCase(Locale.ROOT) + ")";
     }
 
     private void diffColumn(TableModel table, ColumnModel column,
