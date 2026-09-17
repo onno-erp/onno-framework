@@ -383,6 +383,10 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "relatedList.saveFirstManage": "Save this record first to manage {name}.",
   "relatedList.saveFirstView": "Save this record first to see {name}.",
 
+  // Dashboard widgets. The stat tile's period-over-period caption; a widget can still override it
+  // per tile with .config("comparisonLabel", ...).
+  "widget.stat.comparison": "vs previous period",
+
   // Client-side validation messages (mirror the server's AttributeValidator).
   "validation.required": "{field} is required",
   "validation.maxLength": "{field} must be at most {n} characters",

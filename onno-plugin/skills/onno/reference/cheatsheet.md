@@ -266,7 +266,10 @@ because they are not Java field references.
     for artwork that already includes its own circle or tile. Serve assets from `classpath:/static/ui/...`.
 - `Page` — `route()`, `profile()`, `viewport()`, `compose(PageBuilder)`: `b.title/subtitle`,
   `b.bare()` / `b.header(false)` (drop the title/subtitle row),
-  `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)`, or the
+  `b.widget(title)` → `WidgetBuilder.type(…).width(…).document/catalog(…).config(k,v)` (the
+  `stat` tile's period-over-period caption defaults to the `widget.stat.comparison` chrome
+  message, so `onno.ui.locale`/`onno.ui.messages` localize it; `.config("comparisonLabel", …)`
+  overrides it per tile, on both the sparkline and headline-only layouts), or the
   typed `b.chart(title, Source.class)` → `.time/category(…)`, `.count/sum/average/minimum/maximum(…)`,
   `.bar/line/area/donut/pie()`, optional `.secondary(…)`, `.axis(…)`, `.threshold(…)`, per-measure /
   per-series colours, legend/labels/curve/points/grid/height; `b.text`,

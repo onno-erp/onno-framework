@@ -412,6 +412,11 @@ public final class UiMessages {
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");
 
         // Client-side validation messages (mirrors the server's AttributeValidator).
+        // Dashboard widgets — keep in sync with DEFAULT_MESSAGES. The stat tile's
+        // period-over-period caption; a widget can override it per tile with
+        // .config("comparisonLabel", ...).
+        d.put("widget.stat.comparison", "vs previous period");
+
         d.put("validation.required", "{field} is required");
         d.put("validation.maxLength", "{field} must be at most {n} characters");
         d.put("validation.minLength", "{field} must be at least {n} characters");
