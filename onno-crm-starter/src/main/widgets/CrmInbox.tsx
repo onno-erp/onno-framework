@@ -53,7 +53,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip } from "lucide-react";
+import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip, MoreHorizontal } from "lucide-react";
 
 type Message = {
   id: string;
@@ -88,7 +88,7 @@ type Comment = {
 type ComposerMode = "reply" | "note";
 
 // One surface treatment for the header, composer, and contact-details island.
-const islandSurface = "rounded-panel bg-card dark:bg-muted/40 backdrop-blur-md shadow-md shadow-black/10 ring-1 ring-border/60";
+const islandSurface = "rounded-panel bg-card ring-1 ring-border/60";
 
 function string(row: EntityRecord | null, key: string, fallback = ""): string {
   const value = row?.[key];
@@ -249,7 +249,7 @@ function ConversationRow({
             {string(row, "inboxDisplay", channel)}
           </div>
           <div className="mt-1 flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+            <span className="min-w-0 flex-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
               {config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
             </span>
             {unread > 0 ? (
@@ -308,8 +308,8 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
     <div className={outbound ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={message.authorName} url={avatarUrl} channel={channel || message.channel} />}
       <div className={outbound
-        ? "max-w-[72%] rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
-        : "max-w-[72%] rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground"}
+        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
+        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground"}
       >
         <div className="flex items-center gap-1.5">
           <span className={outbound
@@ -320,7 +320,7 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
           </span>
         </div>
         <ChatMessageBody message={message} fallback={message.body?.trim()
-          ? <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5">{message.body}</p> : null} />
+          ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6">{message.body}</p> : null} />
         <Attachments files={message.attachments ?? []} outbound={outbound} />
         <div className={outbound
           ? "mt-1 flex justify-end gap-1.5 text-[10px] text-primary-foreground/70"
@@ -360,15 +360,15 @@ function TimelineComment({ comment, config }: { comment: Comment; config?: Confi
     <div className={comment.mine ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={author} url={comment.authorAvatarUrl} />}
       <div className={comment.mine
-        ? "max-w-[72%] rounded-panel rounded-br-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"
-        : "max-w-[72%] rounded-panel rounded-bl-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"}
+        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"
+        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"}
       >
         <div className="flex items-center gap-1.5">
           <ChannelIcon channel="" comment />
           <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">{author}</span>
           <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{t("crm.chat.internal")}</span>
         </div>
-        <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5"><CommentBody body={comment.body} /></p>
+        <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><CommentBody body={comment.body} /></p>
         <time className="mt-1 block text-right text-[10px] text-muted-foreground">
           {config?.showTimestamps !== false && comment.createdAt ? fullTime(comment.createdAt) : ""}
         </time>
@@ -477,24 +477,30 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const [historyPages, setHistoryPages] = useState(1);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const [detailOverlay, setDetailOverlay] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(() => new URLSearchParams(window.location.search).has("conversation"));
+  const actionsId = useId();
   const contactPanelToggleRef = useRef<HTMLButtonElement | null>(null);
-  const closeContactPanel = () => { setContactPanelOpen(false); contactPanelToggleRef.current?.focus(); };
+  const closeContactPanel = () => { setContactPanelOpen(false); requestAnimationFrame(() => contactPanelToggleRef.current?.focus()); };
+  const contactPanelCloseRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (contactPanelOpen && detailOverlay) contactPanelCloseRef.current?.focus(); }, [contactPanelOpen, detailOverlay]);
   const contactPanelId = useId();
   const replySelectionRef = useRef<ReplySelection | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft || noteDraft;
   const [error, setError] = useState<string | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLDivElement | null>(null);
-  const [composerHeight, setComposerHeight] = useState(220);
+  // Respond to the allocated pane, including a narrow split pane on a wide screen.
   useEffect(() => {
-    const composer = composerRef.current;
-    if (!composer) return;
-    const measure = () => setComposerHeight(composer.getBoundingClientRect().height);
+    const root = inboxRootRef.current;
+    if (!root) return;
+    const measure = () => { setCompact(root.clientWidth < 720); setDetailOverlay(root.clientWidth < 1100); };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(composer);
+    observer.observe(root);
     return () => observer.disconnect();
-  }, [selectedId]);
+  }, [!!config, rows.length > 0]);
 
   const selected = useMemo(
     () => channelRows.find((row) => String(row.id) === selectedId) ?? null,
@@ -506,6 +512,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     selectionRef.current = null;
     replySelectionRef.current = null;
     setSelectedId(null);
+    setMobileChatOpen(false);
     setContactPanelOpen(false);
     inboxRootRef.current?.focus({ preventScroll: true });
   }, []);
@@ -532,7 +539,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
 
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ block: "end" });
-  }, [selectedId, timeline.length, composerHeight]);
+  }, [selectedId, timeline.length, mobileChatOpen]);
 
   useEffect(() => {
     if (selectionDismissedRef.current && selectedId === null) return;
@@ -629,6 +636,10 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useConversationRead(timelineEndRef, readRevision, acknowledgeRead);
 
   const select = (row: EntityRecord) => {
+    setMobileChatOpen(true);
+    setActionsOpen(false);
+    setContactPanelOpen(false);
+    if (String(row.id) === selectedId) return;
     selectionDismissedRef.current = false;
     replySelectionRef.current = null;
     if (activeFolder && owner(row)?.key !== activeFolder.key) setFolderKey(owner(row)?.key ?? null);
@@ -761,28 +772,32 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       data-testid="crm-inbox-workspace"
       className="crm-chat-layout relative grid h-full min-h-0 max-h-full w-full overflow-hidden overscroll-none"
       data-contact-open={!!(contactPanelOpen && selected && config)}
+      data-compact={compact}
+      data-detail-overlay={detailOverlay}
+      data-chat-open={mobileChatOpen && !!selected}
       style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
-      <section aria-label={t("crm.inbox.chatSelection")} className={`${islandSurface} my-1 ml-1 hidden min-h-0 min-w-0 flex-col overflow-hidden md:!flex`}>
+      <section aria-label={t("crm.inbox.chatSelection")} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
         <style>{`
-          .crm-chat-layout { --chat-start-inset:4px; --chat-end-inset:4px; --contact-width: min(320px, 44vw); --contact-motion: 280ms; --contact-ease: cubic-bezier(.22,1,.36,1); grid-template-columns: 0px minmax(0,1fr) 0px; transition: grid-template-columns var(--contact-motion) var(--contact-ease); }
-          .crm-chat-layout[data-contact-open="true"] { --chat-end-inset:8px; grid-template-columns: 0px minmax(0,1fr) var(--contact-width); }
+          .crm-chat-layout { --contact-width:320px; grid-template-columns:300px minmax(0,1fr); gap:12px; }
           .crm-chat-layout > section { grid-column:1; grid-row:1; }
-          .crm-chat-layout > main { grid-column:2; grid-row:1; }
-          .crm-chat-header { margin:4px var(--chat-end-inset) 0 var(--chat-start-inset); }
-          .crm-chat-composer { padding-left:var(--chat-start-inset); padding-right:var(--chat-end-inset); }
-          .crm-contact-slot { grid-column:3; grid-row:1; position:relative; min-width:0; min-height:0; overflow:hidden; }
-          .crm-contact-island { position:absolute; top:4px; bottom:4px; right:4px; width:calc(var(--contact-width) - 8px); transform:translateX(16px); opacity:0; visibility:hidden; transition:transform var(--contact-motion) var(--contact-ease), opacity var(--contact-motion) var(--contact-ease), visibility 0s var(--contact-motion); }
-          .crm-chat-layout[data-contact-open="true"] .crm-contact-island { transform:translateX(0); opacity:1; visibility:visible; transition-delay:0s; }
-          @media (min-width:768px) {
-            .crm-chat-layout { --chat-start-inset:12px; grid-template-columns:260px minmax(0,1fr) 0px; }
-            .crm-chat-layout[data-contact-open="true"] { grid-template-columns:260px minmax(0,1fr) var(--contact-width); }
-          }
-          @media (min-width:1280px) {
-            .crm-chat-layout { grid-template-columns:300px minmax(0,1fr) 0px; }
-            .crm-chat-layout[data-contact-open="true"] { grid-template-columns:300px minmax(0,1fr) var(--contact-width); }
-          }
-          @media (prefers-reduced-motion:reduce) { .crm-chat-layout, .crm-contact-island { transition:none; } }
+          .crm-chat-layout > main { grid-column:2; grid-row:1; border-radius:var(--radius-panel, 16px); background:hsl(var(--card)); }
+          .crm-chat-layout[data-contact-open="true"]:not([data-detail-overlay="true"]) { grid-template-columns:280px minmax(0,1fr) var(--contact-width); }
+          .crm-chat-header { margin:0; border-bottom:1px solid hsl(var(--border)); border-radius:0; }
+          .crm-chat-composer { margin:0 12px 12px; max-height:45%; overflow-y:auto; }
+          .crm-chat-composer textarea { min-height:64px; max-height:144px; }
+          .crm-contact-slot { display:none; grid-column:3; grid-row:1; min-width:0; min-height:0; overflow:hidden; }
+          .crm-contact-island { height:100%; width:100%; }
+          .crm-chat-layout[data-contact-open="true"] .crm-contact-slot { display:block; }
+          .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"] .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30; }
+          .crm-chat-layout[data-compact="true"] { grid-template-columns:minmax(0,1fr); gap:0; }
+          .crm-chat-layout[data-compact="true"] > main { grid-column:1; }
+          .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main,
+          .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { display:none; }
+          .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot { width:100%; }
+          .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
+          .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
           .crm-folder-slide { --page-slide-dur: 300ms; --page-slide-ease: cubic-bezier(0.2,0.7,0.2,1); }
           .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; will-change:transform; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
           .crm-folder-slide[data-open="false"] > .crm-folder-detail { transform:translate3d(100%,0,0); pointer-events:none; }
@@ -830,12 +845,18 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <header className={`${islandSurface} crm-chat-header z-10 flex min-h-16 shrink-0 flex-wrap items-center gap-2 px-4 py-3`}>
+        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden ring-1 ring-border/60" {...(contactPanelOpen && detailOverlay ? {inert:true} : {})}>
+          <header className="crm-chat-header z-10 flex min-h-16 shrink-0 items-center gap-3 px-4 py-3">
+            {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); }}><ArrowLeft className="size-4" /></Button>}
+            {!compact && config.showAvatar !== false && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
               <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{t("crm.inbox.allChannelsSubtitle")}</div>
             </div>
+            <Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>
+            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
+          </header>
+          {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
             {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
               const ref = selected.customerRef as {type:string;id:string};
               window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
@@ -843,9 +864,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />}
             {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
             <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />
-            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
-          </header>
-          <div data-chat-history className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-5" style={{ paddingBottom: composerHeight + 16 }}>
+          </div>}
+          <div data-chat-history className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5">
 
             {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>{t("crm.chat.loadEarlier")}</Button>}
             {timeline.map((entry) => entry.message ? (
@@ -868,11 +888,11 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             {!timeline.length && !error ? (
               <div className="py-16 text-center text-xs text-muted-foreground">{t("crm.chat.noMessages")}</div>
             ) : null}
-            <div ref={timelineEndRef} style={{ scrollMarginBottom: composerHeight + 16 }} />
+            <div ref={timelineEndRef} />
           </div>
 
-          <div ref={composerRef} data-chat-composer className="crm-chat-composer pointer-events-none absolute inset-x-0 bottom-0 z-10 pb-1 pt-2">
-            <div className={`${islandSurface} pointer-events-auto p-3 focus-within:ring-ring/40 ${mode === "note" ? "ring-amber-500/30" : ""}`}>
+          <div data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
+            <div className={`p-3 ${mode === "note" ? "bg-amber-400/5" : ""}`}>
             <div className="mb-2 flex items-center justify-between gap-3">
               <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
                 onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
@@ -900,7 +920,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                 disabled={busy || !action(config, "note")} onChange={(text, body) => {setNoteDraft(text); setNoteBody(body);}}
                 onSubmit={() => void submit()} />
             </div>
-            {mode === "reply" && <Textarea
+            {mode === "reply" && !replyState.disabled && <Textarea
               value={draft}
               disabled={replyState.disabled}
               onChange={(event: { target: { value: string } }) => setDraft(event.target.value)}
@@ -914,7 +934,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               aria-describedby={replyState.message ? composerStatusId : undefined}
               maxLength={mode === "reply" ? delivery?.maxTextLength ?? 4096 : 8000}
               aria-label={mode === "reply" ? "Write a reply" : "Write an internal note"}
-              className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
+              className="min-h-16 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
             />}
             {/* What is about to go with the reply. It sits under the text because that is the order
                 it will arrive in, and each chip can be taken back out before sending. */}
@@ -978,7 +998,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContactPanel(); } }}>
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
             <span className="text-sm font-semibold">{t("crm.contact.details")}</span>
-            <Button size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>
+            <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <ContactPanel key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
@@ -1109,13 +1129,19 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
-  const channelControls = showChannelFilters ? <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
-    <div className="flex flex-wrap items-center gap-1" aria-label={t("crm.chat.channel")}>
+  const channelControls = showChannelFilters ? <div className="crm-channel-bar flex min-w-0 shrink-0 items-center gap-2 rounded-panel bg-card px-3 py-2 ring-1 ring-border/60" aria-label={t("crm.inbox.channelsAndAccounts")}>
+    <div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
       <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
     </div>
+    <div className="crm-channel-select min-w-0 flex-1">
+      <Select value={channel || "all"} onValueChange={value => { setChannel(value === "all" ? "" : value); setAccount(""); }}>
+        <SelectTrigger aria-label={t("crm.chat.channel")} className="w-full min-w-0"><SelectValue>{channel ? channels.find(item => item.value === channel)?.label || channel : t("crm.inbox.allChannels")}</SelectValue></SelectTrigger>
+        <SelectContent><SelectItem value="all">{t("crm.inbox.allChannels")}</SelectItem>{channels.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+      </Select>
+    </div>
     {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
-      <SelectTrigger aria-label={t("crm.inbox.account")} className="w-52"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label={t("crm.inbox.account")} className="crm-account-select ml-auto w-52 min-w-0"><SelectValue>{account ? accountLabels.find(item => item.value === account)?.label || accounts.find(item => item.id === account)?.label || account : t("crm.inbox.allAccounts")}</SelectValue></SelectTrigger>
       <SelectContent><SelectItem value="all">{t("crm.inbox.allAccounts")}</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
     </Select>}
   </div> : undefined;
@@ -1127,7 +1153,19 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     context={{ surface: "crm-inbox", workspaceKey: feed?.key, route: route.get("mode") || "", permissions: {},
       record: { folders: feed?.config.folders.length ?? 0, grouping: widget.extraConfig?.grouping ?? "true" },
       view: viewState, refresh: () => setRefreshKey(key => key + 1) }} />;
-  const headerExtra = <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}{toolbar}</div>;
-  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>{t("crm.inbox.loading")}</p>;
+  return list ? <div className="crm-inbox-page flex h-full min-h-0 min-w-0 flex-col gap-3">
+    <style>{`
+      .crm-inbox-page { container-type:inline-size; }
+      .crm-channel-select { display:none; }
+      .crm-channel-buttons > button { flex-shrink:0; }
+      @container (max-width:720px) {
+        .crm-channel-buttons { display:none; }
+        .crm-channel-select { display:block; }
+        .crm-account-select { width:45%; }
+      }
+    `}</style>
+    {channelControls}
+    <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={<>{modeControls}{toolbar}</>} queryParams={queryParams} />
+  </div> : <p>{t("crm.inbox.loading")}</p>;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

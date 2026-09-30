@@ -104,6 +104,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "crm.inbox.allAccounts": "All accounts",
   "crm.inbox.allChannels": "All channels",
   "crm.inbox.allChannelsSubtitle": "All channels · unified contact history",
+  "crm.chat.actions": "Conversation actions",
   "crm.inbox.back": "Back to conversations",
   "crm.inbox.channelsAndAccounts": "Channels and accounts",
   "crm.inbox.chatSelection": "Chat selection",

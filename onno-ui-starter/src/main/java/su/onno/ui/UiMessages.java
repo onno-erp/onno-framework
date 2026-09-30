@@ -127,6 +127,7 @@ public final class UiMessages {
         d.put("crm.inbox.allAccounts", "All accounts");
         d.put("crm.inbox.allChannels", "All channels");
         d.put("crm.inbox.allChannelsSubtitle", "All channels · unified contact history");
+        d.put("crm.chat.actions", "Conversation actions");
         d.put("crm.inbox.back", "Back to conversations");
         d.put("crm.inbox.channelsAndAccounts", "Channels and accounts");
         d.put("crm.inbox.chatSelection", "Chat selection");

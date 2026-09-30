@@ -381,3 +381,9 @@ booking; provider-backed scheduling remains a connector concern.
 Logged calls and meetings render as native timeline cards with a summary, author/time and an optional
 recording link. Long summaries expand on demand. Existing internal-event text remains compatible;
 other system events retain the compact timeline treatment. Summaries are manually entered, not AI-generated.
+
+### Responsive chat workspace
+
+The inbox uses its allocated pane width, including split views, to choose its layout. At 720px and above the conversation list and chat sit side by side. Below 720px the list opens first; selecting a contact opens the chat with a Back to conversations control. Returning to the same conversation preserves the draft. Channel filters collapse into a selector in narrow panes.
+
+The composer occupies normal layout space below the independently scrolling history, so it cannot cover messages. Contact details use a third column in wide panes (1100px and above) and an overlay in smaller panes, with focus moved to its close button and restored on dismissal. Conversation actions are available from the header's overflow control. Read-only and disconnected channels retain their explanatory status without an empty reply editor.

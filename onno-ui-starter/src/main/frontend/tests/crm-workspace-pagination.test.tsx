@@ -7,8 +7,9 @@ vi.mock("@/components/list-map-view", () => ({ ListMapView: () => null }));
 vi.mock("@onno/widget-sdk", async importOriginal => { await import("@/lib/plugin-host"); return importOriginal(); });
 class ResizeObserverMock { observe() {} unobserve() {} disconnect() {} }
 import "../../../../../onno-crm-starter/src/main/widgets/CrmInbox";
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
-it.each([false, true])("keeps selection through pagination and live read patches (broken feed: %s)", async (brokenFeed) => {
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView; });
+it.each([[false, false], [true, false], [false, true], [true, true]])("keeps selection through pagination and live read patches (broken feed: %s, compact: %s)", async (brokenFeed, compact) => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(compact ? 400 : 1200);
   Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
   vi.stubGlobal("ResizeObserver", ResizeObserverMock);
   vi.stubGlobal("IntersectionObserver", ResizeObserverMock);
@@ -54,13 +55,23 @@ it.each([false, true])("keeps selection through pagination and live read patches
   expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "false");
   expect(fetcher.mock.calls.filter(([input]) => String(input).includes("cursor="))).toHaveLength(2);
   fireEvent.click(screen.getByRole("button", { name: /Person 6/ }));
-  expect(screen.getByRole("button", { name: /Person 6/ })).toHaveAttribute("aria-current", "true");
+  expect(screen.getByRole("button", { name: /Person 6/, hidden: true })).toHaveAttribute("aria-current", "true");
+  if (compact) {
+    expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Back to conversations" }));
+    expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "false");
+    fireEvent.click(screen.getByRole("button", { name: /Person 6/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Show contact details" }));
+    expect(screen.getByRole("button", { name: "Close contact details" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Close contact details" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Show contact details" })).toHaveFocus());
+  }
   await act(async () => {
     window.dispatchEvent(new CustomEvent("onno:dataevent", { detail: {
       type: "updated", entityType: "catalog", entityName: "crm_conversations", id: "chat-6",
     } }));
   });
   await waitFor(() => expect(fetcher.mock.calls.some(([input]) => String(input).includes("ids=chat-6"))).toBe(true));
-  expect(screen.getByRole("button", { name: /Person 6/ })).toHaveAttribute("aria-current", "true");
-  expect(screen.getByRole("button", { name: /Person 1/ })).not.toHaveAttribute("aria-current", "true");
+  expect(screen.getByRole("button", { name: /Person 6/, hidden: true })).toHaveAttribute("aria-current", "true");
+  expect(screen.getByRole("button", { name: /Person 1/, hidden: true })).not.toHaveAttribute("aria-current", "true");
 });
