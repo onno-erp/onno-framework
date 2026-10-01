@@ -35,7 +35,7 @@ export function WorkspaceToolbar({items, layout, compactLayout, compact, balance
       <div className="flex min-w-0 items-center gap-1">{start}</div>
       <div className={cn("min-w-0",balanced ? "text-center" : "flex flex-1 items-center gap-2")}>{center}</div>
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1">{end}
-        {!!overflow.length && <ResponsiveActionPanel label={t("shell.more")} trigger={<Button variant="ghost" size="toolbar" aria-label={t("shell.more")}><MoreHorizontal className="size-4" /></Button>}>
+        {!!overflow.length && <ResponsiveActionPanel presentation="actions" label={t("shell.more")} trigger={<Button variant="ghost" size="toolbar" aria-label={t("shell.more")}><MoreHorizontal className="size-4" /></Button>}>
           {overflow}
         </ResponsiveActionPanel>}
       </div>

@@ -270,3 +270,7 @@ Compact workspace filter chips, select triggers and search use a shared 36px vis
 trigger on desktop, uses a tablet modal and a phone sheet. Use it for compact filter panels and
 workspace action menus; container width selects control density, viewport selects overlay type.
 It is available to plugins through the widget SDK.
+
+For command menus, use `ResponsiveActionPanel presentation="actions"`: consistent 44px,
+left-aligned icon rows and no confirmation footer. The default `controls` presentation keeps
+Done for filter/configuration sheets. Both retain the shared close button and swipe dismissal.

@@ -1005,11 +1005,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
               compactLayout={chrome?.mobileComposer}
               items={[
                 {id:"channel",content:sendingAccount},
-                {id:"tools",content:<ResponsiveActionPanel label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
-                    {action(config, "edit") && !!selected.customerRef && <Button variant="ghost" size="toolbar" onClick={()=>{
-                      const ref = selected.customerRef as {type:string;id:string};
-                      window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
-                    }}>{t("crm.contact.open")}</Button>}
+                {id:"tools",content:<ResponsiveActionPanel presentation="actions" label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
                     {action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => {setMode("reply");setDraft(previous => previous ? `${previous}\n\n${text}` : text);}} />}
                     {action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
                     {action(config, "sendReply") && <Button variant="ghost" size="toolbar" disabled={attachState.disabled || busy || mode !== "reply"} onClick={()=>fileInputRef.current?.click()}><Paperclip className="size-4" />{t("crm.chat.attach")}</Button>}
