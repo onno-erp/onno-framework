@@ -14,7 +14,7 @@ import { contactChats, replySelection, type ReplySelection } from "./contactChat
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail, usePageSlide } from "@onno/widget-sdk";
+import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail, usePageSlide, WorkspaceToolbar, type WorkspaceToolbarLayout } from "@onno/widget-sdk";
 
 /**
  * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
@@ -405,7 +405,16 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean }) {
+type InboxChrome = { list?: WorkspaceToolbarLayout; mobileList?: WorkspaceToolbarLayout; chat?: WorkspaceToolbarLayout; mobileChat?: WorkspaceToolbarLayout; composer?: WorkspaceToolbarLayout; mobileComposer?: WorkspaceToolbarLayout };
+function toolbarLayout(value?: string): WorkspaceToolbarLayout | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    return Object.fromEntries(["start", "center", "end", "secondary", "overflow", "hidden"].filter(key => Array.isArray(parsed[key])).map(key => [key, parsed[key].filter((id:unknown) => typeof id === "string")]));
+  } catch { return undefined; }
+}
+function CrmInbox({ toolbar, chrome, rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean; toolbar?: React.ReactNode; chrome?: InboxChrome }) {
   // Subscribe once at the root: `t` reads the store without subscribing, so this is what makes the
   // whole widget re-render into the server's language when /api/config lands after first paint.
   useTranslate();
@@ -772,7 +781,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   };
   if (!config) return <p className="p-4 text-sm">{configError || "Loading CRM workspace…"}</p>;
 
-  if (!rows.length && !folders.length) {
+  if (!toolbar && !rows.length && !folders.length) {
     return (
       <div className="rounded-panel border border-dashed border-border px-6 py-16 text-center">
         <div className="text-sm font-medium text-foreground">{t("crm.inbox.noMatches")}</div>
@@ -822,13 +831,22 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           .crm-folder-slide[data-open="false"] > .crm-folder-detail { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-folder-slide[data-open="true"] > .crm-folder-root { transform:translate3d(-100%,0,0); pointer-events:none; }
         `}</style>
+        {toolbar && <WorkspaceToolbar compact={compact} className="shrink-0 border-b border-border/50 p-3"
+          layout={{start:["title"], end:["count"], secondary:["controls"], ...chrome?.list}}
+          compactLayout={chrome?.mobileList}
+          items={[
+            {id:"title",content:<span className="text-sm font-semibold">{t("crm.inbox.conversations")}</span>},
+            {id:"count",content:<span className="whitespace-nowrap text-xs text-muted-foreground">{conversationCount(total, channelRows.length)}</span>},
+            {id:"controls",content:<div className="min-w-0 w-full">{toolbar}</div>},
+          ]} />}
         <div ref={folderSlideRef} className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
           <div data-slide-page="root" ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
-            <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
+            {!toolbar && <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
               <div className="text-sm font-semibold">{t("crm.inbox.conversations")}</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
-            </div>
+            </div>}
             <ConversationList {...pagination} active={!activeFolder}>
+              {!rows.length && !folders.length && <p className="p-4 text-sm text-muted-foreground">{t("crm.inbox.noMatches")}</p>}
               {(() => {
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
@@ -864,17 +882,16 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
 
       {selected ? (
         <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
-          <header className="crm-chat-header z-10 grid min-h-16 shrink-0 grid-cols-[72px_minmax(0,1fr)_72px] items-center gap-2 px-3 py-2">
-            <div className="flex items-center">
-              {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>}
-              <Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>
-            </div>
-            <div className="min-w-0 truncate text-center text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
-            <div className="flex justify-end">
-              <Button ref={contactPanelToggleRef} variant="ghost" className="size-11 shrink-0 rounded-full p-1" aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>
-                <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />
-              </Button>
-            </div>
+          <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
+            <WorkspaceToolbar compact={compact} balanced className="min-h-11"
+              layout={{start:["back","actions"], center:["title"], end:["contact"], ...chrome?.chat}}
+              compactLayout={chrome?.mobileChat}
+              items={[
+                {id:"back",content:compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>},
+                {id:"actions",content:<Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>},
+                {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
+                {id:"contact",content:<Button ref={contactPanelToggleRef} variant="ghost" className="size-11 shrink-0 rounded-full p-1" aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /></Button>},
+              ]} />
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
             {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
@@ -980,14 +997,16 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               {replyState.retry && <Button variant="ghost" aria-label={t("crm.chat.checkAgain")} className={compact ? "size-10 shrink-0 p-0" : undefined} onClick={() => void loadSelected()}>{compact ? <RefreshCw className="size-4" /> : t("crm.chat.checkAgain")}</Button>}
             </div>}
             {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
-            <div className={`mt-2 flex items-center ${compact ? "gap-1" : "flex-wrap gap-2"}`}>
-              <Segmented
+            <WorkspaceToolbar compact={compact} className="mt-2"
+              layout={{start:["mode","attach"], end:["send"], secondary:["extensions"], ...chrome?.composer}}
+              compactLayout={chrome?.mobileComposer}
+              items={[
+                {id:"mode",content:(<Segmented
                 value={mode}
                 onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
                 options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
-              />
-              {/* Offered only where the channel actually carries files; the title says why not. */}
-              {mode === "reply" && action(config, "sendReply") && (!compact || !attachState.disabled) && <>
+              />)},
+                {id:"attach",content:(mode === "reply" && action(config, "sendReply") && (!compact || !attachState.disabled) && <>
                 <input ref={fileInputRef} type="file" multiple className="hidden"
                   onChange={(event: { target: { files: FileList | null; value: string } }) => {
                     void attach(event.target.files); event.target.value = "";
@@ -998,15 +1017,14 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                   onClick={() => fileInputRef.current?.click()}>
                   <Paperclip className="size-4" />
                 </Button>
-              </>}
-              <ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
+              </>)},
+                {id:"extensions",content:(<ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
                 insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
-              }} className="flex items-center gap-2" />
-              <span className="min-w-0 flex-1" />
-              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button aria-label={busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
+              }} className="flex items-center gap-2" />)},
+                {id:"send",content:(action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button aria-label={busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
                 {compact ? <Send className="size-4" /> : busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
-              </Button>}
-            </div>
+              </Button>)},
+              ]} />
             </div>
           </div>
         </main>
@@ -1130,12 +1148,14 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   // Honour the routed folder only while the feed it belongs to is the one on screen.
   const folderRef = useRef(routedFolder);
   folderRef.current = feed && routedMode && feed.key !== routedMode ? "" : routedFolder;
+  const chromeRef = useRef<InboxChrome>({});
+  chromeRef.current = {list:toolbarLayout(widget.extraConfig?.listToolbar), mobileList:toolbarLayout(widget.extraConfig?.mobileListToolbar), chat:toolbarLayout(widget.extraConfig?.chatToolbar), mobileChat:toolbarLayout(widget.extraConfig?.mobileChatToolbar), composer:toolbarLayout(widget.extraConfig?.composerToolbar), mobileComposer:toolbarLayout(widget.extraConfig?.mobileComposerToolbar)};
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {
     const current = feedRef.current;
     return current ? <CrmInbox {...props} open={()=>{}} scopedConfig={current.config} workspaceKey={current.key}
-      initialFolder={folderRef.current} flat={flatRef.current} /> : null;
+      initialFolder={folderRef.current} flat={flatRef.current} chrome={chromeRef.current} /> : null;
   },[]);
   const list = useMemo(()=>feed ? {
     ...feed.list,
@@ -1180,10 +1200,13 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     context={{ surface: "crm-inbox", workspaceKey: feed?.key, route: route.get("mode") || "", permissions: {},
       record: { folders: feed?.config.folders.length ?? 0, grouping: widget.extraConfig?.grouping ?? "true" },
       view: viewState, refresh: () => setRefreshKey(key => key + 1) }} />;
-  return list ? <div className="crm-inbox-page flex h-full min-h-0 min-w-0 flex-col gap-3">
+  return list ? <div data-toolbar-placement={widget.extraConfig?.toolbarPlacement} className="crm-inbox-page flex h-full min-h-0 min-w-0 flex-col gap-3">
     <style>{`
       .crm-inbox-page { container-type:inline-size; }
       .crm-channel-select { display:none; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-channel-buttons { display:none; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-channel-select { display:block; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-account-select { width:45%; }
       .crm-channel-buttons > button { flex-shrink:0; }
       @container (max-width:720px) {
         .crm-channel-buttons { display:none; }
@@ -1191,7 +1214,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
         .crm-account-select { width:45%; }
       }
     `}</style>
-    <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={channelControls}
+    <EntityListWidget list={list} renderer={renderer} toolbarPlacement={widget.extraConfig?.toolbarPlacement === "renderer" ? "renderer" : "header"} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={channelControls}
       toolbarOptions={{controls:configuredList("toolbarControls"),
         views:configuredList("toolbarViewOptions") as Array<"table" | "map" | "custom"> | undefined,
         filterKeys:configuredList("toolbarFilters"), actionKeys:configuredList("toolbarActions"), title:widget.extraConfig?.toolbarTitle !== "false", count:widget.extraConfig?.toolbarCount !== "false",

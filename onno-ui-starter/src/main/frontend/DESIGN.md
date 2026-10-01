@@ -251,3 +251,9 @@ The CRM chat header centers the contact name between balanced action areas. The 
 on the right opens contact details; do not add a duplicate sidebar toggle or a generic history
 subtitle. Compact layouts show those details as a third full-width navigation page with Back;
 desktop keeps the same contact content in its aside.
+
+`WorkspaceToolbar` is the canonical configurable layout for operational workspace controls.
+Its ordered regions are start/center/end/secondary/overflow, with optional compact overrides.
+Callers supply already-authorized nodes; layout never changes permission or command semantics.
+A custom list renderer can opt into `toolbarPlacement="renderer"` and place `props.toolbar`
+in its own pane, including empty feeds. Never rebuild a second search/filter state in a widget.

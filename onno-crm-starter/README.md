@@ -406,3 +406,34 @@ Explicit toolbar composition uses comma-separated widget settings. Omitted setti
 | `toolbarSecondary` | `channels,accounts`, either one independently, or empty to omit the lower row. |
 
 These settings select contents, not visual ordering. The host retains consistent title/filter/action positions. The wedding inbox uses `toolbarControls=title,search,filters`, `toolbarViewOptions=custom`, `toolbarFilters=status`, and `toolbarSecondary=channels,accounts`. Its Conversations body remains available without Table/Conversations buttons. The reusable `EntityListWidget.toolbarOptions` exposes equivalent `controls`, `views`, `filterKeys`, and `actionKeys` arrays. Visibility is presentation, never authorization.
+
+### Workspace chrome configuration
+
+CRM uses the shared SDK `WorkspaceToolbar`, so layout choices belong to the host application.
+For `crmInboxWorkspaces`, `toolbarPlacement=renderer` moves the framework's existing list
+controls into the conversation pane and removes the separate top toolbar. It remains
+reachable for empty filtered feeds. Existing `toolbarControls`, `toolbarFilters`,
+`toolbarActions`, `toolbarViewOptions`, and `toolbarSecondary` allowlists still apply.
+The default placement is `header` for compatibility.
+
+The following widget config values are JSON objects using the shared toolbar regions
+`start`, `center`, `end`, `secondary`, `overflow`, and `hidden` (arrays of item IDs):
+
+| Config | Available item IDs |
+| --- | --- |
+| `listToolbar` / `mobileListToolbar` | `title`, `count`, `controls` (the host list toolbar; used with renderer placement) |
+| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `actions`, `title`, `contact` |
+| `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions` |
+
+Desktop configs override the built-in layout; mobile configs override its individual
+regions. Replace both source and destination arrays when moving an item. `hidden` wins;
+unknown IDs are ignored. Missing or malformed config uses defaults. Layout never grants
+access to unavailable commands. Keep `back` reachable on mobile detail screens.
+
+```java
+page.widget("Inbox").type("crmInboxWorkspaces").config("workspace", "support")
+    .config("toolbarPlacement", "renderer")
+    .config("toolbarControls", "search,filters")
+    .config("toolbarSecondary", "channels,accounts")
+    .config("chatToolbar", "{\"start\":[\"back\",\"actions\"],\"center\":[\"title\"],\"end\":[\"contact\"]}");
+```

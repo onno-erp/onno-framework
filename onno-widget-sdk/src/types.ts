@@ -106,6 +106,8 @@ export interface ListRendererDescriptor {
  * the renderer only draws the current window of rows and opens records through the callback.
  */
 export interface ListRendererProps {
+  /** Host-owned controls, when toolbarPlacement is renderer. Render exactly once, including empty feeds. */
+  toolbar?: import("react").ReactNode;
   /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
   hasMore?: boolean;
   /** A next-window request is in flight. */
@@ -169,6 +171,7 @@ export interface OnnoEvents {
  *   const { Select, SelectTrigger, SelectContent, SelectItem, Button, Segmented } = ui;
  */
 export interface OnnoUi {
+  WorkspaceToolbar: import("react").ComponentType<WorkspaceToolbarProps>;
   usePageSlide?: (root: import("react").RefObject<HTMLElement | null>, key: string, enabled?: boolean, onFinish?: () => void, motion?: "slide" | "fade") => void;
   EntityTagMenu: import("react").ComponentType<{kind: "catalogs" | "documents"; name: string; id: string; readOnly?: boolean}>;
   ContextMenuSub: import("react").ComponentType<any>;
@@ -274,3 +277,6 @@ export interface ChatMessageRenderer {
   matches: (message: Readonly<ChatMessage>) => boolean;
   component: import("react").ComponentType<ChatMessageRendererProps>;
 }
+
+export type WorkspaceToolbarLayout = Partial<Record<"start" | "center" | "end" | "secondary" | "overflow" | "hidden", string[]>>;
+export interface WorkspaceToolbarProps { items: {id: string; content: import("react").ReactNode}[]; layout?: WorkspaceToolbarLayout; compactLayout?: WorkspaceToolbarLayout; compact?: boolean; balanced?: boolean; className?: string; }

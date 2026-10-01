@@ -193,6 +193,7 @@ export type ListCustomConfig = { type: string; label?: string; defaultView?: boo
  * draws the rows it's handed and opens a record through the callback.
  */
 export type ListRendererProps = {
+  toolbar?: ReactNode;
   /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
   hasMore?: boolean;
   /** A next-window request is in flight. */
@@ -1290,6 +1291,7 @@ export function EntityListWidget({
   list,
   headerExtra,
   toolbarContent,
+  toolbarPlacement = "header",
   toolbarOptions,
   queryParams,
   renderer,
@@ -1306,6 +1308,8 @@ export function EntityListWidget({
   headerExtra?: ReactNode;
   /** Full-width secondary controls inside the same toolbar surface. */
   toolbarContent?: ReactNode;
+  /** Custom renderers may place the host controls within their own workspace. */
+  toolbarPlacement?: "header" | "renderer";
   toolbarOptions?: {
     title?: boolean; count?: boolean; viewSwitcher?: boolean; search?: boolean;
     controls?: string[]; views?: Array<"table" | "map" | "custom">;
@@ -2588,28 +2592,9 @@ export function EntityListWidget({
       })()
     : null;
 
-  return (
-    // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
-    // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
-    // As its own route surface the island takes the full height from its top to the window bottom
-    // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
-    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
-    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
-    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
-    <div
-      ref={rootRef}
-      className={cn(
-        "pointer-events-auto flex min-h-0 flex-col",
-        surfaceMode && "overflow-hidden",
-        surfaceMode && ownsSurfacePadding && "p-4 sm:p-6"
-      )}
-      style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
-    >
-      {/* Control island — three zones on one line: title/count stay visible on the left, facets get
-          the flexible middle rail (and scroll independently when they do not fit), while search and
-          actions stay visible on the right. The whole toolbar must never become one long scroller:
-          that pushes the primary actions offscreen precisely when space is scarce. */}
-      <div className="mb-3 shrink-0 overflow-hidden rounded-card border border-border/70 bg-card">
+  const relocateToolbar = toolbarPlacement === "renderer" && customMode && !!CustomRenderer;
+  const listToolbar = (
+      <div data-list-toolbar="" className={relocateToolbar ? "shrink-0 min-w-0 border-b border-border/50 bg-card" : "mb-3 shrink-0 overflow-hidden rounded-card border border-border/70 bg-card"}>
       <div className="flex min-w-0 items-center gap-2 px-2.5 py-2">
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
@@ -2872,6 +2857,27 @@ export function EntityListWidget({
       {toolbarContent && <div className="border-t border-border/50 px-2.5 py-2">{toolbarContent}</div>}
       </div>
 
+  );
+
+  return (
+    // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
+    // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
+    // As its own route surface the island takes the full height from its top to the window bottom
+    // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
+    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
+    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
+    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
+    <div
+      ref={rootRef}
+      className={cn(
+        "pointer-events-auto flex min-h-0 flex-col",
+        surfaceMode && "overflow-hidden",
+        surfaceMode && ownsSurfacePadding && "p-4 sm:p-6"
+      )}
+      style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
+    >
+      {!relocateToolbar && listToolbar}
+
       {mapMode ? (
         // Only catalog/document lists ever declare a map config, so mapMode is never true for a
         // register — narrow the kind for the map view, which pages from /api/list/{kind}/{name}.
@@ -2880,7 +2886,7 @@ export function EntityListWidget({
         </div>
       ) : customMode && CustomRenderer ? (
         // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps
-        // the toolbar (search, filters, sort) and keyset feed. No card chrome: the renderer owns
+        // ownership of toolbar state and the keyset feed; placement may be delegated. The renderer owns
         // its own look.
         <div className={cn("relative flex flex-col", surfaceMode && "min-h-0 flex-1")}>
           <div
@@ -2894,12 +2900,12 @@ export function EntityListWidget({
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
                 {t("loading.generic")}
               </div>
-            ) : loadedRows.length === 0 ? (
+            ) : loadedRows.length === 0 && !relocateToolbar ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
-              <CustomRenderer rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
+              <CustomRenderer toolbar={relocateToolbar ? listToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
             {loadingMore ? (

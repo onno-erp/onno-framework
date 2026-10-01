@@ -1,0 +1,20 @@
+import {cleanup, fireEvent, render, screen, waitFor, within} from "@testing-library/react";
+import {afterEach, expect, it, vi} from "vitest";
+import {EntityListWidget, type ListDescriptor, type ListRendererProps} from "@/components/entity-list-widget";
+vi.mock("@/lib/presence-store",()=>({useViewersById:()=>new Map()}));
+vi.mock("@/components/list-map-view",()=>({ListMapView:()=>null}));
+afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+it("keeps controls reachable for empty custom feeds and restores them when switching to table", async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
+  const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:false,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true,custom:{type:"workspace",label:"Workspace",defaultView:true}};
+  const Renderer = (props:ListRendererProps)=><section data-testid="custom-body">{props.toolbar}<p>No workspace records</p></section>;
+  render(<EntityListWidget list={list} renderer={Renderer} toolbarPlacement="renderer" headerExtra={<button>Reset filters</button>} />);
+  const body = await screen.findByTestId("custom-body");
+  expect(within(body).getByText("Reset filters")).toBeVisible();
+  expect(document.querySelectorAll("[data-list-toolbar]")).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button",{name:"Table"}));
+  await waitFor(()=>expect(screen.queryByTestId("custom-body")).toBeNull());
+  expect(screen.getByText("Reset filters")).toBeVisible();
+  expect(document.querySelectorAll("[data-list-toolbar]")).toHaveLength(1);
+});

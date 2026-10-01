@@ -39,8 +39,10 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   });
   vi.stubGlobal("fetch", fetcher);
   const Workspace = resolveWidget("crmInboxWorkspaces") as ComponentType<any>;
-  render(<Workspace widget={{ extraConfig: { workspace: "support", toolbarControls: "title,search,filters,views", toolbarViewOptions: "custom" } }} />);
+  render(<Workspace widget={{ extraConfig: { workspace: "support", toolbarPlacement: "renderer", mobileChatToolbar: JSON.stringify({start:["back"], hidden:["actions"]}), toolbarControls: "title,search,filters,views", toolbarViewOptions: "custom" } }} />);
   await screen.findByText("6 chats");
+  expect(screen.getByTestId("crm-inbox-workspace").querySelector("[data-list-toolbar]")).not.toBeNull();
+  expect(document.querySelectorAll("[data-list-toolbar]")).toHaveLength(1);
   expect(screen.queryByText("6 rows")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", {name:"Table"})).not.toBeInTheDocument();
   await screen.findByText("Person 2");
@@ -61,6 +63,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   expect(screen.getByRole("button", { name: /Person 6/, hidden: true })).toHaveAttribute("aria-current", "true");
   if (compact) {
     expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "true");
+    expect(screen.queryByRole("button", {name:"Conversation actions"})).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Back to conversations" }));
     expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "false");
     expect(screen.getByRole("button", { name: /Person 6/ })).not.toHaveAttribute("aria-current");

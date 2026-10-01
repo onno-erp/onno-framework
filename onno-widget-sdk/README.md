@@ -295,3 +295,32 @@ and `--page-slide-ease` on the container. Older hosts fall back to no animation.
 
 The optional `motion` is `"slide"` by default; `"fade"` uses a 120ms opacity transition
 without horizontal travel, used by the mobile shell when switching top-level sections.
+
+### Configurable workspace toolbars
+
+`WorkspaceToolbar` is a domain-independent layout primitive. Pass `items` containing a
+stable `id` and a React `content` node. The caller still owns permissions, enabled state,
+handlers, labels and data. `layout` selects and orders IDs in `start`, `center`, `end`,
+`secondary`, or `overflow`; `hidden` suppresses IDs everywhere. Unlisted IDs stay hidden,
+unknown IDs are ignored, and duplicate IDs render once (first region wins).
+`compactLayout` overrides individual arrays when `compact` is true. To move an item,
+remove it from its old region as well as adding it to the new region. An empty array
+hides that region. `balanced` keeps a centered title between equal-width edge regions.
+The overflow disclosure hosts ordinary controls, including disabled buttons.
+
+```tsx
+<WorkspaceToolbar compact={narrow}
+  items={[
+    {id: "title", content: <h2>Orders</h2>},
+    {id: "save", content: <Button disabled={!canSave} onClick={save}>Save</Button>},
+    {id: "export", content: canExport ? <Button onClick={exportRows}>Export</Button> : null},
+  ]}
+  layout={{start: ["title"], end: ["save", "export"]}}
+  compactLayout={{end: ["save"], overflow: ["export"]}} />
+```
+
+`EntityListWidget toolbarPlacement="renderer"` passes the host-owned toolbar to a custom
+list renderer as `props.toolbar`. Render it exactly once inside the workspace, including
+when `rows` is empty, so users can clear filters. Query, permissions, actions and pagination
+remain with the host. The default is `"header"`; table/map views always keep their normal
+host toolbar even when a custom renderer opts into internal placement.

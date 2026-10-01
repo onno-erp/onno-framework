@@ -378,3 +378,6 @@ export function useMobileDetail(active: boolean): void {
 
 /** Animate navigation between direct children marked data-slide-page; initial load snaps. */
 export const usePageSlide: NonNullable<OnnoUi["usePageSlide"]> = host.ui.usePageSlide ?? (() => {});
+
+export const WorkspaceToolbar = host.ui.WorkspaceToolbar;
+export type { WorkspaceToolbarLayout, WorkspaceToolbarProps } from "./types";

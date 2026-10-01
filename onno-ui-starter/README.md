@@ -1645,3 +1645,9 @@ row actions and disable cells.
 On bottom-bar shells, declared navigation destinations are top-level screens. Opening another route shows a Back header and hides the bottom bar. Parent surfaces stay mounted until returning or switching top-level destinations, retaining their filters and scroll state. Direct entity links fall back to their catalog/document list. Back asks before discarding a dirty form. Widgets with in-page child states can call SDK `useMobileDetail(active)` when they provide their own Back control; the CRM inbox uses this for an open compact chat. Requests are scoped to the mounted route and released on cleanup.
 
 Composed list toolbars support `toolbarOptions: { title, count, search, viewSwitcher }` (each defaults to visible), a compact `headerExtra` slot beside the title, and a full-width `toolbarContent` row inside the same bordered toolbar. Use the second row for channel/account selectors or other controls that need room on phones. Visibility options change presentation only.
+
+Custom operational workspaces can opt into `EntityListWidget toolbarPlacement="renderer"`.
+Their `ListRendererProps.toolbar` contains the actual host controls, not duplicated search or
+filter state. Keep it mounted even for empty results. Other views retain the ordinary toolbar.
+Use shared `WorkspaceToolbar` for domain-neutral placement/visibility/mobile overrides in
+workspace headers and action rows; see `onno-widget-sdk/README.md` for its layout contract.
