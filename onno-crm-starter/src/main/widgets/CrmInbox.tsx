@@ -88,7 +88,7 @@ type Comment = {
 type ComposerMode = "reply" | "note";
 
 // One surface treatment for the header, composer, and contact-details island.
-const islandSurface = "rounded-panel bg-card ring-1 ring-border/60";
+const islandSurface = "rounded-panel bg-card border border-border/60";
 
 function string(row: EntityRecord | null, key: string, fallback = ""): string {
   const value = row?.[key];
@@ -845,7 +845,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden ring-1 ring-border/60" {...(contactPanelOpen && detailOverlay ? {inert:true} : {})}>
+        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" {...(contactPanelOpen && detailOverlay ? {inert:true} : {})}>
           <header className="crm-chat-header z-10 flex min-h-16 shrink-0 items-center gap-3 px-4 py-3">
             {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); }}><ArrowLeft className="size-4" /></Button>}
             {!compact && config.showAvatar !== false && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />}
@@ -1129,7 +1129,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
-  const channelControls = showChannelFilters ? <div className="crm-channel-bar flex min-w-0 shrink-0 items-center gap-2 rounded-panel bg-card px-3 py-2 ring-1 ring-border/60" aria-label={t("crm.inbox.channelsAndAccounts")}>
+  const channelControls = showChannelFilters ? <div className="crm-channel-bar flex min-w-0 shrink-0 items-center gap-2 rounded-panel bg-card px-3 py-2 border border-border/60" aria-label={t("crm.inbox.channelsAndAccounts")}>
     <div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
       <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}

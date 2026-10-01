@@ -230,3 +230,5 @@ in the section header. The table remains the horizontal scroll boundary on narro
 ### CRM workspace sizing
 
 CRM chat layouts respond to the widget container, not only the browser viewport. Keep the list, history and composer within the host's allocated height (`min-h-0` throughout). The composer stays in document flow; only history and long lists scroll. Under 720px use a list-to-chat drill-in with a visible back control; under 1100px contact details overlay the chat with focus restoration. Keep secondary actions behind the conversation actions disclosure so contact names remain legible.
+
+Use real borders for CRM pane outlines inside clipped containers. Outer Tailwind rings extend beyond the box and are cut off by the workspace and contact-slot overflow boundaries.
