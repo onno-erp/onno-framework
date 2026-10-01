@@ -830,7 +830,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
                   const folder = owner(row);
-                  if (!folder) return <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
+                  if (!folder) return <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
                   if (shown.has(folder.key)) return null;
                   shown.add(folder.key);
                   const members = folderRows(folder.key);
@@ -852,7 +852,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
             <ConversationList {...pagination} active={!!activeFolder}>
-              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
+              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
               {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("crm.inbox.emptyFolder")}</p>}
             </ConversationList>
           </div>

@@ -44,6 +44,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   expect(screen.queryByText("6 rows")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", {name:"Table"})).not.toBeInTheDocument();
   await screen.findByText("Person 2");
+  if (compact) expect(screen.getByTestId("crm-inbox-workspace").querySelector("button[aria-current=true]")).toBeNull();
   const firstPane = screen.getAllByLabelText("Conversation list")[0];
   Object.defineProperties(firstPane, { clientHeight: { configurable: true, value: 300 }, scrollHeight: { configurable: true, value: 1000 }, scrollTop: { configurable: true, value: 700 } });
   fireEvent.scroll(firstPane);
@@ -62,6 +63,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
     expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "true");
     fireEvent.click(screen.getByRole("button", { name: "Back to conversations" }));
     expect(screen.getByTestId("crm-inbox-workspace")).toHaveAttribute("data-chat-open", "false");
+    expect(screen.getByRole("button", { name: /Person 6/ })).not.toHaveAttribute("aria-current");
     fireEvent.click(screen.getByRole("button", { name: /Person 6/ }));
     fireEvent.click(screen.getByRole("button", { name: "Show contact details" }));
     expect(screen.getByRole("button", { name: "Close contact details" })).toHaveFocus();
