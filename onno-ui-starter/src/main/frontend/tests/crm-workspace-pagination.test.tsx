@@ -16,7 +16,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 0));
   vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
   const config = { folders: [], fields: [], actions: [], showAvatar: false, listTitle: "customerDisplay", listSubtitle: "subject", listPreview: "lastMessagePreview" };
-  const list = { columns: [], searchable: false, sort: { column: null, descending: false }, pageSize: 2, custom: { type: "crmInbox", defaultView: true } };
+  const list = { columns: [], searchable: false, sort: { column: null, descending: false }, pageSize: 2, custom: { type: "crmInbox", defaultView: false } };
   const response = (body: unknown) => new Response(JSON.stringify(body));
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input), "http://localhost");
@@ -39,8 +39,10 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   });
   vi.stubGlobal("fetch", fetcher);
   const Workspace = resolveWidget("crmInboxWorkspaces") as ComponentType<any>;
-  render(<Workspace widget={{ extraConfig: { workspace: "support" } }} />);
+  render(<Workspace widget={{ extraConfig: { workspace: "support", toolbarControls: "title,search,filters,views", toolbarViewOptions: "custom" } }} />);
   await screen.findByText("6 chats");
+  expect(screen.queryByText("6 rows")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", {name:"Table"})).not.toBeInTheDocument();
   await screen.findByText("Person 2");
   const firstPane = screen.getAllByLabelText("Conversation list")[0];
   Object.defineProperties(firstPane, { clientHeight: { configurable: true, value: 300 }, scrollHeight: { configurable: true, value: 1000 }, scrollTop: { configurable: true, value: 700 } });

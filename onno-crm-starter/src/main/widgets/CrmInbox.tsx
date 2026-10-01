@@ -1062,8 +1062,13 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   // the folding and the folder it wants opened, instead of dropping the reader at the root list.
   const routedMode = route.get("mode") || "";
   const routedFolder = route.get("folder") || "";
-  const showChannelFilters = widget.extraConfig?.channelFilters === "true";
-  const showAccountFilter = widget.extraConfig?.accountFilter !== "false";
+  const configuredList = (key: string) => widget.extraConfig?.[key] === undefined ? undefined
+    : widget.extraConfig[key].split(",").map(value => value.trim()).filter(Boolean);
+  const mainControls = configuredList("toolbarControls");
+  const showToolbarControl = (key:string) => !mainControls || mainControls.includes(key);
+  const secondaryControls = configuredList("toolbarSecondary");
+  const showChannelFilters = secondaryControls ? secondaryControls.includes("channels") : widget.extraConfig?.channelFilters === "true";
+  const showAccountFilter = secondaryControls ? secondaryControls.includes("accounts") : showChannelFilters && widget.extraConfig?.accountFilter !== "false";
   const [mode, setMode] = useState(
     [routedMode, configuredKey].find(key => key && modeKeys.includes(key)) || modeKeys[0] || ""
   );
@@ -1133,8 +1138,8 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
-  const channelControls = showChannelFilters ? <div className="crm-channel-bar flex min-w-0 shrink-0 items-center gap-2 rounded-panel bg-card px-3 py-2 border border-border/60" aria-label={t("crm.inbox.channelsAndAccounts")}>
-    <div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
+  const channelControls = showChannelFilters || showAccountFilter ? <div className="crm-channel-bar flex min-w-0 items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
+    {showChannelFilters && <><div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
       <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
     </div>
@@ -1144,6 +1149,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
         <SelectContent><SelectItem value="all">{t("crm.inbox.allChannels")}</SelectItem>{channels.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
       </Select>
     </div>
+    </> }
     {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
       <SelectTrigger aria-label={t("crm.inbox.account")} className="crm-account-select ml-auto w-52 min-w-0"><SelectValue>{account ? accountLabels.find(item => item.value === account)?.label || accounts.find(item => item.id === account)?.label || account : t("crm.inbox.allAccounts")}</SelectValue></SelectTrigger>
       <SelectContent><SelectItem value="all">{t("crm.inbox.allAccounts")}</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
@@ -1168,8 +1174,11 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
         .crm-account-select { width:45%; }
       }
     `}</style>
-    {channelControls}
-    <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={<>{modeControls}{toolbar}</>} queryParams={queryParams} />
+    <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={channelControls}
+      toolbarOptions={{controls:configuredList("toolbarControls"),
+        views:configuredList("toolbarViewOptions") as Array<"table" | "map" | "custom"> | undefined,
+        filterKeys:configuredList("toolbarFilters"), actionKeys:configuredList("toolbarActions"), title:widget.extraConfig?.toolbarTitle !== "false", count:widget.extraConfig?.toolbarCount !== "false",
+        viewSwitcher:widget.extraConfig?.toolbarViews !== "false", search:widget.extraConfig?.toolbarSearch !== "false"}} queryParams={queryParams} />
   </div> : <p>{t("crm.inbox.loading")}</p>;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

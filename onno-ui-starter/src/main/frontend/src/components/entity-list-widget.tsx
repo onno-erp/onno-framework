@@ -1297,6 +1297,8 @@ const OVERSCAN = 8;
 export function EntityListWidget({
   list,
   headerExtra,
+  toolbarContent,
+  toolbarOptions,
   queryParams,
   renderer,
   refreshKey,
@@ -1310,8 +1312,16 @@ export function EntityListWidget({
   // surface parks its Balance/Movements toggle here so the view switch lives with the list's own
   // controls instead of floating above the card.
   headerExtra?: ReactNode;
+  /** Full-width secondary controls inside the same toolbar surface. */
+  toolbarContent?: ReactNode;
+  toolbarOptions?: {
+    title?: boolean; count?: boolean; viewSwitcher?: boolean; search?: boolean;
+    controls?: string[]; views?: Array<"table" | "map" | "custom">;
+    filterKeys?: string[]; actionKeys?: string[];
+  };
 }) {
   const { kind, name, columns, pageSize } = list;
+  const showControl = (key: string) => !toolbarOptions?.controls || toolbarOptions.controls.includes(key);
   const queryParamSig = JSON.stringify(queryParams ?? {});
   const t = useMessages();
   // Ambient presence: other users viewing each row's record, looked up by row id at render time.
@@ -1440,7 +1450,7 @@ export function EntityListWidget({
     if (list.custom?.defaultView) return "custom";
     return list.map?.defaultView ? "map" : "table";
   });
-  const mapMode = !!list.map && view === "map";
+
   // The custom body renderer, resolved live from the widget registry: a plugin registering after
   // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
   // list degrades to the default grid rather than failing (no toggle, no blank body).
@@ -1454,7 +1464,12 @@ export function EntityListWidget({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [customType, registryVersion, renderer]
   );
-  const customMode = view === "custom" && !!CustomRenderer;
+  const availableViews = (["table", ...(list.map ? ["map"] : []), ...(CustomRenderer ? ["custom"] : [])] as Array<"table" | "map" | "custom">);
+  const configuredViews = toolbarOptions?.views?.filter(value => availableViews.includes(value));
+  const allowedViews = configuredViews?.length ? configuredViews : availableViews;
+  const activeView = allowedViews.includes(view) ? view : allowedViews[0];
+  const mapMode = !!list.map && activeView === "map";
+  const customMode = activeView === "custom" && !!CustomRenderer;
   // Grouped view replaces the flat table (never shown together with the map or a custom body).
   const grouped = !!groupBy && !mapMode && !customMode;
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
@@ -2602,17 +2617,18 @@ export function EntityListWidget({
           the flexible middle rail (and scroll independently when they do not fit), while search and
           actions stay visible on the right. The whole toolbar must never become one long scroller:
           that pushes the primary actions offscreen precisely when space is scarce. */}
-      <div className="mb-3 flex shrink-0 items-center gap-2 overflow-hidden rounded-card border border-border/70 bg-card px-2.5 py-2">
+      <div className="mb-3 shrink-0 overflow-hidden rounded-card border border-border/70 bg-card">
+      <div className="flex min-w-0 items-center gap-2 px-2.5 py-2">
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
         <div className="mr-1 flex min-h-8 min-w-0 items-center gap-2">
-          <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>
+          {showControl("title") && toolbarOptions?.title !== false && <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>}
           {headerExtra}
           {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
-          <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+          {showControl("count") && toolbarOptions?.count !== false && <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
-          </span>
+          </span>}
           {selected.size ? (
             <button
               type="button"
@@ -2664,7 +2680,7 @@ export function EntityListWidget({
           {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
               Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
               grouped table, which the custom renderer replaces). */}
-          {!mapMode && !customMode && groupable.length ? (
+          {!mapMode && !customMode && showControl("grouping") && groupable.length ? (
             <GroupByFacet
               groupable={groupable}
               groupBy={groupBy}
@@ -2676,7 +2692,7 @@ export function EntityListWidget({
 
         {/* filter facets */}
         {!mapMode &&
-          filters.map((f) => {
+          filters.filter(f => showControl("filters") && (!toolbarOptions?.filterKeys || toolbarOptions.filterKeys.includes(f.key))).map((f) => {
             if (f.type === "dateRange") {
               return (
                 <DateRangeFacet
@@ -2718,7 +2734,7 @@ export function EntityListWidget({
             );
           })}
         {!mapMode &&
-          toolbarInputs.map((inp) => (
+          toolbarInputs.filter(() => showControl("inputs")).map((inp) => (
             <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>
               {inp.type === "select" ? (
@@ -2791,17 +2807,17 @@ export function EntityListWidget({
         {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
           {/* search — a facet-grammar chip that expands inline into the search input (SearchChip) */}
-          {!mapMode && list.searchable ? (
+          {!mapMode && list.searchable && showControl("search") && toolbarOptions?.search !== false ? (
             <SearchChip label={t("list.searchLabel")} value={query} onCommit={setQuery} openWidth={constrainedActions ? 160 : 208} />
           ) : null}
-          {list.map || (list.custom && CustomRenderer) ? (
+          {showControl("views") && toolbarOptions?.viewSwitcher !== false && allowedViews.length > 1 ? (
             // Table plus whichever alternate bodies the list declares. The custom option only
             // appears once its type is registered — an unknown renderer degrades to the plain grid.
             <Segmented
-              value={customMode ? "custom" : view === "custom" ? "table" : view}
+              value={activeView}
               onChange={setView}
               options={[
-                { value: "table", icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
+                { value: "table" as const, icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
                 ...(list.map
                   ? [{ value: "map" as const, icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") }]
                   : []),
@@ -2813,11 +2829,11 @@ export function EntityListWidget({
                       ariaLabel: list.custom.label || t("list.customView"),
                     }]
                   : []),
-              ]}
+              ].filter(option => allowedViews.includes(option.value as "table" | "map" | "custom"))}
             />
           ) : null}
-          <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />
-          {toolbarActions.map((a) => {
+          {showControl("extensions") && <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
+          {toolbarActions.filter(a => showControl("actions") && (!toolbarOptions?.actionKeys || toolbarOptions.actionKeys.includes(a.key))).map((a) => {
             const busy = pending.has(a.key);
             const iconOnly = compact && (!!a.icon || !!a.logo);
             return (
@@ -2844,7 +2860,7 @@ export function EntityListWidget({
               </button>
             );
           })}
-          {list.newUrl ? (
+          {list.newUrl && showControl("create") ? (
             <button
               type="button"
               onClick={() => dispatchAction(list.newUrl!)}
@@ -2860,6 +2876,8 @@ export function EntityListWidget({
             </button>
           ) : null}
         </div>
+      </div>
+      {toolbarContent && <div className="border-t border-border/50 px-2.5 py-2">{toolbarContent}</div>}
       </div>
 
       {mapMode ? (

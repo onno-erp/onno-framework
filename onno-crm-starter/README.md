@@ -389,3 +389,20 @@ The inbox uses its allocated pane width, including split views, to choose its la
 The composer occupies normal layout space below the independently scrolling history, so it cannot cover messages. Contact details use a third column in wide panes (1100px and above) and an overlay in smaller panes, with focus moved to its close button and restored on dismissal. Conversation actions are available from the header's overflow control. Read-only and disconnected channels retain their explanatory status without an empty reply editor.
 
 Mobile list-to-chat navigation uses the same 300ms horizontal slide as folders, reversed on Back. Offscreen panes are inert and hidden from assistive technology. Reduced-motion preferences disable both transitions.
+
+### Inbox toolbar controls
+
+Channel/account selectors now live inside the Inbox toolbar, in a responsive secondary row. Widget configuration `toolbarTitle`, `toolbarCount`, `toolbarViews`, and `toolbarSearch` accept `"false"` to hide each presentation element (defaults remain visible). `channelFilters` and `accountFilter` continue to control the selectors. Hiding controls does not alter permissions or clear filters. Composed list widgets can use `EntityListWidget.toolbarContent` for a full-width toolbar row and `toolbarOptions` for title/count/search/view-switch visibility; `headerExtra` remains the compact title-adjacent slot.
+
+
+Explicit toolbar composition uses comma-separated widget settings. Omitted settings preserve defaults; empty control/filter/action/secondary lists hide that group.
+
+| Setting | Values |
+| --- | --- |
+| `toolbarControls` | `title,count,search,filters,views,grouping,inputs,actions,create,extensions,workspaces` |
+| `toolbarViewOptions` | Allowed bodies: `table,map,custom`. Only declared/registered bodies are offered. A single view removes the switcher and selects that body, overriding an unavailable initial/default view. An empty or invalid list falls back to available views. |
+| `toolbarFilters` | Exact filter keys to display, e.g. `status`. |
+| `toolbarActions` | Exact server-defined toolbar action keys. Permissions still apply. |
+| `toolbarSecondary` | `channels,accounts`, either one independently, or empty to omit the lower row. |
+
+These settings select contents, not visual ordering. The host retains consistent title/filter/action positions. The wedding inbox uses `toolbarControls=title,search,filters`, `toolbarViewOptions=custom`, `toolbarFilters=status`, and `toolbarSecondary=channels,accounts`. Its Conversations body remains available without Table/Conversations buttons. The reusable `EntityListWidget.toolbarOptions` exposes equivalent `controls`, `views`, `filterKeys`, and `actionKeys` arrays. Visibility is presentation, never authorization.
