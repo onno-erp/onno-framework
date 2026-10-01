@@ -387,3 +387,5 @@ other system events retain the compact timeline treatment. Summaries are manuall
 The inbox uses its allocated pane width, including split views, to choose its layout. At 720px and above the conversation list and chat sit side by side. Below 720px the list opens first; selecting a contact opens the chat with a Back to conversations control. Returning to the same conversation preserves the draft. Channel filters collapse into a selector in narrow panes.
 
 The composer occupies normal layout space below the independently scrolling history, so it cannot cover messages. Contact details use a third column in wide panes (1100px and above) and an overlay in smaller panes, with focus moved to its close button and restored on dismissal. Conversation actions are available from the header's overflow control. Read-only and disconnected channels retain their explanatory status without an empty reply editor.
+
+Mobile list-to-chat navigation uses the same 300ms horizontal slide as folders, reversed on Back. Offscreen panes are inert and hidden from assistive technology. Reduced-motion preferences disable both transitions.

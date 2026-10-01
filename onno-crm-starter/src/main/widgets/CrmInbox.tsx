@@ -540,7 +540,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useEffect(() => { setDraft(""); setNoteDraft(""); setNoteBody(""); setHistoryPages(1); }, [selected?.customer]);
 
   useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({ block: "end" });
+    const history = timelineEndRef.current?.parentElement;
+    if (history) history.scrollTop = history.scrollHeight;
   }, [selectedId, timeline.length, mobileChatOpen]);
 
   useEffect(() => {
@@ -779,7 +780,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       data-chat-open={mobileChatOpen && !!selected}
       style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
-      <section aria-label={t("crm.inbox.chatSelection")} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
+      <section aria-label={t("crm.inbox.chatSelection")} aria-hidden={compact && mobileChatOpen && !!selected} inert={compact && mobileChatOpen && !!selected} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
         <style>{`
           .crm-chat-layout { --contact-width:320px; grid-template-columns:300px minmax(0,1fr); gap:12px; }
           .crm-chat-layout > section { grid-column:1; grid-row:1; }
@@ -793,18 +794,19 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           .crm-chat-layout[data-contact-open="true"] .crm-contact-slot { display:block; }
           .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"] .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30; }
           .crm-chat-layout[data-compact="true"] { grid-template-columns:minmax(0,1fr); gap:0; }
-          .crm-chat-layout[data-compact="true"] > main { grid-column:1; }
-          .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main,
-          .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { display:none; }
+          .crm-chat-layout[data-compact="true"] > section,
+          .crm-chat-layout[data-compact="true"] > main { grid-column:1; grid-row:1; position:absolute; inset:0; width:100%; height:100%; transform:translate3d(0,0,0); backface-visibility:hidden; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
+          .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main { transform:translate3d(100%,0,0); pointer-events:none; }
+          .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { transform:translate3d(-100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
           .crm-chat-layout[data-compact="true"] .crm-contact-slot { width:100%; }
           .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
           .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
-          .crm-folder-slide { --page-slide-dur: 300ms; --page-slide-ease: cubic-bezier(0.2,0.7,0.2,1); }
+          .crm-chat-layout, .crm-folder-slide { --page-slide-dur: 300ms; --page-slide-ease: cubic-bezier(0.2,0.7,0.2,1); }
           .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; will-change:transform; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
           .crm-folder-slide[data-open="false"] > .crm-folder-detail { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-folder-slide[data-open="true"] > .crm-folder-root { transform:translate3d(-100%,0,0); pointer-events:none; }
-          @media (prefers-reduced-motion: reduce) { .crm-folder-slide > .crm-folder-page { transition:none; } }
+          @media (prefers-reduced-motion: reduce) { .crm-folder-slide > .crm-folder-page, .crm-chat-layout[data-compact="true"] > section, .crm-chat-layout[data-compact="true"] > main { transition:none; } }
         `}</style>
         <div className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
           <div ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
@@ -847,9 +849,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" {...(contactPanelOpen && detailOverlay ? {inert:true} : {})}>
+        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && !mobileChatOpen} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 flex min-h-16 shrink-0 items-center gap-3 px-4 py-3">
-            {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); }}><ArrowLeft className="size-4" /></Button>}
+            {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>}
             {!compact && config.showAvatar !== false && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
