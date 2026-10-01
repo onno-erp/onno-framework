@@ -422,6 +422,15 @@ public class UiLayoutBuilder {
      */
     public static class ShellBuilder {
         private NavStyle nav;
+        private final Map<String, ShellConfig.MobileItem> mobileItems = new java.util.LinkedHashMap<>();
+
+        /** Short label and priority for an existing bottom-bar destination; does not grant access or add routes. */
+        public ShellBuilder mobileItem(String route, String label, int order) {
+            if (route == null || !route.startsWith("/") || label == null || label.isBlank())
+                throw new IllegalArgumentException("Mobile navigation requires an absolute route and a nonblank label");
+            mobileItems.put(route, new ShellConfig.MobileItem(label, order));
+            return this;
+        }
         private String appName;
         private String logoUrl;
         private String logoUrlDark;
@@ -522,7 +531,7 @@ public class UiLayoutBuilder {
             BrandingConfig branding = new BrandingConfig(
                     appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
                     light.build(), dark.build(), markUrl, markUrlDark, markFramed);
-            return new ShellConfig(nav, branding);
+            return new ShellConfig(nav, branding, mobileItems);
         }
     }
 

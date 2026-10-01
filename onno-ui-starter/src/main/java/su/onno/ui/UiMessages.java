@@ -153,6 +153,7 @@ public final class UiMessages {
         d.put("login.subtitle.choose", "Choose how to sign in.");
         d.put("login.sso", "Continue with {provider}");
         d.put("login.method.password", "Sign in with password");
+        d.put("action.back", "Back");
         d.put("login.back", "Back");
         d.put("login.none", "No interactive login is configured for this application.");
         d.put("login.orManual", "or sign in manually");

@@ -14,7 +14,7 @@ import { contactChats, replySelection, type ReplySelection } from "./contactChat
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { ChatMessageBody, text as hostText, useTranslate } from "@onno/widget-sdk";
+import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail } from "@onno/widget-sdk";
 
 /**
  * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
@@ -518,6 +518,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   }, []);
   const dismissFolder = useCallback(() => setFolderKey(null), []);
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
+
+  useMobileDetail(compact && mobileChatOpen && !!selected);
 
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
 

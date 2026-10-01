@@ -1637,3 +1637,9 @@ Undo remove restores the most
 recently removed row at its original position while preserving subsequent edits to other rows.
 These edits remain in the document draft until the document is saved. Read-only forms hide
 row actions and disable cells.
+
+### Mobile navigation presentation
+
+`layout.shell().mobileItem("/", "Home", 0).mobileItem("/inbox", "Inbox", 1)` adds short labels and bottom-bar priority to existing authorized destinations. Lower order values appear first; unspecified destinations follow in their existing order. The first four appear beside More, where the full navigation remains available. Overrides do not create routes or widen access. Desktop, page titles, and the More menu keep their full labels; screen readers receive the full destination label. Bottom-bar labels use one line.
+
+On bottom-bar shells, declared navigation destinations are top-level screens. Opening another route shows a Back header and hides the bottom bar. Parent surfaces stay mounted until returning or switching top-level destinations, retaining their filters and scroll state. Direct entity links fall back to their catalog/document list. Back asks before discarding a dirty form. Widgets with in-page child states can call SDK `useMobileDetail(active)` when they provide their own Back control; the CRM inbox uses this for an open compact chat. Requests are scoped to the mounted route and released on cleanup.

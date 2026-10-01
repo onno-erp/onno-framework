@@ -9,6 +9,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UiLayoutBuilderTest {
+    @Test
+    void mobilePresentationDoesNotCreateNavigationOrChangeDesktopLabels() {
+        var layout = new UiLayoutBuilder();
+        layout.link("/inbox", "Unified inbox", "inbox");
+        layout.shell().mobileItem("/inbox", "Inbox", 0).mobileItem("/", "Home", 1);
+        assertThat(layout.build()).hasSize(1);
+        assertThat(layout.build().getFirst().pageRefs().getFirst().label()).isEqualTo("Unified inbox");
+        assertThat(layout.buildShell().mobileItems().get("/inbox").label()).isEqualTo("Inbox");
+        assertThatThrownBy(() -> layout.shell().mobileItem("inbox", "Inbox", 0)).isInstanceOf(IllegalArgumentException.class);
+    }
+
 
     @Test
     void linksAreTitlelessSingleItemSectionsAndCoexist() {

@@ -364,3 +364,14 @@ export function registerExtension(extension: import("./extensions").UiExtension)
   return host.extensions.register(extension);
 }
 export const ExtensionSlot: ComponentType<import("./extensions").ExtensionSlotProps> = host.extensions?.Slot ?? (() => null);
+
+/** Hide mobile bottom navigation while a widget shows a child state with its own Back control.
+ * Automatically releases the request on unmount. Desktop navigation is unaffected. */
+export function useMobileDetail(active: boolean): void {
+  const id = React.useId();
+  const path = React.useRef(window.location.pathname);
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent("onno:mobile-detail", {detail:{id, path:path.current, active}}));
+    return () => {window.dispatchEvent(new CustomEvent("onno:mobile-detail", {detail:{id, active:false}}));};
+  }, [id, active]);
+}

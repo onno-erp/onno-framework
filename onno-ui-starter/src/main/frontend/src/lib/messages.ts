@@ -128,6 +128,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "login.subtitle.choose": "Choose how to sign in.",
   "login.sso": "Continue with {provider}",
   "login.method.password": "Sign in with password",
+  "action.back": "Back",
   "login.back": "Back",
   "login.none": "No interactive login is configured for this application.",
   "login.orManual": "or sign in manually",

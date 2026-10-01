@@ -18,6 +18,7 @@ import type { UiEvent } from "@/lib/types";
 import { cn, copyToClipboard } from "@/lib/utils";
 import { stripBasePath, withBasePath } from "@/lib/base-path";
 import { clearFormDirty, isFormDirty } from "@/lib/dirty-forms";
+import { MobileNavigationFrame } from "@/components/mobile-navigation-frame";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
 import { DynamicLucide, ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
@@ -2054,10 +2055,22 @@ export function DivKitView() {
     // large phones (pinned bottom-right). Account lives on the /account page here.
     return (
       <div className="min-h-screen w-full overflow-x-hidden" style={{ background: pageBg }}>
-        <div className="pb-24">{plainContent}</div>
-        <nav className="fixed inset-x-0 bottom-0 z-10">
-          <div className={viewport === "tablet" ? "ml-auto w-fit" : "mx-auto max-w-md"}>{navEl}</div>
-        </nav>
+        <MobileNavigationFrame key={profile || "default"}
+          path={focusedPane?.activePath || location.pathname}
+          roots={(shell?.navigation ?? []).flatMap(section => section.items.map(item => item.path))}
+          backLabel={t("action.back")}
+          back={path => {
+            const current = focusedPane?.activePath || location.pathname;
+            if (isFormDirty(current)) setConfirm({title:t("confirm.discard.title"), message:t("confirm.discard.message"),
+              confirmLabel:t("action.discard"), danger:true, onConfirm:() => {clearFormDirty(current); openPath(path);}});
+            else openPath(path);
+          }}
+          render={path => <ContentPane path={path} viewport={viewport} theme={resolvedTheme} profile={profile}
+            onAction={onCustomAction} registry={liveRegistry.current} skeletonBg={skeletonBg} onNotFound={handleContentNotFound} />}
+          navigation={<nav className="fixed inset-x-0 bottom-0 z-10">
+            <div className={viewport === "tablet" ? "ml-auto w-fit" : "mx-auto max-w-md"}>{navEl}</div>
+          </nav>}
+        />
         {rowMenuEl}
         {confirmEl}
       </div>

@@ -1076,7 +1076,13 @@ public class DivKitController implements DisposableBean {
         // a Page at "/settings" (e.g. a .widget(...).type("setting") input bound to a @Constant) and
         // links it like any other page — section(...).page("/settings", "Settings", "settings"), scoped
         // to an admin profile if it should be admin-only. The /api/settings endpoints enforce ADMIN on write.
-        return nav;
+        var mobileItems = layoutSet.forViewport(vp).shell().mobileItems();
+        return nav.stream().map(section -> new ShellLayoutBuilder.NavSection(section.title(), section.icon(),
+                section.items().stream().map(item -> {
+                    var mobile = mobileItems.get(item.path());
+                    return mobile == null ? item : new ShellLayoutBuilder.NavItem(item.label(), item.url(),
+                            item.icon(), item.path(), mobile.label(), mobile.order());
+                }).toList())).toList();
     }
 
     /**
