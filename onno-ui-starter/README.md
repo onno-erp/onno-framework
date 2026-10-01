@@ -127,6 +127,12 @@ does not override the host. Viewport-specific layouts augment the universal cont
 viewport. This lets a starter such as a CRM module bring its Inbox/Sales routes into an existing
 application while preserving that application's shell.
 
+The shell automatically adds one home entry when an authored `/` Page or dashboard widgets exist
+for the active profile/viewport. Do not also declare `.page("/", ...)` or `spec.link("/", ...)`: that
+creates duplicate navigation to the same page. Other custom pages require an explicit link.
+Verify resolved `navigation[*].items` from `/api/divkit/shell` has exactly one root path on desktop
+and mobile for each applicable role.
+
 The home/dashboard entry is the one nav/tab label that can also be chrome: it uses the authored `/`
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
 widget-grid dashboard with no authored page still localizes its sidebar item and tab via
@@ -776,8 +782,9 @@ class SalesOpsPage implements Page {
 - **Right rail** (shortcut). `b.aside(a -> { … })` is the common two-column case — a narrow side
   column beside the main content (stat tiles to the right of a `b.list(...)`); stacks below on mobile.
   Equivalent to a `row` with a flexible main column and a fixed rail.
-- **Link it in the nav.** A custom route only appears in the sidebar once a `Layout` section lists
-  it: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
+- **Link non-root routes in the nav.** The `/` home route is automatic when an authored root Page
+  or dashboard widgets exist. Never link it again in a section or with `spec.link("/", ...)`.
+  For another custom route, use `spec.link(...)` for direct navigation or a section entry: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
   `.catalog(...)`/`.document(...)`.
 
 ### Process task inbox
