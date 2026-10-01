@@ -1322,7 +1322,21 @@ export function EntityListWidget({
   const { kind, name, columns, pageSize } = list;
   const touchToolbar = useTouchLayout();
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
-  const mobileControls = touchToolbar && toolbarOptions?.compactPresentation === "sheet";
+  const [toolbarElement, setToolbarElement] = useState<HTMLDivElement | null>(null);
+  const [availableToolbarWidth, setAvailableToolbarWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!toolbarElement) return;
+    const measure = () => {
+      const width = toolbarElement.getBoundingClientRect().width;
+      if (width > 0) setAvailableToolbarWidth(width);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(toolbarElement);
+    return () => observer.disconnect();
+  }, [toolbarElement]);
+  const mobileControls = (touchToolbar || (availableToolbarWidth != null && availableToolbarWidth < 560))
+    && toolbarOptions?.compactPresentation === "sheet";
   const showControl = (key: string) => !toolbarOptions?.controls || toolbarOptions.controls.includes(key);
   const queryParamSig = JSON.stringify(queryParams ?? {});
   const t = useMessages();
@@ -2866,7 +2880,7 @@ export function EntityListWidget({
 
   );
 
-  const presentedToolbar = mobileControls ? <div data-compact-list-toolbar="" className="onno-compact-controls min-w-0 w-full">
+  const toolbarPresentation = mobileControls ? <div data-compact-list-toolbar="" className="onno-compact-controls min-w-0 w-full">
     <div className="flex items-center gap-2">
       {list.searchable && showControl("search") && toolbarOptions?.search !== false && <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -2879,6 +2893,7 @@ export function EntityListWidget({
       <div data-compact-filter-sheet="" className="onno-compact-controls p-3">{listToolbar}</div>
     </FacetSheet>
   </div> : listToolbar;
+  const presentedToolbar = <div ref={setToolbarElement} data-toolbar-container="" className="min-w-0 w-full">{toolbarPresentation}</div>;
 
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —

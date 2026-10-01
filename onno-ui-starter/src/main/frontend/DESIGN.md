@@ -258,7 +258,8 @@ Callers supply already-authorized nodes; layout never changes permission or comm
 A custom list renderer can opt into `toolbarPlacement="renderer"` and place `props.toolbar`
 in its own pane, including empty feeds. Never rebuild a second search/filter state in a widget.
 
-Touch list toolbars may use `compactPresentation="sheet"`: one full-width 36px search
+List toolbars may use `compactPresentation="sheet"`: touch layouts and toolbar containers
+narrower than 560px show one full-width 36px search
 field and a matching Filters button, with other controls in a bottom sheet. Avoid stacking
 multiple desktop chip/select rows above a phone list. Nested facet sheets use Vaul's
 nested root; Escape dismisses only the topmost dialog.

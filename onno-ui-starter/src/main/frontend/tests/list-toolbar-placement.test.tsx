@@ -35,3 +35,19 @@ it("uses a persistent mobile search and a filter sheet without losing query stat
   await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
   expect(screen.getByRole("textbox",{name:"Search"})).toBe(search);
 });
+
+it("uses compact controls in narrow panes on a desktop viewport", async()=>{
+  vi.stubGlobal("matchMedia",()=>({matches:false,addEventListener(){},removeEventListener(){}}));
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  const rect = vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(){
+    return {width:this.hasAttribute("data-toolbar-container") ? 300 : 1200,height:600,top:0,left:0,right:1200,bottom:600,x:0,y:0,toJSON(){}};
+  });
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
+  const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:true,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true};
+  try {
+    render(<EntityListWidget list={list} toolbarOptions={{compactPresentation:"sheet",controls:["search","filters"]}} toolbarContent={<button>Channel options</button>} />);
+    expect(await screen.findByRole("textbox",{name:"Search"})).toBeVisible();
+    expect(screen.getByRole("button",{name:"Filters"})).toBeVisible();
+    expect(screen.queryByText("Channel options")).toBeNull();
+  } finally {rect.mockRestore();}
+});
