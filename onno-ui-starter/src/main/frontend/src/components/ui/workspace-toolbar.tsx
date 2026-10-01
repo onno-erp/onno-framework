@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "./button";
-import { Popover, PopoverTrigger, PopoverContent } from "./popover";
+import { ResponsiveActionPanel } from "./responsive-action-panel";
 import { useMessages } from "@/providers/messages-provider";
 import { cn } from "@/lib/utils";
 
@@ -35,9 +35,9 @@ export function WorkspaceToolbar({items, layout, compactLayout, compact, balance
       <div className="flex min-w-0 items-center gap-1">{start}</div>
       <div className={cn("min-w-0",balanced ? "text-center" : "flex flex-1 items-center gap-2")}>{center}</div>
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1">{end}
-        {!!overflow.length && <Popover><PopoverTrigger asChild><Button variant="ghost" size="toolbar" aria-label={t("shell.more")}><MoreHorizontal className="size-4" /></Button></PopoverTrigger>
-          <PopoverContent align="end" className="flex w-auto max-w-[calc(100vw-2rem)] flex-col gap-2 p-2">{overflow}</PopoverContent>
-        </Popover>}
+        {!!overflow.length && <ResponsiveActionPanel label={t("shell.more")} trigger={<Button variant="ghost" size="toolbar" aria-label={t("shell.more")}><MoreHorizontal className="size-4" /></Button>}>
+          {overflow}
+        </ResponsiveActionPanel>}
       </div>
     </div>}
     {!!secondary.length && <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">{secondary}</div>}

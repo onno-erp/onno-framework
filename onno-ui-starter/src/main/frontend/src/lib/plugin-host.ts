@@ -1,3 +1,4 @@
+import { ResponsiveActionPanel } from "@/components/ui/responsive-action-panel";
 import { WorkspaceToolbar } from "@/components/ui/workspace-toolbar";
 import { usePageSlide } from "@/lib/use-page-slide";
 import { extensions } from "./ui-extensions";
@@ -86,6 +87,7 @@ export interface OnnoUi {
   Popover: typeof Popover;
   PopoverAnchor: typeof PopoverAnchor;
   PopoverTrigger: typeof PopoverTrigger;
+  ResponsiveActionPanel: typeof ResponsiveActionPanel;
   PopoverContent: typeof PopoverContent;
   Select: typeof Select;
   SelectContent: typeof SelectContent;
@@ -199,6 +201,7 @@ const ui: OnnoUi = {
   Popover,
   PopoverAnchor,
   PopoverTrigger,
+  ResponsiveActionPanel,
   PopoverContent,
   Select,
   SelectContent,

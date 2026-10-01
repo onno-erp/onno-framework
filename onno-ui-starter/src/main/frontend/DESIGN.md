@@ -265,3 +265,8 @@ multiple desktop chip/select rows above a phone list. Nested facet sheets use Va
 nested root; Escape dismisses only the topmost dialog.
 
 Compact workspace filter chips, select triggers and search use a shared 36px visible height, field radius, neutral fill and solid border. Search text remains 16px to avoid mobile browser focus zoom; its placeholder matches the 14px control labels. Do not enlarge individual CRM dropdowns independently.
+
+`ResponsiveActionPanel` composes canonical Popover and FacetSheet primitives. It anchors to its
+trigger on desktop, uses a tablet modal and a phone sheet. Use it for compact filter panels and
+workspace action menus; container width selects control density, viewport selects overlay type.
+It is available to plugins through the widget SDK.

@@ -286,6 +286,7 @@ export const {
   Popover,
   PopoverAnchor,
   PopoverTrigger,
+  ResponsiveActionPanel,
   PopoverContent,
   Select,
   SelectContent,

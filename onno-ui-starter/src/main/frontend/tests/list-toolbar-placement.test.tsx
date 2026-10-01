@@ -49,5 +49,9 @@ it("uses compact controls in narrow panes on a desktop viewport", async()=>{
     expect(await screen.findByRole("textbox",{name:"Search"})).toBeVisible();
     expect(screen.getByRole("button",{name:"Filters"})).toBeVisible();
     expect(screen.queryByText("Channel options")).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name:"Filters"}));
+    expect(await screen.findByRole("dialog", {name:"Filters"})).toBeVisible();
+    expect(screen.getByText("Channel options")).toBeVisible();
+    expect(document.querySelector("[data-vaul-drawer]")).toBeNull();
   } finally {rect.mockRestore();}
 });

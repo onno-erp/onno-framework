@@ -426,7 +426,7 @@ The following widget config values are JSON objects using the shared toolbar reg
 | --- | --- |
 | `listToolbar` / `mobileListToolbar` | `title`, `count`, `controls` (the host list toolbar; used with renderer placement) |
 | `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
-| `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions` |
+| `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions`, `tools`, `channel` |
 
 Desktop configs override the built-in layout; mobile configs override its individual
 regions. Replace both source and destination arrays when moving an item. `hidden` wins;
@@ -448,3 +448,8 @@ channel/account choices move into the filter sheet. Desktop layout is unchanged.
 Chat header actions can be placed individually in `end` or `overflow`. Keep `back` in `start`
 and the contact identity in `center`; avoid placing secondary actions beside Back. Each action
 retains its configured permissions. The `actions` item remains available for existing layouts.
+
+Mobile composers can place `tools` in `start`, `channel` in `center`, and `send` in `end`.
+This puts the reply/note switch above the editor and the sending account alongside the bottom
+actions. `tools` opens the shared responsive action panel with meeting, activity, attachment and header extensions.
+Set `mobileChatToolbar.overflow` to `[]` to keep those tools out of the mobile header.

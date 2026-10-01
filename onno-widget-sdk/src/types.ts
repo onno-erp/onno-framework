@@ -211,6 +211,7 @@ export interface OnnoUi {
   Popover: import("react").ComponentType<any>;
   PopoverAnchor: import("react").ComponentType<any>;
   PopoverTrigger: import("react").ComponentType<any>;
+  ResponsiveActionPanel: import("react").ComponentType<any>;
   PopoverContent: import("react").ComponentType<any>;
   /** Standard list surface with its host-owned header, filters and view controls. */
   EntityListWidget: import("react").ComponentType<any>;

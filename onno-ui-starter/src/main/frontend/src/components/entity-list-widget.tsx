@@ -1,3 +1,4 @@
+import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
@@ -2886,12 +2887,10 @@ export function EntityListWidget({
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input aria-label={t("list.searchLabel")} placeholder={t("list.searchLabel")} value={query} onChange={event=>setQuery(event.target.value)} className="h-9 w-full border border-input bg-muted pl-9 text-base placeholder:text-sm shadow-none" />
       </div>}
-      <Button variant="subtle" aria-label={t("list.filters")} aria-expanded={filterSheetOpen} onClick={()=>setFilterSheetOpen(true)} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0"><ListFilter className="size-4" />{activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</Button>
+      <ResponsiveActionPanel label={t("list.filters")} open={filterSheetOpen} onOpenChange={setFilterSheetOpen} trigger={<Button variant="subtle" aria-label={t("list.filters")} aria-expanded={filterSheetOpen} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0"><ListFilter className="size-4" />{activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</Button>}>
+        <div data-compact-filter-sheet="" className="onno-compact-controls">{listToolbar}</div>
+      </ResponsiveActionPanel>
     </div>
-    <FacetSheet label={t("list.filters")} open={filterSheetOpen} onClose={()=>setFilterSheetOpen(false)}
-      footer={<SheetDoneButton onClick={()=>setFilterSheetOpen(false)}>{t("list.done")}</SheetDoneButton>}>
-      <div data-compact-filter-sheet="" className="onno-compact-controls p-3">{listToolbar}</div>
-    </FacetSheet>
   </div> : listToolbar;
   const presentedToolbar = <div ref={setToolbarElement} data-toolbar-container="" className="min-w-0 w-full">{toolbarPresentation}</div>;
 

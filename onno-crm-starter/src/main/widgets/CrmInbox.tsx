@@ -27,6 +27,7 @@ import { useId } from "react";
 import { ChannelLogo } from "./ChannelLogo";
 import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
 import {
+  ResponsiveActionPanel,
   Badge,
   Input,
   EntityListWidget,
@@ -53,7 +54,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
+import { Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
 
 type Message = {
   id: string;
@@ -790,6 +791,24 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
     );
   }
 
+  const sendingAccount = selected ? (<Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
+                onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
+                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className={compact ? "h-9 w-full min-w-0 border-0 bg-transparent text-xs shadow-none" : "w-auto max-w-full min-w-0"}
+                  title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
+                  <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{(compact ? "" : "From: ") + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {channelRows.filter(row => String(row.id) === selectedId || (!!selected.customer && String(row.customer) === String(selected.customer))).map(row => (
+                    <SelectItem key={String(row.id)} value={String(row.id)}>
+                      <span className="inline-flex items-center gap-2">
+                        <ChannelLogo channel={conversationChannel(row)} className="size-4" />
+                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", t("crm.chat.conversation"))}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>) : null;
+
   return (
     <div
       ref={inboxRootRef}
@@ -935,26 +954,15 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
             <div ref={timelineEndRef} />
           </div>
 
+                          <input ref={fileInputRef} type="file" multiple className="hidden"
+                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
+                    void attach(event.target.files); event.target.value = "";
+                  }} />
           <div data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
             <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
             <div className={`mb-2 flex items-center justify-between ${compact ? "gap-1" : "gap-3"}`}>
-              <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
-                onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className={compact ? "h-9 min-w-0 flex-1 text-xs" : "w-auto max-w-full min-w-0"}
-                  title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
-                  <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{(compact ? "" : "From: ") + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {channelRows.filter(row => String(row.id) === selectedId || (!!selected.customer && String(row.customer) === String(selected.customer))).map(row => (
-                    <SelectItem key={String(row.id)} value={String(row.id)}>
-                      <span className="inline-flex items-center gap-2">
-                        <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", t("crm.chat.conversation"))}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {compact && chrome?.mobileComposer?.center?.includes("channel") ? <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) setMode(value); }} options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({value:a.key as ComposerMode,label:a.label}))} /> : sendingAccount}
+
               <span hidden={compact && mode === "reply"} title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
                 {mode === "note" ? "Visible to your team only" : ""}
               </span>
@@ -1008,16 +1016,24 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
               layout={{start:["mode","attach"], end:["send"], secondary:["extensions"], ...chrome?.composer}}
               compactLayout={chrome?.mobileComposer}
               items={[
+                {id:"channel",content:sendingAccount},
+                {id:"tools",content:<ResponsiveActionPanel label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
+                    {action(config, "edit") && !!selected.customerRef && <Button variant="ghost" size="toolbar" onClick={()=>{
+                      const ref = selected.customerRef as {type:string;id:string};
+                      window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
+                    }}>{t("crm.contact.open")}</Button>}
+                    {action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => {setMode("reply");setDraft(previous => previous ? `${previous}\n\n${text}` : text);}} />}
+                    {action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
+                    {action(config, "sendReply") && <Button variant="ghost" size="toolbar" disabled={attachState.disabled || busy || mode !== "reply"} onClick={()=>fileInputRef.current?.click()}><Paperclip className="size-4" />{t("crm.chat.attach")}</Button>}
+                    <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-col gap-2" />
+                  </ResponsiveActionPanel>},
                 {id:"mode",content:(<Segmented
                 value={mode}
                 onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
                 options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
               />)},
                 {id:"attach",content:(mode === "reply" && action(config, "sendReply") && (!compact || !attachState.disabled) && <>
-                <input ref={fileInputRef} type="file" multiple className="hidden"
-                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
-                    void attach(event.target.files); event.target.value = "";
-                  }} />
+
                 <Button variant="ghost" type="button" aria-label={t("crm.chat.attach")}
                   title={attachState.disabled ? attachState.reason : t("crm.chat.attach")}
                   disabled={attachState.disabled || busy}
