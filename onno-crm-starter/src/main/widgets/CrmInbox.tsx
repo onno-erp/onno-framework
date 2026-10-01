@@ -235,7 +235,7 @@ function ConversationRow({
       type="button"
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
-      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-2 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
+      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-2 ${badges.length ? "py-2" : "py-3"} text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
         ? "bg-primary/20"
         : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-[68px] after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
     >
@@ -245,7 +245,7 @@ function ConversationRow({
         timestamp={config?.showTimestamps !== false && <time>{compactTime(row.lastMessageAt)}</time>}
         metadata={appearance.showAccount && string(row, "inboxDisplay", channel)}
         preview={config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
-        badges={badges.length > 0 ? badges.map((badge,index)=><span key={`${badge.label}-${index}`} className="max-w-full truncate rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-primary/15 text-primary">{badge.label}</span>) : null}
+        badges={badges.length > 0 ? badges.map((badge,index)=><span key={`${badge.label}-${index}`} className="max-w-full min-w-0 truncate rounded px-1 text-[9px] leading-4 font-medium uppercase bg-primary/15 text-primary">{badge.label}</span>) : null}
         previewLines={appearance.previewLines}
         trailing={unread > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
       />

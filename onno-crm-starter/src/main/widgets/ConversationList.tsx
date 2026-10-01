@@ -69,11 +69,11 @@ export function ConversationRowContent({avatar, title, timestamp, preview, metad
         {timestamp && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{timestamp}</span>}
       </div>
       {metadata && <div className="mt-0.5 truncate text-xs text-muted-foreground">{metadata}</div>}
-      <div className="mt-1 flex min-w-0 items-center gap-2">
-        <span className={`min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground ${previewLines === 2 ? "line-clamp-2" : "truncate"}`}>{preview}</span>
+      <div className={`flex min-w-0 items-center gap-2 ${badges ? "" : "mt-1"}`}>
+        <span className={`min-w-0 flex-1 text-[13px] text-muted-foreground ${badges ? "leading-[18px]" : "leading-5"} ${previewLines === 2 ? "line-clamp-2" : "truncate"}`}>{preview}</span>
         {trailing}
       </div>
-      {badges && <div className="mt-1 flex flex-wrap gap-1">{badges}</div>}
+      {badges && <div className="mt-0.5 flex h-4 min-w-0 flex-nowrap gap-1 overflow-hidden">{badges}</div>}
     </div>
   </div>;
 }
