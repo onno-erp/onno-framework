@@ -975,3 +975,29 @@ onno-icon {
 .maplibregl-ctrl-attrib.maplibregl-compact:hover .maplibregl-ctrl-attrib-inner { display: block; }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 .maplibregl-ctrl-attrib a { color: hsl(var(--muted-foreground)); }
+
+/* Compact workspace controls share one visible scale, regardless of their primitive. */
+.onno-compact-controls .onno-facet-trigger,
+.onno-compact-controls button[role="combobox"] {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-field);
+  background: hsl(var(--muted));
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  box-shadow: none;
+}
+.onno-compact-controls input { height: 36px; }
+
+[data-compact-filter-sheet] [data-filter-rail] {
+  flex-direction: column;
+  align-items: stretch;
+  overflow: visible;
+}
+[data-compact-filter-sheet] .onno-facet-trigger {
+  width: 100%;
+  justify-content: flex-start;
+}

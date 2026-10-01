@@ -437,3 +437,7 @@ page.widget("Inbox").type("crmInboxWorkspaces").config("workspace", "support")
     .config("toolbarSecondary", "channels,accounts")
     .config("chatToolbar", "{\"start\":[\"back\",\"actions\"],\"center\":[\"title\"],\"end\":[\"contact\"]}");
 ```
+
+Set `mobileToolbar=sheet` to use the host's compact search-and-filter-sheet presentation.
+This keeps the mobile conversation header short: search stays visible, while status and
+channel/account choices move into the filter sheet. Desktop layout is unchanged.

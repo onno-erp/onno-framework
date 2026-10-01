@@ -414,7 +414,7 @@ function toolbarLayout(value?: string): WorkspaceToolbarLayout | undefined {
     return Object.fromEntries(["start", "center", "end", "secondary", "overflow", "hidden"].filter(key => Array.isArray(parsed[key])).map(key => [key, parsed[key].filter((id:unknown) => typeof id === "string")]));
   } catch { return undefined; }
 }
-function CrmInbox({ toolbar, chrome, rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean; toolbar?: React.ReactNode; chrome?: InboxChrome }) {
+function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean; toolbar?: React.ReactNode; loading?: boolean; chrome?: InboxChrome }) {
   // Subscribe once at the root: `t` reads the store without subscribing, so this is what makes the
   // whole widget re-render into the server's language when /api/config lands after first paint.
   useTranslate();
@@ -846,7 +846,7 @@ function CrmInbox({ toolbar, chrome, rows: channelRows, total, open, scopedConfi
               <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
             </div>}
             <ConversationList {...pagination} active={!activeFolder}>
-              {!rows.length && !folders.length && <p className="p-4 text-sm text-muted-foreground">{t("crm.inbox.noMatches")}</p>}
+              {!rows.length && !folders.length && <p className="p-4 text-sm text-muted-foreground">{loading ? t("crm.inbox.loading") : t("crm.inbox.noMatches")}</p>}
               {(() => {
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
@@ -1208,6 +1208,10 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       .crm-inbox-page[data-toolbar-placement="renderer"] .crm-channel-select { display:block; }
       .crm-inbox-page[data-toolbar-placement="renderer"] .crm-account-select { width:45%; }
       .crm-channel-buttons > button { flex-shrink:0; }
+      [data-compact-filter-sheet] .crm-channel-bar { flex-direction:column; align-items:stretch; gap:12px; }
+      [data-compact-filter-sheet] .crm-channel-buttons { display:none; }
+      [data-compact-filter-sheet] .crm-channel-select { display:block; flex:none; }
+      [data-compact-filter-sheet] .crm-account-select { margin:0; width:100%; }
       @container (max-width:720px) {
         .crm-channel-buttons { display:none; }
         .crm-channel-select { display:block; }
@@ -1215,7 +1219,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       }
     `}</style>
     <EntityListWidget list={list} renderer={renderer} toolbarPlacement={widget.extraConfig?.toolbarPlacement === "renderer" ? "renderer" : "header"} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={channelControls}
-      toolbarOptions={{controls:configuredList("toolbarControls"),
+      toolbarOptions={{compactPresentation:widget.extraConfig?.mobileToolbar === "sheet" ? "sheet" : "inline", controls:configuredList("toolbarControls"),
         views:configuredList("toolbarViewOptions") as Array<"table" | "map" | "custom"> | undefined,
         filterKeys:configuredList("toolbarFilters"), actionKeys:configuredList("toolbarActions"), title:widget.extraConfig?.toolbarTitle !== "false", count:widget.extraConfig?.toolbarCount !== "false",
         viewSwitcher:widget.extraConfig?.toolbarViews !== "false", search:widget.extraConfig?.toolbarSearch !== "false"}} queryParams={queryParams} />

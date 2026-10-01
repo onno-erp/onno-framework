@@ -106,6 +106,8 @@ export interface ListRendererDescriptor {
  * the renderer only draws the current window of rows and opens records through the callback.
  */
 export interface ListRendererProps {
+  /** Initial or query-change fetch; keep the toolbar mounted while loading. */
+  loading?: boolean;
   /** Host-owned controls, when toolbarPlacement is renderer. Render exactly once, including empty feeds. */
   toolbar?: import("react").ReactNode;
   /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */

@@ -257,3 +257,10 @@ Its ordered regions are start/center/end/secondary/overflow, with optional compa
 Callers supply already-authorized nodes; layout never changes permission or command semantics.
 A custom list renderer can opt into `toolbarPlacement="renderer"` and place `props.toolbar`
 in its own pane, including empty feeds. Never rebuild a second search/filter state in a widget.
+
+Touch list toolbars may use `compactPresentation="sheet"`: one full-width 36px search
+field and a matching Filters button, with other controls in a bottom sheet. Avoid stacking
+multiple desktop chip/select rows above a phone list. Nested facet sheets use Vaul's
+nested root; Escape dismisses only the topmost dialog.
+
+Compact workspace filter chips, select triggers and search use a shared 36px visible height, field radius, neutral fill and solid border. Search text remains 16px to avoid mobile browser focus zoom; its placeholder matches the 14px control labels. Do not enlarge individual CRM dropdowns independently.

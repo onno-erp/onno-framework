@@ -1651,3 +1651,8 @@ Their `ListRendererProps.toolbar` contains the actual host controls, not duplica
 filter state. Keep it mounted even for empty results. Other views retain the ordinary toolbar.
 Use shared `WorkspaceToolbar` for domain-neutral placement/visibility/mobile overrides in
 workspace headers and action rows; see `onno-widget-sdk/README.md` for its layout contract.
+
+For touch layouts, `toolbarOptions.compactPresentation="sheet"` replaces the toolbar with
+an always-visible full-width search field and a Filters disclosure. The existing controls
+(including secondary contributions) stay in a shared bottom sheet; filter/query state stays
+with the list. Desktop retains the inline toolbar. Active filters mark the disclosure.

@@ -324,3 +324,7 @@ list renderer as `props.toolbar`. Render it exactly once inside the workspace, i
 when `rows` is empty, so users can clear filters. Query, permissions, actions and pagination
 remain with the host. The default is `"header"`; table/map views always keep their normal
 host toolbar even when a custom renderer opts into internal placement.
+
+Custom renderers with delegated toolbars remain mounted during query reloads and receive
+`loading: true`, preserving search focus and open filter controls. Use that flag to show a
+loading state in the body rather than unmounting the toolbar.

@@ -18,3 +18,20 @@ it("keeps controls reachable for empty custom feeds and restores them when switc
   expect(screen.getByText("Reset filters")).toBeVisible();
   expect(document.querySelectorAll("[data-list-toolbar]")).toHaveLength(1);
 });
+it("uses a persistent mobile search and a filter sheet without losing query state", async()=>{
+  vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
+  vi.stubGlobal("matchMedia",(query:string)=>({matches:query.includes("max-width: 767px"),addEventListener(){},removeEventListener(){}}));
+  vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
+  const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:true,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true,custom:{type:"workspace",label:"Workspace",defaultView:true}};
+  const Renderer=(props:ListRendererProps)=><section>{props.toolbar}</section>;
+  render(<EntityListWidget list={list} renderer={Renderer} toolbarPlacement="renderer" toolbarOptions={{compactPresentation:"sheet",controls:["search","filters"]}} toolbarContent={<button>Channel options</button>} />);
+  const search=screen.getByRole("textbox",{name:"Search"});
+  fireEvent.change(search,{target:{value:"Amelia"}});
+  expect(screen.queryByText("Channel options")).toBeNull();
+  fireEvent.click(screen.getByRole("button",{name:"Filters"}));
+  expect(await screen.findByText("Channel options")).toBeVisible();
+  fireEvent.click(screen.getByRole("button",{name:"Done"}));
+  expect(search).toHaveValue("Amelia");
+  await waitFor(()=>expect(fetch).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("textbox",{name:"Search"})).toBe(search);
+});

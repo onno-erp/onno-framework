@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, useRef, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Drawer } from "vaul";
 import { useMessages } from "@/providers/messages-provider";
@@ -10,6 +10,8 @@ import { useMessages } from "@/providers/messages-provider";
  */
 
 export type FacetOverlay = "sheet" | "modal" | "popover";
+
+const FacetSheetContext = createContext(false);
 
 const MOBILE_QUERY = "(max-width: 767px)";
 const TABLET_QUERY = "(min-width: 768px) and (max-width: 1023px)";
@@ -57,6 +59,9 @@ export function FacetSheet({
 }) {
   const t = useMessages();
   const overlay = useFacetOverlay();
+  const nested = useContext(FacetSheetContext);
+  const Root = nested ? Drawer.NestedRoot : Drawer.Root;
+  const contentRef = useRef<HTMLDivElement>(null);
   const onOpenChange = (open: boolean) => {
     if (!open) onClose();
   };
@@ -64,6 +69,8 @@ export function FacetSheet({
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        const dialogs = document.querySelectorAll('[role="dialog"]:not([data-state="closed"])');
+        if (contentRef.current && dialogs.length && dialogs[dialogs.length - 1] !== contentRef.current) return;
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -76,7 +83,7 @@ export function FacetSheet({
   if (overlay === "modal") {
     if (!open) return null;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
+      <div ref={contentRef} className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
         <button type="button" aria-label={t("action.close")} className="absolute inset-0 bg-black/50" onClick={onClose} />
         <div className="relative flex max-h-[82dvh] w-full max-w-xl flex-col overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none">
           <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
@@ -97,10 +104,10 @@ export function FacetSheet({
     );
   }
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
+    <FacetSheetContext.Provider value={true}><Root open={open} onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t bg-popover pb-[max(env(safe-area-inset-bottom),0.75rem)] text-popover-foreground shadow-md outline-none">
+        <Drawer.Content ref={contentRef} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t bg-popover pb-[max(env(safe-area-inset-bottom),0.75rem)] text-popover-foreground shadow-md outline-none">
           <Drawer.Handle className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" />
           <Drawer.Title className="sr-only">{label}</Drawer.Title>
           <div className="flex shrink-0 items-center justify-between px-4 pt-2">
@@ -118,7 +125,7 @@ export function FacetSheet({
           {footer ? <div className="flex shrink-0 gap-2 border-t px-4 pt-3">{footer}</div> : null}
         </Drawer.Content>
       </Drawer.Portal>
-    </Drawer.Root>
+    </Root></FacetSheetContext.Provider>
   );
 }
 

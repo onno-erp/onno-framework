@@ -193,6 +193,7 @@ export type ListCustomConfig = { type: string; label?: string; defaultView?: boo
  * draws the rows it's handed and opens a record through the callback.
  */
 export type ListRendererProps = {
+  loading?: boolean;
   toolbar?: ReactNode;
   /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
   hasMore?: boolean;
@@ -428,6 +429,7 @@ export function eventMatches(event: UiEvent, kind: string, name: string): boolea
  */
 const facetTriggerCls = (active: boolean) =>
   cn(
+    "onno-facet-trigger",
     buttonVariants({ variant: "subtle", size: "toolbar" }),
     active
       ? "border-solid border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10"
@@ -1314,9 +1316,13 @@ export function EntityListWidget({
     title?: boolean; count?: boolean; viewSwitcher?: boolean; search?: boolean;
     controls?: string[]; views?: Array<"table" | "map" | "custom">;
     filterKeys?: string[]; actionKeys?: string[];
+    compactPresentation?: "inline" | "sheet";
   };
 }) {
   const { kind, name, columns, pageSize } = list;
+  const touchToolbar = useTouchLayout();
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const mobileControls = touchToolbar && toolbarOptions?.compactPresentation === "sheet";
   const showControl = (key: string) => !toolbarOptions?.controls || toolbarOptions.controls.includes(key);
   const queryParamSig = JSON.stringify(queryParams ?? {});
   const t = useMessages();
@@ -2627,6 +2633,7 @@ export function EntityListWidget({
             left/right fades that signal chips hidden past either edge. */}
         <div className="relative flex min-w-0 flex-1 items-center">
           <div
+            data-filter-rail=""
             ref={railRef}
             onScroll={measureRail}
             className="-mx-1 -my-1 flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -2784,7 +2791,7 @@ export function EntityListWidget({
         {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
           {/* search — a facet-grammar chip that expands inline into the search input (SearchChip) */}
-          {!mapMode && list.searchable && showControl("search") && toolbarOptions?.search !== false ? (
+          {!mobileControls && !mapMode && list.searchable && showControl("search") && toolbarOptions?.search !== false ? (
             <SearchChip label={t("list.searchLabel")} value={query} onCommit={setQuery} openWidth={constrainedActions ? 160 : 208} />
           ) : null}
           {showControl("views") && toolbarOptions?.viewSwitcher !== false && allowedViews.length > 1 ? (
@@ -2859,6 +2866,20 @@ export function EntityListWidget({
 
   );
 
+  const presentedToolbar = mobileControls ? <div data-compact-list-toolbar="" className="onno-compact-controls min-w-0 w-full">
+    <div className="flex items-center gap-2">
+      {list.searchable && showControl("search") && toolbarOptions?.search !== false && <div className="relative min-w-0 flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input aria-label={t("list.searchLabel")} placeholder={t("list.searchLabel")} value={query} onChange={event=>setQuery(event.target.value)} className="h-9 w-full border border-input bg-muted pl-9 text-base placeholder:text-sm shadow-none" />
+      </div>}
+      <Button variant="subtle" aria-label={t("list.filters")} aria-expanded={filterSheetOpen} onClick={()=>setFilterSheetOpen(true)} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0"><ListFilter className="size-4" />{activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</Button>
+    </div>
+    <FacetSheet label={t("list.filters")} open={filterSheetOpen} onClose={()=>setFilterSheetOpen(false)}
+      footer={<SheetDoneButton onClick={()=>setFilterSheetOpen(false)}>{t("list.done")}</SheetDoneButton>}>
+      <div data-compact-filter-sheet="" className="onno-compact-controls p-3">{listToolbar}</div>
+    </FacetSheet>
+  </div> : listToolbar;
+
   return (
     // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
     // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
@@ -2876,7 +2897,7 @@ export function EntityListWidget({
       )}
       style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
     >
-      {!relocateToolbar && listToolbar}
+      {!relocateToolbar && presentedToolbar}
 
       {mapMode ? (
         // Only catalog/document lists ever declare a map config, so mapMode is never true for a
@@ -2895,7 +2916,7 @@ export function EntityListWidget({
             className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
             style={surfaceMode ? undefined : { maxHeight: maxBodyH }}
           >
-            {pageRows == null ? (
+            {pageRows == null && !relocateToolbar ? (
               <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
                 {t("loading.generic")}
@@ -2905,7 +2926,7 @@ export function EntityListWidget({
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
-              <CustomRenderer toolbar={relocateToolbar ? listToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
+              <CustomRenderer loading={pageRows == null} toolbar={relocateToolbar ? presentedToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
             {loadingMore ? (
