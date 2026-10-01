@@ -77,10 +77,10 @@ export function ConversationRowContent({avatar, title, timestamp, preview, metad
     </div>
   </div>;
 }
-export type ConversationRowOptions = {showAccount?: boolean; showChannelBadge?: boolean; previewLines?: 1 | 2};
+export type ConversationRowOptions = {showAccount?: boolean; showChannelBadge?: boolean; previewLines?: 1 | 2; badges?: {field:string; equals:string; label:string}[]};
 export function conversationRowOptions(value?: string): ConversationRowOptions {
   try {
     const parsed = JSON.parse(value ?? "{}");
-    return {showAccount:parsed?.showAccount === true, showChannelBadge:parsed?.showChannelBadge !== false, previewLines:parsed?.previewLines === 2 ? 2 : 1};
+    return {badges:Array.isArray(parsed?.badges) ? parsed.badges.filter((b:any)=>b && typeof b.field === "string" && typeof b.equals === "string" && typeof b.label === "string").slice(0,30) : [], showAccount:parsed?.showAccount === true, showChannelBadge:parsed?.showChannelBadge !== false, previewLines:parsed?.previewLines === 2 ? 2 : 1};
   } catch {return {};}
 }

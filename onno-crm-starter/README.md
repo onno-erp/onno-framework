@@ -463,3 +463,8 @@ widget with `conversationRow` JSON, for example
 `{"showAccount":true,"showChannelBadge":false,"previewLines":2}`.
 Invalid options fall back to compact defaults. Existing list-title/list-preview bindings
 and avatar/timestamp visibility settings continue to apply.
+
+Optional `conversationRow.badges` rules have `field`, `equals`, and `label`; a rule displays
+when the readable row field's display value matches. These are presentation labels, not stored
+entity tags. For example `{"badges":[{"field":"statusDisplay","equals":"Urgent","label":"Priority"}]}`.
+No row is reserved when no rule matches. Keep demo-contact rules in the consuming app.

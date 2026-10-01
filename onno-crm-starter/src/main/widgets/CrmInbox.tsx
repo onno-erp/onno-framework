@@ -228,6 +228,7 @@ function ConversationRow({
   const customer = string(row, "customerDisplay", string(row, "description", t("crm.chat.unknownCustomer")));
   const unread = Number(row.unreadCount ?? 0);
   const channel = conversationChannel(row);
+  const badges = (appearance.badges ?? []).filter(badge => rowValue(row, badge.field) === badge.equals);
   return (
     <ContactRowMenu record={row} workspaceKey={workspaceKey} groups={groups} groupKey={groupKey} conversationId={String(row.id)} onGroupChange={onGroupChange} id={String(row.customer ?? "")} canEdit={!!action(config, "edit")} onOpen={onSelect}>
     <Button variant="ghost"
@@ -244,6 +245,7 @@ function ConversationRow({
         timestamp={config?.showTimestamps !== false && <time>{compactTime(row.lastMessageAt)}</time>}
         metadata={appearance.showAccount && string(row, "inboxDisplay", channel)}
         preview={config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
+        badges={badges.length > 0 ? badges.map((badge,index)=><span key={`${badge.label}-${index}`} className="max-w-full truncate rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide bg-primary/15 text-primary">{badge.label}</span>) : null}
         previewLines={appearance.previewLines}
         trailing={unread > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
       />
