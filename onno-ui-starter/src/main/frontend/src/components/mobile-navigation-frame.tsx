@@ -21,6 +21,8 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   const scroll = useRef(new Map<string, number>());
   const previous = useRef(path);
   const pagesRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLDivElement>(null);
+  const [navigationHeight, setNavigationHeight] = useState(0);
   const exiting = useRef<string | null>(null);
   if (previous.current !== path) exiting.current = previous.current;
   const outgoing = exiting.current;
@@ -66,12 +68,22 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   }, []);
   const localDetail = Object.values(requests).includes(path);
   const detail = !isRoot;
+  const showNavigation = !detail && !localDetail;
+  useLayoutEffect(() => {
+    const node = navigationRef.current;
+    if (!showNavigation || !node) { setNavigationHeight(0); return; }
+    const measure = () => setNavigationHeight(node.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [showNavigation]);
   // Fill-height widgets observe window/layout changes; removing shell chrome does not
   // necessarily resize the document, so explicitly invalidate their allocation.
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
     return () => cancelAnimationFrame(frame);
-  }, [detail, localDetail]);
+  }, [detail, localDetail, navigationHeight]);
   return <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
     {detail && <header className="z-20 flex h-12 shrink-0 items-center border-b border-border bg-background px-3">
       <Button variant="ghost" onClick={() => back(currentStack[currentStack.length - 2] ?? mobileParent(path))}>
@@ -85,6 +97,12 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
         style={route === path ? undefined : {transform: "translateX(-100%)"}}
       >{render(route)}</div>)}
     </div>
-    {!detail && !localDetail && navigation}
+    {showNavigation && <>
+      <div aria-hidden="true" className="shrink-0" style={{height:navigationHeight}} />
+      <div ref={navigationRef} className="pointer-events-none fixed inset-x-0 bottom-0 z-30 bg-transparent"
+        style={{paddingBottom:"max(8px, env(safe-area-inset-bottom))"}}>
+        {navigation}
+      </div>
+    </>}
   </div>;
 }

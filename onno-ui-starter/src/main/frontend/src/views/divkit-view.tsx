@@ -2067,8 +2067,8 @@ export function DivKitView() {
           }}
           render={path => <ContentPane path={path} viewport={viewport} theme={resolvedTheme} profile={profile}
             onAction={onCustomAction} registry={liveRegistry.current} skeletonBg={skeletonBg} onNotFound={handleContentNotFound} />}
-          navigation={<nav className="relative z-10 shrink-0">
-            <div className={viewport === "tablet" ? "ml-auto w-fit" : "mx-auto max-w-md"}>{navEl}</div>
+          navigation={<nav className="pointer-events-none bg-transparent">
+            <div className={viewport === "tablet" ? "pointer-events-auto ml-auto w-fit" : "pointer-events-auto mx-auto max-w-md"}>{navEl}</div>
           </nav>}
         />
         {rowMenuEl}

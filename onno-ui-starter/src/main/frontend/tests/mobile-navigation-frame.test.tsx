@@ -1,7 +1,8 @@
 import {act, cleanup, fireEvent, render, screen} from "@testing-library/react";
-import {afterEach, expect, it, vi} from "vitest";
+import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import {MobileNavigationFrame, mobileParent} from "@/components/mobile-navigation-frame";
-afterEach(() => {cleanup(); vi.restoreAllMocks();});
+beforeEach(() => { vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} }); });
+afterEach(() => {cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals();});
 it("keeps parent state and restores navigation when returning from a record", () => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   const back = vi.fn();
