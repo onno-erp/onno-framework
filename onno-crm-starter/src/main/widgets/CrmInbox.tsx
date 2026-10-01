@@ -53,7 +53,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip, MoreHorizontal } from "lucide-react";
+import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
 
 type Message = {
   id: string;
@@ -907,13 +907,13 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           </div>
 
           <div data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
-            <div className={`p-3 ${mode === "note" ? "bg-amber-400/5" : ""}`}>
-            <div className="mb-2 flex items-center justify-between gap-3">
+            <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
+            <div className={`mb-2 flex items-center justify-between ${compact ? "gap-1" : "gap-3"}`}>
               <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
                 onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className="w-auto max-w-full min-w-0"
+                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className={compact ? "h-9 min-w-0 flex-1 text-xs" : "w-auto max-w-full min-w-0"}
                   title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
-                  <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{"From: " + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
+                  <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{(compact ? "" : "From: ") + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {channelRows.filter(row => String(row.id) === selectedId || (!!selected.customer && String(row.customer) === String(selected.customer))).map(row => (
@@ -926,7 +926,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                   ))}
                 </SelectContent>
               </Select>
-              <span title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
+              <span hidden={compact && mode === "reply"} title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
                 {mode === "note" ? "Visible to your team only" : ""}
               </span>
             </div>
@@ -970,19 +970,19 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                 {t("crm.chat.uploading", { count: uploading })}
               </span>}
             </div>}
-            {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className="flex items-center gap-2 rounded-field bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className={`flex items-center gap-2 rounded-field bg-muted/50 text-xs text-muted-foreground ${compact ? "px-2 py-1" : "px-3 py-2"}`}>
               <span className="flex-1">{replyState.message}</span>
-              {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>{t("crm.chat.checkAgain")}</Button>}
+              {replyState.retry && <Button variant="ghost" aria-label={t("crm.chat.checkAgain")} className={compact ? "size-10 shrink-0 p-0" : undefined} onClick={() => void loadSelected()}>{compact ? <RefreshCw className="size-4" /> : t("crm.chat.checkAgain")}</Button>}
             </div>}
             {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className={`mt-2 flex items-center ${compact ? "gap-1" : "flex-wrap gap-2"}`}>
               <Segmented
                 value={mode}
                 onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
                 options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
               />
               {/* Offered only where the channel actually carries files; the title says why not. */}
-              {mode === "reply" && action(config, "sendReply") && <>
+              {mode === "reply" && action(config, "sendReply") && (!compact || !attachState.disabled) && <>
                 <input ref={fileInputRef} type="file" multiple className="hidden"
                   onChange={(event: { target: { files: FileList | null; value: string } }) => {
                     void attach(event.target.files); event.target.value = "";
@@ -997,9 +997,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               <ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
                 insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
               }} className="flex items-center gap-2" />
-              <span className="flex-1" />
-              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
-                {busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
+              <span className="min-w-0 flex-1" />
+              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button aria-label={busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
+                {compact ? <Send className="size-4" /> : busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
               </Button>}
             </div>
             </div>

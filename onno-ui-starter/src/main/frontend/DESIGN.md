@@ -236,3 +236,13 @@ Use real borders for CRM pane outlines inside clipped containers. Outer Tailwind
 Keep `FacetSheet` mounted with its controlled `open` prop; conditionally removing it skips Vaul’s exit animation. Closed sheets must not intercept Escape. CRM chat slides begin on user navigation, not initial loading or a compact-layout breakpoint change.
 
 Top-level mobile section switches use a quick 120ms fade, never a horizontal slide. Opening details and returning to a retained parent use the shared directional slide.
+
+The mobile bottom-bar shell occupies `100dvh` and allocates its Back header, page viewport,
+and bottom navigation in normal flex flow. Each retained route owns its page scroller;
+full-height list/workspace surfaces consume that allocation and scroll only their inner panes.
+Content-sized forms and dashboards may scroll within the route viewport. Do not add fixed
+bottom navigation plus guessed padding to a full-height surface.
+
+Compact CRM composers use a full-width account selector, an accessible icon Send button,
+and a compact retry action. Hide unavailable attachment actions on compact layouts; desktop
+keeps its existing controls. Preserve message history space and keep the composer in flow.

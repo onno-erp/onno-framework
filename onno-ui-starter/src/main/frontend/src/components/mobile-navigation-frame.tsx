@@ -72,16 +72,16 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
     const frame = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
     return () => cancelAnimationFrame(frame);
   }, [detail, localDetail]);
-  return <div className="min-h-screen w-full overflow-x-hidden">
-    {detail && <header className="sticky top-0 z-20 flex h-12 items-center border-b border-border bg-background px-3">
+  return <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    {detail && <header className="z-20 flex h-12 shrink-0 items-center border-b border-border bg-background px-3">
       <Button variant="ghost" onClick={() => back(currentStack[currentStack.length - 2] ?? mobileParent(path))}>
         <ArrowLeft className="size-4" />{backLabel}
       </Button>
     </header>}
-    <div ref={pagesRef} className={`relative overflow-x-clip ${detail || localDetail ? "" : "pb-24"}`}>
+    <div ref={pagesRef} className="relative min-h-0 flex-1 overflow-hidden">
       {retainedRoutes.map(route => <div key={route} data-slide-page={route}
         hidden={route !== path && route !== outgoing} inert={route !== path} aria-hidden={route !== path}
-        className={route === path ? "relative w-full" : "absolute inset-x-0 top-0 w-full pointer-events-none"}
+        className={route === path ? "relative h-full w-full overflow-y-auto overflow-x-hidden overscroll-contain" : "absolute inset-0 h-full w-full overflow-y-auto overflow-x-hidden pointer-events-none"}
         style={route === path ? undefined : {transform: "translateX(-100%)"}}
       >{render(route)}</div>)}
     </div>

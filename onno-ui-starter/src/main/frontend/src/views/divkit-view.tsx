@@ -2054,7 +2054,7 @@ export function DivKitView() {
     // Full-width centered on small phones; a compact corner island on tablets and
     // large phones (pinned bottom-right). Account lives on the /account page here.
     return (
-      <div className="min-h-screen w-full overflow-x-hidden" style={{ background: pageBg }}>
+      <div className="h-[100dvh] w-full overflow-hidden" style={{ background: pageBg }}>
         <MobileNavigationFrame key={profile || "default"}
           path={focusedPane?.activePath || location.pathname}
           roots={(shell?.navigation ?? []).flatMap(section => section.items.map(item => item.path))}
@@ -2067,7 +2067,7 @@ export function DivKitView() {
           }}
           render={path => <ContentPane path={path} viewport={viewport} theme={resolvedTheme} profile={profile}
             onAction={onCustomAction} registry={liveRegistry.current} skeletonBg={skeletonBg} onNotFound={handleContentNotFound} />}
-          navigation={<nav className="fixed inset-x-0 bottom-0 z-10">
+          navigation={<nav className="relative z-10 shrink-0">
             <div className={viewport === "tablet" ? "ml-auto w-fit" : "mx-auto max-w-md"}>{navEl}</div>
           </nav>}
         />
