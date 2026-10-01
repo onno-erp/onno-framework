@@ -274,3 +274,7 @@ It is available to plugins through the widget SDK.
 For command menus, use `ResponsiveActionPanel presentation="actions"`: consistent 44px,
 left-aligned icon rows and no confirmation footer. The default `controls` presentation keeps
 Done for filter/configuration sheets. Both retain the shared close button and swipe dismissal.
+
+FacetSheet supplies DialogPortalContext to its contents, as DialogShell does. Nested popovers
+and selects must portal into that modal subtree so editing their forms is not treated as an
+outside interaction that dismisses the owning sheet.
