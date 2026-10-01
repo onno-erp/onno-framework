@@ -50,3 +50,21 @@ it("retains an exiting record until Back finishes animating", async () => {
   expect(exiting).not.toBeInTheDocument();
   delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
 });
+it("fades section changes quickly but still slides the next detail and Back", async () => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const animate = vi.fn(() => ({cancel:vi.fn(),finished:Promise.resolve()}));
+  Object.defineProperty(HTMLElement.prototype,"animate",{configurable:true,value:animate});
+  const props = {roots:["/inbox","/catalogs/contacts"],back:vi.fn(),backLabel:"Back",navigation:<nav>Tabs</nav>,render:(path:string)=><div>{path}</div>};
+  const view = render(<MobileNavigationFrame {...props} path="/inbox"/>);
+  expect(animate).not.toHaveBeenCalled();
+  await act(async () => view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts"/>));
+  expect(animate.mock.calls[0][0]).toEqual([{opacity:0,transform:"translateX(0)"},{opacity:1,transform:"translateX(0)"}]);
+  expect(animate.mock.calls[0][1]).toMatchObject({duration:120});
+  animate.mockClear();
+  await act(async () => view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts/123"/>));
+  expect(animate.mock.calls[0][0][0]).toEqual({transform:"translateX(100%)"});
+  animate.mockClear();
+  await act(async () => view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts"/>));
+  expect(animate.mock.calls[0][0][0]).toEqual({transform:"translateX(-100%)"});
+  delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
+});

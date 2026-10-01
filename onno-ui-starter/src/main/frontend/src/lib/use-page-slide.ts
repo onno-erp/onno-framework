@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
  * Keep the outgoing child mounted until onFinish. Initial renders and breakpoint changes snap. */
 export function usePageSlide(
   root: RefObject<HTMLElement | null>, key: string, enabled = true,
-  onFinish?: () => void,
+  onFinish?: () => void, motion: "slide" | "fade" = "slide",
 ) {
   const previous = useRef({ key, enabled });
   const finish = useRef(onFinish);
@@ -25,7 +25,11 @@ export function usePageSlide(
     const durationValue = styles.getPropertyValue("--page-slide-dur").trim() || "300ms";
     const duration = parseFloat(durationValue) * (durationValue.endsWith("ms") ? 1 : 1000);
     const easing = styles.getPropertyValue("--page-slide-ease").trim() || "cubic-bezier(0.2,0.7,0.2,1)";
-    const animations = [
+    const options = { duration: motion === "fade" ? 120 : duration, easing };
+    const animations = motion === "fade" ? [
+      incoming.animate([{ opacity: 0, transform: "translateX(0)" }, { opacity: 1, transform: "translateX(0)" }], options),
+      outgoing.animate([{ opacity: 1, transform: "translateX(0)" }, { opacity: 0, transform: "translateX(0)" }], options),
+    ] : [
       incoming.animate([{ transform: `translateX(${direction * 100}%)` }, { transform: "translateX(0)" }], { duration, easing }),
       outgoing.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-direction * 100}%)` }], { duration, easing }),
     ];
@@ -34,5 +38,5 @@ export function usePageSlide(
       if (!cancelled) finish.current?.();
     }).catch(() => {});
     return () => { cancelled = true; animations.forEach(animation => animation.cancel()); };
-  }, [root, key, enabled]);
+  }, [root, key, enabled, motion]);
 }

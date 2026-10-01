@@ -25,6 +25,11 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   if (previous.current !== path) exiting.current = previous.current;
   const outgoing = exiting.current;
   const isRoot = roots.includes(path) || path === "/" || path === "/menu";
+  const motion = useRef<"slide" | "fade">("slide");
+  if (previous.current !== path) {
+    // Switching sections is lateral navigation; returning to a retained parent is Back.
+    motion.current = isRoot && !stack.includes(path) ? "fade" : "slide";
+  }
   const currentStack = stack[stack.length - 1] === path ? stack : isRoot ? [path]
     : stack.includes(path) ? stack.slice(0, stack.indexOf(path) + 1) : [...stack, path];
   useLayoutEffect(() => {
@@ -37,7 +42,7 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   usePageSlide(pagesRef, path, true, () => {
     exiting.current = null;
     setStack([...currentStack]);
-  });
+  }, motion.current);
   const retainedRoutes = [...new Set([...stack, ...currentStack])];
   useLayoutEffect(() => {
     const listener = (event: Event) => {

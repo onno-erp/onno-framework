@@ -234,3 +234,5 @@ CRM chat layouts respond to the widget container, not only the browser viewport.
 Use real borders for CRM pane outlines inside clipped containers. Outer Tailwind rings extend beyond the box and are cut off by the workspace and contact-slot overflow boundaries.
 
 Keep `FacetSheet` mounted with its controlled `open` prop; conditionally removing it skips Vaul’s exit animation. Closed sheets must not intercept Escape. CRM chat slides begin on user navigation, not initial loading or a compact-layout breakpoint change.
+
+Top-level mobile section switches use a quick 120ms fade, never a horizontal slide. Opening details and returning to a retained parent use the shared directional slide.

@@ -169,7 +169,7 @@ export interface OnnoEvents {
  *   const { Select, SelectTrigger, SelectContent, SelectItem, Button, Segmented } = ui;
  */
 export interface OnnoUi {
-  usePageSlide?: (root: import("react").RefObject<HTMLElement | null>, key: string, enabled?: boolean, onFinish?: () => void) => void;
+  usePageSlide?: (root: import("react").RefObject<HTMLElement | null>, key: string, enabled?: boolean, onFinish?: () => void, motion?: "slide" | "fade") => void;
   EntityTagMenu: import("react").ComponentType<{kind: "catalogs" | "documents"; name: string; id: string; readOnly?: boolean}>;
   ContextMenuSub: import("react").ComponentType<any>;
   EntityTags: import("react").ComponentType<{kind: "catalogs" | "documents"; name: string; id: string; readOnly?: boolean}>;
