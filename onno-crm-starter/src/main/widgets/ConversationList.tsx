@@ -55,3 +55,32 @@ export function ConversationList({ children, active = true, hasMore, loadingMore
 export function conversationCount(total: number | null | undefined, loaded: number): string {
   return total == null ? `${loaded} loaded chats` : `${total} chats`;
 }
+
+/** Compact row anatomy; optional metadata and badges do not reserve empty rows. */
+export function ConversationRowContent({avatar, title, timestamp, preview, metadata, badges, trailing, previewLines = 1}: {
+  avatar?: ReactNode; title: ReactNode; timestamp?: ReactNode; preview?: ReactNode;
+  metadata?: ReactNode; badges?: ReactNode; trailing?: ReactNode; previewLines?: 1 | 2;
+}) {
+  return <div className="flex min-w-0 items-center gap-3">
+    {avatar}
+    <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{title}</span>
+        {timestamp && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{timestamp}</span>}
+      </div>
+      {metadata && <div className="mt-0.5 truncate text-xs text-muted-foreground">{metadata}</div>}
+      <div className="mt-1 flex min-w-0 items-center gap-2">
+        <span className={`min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground ${previewLines === 2 ? "line-clamp-2" : "truncate"}`}>{preview}</span>
+        {trailing}
+      </div>
+      {badges && <div className="mt-1 flex flex-wrap gap-1">{badges}</div>}
+    </div>
+  </div>;
+}
+export type ConversationRowOptions = {showAccount?: boolean; showChannelBadge?: boolean; previewLines?: 1 | 2};
+export function conversationRowOptions(value?: string): ConversationRowOptions {
+  try {
+    const parsed = JSON.parse(value ?? "{}");
+    return {showAccount:parsed?.showAccount === true, showChannelBadge:parsed?.showChannelBadge !== false, previewLines:parsed?.previewLines === 2 ? 2 : 1};
+  } catch {return {};}
+}

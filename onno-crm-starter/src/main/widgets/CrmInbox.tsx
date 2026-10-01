@@ -1,4 +1,4 @@
-import { conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
+import { ConversationRowContent, conversationRowOptions, type ConversationRowOptions, conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
 import { CallActivityCard, callActivity } from "./CallActivityCard";
 import { ContactAvatarImage } from "./ContactAvatarImage";
 import { ScheduleCall } from "./ScheduleCall";
@@ -215,8 +215,9 @@ function ConversationRow({
   selected,
   onSelect,
   config,
-  groups, groupKey, onGroupChange, workspaceKey,
+  groups, groupKey, onGroupChange, workspaceKey, appearance = {},
 }: {
+  appearance?: ConversationRowOptions;
   workspaceKey?: string;
   groups?: ChatGroup[]; groupKey?: string; onGroupChange?: (change: GroupChange) => Promise<void>;
   config?: Config;
@@ -233,34 +234,19 @@ function ConversationRow({
       type="button"
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
-      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
+      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-2 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
         ? "bg-primary/20"
-        : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-16 after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
+        : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-[68px] after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
     >
-      <div className="flex items-start gap-2.5">
-        {config?.showAvatar !== false && <Avatar name={customer} url={string(row, "customerAvatar")} channel={channel} className="size-10" />}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[13px] font-semibold text-foreground">{config ? rowValue(row, config.listTitle) : customer}</span>
-            <time className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
-              {config?.showTimestamps !== false ? compactTime(row.lastMessageAt) : ""}
-            </time>
-          </div>
-          <div className="mt-0.5 truncate text-[11px] font-medium text-foreground/80">
-            {string(row, "inboxDisplay", channel)}
-          </div>
-          <div className="mt-1 flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-              {config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
-            </span>
-            {unread > 0 ? (
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                {unread > 9 ? "9+" : unread}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <ConversationRowContent
+        avatar={config?.showAvatar !== false && <Avatar name={customer} url={string(row, "customerAvatar")} channel={appearance.showChannelBadge !== false ? channel : undefined} className="size-12" />}
+        title={config ? rowValue(row, config.listTitle) : customer}
+        timestamp={config?.showTimestamps !== false && <time>{compactTime(row.lastMessageAt)}</time>}
+        metadata={appearance.showAccount && string(row, "inboxDisplay", channel)}
+        preview={config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
+        previewLines={appearance.previewLines}
+        trailing={unread > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
+      />
     </Button>
     </ContactRowMenu>
   );
@@ -406,7 +392,7 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-type InboxChrome = { list?: WorkspaceToolbarLayout; mobileList?: WorkspaceToolbarLayout; chat?: WorkspaceToolbarLayout; mobileChat?: WorkspaceToolbarLayout; composer?: WorkspaceToolbarLayout; mobileComposer?: WorkspaceToolbarLayout };
+type InboxChrome = { conversationRow?: ConversationRowOptions; list?: WorkspaceToolbarLayout; mobileList?: WorkspaceToolbarLayout; chat?: WorkspaceToolbarLayout; mobileChat?: WorkspaceToolbarLayout; composer?: WorkspaceToolbarLayout; mobileComposer?: WorkspaceToolbarLayout };
 function toolbarLayout(value?: string): WorkspaceToolbarLayout | undefined {
   if (value === undefined) return undefined;
   try {
@@ -870,7 +856,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
                   const folder = owner(row);
-                  if (!folder) return <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
+                  if (!folder) return <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
                   if (shown.has(folder.key)) return null;
                   shown.add(folder.key);
                   const members = folderRows(folder.key);
@@ -892,7 +878,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
             <ConversationList {...pagination} active={!!activeFolder}>
-              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
+              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
               {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("crm.inbox.emptyFolder")}</p>}
             </ConversationList>
           </div>
@@ -1172,7 +1158,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   const folderRef = useRef(routedFolder);
   folderRef.current = feed && routedMode && feed.key !== routedMode ? "" : routedFolder;
   const chromeRef = useRef<InboxChrome>({});
-  chromeRef.current = {list:toolbarLayout(widget.extraConfig?.listToolbar), mobileList:toolbarLayout(widget.extraConfig?.mobileListToolbar), chat:toolbarLayout(widget.extraConfig?.chatToolbar), mobileChat:toolbarLayout(widget.extraConfig?.mobileChatToolbar), composer:toolbarLayout(widget.extraConfig?.composerToolbar), mobileComposer:toolbarLayout(widget.extraConfig?.mobileComposerToolbar)};
+  chromeRef.current = {conversationRow:conversationRowOptions(widget.extraConfig?.conversationRow), list:toolbarLayout(widget.extraConfig?.listToolbar), mobileList:toolbarLayout(widget.extraConfig?.mobileListToolbar), chat:toolbarLayout(widget.extraConfig?.chatToolbar), mobileChat:toolbarLayout(widget.extraConfig?.mobileChatToolbar), composer:toolbarLayout(widget.extraConfig?.composerToolbar), mobileComposer:toolbarLayout(widget.extraConfig?.mobileComposerToolbar)};
   const flatRef = useRef(flat);
   flatRef.current = flat;
   const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {

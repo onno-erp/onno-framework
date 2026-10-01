@@ -453,3 +453,13 @@ Mobile composers can place `tools` in `start`, `channel` in `center`, and `send`
 This puts the reply/note switch above the editor and the sending account alongside the bottom
 actions. `tools` opens the shared responsive action panel with meeting, activity, attachment and header extensions.
 Set `mobileChatToolbar.overflow` to `[]` to keep those tools out of the mobile header.
+
+### Conversation row presentation
+
+Conversation rows use `ConversationRowContent` slots for avatar, title, timestamp, preview,
+optional metadata, badges and a trailing indicator. Rows default to a single preview line,
+a channel badge on the avatar and no separate account-label row. Configure the workspace
+widget with `conversationRow` JSON, for example
+`{"showAccount":true,"showChannelBadge":false,"previewLines":2}`.
+Invalid options fall back to compact defaults. Existing list-title/list-preview bindings
+and avatar/timestamp visibility settings continue to apply.
