@@ -808,7 +808,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
           .crm-chat-layout > section { grid-column:1; grid-row:1; }
           .crm-chat-layout > main { grid-column:2; grid-row:1; border-radius:var(--radius-panel, 16px); background:hsl(var(--card)); }
           .crm-chat-layout[data-contact-open="true"]:not([data-detail-overlay="true"]) { grid-template-columns:280px minmax(0,1fr) var(--contact-width); }
-          .crm-chat-header { margin:0; border-bottom:1px solid hsl(var(--border)); border-radius:0; }
+          .crm-chat-header { --workspace-toolbar-edge:88px; margin:0; border-bottom:1px solid hsl(var(--border)); border-radius:0; }
           .crm-chat-composer { margin:0 12px 12px; max-height:45%; overflow-y:auto; }
           .crm-chat-composer textarea { min-height:64px; max-height:144px; }
           .crm-contact-slot { display:none; grid-column:3; grid-row:1; min-width:0; min-height:0; overflow:hidden; }
@@ -884,11 +884,18 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
         <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
             <WorkspaceToolbar compact={compact} balanced className="min-h-11"
-              layout={{start:["back","actions"], center:["title"], end:["contact"], ...chrome?.chat}}
+              layout={{start:["back"], center:["title"], end:["actions","contact"], ...chrome?.chat}}
               compactLayout={chrome?.mobileChat}
               items={[
                 {id:"back",content:compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>},
                 {id:"actions",content:<Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>},
+                {id:"openContact",content:action(config, "edit") && !!selected.customerRef && <Button size="toolbar" variant="ghost" onClick={() => {
+                  const ref = selected.customerRef as {type:string;id:string};
+                  window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
+                }}>{t("crm.contact.open")}</Button>},
+                {id:"scheduleCall",content:action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />},
+                {id:"logActivity",content:action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />},
+                {id:"extensions",content:<ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />},
                 {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
                 {id:"contact",content:<Button ref={contactPanelToggleRef} variant="ghost" className="size-11 shrink-0 rounded-full p-1" aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /></Button>},
               ]} />

@@ -425,7 +425,7 @@ The following widget config values are JSON objects using the shared toolbar reg
 | Config | Available item IDs |
 | --- | --- |
 | `listToolbar` / `mobileListToolbar` | `title`, `count`, `controls` (the host list toolbar; used with renderer placement) |
-| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `actions`, `title`, `contact` |
+| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
 | `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions` |
 
 Desktop configs override the built-in layout; mobile configs override its individual
@@ -438,9 +438,13 @@ page.widget("Inbox").type("crmInboxWorkspaces").config("workspace", "support")
     .config("toolbarPlacement", "renderer")
     .config("toolbarControls", "search,filters")
     .config("toolbarSecondary", "channels,accounts")
-    .config("chatToolbar", "{\"start\":[\"back\",\"actions\"],\"center\":[\"title\"],\"end\":[\"contact\"]}");
+    .config("chatToolbar", "{\"start\":[\"back\"],\"center\":[\"title\"],\"end\":[\"contact\"],\"overflow\":[\"openContact\",\"scheduleCall\",\"logActivity\",\"extensions\"]}");
 ```
 
 Set `mobileToolbar=sheet` to use the host's compact search-and-filter-sheet presentation.
 This keeps the mobile conversation header short: search stays visible, while status and
 channel/account choices move into the filter sheet. Desktop layout is unchanged.
+
+Chat header actions can be placed individually in `end` or `overflow`. Keep `back` in `start`
+and the contact identity in `center`; avoid placing secondary actions beside Back. Each action
+retains its configured permissions. The `actions` item remains available for existing layouts.

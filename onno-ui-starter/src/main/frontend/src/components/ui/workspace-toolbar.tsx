@@ -31,7 +31,7 @@ export function WorkspaceToolbar({items, layout, compactLayout, compact, balance
   const start = region("start"), center = region("center"), end = region("end"), secondary = region("secondary"), overflow = region("overflow");
   if (![start,center,end,secondary,overflow].some(nodes => nodes.length)) return null;
   return <div className={cn("min-w-0 shrink-0",className)}>
-    {(start.length + center.length + end.length + overflow.length > 0) && <div className={cn("min-w-0 items-center gap-2",balanced ? "grid grid-cols-[72px_minmax(0,1fr)_72px]" : "flex")}>
+    {(start.length + center.length + end.length + overflow.length > 0) && <div className={cn("min-w-0 items-center gap-2",balanced ? "grid grid-cols-[var(--workspace-toolbar-edge,72px)_minmax(0,1fr)_var(--workspace-toolbar-edge,72px)]" : "flex")}>
       <div className="flex min-w-0 items-center gap-1">{start}</div>
       <div className={cn("min-w-0",balanced ? "text-center" : "flex flex-1 items-center gap-2")}>{center}</div>
       <div className="ml-auto flex min-w-0 items-center justify-end gap-1">{end}
