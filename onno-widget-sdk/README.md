@@ -281,3 +281,14 @@ Custom list renderers receive optional `ListRendererProps.total`, the server cou
 current search and filters, independently of how many pages are loaded. A null/omitted total means
 unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
 rows and are labeled as the current view.
+
+### Page navigation motion
+
+`usePageSlide(ref, activeKey, enabled?, onFinish?)` applies the host's shared horizontal
+navigation slide to direct children marked `data-slide-page="key"`. Keep both pages
+mounted and give them their final positions; the hook animates the incoming page to
+zero and the outgoing page toward its sibling. DOM order defines forward/back.
+Initial render, switching `enabled` (for responsive layouts), and reduced-motion
+preferences snap without animation. The cleanup cancels interrupted slides.
+`onFinish` can release retained outgoing pages. Timing comes from `--page-slide-dur`
+and `--page-slide-ease` on the container. Older hosts fall back to no animation.

@@ -1,3 +1,4 @@
+import { usePageSlide } from "@/lib/use-page-slide";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,10 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   const [requests, setRequests] = useState<Record<string, string>>({});
   const scroll = useRef(new Map<string, number>());
   const previous = useRef(path);
+  const pagesRef = useRef<HTMLDivElement>(null);
+  const exiting = useRef<string | null>(null);
+  if (previous.current !== path) exiting.current = previous.current;
+  const outgoing = exiting.current;
   const isRoot = roots.includes(path) || path === "/" || path === "/menu";
   const currentStack = stack[stack.length - 1] === path ? stack : isRoot ? [path]
     : stack.includes(path) ? stack.slice(0, stack.indexOf(path) + 1) : [...stack, path];
@@ -27,8 +32,13 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
       window.scrollTo(0, scroll.current.get(path) ?? 0);
       previous.current = path;
     }
-    if (stack !== currentStack) setStack(currentStack);
+
   }, [path, currentStack, stack]);
+  usePageSlide(pagesRef, path, true, () => {
+    exiting.current = null;
+    setStack([...currentStack]);
+  });
+  const retainedRoutes = [...new Set([...stack, ...currentStack])];
   useLayoutEffect(() => {
     const listener = (event: Event) => {
       const detail = (event as CustomEvent).detail;
@@ -62,8 +72,12 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
         <ArrowLeft className="size-4" />{backLabel}
       </Button>
     </header>}
-    <div className={detail || localDetail ? "" : "pb-24"}>
-      {currentStack.map(route => <div key={route} hidden={route !== path} inert={route !== path}>{render(route)}</div>)}
+    <div ref={pagesRef} className={`relative overflow-x-clip ${detail || localDetail ? "" : "pb-24"}`}>
+      {retainedRoutes.map(route => <div key={route} data-slide-page={route}
+        hidden={route !== path && route !== outgoing} inert={route !== path} aria-hidden={route !== path}
+        className={route === path ? "relative w-full" : "absolute inset-x-0 top-0 w-full pointer-events-none"}
+        style={route === path ? undefined : {transform: "translateX(-100%)"}}
+      >{render(route)}</div>)}
     </div>
     {!detail && !localDetail && navigation}
   </div>;

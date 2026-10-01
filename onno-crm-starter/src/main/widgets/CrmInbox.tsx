@@ -14,7 +14,7 @@ import { contactChats, replySelection, type ReplySelection } from "./contactChat
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail } from "@onno/widget-sdk";
+import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail, usePageSlide } from "@onno/widget-sdk";
 
 /**
  * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
@@ -479,6 +479,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [compact, setCompact] = useState(false);
+  const folderSlideRef = useRef<HTMLDivElement | null>(null);
   const [detailOverlay, setDetailOverlay] = useState(false);
   const [mobileChatOpen, setMobileChatOpen] = useState(() => new URLSearchParams(window.location.search).has("conversation"));
   const actionsId = useId();
@@ -495,7 +496,11 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useEffect(() => {
     const root = inboxRootRef.current;
     if (!root) return;
-    const measure = () => { setCompact(root.clientWidth < 720); setDetailOverlay(root.clientWidth < 1100); };
+    const measure = () => {
+      const nextCompact = root.clientWidth < 720;
+      setCompact(nextCompact);
+      setDetailOverlay(root.clientWidth < 1100);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(root);
@@ -508,6 +513,12 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   );
 
   const dismissChat = useCallback(() => {
+    if (compact) {
+      setMobileChatOpen(false);
+      setContactPanelOpen(false);
+      inboxRootRef.current?.focus({ preventScroll: true });
+      return;
+    }
     selectionDismissedRef.current = true;
     selectionRef.current = null;
     replySelectionRef.current = null;
@@ -515,11 +526,13 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     setMobileChatOpen(false);
     setContactPanelOpen(false);
     inboxRootRef.current?.focus({ preventScroll: true });
-  }, []);
+  }, [compact]);
   const dismissFolder = useCallback(() => setFolderKey(null), []);
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
 
   useMobileDetail(compact && mobileChatOpen && !!selected);
+  usePageSlide(inboxRootRef, mobileChatOpen ? "chat" : "list", compact);
+  usePageSlide(folderSlideRef, activeFolder ? "folder" : "root");
 
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
 
@@ -780,7 +793,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       data-chat-open={mobileChatOpen && !!selected}
       style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
-      <section aria-label={t("crm.inbox.chatSelection")} aria-hidden={compact && mobileChatOpen && !!selected} inert={compact && mobileChatOpen && !!selected} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
+      <section data-slide-page="list" aria-label={t("crm.inbox.chatSelection")} aria-hidden={compact && mobileChatOpen && !!selected} inert={compact && mobileChatOpen && !!selected} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
         <style>{`
           .crm-chat-layout { --contact-width:320px; grid-template-columns:300px minmax(0,1fr); gap:12px; }
           .crm-chat-layout > section { grid-column:1; grid-row:1; }
@@ -795,21 +808,19 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"] .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30; }
           .crm-chat-layout[data-compact="true"] { grid-template-columns:minmax(0,1fr); gap:0; }
           .crm-chat-layout[data-compact="true"] > section,
-          .crm-chat-layout[data-compact="true"] > main { grid-column:1; grid-row:1; position:absolute; inset:0; width:100%; height:100%; transform:translate3d(0,0,0); backface-visibility:hidden; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
+          .crm-chat-layout[data-compact="true"] > main { grid-column:1; grid-row:1; position:absolute; inset:0; width:100%; height:100%; transform:translate3d(0,0,0); backface-visibility:hidden; }
           .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { transform:translate3d(-100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
           .crm-chat-layout[data-compact="true"] .crm-contact-slot { width:100%; }
           .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
           .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
-          .crm-chat-layout, .crm-folder-slide { --page-slide-dur: 300ms; --page-slide-ease: cubic-bezier(0.2,0.7,0.2,1); }
-          .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; will-change:transform; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
+          .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; }
           .crm-folder-slide[data-open="false"] > .crm-folder-detail { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-folder-slide[data-open="true"] > .crm-folder-root { transform:translate3d(-100%,0,0); pointer-events:none; }
-          @media (prefers-reduced-motion: reduce) { .crm-folder-slide > .crm-folder-page, .crm-chat-layout[data-compact="true"] > section, .crm-chat-layout[data-compact="true"] > main { transition:none; } }
         `}</style>
-        <div className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
-          <div ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
+        <div ref={folderSlideRef} className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
+          <div data-slide-page="root" ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
               <div className="text-sm font-semibold">{t("crm.inbox.conversations")}</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
@@ -833,7 +844,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               })()}
             </ConversationList>
           </div>
-          <div ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
+          <div data-slide-page="folder" ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-border/50 px-3 py-3">
               <Button variant="ghost" size="sm" aria-label={t("crm.inbox.back")} onClick={() => setFolderKey(null)}><ArrowLeft className="size-4" /></Button>
               {displayedFolder && <FolderTile folder={displayedFolder} size="size-8" icon={16} />}
@@ -849,7 +860,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && !mobileChatOpen} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
+        <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && !mobileChatOpen} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 flex min-h-16 shrink-0 items-center gap-3 px-4 py-3">
             {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>}
             {!compact && config.showAvatar !== false && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />}

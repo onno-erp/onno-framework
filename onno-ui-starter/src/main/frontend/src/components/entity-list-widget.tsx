@@ -600,58 +600,56 @@ export function OptionsFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => close(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    onChange([]);
-                    close(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton onClick={() => close(false)}>{t("list.done")}</SheetDoneButton>
-              </>
-            }
-          >
-            <div className="px-2 py-2">
-              {searchable ? (
-                <div className="mx-1 mb-1.5 flex items-center gap-2 rounded-field bg-muted px-3">
-                  <Search className="size-4 shrink-0 opacity-50" />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={t("list.search")}
-                    className="h-10 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
-              ) : null}
-              {searchable && visible.length === 0 ? (
-                <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                  {t("empty.noMatches")}
-                </div>
-              ) : null}
-              {visible.map((o) => {
-                const on = selected.includes(o.value);
-                return (
-                  <FacetOptionRow
-                    key={o.value}
-                    option={o}
-                    selected={on}
-                    multi={multi}
-                    touch
-                    onSelect={() => toggle(o.value)}
-                  />
-                );
-              })}
-            </div>
-          </FacetSheet>
-        ) : null}
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => close(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  onChange([]);
+                  close(false);
+                }}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton onClick={() => close(false)}>{t("list.done")}</SheetDoneButton>
+            </>
+          }
+        >
+          <div className="px-2 py-2">
+            {searchable ? (
+              <div className="mx-1 mb-1.5 flex items-center gap-2 rounded-field bg-muted px-3">
+                <Search className="size-4 shrink-0 opacity-50" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("list.search")}
+                  className="h-10 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+            ) : null}
+            {searchable && visible.length === 0 ? (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                {t("empty.noMatches")}
+              </div>
+            ) : null}
+            {visible.map((o) => {
+              const on = selected.includes(o.value);
+              return (
+                <FacetOptionRow
+                  key={o.value}
+                  option={o}
+                  selected={on}
+                  multi={multi}
+                  touch
+                  onSelect={() => toggle(o.value)}
+                />
+              );
+            })}
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -762,50 +760,48 @@ function TextFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => setOpen(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    setText("");
-                    onCommit("");
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton
-                  onClick={() => {
-                    onCommit(text);
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.done")}
-                </SheetDoneButton>
-              </>
-            }
-          >
-            <div className="relative px-4 py-3">
-              <Search className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                autoFocus
-                value={text}
-                placeholder={label}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    onCommit(text);
-                    setOpen(false);
-                  }
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  setText("");
+                  onCommit("");
+                  setOpen(false);
                 }}
-                className="h-11 rounded-field pl-10 text-[15px]"
-              />
-            </div>
-          </FacetSheet>
-        ) : null}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton
+                onClick={() => {
+                  onCommit(text);
+                  setOpen(false);
+                }}
+              >
+                {t("list.done")}
+              </SheetDoneButton>
+            </>
+          }
+        >
+          <div className="relative px-4 py-3">
+            <Search className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              autoFocus
+              value={text}
+              placeholder={label}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onCommit(text);
+                  setOpen(false);
+                }
+              }}
+              className="h-11 rounded-field pl-10 text-[15px]"
+            />
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -1021,52 +1017,50 @@ function DateRangeFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => setOpen(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    onChange({ from: "", to: "" });
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
-              </>
-            }
-          >
-            <div className="grid grid-cols-3 gap-2 px-4 pt-3">
-              {presets.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => {
-                    setRange(p.start, p.end);
-                    setOpen(false);
-                  }}
-                  className="h-9 rounded-field border border-input px-2 text-xs font-medium text-foreground transition-colors active:bg-accent"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-center">
-              <RangeCalendar
-                aria-label={label}
-                value={range}
-                numberOfMonths={1}
-                touch
-                onChange={(v) => {
-                  if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  onChange({ from: "", to: "" });
+                  setOpen(false);
                 }}
-              />
-            </div>
-          </FacetSheet>
-        ) : null}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
+            </>
+          }
+        >
+          <div className="grid grid-cols-3 gap-2 px-4 pt-3">
+            {presets.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  setRange(p.start, p.end);
+                  setOpen(false);
+                }}
+                className="h-9 rounded-field border border-input px-2 text-xs font-medium text-foreground transition-colors active:bg-accent"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-center">
+            <RangeCalendar
+              aria-label={label}
+              value={range}
+              numberOfMonths={1}
+              touch
+              onChange={(v) => {
+                if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
+              }}
+            />
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -1179,56 +1173,54 @@ function GroupByFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={t("list.groupBy")}
-            onClose={() => setOpen(false)}
-            footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
-          >
-            <div className="px-2 py-2">
-              {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
-                const on = (groupBy || "") === g.columnName;
-                return (
-                  <button
-                    key={g.columnName || "__none"}
-                    type="button"
-                    onClick={() => choose(g.columnName)}
-                    className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                      )}
-                    >
-                      {on ? <Check className="size-3.5" /> : null}
-                    </span>
-                    <span className="truncate">{g.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {col?.date ? (
-              <div className="flex items-center gap-2 border-t px-4 py-3">
-                {(["day", "month", "year"] as const).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => onGranularity(g)}
+        <FacetSheet open={open}
+          label={t("list.groupBy")}
+          onClose={() => setOpen(false)}
+          footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
+        >
+          <div className="px-2 py-2">
+            {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
+              const on = (groupBy || "") === g.columnName;
+              return (
+                <button
+                  key={g.columnName || "__none"}
+                  type="button"
+                  onClick={() => choose(g.columnName)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
+                >
+                  <span
                     className={cn(
-                      "h-10 flex-1 rounded-control text-sm font-medium transition-colors",
-                      granularity === g
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground active:bg-accent/60"
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                      on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                     )}
                   >
-                    {granLabels[g]}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </FacetSheet>
-        ) : null}
+                    {on ? <Check className="size-3.5" /> : null}
+                  </span>
+                  <span className="truncate">{g.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {col?.date ? (
+            <div className="flex items-center gap-2 border-t px-4 py-3">
+              {(["day", "month", "year"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => onGranularity(g)}
+                  className={cn(
+                    "h-10 flex-1 rounded-control text-sm font-medium transition-colors",
+                    granularity === g
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground active:bg-accent/60"
+                  )}
+                >
+                  {granLabels[g]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </FacetSheet>
       </>
     );
   }

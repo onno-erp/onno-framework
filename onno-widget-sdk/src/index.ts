@@ -375,3 +375,6 @@ export function useMobileDetail(active: boolean): void {
     return () => {window.dispatchEvent(new CustomEvent("onno:mobile-detail", {detail:{id, active:false}}));};
   }, [id, active]);
 }
+
+/** Animate navigation between direct children marked data-slide-page; initial load snaps. */
+export const usePageSlide: NonNullable<OnnoUi["usePageSlide"]> = host.ui.usePageSlide ?? (() => {});

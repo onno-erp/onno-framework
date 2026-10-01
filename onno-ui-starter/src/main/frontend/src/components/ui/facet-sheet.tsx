@@ -43,11 +43,14 @@ export function useTouchLayout(): boolean {
  */
 export function FacetSheet({
   label,
+  open = true,
   onClose,
   footer,
   children,
 }: {
   label: string;
+  /** Keep mounted and toggle open so the drawer can finish its exit animation. */
+  open?: boolean;
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
@@ -58,6 +61,7 @@ export function FacetSheet({
     if (!open) onClose();
   };
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -68,8 +72,9 @@ export function FacetSheet({
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, open]);
   if (overlay === "modal") {
+    if (!open) return null;
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
         <button type="button" aria-label={t("action.close")} className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -92,7 +97,7 @@ export function FacetSheet({
     );
   }
   return (
-    <Drawer.Root open onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
+    <Drawer.Root open={open} onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <Drawer.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t bg-popover pb-[max(env(safe-area-inset-bottom),0.75rem)] text-popover-foreground shadow-md outline-none">

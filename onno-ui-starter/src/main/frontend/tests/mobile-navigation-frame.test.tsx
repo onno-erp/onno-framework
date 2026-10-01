@@ -31,3 +31,22 @@ it("handles deep links and scoped widget detail states", () => {
   expect(screen.getByRole("navigation")).toBeVisible();
   expect(mobileParent("/custom/child")).toBe("/custom");
 });
+it("retains an exiting record until Back finishes animating", async () => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  const resolvers: Array<() => void> = [];
+  const animate = vi.fn(() => ({cancel: vi.fn(), finished: new Promise<void>(resolve => resolvers.push(resolve))}));
+  Object.defineProperty(HTMLElement.prototype, "animate", {configurable:true, value:animate});
+  const props = {roots:["/catalogs/contacts"],back:vi.fn(),backLabel:"Back",navigation:<nav>Tabs</nav>,render:(path:string)=><div>{path}</div>};
+  const view = render(<MobileNavigationFrame {...props} path="/catalogs/contacts"/>);
+  expect(animate).not.toHaveBeenCalled();
+  view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts/123"/>);
+  expect(animate).toHaveBeenCalledTimes(2);
+  await act(async () => { resolvers.splice(0).forEach(resolve => resolve()); });
+  view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts"/>);
+  const exiting = view.container.querySelector('[data-slide-page="/catalogs/contacts/123"]');
+  expect(exiting).toBeInTheDocument();
+  expect(exiting).toHaveAttribute("aria-hidden", "true");
+  await act(async () => { resolvers.splice(0).forEach(resolve => resolve()); });
+  expect(exiting).not.toBeInTheDocument();
+  delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
+});

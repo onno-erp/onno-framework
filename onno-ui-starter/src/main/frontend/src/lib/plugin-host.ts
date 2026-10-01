@@ -1,3 +1,4 @@
+import { usePageSlide } from "@/lib/use-page-slide";
 import { extensions } from "./ui-extensions";
 import { CommentComposer, CommentBody } from "@/components/entity-comments-widget";
 import { EntityTagMenu, EntityTags } from "@/components/entity-tags";
@@ -55,6 +56,7 @@ import {
  * never drifts from the product's look. Curated subset; grow it as widgets need more (issue #243).
  */
 export interface OnnoUi {
+  usePageSlide: typeof usePageSlide;
   ContextMenuContent: typeof ContextMenuContent;
   ContextMenuItem: typeof ContextMenuItem;
   EntityTagMenu: typeof EntityTagMenu;
@@ -166,6 +168,7 @@ declare global {
 // The curated UI primitives handed to widgets. Same instances the host renders with, so a widget's
 // controls are the product's controls — see {@link OnnoUi}.
 const ui: OnnoUi = {
+  usePageSlide,
   EntityTagMenu,
   ContextMenuSub,
   EntityTags,
