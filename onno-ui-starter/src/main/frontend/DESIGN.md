@@ -246,3 +246,8 @@ bottom navigation plus guessed padding to a full-height surface.
 Compact CRM composers use a full-width account selector, an accessible icon Send button,
 and a compact retry action. Hide unavailable attachment actions on compact layouts; desktop
 keeps its existing controls. Preserve message history space and keep the composer in flow.
+
+The CRM chat header centers the contact name between balanced action areas. The profile avatar
+on the right opens contact details; do not add a duplicate sidebar toggle or a generic history
+subtitle. Compact layouts show those details as a third full-width navigation page with Back;
+desktop keeps the same contact content in its aside.

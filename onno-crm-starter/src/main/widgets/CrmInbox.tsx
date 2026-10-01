@@ -53,7 +53,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
+import { Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
 
 type Message = {
   id: string;
@@ -531,7 +531,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
 
   useMobileDetail(compact && mobileChatOpen && !!selected);
-  usePageSlide(inboxRootRef, mobileChatOpen ? "chat" : "list", compact);
+  usePageSlide(inboxRootRef, contactPanelOpen ? "contact" : mobileChatOpen ? "chat" : "list", compact);
   usePageSlide(folderSlideRef, activeFolder ? "folder" : "root");
 
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
@@ -812,7 +812,10 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { transform:translate3d(-100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
-          .crm-chat-layout[data-compact="true"] .crm-contact-slot { width:100%; }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot { display:block; position:absolute; inset:0; width:100%; height:100%; z-index:30; transform:translateX(100%); }
+          .crm-chat-layout[data-compact="true"][data-contact-open="true"] .crm-contact-slot { transform:translateX(0); }
+          .crm-chat-layout[data-compact="true"][data-contact-open="true"] > main { transform:translateX(-100%); }
+          .crm-chat-layout[data-compact="true"] .crm-contact-island { background:hsl(var(--background)); }
           .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
           .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
           .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; }
@@ -860,16 +863,18 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && !mobileChatOpen} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
-          <header className="crm-chat-header z-10 flex min-h-16 shrink-0 items-center gap-3 px-4 py-3">
-            {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>}
-            {!compact && config.showAvatar !== false && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
-              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{t("crm.inbox.allChannelsSubtitle")}</div>
+        <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
+          <header className="crm-chat-header z-10 grid min-h-16 shrink-0 grid-cols-[72px_minmax(0,1fr)_72px] items-center gap-2 px-3 py-2">
+            <div className="flex items-center">
+              {compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>}
+              <Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>
             </div>
-            <Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>
-            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
+            <div className="min-w-0 truncate text-center text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
+            <div className="flex justify-end">
+              <Button ref={contactPanelToggleRef} variant="ghost" className="size-11 shrink-0 rounded-full p-1" aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>
+                <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />
+              </Button>
+            </div>
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
             {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
@@ -1007,13 +1012,14 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
         </main>
       ) : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">{t("crm.chat.chooseConversation")}</main>}
 
-      <div className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
+      <div data-slide-page="contact" className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
         {selected && config ? <aside id={contactPanelId} aria-label={t("crm.contact.details")}
           className={`${islandSurface} crm-contact-island flex flex-col overflow-hidden`}
           onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContactPanel(); } }}>
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
-            <span className="text-sm font-semibold">{t("crm.contact.details")}</span>
-            <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>
+            {compact && <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><ArrowLeft className="size-4" /></Button>}
+            <span className={compact ? "flex-1 text-center text-sm font-semibold" : "text-sm font-semibold"}>{t("crm.contact.details")}</span>
+            {compact ? <span className="w-9" /> : <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <ContactPanel key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
