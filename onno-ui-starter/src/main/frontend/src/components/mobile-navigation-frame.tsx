@@ -28,7 +28,8 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
   const motion = useRef<"slide" | "fade">("slide");
   if (previous.current !== path) {
     // Switching sections is lateral navigation; returning to a retained parent is Back.
-    motion.current = isRoot && !stack.includes(path) ? "fade" : "slide";
+    const fromRoot = roots.includes(previous.current) || previous.current === "/" || previous.current === "/menu";
+    motion.current = isRoot && (fromRoot || !stack.includes(path)) ? "fade" : "slide";
   }
   const currentStack = stack[stack.length - 1] === path ? stack : isRoot ? [path]
     : stack.includes(path) ? stack.slice(0, stack.indexOf(path) + 1) : [...stack, path];
