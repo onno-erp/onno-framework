@@ -98,7 +98,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
   </Button>;
 }
-export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute }: { inboxRoute?: string; id: string; row?: EntityRecord; config: Config; customer?: EntityRecord | null }) {
+export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute, presentation = "sidebar" }: { presentation?: "sidebar" | "card"; inboxRoute?: string; id: string; row?: EntityRecord; config: Config; customer?: EntityRecord | null }) {
+  const card = presentation === "card";
   const [contact, setContact] = useState<Contact | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(async () => { const c = await request<Contact>(`/contacts/${id}`); setContact(c); }, [id]);
@@ -124,15 +125,16 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
     .map(section => ({ section, fields: rows.filter(f => f.section === section && (config.showEmpty || (value(f) != null && value(f) !== ""))) }))
     .filter(group => group.fields.length > 0);
   const primary = contact.identities.find(identity => identity.address) ?? contact.identities[0];
-  return <div className="p-4 text-xs">
-    <header className="flex items-center gap-3 pb-3">
-      {config.showAvatar && <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground">
+  return <div data-contact-card={card || undefined} className={card ? "space-y-3 p-3 text-sm" : "p-4 text-xs"}>
+    <style>{`[data-contact-card] dt { font-size:12px; } [data-contact-card] dd { font-size:14px; } [data-contact-card] dl > .group { padding:6px 0; } [data-contact-card] button[title^="Copy"] { opacity:1; width:32px; height:32px; }`}</style>
+    <header className={card ? "flex flex-col items-center gap-3 rounded-panel border border-border/60 bg-muted/30 px-4 py-6 text-center" : "flex items-center gap-3 pb-3"}>
+      {config.showAvatar && <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground ${card ? "size-16" : "size-11"}`}>
         {name.slice(0, 2).toUpperCase()}
         <ContactAvatarImage name={name} url={typeof contact.fields.avatarUrl === "string" ? contact.fields.avatarUrl : null} />
       </span>}
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-sm font-semibold leading-5 text-foreground" title={name}>{name}</h2>
-        {primary ? <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <h2 className={card ? "break-words text-lg font-semibold text-foreground" : "truncate text-sm font-semibold leading-5 text-foreground"} title={name}>{name}</h2>
+        {primary ? <span className={`mt-1 flex items-center gap-1.5 text-muted-foreground ${card ? "justify-center text-sm" : "text-[11px]"}`}>
           <ChannelLogo channel={primary.channel} className="size-3.5" />
           <span className="truncate">{primary.address || primary.externalId}</span>
         </span> : null}
@@ -141,7 +143,7 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
     {chips.length > 0 && <div className="flex flex-wrap gap-1.5 pb-3">
       {chips.map(f => <StageBadge key={f.key} text={String(value(f))} color={color(f)} />)}
     </div>}
-    {sections.map(group => <section key={group.section} className="border-t border-border/60 py-3">
+    {sections.map(group => <section key={group.section} className={card ? "rounded-panel border border-border/60 p-4" : "border-t border-border/60 py-3"}>
       <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.section}</h3>
       <dl>{group.fields.map(f => {
         const text = value(f) == null ? "" : String(value(f));
@@ -156,7 +158,7 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
         </div>;
       })}</dl>
     </section>)}
-    {config.showIdentities && <section className="border-t border-border/60 py-3">
+    {config.showIdentities && <section className={card ? "rounded-panel border border-border/60 p-4" : "border-t border-border/60 py-3"}>
       <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{t("crm.contact.identities")}</h3>
       {contact.identities.length ? <ul className="space-y-1.5">{contact.identities.map(i => <li key={i.id} className="group flex items-center gap-2">
         <ChannelLogo channel={i.channel} className="size-4" />

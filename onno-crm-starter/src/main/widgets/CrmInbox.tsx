@@ -493,9 +493,9 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
   const [mobileChatOpen, setMobileChatOpen] = useState(() => new URLSearchParams(window.location.search).has("conversation"));
   const actionsId = useId();
   const contactPanelToggleRef = useRef<HTMLButtonElement | null>(null);
-  const closeContactPanel = () => { setContactPanelOpen(false); requestAnimationFrame(() => contactPanelToggleRef.current?.focus()); };
+  const closeContactPanel = () => { setContactPanelOpen(false); requestAnimationFrame(() => contactPanelToggleRef.current?.focus({ preventScroll: true })); };
   const contactPanelCloseRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => { if (contactPanelOpen && detailOverlay) contactPanelCloseRef.current?.focus(); }, [contactPanelOpen, detailOverlay]);
+  useEffect(() => { if (contactPanelOpen && detailOverlay) contactPanelCloseRef.current?.focus({ preventScroll: true }); }, [contactPanelOpen, detailOverlay]);
   const contactPanelId = useId();
   const replySelectionRef = useRef<ReplySelection | null>(null);
   const draftRef = useRef(draft); draftRef.current = draft || noteDraft;
@@ -814,17 +814,17 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
           .crm-contact-slot { display:none; grid-column:3; grid-row:1; min-width:0; min-height:0; overflow:hidden; }
           .crm-contact-island { height:100%; width:100%; }
           .crm-chat-layout[data-contact-open="true"] .crm-contact-slot { display:block; }
-          .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"] .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30; }
+          .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"]:not([data-compact="true"]) .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30; }
           .crm-chat-layout[data-compact="true"] { grid-template-columns:minmax(0,1fr); gap:0; }
           .crm-chat-layout[data-compact="true"] > section,
           .crm-chat-layout[data-compact="true"] > main { grid-column:1; grid-row:1; position:absolute; inset:0; width:100%; height:100%; transform:translate3d(0,0,0); backface-visibility:hidden; }
           .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { transform:translate3d(-100%,0,0); pointer-events:none; }
           .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
-          .crm-chat-layout[data-compact="true"] .crm-contact-slot { display:block; position:absolute; inset:0; width:100%; height:100%; z-index:30; transform:translateX(100%); }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot { grid-column:1; grid-row:1; display:block; position:absolute; inset:0; width:100%; height:100%; z-index:30; transform:translateX(100%); }
           .crm-chat-layout[data-compact="true"][data-contact-open="true"] .crm-contact-slot { transform:translateX(0); }
           .crm-chat-layout[data-compact="true"][data-contact-open="true"] > main { transform:translateX(-100%); }
-          .crm-chat-layout[data-compact="true"] .crm-contact-island { background:hsl(var(--background)); }
+          .crm-chat-layout[data-compact="true"] .crm-contact-island { background:hsl(var(--card)); }
           .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
           .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
           .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; }
@@ -1034,13 +1034,13 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
         {selected && config ? <aside id={contactPanelId} aria-label={t("crm.contact.details")}
           className={`${islandSurface} crm-contact-island flex flex-col overflow-hidden`}
           onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContactPanel(); } }}>
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
+          <div className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
             {compact && <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><ArrowLeft className="size-4" /></Button>}
             <span className={compact ? "flex-1 text-center text-sm font-semibold" : "text-sm font-semibold"}>{t("crm.contact.details")}</span>
             {compact ? <span className="w-9" /> : <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <ContactPanel key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
+            <ContactPanel presentation={compact ? "card" : "sidebar"} key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
             <ExtensionSlot name="crm.chat.aside" context={extensionContext} className="space-y-3 p-4" />
           </div>
         </aside> : null}

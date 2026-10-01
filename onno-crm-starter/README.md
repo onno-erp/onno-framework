@@ -33,6 +33,9 @@ A five-argument `.field(key, label, section, format, getter)` files a projection
 section; the contact panel groups its fields by section and draws one heading per group, so a host
 exposing more than a handful of fields can say which belong together instead of handing the reader
 one undifferentiated list. Fields declared with the four-argument form file under `Contact`.
+On compact inbox layouts, the avatar opens a full-width contact page with a profile card and
+separate cards for these field groups and linked identities. Its header stays fixed while the
+content scrolls; Back returns to the chat. Desktop layouts retain the contact sidebar.
 `.color(key, getter)` supplies the colour a `badge` field's value carries — an enumeration already
 names its own on `@EnumLabel` — so a stage reads as the same pill in the panel as it does elsewhere.
 The colour travels beside the value as `<key>Color` and is not itself a displayable field.
