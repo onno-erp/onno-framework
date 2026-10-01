@@ -22,7 +22,8 @@ belong in `EntityView`, not here.
   shell. Mixed `.page(...)`, `.catalog(...)`, `.document(...)`, and `.register(...)` calls retain
   declaration order inside the drawer.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
-- A custom page route appears in nav only when a layout section links it with `.page(...)`.
+- **Home is automatic.** An authored `Page.route()` of `/` (or dashboard widgets for the active layout/profile) makes onno add one leading home navigation item. Set its label with `PageBuilder.title("Studio overview")`. Do not also add `.page("/", ...)` to a section or `spec.link("/", ...)`: those create a second entry for the same destination. With neither a root page nor dashboard widgets, no home item is added.
+- For other custom routes, use `spec.link("/inbox", "Inbox", "inbox")` for a direct top-level entry, or `spec.section("Studio").page("/reports", "Reports", "chart")` for a nested entry. Author route paths without the browser's `/ui` prefix.
 - For an entity-backed fullscreen workspace, use `page.list(Entity.class, view -> view.fill())`.
   `page.bare()` only removes the authored page header; it does not allocate height or remove page
   padding. Read [the full-height recipe](../onno-ui-widgets/references/full-height-workspaces.md)

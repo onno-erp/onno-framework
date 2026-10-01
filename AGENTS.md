@@ -916,6 +916,8 @@ The compiler checks the field references, the IDE refactors through them, and th
 
 ### UI Authoring (Layout / Page / EntityView)
 
+Home navigation is automatic for an authored `/` Page or active dashboard widgets. Never add a second root link using `section(...).page("/", ...)` or `spec.link("/", ...)`. Label home through the root Page title. Non-root pages use `spec.link(...)` for direct rail navigation or `.page(...)` within a section. Verify one root destination in the resolved desktop and mobile shell; see [layout/page guidance](onno-plugin/skills/onno-ui-layout-pages/SKILL.md).
+
 UI is authored as Java classes registered as Spring beans — never as annotations on domain classes. Three kinds:
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)

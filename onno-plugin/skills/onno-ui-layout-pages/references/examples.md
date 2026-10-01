@@ -10,6 +10,43 @@
 - Settings And Page Actions
 - Reachability Verification
 
+## Home And Direct Navigation
+
+```java
+import org.springframework.stereotype.Component;
+import su.onno.ui.Layout;
+import su.onno.ui.LayoutSpec;
+import su.onno.ui.NavStyle;
+import su.onno.ui.Page;
+import su.onno.ui.PageBuilder;
+// Import Wedding and Contact from your host application.
+
+@Component
+class StudioHome implements Page {
+    public String route() { return "/"; }
+    public void compose(PageBuilder b) { b.title("Studio overview"); }
+}
+@Component
+class StudioLayout implements Layout {
+    public void configure(LayoutSpec spec) {
+        spec.shell().nav(NavStyle.SIDEBAR).brand("Ever After");
+        spec.link("/inbox", "Inbox", "inbox").order(0);
+        spec.section("Studio").icon("heart").order(1)
+            .catalog(Wedding.class).catalog(Contact.class);
+    }
+}
+```
+
+The shell supplies the root home entry; the layout deliberately does not link `/` again. `Wedding`
+and `Contact` are host catalogs, and `/inbox` needs its own Page bean. Naming a second link
+"Overview" does not create a different page: destinations, not labels, determine duplication.
+
+Verify `GET /api/divkit/shell?viewport=desktop` and `?viewport=mobile` as each relevant role:
+flatten `navigation[*].items`, assert exactly one `path == "/"` with label `Studio overview`,
+and exactly one `path == "/inbox"`. The inbox item should be in an untitled section for direct
+navigation. Open home, Studio and Inbox in the browser; Studio must list its distinct destinations
+without another overview. These assertions catch accidental links from additive Layout beans too.
+
 ## Main Layout
 
 ```java
