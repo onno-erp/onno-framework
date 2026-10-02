@@ -425,7 +425,7 @@ The following widget config values are JSON objects using the shared toolbar reg
 | Config | Available item IDs |
 | --- | --- |
 | `listToolbar` / `mobileListToolbar` | `title`, `count`, `controls` (the host list toolbar; used with renderer placement) |
-| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
+| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `avatar` (desktop only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
 | `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions`, `tools`, `channel` |
 
 Desktop configs override the built-in layout; mobile configs override its individual
@@ -468,3 +468,7 @@ Optional `conversationRow.badges` rules have `field`, `equals`, and `label`; a r
 when the readable row field's display value matches. These are presentation labels, not stored
 entity tags. For example `{"badges":[{"field":"statusDisplay","equals":"Urgent","label":"Priority"}]}`.
 No row is reserved when no rule matches. Keep demo-contact rules in the consuming app.
+
+Desktop chat headers use flexible space for inline actions. The `avatar` item shows the contact
+photo; `contact` is an icon button that toggles the details panel. Compact headers retain the
+centered name and tappable avatar.

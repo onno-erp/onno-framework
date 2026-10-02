@@ -54,7 +54,7 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
+import { ContactRound, Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
 
 type Message = {
   id: string;
@@ -890,7 +890,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
       {selected ? (
         <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
-            <WorkspaceToolbar compact={compact} balanced className="min-h-11"
+            <WorkspaceToolbar compact={compact} balanced={compact} className="min-h-11"
               layout={{start:["back"], center:["title"], end:["actions","contact"], ...chrome?.chat}}
               compactLayout={chrome?.mobileChat}
               items={[
@@ -904,7 +904,8 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
                 {id:"logActivity",content:action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />},
                 {id:"extensions",content:<ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />},
                 {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
-                {id:"contact",content:<Button ref={contactPanelToggleRef} variant="ghost" className="size-11 shrink-0 rounded-full p-1" aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /></Button>},
+                {id:"avatar",content:!compact && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />},
+                {id:"contact",content:<Button ref={contactPanelToggleRef} variant="ghost" className={compact ? "size-11 shrink-0 rounded-full p-1" : "size-9 shrink-0 rounded-field p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
               ]} />
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
