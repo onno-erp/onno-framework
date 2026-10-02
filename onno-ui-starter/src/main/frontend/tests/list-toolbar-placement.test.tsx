@@ -43,7 +43,7 @@ it("uses compact controls in narrow panes on a desktop viewport", async()=>{
     return {width:this.hasAttribute("data-toolbar-container") ? 300 : 1200,height:600,top:0,left:0,right:1200,bottom:600,x:0,y:0,toJSON(){}};
   });
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
-  const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:true,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true};
+  const list: ListDescriptor = {kind:"catalogs",name:"orders",title:"Orders",columns:[],searchable:true,filters:[{key:"status",column:"status",label:"Status",type:"options",options:[{value:"open",label:"Open"},{value:"closed",label:"Closed"}]}],sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true};
   try {
     render(<EntityListWidget list={list} toolbarOptions={{compactPresentation:"sheet",controls:["search","filters"]}} toolbarContent={<button>Channel options</button>} />);
     expect(await screen.findByRole("textbox",{name:"Search"})).toBeVisible();
@@ -53,5 +53,11 @@ it("uses compact controls in narrow panes on a desktop viewport", async()=>{
     expect(await screen.findByRole("dialog", {name:"Filters"})).toBeVisible();
     expect(screen.getByText("Channel options")).toBeVisible();
     expect(document.querySelector("[data-vaul-drawer]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", {name:"Open", exact:true}));
+    expect(screen.getByRole("button", {name:"Open", exact:true})).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>decodeURIComponent(String(url)).includes("status,open"))).toBe(true));
+    fireEvent.click(screen.getByRole("button", {name:"All", exact:true}));
+    expect(screen.getByRole("button", {name:"Open", exact:true})).toHaveAttribute("aria-pressed", "false");
   } finally {rect.mockRestore();}
 });

@@ -472,3 +472,5 @@ No row is reserved when no rule matches. Keep demo-contact rules in the consumin
 Desktop chat headers use flexible space for inline actions. The `avatar` item shows the contact
 photo; `contact` is an icon button that toggles the details panel. Compact headers retain the
 centered name and tappable avatar.
+
+Compact inbox filters (`mobileToolbar=sheet`) show channel and account choices directly in labeled groups. Option facets such as Status are also inline in the same panel; selecting a value must not open a second popover or sheet. Search remains in the conversation header, filters apply immediately, and each group exposes its All reset.

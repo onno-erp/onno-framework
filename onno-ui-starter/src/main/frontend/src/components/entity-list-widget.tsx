@@ -542,12 +542,14 @@ function FacetOptionRow({
  * (what the query binds); labels are what the user reads. Empty → no constraint.
  */
 export function OptionsFacet({
+  inline = false,
   label,
   options,
   multi,
   selected,
   onChange,
 }: {
+  inline?: boolean;
   label: string;
   options: FilterOption[];
   multi: boolean;
@@ -577,6 +579,16 @@ export function OptionsFacet({
       close(false);
     }
   };
+
+  if (inline) return <fieldset className="w-full min-w-0 space-y-2">
+    <legend className="text-xs font-semibold text-muted-foreground">{label}</legend>
+    {searchable && <Input aria-label={`${t("list.searchLabel")} ${label}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("list.searchLabel")} />}
+    <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+      <Button size="sm" variant={!active ? "secondary" : "ghost"} aria-pressed={!active} onClick={() => onChange([])}>{t("list.all")}</Button>
+      {visible.map(option => <Button key={option.value} size="sm" variant={selected.includes(option.value) ? "secondary" : "ghost"} aria-pressed={selected.includes(option.value)} onClick={() => toggle(option.value)}>{option.label}</Button>)}
+      {searchable && !visible.length && <p className="text-sm text-muted-foreground">{t("empty.noMatches")}</p>}
+    </div>
+  </fieldset>;
 
   const trigger = (
     <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
@@ -2709,6 +2721,7 @@ export function EntityListWidget({
               const selected = multi ? st?.in ?? [] : st?.eq ? [st.eq] : [];
               return (
                 <OptionsFacet
+                  inline={mobileControls}
                   key={f.key}
                   label={f.label}
                   options={f.options}
@@ -2888,7 +2901,7 @@ export function EntityListWidget({
         <Input aria-label={t("list.searchLabel")} placeholder={t("list.searchLabel")} value={query} onChange={event=>setQuery(event.target.value)} className="h-9 w-full border border-input bg-muted pl-9 text-base placeholder:text-sm shadow-none" />
       </div>}
       <ResponsiveActionPanel label={t("list.filters")} open={filterSheetOpen} onOpenChange={setFilterSheetOpen} trigger={<Button variant="subtle" aria-label={t("list.filters")} aria-expanded={filterSheetOpen} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0"><ListFilter className="size-4" />{activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</Button>}>
-        <div data-compact-filter-sheet="" className="onno-compact-controls">{listToolbar}</div>
+        <div data-compact-filter-sheet="" className="onno-compact-controls w-80 max-w-full max-h-[65vh] overflow-y-auto"><div className="flex items-center justify-between px-2.5 pb-2"><span className="text-sm font-semibold">{t("list.filters")}</span></div>{listToolbar}</div>
       </ResponsiveActionPanel>
     </div>
   </div> : listToolbar;
