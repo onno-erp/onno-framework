@@ -890,7 +890,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
       {selected ? (
         <main data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
           <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
-            <WorkspaceToolbar compact={compact} balanced={compact} className="min-h-11"
+            <WorkspaceToolbar compact={compact} balanced={compact} className="flex min-h-11 flex-col justify-center"
               layout={{start:["back"], center:["title"], end:["actions","contact"], ...chrome?.chat}}
               compactLayout={chrome?.mobileChat}
               items={[
