@@ -1048,7 +1048,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
             {compact ? <span className="w-9" /> : <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <ContactPanel presentation={compact ? "card" : "sidebar"} key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
+            <ContactPanel presentation="card" key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
             <ExtensionSlot name="crm.chat.aside" context={extensionContext} className="space-y-3 p-4" />
           </div>
         </aside> : null}
