@@ -905,7 +905,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
                 {id:"extensions",content:<ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />},
                 {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
                 {id:"avatar",content:!compact && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />},
-                {id:"contact",content:<Button ref={contactPanelToggleRef} variant="ghost" className={compact ? "size-11 shrink-0 rounded-full p-1" : "size-9 shrink-0 rounded-field p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
+                {id:"contact",content:<Button ref={contactPanelToggleRef} variant={compact ? "ghost" : "subtle"} size="toolbar" className={compact ? "size-11 shrink-0 rounded-full p-1" : "w-8 shrink-0 p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
               ]} />
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
@@ -1183,6 +1183,22 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
+  const flatChannelControls = <div className="space-y-4" aria-label={t("crm.inbox.channelsAndAccounts")}>
+    {showChannelFilters && <fieldset className="min-w-0 space-y-2">
+      <legend className="text-xs font-semibold text-muted-foreground">{t("crm.chat.channel")}</legend>
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel("");setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
+        {channels.map(item => <Button key={item.value} size="sm" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value);setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
+      </div>
+    </fieldset>}
+    {showAccountFilter && <fieldset className="min-w-0 space-y-2">
+      <legend className="text-xs font-semibold text-muted-foreground">{t("crm.inbox.account")}</legend>
+      <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto">
+        <Button size="sm" variant={!account ? "secondary" : "ghost"} aria-pressed={!account} onClick={() => setAccount("")}>{t("crm.inbox.allAccounts")}</Button>
+        {accounts.filter(item => !channel || item.channel === channel).map(item => <Button key={item.id} size="sm" variant={account === item.id ? "secondary" : "ghost"} aria-pressed={account === item.id} onClick={() => setAccount(item.id)}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</Button>)}
+      </div>
+    </fieldset>}
+  </div>;
   const channelControls = showChannelFilters || showAccountFilter ? <div className="crm-channel-bar flex min-w-0 items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
     {showChannelFilters && <><div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
       <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
@@ -1226,7 +1242,7 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
         .crm-account-select { width:45%; }
       }
     `}</style>
-    <EntityListWidget list={list} renderer={renderer} toolbarPlacement={widget.extraConfig?.toolbarPlacement === "renderer" ? "renderer" : "header"} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={channelControls}
+    <EntityListWidget list={list} renderer={renderer} toolbarPlacement={widget.extraConfig?.toolbarPlacement === "renderer" ? "renderer" : "header"} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={widget.extraConfig?.mobileToolbar === "sheet" ? flatChannelControls : channelControls}
       toolbarOptions={{compactPresentation:widget.extraConfig?.mobileToolbar === "sheet" ? "sheet" : "inline", controls:configuredList("toolbarControls"),
         views:configuredList("toolbarViewOptions") as Array<"table" | "map" | "custom"> | undefined,
         filterKeys:configuredList("toolbarFilters"), actionKeys:configuredList("toolbarActions"), title:widget.extraConfig?.toolbarTitle !== "false", count:widget.extraConfig?.toolbarCount !== "false",
