@@ -48,6 +48,28 @@ class TypedFieldDslTest {
         assertThat(row.bool(Order::getActive)).isTrue();
     }
 
+    @Test
+    void listFluentMethodsPreserveTheEntityType() {
+        ListSpec<Order> list = new ListSpec<>();
+
+        list.title("Orders").columns(Order::getStatus);
+        list.searchable(true).columns(Order::getStatus);
+        list.noSearch().columns(Order::getStatus);
+        list.sortBy("status").columns(Order::getStatus);
+        list.sortBy("status", true).columns(Order::getStatus);
+        list.columns("status").columns(Order::getStatus);
+        list.column("status", "Status").columns(Order::getStatus);
+        list.label("status", "Status").columns(Order::getStatus);
+        list.hide("status").columns(Order::getStatus);
+        list.pageSize(25).columns(Order::getStatus);
+        list.cellMenu("status", "Change status").columns(Order::getStatus);
+        list.groupable("status").columns(Order::getStatus);
+        list.defaultGroupBy("status").columns(Order::getStatus);
+        list.aggregate("total", ListSpec.Agg.SUM).columns(Order::getStatus);
+        list.aggregate("total", ListSpec.Agg.SUM, "Total").columns(Order::getStatus);
+        list.rowStyle(row -> null).columns(Order::getStatus);
+    }
+
     static final class NoopValidator implements FormValidator {
         @Override
         public List<FormFeedback> validate(FormValidationContext context) {
