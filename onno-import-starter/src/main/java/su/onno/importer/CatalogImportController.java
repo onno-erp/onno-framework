@@ -68,10 +68,10 @@ public class CatalogImportController {
                                   @RequestParam(defaultValue = "CREATE_ONLY") CatalogImportMode mode,
                                   @RequestParam(defaultValue = "false") boolean dryRun,
                                   @RequestParam(required = false) String charset,
-                                  Principal principal) {
+                                  Principal principal, su.onno.access.AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        return catalogImports.importCatalog(desc, bytes(file), charset, parseMapping(mapping), mode, dryRun, principal);
+        return catalogImports.importCatalog(desc, bytes(file), charset, parseMapping(mapping), mode, dryRun, subject);
     }
 
     @PostMapping("/documents/{name}/csv")
@@ -83,11 +83,11 @@ public class CatalogImportController {
                                           @RequestParam(defaultValue = "false") boolean postAfterImport,
                                           @RequestParam(required = false) String groupBy,
                                           @RequestParam(required = false) String charset,
-                                          Principal principal) {
+                                          Principal principal, su.onno.access.AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
         return documentImports.importDocuments(desc, bytes(file), charset, parseMapping(mapping),
-                mode, dryRun, postAfterImport, groupBy, principal);
+                mode, dryRun, postAfterImport, groupBy, subject);
     }
 
     private byte[] bytes(MultipartFile file) {

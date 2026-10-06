@@ -27,7 +27,8 @@ public final class RefOptionService {
     public List<Map<String, Object>> decorate(String decoratorType,
                                                RefOptionContext context,
                                                List<Map<String, Object>> rows) {
-        RefOptionDecorator decorator = decorators.get(decoratorType);
+        // Map.copyOf rejects a null lookup key: a picker without a decorator sends none.
+        RefOptionDecorator decorator = decoratorType == null ? null : decorators.get(decoratorType);
         if (decorator == null || rows.isEmpty()) {
             return rows;
         }

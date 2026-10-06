@@ -375,6 +375,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "form.chooseColor": "Choose color",
   "ref.selectedElsewhere": "Selected in another row",
   "ref.alreadySelected": "Already selected",
+  // A reference to a record the viewer may not open (record-level access policies).
+  "ref.restricted": "Restricted",
+  "ref.restrictedHint": "You don't have access to this record",
   // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
   "form.staleChanged": "This record changed elsewhere.",
   "form.reload": "Reload",

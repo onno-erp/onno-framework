@@ -4,7 +4,9 @@ description: >-
   Configure onno-auth-starter and onno-framework authorization. Use when setting onno.auth.mode,
   in-memory users, OIDC/SSO, resource-server JWT, public paths, CSRF ignored paths, remember-me,
   session timeout, AuthMethodsProvider/AuthMethodsContributor, @AccessControl readRoles/writeRoles,
-  ADMIN behavior, UI profile roles, MCP/web authorization, or debugging 401/403 access issues.
+  ADMIN behavior, UI profile roles, MCP/web authorization, record-level access policies
+  (RecordAccessPolicy, RecordScope, AccessSubject, RecordAccess, external users / customer portals),
+  or debugging 401/403/404 access issues.
 ---
 
 # onno Auth And RBAC
@@ -28,6 +30,15 @@ change.
   non-API endpoints as a separate security decision; use a management port/chain when needed.
 - `@AccessControl` is deny-by-default. `ADMIN` always passes.
 - `writeRoles` falls back to `readRoles` when empty.
+- Record-level access (external users seeing only their own records) is a `RecordAccessPolicy`
+  bean: `RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
+  .read(RecordScope.eq("owner", Subject.recordId()))`; `via("tenant")` scopes through a ref;
+  `write(...)` defaults to read; `defaults(d -> d.set("owner", Subject.recordId()))` fills creates.
+  `Subject.recordId()` needs `Layout.identity(...)`. Out-of-scope records are 404, refs to them
+  render restricted. Startup rejects invalid/dead policies.
+- Typed repositories are NOT record-scoped (trusted code). Custom endpoints/actions/`@McpTool`s
+  serving users take an `AccessSubject` (controller parameter, `ctx.subject()`) and check with
+  `RecordAccess`; never pass `AccessSubject.system()` on a user's behalf.
 - Layout/page roles curate UI; entity access still gates data and API calls.
 - With password + ≥1 SSO provider configured, the login screen renders a method chooser first —
   extra providers come from `AuthMethodsContributor` beans (Telegram lives in
@@ -39,6 +50,8 @@ change.
   session iframes also need `onno.auth.embedding.cross-site-cookies=true` and HTTPS
   `SameSite=None; Secure` servlet-session cookies.
 
-Read [references/examples.md](references/examples.md) for config and debugging flows, and
+Read [Record access policies](https://github.com/onno-erp/onno-framework/blob/main/docs/RECORD_ACCESS_POLICIES.md) for the full policy
+model and enforcement table, [references/examples.md](references/examples.md) for config and
+debugging flows, and
 [references/gotchas.md](references/gotchas.md) for the public bootstrap list and common failure
 signatures.

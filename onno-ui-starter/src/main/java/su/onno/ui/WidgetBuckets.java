@@ -153,8 +153,11 @@ public final class WidgetBuckets {
      * sizes date granularity from without ever fetching rows.
      */
     static Map<String, Object> run(Jdbi jdbi, RefResolver refResolver, List<AttributeDescriptor> attributes,
-                                   String table, Set<String> columns, Set<String> uuidColumns, Request r) {
-        WidgetFilter.Result wf = WidgetFilter.parse(r.filter(), columns, uuidColumns);
+                                   String table, Set<String> columns, Set<String> uuidColumns, Request r,
+                                   ScopeClause scope, su.onno.access.AccessSubject subject) {
+        // The viewer's record scope is ANDed in before GROUP BY / aggregation, so buckets, totals and
+        // the span only ever reflect rows the viewer may read.
+        WidgetFilter.Result wf = scope.andInto(WidgetFilter.parse(r.filter(), columns, uuidColumns));
         Query q = build(r, table, columns, wf);
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(q.sql());
@@ -189,7 +192,7 @@ public final class WidgetBuckets {
                 if (seriesCol != null) lr.put(seriesCol, row.get("_series"));
                 labelRows.add(lr);
             }
-            refResolver.resolveAttributes(labelRows, attributes);
+            refResolver.resolveAttributes(labelRows, attributes, subject);
         }
 
         List<Map<String, Object>> buckets = new ArrayList<>();
@@ -197,12 +200,15 @@ public final class WidgetBuckets {
             Map<String, Object> row = rows.get(i);
             Map<String, Object> b = new LinkedHashMap<>();
             if (groupCol != null) {
-                b.put("key", jsonValue(row.get("_bucket")));
+                // A ref bucket the viewer may not read keeps its masked label but not the target's id.
+                boolean restricted = Boolean.TRUE.equals(labelRows.get(i).get(groupCol + "_restricted"));
+                b.put("key", restricted ? null : jsonValue(row.get("_bucket")));
                 Object display = labelRows.get(i).get(groupCol + "_display");
                 if (display != null) b.put("label", String.valueOf(display));
             }
             if (seriesCol != null) {
-                b.put("series", jsonValue(row.get("_series")));
+                boolean restricted = Boolean.TRUE.equals(labelRows.get(i).get(seriesCol + "_restricted"));
+                b.put("series", restricted ? null : jsonValue(row.get("_series")));
                 Object display = labelRows.get(i).get(seriesCol + "_display");
                 if (display != null) b.put("seriesLabel", String.valueOf(display));
             }

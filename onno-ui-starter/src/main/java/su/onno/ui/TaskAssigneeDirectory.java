@@ -23,6 +23,7 @@ public final class TaskAssigneeDirectory {
     private final UiAccessService access;
     private final UiLayout layout;
     private final CommentAuthorAvatars avatars;
+    private final AccessSubjectResolver subjects;
 
     public TaskAssigneeDirectory(
             MetadataRegistry registry,
@@ -31,11 +32,30 @@ public final class TaskAssigneeDirectory {
             UiLayout layout,
             CommentAuthorAvatars avatars
     ) {
+        this(registry, catalogs, access, layout, avatars, null);
+    }
+
+    public TaskAssigneeDirectory(
+            MetadataRegistry registry,
+            CatalogQueryService catalogs,
+            UiAccessService access,
+            UiLayout layout,
+            CommentAuthorAvatars avatars,
+            AccessSubjectResolver subjects
+    ) {
         this.registry = registry;
         this.catalogs = catalogs;
         this.access = access;
         this.layout = layout;
         this.avatars = avatars;
+        this.subjects = subjects;
+    }
+
+    /** The record-scoped subject of the caller: only identities it may read are offered. */
+    private su.onno.access.AccessSubject subject(Principal principal) {
+        return subjects != null
+                ? subjects.resolve(principal)
+                : su.onno.access.AccessSubject.user(access.username(principal), access.roles(principal));
     }
 
     public List<AssigneeOption> search(String query, Principal principal) {
@@ -56,7 +76,7 @@ public final class TaskAssigneeDirectory {
             return List.of();
         }
         List<Map<String, Object>> rows =
-                catalogs.search(descriptor, query == null ? "" : query.trim(), 20);
+                catalogs.search(subject(principal), descriptor, query == null ? "" : query.trim(), 20);
         Map<String, String> avatarUrls = avatars == null
                 ? Map.of()
                 : avatars.avatarsFor(rows.stream().map(row -> text(row.get("_id"))).toList());
@@ -75,7 +95,7 @@ public final class TaskAssigneeDirectory {
             throw new IllegalArgumentException("targetActorId must be an identity record UUID");
         }
         AssigneeOption option = option(
-                catalogs.get(directory.descriptor(), id), directory.loginColumn(), null);
+                catalogs.get(subject(principal), directory.descriptor(), id), directory.loginColumn(), null);
         if (option.username() == null || option.username().isBlank()) {
             throw new IllegalArgumentException("Selected identity has no configured login");
         }

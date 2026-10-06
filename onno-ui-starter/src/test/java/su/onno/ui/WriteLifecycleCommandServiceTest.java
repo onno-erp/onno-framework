@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -129,7 +130,7 @@ class WriteLifecycleCommandServiceTest {
         }
     }
 
-    private final Principal admin = new AdminPrincipal();
+    private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private DocumentDescriptor orderDesc;
     private CatalogDescriptor widgetDesc;
     private EnumerationDescriptor statusEnum;
@@ -181,7 +182,7 @@ class WriteLifecycleCommandServiceTest {
         Map<String, Object> created = documentCommands.create(orderDesc, body, admin);
         UUID id = (UUID) created.get("_id");
 
-        Map<String, Object> row = documentQuery.get(orderDesc, id);
+        Map<String, Object> row = documentQuery.get(AccessSubject.system(), orderDesc, id);
         String number = (String) row.get("_number");
         assertThat(row.get(column(orderDesc.attributes(), "statusName"))).isEqualTo("IN_PROGRESS");
         assertThat(row.get(column(orderDesc.attributes(), "summary"))).isEqualTo(number + " / Spring order");
@@ -199,7 +200,7 @@ class WriteLifecycleCommandServiceTest {
         update.put("status", statusId("DONE").toString());
         documentCommands.update(orderDesc, id, update, admin);
 
-        Map<String, Object> row = documentQuery.get(orderDesc, id);
+        Map<String, Object> row = documentQuery.get(AccessSubject.system(), orderDesc, id);
         assertThat(row.get(column(orderDesc.attributes(), "statusName"))).isEqualTo("DONE");
     }
 
@@ -220,7 +221,7 @@ class WriteLifecycleCommandServiceTest {
                 Map.of("items", List.of(Map.of("quantity", 3, "price", 4))), admin);
 
         List<Map<String, Object>> updatedItems = (List<Map<String, Object>>)
-                documentQuery.get(orderDesc, id).get("items");
+                documentQuery.get(AccessSubject.system(), orderDesc, id).get("items");
         assertThat(updatedItems).singleElement().satisfies(row ->
                 assertThat((BigDecimal) row.get("amount")).isEqualByComparingTo("12.00"));
     }
@@ -243,7 +244,7 @@ class WriteLifecycleCommandServiceTest {
 
         UUID id = (UUID) catalogCommands.create(widgetDesc, body, admin).get("_id");
 
-        Map<String, Object> row = catalogQuery.get(widgetDesc, id);
+        Map<String, Object> row = catalogQuery.get(AccessSubject.system(), widgetDesc, id);
         assertThat(row.get(column(widgetDesc.attributes(), "slug"))).isEqualTo("big widget");
     }
 
@@ -257,7 +258,7 @@ class WriteLifecycleCommandServiceTest {
         update.put("label", "Beta");
         catalogCommands.update(widgetDesc, id, update, admin);
 
-        Map<String, Object> row = catalogQuery.get(widgetDesc, id);
+        Map<String, Object> row = catalogQuery.get(AccessSubject.system(), widgetDesc, id);
         assertThat(row.get(column(widgetDesc.attributes(), "slug"))).isEqualTo("beta");
     }
 
@@ -290,7 +291,7 @@ class WriteLifecycleCommandServiceTest {
         assertThat(report.get("valid")).isEqualTo(false);
         assertThat((List<String>) report.get("formErrors"))
                 .anyMatch(m -> m.contains("needs a status"));
-        assertThat(documentQuery.count(orderDesc)).isZero();
+        assertThat(documentQuery.count(AccessSubject.system(), orderDesc)).isZero();
     }
 
     @Test
@@ -325,7 +326,7 @@ class WriteLifecycleCommandServiceTest {
         assertThat((List<String>) report.get("formErrors"))
                 .anyMatch(m -> m.contains("needs a status"));
         // Dry run only — the stored document still carries its status.
-        Map<String, Object> row = documentQuery.get(orderDesc, id);
+        Map<String, Object> row = documentQuery.get(AccessSubject.system(), orderDesc, id);
         assertThat(row.get(column(orderDesc.attributes(), "statusName"))).isEqualTo("NEW");
     }
 

@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccumulationRegister;
 import su.onno.annotations.Dimension;
 import su.onno.annotations.Resource;
@@ -52,7 +53,7 @@ class RegisterQueryServiceSignedTotalsTest {
 
     @Test
     void turnoverSubtractsExpenseMovements() {
-        Map<String, Object> row = service.turnover(
+        Map<String, Object> row = service.turnover(AccessSubject.system(), 
                         descriptor,
                         "2024-01-01T00:00:00",
                         "2024-12-31T23:59:59",
@@ -64,7 +65,7 @@ class RegisterQueryServiceSignedTotalsTest {
 
     @Test
     void widgetTotalSubtractsExpenseMovements() {
-        assertThat(service.total(descriptor, "amount", null, null, null))
+        assertThat(service.total(AccessSubject.system(), descriptor, "amount", null, null, null))
                 .isEqualByComparingTo("65.00");
     }
 
@@ -86,7 +87,7 @@ class RegisterQueryServiceSignedTotalsTest {
             batch.execute();
         });
 
-        RegisterQueryService.BoundedRows result = service.movementsBounded(descriptor, null, null);
+        RegisterQueryService.BoundedRows result = service.movementsBounded(AccessSubject.system(), descriptor, null, null);
 
         assertThat(result.rows()).hasSize(1000);
         assertThat(result.truncated()).isTrue();
@@ -106,7 +107,7 @@ class RegisterQueryServiceSignedTotalsTest {
             batch.execute();
         });
 
-        RegisterQueryService.BoundedRows result = service.balanceBounded(balanceDescriptor, Map.of());
+        RegisterQueryService.BoundedRows result = service.balanceBounded(AccessSubject.system(), balanceDescriptor, Map.of());
 
         assertThat(result.rows()).hasSize(5000);
         assertThat(result.truncated()).isTrue();

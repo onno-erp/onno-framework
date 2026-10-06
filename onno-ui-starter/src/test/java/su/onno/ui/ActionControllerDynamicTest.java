@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -64,43 +65,47 @@ class ActionControllerDynamicTest {
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
         Principal principal = () -> "alice";
+        AccessSubject subject = AccessSubject.user("alice", java.util.Set.of("OPERATOR"));
         when(catalogs.require("orders")).thenReturn(descriptor);
         doReturn(String.class).when(descriptor).javaClass();
-        when(catalogs.get(descriptor, first)).thenReturn(Map.of("_id", first));
+        when(catalogs.get(subject, descriptor, first)).thenReturn(Map.of("_id", first));
+        when(catalogs.inScope(org.mockito.ArgumentMatchers.eq(subject), org.mockito.ArgumentMatchers.eq(descriptor),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(su.onno.access.AccessMode.WRITE)))
+                .thenReturn(true);
         when(properties.isReadOnly()).thenReturn(false);
         when(access.hasAnyRole(principal, List.of("OPERATOR"))).thenReturn(true);
         ActionController controller =
                 new ActionController(catalogs, documents, access, resolver, properties, batch);
 
         Map<String, Object> initial =
-                controller.descriptors("catalogs", "orders", first, principal);
+                controller.descriptors("catalogs", "orders", first, principal, subject);
         assertThat(actionKeys(initial)).containsExactly("new");
         assertThat(firstAction(initial))
                 .containsEntry("dynamicForm", true)
                 .containsKey("form");
         assertThat(((Map<?, ?>) initial.get("rowActions")).containsKey("new")).isTrue();
-        assertThat(controller.formDefaults("catalogs", "orders", "new", first, principal))
+        assertThat(controller.formDefaults("catalogs", "orders", "new", first, principal, subject))
                 .extractingByKey("values")
                 .isEqualTo(Map.of("note", "Current new"));
 
         choices.clear();
         choices.add("done");
         Map<String, Object> refreshed =
-                controller.descriptors("catalogs", "orders", first, principal);
+                controller.descriptors("catalogs", "orders", first, principal, subject);
         assertThat(actionKeys(refreshed)).containsExactly("done");
         verify(access, atLeastOnce()).requireWrite(principal, descriptor);
 
-        controller.run("catalogs", "orders", "done", first, Map.of(), principal);
+        controller.run("catalogs", "orders", "done", first, Map.of(), principal, subject);
         Map<String, Object> batchResult = controller.runBatch(
                 "catalogs", "orders", "done",
-                Map.of("ids", List.of(first.toString(), second.toString())), principal);
+                Map.of("ids", List.of(first.toString(), second.toString())), principal, subject);
         assertThat(batchResult).containsEntry("ok", 2).containsEntry("total", 2);
         assertThat(handled).containsExactly(first, first, second);
         verify(access, atLeastOnce()).hasAnyRole(principal, List.of("OPERATOR"));
 
         choices.clear();
         assertThatThrownBy(() ->
-                controller.run("catalogs", "orders", "done", first, Map.of(), principal))
+                controller.run("catalogs", "orders", "done", first, Map.of(), principal, subject))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }

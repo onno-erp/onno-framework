@@ -19,7 +19,8 @@ record EntitySurfaceDescriptor(
         List<String> searchSystemColumns,
         String defaultSortColumn,
         boolean defaultDescending,
-        Set<String> nonNullableSystemSorts
+        Set<String> nonNullableSystemSorts,
+        Class<?> javaClass
 ) {
 
     static EntitySurfaceDescriptor catalog(CatalogDescriptor desc) {
@@ -37,7 +38,8 @@ record EntitySurfaceDescriptor(
                 List.of("_code", "_description"),
                 "_code",
                 false,
-                Set.of("_code")
+                Set.of("_code"),
+                desc.javaClass()
         );
     }
 
@@ -56,7 +58,8 @@ record EntitySurfaceDescriptor(
                 List.of("_number"),
                 "_date",
                 true,
-                Set.of("_date", "_number", "_posted")
+                Set.of("_date", "_number", "_posted"),
+                desc.javaClass()
         );
     }
 

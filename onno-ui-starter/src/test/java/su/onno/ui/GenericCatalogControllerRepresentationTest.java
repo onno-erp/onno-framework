@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.annotations.Attribute;
@@ -45,6 +46,7 @@ class GenericCatalogControllerRepresentationTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
                 new GenericCatalogController(query, access, commands, relatedLists, messages, batch))
+                .setCustomArgumentResolvers(AccessSubjectArgumentResolver.fixed(AccessSubject.system()))
                 .build();
     }
 
@@ -52,7 +54,7 @@ class GenericCatalogControllerRepresentationTest {
     void getDefaultsToLogicalRepresentation() throws Exception {
         UUID id = UUID.randomUUID();
         when(query.require("customers")).thenReturn(descriptor);
-        when(query.get(descriptor, id)).thenReturn(row(id));
+        when(query.get(AccessSubject.system(), descriptor, id)).thenReturn(row(id));
 
         String json = mvc.perform(get("/api/catalogs/customers/{id}", id))
                 .andExpect(status().isOk())
@@ -70,7 +72,7 @@ class GenericCatalogControllerRepresentationTest {
     void storageRepresentationPreservesLegacyResponse() throws Exception {
         UUID id = UUID.randomUUID();
         when(query.require("customers")).thenReturn(descriptor);
-        when(query.get(descriptor, id)).thenReturn(row(id));
+        when(query.get(AccessSubject.system(), descriptor, id)).thenReturn(row(id));
 
         String json = mvc.perform(get("/api/catalogs/customers/{id}", id)
                         .param("representation", "storage"))

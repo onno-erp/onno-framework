@@ -1,5 +1,6 @@
 package su.onno.mcp;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
@@ -25,7 +26,6 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
 import io.modelcontextprotocol.spec.McpSchema.ToolAnnotations;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,9 +37,9 @@ import java.util.function.BiFunction;
  * Generates the MCP tool set generically from the {@link MetadataRegistry}.
  *
  * <p>Every tool resolves a descriptor by logical name, enforces access through
- * {@link UiAccessService} against the principal captured by {@link McpPrincipalContext},
+ * {@link UiAccessService} against the subject captured by {@link McpPrincipalContext},
  * and then delegates to the shared query/command services — the same code path the web
- * UI uses. There is no per-entity code: adding an entity to the application surfaces it
+ * UI uses, including the caller's record scope ({@code RecordAccessPolicy}). There is no per-entity code: adding an entity to the application surfaces it
  * here automatically, and a {@code describe_metadata} discovery tool lets the model learn
  * entity, field, and enum names at runtime.
  */
@@ -119,7 +119,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 "{\"type\":\"object\",\"properties\":{"
                         + "\"kind\":{\"type\":\"string\",\"enum\":[\"catalog\",\"document\",\"register\",\"process\",\"all\"],"
                         + "\"description\":\"Restrict the description to one entity kind. Defaults to all.\"}}}",
-                (exchange, args) -> describeMetadata(principal(exchange), optString(args, "kind"))));
+                (exchange, args) -> describeMetadata(subject(exchange), optString(args, "kind"))));
 
         tools.add(readTool("list_catalog",
                 "List catalog records",
@@ -132,9 +132,9 @@ public class MetadataToolFactory implements McpToolProvider {
                         + "\"limit\":{\"type\":\"integer\",\"description\":\"Window size (1-500, default 100).\"}}}",
                 (exchange, args) -> {
                     CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
+                    access.requireRead(subject(exchange), desc);
                     Integer limit = optInt(args, "limit");
-                    KeysetPage page = catalogQuery.keysetPage(
+                    KeysetPage page = catalogQuery.keysetPage(subject(exchange),
                             desc, optString(args, "cursor"), limit == null ? 100 : limit,
                             null, false, optString(args, "query"),
                             List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), null);
@@ -147,8 +147,8 @@ public class MetadataToolFactory implements McpToolProvider {
                 idSchema("Catalog logical name (see describe_metadata)."),
                 (exchange, args) -> {
                     CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
-                    return ok(catalogQuery.get(desc, requireUuid(args, "id")));
+                    access.requireRead(subject(exchange), desc);
+                    return ok(catalogQuery.get(subject(exchange), desc, requireUuid(args, "id")));
                 }));
 
         tools.add(readTool("list_documents",
@@ -164,9 +164,9 @@ public class MetadataToolFactory implements McpToolProvider {
                         + "\"limit\":{\"type\":\"integer\",\"description\":\"Window size (1-500, default 100).\"}}}",
                 (exchange, args) -> {
                     DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
+                    access.requireRead(subject(exchange), desc);
                     Integer limit = optInt(args, "limit");
-                    KeysetPage page = documentQuery.keysetPage(
+                    KeysetPage page = documentQuery.keysetPage(subject(exchange),
                             desc, optString(args, "cursor"), limit == null ? 100 : limit,
                             null, true, optString(args, "query"),
                             optString(args, "from"), optString(args, "to"),
@@ -180,8 +180,8 @@ public class MetadataToolFactory implements McpToolProvider {
                 idSchema("Document logical name (see describe_metadata)."),
                 (exchange, args) -> {
                     DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
-                    return ok(documentQuery.get(desc, requireUuid(args, "id")));
+                    access.requireRead(subject(exchange), desc);
+                    return ok(documentQuery.get(subject(exchange), desc, requireUuid(args, "id")));
                 }));
 
         tools.add(readTool("register_balance",
@@ -194,9 +194,9 @@ public class MetadataToolFactory implements McpToolProvider {
                         + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
+                    access.requireRead(subject(exchange), desc);
                     RegisterQueryService.BoundedRows result =
-                            registerQuery.balanceBounded(desc, stringMap(args.get("filters")));
+                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")));
                     if (result.truncated()) {
                         return error("Register balance exceeds the 5000-row safety limit; "
                                 + "narrow the dimension filters and retry.");
@@ -215,8 +215,8 @@ public class MetadataToolFactory implements McpToolProvider {
                         + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
-                    access.requireRead(principal(exchange), desc);
-                    RegisterQueryService.BoundedRows result = registerQuery.movementsBounded(
+                    access.requireRead(subject(exchange), desc);
+                    RegisterQueryService.BoundedRows result = registerQuery.movementsBounded(subject(exchange),
                             desc, optString(args, "from"), optString(args, "to"));
                     if (result.truncated()) {
                         return error("Register movements exceed the 1000-row safety limit; "
@@ -233,7 +233,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Catalog logical name (see describe_metadata).", false),
                     (exchange, args) -> {
                         CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                        return ok(catalogCommands.create(desc, values(args), principal(exchange)));
+                        return ok(catalogCommands.create(desc, values(args), subject(exchange)));
                     }));
 
             tools.add(writeTool("update_catalog",
@@ -243,7 +243,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Catalog logical name (see describe_metadata).", true),
                     (exchange, args) -> {
                         CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                        return ok(catalogCommands.update(desc, requireUuid(args, "id"), values(args), principal(exchange)));
+                        return ok(catalogCommands.update(desc, requireUuid(args, "id"), values(args), subject(exchange)));
                     }));
 
             tools.add(destructiveTool("delete_catalog",
@@ -253,7 +253,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     (exchange, args) -> {
                         CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
                         UUID id = requireUuid(args, "id");
-                        catalogCommands.delete(desc, id, principal(exchange));
+                        catalogCommands.delete(desc, id, subject(exchange));
                         return ok(Map.of("deleted", true, "entityType", "catalog",
                                 "name", desc.logicalName(), "id", id.toString()));
                     }));
@@ -266,7 +266,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Document logical name (see describe_metadata).", false),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.create(desc, values(args), principal(exchange)));
+                        return ok(documentCommands.create(desc, values(args), subject(exchange)));
                     }));
 
             tools.add(writeTool("update_document",
@@ -276,7 +276,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Document logical name (see describe_metadata).", true),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.update(desc, requireUuid(args, "id"), values(args), principal(exchange)));
+                        return ok(documentCommands.update(desc, requireUuid(args, "id"), values(args), subject(exchange)));
                     }));
 
             tools.add(destructiveTool("delete_document",
@@ -287,7 +287,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
                         UUID id = requireUuid(args, "id");
-                        documentCommands.delete(desc, id, principal(exchange));
+                        documentCommands.delete(desc, id, subject(exchange));
                         return ok(Map.of("deleted", true, "entityType", "document",
                                 "name", desc.logicalName(), "id", id.toString()));
                     }));
@@ -301,7 +301,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.postingPreview(desc, requireUuid(args, "id"), principal(exchange)));
+                        return ok(documentCommands.postingPreview(desc, requireUuid(args, "id"), subject(exchange)));
                     }));
 
         }
@@ -314,7 +314,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.post(desc, requireUuid(args, "id"), principal(exchange)));
+                        return ok(documentCommands.post(desc, requireUuid(args, "id"), subject(exchange)));
                     }));
 
             tools.add(writeTool("unpost_document",
@@ -323,7 +323,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.unpost(desc, requireUuid(args, "id"), principal(exchange)));
+                        return ok(documentCommands.unpost(desc, requireUuid(args, "id"), subject(exchange)));
                     }));
         }
 
@@ -337,7 +337,7 @@ public class MetadataToolFactory implements McpToolProvider {
 
     // ---- describe_metadata ------------------------------------------------------------
 
-    private CallToolResult describeMetadata(Principal principal, String kind) {
+    private CallToolResult describeMetadata(AccessSubject principal, String kind) {
         String k = kind == null ? "all" : kind.toLowerCase();
         Map<String, Object> out = new LinkedHashMap<>();
 
@@ -524,8 +524,8 @@ public class MetadataToolFactory implements McpToolProvider {
         return CallToolResult.builder().isError(true).addTextContent(message == null ? "error" : message).build();
     }
 
-    private static Principal principal(McpSyncServerExchange exchange) {
-        return McpPrincipalContext.principal(exchange);
+    private static AccessSubject subject(McpSyncServerExchange exchange) {
+        return McpPrincipalContext.subject(exchange);
     }
 
     private static String requireString(Map<String, Object> args, String key) {

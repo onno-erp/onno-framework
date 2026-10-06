@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -64,7 +63,7 @@ public class MentionController {
     @GetMapping("/api/mentions")
     public List<Map<String, Object>> search(@RequestParam(name = "q", required = false) String q,
                                             @RequestParam(name = "kind", required = false) String kind,
-                                            Principal principal) {
+                                            su.onno.access.AccessSubject subject) {
         if (!properties.getMentions().isEnabled()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentions are not enabled");
         }
@@ -84,14 +83,14 @@ public class MentionController {
                 if (peopleOnly && !desc.javaClass().equals(identityClass)) {
                     continue;
                 }
-                if (!access.canRead(principal, desc)) {
+                if (!access.canRead(subject, desc)) {
                     continue;
                 }
                 String entity = desc.logicalName();
                 String name = Mentions.routeName(entity);
                 String avatarColumn = avatarColumn(desc);
                 String hintColumn = column(desc, "email");
-                for (Map<String, Object> row : catalogQuery.search(desc, query, perEntity)) {
+                for (Map<String, Object> row : catalogQuery.search(subject, desc, query, perEntity)) {
                     String display = firstNonBlank(str(row, "_description"), str(row, "_code"));
                     if (display == null) {
                         continue;
@@ -111,12 +110,12 @@ public class MentionController {
         }
         if (kind == null || kind.isBlank() || "documents".equals(kind)) {
             for (DocumentDescriptor desc : registry.allDocuments()) {
-                if (!access.canRead(principal, desc)) {
+                if (!access.canRead(subject, desc)) {
                     continue;
                 }
                 String entity = desc.logicalName();
                 String name = Mentions.routeName(entity);
-                for (Map<String, Object> row : documentQuery.search(desc, query, perEntity)) {
+                for (Map<String, Object> row : documentQuery.search(subject, desc, query, perEntity)) {
                     String display = str(row, "_number");
                     if (display == null) {
                         continue;
@@ -156,7 +155,7 @@ public class MentionController {
     public Map<String, Object> resolve(@RequestParam("kind") String kind,
                                        @RequestParam("name") String name,
                                        @RequestParam("id") String id,
-                                       Principal principal) {
+                                       su.onno.access.AccessSubject subject) {
         if (!properties.getMentions().isEnabled()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Mentions are not enabled");
         }
@@ -170,7 +169,7 @@ public class MentionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "id must be a UUID");
         }
         MentionRef ref = new MentionRef(kind, name, uuid);
-        Map<String, Object> out = resolver.resolve(List.of(ref), principal).get(0).toJson();
+        Map<String, Object> out = resolver.resolve(List.of(ref), subject).get(0).toJson();
         out.put("person", "catalogs".equals(kind) && isIdentityRoute(name));
         return out;
     }

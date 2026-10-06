@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -69,7 +70,7 @@ class CatalogQueryServiceGroupsTest {
         insert("C-02", "gold", LocalDate.of(2024, 1, 6), new BigDecimal("50.00"));
         insert("C-03", "std", LocalDate.of(2024, 2, 1), new BigDecimal("10.00"));
 
-        ListGroups.GroupResult res = service.groups(catalog, col("tier"), null, null,
+        ListGroups.GroupResult res = service.groups(AccessSubject.system(), catalog, col("tier"), null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null,
                 List.of(new ListGroups.Agg("sum", col("amount"))));
 
@@ -92,7 +93,7 @@ class CatalogQueryServiceGroupsTest {
         insert("C-02", "std", LocalDate.of(2024, 1, 20), new BigDecimal("1"));
         insert("C-03", "std", LocalDate.of(2024, 3, 2), new BigDecimal("1"));
 
-        ListGroups.GroupResult res = service.groups(catalog, col("placedOn"), "month", null,
+        ListGroups.GroupResult res = service.groups(AccessSubject.system(), catalog, col("placedOn"), "month", null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null, List.of());
 
         assertThat(res.groups()).extracting(g -> g.get("label")).containsExactly("2024-01", "2024-03");
@@ -112,7 +113,7 @@ class CatalogQueryServiceGroupsTest {
         insert("C-02", "std", LocalDate.of(2024, 1, 6), new BigDecimal("1"));
 
         // eq tier=gold → only the gold group survives, like the flat list would.
-        ListGroups.GroupResult res = service.groups(catalog, col("tier"), null, null,
+        ListGroups.GroupResult res = service.groups(AccessSubject.system(), catalog, col("tier"), null, null,
                 List.of(col("tier") + ",gold"), NONE, NONE, NONE, NONE, NONE, null, List.of());
 
         assertThat(res.groups()).extracting(g -> g.get("label")).containsExactly("gold");
@@ -121,7 +122,7 @@ class CatalogQueryServiceGroupsTest {
     @Test
     void unknownGroupColumnYieldsNoGroups() {
         insert("C-01", "gold", LocalDate.of(2024, 1, 5), new BigDecimal("1"));
-        ListGroups.GroupResult res = service.groups(catalog, "not_a_column", null, null,
+        ListGroups.GroupResult res = service.groups(AccessSubject.system(), catalog, "not_a_column", null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null, List.of());
         assertThat(res.groups()).isEmpty();
     }

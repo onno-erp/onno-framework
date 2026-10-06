@@ -87,6 +87,10 @@ public class DivKitController implements DisposableBean {
     // dashboard doesn't pay N sequential round-trips. Bounded by onno.ui.dashboard.widget-parallelism
     // to stay under the JDBC pool; null when parallelism == 1 (resolve inline on the request thread).
     private final ExecutorService widgetPool;
+    // Resolves the request's record-scoped AccessSubject (cached per request). Widget values resolve
+    // on widgetPool threads, which carry no request/security context — so the subject is resolved
+    // here, on the request thread, and handed to each task explicitly.
+    private AccessSubjectResolver subjects;
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -131,6 +135,17 @@ public class DivKitController implements DisposableBean {
             t.setDaemon(true);
             return t;
         });
+    }
+
+    /** Wire the subject resolver (set by the auto-configuration). */
+    public void setAccessSubjectResolver(AccessSubjectResolver subjects) {
+        this.subjects = subjects;
+    }
+
+    private su.onno.access.AccessSubject subject(Principal principal) {
+        return subjects != null
+                ? subjects.resolve(principal)
+                : su.onno.access.AccessSubject.user(access.username(principal), access.roles(principal));
     }
 
     @Override
@@ -295,7 +310,7 @@ public class DivKitController implements DisposableBean {
             // back" / "Nothing here yet" card — the client lands the user on the first real
             // nav item (see #shell "home"), and this is only the surface for an app that
             // exposes nothing at all.
-            Map<PageWidgetDescriptor, String> values = resolveWidgetValues(widgets);
+            Map<PageWidgetDescriptor, String> values = resolveWidgetValues(widgets, subject(principal));
             content = widgets.isEmpty()
                     ? DashboardDivBuilder.empty()
                     : DashboardDivBuilder.build(defaultTitle, greeting, widgets, columns,
@@ -372,7 +387,9 @@ public class DivKitController implements DisposableBean {
         if (!action.roles().isEmpty() && !access.hasAnyRole(principal, action.roles())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
         }
-        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body);
+        // No record to scope: a handler that touches data uses RecordAccess with ctx.subject().
+        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body)
+                .withSubject(subject(principal));
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -457,7 +474,7 @@ public class DivKitController implements DisposableBean {
         if (aside != null) {
             collectWidgets(aside, allWidgets);
         }
-        Map<PageWidgetDescriptor, String> values = resolveWidgetValues(allWidgets);
+        Map<PageWidgetDescriptor, String> values = resolveWidgetValues(allWidgets, subject(principal));
         java.util.function.Function<PageWidgetDescriptor, String> valueFn = w -> values.getOrDefault(w, "—");
 
         return PageDivBuilder.build(title, subtitle, pb.showHeader(), main, aside, columns > 1,
@@ -819,11 +836,15 @@ public class DivKitController implements DisposableBean {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
+        su.onno.access.AccessSubject subject = subject(principal);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
         // Load the record before building the actions: the custom DETAIL actions' per-record
-        // functions (visibleWhen/label/…) evaluate against it (#255).
-        Map<String, Object> row = catalogQuery.get(desc, id);
+        // functions (visibleWhen/label/…) evaluate against it (#255). Outside the viewer's record
+        // scope this is a 404, like a missing record.
+        Map<String, Object> row = catalogQuery.get(subject, desc, id);
+        // A record the viewer can read but not change (outside its write scope) renders read-only.
+        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
+                && catalogQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
@@ -863,7 +884,7 @@ public class DivKitController implements DisposableBean {
         // overlay onto that seed as initial field values.
         return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
                 meta, EntityJsonRepresentation.catalog(desc,
-                        catalogQuery.newDraft(desc, formPrefill(params)),
+                        catalogQuery.newDraft(subject(principal), desc, formPrefill(params)),
                         EntityJsonRepresentation.Mode.LOGICAL));
     }
 
@@ -875,7 +896,7 @@ public class DivKitController implements DisposableBean {
         access.requireWrite(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
-        Map<String, Object> draft = duplicateDraft(catalogQuery.get(desc, id), desc.attributes());
+        Map<String, Object> draft = duplicateDraft(catalogQuery.get(subject(principal), desc, id), desc.attributes());
         return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
                 EntityJsonRepresentation.catalog(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
@@ -914,9 +935,12 @@ public class DivKitController implements DisposableBean {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly();
+        su.onno.access.AccessSubject subject = subject(principal);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
-        Map<String, Object> row = documentQuery.get(desc, id);
+        Map<String, Object> row = documentQuery.get(subject, desc, id);
+        // A document the viewer can read but not change (outside its write scope) renders read-only.
+        boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
+                && documentQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
         boolean postable = Boolean.TRUE.equals(meta.get("postable"));
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         @SuppressWarnings("unchecked")
@@ -968,7 +992,7 @@ public class DivKitController implements DisposableBean {
         // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
         return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
                 meta, EntityJsonRepresentation.document(desc,
-                        documentQuery.newDraft(desc, formPrefill(params)),
+                        documentQuery.newDraft(subject(principal), desc, formPrefill(params)),
                         EntityJsonRepresentation.Mode.LOGICAL));
     }
 
@@ -987,7 +1011,7 @@ public class DivKitController implements DisposableBean {
         access.requireWrite(principal, desc);
         requireView(desc.javaClass(), activeProfile(principal, profile).id());
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
-        Map<String, Object> draft = duplicateDraft(documentQuery.get(desc, id), desc.attributes());
+        Map<String, Object> draft = duplicateDraft(documentQuery.get(subject(principal), desc, id), desc.attributes());
         return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
                 EntityJsonRepresentation.document(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
@@ -1247,9 +1271,12 @@ public class DivKitController implements DisposableBean {
      * the descriptor instance. Identical tiles (same entity/metric/field/filter) share a single
      * query, and the distinct queries run concurrently on {@link #widgetPool} — so a dashboard of N
      * KPI cards costs one batch of parallel aggregates instead of N sequential ones. Non-card widgets
-     * (chart/list/…) carry no value and are skipped (they fetch their own data client-side).
+     * (chart/list/…) carry no value and are skipped (they fetch their own data client-side). Every
+     * value is computed for {@code subject} (captured explicitly into the pool tasks), so a tile only
+     * ever aggregates rows inside the viewer's record scope.
      */
-    private Map<PageWidgetDescriptor, String> resolveWidgetValues(List<PageWidgetDescriptor> widgets) {
+    private Map<PageWidgetDescriptor, String> resolveWidgetValues(List<PageWidgetDescriptor> widgets,
+                                                                  su.onno.access.AccessSubject subject) {
         // Group the value-bearing tiles by their resolution key so duplicates query once.
         Map<String, List<PageWidgetDescriptor>> byKey = new LinkedHashMap<>();
         for (PageWidgetDescriptor w : widgets) {
@@ -1265,11 +1292,11 @@ public class DivKitController implements DisposableBean {
         // (→ "—"), so a single failing tile never sinks the whole render.
         Map<String, String> resolved = new ConcurrentHashMap<>();
         if (widgetPool == null || byKey.size() == 1) {
-            byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.get(0))));
+            byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.get(0), subject)));
         } else {
             List<Future<?>> futures = new ArrayList<>(byKey.size());
             for (Map.Entry<String, List<PageWidgetDescriptor>> e : byKey.entrySet()) {
-                futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().get(0)))));
+                futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().get(0), subject))));
             }
             for (Future<?> f : futures) {
                 try {
@@ -1301,17 +1328,17 @@ public class DivKitController implements DisposableBean {
                 String.valueOf(cfg.get("metricField")), String.valueOf(cfg.get("filter")));
     }
 
-    private String widgetValue(PageWidgetDescriptor w) {
+    private String widgetValue(PageWidgetDescriptor w, su.onno.access.AccessSubject subject) {
         Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
         String metric = cfg.getOrDefault("metric", "count");
         String field = cfg.get("metricField");
         String filter = cfg.get("filter");
         try {
             java.math.BigDecimal value = switch (w.entityType()) {
-                case "catalog" -> catalogQuery.aggregate(catalogQuery.require(w.entityName()), metric, field, filter);
-                case "document" -> documentQuery.aggregate(documentQuery.require(w.entityName()), metric, field, filter);
+                case "catalog" -> catalogQuery.aggregate(subject, catalogQuery.require(w.entityName()), metric, field, filter);
+                case "document" -> documentQuery.aggregate(subject, documentQuery.require(w.entityName()), metric, field, filter);
                 // A register tile sums one resource (its turnover counterpart for a single number).
-                case "register" -> registerQuery.total(registerQuery.require(w.entityName()), field, null, null, filter);
+                case "register" -> registerQuery.total(subject, registerQuery.require(w.entityName()), field, null, null, filter);
                 default -> java.math.BigDecimal.ZERO;
             };
             return formatMetric(value, metric, cfg);

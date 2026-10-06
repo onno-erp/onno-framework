@@ -53,6 +53,7 @@ import { applyFormat, formatTimestampDefault, isImageWidget, isAvatarWidget, loo
 import { linkify } from "@/lib/linkify";
 import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
+import { RestrictedRef, isRestrictedRef } from "@/components/restricted-ref";
 import type { Translate } from "@/lib/messages";
 
 /**
@@ -348,6 +349,10 @@ function displayCellValue(raw: string, col: ListColumn): string {
 /** One list cell: an image thumbnail for image/avatar columns, otherwise formatted text. */
 export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
   const t = useMessages();
+  // A ref to a record the viewer may not read: the server withheld its id and label.
+  if (isRestrictedRef(row, responseKey(col)) || isRestrictedRef(row, col.columnName)) {
+    return <RestrictedRef />;
+  }
   const raw = rawCellValue(row, col, t);
   if (isImageWidget(col.widget) && raw) {
     if (looksLikeImageUrl(raw)) {

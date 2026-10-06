@@ -16,6 +16,7 @@ Implemented:
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
 - Production auth modes shipped in `onno-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
 - Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
+- Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
 - Agent-readable business model surface via the MCP server (`onno-mcp-starter`, `describe_metadata` tool) — there is no anonymous HTTP manifest endpoint

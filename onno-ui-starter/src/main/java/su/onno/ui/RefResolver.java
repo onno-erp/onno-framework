@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.*;
 import su.onno.types.PolyRef;
 
@@ -16,11 +17,22 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Descriptor lookups (logical name → catalog/document, enum class → enumeration,
  * enum id → display name) are cached: the registry never changes after startup
  * scanning, and these resolvers run on every list/get response.
+ *
+ * <p>Resolution is <strong>per viewer</strong>: a ref target the {@link AccessSubject} may not read
+ * (no entity-level read grant, or outside its record scope) is rendered as a <em>restricted</em> ref
+ * — {@code {col}_display = "—"}, {@code {col}_restricted = true}, a {@code {col}_ref} of
+ * {@code {type, display, restricted: true}} — and, by default, the raw id is withheld from the row,
+ * so a list never leaks the display name (or existence) of a record its viewer can't open.
  */
 public class RefResolver {
 
+    /** The display a restricted ref renders as. */
+    public static final String RESTRICTED_DISPLAY = "—";
+
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
+    private final RecordScopeCompiler scopes;
+    private final UiAccessService access;
     private final ConcurrentHashMap<String, Optional<CatalogDescriptor>> catalogsByName = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Optional<DocumentDescriptor>> documentsByName = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Class<?>, Map<String, EnumView>> enumDisplayNames = new ConcurrentHashMap<>();
@@ -29,24 +41,82 @@ public class RefResolver {
     private record EnumView(String label, String color) {}
 
     public RefResolver(MetadataRegistry registry, Jdbi jdbi) {
-        this.registry = registry;
-        this.jdbi = jdbi;
+        this(registry, jdbi, RecordScopeCompiler.unrestricted(registry), new UiAccessService(registry));
     }
 
-    public void resolveAttributes(List<Map<String, Object>> rows, List<AttributeDescriptor> attributes) {
+    public RefResolver(MetadataRegistry registry, Jdbi jdbi, RecordScopeCompiler scopes, UiAccessService access) {
+        this.registry = registry;
+        this.jdbi = jdbi;
+        this.scopes = scopes;
+        this.access = access;
+    }
+
+    /** Resolve refs/enums for {@code subject}, withholding the ids of restricted refs. */
+    public void resolveAttributes(List<Map<String, Object>> rows, List<AttributeDescriptor> attributes,
+                                  AccessSubject subject) {
+        resolveAttributes(rows, attributes, subject, true);
+    }
+
+    /**
+     * Resolve refs/enums for {@code subject}. With {@code withholdIds = false} a restricted ref keeps
+     * its raw id in the row (used where the id is the row's own grouping key, e.g. list group
+     * headers, which must still expand to the matching rows) — its display is masked either way.
+     */
+    public void resolveAttributes(List<Map<String, Object>> rows, List<AttributeDescriptor> attributes,
+                                  AccessSubject subject, boolean withholdIds) {
+        if (subject == null) {
+            throw new IllegalArgumentException("AccessSubject is required; pass AccessSubject.system() for trusted code");
+        }
         for (AttributeDescriptor attr : attributes) {
             if (attr.isPolymorphicRef()) {
-                resolvePolymorphicRefColumn(rows, attr);
+                resolvePolymorphicRefColumn(rows, attr, subject, withholdIds);
             } else if (attr.isRef() && attr.refTarget() != null) {
-                resolveRefColumn(rows, attr);
+                resolveRefColumn(rows, attr, subject, withholdIds);
             } else if (attr.javaType().isEnum()) {
                 resolveEnumColumn(rows, attr);
             }
         }
     }
 
+    /** How far a viewer may see one ref target entity. */
+    private sealed interface Visibility {
+        /** Readable and unscoped: unresolvable ids keep the pre-3.4 raw-id fallback. */
+        record Open() implements Visibility {}
+        /** Readable within a record scope: an id outside the scope (or missing) is restricted. */
+        record Scoped(ScopeClause clause) implements Visibility {}
+        /** No entity-level read grant: every ref is restricted. */
+        record Denied() implements Visibility {}
+    }
+
+    private Visibility visibility(String kind, String logicalName, Class<?> type, String table,
+                                  AccessSubject subject) {
+        if (!access.canRead(subject, kind, logicalName)) {
+            return new Visibility.Denied();
+        }
+        ScopeClause clause = scopes.clause(type, subject, su.onno.access.AccessMode.READ, table);
+        return clause.isAll() ? new Visibility.Open() : new Visibility.Scoped(clause);
+    }
+
+    /** Mark {@code row}'s ref column restricted: masked display, no id unless {@code keepId}. */
+    static void restrict(Map<String, Object> row, String column, String type, boolean withholdId) {
+        if (withholdId) {
+            row.put(column, null);
+        }
+        row.remove(column + "_code");
+        row.remove(column + "_avatar");
+        row.remove(column + "_color");
+        row.put(column + "_display", RESTRICTED_DISPLAY);
+        row.put(column + "_restricted", true);
+        Map<String, Object> refMap = new LinkedHashMap<>();
+        refMap.put("type", type);
+        refMap.put("display", RESTRICTED_DISPLAY);
+        refMap.put("restricted", true);
+        row.put(column + "_ref", refMap);
+    }
+
     private void resolvePolymorphicRefColumn(List<Map<String, Object>> rows,
-                                             AttributeDescriptor attr) {
+                                             AttributeDescriptor attr, AccessSubject subject,
+                                             boolean withholdIds) {
         Map<String, ReferenceTargetDescriptor> allowed = new HashMap<>();
         for (ReferenceTargetDescriptor target : attr.refTargets()) {
             allowed.put(target.javaTypeName(), target);
@@ -69,6 +139,7 @@ public class RefResolver {
             }
         }
         Map<PolyRefKey, String> displays = new HashMap<>();
+        Set<String> closedTargets = new HashSet<>();
         for (Map.Entry<ReferenceTargetDescriptor, Set<UUID>> entry : idsByTarget.entrySet()) {
             ReferenceTargetDescriptor target = entry.getKey();
             if ("document".equals(target.kind())) {
@@ -76,10 +147,15 @@ public class RefResolver {
                         .filter(d -> d.logicalName().equals(target.logicalName()))
                         .findFirst().orElse(null);
                 if (document == null) continue;
+                Visibility vis = visibility("document", document.logicalName(), document.javaClass(),
+                        document.tableName(), subject);
+                if (!(vis instanceof Visibility.Open)) closedTargets.add(target.javaTypeName());
+                if (vis instanceof Visibility.Denied) continue;
+                ScopeClause clause = vis instanceof Visibility.Scoped sc ? sc.clause() : ScopeClause.ALL;
                 jdbi.withHandle(handle -> {
-                    List<Map.Entry<PolyRefKey, String>> resolved = handle.createQuery(
+                    List<Map.Entry<PolyRefKey, String>> resolved = clause.bind(handle.createQuery(
                                     "SELECT _id, _number FROM " + document.tableName()
-                                            + " WHERE _id IN (<ids>)")
+                                            + " WHERE _id IN (<ids>)" + clause.and()))
                             .bindList("ids", entry.getValue())
                             .map((rs, ctx) -> Map.entry(
                                     new PolyRefKey(target.javaTypeName(), rs.getObject("_id", UUID.class)),
@@ -93,10 +169,15 @@ public class RefResolver {
                         .filter(c -> c.logicalName().equals(target.logicalName()))
                         .findFirst().orElse(null);
                 if (catalog == null) continue;
+                Visibility vis = visibility("catalog", catalog.logicalName(), catalog.javaClass(),
+                        catalog.tableName(), subject);
+                if (!(vis instanceof Visibility.Open)) closedTargets.add(target.javaTypeName());
+                if (vis instanceof Visibility.Denied) continue;
+                ScopeClause clause = vis instanceof Visibility.Scoped sc ? sc.clause() : ScopeClause.ALL;
                 jdbi.withHandle(handle -> {
-                    List<Map.Entry<PolyRefKey, String>> resolved = handle.createQuery(
+                    List<Map.Entry<PolyRefKey, String>> resolved = clause.bind(handle.createQuery(
                                     "SELECT _id, _code, _description FROM " + catalog.tableName()
-                                            + " WHERE _id IN (<ids>)")
+                                            + " WHERE _id IN (<ids>)" + clause.and()))
                             .bindList("ids", entry.getValue())
                             .map((rs, ctx) -> {
                                 String description = rs.getString("_description");
@@ -118,8 +199,14 @@ public class RefResolver {
             Map<String, Object> row = entry.getKey();
             PolyRef ref = entry.getValue();
             ReferenceTargetDescriptor target = allowed.get(ref.type().getName());
-            String display = displays.getOrDefault(
-                    new PolyRefKey(target.javaTypeName(), ref.id()), ref.id().toString());
+            PolyRefKey key = new PolyRefKey(target.javaTypeName(), ref.id());
+            if (!displays.containsKey(key) && closedTargets.contains(target.javaTypeName())) {
+                restrict(row, attr.columnName(), target.logicalName(), withholdIds);
+                Map<String, Object> refMap = castMap(row.get(attr.columnName() + "_ref"));
+                refMap.put("kind", target.kind());
+                continue;
+            }
+            String display = displays.getOrDefault(key, ref.id().toString());
             row.put(attr.columnName() + "_display", display);
             Map<String, Object> refMap = new LinkedHashMap<>();
             refMap.put("id", ref.id().toString());
@@ -133,7 +220,13 @@ public class RefResolver {
 
     private record PolyRefKey(String javaType, UUID id) {}
 
-    private void resolveRefColumn(List<Map<String, Object>> rows, AttributeDescriptor attr) {
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object value) {
+        return (Map<String, Object>) value;
+    }
+
+    private void resolveRefColumn(List<Map<String, Object>> rows, AttributeDescriptor attr,
+                                  AccessSubject subject, boolean withholdIds) {
         Set<UUID> ids = new HashSet<>();
         for (Map<String, Object> row : rows) {
             Object val = row.get(attr.columnName());
@@ -153,7 +246,8 @@ public class RefResolver {
                         .findFirst()
         ).orElse(null);
         if (catalog != null) {
-            resolveCatalogRef(rows, attr, catalog, ids);
+            resolveCatalogRef(rows, attr, catalog, ids, visibility("catalog", catalog.logicalName(),
+                    catalog.javaClass(), catalog.tableName(), subject), withholdIds);
             return;
         }
         DocumentDescriptor document = documentsByName.computeIfAbsent(attr.refTarget(), name ->
@@ -162,12 +256,14 @@ public class RefResolver {
                         .findFirst()
         ).orElse(null);
         if (document != null) {
-            resolveDocumentRef(rows, attr, document, ids);
+            resolveDocumentRef(rows, attr, document, ids, visibility("document", document.logicalName(),
+                    document.javaClass(), document.tableName(), subject), withholdIds);
         }
     }
 
     private void resolveCatalogRef(List<Map<String, Object>> rows, AttributeDescriptor attr,
-                                   CatalogDescriptor catalog, Set<UUID> ids) {
+                                   CatalogDescriptor catalog, Set<UUID> ids, Visibility vis,
+                                   boolean withholdIds) {
         // Detect optional presentation columns on the target catalog by name convention:
         // avatar_url → a thumbnail beside the display name; color → the referencing cell renders
         // as a colored pill ({col}_color), exactly like an @EnumLabel(color=…) enum value — this
@@ -191,8 +287,9 @@ public class RefResolver {
 
         final String avatarCol = avatarColumn;
         final String colorCol = colorColumn;
-        Map<UUID, ResolvedRef> resolved = jdbi.withHandle(h ->
-                h.createQuery(selectSql)
+        ScopeClause clause = vis instanceof Visibility.Scoped sc ? sc.clause() : ScopeClause.ALL;
+        Map<UUID, ResolvedRef> resolved = vis instanceof Visibility.Denied ? Map.of() : jdbi.withHandle(h ->
+                clause.bind(h.createQuery(selectSql + clause.and()))
                         .bindList("ids", new ArrayList<>(ids))
                         .reduceRows(new HashMap<>(), (map, rv) -> {
                             String code = rv.getColumn("_code", String.class);
@@ -213,6 +310,10 @@ public class RefResolver {
             if (val != null) {
                 UUID id = toUUID(val);
                 ResolvedRef hit = resolved.get(id);
+                if (hit == null && !(vis instanceof Visibility.Open)) {
+                    restrict(row, attr.columnName(), attr.refTarget(), withholdIds);
+                    continue;
+                }
                 String display = hit != null ? hit.display() : null;
                 if (display == null || display.isBlank()) display = val.toString();
                 String code = hit != null ? hit.code() : null;
@@ -243,9 +344,12 @@ public class RefResolver {
     }
 
     private void resolveDocumentRef(List<Map<String, Object>> rows, AttributeDescriptor attr,
-                                    DocumentDescriptor document, Set<UUID> ids) {
-        Map<UUID, String> resolved = jdbi.withHandle(h ->
-                h.createQuery("SELECT _id, _number FROM " + document.tableName() + " WHERE _id IN (<ids>)")
+                                    DocumentDescriptor document, Set<UUID> ids, Visibility vis,
+                                    boolean withholdIds) {
+        ScopeClause clause = vis instanceof Visibility.Scoped sc ? sc.clause() : ScopeClause.ALL;
+        Map<UUID, String> resolved = vis instanceof Visibility.Denied ? Map.of() : jdbi.withHandle(h ->
+                clause.bind(h.createQuery("SELECT _id, _number FROM " + document.tableName()
+                                + " WHERE _id IN (<ids>)" + clause.and()))
                         .bindList("ids", new ArrayList<>(ids))
                         .reduceRows(new HashMap<>(), (map, rv) -> {
                             map.put(rv.getColumn("_id", UUID.class), rv.getColumn("_number", String.class));
@@ -257,6 +361,10 @@ public class RefResolver {
             Object val = value(row, attr.columnName());
             if (val == null) continue;
             UUID id = toUUID(val);
+            if (!resolved.containsKey(id) && !(vis instanceof Visibility.Open)) {
+                restrict(row, attr.columnName(), attr.refTarget(), withholdIds);
+                continue;
+            }
             String display = resolved.get(id);
             if (display == null || display.isBlank()) display = val.toString();
 

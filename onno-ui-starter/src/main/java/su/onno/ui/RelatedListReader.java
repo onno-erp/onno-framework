@@ -1,12 +1,13 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.MetadataRegistry;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,15 +30,17 @@ public class RelatedListReader {
     private final CatalogQueryService catalogQuery;
     private final InformationRegisterQueryService registerQuery;
     private final UiAccessService access;
+    private final RecordAccess recordAccess;
 
     public RelatedListReader(FieldHintResolver fieldHints, MetadataRegistry registry,
                              CatalogQueryService catalogQuery, InformationRegisterQueryService registerQuery,
-                             UiAccessService access) {
+                             UiAccessService access, RecordAccess recordAccess) {
         this.fieldHints = fieldHints;
         this.registry = registry;
         this.catalogQuery = catalogQuery;
         this.registerQuery = registerQuery;
         this.access = access;
+        this.recordAccess = recordAccess;
     }
 
     /**
@@ -45,10 +48,11 @@ public class RelatedListReader {
      * {@code parentId} — the REST read path the form widget drives. Throws {@code 404} when no such
      * panel exists, the junction is unregistered, or its {@code via} ref is gone; {@code 403} when
      * the caller may not read the junction. The owning entity's own read access is enforced by the
-     * controller before this is called.
+     * controller before this is called; the owning <em>record</em> must also be inside the caller's
+     * record scope (404 otherwise), and junction rows are filtered by the junction's own scope.
      */
     public List<Map<String, Object>> rows(Class<?> parentClass, String parentLogicalName,
-                                           String relatedName, UUID parentId, Principal principal,
+                                           String relatedName, UUID parentId, AccessSubject subject,
                                            EntityJsonRepresentation.Mode representation) {
         RelatedList rl = fieldHints.relatedList(parentClass, relatedName);
         if (rl == null) {
@@ -65,8 +69,9 @@ public class RelatedListReader {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Related list '" + relatedName + "' has no via ref '" + rl.via() + "'");
         }
-        requireRead(principal, junction);
-        List<Map<String, Object>> rows = read(junction, via.columnName(), parentId);
+        requireRead(subject, junction);
+        requireParent(subject, parentClass, parentId);
+        List<Map<String, Object>> rows = read(subject, junction, via.columnName(), parentId);
         return junction.isRegister()
                 ? rows
                 : EntityJsonRepresentation.catalogs(junction.catalog(), rows, representation);
@@ -79,7 +84,7 @@ public class RelatedListReader {
      * {@code via} ref, or the caller may not read is simply skipped, never breaking the surface.
      */
     public Map<String, List<Map<String, Object>>> preloadForDetail(Class<?> parentClass, UUID parentId,
-                                                                    Principal principal) {
+                                                                    AccessSubject subject) {
         Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();
         for (RelatedList rl : fieldHints.relatedListsFor(parentClass)) {
             if (rl.hideInDetail()) {
@@ -90,31 +95,40 @@ public class RelatedListReader {
                 continue;
             }
             AttributeDescriptor via = Junctions.refField(junction, rl.via());
-            if (via == null || !canRead(principal, junction)) {
+            if (via == null || !canRead(subject, junction)) {
                 continue;
             }
-            out.put(rl.name(), read(junction, via.columnName(), parentId));
+            out.put(rl.name(), read(subject, junction, via.columnName(), parentId));
         }
         return out;
     }
 
-    private List<Map<String, Object>> read(Junctions.Junction junction, String viaColumn, UUID parentId) {
+    private List<Map<String, Object>> read(AccessSubject subject, Junctions.Junction junction, String viaColumn,
+                                           UUID parentId) {
         return junction.isRegister()
-                ? registerQuery.relatedRows(junction.register(), viaColumn, parentId)
-                : catalogQuery.relatedRows(junction.catalog(), viaColumn, parentId);
+                ? registerQuery.relatedRows(subject, junction.register(), viaColumn, parentId)
+                : catalogQuery.relatedRows(subject, junction.catalog(), viaColumn, parentId);
     }
 
-    private boolean canRead(Principal principal, Junctions.Junction junction) {
-        return junction.isRegister()
-                ? access.canRead(principal, junction.register())
-                : access.canRead(principal, junction.catalog());
+    /** A record-scoped caller may only list the junction rows of a parent record it can read. */
+    private void requireParent(AccessSubject subject, Class<?> parentClass, UUID parentId) {
+        if (recordAccess != null && recordAccess.policies().entity(parentClass) != null
+                && recordAccess.policies().isScoped(parentClass, subject, AccessMode.READ)) {
+            recordAccess.require(subject, parentClass, parentId, AccessMode.READ);
+        }
     }
 
-    private void requireRead(Principal principal, Junctions.Junction junction) {
+    private boolean canRead(AccessSubject subject, Junctions.Junction junction) {
+        return junction.isRegister()
+                ? access.canRead(subject, junction.register())
+                : access.canRead(subject, junction.catalog());
+    }
+
+    private void requireRead(AccessSubject subject, Junctions.Junction junction) {
         if (junction.isRegister()) {
-            access.requireRead(principal, junction.register());
+            access.requireRead(subject, junction.register());
         } else {
-            access.requireRead(principal, junction.catalog());
+            access.requireRead(subject, junction.catalog());
         }
     }
 }

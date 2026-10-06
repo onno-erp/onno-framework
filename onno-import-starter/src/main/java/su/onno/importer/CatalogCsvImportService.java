@@ -1,5 +1,6 @@
 package su.onno.importer;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.ui.CatalogCommandService;
 
@@ -8,7 +9,6 @@ import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,7 +54,7 @@ public class CatalogCsvImportService {
      */
     public ImportResult importCatalog(CatalogDescriptor desc, byte[] csv, String charsetName,
                                       Map<String, String> mapping, CatalogImportMode mode,
-                                      boolean dryRun, Principal principal) {
+                                      boolean dryRun, AccessSubject subject) {
         if (mapping == null || mapping.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mapping is required");
         }
@@ -80,11 +80,16 @@ public class CatalogCsvImportService {
                     UUID existingId = mode == CatalogImportMode.UPSERT_BY_CODE
                             ? existingIdByCode(desc, body.get("code"))
                             : null;
+                    // An upsert may only update a record the importer could change by hand: an
+                    // existing code outside the caller's record scope is a row error, not an overwrite.
+                    if (existingId != null && !catalogCommands.isWritable(desc, existingId, subject)) {
+                        throw new IllegalArgumentException("Code " + body.get("code") + " is already in use");
+                    }
                     if (!dryRun) {
                         if (existingId == null) {
-                            catalogCommands.create(desc, body, principal);
+                            catalogCommands.create(desc, body, subject);
                         } else {
-                            catalogCommands.update(desc, existingId, body, principal);
+                            catalogCommands.update(desc, existingId, body, subject);
                         }
                     }
                     if (existingId == null) {

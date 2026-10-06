@@ -341,7 +341,10 @@ There is no universal query DSL. Catalog and document API reads use the UI start
 resolution. Typed business reads of accumulation registers use `RegisterRepository.query()`;
 generic UI and MCP register projections use `RegisterQueryService`. The small
 `su.onno.query` package contains only shared cursor/keyset and SQL-rendering utilities used by those
-runtime paths.
+runtime paths. Every UI-starter query service method takes the `AccessSubject` it reads for and
+applies that subject's record scope inside the query (see
+[Record-level access policies](#record-level-access-policies)); typed repositories are trusted code
+and unscoped.
 
 ## Generic REST API
 
@@ -543,6 +546,46 @@ catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onno.auth.enabled=false` and supplying your own
 `SecurityFilterChain`.
+
+### Record-level access policies
+
+`@AccessControl` decides which *entities* a role may use; a `RecordAccessPolicy` bean decides which
+*records*. A policy names the roles it `appliesTo`, a read `RecordScope` (and optionally a write scope
+and create `defaults`); `ADMIN` and `exemptRoles(...)` are exempt, several applicable policies are
+OR'ed, and an entity without an applicable policy is unscoped.
+
+```java
+@Bean
+RecordAccessPolicy tenantsByOwner() {
+    return RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
+            .read(RecordScope.eq("owner", Subject.recordId()))
+            .defaults(d -> d.set("owner", Subject.recordId()));
+}
+```
+
+- **Subject.** Every read and write runs for an `AccessSubject` — a `User` (login, roles,
+  `Layout.identity(...)` record id, `AccessSubjectContributor` attributes), resolved once per request
+  by `AccessSubjectResolver`, or the trusted `AccessSubject.system()`. Controllers declare an
+  `AccessSubject` parameter; the subject is captured explicitly into widget pools, batches, SSE
+  subscriptions and MCP exchanges.
+- **Compilation.** `RecordPolicies` (core) validates every policy at boot and resolves the scope for
+  a subject; `RecordScopeCompiler` (UI starter) turns it into a `ScopeClause` (SQL + bindings,
+  three-valued logic, `via` as a correlated `EXISTS`) that the query services AND into every
+  `WHERE` — lists, counts, groups, aggregates, widget buckets, search (whose ref `EXISTS` carries the
+  target's scope), trees, related lists and `get` (404 outside the scope).
+- **Writes.** `RecordWriteGuard` (shared by the command services) requires the write scope for
+  existing records, checks the post-image inside the write transaction, fills defaults, rejects
+  unreadable ref values (422) and preserves restricted refs echoed back as `null`.
+- **Ref display.** `RefResolver` resolves per viewer: a ref into an entity the viewer can't read, or a
+  record outside its scope, renders restricted (`{field}Restricted`, display `—`, id withheld).
+- **Everywhere else.** Actions (write scope + server-side `enabledWhen`), batch, import, ref options,
+  mentions, comments, tags, presence, notifications, task labels, SSE (`UiEventPublisher` checks
+  each record event against each distinct subscriber scope), MCP tools and the CRM inbox.
+- **Not scoped:** typed repositories, posting, process internals, jobs, migrations, connectors —
+  trusted code. App code serving external users from repositories checks through `RecordAccess`.
+
+`RecordPolicyConformanceTest` (leak test + route coverage guard) and `RecordScopeArchitectureTest`
+keep new endpoints and data paths honest. See [Record access policies](RECORD_ACCESS_POLICIES.md).
 
 ## Integrations
 

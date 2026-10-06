@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RefSelect } from "@/components/ref-select";
+import { RestrictedRef, isRestrictedRef } from "@/components/restricted-ref";
 import { DatePicker } from "@/components/date-picker";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { MapEditor } from "@/components/map-editor";
@@ -772,6 +773,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
                   feedback={feedbackFor(f.key)}
                   filterValues={data}
                   documentId={kind === "documents" && isEdit ? id ?? undefined : undefined}
+                  restricted={isRestrictedRef(record, f.key) && data[f.key] == null}
                   onChange={(v) => set(f.key, v)}
                 />
               </div>
@@ -1125,6 +1127,7 @@ function FormFieldRow({
   feedback = [],
   filterValues,
   documentId,
+  restricted,
   onChange,
 }: {
   field: Field;
@@ -1134,6 +1137,8 @@ function FormFieldRow({
   /** The form's current values, for resolving a ref field's cascading refFilter. */
   filterValues?: EntityRecord;
   documentId?: string;
+  /** A ref whose target the viewer may not read: rendered as a locked chip, never submitted. */
+  restricted?: boolean;
   onChange: (value: unknown) => void;
 }) {
   const required = field.kind === "attr" && field.attr.required;
@@ -1153,6 +1158,7 @@ function FormFieldRow({
       <AttrControl
         attr={field.attr}
         value={value}
+        restricted={restricted}
         invalid={invalid}
         placeholder={placeholder}
         filterValues={filterValues}
@@ -1256,9 +1262,12 @@ function AttrControl({
   filterValues,
   optionContext,
   excludedIds,
+  restricted,
 }: {
   attr: AttributeMeta;
   value: unknown;
+  /** A ref the viewer may not read (see RestrictedRef). */
+  restricted?: boolean;
   onChange: (value: unknown) => void;
   invalid?: boolean;
   placeholder?: string;
@@ -1321,6 +1330,14 @@ function AttrControl({
         invalid={invalid}
         placeholder={placeholder}
       />
+    );
+  }
+
+  if (restricted && (attr.isRef || attr.isPolymorphicRef)) {
+    return (
+      <div className="flex h-9 items-center">
+        <RestrictedRef />
+      </div>
     );
   }
 

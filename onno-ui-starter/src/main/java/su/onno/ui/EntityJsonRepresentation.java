@@ -33,6 +33,7 @@ final class EntityJsonRepresentation {
             Map.entry("_deletion_mark", "deletionMark"),
             Map.entry("_is_folder", "folder"),
             Map.entry("_parent", "parent"),
+            Map.entry("_parent_restricted", "parentRestricted"),
             Map.entry("_version", "version"),
             Map.entry("_actions", "actions"),
             Map.entry("_style", "style")
@@ -60,7 +61,9 @@ final class EntityJsonRepresentation {
             "_ref", "Ref",
             "_code", "Code",
             "_avatar", "Avatar",
-            "_color", "Color"
+            "_color", "Color",
+            // a ref to a record the viewer may not read (see RefResolver#restrict)
+            "_restricted", "Restricted"
     );
 
     private EntityJsonRepresentation() {

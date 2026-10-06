@@ -83,7 +83,9 @@ public class CrmInboxWorkspaceController {
         // Filled in below, once the page is known: decoration reads from it rather than querying.
         final Map<UUID,su.onno.crm.service.CrmContactService.Summary> rowContacts=new HashMap<>();
         java.util.function.Function<Conversation,Map<String,Object>> decorate = conversation -> {
-            var raw=catalogs.get(descriptor,conversation.getId());
+            // Membership is already authorized by the workspace (and customers by their policy); read
+            // the conversation row as trusted code.
+            var raw=catalogs.get(su.onno.access.AccessSubject.system(),descriptor,conversation.getId());
             Map<String,Object> row=new LinkedHashMap<>();
             row.put("id",conversation.getId());row.put("description",conversation.getDescription());
             for(var attribute:descriptor.attributes()) {
