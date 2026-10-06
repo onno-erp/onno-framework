@@ -87,7 +87,7 @@ public class DocumentQueryService {
     }
 
     /**
-     * As {@link #search(DocumentDescriptor, String, int)}, additionally narrowed by a
+     * As {@link #search(AccessSubject, DocumentDescriptor, String, int)}, additionally narrowed by a
      * {@link WidgetFilter} predicate — the cascading ref picker sends its resolved
      * {@code refFilter} here, so only compatible documents are offered. Ref/enum columns bind as
      * typed uuids (PG-strict); a null/blank/invalid predicate is simply no filter.
@@ -126,7 +126,7 @@ public class DocumentQueryService {
     }
 
     /**
-     * As {@link #newDraft(DocumentDescriptor)}, but overlays caller-supplied initial values (from the
+     * As {@link #newDraft(AccessSubject, DocumentDescriptor)}, but overlays caller-supplied initial values (from the
      * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
      * resolution — so a deep link like {@code …/new?startsAt=…&room=<id>} pre-fills those fields.
      */

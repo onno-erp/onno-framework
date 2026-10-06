@@ -89,7 +89,7 @@ public class CatalogQueryService {
     }
 
     /**
-     * As {@link #search(CatalogDescriptor, String, int)}, additionally narrowed by a
+     * As {@link #search(AccessSubject, CatalogDescriptor, String, int)}, additionally narrowed by a
      * {@link WidgetFilter} predicate — the cascading ref picker sends its resolved
      * {@code refFilter} here (e.g. {@code "supplier = <uuid>"}), so only compatible records are
      * offered. Ref/enum columns bind as typed uuids (PG-strict); a null/blank/invalid predicate is
@@ -130,7 +130,7 @@ public class CatalogQueryService {
     }
 
     /**
-     * As {@link #newDraft(CatalogDescriptor)}, but overlays caller-supplied initial values (from the
+     * As {@link #newDraft(AccessSubject, CatalogDescriptor)}, but overlays caller-supplied initial values (from the
      * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
      * resolution — so a deep link like {@code …/new?field=value} pre-fills those fields. The
      * subject's record-policy {@code defaults(...)} are applied last, as the create will.
