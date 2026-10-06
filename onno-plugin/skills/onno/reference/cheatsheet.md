@@ -139,6 +139,16 @@ stored instances under a changed same-version graph.
 ### `@AccessControl` (RBAC; deny-by-default, `ADMIN` always allowed)
 `readRoles=String[]{}`, `writeRoles=String[]{}` (falls back to `readRoles` if empty).
 
+### `RecordAccessPolicy` (record-level; package `su.onno.access`, a Spring bean)
+`RecordAccessPolicy.forCatalog|forDocument|forRegister|of(Type.class)` `.appliesTo(roles…)`
+`.exemptRoles(roles…)` `.read(RecordScope)` (required) `.write(RecordScope)` (default = read)
+`.defaults(d -> d.set(field, value))`. `RecordScope.eq|in(field, literal | Subject.recordId() |
+Subject.username() | Subject.attribute(name))`, `isNull(field)`, `via(refField[, targetScope])`,
+`and|or|not`, `all()|none()`. Subject attributes come from `AccessSubjectContributor` beans. Query and
+command services take an `AccessSubject` (controller parameter; `AccessSubject.system()` for trusted
+code); app code checks with the `RecordAccess` bean (`require|can|filter|clause`). Typed repositories
+are unscoped.
+
 ### UI authoring
 UI is authored via `Layout`/`Page`/`EntityView` beans, not domain annotations.
 

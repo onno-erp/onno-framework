@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -70,22 +71,22 @@ class CatalogSearchRefFilterTest {
 
     @Test
     void searchNarrowsByRefFilter() {
-        List<Map<String, Object>> rows = query.search(bookDesc, null, 50, "supplier = " + north);
+        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, null, 50, "supplier = " + north);
         assertThat(rows).extracting(r -> r.get("_description"))
                 .containsExactlyInAnyOrder("Alpha Atlas", "Beta Guide");
     }
 
     @Test
     void refFilterComposesWithTextSearch() {
-        List<Map<String, Object>> rows = query.search(bookDesc, "alpha", 50, "supplier = " + north);
+        List<Map<String, Object>> rows = query.search(AccessSubject.system(), bookDesc, "alpha", 50, "supplier = " + north);
         assertThat(rows).extracting(r -> r.get("_description"))
                 .containsExactly("Alpha Atlas");
     }
 
     @Test
     void blankFilterLeavesSearchUnfiltered() {
-        assertThat(query.search(bookDesc, null, 50, null)).hasSize(3);
-        assertThat(query.search(bookDesc, null, 50, "")).hasSize(3);
+        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, null)).hasSize(3);
+        assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, "")).hasSize(3);
     }
 
     private void supplier(UUID id, String name) {

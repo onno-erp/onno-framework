@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.numbering.NumberGenerator;
 import su.onno.posting.PostingService;
@@ -16,7 +17,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @AutoConfiguration(after = OnnoAutoConfiguration.class)
-@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class})
+@EnableConfigurationProperties({UiProperties.class, UpdateProperties.class, RecordAccessProperties.class})
 @ConditionalOnBean(MetadataRegistry.class)
 @ConditionalOnProperty(prefix = "onno.ui", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class UiAutoConfiguration implements WebMvcConfigurer {
@@ -33,6 +34,30 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         this.widgetPluginScanner = uiProperties.getPlugins().isEnabled()
                 ? new WidgetPluginScanner(uiProperties.getPlugins().getLocation())
                 : null;
+    }
+
+    /**
+     * Puts the {@link AccessSubject} argument resolver <em>first</em> on the MVC handler adapter.
+     * Registering it through {@code addArgumentResolvers} is not enough: custom resolvers run after
+     * the built-in ones, and Spring Data's web support answers any interface-typed parameter with a
+     * projection proxy — a handler's {@code AccessSubject} would silently become an empty proxy.
+     */
+    @Bean
+    public static org.springframework.beans.factory.config.BeanPostProcessor accessSubjectArgumentResolverRegistrar(
+            org.springframework.beans.factory.ObjectProvider<AccessSubjectResolver> accessSubjectResolver) {
+        return new org.springframework.beans.factory.config.BeanPostProcessor() {
+            @Override
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
+                if (bean instanceof org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter adapter
+                        && adapter.getArgumentResolvers() != null) {
+                    java.util.List<org.springframework.web.method.support.HandlerMethodArgumentResolver> resolvers =
+                            new java.util.ArrayList<>(adapter.getArgumentResolvers());
+                    resolvers.add(0, new AccessSubjectArgumentResolver(accessSubjectResolver));
+                    adapter.setArgumentResolvers(resolvers);
+                }
+                return bean;
+            }
+        };
     }
 
     @Override
@@ -147,10 +172,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             UiAccessService access,
             TaskAssigneeDirectory taskAssigneeDirectory,
-            CurrentUserResolver currentUserResolver) {
-        return new ProcessController(
+            CurrentUserResolver currentUserResolver,
+            RecordAccess recordAccess,
+            AccessSubjectResolver accessSubjectResolver) {
+        ProcessController controller = new ProcessController(
                 processEngine, processDefinitions, objectMapper, access,
                 taskAssigneeDirectory, currentUserResolver);
+        controller.setRecordAccess(recordAccess, accessSubjectResolver);
+        return controller;
     }
 
     @Bean
@@ -159,9 +188,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             CatalogQueryService catalogQueryService,
             UiAccessService access,
             su.onno.ui.UiLayout uiLayout,
-            CommentAuthorAvatars commentAuthorAvatars) {
+            CommentAuthorAvatars commentAuthorAvatars,
+            AccessSubjectResolver accessSubjectResolver) {
         return new TaskAssigneeDirectory(
-                registry, catalogQueryService, access, uiLayout, commentAuthorAvatars);
+                registry, catalogQueryService, access, uiLayout, commentAuthorAvatars, accessSubjectResolver);
     }
 
     @Bean
@@ -218,7 +248,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
-    public UiEventPublisher uiEventPublisher(UiAccessService access, UiProperties properties) {
+    public UiEventPublisher uiEventPublisher(UiAccessService access, UiProperties properties,
+                                             RecordScopeCompiler recordScopeCompiler, Jdbi jdbi,
+                                             MetadataRegistry registry) {
         // onno.ui.dev-mode unset → dev mode exactly when devtools is around: on the classpath under
         // bootRun/exploded runs, excluded from the production boot jar. See UiProperties#devMode.
         boolean devMode = properties.getDevMode() != null
@@ -226,7 +258,9 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                 : org.springframework.util.ClassUtils.isPresent(
                         "org.springframework.boot.devtools.settings.DevToolsSettings",
                         UiAutoConfiguration.class.getClassLoader());
-        return new UiEventPublisher(access, devMode);
+        UiEventPublisher publisher = new UiEventPublisher(access, devMode);
+        publisher.setRecordScopes(recordScopeCompiler, jdbi, registry);
+        return publisher;
     }
 
     @Bean
@@ -271,8 +305,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     public su.onno.ui.presence.PresenceController presenceController(su.onno.ui.presence.PresenceRegistry presenceRegistry,
                                                                      UiAccessService access,
                                                                      CurrentUserResolver currentUserResolver,
-                                                                     CommentAuthorAvatars authorAvatars) {
-        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver, authorAvatars);
+                                                                     CommentAuthorAvatars authorAvatars,
+                                                                     RecordAccess recordAccess) {
+        return new su.onno.ui.presence.PresenceController(presenceRegistry, access, currentUserResolver, authorAvatars,
+                recordAccess);
     }
 
     @Bean
@@ -298,14 +334,50 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new ResolvedMetadataService(registry, fieldHintResolver);
     }
 
+    /** The validated record policies; boot fails here on an invalid {@code RecordAccessPolicy}. */
     @Bean
-    public CatalogQueryService catalogQueryService(MetadataRegistry registry, Jdbi jdbi) {
-        return new CatalogQueryService(registry, jdbi);
+    public su.onno.access.RecordPolicies recordPolicies(
+            MetadataRegistry registry,
+            org.springframework.beans.factory.ObjectProvider<su.onno.access.RecordAccessPolicy> policies) {
+        return new su.onno.access.RecordPolicies(registry, policies.orderedStream().toList());
     }
 
     @Bean
-    public DocumentQueryService documentQueryService(MetadataRegistry registry, Jdbi jdbi) {
-        return new DocumentQueryService(registry, jdbi);
+    public RecordScopeCompiler recordScopeCompiler(su.onno.access.RecordPolicies recordPolicies) {
+        return new RecordScopeCompiler(recordPolicies);
+    }
+
+    @Bean
+    public RecordAccess recordAccess(RecordScopeCompiler recordScopeCompiler, UiAccessService access, Jdbi jdbi,
+                                     RecordAccessProperties properties) {
+        return new RecordAccess(recordScopeCompiler, access, jdbi, properties.isLogDenials());
+    }
+
+    @Bean
+    public RecordScopeIndexes recordScopeIndexes(su.onno.access.RecordPolicies recordPolicies, Jdbi jdbi,
+                                                 RecordAccessProperties properties,
+                                                 org.springframework.core.env.Environment environment) {
+        return new RecordScopeIndexes(recordPolicies, jdbi, properties.isCreateIndexes(),
+                environment.getProperty("onno.schema.mode", "update"));
+    }
+
+    @Bean
+    public AccessSubjectResolver accessSubjectResolver(
+            UiAccessService access, CurrentUserResolver currentUserResolver,
+            org.springframework.beans.factory.ObjectProvider<su.onno.access.AccessSubjectContributor> contributors) {
+        return new AccessSubjectResolver(access, currentUserResolver, () -> contributors.orderedStream().toList());
+    }
+
+    @Bean
+    public CatalogQueryService catalogQueryService(MetadataRegistry registry, Jdbi jdbi,
+                                                   RecordScopeCompiler recordScopeCompiler, UiAccessService access) {
+        return new CatalogQueryService(registry, jdbi, recordScopeCompiler, access);
+    }
+
+    @Bean
+    public DocumentQueryService documentQueryService(MetadataRegistry registry, Jdbi jdbi,
+                                                     RecordScopeCompiler recordScopeCompiler, UiAccessService access) {
+        return new DocumentQueryService(registry, jdbi, recordScopeCompiler, access);
     }
 
     @Bean
@@ -339,22 +411,25 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    public RegisterQueryService registerQueryService(MetadataRegistry registry, Jdbi jdbi) {
-        return new RegisterQueryService(registry, jdbi);
+    public RegisterQueryService registerQueryService(MetadataRegistry registry, Jdbi jdbi,
+                                                     RecordScopeCompiler recordScopeCompiler, UiAccessService access) {
+        return new RegisterQueryService(registry, jdbi, recordScopeCompiler, access);
     }
 
     @Bean
-    public InformationRegisterQueryService informationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi) {
-        return new InformationRegisterQueryService(registry, jdbi);
+    public InformationRegisterQueryService informationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi,
+                                                                           RecordScopeCompiler recordScopeCompiler,
+                                                                           UiAccessService access) {
+        return new InformationRegisterQueryService(registry, jdbi, recordScopeCompiler, access);
     }
 
     @Bean
     public RelatedListReader relatedListReader(FieldHintResolver fieldHintResolver, MetadataRegistry registry,
                                                CatalogQueryService catalogQueryService,
                                                InformationRegisterQueryService informationRegisterQueryService,
-                                               UiAccessService access) {
+                                               UiAccessService access, RecordAccess recordAccess) {
         return new RelatedListReader(fieldHintResolver, registry, catalogQueryService,
-                informationRegisterQueryService, access);
+                informationRegisterQueryService, access, recordAccess);
     }
 
     @Bean
@@ -453,11 +528,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              UiProperties uiProperties,
                                              UiMessages uiMessages,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
-                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties) {
-        return new DivKitController(layoutSet, layoutResolver, profileResolver, access, currentUserResolver,
-                resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService, documentQueryService,
-                registerQueryService, uiActionResolver, relatedListReader, uiProperties, uiMessages, commentProperties,
-                notificationProperties);
+                                             org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties,
+                                             AccessSubjectResolver accessSubjectResolver) {
+        DivKitController controller = new DivKitController(layoutSet, layoutResolver, profileResolver, access,
+                currentUserResolver, resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService,
+                documentQueryService, registerQueryService, uiActionResolver, relatedListReader, uiProperties,
+                uiMessages, commentProperties, notificationProperties);
+        controller.setAccessSubjectResolver(accessSubjectResolver);
+        return controller;
     }
 
 }

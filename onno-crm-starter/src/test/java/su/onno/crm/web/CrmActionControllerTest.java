@@ -20,14 +20,14 @@ class CrmActionControllerTest {
   var scopes=mock(CrmInboxWorkspaceService.class);var catalogs=mock(CatalogQueryService.class);
   var descriptor=mock(CatalogDescriptor.class);var id=UUID.randomUUID();java.security.Principal principal=()->"reader";
   when(catalogs.forClass(Conversation.class)).thenReturn(descriptor);
-  when(catalogs.get(descriptor,id)).thenReturn(Map.of("subject","allowed"));
+  when(catalogs.get(su.onno.access.AccessSubject.system(),descriptor,id)).thenReturn(Map.of("subject","allowed"));
   var controller=new CrmActionController(scopes,new UiActionResolver(List.of(view)),mock(UiAccessService.class),catalogs,false);
-  controller.run("support",id,"host.review",Map.of("inputs",Map.of("reason","Review requested")),principal);
+  controller.run("support",id,"host.review",Map.of("inputs",Map.of("reason","Review requested")),principal,su.onno.access.AccessSubject.user("reader",java.util.Set.of()));
   assertThat(calls).hasValue(1);
-  when(catalogs.get(descriptor,id)).thenReturn(Map.of("subject","blocked"));
-  assertThatThrownBy(()->controller.run("support",id,"host.review",Map.of(),principal)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+  when(catalogs.get(su.onno.access.AccessSubject.system(),descriptor,id)).thenReturn(Map.of("subject","blocked"));
+  assertThatThrownBy(()->controller.run("support",id,"host.review",Map.of(),principal,su.onno.access.AccessSubject.user("reader",java.util.Set.of()))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
   when(scopes.requireConversation("support",id,principal,true)).thenThrow(new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN));
-  assertThatThrownBy(()->controller.run("support",id,"host.review",Map.of(),principal)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+  assertThatThrownBy(()->controller.run("support",id,"host.review",Map.of(),principal,su.onno.access.AccessSubject.user("reader",java.util.Set.of()))).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
   assertThat(calls).hasValue(1);
  }
 }

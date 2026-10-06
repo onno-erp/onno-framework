@@ -65,7 +65,15 @@ public final class CrmCatalogBinding<T extends CatalogObject> {
         return this;
     }
 
-    /** Optional host record-level policy, applied in addition to the catalog's onno read roles. */
+    /**
+     * Optional host record-level policy, applied in addition to the catalog's onno read roles.
+     *
+     * @deprecated since 3.4.0: declare a {@link su.onno.access.RecordAccessPolicy} for the bound
+     *             catalog instead — it is applied by the CRM inbox and by every other surface, and
+     *             pushed into the query rather than filtered in memory. This predicate still runs in
+     *             addition and is slated for removal in 4.0.
+     */
+    @Deprecated(since = "3.4.0")
     public CrmCatalogBinding<T> readableWhen(BiPredicate<T, Principal> policy) {
         if (sealed) throw new IllegalStateException("CRM binding is already in use");
         readable = Objects.requireNonNull(policy);

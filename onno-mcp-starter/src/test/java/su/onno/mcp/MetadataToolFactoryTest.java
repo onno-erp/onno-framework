@@ -1,5 +1,6 @@
 package su.onno.mcp;
 
+import su.onno.access.AccessSubject;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
@@ -160,7 +161,7 @@ class MetadataToolFactoryTest {
     @Test
     void registerMovementsFailsLoudlyWhenTheBoundedQueryTruncates() {
         when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.movementsBounded(cash, null, null))
+        when(registerQuery.movementsBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
         SyncToolSpecification movements = byName(factory(new OnnoMcpProperties()).build(), "register_movements");
 
@@ -174,7 +175,7 @@ class MetadataToolFactoryTest {
     @Test
     void registerBalanceFailsLoudlyWhenTheBoundedQueryTruncates() {
         when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.balanceBounded(cash, Map.of()))
+        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.eq(Map.of())))
                 .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
 

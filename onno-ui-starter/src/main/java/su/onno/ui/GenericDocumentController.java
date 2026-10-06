@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
@@ -7,7 +8,6 @@ import su.onno.posting.PostingPreview;
 
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,10 +39,10 @@ public class GenericDocumentController {
     @GetMapping("/{name}/{id}")
     public Map<String, Object> get(@PathVariable String name, @PathVariable UUID id,
                                    @RequestParam(defaultValue = "logical") String representation,
-                                   Principal principal) {
+                                   AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
-        return EntityJsonRepresentation.document(desc, query.get(desc, id),
+        access.requireRead(subject, desc);
+        return EntityJsonRepresentation.document(desc, query.get(subject, desc, id),
                 EntityJsonRepresentation.parse(representation));
     }
 
@@ -57,20 +57,20 @@ public class GenericDocumentController {
     public List<Map<String, Object>> related(@PathVariable String name, @PathVariable UUID id,
                                              @PathVariable String relatedName,
                                              @RequestParam(defaultValue = "logical") String representation,
-                                             Principal principal) {
+                                             AccessSubject subject) {
         DocumentDescriptor parent = query.require(name);
-        access.requireRead(principal, parent);
-        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, principal,
+        access.requireRead(subject, parent);
+        return relatedLists.rows(parent.javaClass(), parent.logicalName(), relatedName, id, subject,
                 EntityJsonRepresentation.parse(representation));
     }
 
     @PostMapping("/{name}")
     public Map<String, Object> create(@PathVariable String name, @RequestBody Map<String, Object> body,
                                       @RequestParam(defaultValue = "logical") String representation,
-                                      Principal principal) {
+                                      AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.create(desc, body, principal),
+        return EntityJsonRepresentation.document(desc, commands.create(desc, body, subject),
                 mode);
     }
 
@@ -84,11 +84,11 @@ public class GenericDocumentController {
     @PostMapping("/{name}/{id}/duplicate")
     public Map<String, Object> duplicate(@PathVariable String name, @PathVariable UUID id,
                                          @RequestParam(defaultValue = "logical") String representation,
-                                         Principal principal) {
+                                         AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
-        access.requireRead(principal, desc); // create() enforces write below
+        access.requireRead(subject, desc); // create() enforces write below
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        Map<String, Object> row = query.get(desc, id);
+        Map<String, Object> row = query.get(subject, desc, id);
         Map<String, Object> body = new LinkedHashMap<>();
         for (AttributeDescriptor attr : desc.attributes()) {
             if (attr.secret()) {
@@ -123,7 +123,7 @@ public class GenericDocumentController {
             }
             body.put(ts.name(), copies);
         }
-        return EntityJsonRepresentation.document(desc, commands.create(desc, body, principal),
+        return EntityJsonRepresentation.document(desc, commands.create(desc, body, subject),
                 mode);
     }
 
@@ -131,10 +131,10 @@ public class GenericDocumentController {
     public Map<String, Object> update(@PathVariable String name, @PathVariable UUID id,
                                       @RequestBody Map<String, Object> body,
                                       @RequestParam(defaultValue = "logical") String representation,
-                                      Principal principal) {
+                                      AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.update(desc, id, body, principal),
+        return EntityJsonRepresentation.document(desc, commands.update(desc, id, body, subject),
                 mode);
     }
 
@@ -150,38 +150,38 @@ public class GenericDocumentController {
     public Map<String, Object> validate(@PathVariable String name,
                                         @PathVariable(required = false) UUID id,
                                         @RequestBody Map<String, Object> body,
-                                        Principal principal) {
-        return commands.validate(query.require(name), id, body, principal);
+                                        AccessSubject subject) {
+        return commands.validate(query.require(name), id, body, subject);
     }
 
     @PostMapping("/{name}/{id}/post")
     public Map<String, Object> post(@PathVariable String name, @PathVariable UUID id,
                                     @RequestParam(defaultValue = "logical") String representation,
-                                    Principal principal) {
+                                    AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.post(desc, id, principal),
+        return EntityJsonRepresentation.document(desc, commands.post(desc, id, subject),
                 mode);
     }
 
     @GetMapping("/{name}/{id}/posting-preview")
-    public PostingPreview postingPreview(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        return commands.postingPreview(query.require(name), id, principal);
+    public PostingPreview postingPreview(@PathVariable String name, @PathVariable UUID id, AccessSubject subject) {
+        return commands.postingPreview(query.require(name), id, subject);
     }
 
     @PostMapping("/{name}/{id}/unpost")
     public Map<String, Object> unpost(@PathVariable String name, @PathVariable UUID id,
                                       @RequestParam(defaultValue = "logical") String representation,
-                                      Principal principal) {
+                                      AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         EntityJsonRepresentation.Mode mode = EntityJsonRepresentation.parse(representation);
-        return EntityJsonRepresentation.document(desc, commands.unpost(desc, id, principal),
+        return EntityJsonRepresentation.document(desc, commands.unpost(desc, id, subject),
                 mode);
     }
 
     @DeleteMapping("/{name}/{id}")
-    public void delete(@PathVariable String name, @PathVariable UUID id, Principal principal) {
-        commands.delete(query.require(name), id, principal);
+    public void delete(@PathVariable String name, @PathVariable UUID id, AccessSubject subject) {
+        commands.delete(query.require(name), id, subject);
     }
 
     /**
@@ -194,9 +194,9 @@ public class GenericDocumentController {
      */
     @PostMapping("/{name}/batch-delete")
     public Map<String, Object> batchDelete(@PathVariable String name,
-                                           @RequestBody Map<String, Object> body, Principal principal) {
+                                           @RequestBody Map<String, Object> body, AccessSubject subject) {
         DocumentDescriptor desc = query.require(name);
         List<UUID> ids = ActionController.idList(body);
-        return batch.run(ids, rid -> commands.delete(desc, rid, principal));
+        return batch.run(ids, rid -> commands.delete(desc, rid, subject));
     }
 }

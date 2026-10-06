@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Attribute;
 import su.onno.metadata.CatalogDescriptor;
@@ -72,8 +73,7 @@ class RefOptionControllerTest {
                 "", 30, null, "participants.employee", form,
                 "participants", 1, row, documentId);
 
-        var principal = new UsernamePasswordAuthenticationToken(
-                "admin", "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        var principal = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
         List<Map<String, Object>> result = controller.search(request, principal);
 
         assertThat(result).hasSize(2);

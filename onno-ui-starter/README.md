@@ -427,6 +427,11 @@ change icon or grey itself (`enabledWhen`) by the record's state, mirroring the 
 form-opening action in one specific state, is two `DETAIL` actions with complementary
 `visibleWhen` predicates. `TOOLBAR` actions have no record context and keep the fixed icon/label.
 
+`visibleWhen`/`enabledWhen` shape the UI, but **`enabledWhen` is also enforced on the server**: running
+a ROW/DETAIL action on a record for which it evaluates `false` is rejected with `409`, and the record
+must be inside the caller's record-policy write scope (`404` otherwise) — including per id in a batch.
+The handler receives the caller's `AccessSubject` as `ctx.subject()`.
+
 A `DETAIL` action lands in the record surface's header overflow (⋯) menu by default (beside the
 form title), but honors the same placement override the built-in `unpost`/`duplicate`/`delete`
 actions do — promote a key workflow action to a primary button (given the brand accent), keep it in
@@ -1223,7 +1228,9 @@ A server handler runs only for an authenticated user, and `onno.ui.read-only` bl
 other mutation. Because a page action has no entity to gate on, declare `.roles("MANAGER")` to
 restrict who may run it — the endpoint rejects other callers **and the button is hidden from the
 rendered page**; `ADMIN` always passes, like entity `@AccessControl`. Without `.roles(...)`, any
-authenticated user may run it and the handler self-authorizes via `ctx.user()`.
+authenticated user may run it and the handler self-authorizes via `ctx.user()`. A page action has no
+record to scope; a handler that reads or changes records on the caller's behalf uses `RecordAccess`
+with `ctx.subject()`.
 
 Button face — set **one**:
 
@@ -1424,6 +1431,12 @@ that matters to an integrator:
   unless its read/write roles grant the caller, with one exception: the `ADMIN` role is a superuser
   that bypasses every per-entity check. Roles are matched case-insensitively with the `ROLE_`
   prefix stripped. Failing a check returns `403`.
+- **Record-level policies narrow further.** A `RecordAccessPolicy` bean scopes which *records* the
+  holders of a role see and change — enforced inside every list/count/group/aggregate/search/`get`,
+  every write, action, picker, comment/tag/presence/notification surface, SSE delivery and MCP tool.
+  A record outside the caller's scope is `404` (like a missing one); a ref to an unreadable record
+  renders restricted (`{field}Restricted: true`, display `—`, no id). See
+  [Record access policies](../docs/RECORD_ACCESS_POLICIES.md).
 - **Mutating requests need a CSRF token.** POST/PUT/DELETE must send the token from the
   `XSRF-TOKEN` cookie back in the `X-XSRF-TOKEN` header (Spring's `CookieCsrfTokenRepository`,
   non-HttpOnly so JS can read it). The cookie is issued on the first response thanks to a

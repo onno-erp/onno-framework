@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -65,7 +66,7 @@ class NullRefBindingPostgresIT {
         @Attribute private Ref<PgTelegramUser> approver; // nullable ref attribute
     }
 
-    private final Principal admin = new AdminPrincipal();
+    private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private Jdbi jdbi;
     private CatalogDescriptor userDesc;
     private DocumentDescriptor approvalDesc;

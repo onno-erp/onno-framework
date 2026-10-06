@@ -599,6 +599,41 @@ token id to a typed target step, so parallel work cannot be silently dropped. Wh
 branches are active, map their coordinator to a parallel fork with the same branch enum keys;
 finish or cancel the instance before changing branch cardinality.
 
+### Record-Level Access (External Users)
+
+`@AccessControl` grants a role an *entity*; a `RecordAccessPolicy` bean narrows it to *records*.
+Use it whenever external users (customers, clients, tenants) must only see their own data — do not
+build bespoke endpoints for that.
+
+```java
+@Bean
+RecordAccessPolicy tenantsByOwner() {
+    return RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
+            .read(RecordScope.eq("owner", Subject.recordId()))   // the Layout.identity(...) record
+            .defaults(d -> d.set("owner", Subject.recordId()));  // filled on create
+}
+
+@Bean
+RecordAccessPolicy jobsByTenant() {
+    return RecordAccessPolicy.forDocument(BuildJob.class).appliesTo("CUSTOMER")
+            .read(RecordScope.via("tenant"));                    // visible when the tenant is
+}
+```
+
+Scopes are a closed predicate tree (`eq`, `in`, `isNull`, `via`, `and`, `or`, `not`, `all`,
+`none`) compiled into SQL; values are literals or `Subject.recordId()` / `Subject.username()` /
+`Subject.attribute(name)` (contributed by `AccessSubjectContributor` beans). `write(...)` defaults to
+the read scope; `write(RecordScope.none())` allows changes only through trusted code. `ADMIN` and
+`exemptRoles(...)` are exempt; several applicable policies are OR'ed. Register policies scope by
+dimensions. Startup fails on an invalid policy.
+
+Every UI-starter query/command service method takes an `AccessSubject`. Request code receives it
+as a controller parameter (`AccessSubject subject`), from `ActionContext.subject()` or
+`McpToolContext.subject()`; only trusted background code passes `AccessSubject.system()`. **Typed
+repositories are unscoped** — custom code serving a user from a repository must check with
+`RecordAccess.require(subject, Type.class, id, AccessMode.READ)`. See
+[docs/RECORD_ACCESS_POLICIES.md](docs/RECORD_ACCESS_POLICIES.md).
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.

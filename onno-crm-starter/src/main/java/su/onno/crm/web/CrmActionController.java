@@ -28,7 +28,8 @@ public class CrmActionController {
         return action.isServer() && action.scope()!=ActionScope.TOOLBAR &&
             (action.roles().isEmpty() || access.hasAnyRole(principal,action.roles()));
     }
-    private Map<String,Object> row(UUID id) { return catalogs.get(catalogs.forClass(Conversation.class),id); }
+    // The workspace boundary authorizes the conversation; the row is read as trusted code.
+    private Map<String,Object> row(UUID id) { return catalogs.get(su.onno.access.AccessSubject.system(),catalogs.forClass(Conversation.class),id); }
     @GetMapping public Object list(@PathVariable String workspace,@PathVariable UUID id,Principal principal) {
         workspaces.requireConversation(workspace,id,principal,false);
         var definition=workspaces.requireWorkspace(workspace,principal,false);
@@ -40,7 +41,7 @@ public class CrmActionController {
         }).filter(a->Boolean.TRUE.equals(a.get("visible"))).toList();
     }
     @PostMapping("/{key}") public ActionResult run(@PathVariable String workspace,@PathVariable UUID id,@PathVariable String key,
-            @RequestBody(required=false) Map<String,Object> body,Principal principal) {
+            @RequestBody(required=false) Map<String,Object> body,Principal principal,su.onno.access.AccessSubject subject) {
         workspaces.requireConversation(workspace,id,principal,true);
         if(readOnly)throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Application is read-only");
         var action=actions.find(Conversation.class,key);
@@ -48,7 +49,8 @@ public class CrmActionController {
         if(!allowed(action,principal))throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         var state=UiActionResolver.recordActionState(action,row(id));
         if(!state.visible() || !state.enabled())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Action unavailable");
-        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body));
+        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body)
+                .withSubject(subject));
         return result==null?ActionResult.ok():result;
     }
 }

@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.AttributeDescriptor;
@@ -83,7 +84,7 @@ class CatalogRowsByIdsTest {
 
     @Test
     void returnsOnlyTheRequestedRows_withRefsResolved() {
-        List<Map<String, Object>> rows = service.rowsByIds(clientDesc, List.of(ada, linus));
+        List<Map<String, Object>> rows = service.rowsByIds(AccessSubject.system(), clientDesc, List.of(ada, linus));
 
         assertThat(rows).hasSize(2);
         assertThat(rows).extracting(r -> r.get("_description"))
@@ -95,7 +96,7 @@ class CatalogRowsByIdsTest {
 
     @Test
     void skipsDeletionMarkedAndUnknownIds() {
-        List<Map<String, Object>> rows = service.rowsByIds(clientDesc, List.of(ada, deleted, UUID.randomUUID()));
+        List<Map<String, Object>> rows = service.rowsByIds(AccessSubject.system(), clientDesc, List.of(ada, deleted, UUID.randomUUID()));
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).get("_description")).isEqualTo("Ada Lovelace");
@@ -103,8 +104,8 @@ class CatalogRowsByIdsTest {
 
     @Test
     void emptyInputYieldsEmptyList() {
-        assertThat(service.rowsByIds(clientDesc, List.of())).isEmpty();
-        assertThat(service.rowsByIds(clientDesc, null)).isEmpty();
+        assertThat(service.rowsByIds(AccessSubject.system(), clientDesc, List.of())).isEmpty();
+        assertThat(service.rowsByIds(AccessSubject.system(), clientDesc, null)).isEmpty();
     }
 
     private String companyColumn() {

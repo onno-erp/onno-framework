@@ -12,8 +12,8 @@ class TagControllerTest {
     @Test void deniesReadsAndWritesWithoutEntityPermissions() {
         var service=mock(TagService.class); var access=mock(UiAccessService.class);
         var controller=new TagController(service,access,mock(CatalogQueryService.class),mock(DocumentQueryService.class),List.of(),mock(org.springframework.context.ApplicationEventPublisher.class));
-        assertThatThrownBy(() -> controller.library("catalogs","Customers",null)).isInstanceOf(ResponseStatusException.class);
-        assertThatThrownBy(() -> controller.assign("catalogs","Customers",UUID.randomUUID(),UUID.randomUUID(),null)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.library("catalogs","Customers",null,su.onno.access.AccessSubject.user(null,java.util.Set.of()))).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> controller.assign("catalogs","Customers",UUID.randomUUID(),UUID.randomUUID(),null,su.onno.access.AccessSubject.user(null,java.util.Set.of()))).isInstanceOf(ResponseStatusException.class);
         verifyNoInteractions(service);
     }
 }

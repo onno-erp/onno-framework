@@ -402,6 +402,9 @@ public final class UiMessages {
         d.put("form.hexColor", "Hex color");
         d.put("form.chooseColor", "Choose color");
         d.put("ref.selectedElsewhere", "Selected in another row");
+        // A reference to a record the viewer may not open (record-level access policies).
+        d.put("ref.restricted", "Restricted");
+        d.put("ref.restrictedHint", "You don't have access to this record");
         d.put("ref.alreadySelected", "Already selected");
         // Shown on an open form when the record changes elsewhere (another user/tab/widget) over SSE.
         d.put("form.staleChanged", "This record changed elsewhere.");

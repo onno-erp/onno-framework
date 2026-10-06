@@ -42,8 +42,9 @@ public class CommentsAutoConfiguration {
     }
 
     @Bean
-    public MentionResolver mentionResolver(MetadataRegistry registry, UiAccessService access, Jdbi jdbi) {
-        return new MentionResolver(registry, access, jdbi);
+    public MentionResolver mentionResolver(MetadataRegistry registry, UiAccessService access, Jdbi jdbi,
+                                           su.onno.ui.RecordScopeCompiler recordScopeCompiler) {
+        return new MentionResolver(registry, access, jdbi, recordScopeCompiler);
     }
 
     @Bean

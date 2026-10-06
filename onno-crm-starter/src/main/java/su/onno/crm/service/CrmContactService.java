@@ -20,6 +20,30 @@ public class CrmContactService {
     private final CrmWorkspaceService workspace;
     private final JdbcTemplate jdbc;
     private final UiAccessService access;
+    private su.onno.ui.RecordAccess recordAccess;
+    private su.onno.ui.AccessSubjectResolver subjects;
+
+    /**
+     * Apply the bound customer catalog's {@code RecordAccessPolicy} on top of {@code readableWhen}:
+     * a customer outside the viewer's record scope is unreadable here too, so the inbox, contact
+     * panel and merge commands never surface it.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRecordAccess(su.onno.ui.RecordAccess recordAccess, su.onno.ui.AccessSubjectResolver subjects) {
+        this.recordAccess = recordAccess;
+        this.subjects = subjects;
+    }
+
+    /** The subset of canonical customer ids inside the viewer's record scope (all when unscoped). */
+    private Set<UUID> inRecordScope(Collection<UUID> canonicalIds, Principal principal) {
+        if (recordAccess == null || subjects == null || canonicalIds.isEmpty()) return new HashSet<>(canonicalIds);
+        Class<?> type = binding.catalog().type();
+        var subject = subjects.resolve(principal);
+        if (!recordAccess.policies().isScoped(type, subject, su.onno.access.AccessMode.READ)) {
+            return new HashSet<>(canonicalIds);
+        }
+        return recordAccess.filter(subject, type, canonicalIds, su.onno.access.AccessMode.READ);
+    }
 
     public CrmContactService(CrmCustomerBinding<?> binding, ConversationRepository conversations,
             ContactIdentityRepository identities, CrmWorkspaceService workspace, JdbcTemplate jdbc, UiAccessService access) {
@@ -43,7 +67,9 @@ public class CrmContactService {
         throw new IllegalArgumentException("Contact redirect cycle");
     }
     public boolean canRead(UUID id, Principal principal) {
-        return access.canRead(principal,"catalog",catalogName()) && binding.catalog().canRead(canonical(id),principal);
+        UUID canonicalId=canonical(id);
+        return access.canRead(principal,"catalog",catalogName()) && binding.catalog().canRead(canonicalId,principal)
+                && inRecordScope(List.of(canonicalId),principal).contains(canonicalId);
     }
 
     /**
@@ -82,12 +108,16 @@ public class CrmContactService {
     public Set<UUID> readable(Collection<UUID> ids, Principal principal) {
         if(ids.isEmpty() || !access.canRead(principal,"catalog",catalogName())) return Set.of();
         var redirects=redirects();
+        var canonicalIds=new java.util.LinkedHashSet<UUID>();
+        for(UUID id:ids) if(id!=null) canonicalIds.add(canonical(id,redirects));
+        // The record policy narrows in one query for the whole page.
+        var scoped=inRecordScope(canonicalIds,principal);
         var allowed=new java.util.HashSet<UUID>();
         var decided=new java.util.HashMap<UUID,Boolean>();
         for(UUID id:ids) {
             if(id==null) continue;
             if(decided.computeIfAbsent(canonical(id,redirects),canonicalId->
-                    binding.catalog().canRead(canonicalId,principal))) allowed.add(id);
+                    scoped.contains(canonicalId) && binding.catalog().canRead(canonicalId,principal))) allowed.add(id);
         }
         return allowed;
     }

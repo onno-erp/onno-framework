@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -86,7 +87,7 @@ class WidgetBucketsTest {
         insert("new", null, LocalDateTime.of(2026, 1, 6, 10, 0), "20");
         insert("done", null, LocalDateTime.of(2026, 1, 7, 10, 0), "5");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("status"), null, null, null, null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -105,7 +106,7 @@ class WidgetBucketsTest {
         insert("new", null, LocalDateTime.of(2026, 1, 8, 9, 0), "40");
         insert("new", null, LocalDateTime.of(2025, 6, 1, 9, 0), "999"); // outside the window
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("sum", col("amount"), col("placedAt"), "day", null, null,
                         col("placedAt"), "2026-01-04T00:00:00", "2026-01-10T00:00:00"));
 
@@ -133,7 +134,7 @@ class WidgetBucketsTest {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
         insert("new", null, LocalDateTime.of(2026, 1, 8, 9, 0), "40");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("placedAt"), "day", null, null, null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -153,7 +154,7 @@ class WidgetBucketsTest {
         insert("done", null, LocalDateTime.of(2026, 1, 5, 15, 0), "20");
         insert("new", null, LocalDateTime.of(2026, 1, 7, 9, 0), "5");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("placedAt"), "day", col("status"), null,
                         col("placedAt"), "2026-01-05T00:00:00", "2026-01-08T00:00:00"));
 
@@ -176,7 +177,7 @@ class WidgetBucketsTest {
     void oversizedSpineTruncatesAtMaxBuckets() {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("placedAt"), "day", null, null,
                         col("placedAt"), "2020-01-01T00:00:00", "2026-12-31T00:00:00"));
 
@@ -192,7 +193,7 @@ class WidgetBucketsTest {
         insert("new", null, LocalDateTime.of(2026, 1, 6, 9, 0), "1");   // Tue of ISO week 2
         insert("new", null, LocalDateTime.of(2026, 1, 8, 9, 0), "1");   // Thu of the same week
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("placedAt"), "week", null, null, null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -212,7 +213,7 @@ class WidgetBucketsTest {
         insert("done", null, LocalDateTime.of(2026, 1, 5, 15, 0), "20");
         insert("canceled", null, LocalDateTime.of(2026, 1, 5, 16, 0), "99");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("sum", col("amount"), col("placedAt"), "day", col("status"),
                         col("status") + " != canceled", null, null, null));
 
@@ -230,7 +231,7 @@ class WidgetBucketsTest {
                 .bind("id", customer).execute());
         insert("new", customer, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("customer"), null, null, null, null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -246,7 +247,7 @@ class WidgetBucketsTest {
         insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
         insert("done", null, LocalDateTime.of(2026, 1, 6, 9, 0), "5");
 
-        Map<String, Object> out = service.aggregateBuckets(orders,
+        Map<String, Object> out = service.aggregateBuckets(AccessSubject.system(), orders,
                 request("sum", col("amount"), null, null, null, null, null, null, null));
 
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) out.get("buckets");
@@ -258,16 +259,16 @@ class WidgetBucketsTest {
 
     @Test
     void unknownColumnsAndUnitsAreRejected() {
-        assertThatThrownBy(() -> service.aggregateBuckets(orders,
+        assertThatThrownBy(() -> service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, "no_such_col", null, null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.aggregateBuckets(orders,
+        assertThatThrownBy(() -> service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, "x; DROP TABLE t", null, null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.aggregateBuckets(orders,
+        assertThatThrownBy(() -> service.aggregateBuckets(AccessSubject.system(), orders,
                 request("count", null, col("placedAt"), "decade", null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> service.aggregateBuckets(orders,
+        assertThatThrownBy(() -> service.aggregateBuckets(AccessSubject.system(), orders,
                 request("sum", "no_such_col", col("status"), null, null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class);
     }

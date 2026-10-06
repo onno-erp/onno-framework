@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
@@ -19,19 +20,43 @@ import java.util.UUID;
 
 /**
  * Read-side queries for documents (list with optional date range; detail with
- * tabular sections), shared by the REST API and the DivKit emitters. Pure data
- * access — access control stays with the callers.
+ * tabular sections), shared by the REST API and the DivKit emitters.
+ *
+ * <p>Every read takes the {@link AccessSubject} it is made for. Entity-level RBAC stays with the
+ * callers; the subject's <strong>record scope</strong> is applied here, inside the {@code WHERE}.
+ * Tabular sections inherit the document's scope (they are only reachable through it). Trusted code
+ * passes {@link AccessSubject#system()}.
  */
 public class DocumentQueryService {
 
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
     private final RefResolver refResolver;
+    private final RecordScopeCompiler scopes;
+    private final UiAccessService access;
 
+    /** A service without record policies (every subject unscoped) — for tests and tools. */
     public DocumentQueryService(MetadataRegistry registry, Jdbi jdbi) {
+        this(registry, jdbi, RecordScopeCompiler.unrestricted(registry), new UiAccessService(registry));
+    }
+
+    public DocumentQueryService(MetadataRegistry registry, Jdbi jdbi, RecordScopeCompiler scopes,
+                                UiAccessService access) {
         this.registry = registry;
         this.jdbi = jdbi;
-        this.refResolver = new RefResolver(registry, jdbi);
+        this.scopes = scopes;
+        this.access = access;
+        this.refResolver = new RefResolver(registry, jdbi, scopes, access);
+    }
+
+    /** The ref resolver bound to this service's policies. */
+    public RefResolver refResolver() {
+        return refResolver;
+    }
+
+    /** The record-scope compiler this service applies. */
+    public RecordScopeCompiler scopes() {
+        return scopes;
     }
 
     public DocumentDescriptor require(String name) {
@@ -57,8 +82,8 @@ public class DocumentQueryService {
      * document is findable by a secondary attribute, not just its number (issue #184). Live records
      * only, newest first.
      */
-    public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit) {
-        return search(desc, query, limit, null);
+    public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query, int limit) {
+        return search(subject, desc, query, limit, null);
     }
 
     /**
@@ -67,12 +92,15 @@ public class DocumentQueryService {
      * {@code refFilter} here, so only compatible documents are offered. Ref/enum columns bind as
      * typed uuids (PG-strict); a null/blank/invalid predicate is simply no filter.
      */
-    public List<Map<String, Object>> search(DocumentDescriptor desc, String query, int limit, String filter) {
+    public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
+                                            int limit, String filter) {
         EntitySurfaceDescriptor surface = surface(desc);
         WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        ScopeClause scope = scope(subject, surface);
+        ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
                 + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")")
-                + searchClause(surface, query);
+                + search.and() + scope.and();
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
                             " WHERE " + where +
@@ -80,9 +108,11 @@ public class DocumentQueryService {
                     .bind("limit", limit);
             wf.bindings().forEach(q::bind);
             EntityQuerySupport.bindSearch(q, query);
+            search.bind(q);
+            scope.bind(q);
             return q.mapToMap().list();
         });
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
         return rows;
     }
 
@@ -91,8 +121,8 @@ public class DocumentQueryService {
      * in the same column-keyed, ref-resolved shape {@link #get} returns for an existing record, so
      * the New form pre-fills declared defaults instead of opening blank (issue #181).
      */
-    public Map<String, Object> newDraft(DocumentDescriptor desc) {
-        return newDraft(desc, Map.of());
+    public Map<String, Object> newDraft(AccessSubject subject, DocumentDescriptor desc) {
+        return newDraft(subject, desc, Map.of());
     }
 
     /**
@@ -100,16 +130,19 @@ public class DocumentQueryService {
      * New-form navigation query, keyed by attribute field name) onto the seed row before ref/enum
      * resolution — so a deep link like {@code …/new?startsAt=…&room=<id>} pre-fills those fields.
      */
-    public Map<String, Object> newDraft(DocumentDescriptor desc, Map<String, String> prefill) {
+    public Map<String, Object> newDraft(AccessSubject subject, DocumentDescriptor desc, Map<String, String> prefill) {
         Map<String, Object> row = NewEntityDefaults.columnValues(desc.javaClass(), desc.attributes(), registry);
-        NewEntityDefaults.applyPrefill(row, desc.attributes(), prefill);
-        refResolver.resolveAttributes(List.of(row), desc.attributes());
+        NewEntityDefaults.applyPrefill(row, desc.attributes(), EntityQuerySupport.withDefaults(prefill,
+                EntityQuerySupport.policyDefaults(scopes, desc.javaClass(), subject)));
+        refResolver.resolveAttributes(List.of(row), desc.attributes(), subject);
         return row;
     }
 
-    public long count(DocumentDescriptor desc) {
+    public long count(AccessSubject subject, DocumentDescriptor desc) {
+        ScopeClause scope = scope(subject, surface(desc));
         return jdbi.withHandle(h ->
-                h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _deletion_mark = false")
+                scope.bind(h.createQuery("SELECT COUNT(*) FROM " + desc.tableName()
+                                + " WHERE _deletion_mark = false" + scope.and()))
                         .mapTo(Long.class)
                         .one());
     }
@@ -121,26 +154,30 @@ public class DocumentQueryService {
      * extra row for {@code hasMore} (no COUNT), and mints the next cursor
      * from the last row. The default newest-first order seeks on {@code (_date, _id)}.
      */
-    public KeysetPage keysetPage(DocumentDescriptor desc, String cursorToken, int limit,
+    public KeysetPage keysetPage(AccessSubject subject, DocumentDescriptor desc, String cursorToken, int limit,
                                  String sortColumn, boolean descending, String search,
                                  String from, String to,
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
+        String fingerprint = scopes.policies().fingerprint(subject);
         boolean defaultSort = surface.isDefaultSort(sortColumn);
         String col = surface.safeSort(sortColumn);
         boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
-        Cursor cursor = Cursor.decodeFor(cursorToken, col, dirDesc);
+        Cursor cursor = Cursor.decodeFor(EntityQuerySupport.openCursor(cursorToken, fingerprint), col, dirDesc);
         Keyset.Plan plan = Keyset.plan(col, dirDesc, !surface.isNonNullableSort(col), cursor);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
-        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
+        ScopeClause scope = scope(subject, surface);
+        ScopeClause searchClause = searchClause(subject, surface, search);
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
+        where.append(scope.and());
         where.append(plan.predicate());
         int lim = Keyset.clampLimit(limit);
 
@@ -151,10 +188,12 @@ public class DocumentQueryService {
                             " LIMIT :limit")
                     .bind("limit", lim + 1); // one extra row tells us whether another window exists
             EntityQuerySupport.bindSearch(q, search);
+            searchClause.bind(q);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
+            scope.bind(q);
             if (plan.hasCursor()) {
                 q.bind(Keyset.ID_BIND, cursor.id());
                 if (plan.bindsValue()) q.bind(Keyset.VALUE_BIND, cursor.value());
@@ -167,9 +206,10 @@ public class DocumentQueryService {
             rows = rows.subList(0, lim);
         }
         String nextCursor = (hasMore && !rows.isEmpty())
-                ? Cursor.from(col, dirDesc, rows.get(rows.size() - 1)).encode()
+                ? EntityQuerySupport.sealCursor(Cursor.from(col, dirDesc, rows.get(rows.size() - 1)).encode(),
+                        fingerprint)
                 : null;
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows);
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
         return new KeysetPage(rows, nextCursor, hasMore);
     }
 
@@ -185,8 +225,9 @@ public class DocumentQueryService {
      * ({@code pg_class.reltuples}) so it never scans the table; callers wanting an exact figure use
      * {@link #count} instead.
      */
-    public Long estimateCount(DocumentDescriptor desc, boolean filtered) {
-        return EntityQuerySupport.estimateCount(jdbi, surface(desc), filtered);
+    public Long estimateCount(AccessSubject subject, DocumentDescriptor desc, boolean filtered) {
+        EntitySurfaceDescriptor surface = surface(desc);
+        return EntityQuerySupport.estimateCount(jdbi, surface, filtered, scope(subject, surface));
     }
 
     /**
@@ -194,30 +235,36 @@ public class DocumentQueryService {
      * secrets redacted) so the list island can refresh just the rows that changed instead of
      * re-paging the whole window. Returns only the rows that still exist and aren't deletion-marked.
      */
-    public List<Map<String, Object>> rowsByIds(DocumentDescriptor desc, List<UUID> ids) {
-        return EntityQuerySupport.rowsByIds(jdbi, refResolver, surface(desc), ids);
+    public List<Map<String, Object>> rowsByIds(AccessSubject subject, DocumentDescriptor desc, List<UUID> ids) {
+        EntitySurfaceDescriptor surface = surface(desc);
+        return EntityQuerySupport.rowsByIds(jdbi, refResolver, surface, ids, scope(subject, surface), subject);
     }
 
     /** Total live rows matching the search (+ optional date range, declarative filters, widget filter). */
-    public long count(DocumentDescriptor desc, String search, String from, String to,
+    public long count(AccessSubject subject, DocumentDescriptor desc, String search, String from, String to,
                       List<String> eq, List<String> in, List<String> like,
                       List<String> prefix, List<String> ge, List<String> le,
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
-        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
+        ScopeClause scope = scope(subject, surface);
+        ScopeClause searchClause = searchClause(subject, surface, search);
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
+        where.append(scope.and());
         return jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT COUNT(*) FROM " + desc.tableName() + " WHERE " + where);
             EntityQuerySupport.bindSearch(q, search);
+            searchClause.bind(q);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
+            scope.bind(q);
             return q.mapTo(Long.class).one();
         });
     }
@@ -230,7 +277,8 @@ public class DocumentQueryService {
      * {@code expand} filter the client replays on the normal feed. Headers capped at
      * {@link ListGroups#MAX_GROUPS}.
      */
-    public ListGroups.GroupResult groups(DocumentDescriptor desc, String groupColumn, String granularity,
+    public ListGroups.GroupResult groups(AccessSubject subject, DocumentDescriptor desc, String groupColumn,
+                                         String granularity,
                                          String search, String from, String to,
                                          List<String> eq, List<String> in, List<String> like,
                                          List<String> prefix, List<String> ge, List<String> le,
@@ -245,11 +293,14 @@ public class DocumentQueryService {
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
-        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause(surface, search));
+        ScopeClause scope = scope(subject, surface);
+        ScopeClause searchClause = searchClause(subject, surface, search);
+        StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
         if (from != null) where.append(" AND _date >= CAST(:from AS TIMESTAMP)");
         if (to != null) where.append(" AND _date <= CAST(:to AS TIMESTAMP)");
         if (!filter.isEmpty()) where.append(" AND (").append(filter.sql()).append(")");
         if (!wf.isEmpty()) where.append(" AND (").append(wf.sql()).append(")");
+        where.append(scope.and());
 
         StringBuilder select = new StringBuilder(groupExpr).append(" AS ").append(groupColumn)
                 .append(", COUNT(*) AS _count");
@@ -272,17 +323,20 @@ public class DocumentQueryService {
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery(sql).bind("limit", ListGroups.MAX_GROUPS + 1);
             EntityQuerySupport.bindSearch(q, search);
+            searchClause.bind(q);
             if (from != null) q.bind("from", from);
             if (to != null) q.bind("to", to);
             filter.bindings().forEach(q::bind);
             wf.bindings().forEach(q::bind);
+            scope.bind(q);
             return q.mapToMap().list();
         });
         boolean capped = rows.size() > ListGroups.MAX_GROUPS;
         if (capped) {
             rows = new ArrayList<>(rows.subList(0, ListGroups.MAX_GROUPS));
         }
-        refResolver.resolveAttributes(rows, desc.attributes());
+        // The raw value stays the group's expand key; a restricted target only has its label masked.
+        refResolver.resolveAttributes(rows, desc.attributes(), subject, false);
         return new ListGroups.GroupResult(
                 ListGroups.buildGroups(rows, groupColumn, date, granularity, valid), capped);
     }
@@ -307,8 +361,13 @@ public class DocumentQueryService {
      * text), each {@code Ref<>} by the displayed value of its target (customer name, assignee), and each
      * enum by its label/name. See {@link Searching}. One bound {@code :search} drives every text term.
      */
-    private String searchClause(EntitySurfaceDescriptor surface, String search) {
-        return EntityQuerySupport.searchClause(registry, surface, search);
+    private ScopeClause searchClause(AccessSubject subject, EntitySurfaceDescriptor surface, String search) {
+        return EntityQuerySupport.searchClause(registry, surface, search,
+                EntityQuerySupport.targetGate(scopes, access, subject));
+    }
+
+    private ScopeClause scope(AccessSubject subject, EntitySurfaceDescriptor surface) {
+        return EntityQuerySupport.readScope(scopes, surface, subject);
     }
 
     /**
@@ -316,31 +375,41 @@ public class DocumentQueryService {
      * {@code sum|avg|min|max} of one numeric column — restricted to live records and
      * narrowed by an optional safe {@code filter} predicate (see {@link WidgetFilter}).
      */
-    public BigDecimal aggregate(DocumentDescriptor desc, String metric, String field, String filter) {
-        return EntityQuerySupport.aggregate(jdbi, surface(desc), metric, field, filter);
+    public BigDecimal aggregate(AccessSubject subject, DocumentDescriptor desc, String metric, String field,
+                                String filter) {
+        EntitySurfaceDescriptor surface = surface(desc);
+        return EntityQuerySupport.aggregate(jdbi, surface, metric, field, filter, scope(subject, surface));
     }
 
     /**
      * Grouped aggregate buckets for a chart/stat widget — a server-side {@code GROUP BY} returning
      * O(buckets) rows instead of the whole table (#199). See {@link WidgetBuckets}.
      */
-    public Map<String, Object> aggregateBuckets(DocumentDescriptor desc, WidgetBuckets.Request request) {
-        return EntityQuerySupport.aggregateBuckets(jdbi, refResolver, surface(desc), request);
+    public Map<String, Object> aggregateBuckets(AccessSubject subject, DocumentDescriptor desc,
+                                                WidgetBuckets.Request request) {
+        EntitySurfaceDescriptor surface = surface(desc);
+        return EntityQuerySupport.aggregateBuckets(jdbi, refResolver, surface, request,
+                scope(subject, surface), subject);
     }
 
     private static EntitySurfaceDescriptor surface(DocumentDescriptor desc) {
         return EntitySurfaceDescriptor.document(desc);
     }
 
-    public Map<String, Object> get(DocumentDescriptor desc, UUID id) {
+    /**
+     * One document with its tabular sections; a document outside the subject's scope is a 404,
+     * exactly like a missing one (its lines are only reachable through it).
+     */
+    public Map<String, Object> get(AccessSubject subject, DocumentDescriptor desc, UUID id) {
+        ScopeClause scope = scope(subject, surface(desc));
         Map<String, Object> doc = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")
+                scope.bind(h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id" + scope.and()))
                         .bind("id", id)
                         .mapToMap()
                         .findOne()
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
         );
-        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), List.of(doc));
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), List.of(doc), subject);
 
         for (TabularSectionDescriptor ts : desc.tabularSections()) {
             List<Map<String, Object>> rows = jdbi.withHandle(h ->
@@ -350,9 +419,18 @@ public class DocumentQueryService {
                             .mapToMap()
                             .list()
             );
-            EntityQuerySupport.decorateRows(refResolver, ts.attributes(), rows);
+            EntityQuerySupport.decorateRows(refResolver, ts.attributes(), rows, subject);
             doc.put(ts.name(), rows);
         }
         return doc;
+    }
+
+    /** Whether document {@code id} exists within the subject's scope for {@code mode} (deleted rows included). */
+    public boolean inScope(AccessSubject subject, DocumentDescriptor desc, UUID id, su.onno.access.AccessMode mode) {
+        ScopeClause scope = scopes.clause(desc.javaClass(), subject, mode, desc.tableName());
+        return jdbi.withHandle(h -> scope.bind(h.createQuery(
+                        "SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _id = :id" + scope.and()))
+                .bind("id", id)
+                .mapTo(Long.class).one() > 0);
     }
 }

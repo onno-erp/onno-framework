@@ -40,16 +40,23 @@ public class NotificationController {
 
     private final NotificationService notifications;
     private final CurrentUserResolver currentUser;
+    private final su.onno.ui.RecordAccess recordAccess;
 
     public NotificationController(NotificationService notifications, CurrentUserResolver currentUser) {
+        this(notifications, currentUser, null);
+    }
+
+    public NotificationController(NotificationService notifications, CurrentUserResolver currentUser,
+                                  su.onno.ui.RecordAccess recordAccess) {
         this.notifications = notifications;
         this.currentUser = currentUser;
+        this.recordAccess = recordAccess;
     }
 
     @GetMapping
     public Map<String, Object> list(@RequestParam(required = false, defaultValue = "false") boolean unread,
                                     @RequestParam(required = false) String cursor,
-                                    Principal principal) {
+                                    Principal principal, su.onno.access.AccessSubject subject) {
         String recipient = recipient(principal);
         Map<String, Object> out = new LinkedHashMap<>();
         if (recipient == null) {
@@ -61,7 +68,11 @@ public class NotificationController {
             return out;
         }
         NotificationStore.Page page = notifications.list(recipient, unread, cursor);
-        out.put("items", page.items().stream().map(NotificationController::toJson).toList());
+        // A notification about a record the viewer can no longer read (outside its record scope) is
+        // withheld — its title snapshots the record's label.
+        out.put("items", page.items().stream()
+                .filter(n -> recordAccess == null || recordAccess.canReadRoute(subject, n.link()))
+                .map(NotificationController::toJson).toList());
         out.put("nextCursor", page.nextCursor());
         out.put("hasMore", page.hasMore());
         out.put("unreadCount", notifications.unreadCount(recipient));

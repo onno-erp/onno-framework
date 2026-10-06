@@ -1,5 +1,8 @@
 package su.onno.mcp;
 
+import su.onno.access.AccessSubject;
+import su.onno.ui.AccessSubjectResolver;
+
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -24,12 +27,27 @@ import java.util.Map;
  * survive the hop to a Reactor scheduler thread.
  *
  * <p>This makes every tool execute as the connecting user, so the existing
- * {@code UiAccessService} deny-by-default role checks apply unchanged.
+ * {@code UiAccessService} deny-by-default role checks apply unchanged. The user's full
+ * {@link AccessSubject} (roles, identity record, contributed attributes) is resolved here too, on
+ * the request thread, so every tool also runs inside the user's record scope.
  */
 public class McpPrincipalContext implements McpTransportContextExtractor<HttpServletRequest> {
 
     /** Key under which the captured {@link Principal} is stored in the transport context. */
     public static final String PRINCIPAL_KEY = "onno.principal";
+
+    /** Key under which the resolved {@link AccessSubject} is stored in the transport context. */
+    public static final String SUBJECT_KEY = "onno.subject";
+
+    private final AccessSubjectResolver subjects;
+
+    public McpPrincipalContext() {
+        this(null);
+    }
+
+    public McpPrincipalContext(AccessSubjectResolver subjects) {
+        this.subjects = subjects;
+    }
 
     @Override
     public McpTransportContext extract(HttpServletRequest request) {
@@ -39,8 +57,34 @@ public class McpPrincipalContext implements McpTransportContextExtractor<HttpSer
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             values.put(PRINCIPAL_KEY, authentication);
+            if (subjects != null) {
+                values.put(SUBJECT_KEY, subjects.resolve(authentication));
+            }
         }
         return McpTransportContext.create(values);
+    }
+
+    /**
+     * The access subject captured for the current tool call. An anonymous call — or one made
+     * without a subject resolver — yields a user with no roles (denied everything), never the
+     * trusted {@link AccessSubject#system()} subject.
+     */
+    public static AccessSubject subject(McpSyncServerExchange exchange) {
+        McpTransportContext context = exchange == null ? null : exchange.transportContext();
+        Object value = context == null ? null : context.get(SUBJECT_KEY);
+        if (value instanceof AccessSubject subject) {
+            return subject;
+        }
+        Principal principal = principal(exchange);
+        return AccessSubject.user(principal == null ? null : principal.getName(), rolesOf(principal));
+    }
+
+    private static java.util.Set<String> rolesOf(Principal principal) {
+        java.util.Set<String> roles = new java.util.LinkedHashSet<>();
+        if (principal instanceof Authentication auth) {
+            auth.getAuthorities().forEach(a -> roles.add(a.getAuthority()));
+        }
+        return roles;
     }
 
     /**

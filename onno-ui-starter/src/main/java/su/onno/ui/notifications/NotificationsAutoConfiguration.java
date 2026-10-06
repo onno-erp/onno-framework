@@ -49,8 +49,9 @@ public class NotificationsAutoConfiguration {
 
     @Bean
     public NotificationController notificationController(NotificationService notificationService,
-                                                        CurrentUserResolver currentUserResolver) {
-        return new NotificationController(notificationService, currentUserResolver);
+                                                        CurrentUserResolver currentUserResolver,
+                                                        su.onno.ui.RecordAccess recordAccess) {
+        return new NotificationController(notificationService, currentUserResolver, recordAccess);
     }
 
     @Bean
