@@ -51,11 +51,11 @@ public class UiViewResolver {
     }
 
     public ResolvedListView catalogList(CatalogDescriptor d, String profileId) {
-        return resolveList(d.javaClass(), profileId, metadata.describeCatalog(d));
+        return resolveList(d.javaClass(), profileId, metadata.describeCatalog(d, profileId));
     }
 
     public ResolvedListView documentList(DocumentDescriptor d, String profileId) {
-        return resolveList(d.javaClass(), profileId, metadata.describeDocument(d));
+        return resolveList(d.javaClass(), profileId, metadata.describeDocument(d, profileId));
     }
 
     /**

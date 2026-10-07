@@ -82,3 +82,15 @@ See the [record access policies guide](RECORD_ACCESS_POLICIES.md).
 4. If users relied on seeing display names of refs into entities they cannot read, grant those
    roles read access (`@AccessControl(readRoles = …)`).
 5. Clients that replay keyset cursors across users get a 400 for record-scoped users.
+
+## 3.4.1
+
+- **Profile-specific views now shape the record surface, not only the list.** An `EntityView` with
+  `profile()` set used to change that profile's list columns while the record form, its field hints,
+  `detail(...)` widgets, action placement and form validations still came from the default view — so
+  an external-user persona (e.g. a customer console) was shown the back-office record form. The
+  record surface (`/catalogs|documents/{name}/{id}`, `/new`, `/duplicate`) and the list's field
+  metadata now resolve per profile with the same rule lists already used: the profile's own view
+  wins as a whole, otherwise the default view applies. Apps without profile-specific views are
+  unaffected. `ResolvedMetadataService.describeCatalog/describeDocument/actionOverrides` gained
+  profile-taking overloads; the existing signatures keep returning the default view.

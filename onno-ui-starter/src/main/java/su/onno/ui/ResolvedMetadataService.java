@@ -33,7 +33,17 @@ public class ResolvedMetadataService {
         this.fieldHints = fieldHints;
     }
 
+    /** The catalog as its default view describes it. */
     public Map<String, Object> describeCatalog(CatalogDescriptor d) {
+        return describeCatalog(d, null);
+    }
+
+    /**
+     * The catalog as {@code profileId} sees it: field hints, related lists, form validations and
+     * detail widgets come from the profile's own {@link EntityView} when it declares one, else the
+     * default view's (see {@link FieldHintResolver}).
+     */
+    public Map<String, Object> describeCatalog(CatalogDescriptor d, String profileId) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
         map.put("title", d.displayTitle());
@@ -45,14 +55,14 @@ public class ResolvedMetadataService {
         map.put("context", d.context());
         map.put("readRoles", d.readRoles());
         map.put("writeRoles", d.writeRoles());
-        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
+        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass(), profileId);
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
                 systemColumn("code", "Code", "_code", hints),
                 systemColumn("description", "Description", "_description", hints)));
-        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
-        map.put("formValidations", describeFormValidations(d.javaClass()));
-        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "catalog", d.logicalName()));
+        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName(), profileId));
+        map.put("formValidations", describeFormValidations(d.javaClass(), profileId));
+        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "catalog", d.logicalName(), profileId));
         return map;
     }
 
@@ -76,9 +86,10 @@ public class ResolvedMetadataService {
      * "register"}): they render rows in both directions but offer no inline add/remove, since
      * information registers have no generic write REST surface yet.</p>
      */
-    private List<Map<String, Object>> describeRelatedLists(Class<?> parentClass, String parentLogicalName) {
+    private List<Map<String, Object>> describeRelatedLists(Class<?> parentClass, String parentLogicalName,
+                                                           String profileId) {
         List<Map<String, Object>> out = new java.util.ArrayList<>();
-        for (RelatedList rl : fieldHints.relatedListsFor(parentClass)) {
+        for (RelatedList rl : fieldHints.relatedListsFor(parentClass, profileId)) {
             Junctions.Junction junction = Junctions.resolve(registry, rl.junction());
             if (junction == null) {
                 continue;
@@ -137,14 +148,20 @@ public class ResolvedMetadataService {
             m.put("showInDetail", !rl.hideInDetail());
             // Catalog junctions carry per-field UI hints from their own view; registers don't yet.
             Map<String, FieldHint> joinHints = junction.isRegister()
-                    ? Map.of() : fieldHints.forEntity(junction.catalog().javaClass());
+                    ? Map.of() : fieldHints.forEntity(junction.catalog().javaClass(), profileId);
             m.put("columns", describeAttributes(columns, joinHints));
             out.add(m);
         }
         return out;
     }
 
+    /** The document as its default view describes it. */
     public Map<String, Object> describeDocument(DocumentDescriptor d) {
+        return describeDocument(d, null);
+    }
+
+    /** The document as {@code profileId} sees it — see {@link #describeCatalog(CatalogDescriptor, String)}. */
+    public Map<String, Object> describeDocument(DocumentDescriptor d, String profileId) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("name", d.logicalName());
         map.put("title", d.displayTitle());
@@ -162,13 +179,13 @@ public class ResolvedMetadataService {
         // Record-form action placement. Post is the primary button; Unpost/Delete live in the
         // overflow (⋯) menu. A view overrides
         // per action via f.action("...").primary()/.inMenu()/.hidden().
-        Map<String, String> actionOverrides = fieldHints.actionsFor(d.javaClass());
+        Map<String, String> actionOverrides = fieldHints.actionsFor(d.javaClass(), profileId);
         Map<String, Object> actions = new LinkedHashMap<>();
         actions.put("post", actionOverrides.getOrDefault("post", "primary"));
         actions.put("unpost", actionOverrides.getOrDefault("unpost", "menu"));
         actions.put("delete", actionOverrides.getOrDefault("delete", "menu"));
         map.put("actions", actions);
-        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass());
+        Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass(), profileId);
         map.put("attributes", describeAttributes(d.attributes(), hints));
         map.put("systemColumns", List.of(
                 systemColumn("number", "Number", "_number", hints),
@@ -188,15 +205,15 @@ public class ResolvedMetadataService {
         // Documents surface related-list panels too (1C parity): a booking can show its guests —
         // the reverse side of a Booking↔Client junction — read-only on the detail and editable in
         // the form, exactly like a catalog. See #110.
-        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName()));
-        map.put("formValidations", describeFormValidations(d.javaClass()));
-        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "document", d.logicalName()));
+        map.put("relatedLists", describeRelatedLists(d.javaClass(), d.logicalName(), profileId));
+        map.put("formValidations", describeFormValidations(d.javaClass(), profileId));
+        map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "document", d.logicalName(), profileId));
         return map;
     }
 
     private List<Map<String, Object>> describeDetailWidgets(Class<?> entity, String entityType,
-                                                             String entityName) {
-        return fieldHints.detailWidgetsFor(entity).stream().map(widget -> {
+                                                             String entityName, String profileId) {
+        return fieldHints.detailWidgetsFor(entity, profileId).stream().map(widget -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("title", widget.title());
             map.put("widgetType", widget.type());
@@ -213,8 +230,8 @@ public class ResolvedMetadataService {
         }).toList();
     }
 
-    private List<Map<String, Object>> describeFormValidations(Class<?> entity) {
-        return fieldHints.validationsFor(entity).stream().map(validation -> {
+    private List<Map<String, Object>> describeFormValidations(Class<?> entity, String profileId) {
+        return fieldHints.validationsFor(entity, profileId).stream().map(validation -> {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("key", validation.key());
             map.put("dependencies", validation.dependencies());
@@ -232,7 +249,12 @@ public class ResolvedMetadataService {
      * can honor a placement override on a custom action too (issue #183).
      */
     public Map<String, String> actionOverrides(Class<?> entity) {
-        return fieldHints.actionsFor(entity);
+        return actionOverrides(entity, null);
+    }
+
+    /** {@link #actionOverrides(Class)} as {@code profileId}'s view authors them. */
+    public Map<String, String> actionOverrides(Class<?> entity, String profileId) {
+        return fieldHints.actionsFor(entity, profileId);
     }
 
     public Map<String, Object> describeRegister(AccumulationRegisterDescriptor d) {
