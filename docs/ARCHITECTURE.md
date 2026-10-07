@@ -478,7 +478,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   the view layer is the allowlist (no view → `404`).** This gates reachability, not nav presence: a
   view makes the entity reachable by its direct route, but it shows in the sidebar only once a
   `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not
-  sufficient for nav presence.
+  sufficient for nav presence. A profile-specific view (`profile()` set) shapes that profile's
+  whole surface — list, record form fields, detail widgets, action placement and form validations —
+  replacing (not merging with) the default view; other profiles keep the default view.
 
 Server-side rendering uses **DivKit**: the controllers emit DivKit card JSON resolved for the
 caller's persona, roles, theme, and viewport. The same contract drives the bundled React/Vite SPA

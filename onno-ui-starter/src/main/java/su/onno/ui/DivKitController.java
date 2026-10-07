@@ -835,9 +835,10 @@ public class DivKitController implements DisposableBean {
                                              Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
+        String profileId = activeProfile(principal, profile).id();
+        requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Load the record before building the actions: the custom DETAIL actions' per-record
         // functions (visibleWhen/label/…) evaluate against it (#255). Outside the viewer's record
         // scope this is a 404, like a missing record.
@@ -855,7 +856,7 @@ public class DivKitController implements DisposableBean {
                     List.of(), Map.of(), false, false));
             // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
             actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass()), row));
+                    resolvedMetadata.actionOverrides(desc.javaClass(), profileId), row));
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -877,8 +878,9 @@ public class DivKitController implements DisposableBean {
                                           @RequestParam Map<String, String> params, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, params.get("profile")).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
+        String profileId = activeProfile(principal, params.get("profile")).id();
+        requireView(desc.javaClass(), profileId);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Extra query params
         // overlay onto that seed as initial field values.
@@ -894,8 +896,9 @@ public class DivKitController implements DisposableBean {
                                                 Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc), principal);
+        String profileId = activeProfile(principal, profile).id();
+        requireView(desc.javaClass(), profileId);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         Map<String, Object> draft = duplicateDraft(catalogQuery.get(subject(principal), desc, id), desc.attributes());
         return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
                 EntityJsonRepresentation.catalog(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
@@ -934,9 +937,10 @@ public class DivKitController implements DisposableBean {
                                               Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
+        String profileId = activeProfile(principal, profile).id();
+        requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> row = documentQuery.get(subject, desc, id);
         // A document the viewer can read but not change (outside its write scope) renders read-only.
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
@@ -965,7 +969,7 @@ public class DivKitController implements DisposableBean {
             // the same override map the built-in unpost/duplicate/delete actions read above. Their
             // per-record functions evaluate against the loaded row (#255).
             actions.addAll(detailActions(desc.javaClass(), "documents", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass()), row));
+                    resolvedMetadata.actionOverrides(desc.javaClass(), profileId), row));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -985,8 +989,9 @@ public class DivKitController implements DisposableBean {
                                            @RequestParam Map<String, String> params, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, params.get("profile")).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
+        String profileId = activeProfile(principal, params.get("profile")).id();
+        requireView(desc.javaClass(), profileId);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
         // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
@@ -1009,8 +1014,9 @@ public class DivKitController implements DisposableBean {
                                                  Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        requireView(desc.javaClass(), activeProfile(principal, profile).id());
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc), principal);
+        String profileId = activeProfile(principal, profile).id();
+        requireView(desc.javaClass(), profileId);
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(subject(principal), desc, id), desc.attributes());
         return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
                 EntityJsonRepresentation.document(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);

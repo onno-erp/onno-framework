@@ -334,7 +334,8 @@ because they are not Java field references.
   mistyped path, silently returns the app shell instead of a 404, and won't render under `nosniff`.
   `/api/**` and `{onno.ui.path}/plugins/**` are exempt. For a custom path or content-type, add a
   dedicated `@GetMapping` (a controller out-precedences the SPA fallback).
-- `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`,
+- `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`
+  (a profile's own view replaces the default one for its list *and* record surface),
   `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `detail(DetailSpec<E>)`,
   `actions(ActionSpec)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
