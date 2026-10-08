@@ -4,6 +4,7 @@ import {
   FALLBACK_RANGE,
   autoGranularityForRange,
   presetById,
+  sameRange,
   type RangePreset,
   type TimeGranularity,
   type TimeGranularityMode,
@@ -33,8 +34,9 @@ interface TimeRangeContextValue {
   setAbsolute: (from?: string, to?: string) => void;
   /**
    * Let the placed `timeRange` widget supply this dashboard's presets and default. The default is
-   * applied only when the user hasn't already chosen a range (nothing persisted), so a saved
-   * selection always wins.
+   * applied when the user hasn't chosen a range (nothing persisted), and when the persisted one is
+   * a relative range this dashboard's ladder doesn't offer — a saved pick it does offer, and any
+   * absolute window, still wins.
    */
   configure: (opts: { presets?: RangePreset[]; defaultRangeId?: string }) => void;
 }
@@ -82,7 +84,8 @@ function samePresetIds(a: RangePreset[], b: RangePreset[]): boolean {
 }
 
 export function TimeRangeProvider({ children }: { children: ReactNode }) {
-  // Whether the user has a persisted selection — gates whether a dashboard's default applies.
+  // The user's persisted selection, if any — gates whether a dashboard's default applies, and is
+  // rewritten when a dashboard falls back because its ladder doesn't offer the saved range.
   const persisted = useRef<TimeRange | null>(load());
   const [range, setRange] = useState<TimeRange>(persisted.current ?? FALLBACK_RANGE);
   const [granularity, setGranularity] = useState<TimeGranularityMode>(loadGranularity);
@@ -138,7 +141,19 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
         const p = presetById(list, opts.defaultRangeId);
         if (p) {
           defaultRange.current = p.range;
-          if (!persisted.current) setRange(p.range); // only when the user hasn't chosen
+          // A saved selection wins — but only one this dashboard actually offers. A relative range
+          // carried over from a board with a different ladder ("last hour" from a logs view landing
+          // on a 30d–1y business board) would otherwise apply invisibly: every widget reads an empty
+          // window while the chip renders no value, so the page looks broken rather than filtered.
+          // Such a range falls back to this dashboard's default, which then persists as the choice.
+          const offered =
+            !!persisted.current &&
+            (persisted.current.kind === "absolute" ||
+              list.some((candidate) => sameRange(candidate.range, persisted.current!)));
+          if (!persisted.current || !offered) {
+            persisted.current = p.range;
+            setRange(p.range);
+          }
         }
       }
     },
