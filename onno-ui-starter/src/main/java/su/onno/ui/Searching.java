@@ -7,6 +7,7 @@ import su.onno.metadata.MetadataRegistry;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +28,10 @@ import java.util.stream.Collectors;
  * <p>The one bound {@code :search} parameter ({@code %term%}, lowercased) drives every text/ref term;
  * enum matches inline their value ids, which come from trusted metadata (never user input) and so are
  * safe to embed directly.
+ *
+ * <p>A ref term only looks through targets its viewer may read: a target entity without a read grant
+ * contributes no term, and a record-scoped target carries its scope inside the {@code EXISTS} — so
+ * search can never be used as an oracle for the display names of records the viewer can't open.
  */
 final class Searching {
 
@@ -34,27 +39,52 @@ final class Searching {
     }
 
     /**
-     * One OR-term matching {@code search} against attribute {@code a}, or {@code null} when the
-     * attribute can contribute nothing to the match (an enum none of whose values match the term).
+     * Decides what a ref search term may look through: {@code null} when the viewer may not read the
+     * target entity (no term), {@link ScopeClause#ALL} when unrestricted, else the target's scope
+     * qualified by {@code alias}.
      */
-    static String term(MetadataRegistry registry, AttributeDescriptor a, String search) {
-        String col = a.columnName();
+    @FunctionalInterface
+    interface TargetGate {
+        ScopeClause gate(String kind, String logicalName, Class<?> type, String alias);
+
+        /** Everything readable: the trusted/system view. */
+        TargetGate OPEN = (kind, name, type, alias) -> ScopeClause.ALL;
+    }
+
+    /**
+     * One OR-term matching {@code search} against attribute {@code a}, or {@code null} when the
+     * attribute can contribute nothing to the match (an enum none of whose values match the term, or
+     * a ref whose target the viewer may not read). {@code outer} qualifies the searched table's
+     * columns (so a self-referencing ref never resolves to the subquery's own column); {@code alias}
+     * must be unique within the query; bindings a target scope needs are added to {@code bindings}.
+     */
+    static String term(MetadataRegistry registry, AttributeDescriptor a, String search, String outer,
+                       String alias, TargetGate gate, Map<String, Object> bindings) {
+        String col = outer == null || outer.isEmpty() ? a.columnName() : outer + "." + a.columnName();
         if (a.isPolymorphicRef()) {
-            List<String> targets = a.refTargets().stream()
-                    .map(target -> polymorphicRefTerm(registry, col, target))
-                    .filter(java.util.Objects::nonNull)
-                    .toList();
-            return targets.isEmpty() ? likeVarchar(col) : "(" + String.join(" OR ", targets) + ")";
+            List<String> targets = new java.util.ArrayList<>();
+            int i = 0;
+            for (su.onno.metadata.ReferenceTargetDescriptor target : a.refTargets()) {
+                String term = polymorphicRefTerm(registry, col, target, alias + "_" + (i++), gate, bindings);
+                if (term != null) targets.add(term);
+            }
+            return targets.isEmpty() ? null : "(" + String.join(" OR ", targets) + ")";
         }
         if (a.isRef() && a.refTarget() != null) {
             RefTarget rt = refTarget(registry, a.refTarget());
             if (rt == null) {
                 return likeVarchar(col); // unknown target — fall back to matching the raw ref column
             }
+            ScopeClause scope = gate.gate(rt.kind(), rt.logicalName(), rt.type(), alias);
+            if (scope == null) {
+                return null; // the viewer may not read the target entity: never search through it
+            }
+            bindings.putAll(scope.bindings());
             String display = rt.displayCols().stream()
-                    .map(dc -> "LOWER(CAST(t." + dc + " AS VARCHAR)) LIKE :search")
+                    .map(dc -> "LOWER(CAST(" + alias + "." + dc + " AS VARCHAR)) LIKE :search")
                     .collect(Collectors.joining(" OR "));
-            return "EXISTS (SELECT 1 FROM " + rt.table() + " t WHERE t._id = " + col + " AND (" + display + "))";
+            return "EXISTS (SELECT 1 FROM " + rt.table() + " " + alias + " WHERE " + alias + "._id = " + col
+                    + " AND (" + display + ")" + scope.and() + ")";
         }
         if (a.javaType().isEnum()) {
             List<String> ids = enumIdsMatching(registry, a.javaType(), search);
@@ -74,33 +104,42 @@ final class Searching {
         return "LOWER(CAST(" + column + " AS VARCHAR)) LIKE :search";
     }
 
-    private record RefTarget(String table, List<String> displayCols) {}
+    private record RefTarget(String kind, String logicalName, Class<?> type, String table,
+                             List<String> displayCols) {}
 
     private static String polymorphicRefTerm(
             MetadataRegistry registry,
             String column,
-            su.onno.metadata.ReferenceTargetDescriptor target) {
+            su.onno.metadata.ReferenceTargetDescriptor target,
+            String alias,
+            TargetGate gate,
+            Map<String, Object> bindings) {
         RefTarget resolved = refTarget(registry, target.logicalName());
         if (resolved == null) return null;
+        ScopeClause scope = gate.gate(resolved.kind(), resolved.logicalName(), resolved.type(), alias);
+        if (scope == null) return null;
+        bindings.putAll(scope.bindings());
         String display = resolved.displayCols().stream()
-                .map(dc -> "LOWER(CAST(t." + dc + " AS VARCHAR)) LIKE :search")
+                .map(dc -> "LOWER(CAST(" + alias + "." + dc + " AS VARCHAR)) LIKE :search")
                 .collect(Collectors.joining(" OR "));
         String typePrefix = target.javaTypeName().replace("'", "''") + "|";
         return "EXISTS (SELECT 1 FROM " + resolved.table()
-                + " t WHERE " + column + " = '" + typePrefix
-                + "' || CAST(t._id AS VARCHAR) AND (" + display + "))";
+                + " " + alias + " WHERE " + column + " = '" + typePrefix
+                + "' || CAST(" + alias + "._id AS VARCHAR) AND (" + display + ")" + scope.and() + ")";
     }
 
     /** Resolve a ref's registered logical name to its table + the column(s) shown for a target row. */
     private static RefTarget refTarget(MetadataRegistry registry, String logicalName) {
         for (CatalogDescriptor c : registry.allCatalogs()) {
             if (c.logicalName().equals(logicalName)) {
-                return new RefTarget(c.tableName(), List.of("_description", "_code"));
+                return new RefTarget("catalog", c.logicalName(), c.javaClass(), c.tableName(),
+                        List.of("_description", "_code"));
             }
         }
         for (DocumentDescriptor d : registry.allDocuments()) {
             if (d.logicalName().equals(logicalName)) {
-                return new RefTarget(d.tableName(), List.of("_number"));
+                return new RefTarget("document", d.logicalName(), d.javaClass(), d.tableName(),
+                        List.of("_number"));
             }
         }
         return null;

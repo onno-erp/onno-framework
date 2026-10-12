@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Document;
@@ -55,7 +56,7 @@ class DocumentWidgetFilterPostgresIT {
 
     private static final List<String> NONE = List.of();
 
-    private final Principal admin = new AdminPrincipal();
+    private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private Jdbi jdbi;
     private DocumentDescriptor stayDesc;
     private DocumentQueryService documentQuery;
@@ -93,7 +94,7 @@ class DocumentWidgetFilterPostgresIT {
     void keysetWindow_excludesDraftAndCancelled_andScopesToSeason() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
         List<Map<String, Object>> rows =
-                documentQuery.keysetPage(stayDesc, null, 100, null, false, null, null, null,
+                documentQuery.keysetPage(AccessSubject.system(), stayDesc, null, 100, null, false, null, null, null,
                         NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
 
         assertThat(rows).hasSize(2);
@@ -106,14 +107,14 @@ class DocumentWidgetFilterPostgresIT {
     @Test
     void count_matchesTheFilteredWindow() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
-        long n = documentQuery.count(stayDesc, null, null, null,
+        long n = documentQuery.count(AccessSubject.system(), stayDesc, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, filter);
         assertThat(n).isEqualTo(2);
     }
 
     @Test
     void noFilter_returnsEveryLiveRow() {
-        long n = documentQuery.count(stayDesc, null, null, null,
+        long n = documentQuery.count(AccessSubject.system(), stayDesc, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null);
         assertThat(n).isEqualTo(5);
     }
@@ -122,7 +123,7 @@ class DocumentWidgetFilterPostgresIT {
     void keysetWindow_appliesWidgetFilter() {
         String filter = "status != 'DRAFT' AND status != 'CANCELED' AND season = '2026'";
         List<Map<String, Object>> rows =
-                documentQuery.keysetPage(stayDesc, null, 100, null, false, null, null, null,
+                documentQuery.keysetPage(AccessSubject.system(), stayDesc, null, 100, null, false, null, null, null,
                         NONE, NONE, NONE, NONE, NONE, NONE, filter).rows();
 
         assertThat(rows).hasSize(2);
@@ -134,7 +135,7 @@ class DocumentWidgetFilterPostgresIT {
 
     @Test
     void keysetWindow_noFilter_returnsEveryLiveRow() {
-        assertThat(documentQuery.keysetPage(
+        assertThat(documentQuery.keysetPage(AccessSubject.system(), 
                 stayDesc, null, 100, null, false, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null).rows()).hasSize(5);
     }

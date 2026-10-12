@@ -156,6 +156,8 @@ Catalog/document responses use **logical API names by default**. Attributes use 
 | `<fieldName>Code` | catalog-`Ref<>` attrs only | the target's code |
 | `<fieldName>Avatar` | catalog-`Ref<>` attrs only | the target's `avatar_url` |
 | `<fieldName>Color` | enum & catalog-`Ref<>` attrs | `@EnumLabel(color)` hex, or the ref target's `color` column — a status pill |
+| `<fieldName>Restricted` | `Ref<>`/`PolyRef` attrs | `true` when the viewer may not read the target; see [Restricted references](#restricted-references) |
+| `parentRestricted` | hierarchical catalogs | `true` when the parent is outside the viewer's record scope (`parent` is then `null`) |
 
 ### Storage compatibility representation
 
@@ -266,7 +268,33 @@ The raw `{fieldName}` value remains the UUID for `Ref<>`, or `fully.qualified.Ja
 (`catalog`/`document`) and `javaType`; its `type` is the selected target's logical name.
 
 With `?representation=storage`, these companions retain their former `{column}_display`,
-`{column}_ref`, `{column}_code`, `{column}_avatar`, and `{column}_color` names.
+`{column}_ref`, `{column}_code`, `{column}_avatar`, `{column}_color` and `{column}_restricted` names.
+
+### Restricted references
+
+References resolve **per viewer**. When the viewer has no entity-level read grant on the target, or
+the target record is outside the viewer's record scope (see
+[Record access policies](RECORD_ACCESS_POLICIES.md)), the ref is *restricted*:
+
+```json
+"tenant": null,
+"tenantDisplay": "—",
+"tenantRestricted": true,
+"tenantRef": { "type": "Tenants", "display": "—", "restricted": true }
+```
+
+The target's id and label are withheld, so a list never reveals the name — or the existence — of a
+record its viewer can't open. A client that echoes `null` back on a partial update does not clear the
+stored link. In group headers (`/groups`) the raw value is kept as the group's expand key; only the
+label is masked.
+
+## Record scope
+
+For a user restricted by a record policy every read is scoped: lists, counts (`count=estimate` returns
+the exact scoped count), groups, aggregates, search and trees only contain records in scope, and
+`get` of any other id is `404` — indistinguishable from a missing record. `?ids=` live patches drop
+out-of-scope ids. Keyset cursors are bound to the subject that minted them (a `~fingerprint`
+suffix); replaying one as another user is a `400`.
 
 ## Secrets
 
@@ -305,6 +333,11 @@ POST /api/documents/{name}/{id}/post      post, or atomically repost an already-
 Two more contracts worth knowing:
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
+
+Writes are record-scoped too: updating, deleting, posting or unposting a record outside the caller's
+write scope is `404`; a create or update whose result would leave the write scope is `403` (nothing is
+written); a reference value — header or tabular line — pointing at a record the caller may not read
+is `422`. Policy defaults (e.g. `owner`) are filled on create and cannot be overridden by the body.
 
 ## Filtering & deletion
 

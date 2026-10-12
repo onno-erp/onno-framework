@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -19,8 +21,12 @@ import java.util.stream.Collectors;
 
 /**
  * Read-side queries for accumulation registers (movements, balance, turnover),
- * shared by the REST API and the DivKit emitters. Pure data access — access
- * control stays with the callers.
+ * shared by the REST API and the DivKit emitters.
+ *
+ * <p>Every read takes the {@link AccessSubject} it is made for. Entity-level RBAC stays with the
+ * callers; a register record policy scopes by <em>dimension</em> columns, which exist in both the
+ * movement and the totals table, so the same scope restricts movements, balances (read from the
+ * totals table), turnovers and totals.
  */
 public class RegisterQueryService {
 
@@ -30,6 +36,7 @@ public class RegisterQueryService {
     private final MetadataRegistry registry;
     private final Jdbi jdbi;
     private final RefResolver refResolver;
+    private final RecordScopeCompiler scopes;
 
     /**
      * Row caps for the unfiltered register tabs. Movements/balance default to "show everything",
@@ -40,10 +47,22 @@ public class RegisterQueryService {
     private static final int MOVEMENTS_CAP = 1000;
     private static final int BALANCE_CAP = 5000;
 
+    /** A service without record policies (every subject unscoped) — for tests and tools. */
     public RegisterQueryService(MetadataRegistry registry, Jdbi jdbi) {
+        this(registry, jdbi, RecordScopeCompiler.unrestricted(registry), new UiAccessService(registry));
+    }
+
+    public RegisterQueryService(MetadataRegistry registry, Jdbi jdbi, RecordScopeCompiler scopes,
+                                UiAccessService access) {
         this.registry = registry;
         this.jdbi = jdbi;
-        this.refResolver = new RefResolver(registry, jdbi);
+        this.scopes = scopes;
+        this.refResolver = new RefResolver(registry, jdbi, scopes, access);
+    }
+
+    /** The subject's scope over {@code table} (the movement or the totals table of {@code desc}). */
+    private ScopeClause scope(AccessSubject subject, AccumulationRegisterDescriptor desc, String table) {
+        return scopes.clause(desc.javaClass(), subject, AccessMode.READ, table);
     }
 
     public AccumulationRegisterDescriptor require(String name) {
@@ -55,29 +74,34 @@ public class RegisterQueryService {
                         "Register not found: " + name));
     }
 
-    public List<Map<String, Object>> movements(AccumulationRegisterDescriptor desc, String from, String to) {
-        return movementsBounded(desc, from, to).rows();
+    public List<Map<String, Object>> movements(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                               String from, String to) {
+        return movementsBounded(subject, desc, from, to).rows();
     }
 
     /**
      * The same newest-first movement slice as {@link #movements}, plus an explicit overflow signal
      * for non-UI callers that must not mistake the capped slice for the complete result set.
      */
-    public BoundedRows movementsBounded(AccumulationRegisterDescriptor desc, String from, String to) {
+    public BoundedRows movementsBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                        String from, String to) {
+        ScopeClause scope = scope(subject, desc, desc.tableName());
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
         if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
+        sql.append(scope.and());
         sql.append(" ORDER BY _period DESC LIMIT :cap");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
             if (from != null) query.bind("from", from);
             if (to != null) query.bind("to", to);
+            scope.bind(query);
             query.bind("cap", MOVEMENTS_CAP + 1);
             return query.mapToMap().list();
         });
-        return bounded(desc, rows, MOVEMENTS_CAP);
+        return bounded(subject, desc, rows, MOVEMENTS_CAP);
     }
 
     /**
@@ -88,41 +112,44 @@ public class RegisterQueryService {
      * window size, so a packed register never ships its whole movement log.
      * Refs are resolved like {@link #movements}.
      */
-    public List<Map<String, Object>> movementsWindow(AccumulationRegisterDescriptor desc, String from, String to,
+    public List<Map<String, Object>> movementsWindow(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                                     String from, String to,
                                                      ListFilter.Result filters,
                                                      String sortColumn, boolean descending,
                                                      int rowPosition, int windowSize) {
         String orderBy = safeSort(desc, sortColumn, "_period", movementColumns(desc));
+        ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
         appendMovementWindow(sql, from, to);
-        appendFilters(sql, filters);
+        appendFilters(sql, scoped);
         sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC");
         sql.append(" LIMIT :windowSize OFFSET :rowPosition");
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
             bindMovementWindow(query, from, to);
-            bindFilters(query, filters);
+            bindFilters(query, scoped);
             query.bind("windowSize", Math.max(1, windowSize))
                     .bind("rowPosition", Math.max(0, rowPosition));
             return query.mapToMap().list();
         });
-        resolveAll(desc, rows);
+        resolveAll(subject, desc, rows);
         return rows;
     }
 
     /** Total active movements matching the window + filters — for the island's virtual scroller. */
-    public long movementsCount(AccumulationRegisterDescriptor desc, String from, String to,
+    public long movementsCount(AccessSubject subject, AccumulationRegisterDescriptor desc, String from, String to,
                                ListFilter.Result filters) {
+        ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
         StringBuilder sql = new StringBuilder(
                 "SELECT COUNT(*) FROM " + desc.tableName() + " WHERE _active = true");
         appendMovementWindow(sql, from, to);
-        appendFilters(sql, filters);
+        appendFilters(sql, scoped);
         return jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
             bindMovementWindow(query, from, to);
-            bindFilters(query, filters);
+            bindFilters(query, scoped);
             return query.mapTo(Long.class).one();
         });
     }
@@ -148,7 +175,7 @@ public class RegisterQueryService {
     }
 
     private static void appendFilters(StringBuilder sql, ListFilter.Result filters) {
-        if (filters != null && !filters.isEmpty()) sql.append(" AND ").append(filters.sql());
+        if (filters != null && !filters.isEmpty()) sql.append(" AND (").append(filters.sql()).append(")");
     }
 
     private static void bindFilters(org.jdbi.v3.core.statement.Query query, ListFilter.Result filters) {
@@ -160,7 +187,8 @@ public class RegisterQueryService {
      * ordered by a validated column (default: the dimension tuple) and bounded by a start position
      * and window size. BALANCE registers only.
      */
-    public List<Map<String, Object>> balanceWindow(AccumulationRegisterDescriptor desc, ListFilter.Result filters,
+    public List<Map<String, Object>> balanceWindow(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                                   ListFilter.Result filters,
                                                    String sortColumn, boolean descending,
                                                    int rowPosition, int windowSize) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
@@ -172,32 +200,34 @@ public class RegisterQueryService {
                 .collect(Collectors.joining(", "));
         String orderBy = safeSort(desc, sortColumn,
                 dimOrder.isEmpty() ? "1" : dimOrder, balanceColumns(desc));
+        ListFilter.Result scoped = scope(subject, desc, desc.totalsTableName()).andInto(filters);
         StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
-        if (filters != null && !filters.isEmpty()) sql.append(" WHERE ").append(filters.sql());
+        if (scoped != null && !scoped.isEmpty()) sql.append(" WHERE ").append(scoped.sql());
         sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC")
                 .append(" LIMIT :windowSize OFFSET :rowPosition");
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
-            bindFilters(query, filters);
+            bindFilters(query, scoped);
             query.bind("windowSize", Math.max(1, windowSize))
                     .bind("rowPosition", Math.max(0, rowPosition));
             return query.mapToMap().list();
         });
-        resolveAll(desc, rows);
+        resolveAll(subject, desc, rows);
         return rows;
     }
 
     /** Balance rows (distinct dimension combinations) matching the filters — for the scroller. */
-    public long balanceCount(AccumulationRegisterDescriptor desc, ListFilter.Result filters) {
+    public long balanceCount(AccessSubject subject, AccumulationRegisterDescriptor desc, ListFilter.Result filters) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
+        ListFilter.Result scoped = scope(subject, desc, desc.totalsTableName()).andInto(filters);
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM " + desc.totalsTableName());
-        if (filters != null && !filters.isEmpty()) sql.append(" WHERE ").append(filters.sql());
+        if (scoped != null && !scoped.isEmpty()) sql.append(" WHERE ").append(scoped.sql());
         return jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
-            bindFilters(query, filters);
+            bindFilters(query, scoped);
             return query.mapTo(Long.class).one();
         });
     }
@@ -224,25 +254,31 @@ public class RegisterQueryService {
         return sortColumn != null && allowed.contains(sortColumn.toLowerCase()) ? sortColumn : fallback;
     }
 
-    public List<Map<String, Object>> balance(AccumulationRegisterDescriptor desc, Map<String, String> filters) {
-        return balanceBounded(desc, filters).rows();
+    public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                             Map<String, String> filters) {
+        return balanceBounded(subject, desc, filters).rows();
     }
 
     /**
      * The same current-balance slice as {@link #balance}, plus an explicit overflow signal for
      * non-UI callers that require complete-result semantics.
      */
-    public BoundedRows balanceBounded(AccumulationRegisterDescriptor desc, Map<String, String> filters) {
+    public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                      Map<String, String> filters) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
 
+        ScopeClause scope = scope(subject, desc, desc.totalsTableName());
         StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
-        List<String> conditions = desc.dimensions().stream()
+        List<String> conditions = new ArrayList<>(desc.dimensions().stream()
                 .filter(d -> filters.containsKey(d.fieldName()))
                 .map(d -> d.columnName() + " = :" + d.columnName())
-                .toList();
+                .toList());
+        if (!scope.isAll()) {
+            conditions.add("(" + scope.sql() + ")");
+        }
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
@@ -261,24 +297,27 @@ public class RegisterQueryService {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
                 }
             }
+            scope.bind(query);
             query.bind("cap", BALANCE_CAP + 1);
             return query.mapToMap().list();
         });
-        return bounded(desc, rows, BALANCE_CAP);
+        return bounded(subject, desc, rows, BALANCE_CAP);
     }
 
-    private BoundedRows bounded(AccumulationRegisterDescriptor desc,
+    private BoundedRows bounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                 List<Map<String, Object>> rows, int cap) {
         boolean truncated = rows.size() > cap;
         List<Map<String, Object>> returned = truncated
                 ? new ArrayList<>(rows.subList(0, cap))
                 : rows;
-        resolveAll(desc, returned);
+        resolveAll(subject, desc, returned);
         return new BoundedRows(returned, truncated);
     }
 
-    public List<Map<String, Object>> turnover(AccumulationRegisterDescriptor desc, String from, String to,
+    public List<Map<String, Object>> turnover(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                              String from, String to,
                                               Map<String, String> filters) {
+        ScopeClause scope = scope(subject, desc, desc.tableName());
         String dimColumns = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
                 .collect(Collectors.joining(", "));
@@ -298,12 +337,14 @@ public class RegisterQueryService {
                 sql.append(" AND ").append(dim.columnName()).append(" = :").append(dim.columnName());
             }
         }
+        sql.append(scope.and());
         if (!dimColumns.isEmpty()) {
             sql.append(" GROUP BY ").append(dimColumns);
         }
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString()).bind("from", from).bind("to", to);
+            scope.bind(query);
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
@@ -311,7 +352,7 @@ public class RegisterQueryService {
             }
             return query.mapToMap().list();
         });
-        resolveAll(desc, rows);
+        resolveAll(subject, desc, rows);
         return rows;
     }
 
@@ -321,7 +362,7 @@ public class RegisterQueryService {
      * window and a safe {@code filter} predicate (see {@link WidgetFilter}). The resource
      * field must be one of the register's resources, so it can never carry arbitrary SQL.
      */
-    public BigDecimal total(AccumulationRegisterDescriptor desc, String resourceField,
+    public BigDecimal total(AccessSubject subject, AccumulationRegisterDescriptor desc, String resourceField,
                             String from, String to, String filter) {
         String resourceColumn = desc.resources().stream()
                 .map(AttributeDescriptor::columnName)
@@ -330,7 +371,8 @@ public class RegisterQueryService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown register resource: " + resourceField));
         String agg = "COALESCE(" + signedSum(resourceColumn) + ", 0)";
-        WidgetFilter.Result f = WidgetFilter.parse(filter, dimensionColumns(desc));
+        WidgetFilter.Result f = scope(subject, desc, desc.tableName())
+                .andInto(WidgetFilter.parse(filter, dimensionColumns(desc)));
 
         StringBuilder sql = new StringBuilder("SELECT ").append(agg)
                 .append(" FROM ").append(desc.tableName())
@@ -338,7 +380,7 @@ public class RegisterQueryService {
         if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");
         if (!f.isEmpty()) {
-            sql.append(" AND ").append(f.sql());
+            sql.append(" AND (").append(f.sql()).append(")");
         }
         return jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
@@ -375,10 +417,11 @@ public class RegisterQueryService {
         return raw;
     }
 
-    private void resolveAll(AccumulationRegisterDescriptor desc, List<Map<String, Object>> rows) {
+    private void resolveAll(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                            List<Map<String, Object>> rows) {
         List<AttributeDescriptor> all = new ArrayList<>();
         all.addAll(desc.dimensions());
         all.addAll(desc.resources());
-        refResolver.resolveAttributes(rows, all);
+        refResolver.resolveAttributes(rows, all, subject);
     }
 }

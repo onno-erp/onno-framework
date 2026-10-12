@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
@@ -101,7 +102,11 @@ public class UiAccessService {
      * the REST layer would reject anyway.
      */
     public boolean canWrite(Principal principal, String type, String name) {
-        Set<String> roles = roles(principal);
+        return canWrite(roles(principal), type, name);
+    }
+
+    /** As {@link #canWrite(Principal, String, String)} against a pre-resolved role set. */
+    public boolean canWrite(Set<String> roles, String type, String name) {
         if (!allowed(roles,type,name,true)) return false;
         String normalized = normalizeName(name);
         return switch (type) {
@@ -157,8 +162,84 @@ public class UiAccessService {
                     .findFirst()
                     .map(d -> hasAnyRole(roles, d.readRoles()))
                     .orElse(false);
+            case "information register" -> registry.allInformationRegisters().stream()
+                    .filter(d -> normalizeName(d.logicalName()).equals(normalized))
+                    .findFirst()
+                    .map(d -> hasAnyRole(roles, d.readRoles()))
+                    .orElse(false);
             default -> false;
         };
+    }
+
+    // ---------------------------------------------------------------- AccessSubject overloads
+    //
+    // The record-scoped services take an AccessSubject instead of a Principal. The trusted
+    // AccessSubject.system() passes every entity-level check; a user is checked by its roles exactly
+    // like the Principal overloads.
+
+    /** Entity-level read grant for {@code subject} on the entity of {@code type}/{@code name}. */
+    public boolean canRead(AccessSubject subject, String type, String name) {
+        return subject instanceof AccessSubject.System || canRead(subject.roles(), type, name);
+    }
+
+    /** Entity-level write grant for {@code subject} on the entity of {@code type}/{@code name}. */
+    public boolean canWrite(AccessSubject subject, String type, String name) {
+        return subject instanceof AccessSubject.System || canWrite(subject.roles(), type, name);
+    }
+
+    public void requireRead(AccessSubject subject, CatalogDescriptor descriptor) {
+        if (!canRead(subject, "catalog", descriptor.logicalName())) throw forbidden("catalog", descriptor.logicalName());
+    }
+
+    public void requireWrite(AccessSubject subject, CatalogDescriptor descriptor) {
+        if (!canWrite(subject, "catalog", descriptor.logicalName())) throw forbidden("catalog", descriptor.logicalName());
+    }
+
+    public void requireRead(AccessSubject subject, DocumentDescriptor descriptor) {
+        if (!canRead(subject, "document", descriptor.logicalName())) throw forbidden("document", descriptor.logicalName());
+    }
+
+    public void requireWrite(AccessSubject subject, DocumentDescriptor descriptor) {
+        if (!canWrite(subject, "document", descriptor.logicalName())) throw forbidden("document", descriptor.logicalName());
+    }
+
+    public void requireRead(AccessSubject subject, AccumulationRegisterDescriptor descriptor) {
+        if (!canRead(subject, "register", descriptor.logicalName())) throw forbidden("register", descriptor.logicalName());
+    }
+
+    public void requireRead(AccessSubject subject, InformationRegisterDescriptor descriptor) {
+        if (!canRead(subject, "information register", descriptor.logicalName())) {
+            throw forbidden("information register", descriptor.logicalName());
+        }
+    }
+
+    public boolean canRead(AccessSubject subject, AccumulationRegisterDescriptor descriptor) {
+        return canRead(subject, "register", descriptor.logicalName());
+    }
+
+    public boolean canRead(AccessSubject subject, InformationRegisterDescriptor descriptor) {
+        return canRead(subject, "information register", descriptor.logicalName());
+    }
+
+    public boolean canRead(AccessSubject subject, CatalogDescriptor descriptor) {
+        return canRead(subject, "catalog", descriptor.logicalName());
+    }
+
+    public boolean canRead(AccessSubject subject, DocumentDescriptor descriptor) {
+        return canRead(subject, "document", descriptor.logicalName());
+    }
+
+    public boolean canWrite(AccessSubject subject, CatalogDescriptor descriptor) {
+        return canWrite(subject, "catalog", descriptor.logicalName());
+    }
+
+    public boolean canWrite(AccessSubject subject, DocumentDescriptor descriptor) {
+        return canWrite(subject, "document", descriptor.logicalName());
+    }
+
+    /** Whether {@code subject} holds any of {@code requiredRoles} ({@code ADMIN} and system code always pass). */
+    public boolean hasAnyRole(AccessSubject subject, List<String> requiredRoles) {
+        return subject instanceof AccessSubject.System || hasAnyRole(subject.roles(), requiredRoles);
     }
 
     /**
@@ -216,6 +297,27 @@ public class UiAccessService {
             roles = authoritiesOf(currentAuthentication());
         }
         return roles;
+    }
+
+    /**
+     * The caller's login: the injected principal's name, else the name of the request's
+     * {@code Authentication}, else {@code null} (anonymous).
+     */
+    public String username(Principal principal) {
+        if (principal != null && principal.getName() != null) {
+            return principal.getName();
+        }
+        Object auth = currentAuthentication();
+        if (auth == null) return null;
+        try {
+            Object authenticated = invokePublic(auth, "isAuthenticated");
+            if (Boolean.FALSE.equals(authenticated)) return null;
+            if (auth.getClass().getName().endsWith("AnonymousAuthenticationToken")) return null;
+            Object name = invokePublic(auth, "getName");
+            return name instanceof String s ? s : null;
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
     }
 
     /** Reflectively read {@code getAuthorities().getAuthority()} off any object, or empty if absent. */

@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
@@ -15,7 +17,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,8 +26,11 @@ import java.util.UUID;
 /**
  * Write-side commands for catalogs — create, update, delete. Extracted from
  * {@code GenericCatalogController} so the REST API and other callers (e.g. the MCP
- * server) share one write path, and read-only mode + {@link UiAccessService} write
- * checks are enforced in a single place against the caller's {@link Principal}.
+ * server, import, batch, actions) share one write path, and read-only mode,
+ * {@link UiAccessService} write checks and record policies are enforced in a single place
+ * against the caller's {@link AccessSubject}: an existing record must be inside the write scope
+ * (404 otherwise), the written record must still satisfy it (403, rolled back), and every
+ * reference written must be readable (422). See {@link RecordWriteGuard}.
  */
 public class CatalogCommandService {
 
@@ -39,6 +43,7 @@ public class CatalogCommandService {
     private final SecretCipher secretCipher;
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
+    private final RecordWriteGuard guard;
 
     public CatalogCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                  NumberGenerator numberGenerator, CatalogQueryService query,
@@ -52,12 +57,16 @@ public class CatalogCommandService {
         this.events = events;
         this.secretCipher = secretCipher;
         this.lifecycle = new WriteLifecycle(registry, secretCipher);
+        this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
     }
 
-    public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, Principal principal) {
+    public Map<String, Object> create(CatalogDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
         Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        guard.applyDefaults(desc.javaClass(), body, subject);
+        guard.requireReadableRefs(desc.attributes(), body, subject);
+        requireReadableParent(desc, body, subject);
 
         UUID id = UUID.randomUUID();
         String code = resolveCode(desc, body);
@@ -100,7 +109,7 @@ public class CatalogCommandService {
                 " (" + String.join(", ", columns) + ")" +
                 " VALUES (" + String.join(", ", values) + ")";
 
-        jdbi.useHandle(h -> {
+        jdbi.useTransaction(h -> {
             var update = h.createUpdate(sql)
                     .bind("_id", id)
                     .bind("_code", resolveCode(desc, body))
@@ -115,20 +124,26 @@ public class CatalogCommandService {
                 EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
             }
             update.execute();
+            guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
         });
         lifecycle.runAfterWrite(entity);
 
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.CATALOG,
                 desc.logicalName(), id, naturalKey(result)));
         return result;
     }
 
     public Map<String, Object> update(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                       Principal principal) {
+                                       AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        guard.preserveRestrictedRefs(desc.tableName(), desc.attributes(), id, body, subject,
+                desc.hierarchical() ? desc.javaClass() : null);
+        guard.requireReadableRefs(desc.attributes(), body, subject);
+        requireReadableParent(desc, body, subject);
 
         // Reconstruct the stored item, overlay the submitted changes, and run the write lifecycle
         // (beforeWrite + rules) on the merged state so derived fields recompute the way they do on
@@ -172,7 +187,7 @@ public class CatalogCommandService {
         }
 
         if (setClauses.isEmpty()) {
-            return query.get(desc, id);
+            return query.get(subject, desc, id);
         }
 
         setClauses.add("_version = _version + 1");
@@ -182,7 +197,7 @@ public class CatalogCommandService {
                 " SET " + String.join(", ", setClauses) +
                 " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
 
-        int updated = jdbi.withHandle(h -> {
+        int updated = jdbi.inTransaction(h -> {
             var update = h.createUpdate(sql).bind("_id", id);
             if (body.containsKey("code")) update.bind("_code", body.get("code"));
             if (body.containsKey("description")) update.bind("_description", body.get("description"));
@@ -198,7 +213,9 @@ public class CatalogCommandService {
                     EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
                 }
             }
-            return update.execute();
+            int n = update.execute();
+            if (n > 0) guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            return n;
         });
         if (updated == 0 && hasExpectedVersion) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -206,7 +223,7 @@ public class CatalogCommandService {
         }
         lifecycle.runAfterWrite(entity);
 
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.CATALOG,
                 desc.logicalName(), id, naturalKey(result)));
         return result;
@@ -222,9 +239,11 @@ public class CatalogCommandService {
      * the {@code {valid, fieldErrors, formErrors}} payload.
      */
     public Map<String, Object> validate(CatalogDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                        Principal principal) {
-        access.requireWrite(principal, desc);
+                                        AccessSubject subject) {
+        access.requireWrite(subject, desc);
+        if (id != null) guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
+        if (id == null) guard.applyDefaults(desc.javaClass(), body, subject);
 
         ValidationErrors errors = new ValidationErrors();
         boolean isNew = id == null;
@@ -253,9 +272,19 @@ public class CatalogCommandService {
         return EntityWriteSupport.validationReport(errors);
     }
 
-    public void delete(CatalogDescriptor desc, UUID id, Principal principal) {
+    /**
+     * Whether {@code subject} may change existing record {@code id} — inside its record-policy
+     * write scope (entity-level write access is checked by the write itself). Import uses this to
+     * turn an upsert onto someone else's record into a row error instead of an overwrite.
+     */
+    public boolean isWritable(CatalogDescriptor desc, UUID id, AccessSubject subject) {
+        return query.inScope(subject, desc, id, AccessMode.WRITE);
+    }
+
+    public void delete(CatalogDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
         // (OnnoBeforeDeleteCallback): load the stored aggregate and let it veto the soft-delete —
         // a thrown ValidationException maps to the standard 4xx. This is what lets a catalog
@@ -278,6 +307,17 @@ public class CatalogCommandService {
         );
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.CATALOG,
                 desc.logicalName(), id, code));
+    }
+
+    /** A record-scoped subject may only file a record under a parent it can read. */
+    private void requireReadableParent(CatalogDescriptor desc, Map<String, Object> body, AccessSubject subject) {
+        if (!desc.hierarchical() || !body.containsKey("parent")) return;
+        UUID parent = parseUuid(body.get("parent"));
+        if (parent != null && query.scopes().isScoped(desc.javaClass(), subject, AccessMode.READ)
+                && !query.inScope(subject, desc, parent, AccessMode.READ)) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "Unknown or inaccessible reference for parent");
+        }
     }
 
     /** Natural key for a catalog row is its code (the slug used to address the resource). */

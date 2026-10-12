@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,20 +20,40 @@ import java.util.UUID;
  * @param id     the target record's id, or {@code null} for a toolbar (list-level) action
  * @param user   the authenticated username, for the handler's own checks
  * @param inputs current values of the scalar inputs, keyed by input key (never null)
- * @param rows   collected row groups, keyed by group key; each group is a list of {column → value}
- *               rows (never null)
+ * @param rows    collected row groups, keyed by group key; each group is a list of {column → value}
+ *                rows (never null)
+ * @param subject who runs the action — pass it to {@code RecordAccess} when the handler reads or
+ *                changes other records on the caller's behalf; {@code null} only when constructed
+ *                by code predating record policies. The framework has already checked that the
+ *                caller may write the target record ({@link #id()}).
  */
 public record ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs,
-                            Map<String, List<Map<String, String>>> rows) {
+                            Map<String, List<Map<String, String>>> rows, AccessSubject subject) {
 
     public ActionContext {
         inputs = inputs == null ? Map.of() : inputs;
         rows = rows == null ? Map.of() : rows;
     }
 
+    /** Constructor predating {@link #subject()}. */
+    public ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs,
+                         Map<String, List<Map<String, String>>> rows) {
+        this(kind, name, id, user, inputs, rows, null);
+    }
+
     /** Backwards-compatible constructor for a scalar-only action (no row groups). */
     public ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs) {
-        this(kind, name, id, user, inputs, Map.of());
+        this(kind, name, id, user, inputs, Map.of(), null);
+    }
+
+    /** A copy bound to {@code subject}. */
+    public ActionContext withSubject(AccessSubject subject) {
+        return new ActionContext(kind, name, id, user, inputs, rows, subject);
+    }
+
+    /** A copy targeting record {@code id} (a batch runs the shared inputs once per id). */
+    public ActionContext withId(UUID id) {
+        return new ActionContext(kind, name, id, user, inputs, rows, subject);
     }
 
     /** The current value of scalar input {@code key}, or {@code ""} if absent. */

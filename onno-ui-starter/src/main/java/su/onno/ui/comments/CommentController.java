@@ -1,5 +1,7 @@
 package su.onno.ui.comments;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
 import su.onno.ui.CatalogQueryService;
 import su.onno.ui.CurrentUserResolver;
@@ -34,8 +36,9 @@ import java.util.UUID;
 /**
  * The discussion-thread endpoint. A thread hangs off any catalog or document detail page and is
  * addressed by the same {@code {kind}/{name}/{id}} triple the UI routes use. Reading and posting
- * are gated on <em>read</em> access to the target entity — if you can open the record you can
- * comment on it (see {@link UiAccessService}); deleting is limited to the author or an {@code ADMIN}.
+ * are gated on <em>read</em> access to the target — the entity grant (see {@link UiAccessService})
+ * and, for a record-scoped caller, the record itself (404 outside the scope): if you can open the
+ * record you can comment on it. Deleting is limited to the author or an {@code ADMIN}.
  * Authorship is stamped from the authenticated principal via {@link CurrentUserResolver}, so the
  * client never asserts who it is.
  */
@@ -90,8 +93,8 @@ public class CommentController {
 
     @GetMapping("/{kind}/{name}/{id}")
     public List<Map<String, Object>> list(@PathVariable String kind, @PathVariable String name,
-                                          @PathVariable UUID id, Principal principal) {
-        requireRead(kind, name, principal);
+                                          @PathVariable UUID id, Principal principal, AccessSubject subject) {
+        requireRead(kind, name, id, subject);
         CurrentUser me = currentUser.resolve(principal);
         boolean admin = isAdmin(principal);
         List<Comment> thread = comments.list(kind, name, id);
@@ -100,7 +103,7 @@ public class CommentController {
         // Resolve every mention across the whole thread in one batch (per the viewer's read access),
         // then hand each comment just the ones in its body — a thread mentioning ten customers costs
         // one query, not ten.
-        Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(thread, principal);
+        Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(thread, subject);
         Map<UUID, List<CommentService.CommentReaction>> reactions = comments.reactionsFor(
                 thread.stream().map(Comment::id).toList(), reactionUserKey(me));
         return thread.stream()
@@ -115,8 +118,8 @@ public class CommentController {
     @PostMapping("/{kind}/{name}/{id}")
     public Map<String, Object> add(@PathVariable String kind, @PathVariable String name,
                                    @PathVariable UUID id, @RequestBody CommentRequest request,
-                                   Principal principal) {
-        requireRead(kind, name, principal);
+                                   Principal principal, AccessSubject subject) {
+        requireRead(kind, name, id, subject);
         String body = request == null ? null : request.body();
         if (body == null || body.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Comment cannot be empty");
@@ -130,7 +133,7 @@ public class CommentController {
         // Strip any mention the author can't read before storing — no smuggling a clickable link to
         // a hidden record (it degrades to the token's plain label text instead).
         if (mentionsEnabled()) {
-            body = Mentions.degrade(body, ref -> !mentions.canRead(principal, ref));
+            body = Mentions.degrade(body, ref -> !mentions.canRead(subject, ref));
         }
         UUID parentId = request == null ? null : request.parentId();
         Comment parent = null;
@@ -149,7 +152,7 @@ public class CommentController {
         // panels refetch. The insert has already committed (its own JDBI transaction), so a viewer
         // reacting to this event reads the new comment back, not a phantom (issues #28, #29).
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, COMMENT_ENTITY_TYPE, name, id, null));
-        Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(List.of(saved), principal);
+        Map<MentionRef, ResolvedMention> resolved = resolveThreadMentions(List.of(saved), subject);
         if (mentionsEnabled()) {
             // Announce each surviving (author-readable) mention. No consumers ship with the framework;
             // delivery (in-app, cross-node bus, mail) is purely additive via an @EventListener.
@@ -172,10 +175,10 @@ public class CommentController {
     @PostMapping("/{commentId}/reactions")
     public List<Map<String, Object>> toggleReaction(@PathVariable UUID commentId,
                                                     @RequestBody ReactionRequest request,
-                                                    Principal principal) {
+                                                    Principal principal, AccessSubject subject) {
         Comment comment = comments.find(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        requireRead(comment.entityType(), comment.entityName(), principal);
+        requireRead(comment.entityType(), comment.entityName(), comment.entityId(), subject);
         String emoji = request == null ? null : request.emoji();
         if (!ALLOWED_REACTIONS.contains(emoji)) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "Unsupported reaction");
@@ -189,10 +192,10 @@ public class CommentController {
     }
 
     @DeleteMapping("/{commentId}")
-    public ResponseEntity<Void> delete(@PathVariable UUID commentId, Principal principal) {
+    public ResponseEntity<Void> delete(@PathVariable UUID commentId, Principal principal, AccessSubject subject) {
         Comment comment = comments.find(commentId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        requireRead(comment.entityType(), comment.entityName(), principal);
+        requireRead(comment.entityType(), comment.entityName(), comment.entityId(), subject);
         if (!canDelete(comment, currentUser.resolve(principal), isAdmin(principal))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the author or an administrator can delete this comment");
@@ -208,9 +211,10 @@ public class CommentController {
      * Gate a thread request: the kind must be a catalog or document, the caller must have read
      * access to the owning entity, and that entity must have comments enabled (the per-entity,
      * opt-in {@link su.onno.ui.EntityView#comments()} switch). A request for an entity that hasn't
-     * opted in is a 404 — the comment surface simply doesn't exist there.
+     * opted in is a 404 — the comment surface simply doesn't exist there. For a record-scoped caller
+     * the record must also be inside its read scope (404 otherwise, like a missing record).
      */
-    private void requireRead(String kind, String name, Principal principal) {
+    private void requireRead(String kind, String name, UUID id, AccessSubject subject) {
         String type = switch (kind) {
             case "catalogs" -> "catalog";
             case "documents" -> "document";
@@ -219,7 +223,7 @@ public class CommentController {
         if (type == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        if (!access.canRead(principal, type, name)) {
+        if (!access.canRead(subject, type, name)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Current user is not allowed to read " + type + ": " + name);
         }
@@ -229,6 +233,14 @@ public class CommentController {
         if (!viewResolver.commentsEnabled(entity)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "Comments are not enabled for " + type + ": " + name);
+        }
+        if (id != null && catalogQuery.scopes().isScoped(entity, subject, AccessMode.READ)) {
+            boolean readable = "catalogs".equals(kind)
+                    ? catalogQuery.inScope(subject, catalogQuery.require(name), id, AccessMode.READ)
+                    : documentQuery.inScope(subject, documentQuery.require(name), id, AccessMode.READ);
+            if (!readable) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            }
         }
     }
 
@@ -249,7 +261,7 @@ public class CommentController {
     }
 
     /** Resolve every distinct mention across a set of comments, once, for the viewer. */
-    private Map<MentionRef, ResolvedMention> resolveThreadMentions(List<Comment> thread, Principal viewer) {
+    private Map<MentionRef, ResolvedMention> resolveThreadMentions(List<Comment> thread, AccessSubject viewer) {
         if (!mentionsEnabled()) {
             return Map.of();
         }

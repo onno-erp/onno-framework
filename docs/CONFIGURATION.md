@@ -30,6 +30,8 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.access.records.create-indexes` | `Boolean` | `true` | Create an index for every column a record policy scopes by (if missing) at startup, so a scoped list never degrades to a full table scan. Skipped when `onno.schema.mode` does not allow DDL; a missing index is then logged as a warning. |
+| `onno.access.records.log-denials` | `Boolean` | `false` | Log every request denied because the record lies outside the caller's record scope (the 404s that are indistinguishable from a missing record) at DEBUG on `su.onno.ui.RecordAccess`, with the subject, entity and id — for troubleshooting a policy. |
 | `onno.comments.enabled` | `Boolean` | `true` | Whether the comments endpoint, its storage table, and the detail-page comments panel are wired at all. Turn it off to drop the feature from every entity without touching the model. |
 | `onno.comments.max-length` | `Integer` | `4000` | Largest comment body accepted, in characters. The server rejects a longer body with 422; the compose box mirrors the limit client-side. Defaults to 4000. |
 | `onno.comments.mentions.enabled` | `Boolean` | `true` | Whether `@`-mentions are parsed, resolved and offered in the compose typeahead. Turn it off to keep plain-text comments without touching `onno.comments.enabled`; existing mention tokens then degrade to their plain label text. |

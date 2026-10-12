@@ -10,8 +10,9 @@ Because onno is metadata-driven, the tools are **generated generically** from th
 typed process-graph names at runtime.
 
 Every tool call runs **as the authenticated user** and is enforced through the same
-`UiAccessService` deny-by-default role model as the web UI. The LLM is just another
-caller — it never gains access a user role wouldn't have.
+`UiAccessService` deny-by-default role model as the web UI — and inside the same record scope
+(`RecordAccessPolicy`): a tool never returns or changes a record the user couldn't open in the UI.
+The LLM is just another caller — it never gains access a user role wouldn't have.
 
 ## What it adds
 
@@ -67,9 +68,11 @@ and operations are visible.
 ### Custom tools
 
 Add `@McpTool` to a public instance method on any Spring bean. Ordinary parameters become
-JSON-schema inputs and are converted to their declared Java types. `Principal`,
+JSON-schema inputs and are converted to their declared Java types. `Principal`, `AccessSubject`,
 `McpToolContext`, and `McpSyncServerExchange` parameters are injected and do not appear in the
-schema.
+schema. A tool that reads or changes records on the caller's behalf passes the `AccessSubject`
+(also `McpToolContext.subject()`) to the UI starter's query services or checks with `RecordAccess` —
+typed repositories are not record-scoped.
 
 ```java
 @Component
@@ -110,7 +113,8 @@ add tools.
 - Identity is bridged from Spring Security into the tool call by `McpPrincipalContext`:
   the principal is captured on the servlet request thread (where the security filter chain
   has populated the context) and carried into the tool handler via the MCP transport
-  context — so authorization survives the SDK's reactive hop.
+  context — so authorization survives the SDK's reactive hop. The caller's record-scoped
+  `AccessSubject` is resolved there too and travels the same way.
 - A `null`/anonymous principal is denied everything (deny by default).
 - The `/mcp` chain is stateless and CSRF-exempt; clients authenticate per request.
 - Posting tools mutate ledgers. Disable them with `onno.mcp.posting-enabled=false` if you

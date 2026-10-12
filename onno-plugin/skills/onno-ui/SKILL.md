@@ -22,7 +22,9 @@ UI is authored as Spring beans, never as annotations on domain classes.
 | Host SPA extension | `src/main/widgets/*.tsx` + `su.onno.widgets` |
 
 An entity surface is served only when an `EntityView` exists for the active profile. A view does not
-put the entity in the sidebar; a `Layout` section must list it. Nav is curated.
+put the entity in the sidebar; a `Layout` section must list it. Nav is curated. A profile's own view
+replaces the default view for that profile — list, record form fields, detail widgets, action
+placement and validations alike.
 
 ## Layout
 

@@ -93,6 +93,7 @@ class DocumentCsvImportServiceTest {
                 Number,Date
                 INV-001,2026-06-04T10:00
                 """.getBytes(StandardCharsets.UTF_8);
+        when(commands.isWritable(any(), any(), any())).thenReturn(true);
         when(commands.update(eq(invoice), eq(existingId), any(), any())).thenReturn(Map.of("_id", existingId));
 
         ImportResult result = upsertService.importDocuments(invoice, csv, null,

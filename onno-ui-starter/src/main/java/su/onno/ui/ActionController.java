@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.ui.ActionSpec.Action;
@@ -29,6 +31,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * we resolve the entity, enforce write access, invoke the handler bean, and return its
  * {@link ActionResult} so the client can show typed feedback and/or refresh. Navigation-only actions never
  * reach the server — the client routes them directly.
+ *
+ * <p>For a record action the target record is loaded with the caller's record-policy <em>write</em>
+ * scope first (404 when outside it), and the action's {@code enabledWhen} predicate is evaluated
+ * server-side against it (409 when disabled) — so neither a hidden button nor a disabled one can be
+ * replayed by hand. The handler receives the caller's {@link AccessSubject} in
+ * {@link ActionContext#subject()}.
  */
 @RestController
 @RequestMapping("/api/actions")
@@ -93,7 +101,7 @@ public class ActionController {
     @GetMapping("/{kind}/{name}")
     public Map<String, Object> descriptors(@PathVariable String kind, @PathVariable String name,
                                            @RequestParam(required = false) UUID id,
-                                           Principal principal) {
+                                           Principal principal, AccessSubject subject) {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         List<Action> current = actions.resolvedForEntity(entity);
         List<Map<String, Object>> out = UiActionResolver.descriptors(current,
@@ -104,27 +112,53 @@ public class ActionController {
         }
         Map<String, Object> rowState = id == null
                 ? Map.of()
-                : actions.rowActionState(current, actionRow(kind, name, id));
+                : actions.rowActionState(current, actionRow(subject, kind, name, id));
         return Map.of("actions", out, "rowActions", rowState);
     }
 
-    private Map<String, Object> actionRow(String kind, String name, UUID id) {
+    private Map<String, Object> actionRow(AccessSubject subject, String kind, String name, UUID id) {
         return switch (kind) {
-            case "catalogs" -> catalogQuery.get(catalogQuery.require(name), id);
-            case "documents" -> documentQuery.get(documentQuery.require(name), id);
+            case "catalogs" -> catalogQuery.get(subject, catalogQuery.require(name), id);
+            case "documents" -> documentQuery.get(subject, documentQuery.require(name), id);
             default -> Map.of();
         };
+    }
+
+    /**
+     * Before a handler runs on record {@code id}: the record must be inside the caller's write
+     * scope (404 otherwise, like a missing record) and the action's {@code enabledWhen} must hold
+     * for it (409 otherwise). A no-op for toolbar actions ({@code id == null}).
+     */
+    private void requireRunnableOn(AccessSubject subject, String kind, String name, UUID id, Action action) {
+        if (id == null) return;
+        boolean inScope = switch (kind) {
+            case "catalogs" -> catalogQuery.inScope(subject, catalogQuery.require(name), id, AccessMode.WRITE);
+            case "documents" -> documentQuery.inScope(subject, documentQuery.require(name), id, AccessMode.WRITE);
+            default -> false;
+        };
+        if (!inScope) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
+        if (action.enabledFn() != null) {
+            Map<String, Object> row = actionRow(subject, kind, name, id);
+            if (!UiActionResolver.recordActionState(action, row).enabled()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Action is not available for this record: " + action.key());
+            }
+        }
     }
 
     @PostMapping("/{kind}/{name}/{key}")
     public ActionResult run(@PathVariable String kind, @PathVariable String name, @PathVariable String key,
                             @RequestParam(required = false) UUID id,
-                            @RequestBody(required = false) Map<String, Object> body, Principal principal) {
+                            @RequestBody(required = false) Map<String, Object> body, Principal principal,
+                            AccessSubject subject) {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
+        requireRunnableOn(subject, kind, name, id, action);
         ActionContext ctx = ActionContext.from(kind, name, id,
-                principal != null ? principal.getName() : null, body);
+                principal != null ? principal.getName() : null, body).withSubject(subject);
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -142,14 +176,16 @@ public class ActionController {
     @GetMapping("/{kind}/{name}/{key}/form")
     public Map<String, Object> formDefaults(@PathVariable String kind, @PathVariable String name,
                                             @PathVariable String key,
-                                            @RequestParam(required = false) UUID id, Principal principal) {
+                                            @RequestParam(required = false) UUID id, Principal principal,
+                                            AccessSubject subject) {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
         if (!action.hasDynamicForm()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Action has no dynamic form: " + key);
         }
+        requireRunnableOn(subject, kind, name, id, action);
         ActionContext ctx = new ActionContext(kind, name, id,
-                principal != null ? principal.getName() : null, Map.of(), Map.of());
+                principal != null ? principal.getName() : null, Map.of(), Map.of(), subject);
         try {
             ActionSpec.FormDefaults defaults = action.formDefaultsFn().apply(ctx);
             if (defaults == null) {
@@ -172,23 +208,26 @@ public class ActionController {
      * transaction-per-invocation semantics (identical to N single calls, minus the HTTP round-trips);
      * a failing id is recorded and the batch continues. Ids are resolved concurrently on the shared
      * {@link BatchRunner} pool ({@code onno.ui.batch.parallelism}). Returns {@code {ok, failed, total}}
-     * so the client can toast a summary. Capped at {@link #BATCH_LIMIT} ids.
+     * so the client can toast a summary. Capped at {@link #BATCH_LIMIT} ids. Each id gets the same
+     * record checks as a single run (write scope, server-side {@code enabledWhen}); an id that fails
+     * them is counted as failed and the rest still run.
      */
     @PostMapping("/{kind}/{name}/{key}/batch")
     public Map<String, Object> runBatch(@PathVariable String kind, @PathVariable String name,
                                         @PathVariable String key,
-                                        @RequestBody Map<String, Object> body, Principal principal) {
+                                        @RequestBody Map<String, Object> body, Principal principal,
+                                        AccessSubject subject) {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
         List<UUID> ids = idList(body);
         String user = principal != null ? principal.getName() : null;
         // Parse the shared inputs/rows once; each id runs with the same collected values.
-        ActionContext shared = ActionContext.from(kind, name, null, user, body);
+        ActionContext shared = ActionContext.from(kind, name, null, user, body).withSubject(subject);
         AtomicReference<ActionFeedback> firstFeedback = new AtomicReference<>();
         Map<String, Object> result = batch.run(ids, id -> {
-            ActionResult actionResult = action.handler().apply(
-                    new ActionContext(kind, name, id, user, shared.inputs(), shared.rows()));
+            requireRunnableOn(subject, kind, name, id, action);
+            ActionResult actionResult = action.handler().apply(shared.withId(id));
             if (actionResult != null && actionResult.feedback() != null) {
                 firstFeedback.compareAndSet(null, actionResult.feedback());
             }

@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -66,7 +67,7 @@ class TemporalRoundTripPostgresIT {
         @Attribute private LocalDateTime happensAt;
     }
 
-    private final Principal admin = new AdminPrincipal();
+    private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private Jdbi jdbi;
     private CatalogDescriptor episodeDesc;
     private DocumentDescriptor eventDesc;
@@ -114,7 +115,7 @@ class TemporalRoundTripPostgresIT {
                 "observedAt", "2026-01-16T04:00:00.000"
         ), admin).get("_id");
 
-        Map<String, Object> read = catalogQuery.get(episodeDesc, id);
+        Map<String, Object> read = catalogQuery.get(AccessSubject.system(), episodeDesc, id);
         assertThat(read.get("observed_at")).isEqualTo("2026-01-16T04:00");
 
         assertThatCode(() -> catalogCommands.update(episodeDesc, id,
@@ -131,7 +132,7 @@ class TemporalRoundTripPostgresIT {
                 "slots", List.of(Map.of("happensAt", "2026-01-16T05:30:00.000"))
         ), admin).get("_id");
 
-        Map<String, Object> read = documentQuery.get(eventDesc, id);
+        Map<String, Object> read = documentQuery.get(AccessSubject.system(), eventDesc, id);
         assertThat(read.get("starts_at")).isEqualTo("2026-01-16T04:00");
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) read.get("slots");

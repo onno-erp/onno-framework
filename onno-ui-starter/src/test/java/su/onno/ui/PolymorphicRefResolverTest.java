@@ -91,7 +91,7 @@ class PolymorphicRefResolverTest {
         paymentRow.put(subject.columnName(), PolyRef.of(Payment.class, paymentId).externalForm());
 
         new RefResolver(registry, jdbi)
-                .resolveAttributes(List.of(accountRow, paymentRow), List.of(subject));
+                .resolveAttributes(List.of(accountRow, paymentRow), List.of(subject), su.onno.access.AccessSubject.system());
 
         assertThat(accountRow.get("subject_display")).isEqualTo("Main bank");
         assertThat(accountRow.get("subject_ref")).isEqualTo(Map.of(

@@ -19,6 +19,7 @@ import su.onno.process.ProcessGraphDescriptor;
 import su.onno.process.ProcessSnapshot;
 import su.onno.process.ProcessTokenSnapshot;
 import su.onno.process.ProcessTransitionSnapshot;
+import su.onno.process.ProcessDomainLink;
 import su.onno.process.ProcessWorkItem;
 import su.onno.process.ProcessWorkItemEventSnapshot;
 
@@ -39,6 +40,8 @@ public final class ProcessController {
     private final UiAccessService access;
     private final TaskAssigneeDirectory assignees;
     private final CurrentUserResolver currentUser;
+    private RecordAccess recordAccess;
+    private AccessSubjectResolver subjects;
 
     public ProcessController(
             ProcessEngine engine,
@@ -157,15 +160,40 @@ public final class ProcessController {
         }
     }
 
+    /** Enable record-scope masking of task subjects (set by the auto-configuration). */
+    public void setRecordAccess(RecordAccess recordAccess, AccessSubjectResolver subjects) {
+        this.recordAccess = recordAccess;
+        this.subjects = subjects;
+    }
+
+    /**
+     * Task visibility is decided by assignment, but a task's subject label snapshots the record it
+     * concerns: when that record is outside the viewer's record scope, the label is masked.
+     */
+    private ProcessWorkItem masked(ProcessWorkItem item, Principal principal) {
+        ProcessDomainLink link = item == null ? null : item.subject();
+        if (link == null || recordAccess == null || subjects == null) return item;
+        if (recordAccess.canReadRecord(subjects.resolve(principal), link.kind(), link.entityName(),
+                link.id().toString())) {
+            return item;
+        }
+        ProcessDomainLink restricted = new ProcessDomainLink(link.kind(), link.entityName(), link.id(),
+                RefResolver.RESTRICTED_DISPLAY);
+        return new ProcessWorkItem(item.id(), item.instanceId(), item.tokenId(), item.definitionKey(),
+                item.definitionVersion(), item.stepKey(), item.title(), item.status(), item.assigneeId(),
+                item.assignee(), restricted, item.createdAt(), item.claimedAt(), item.completedAt(),
+                item.outcome(), item.outcomes());
+    }
+
     @GetMapping("/tasks")
     public List<ProcessWorkItem> inbox(Principal principal) {
-        return engine.inbox(actor(principal));
+        return engine.inbox(actor(principal)).stream().map(item -> masked(item, principal)).toList();
     }
 
     @PostMapping("/tasks/{workItemId}/claim")
     public ProcessWorkItem claim(@PathVariable UUID workItemId, Principal principal) {
         try {
-            return engine.claim(workItemId, actor(principal));
+            return masked(engine.claim(workItemId, actor(principal)), principal);
         } catch (RuntimeException exception) {
             throw operationFailure(exception);
         }
@@ -203,13 +231,13 @@ public final class ProcessController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request is required");
         }
         try {
-            return engine.delegate(
+            return masked(engine.delegate(
                     workItemId,
                     assignees == null
                             ? ProcessIdentity.unlinked(request.targetActorId())
                             : assignees.require(request.targetActorId(), principal),
                     request.reason(),
-                    actor(principal));
+                    actor(principal)), principal);
         } catch (RuntimeException exception) {
             throw operationFailure(exception);
         }

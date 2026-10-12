@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.AccessControl;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
@@ -54,7 +55,7 @@ class DocumentWidgetRefFilterPostgresIT {
 
     private static final List<String> NONE = List.of();
 
-    private final Principal admin = new AdminPrincipal();
+    private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private Jdbi jdbi;
     private CatalogDescriptor databaseDesc;
     private DocumentDescriptor sampleDesc;
@@ -98,19 +99,19 @@ class DocumentWidgetRefFilterPostgresIT {
     void refFilterBindsUuidAcrossEntityWidgetQueries() {
         String filter = "database = " + databaseId;
 
-        assertThat(documentQuery.aggregate(sampleDesc, "sum", "events", filter))
+        assertThat(documentQuery.aggregate(AccessSubject.system(), sampleDesc, "sum", "events", filter))
                 .isEqualByComparingTo("12");
 
-        Map<String, Object> aggregate = documentQuery.aggregateBuckets(sampleDesc,
+        Map<String, Object> aggregate = documentQuery.aggregateBuckets(AccessSubject.system(), sampleDesc,
                 new WidgetBuckets.Request("sum", "events", null, null,
                         null, null, null, filter, null, null, null));
         List<Map<String, Object>> buckets = (List<Map<String, Object>>) aggregate.get("buckets");
         assertThat(buckets).singleElement().satisfies(bucket ->
                 assertThat(new BigDecimal(bucket.get("value").toString())).isEqualByComparingTo("12"));
 
-        assertThat(documentQuery.count(sampleDesc, null, null, null,
+        assertThat(documentQuery.count(AccessSubject.system(), sampleDesc, null, null, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, filter)).isEqualTo(2);
-        assertThat(documentQuery.keysetPage(sampleDesc, null, 20, null, false,
+        assertThat(documentQuery.keysetPage(AccessSubject.system(), sampleDesc, null, 20, null, false,
                 null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, filter).rows()).hasSize(2);
     }
 

@@ -25,6 +25,8 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
+    // The MCP record-policy leak test runs the real query/command services against H2.
+    testImplementation(libs.h2)
     testRuntimeOnly(libs.junit.platform.launcher)
     testRuntimeOnly(libs.slf4j.simple)
 }

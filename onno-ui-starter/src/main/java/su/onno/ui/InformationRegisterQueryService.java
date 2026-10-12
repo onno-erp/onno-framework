@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.MetadataRegistry;
@@ -13,8 +15,9 @@ import java.util.UUID;
 
 /**
  * Read-side queries for information registers, used to drive related-list panels backed by a
- * register junction (see {@link RelatedList}, {@link Junctions}). Pure data access — access
- * control stays with the callers. Read-only by design for now: a register-backed relationship
+ * register junction (see {@link RelatedList}, {@link Junctions}). Entity-level RBAC stays with the
+ * callers; the subject's record scope (by dimension) is applied here. Read-only by design for now: a
+ * register-backed relationship
  * renders both-direction panels but isn't edited inline (info registers have no generic write
  * REST surface yet).
  */
@@ -22,10 +25,18 @@ public class InformationRegisterQueryService {
 
     private final Jdbi jdbi;
     private final RefResolver refResolver;
+    private final RecordScopeCompiler scopes;
 
+    /** A service without record policies (every subject unscoped) — for tests and tools. */
     public InformationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi) {
+        this(registry, jdbi, RecordScopeCompiler.unrestricted(registry), new UiAccessService(registry));
+    }
+
+    public InformationRegisterQueryService(MetadataRegistry registry, Jdbi jdbi, RecordScopeCompiler scopes,
+                                           UiAccessService access) {
         this.jdbi = jdbi;
-        this.refResolver = new RefResolver(registry, jdbi);
+        this.scopes = scopes;
+        this.refResolver = new RefResolver(registry, jdbi, scopes, access);
     }
 
     /**
@@ -36,15 +47,16 @@ public class InformationRegisterQueryService {
      * resolves it from the register's scanned dimensions, never from user input) so this stays
      * injection-safe. Information registers carry no soft-delete flag, so every stored row counts.
      */
-    public List<Map<String, Object>> relatedRows(InformationRegisterDescriptor desc, String viaColumn,
-                                                  UUID parentId) {
+    public List<Map<String, Object>> relatedRows(AccessSubject subject, InformationRegisterDescriptor desc,
+                                                  String viaColumn, UUID parentId) {
+        ScopeClause scope = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName());
         List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE " + viaColumn + " = :parent ORDER BY _id")
+                scope.bind(h.createQuery("SELECT * FROM " + desc.tableName() +
+                                " WHERE " + viaColumn + " = :parent" + scope.and() + " ORDER BY _id"))
                         .bind("parent", parentId)
                         .mapToMap()
                         .list());
-        refResolver.resolveAttributes(rows, allFields(desc));
+        refResolver.resolveAttributes(rows, allFields(desc), subject);
         return rows;
     }
 

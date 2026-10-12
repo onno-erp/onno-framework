@@ -40,7 +40,7 @@ class CrmInboxReadPerformanceTest {
         when(workspaces.config(workspace)).thenReturn(new CrmWorkspaceService.Config(List.of(),List.of(),"","","",true,true,true,true,true,true));
         var descriptor=mock(CatalogDescriptor.class);when(descriptor.attributes()).thenReturn(List.of());
         when(catalogs.forClass(Conversation.class)).thenReturn(descriptor);
-        when(catalogs.get(eq(descriptor),any())).thenReturn(Map.of());
+        when(catalogs.get(any(),eq(descriptor),any())).thenReturn(Map.of());
         var views=mock(UiViewResolver.class);var view=mock(ResolvedListView.class);
         when(views.catalogList(eq(descriptor),any(ListSpec.class))).thenReturn(view);
         when(view.title()).thenReturn("Inbox");when(view.columns()).thenReturn(List.of());when(view.filters()).thenReturn(List.of());
@@ -86,7 +86,7 @@ class CrmInboxReadPerformanceTest {
         assertThat(result.get("nextCursor")).isEqualTo("3");
         var rows=(List<Map<String,Object>>)result.get("rows");
         assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(94).getId(),members.get(92).getId());
-        verify(catalogs,times(2)).get(any(),any());
+        verify(catalogs,times(2)).get(any(),any(),any());
         assertThat(resolvedCustomers())
             .containsExactlyInAnyOrder(members.get(94).getCustomer(),members.get(92).getCustomer())
             .doesNotContain(members.get(98).getCustomer());
@@ -126,6 +126,6 @@ class CrmInboxReadPerformanceTest {
         var result=(Map<?,?>)controller.read("support","",0,params,principal);
         assertThat((List<?>)result.get("rows")).isEmpty();
         assertThat(result.get("total")).isEqualTo(100);
-        verify(contacts,never()).get(any(),any());verify(catalogs,never()).get(any(),any());
+        verify(contacts,never()).get(any(),any());verify(catalogs,never()).get(any(),any(),any());
     }
 }

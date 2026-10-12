@@ -143,7 +143,10 @@ final class AnnotatedMcpToolProvider implements McpToolProvider {
             if (parameter.getType() == Principal.class) {
                 values[i] = principal;
             } else if (parameter.getType() == McpToolContext.class) {
-                values[i] = new McpToolContext(principal, exchange);
+                values[i] = new McpToolContext(principal, exchange, McpPrincipalContext.subject(exchange));
+            } else if (parameter.getType() == su.onno.access.AccessSubject.class
+                    || parameter.getType() == su.onno.access.AccessSubject.User.class) {
+                values[i] = McpPrincipalContext.subject(exchange);
             } else if (parameter.getType() == McpSyncServerExchange.class) {
                 values[i] = exchange;
             } else {

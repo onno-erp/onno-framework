@@ -1,6 +1,8 @@
 package su.onno.ui.presence;
 
+import su.onno.access.AccessSubject;
 import su.onno.cluster.ClusterEvent;
+import su.onno.ui.RecordAccess;
 import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 import su.onno.ui.UiAccessService;
@@ -30,8 +32,9 @@ import java.util.Set;
  * and Babbage are also here") on the open tab, list rows, and the sidebar nav.
  *
  * <p>The client posts the pane's route {@code path}; the server derives the presence identity from it. A
- * {@code catalogs}/{@code documents} route is gated on the owning entity's <em>read</em> access (so you
- * only register on, and learn about, records/lists you may read), while any other route is a {@code page}
+ * {@code catalogs}/{@code documents} route is gated on the owning entity's <em>read</em> access — and,
+ * for a record route and a record-scoped viewer, on the record being inside the viewer's read scope —
+ * (so you only register on, and learn about, records/lists you may read), while any other route is a {@code page}
  * visible to any signed-in user. Identity is stamped from the authenticated principal via
  * {@link CurrentUserResolver}, so the client never asserts who it is. The client posts {@code enter} on
  * open, {@code heartbeat} periodically, and {@code leave} on close; the response returns the route's
@@ -48,20 +51,33 @@ public class PresenceController {
     private final UiAccessService access;
     private final CurrentUserResolver currentUser;
     private final CommentAuthorAvatars authorAvatars;
+    private final RecordAccess recordAccess;
 
     public PresenceController(PresenceRegistry registry, UiAccessService access, CurrentUserResolver currentUser,
                               CommentAuthorAvatars authorAvatars) {
+        this(registry, access, currentUser, authorAvatars, null);
+    }
+
+    public PresenceController(PresenceRegistry registry, UiAccessService access, CurrentUserResolver currentUser,
+                              CommentAuthorAvatars authorAvatars, RecordAccess recordAccess) {
         this.registry = registry;
         this.access = access;
         this.currentUser = currentUser;
         this.authorAvatars = authorAvatars;
+        this.recordAccess = recordAccess;
+    }
+
+    /** Whether a record route is readable by a record-scoped viewer (true for lists/pages/unscoped). */
+    private boolean recordReadable(AccessSubject subject, String kind, String name, String id) {
+        return recordAccess == null || recordAccess.canReadRecord(subject, kind, name, id);
     }
 
     /** The heartbeat body: the pane's route {@code path} and an {@code action} (enter/heartbeat/leave). */
     public record PresenceRequest(String path, String action) {}
 
     @PostMapping
-    public Map<String, Object> ping(@RequestBody(required = false) PresenceRequest request, Principal principal) {
+    public Map<String, Object> ping(@RequestBody(required = false) PresenceRequest request, Principal principal,
+                                    AccessSubject subject) {
         String action = request == null ? null : request.action();
         if (action == null || !ACTIONS.contains(action)) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
@@ -73,6 +89,9 @@ public class PresenceController {
         if (route.entity() && !access.canRead(principal, route.type(), route.name())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Current user is not allowed to read " + route.type() + ": " + route.name());
+        }
+        if (route.entity() && !recordReadable(subject, route.kind(), route.name(), route.id())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         CurrentUser me = currentUser.resolve(principal);
         String userId = me.recordId() != null ? me.recordId() : me.username();
@@ -99,7 +118,7 @@ public class PresenceController {
      * visible to any signed-in user.
      */
     @GetMapping
-    public Map<String, Object> snapshot(Principal principal) {
+    public Map<String, Object> snapshot(Principal principal, AccessSubject subject) {
         CurrentUser me = currentUser.resolve(principal);
         String you = me.recordId() != null ? me.recordId() : me.username();
         Map<String, Boolean> readable = new HashMap<>();
@@ -120,6 +139,10 @@ public class PresenceController {
             if (ok == null) {
                 ok = "page".equals(type) || access.canRead(principal, type, name);
                 readable.put(type + ":" + name, ok);
+            }
+            if (ok && !"page".equals(type)
+                    && !recordReadable(subject, kind, name, String.valueOf(rec.get("id")))) {
+                ok = false; // a record outside the viewer's scope: never reveal who is on it
             }
             if (ok) {
                 records.add(rec);

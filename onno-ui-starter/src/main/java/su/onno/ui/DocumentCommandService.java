@@ -1,5 +1,7 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.DocumentDescriptor;
@@ -25,7 +27,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.math.BigDecimal;
-import java.security.Principal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,9 +43,12 @@ import java.util.UUID;
  * and other callers (e.g. the MCP server), and access control / read-only checks
  * are enforced in exactly one place.
  *
- * <p>Every mutating method enforces {@code requireWritable()} (global read-only mode)
- * and {@link UiAccessService#requireWrite} against the caller's {@link Principal}, so
- * callers never bypass the role model.
+ * <p>Every mutating method enforces {@code requireWritable()} (global read-only mode),
+ * {@link UiAccessService#requireWrite} and the record policies against the caller's
+ * {@link AccessSubject}, so callers never bypass the role model: an existing document must be
+ * inside the write scope (404 otherwise), the written document must still satisfy it (403, rolled
+ * back), and every reference written — header or line — must be readable (422). Tabular sections
+ * inherit the document's scope. See {@link RecordWriteGuard}.
  */
 public class DocumentCommandService {
 
@@ -59,6 +63,7 @@ public class DocumentCommandService {
     private final SecretCipher secretCipher;
     private final AttributeValidator attributeValidator = new AttributeValidator();
     private final WriteLifecycle lifecycle;
+    private final RecordWriteGuard guard;
 
     public DocumentCommandService(MetadataRegistry registry, Jdbi jdbi, UiProperties properties,
                                   NumberGenerator numberGenerator, PostingService postingService,
@@ -74,12 +79,15 @@ public class DocumentCommandService {
         this.events = events;
         this.secretCipher = secretCipher;
         this.lifecycle = new WriteLifecycle(registry, secretCipher);
+        this.guard = new RecordWriteGuard(registry, query.scopes(), access, jdbi);
     }
 
-    public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, Principal principal) {
+    public Map<String, Object> create(DocumentDescriptor desc, Map<String, Object> requestBody, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
         Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
+        guard.applyDefaults(desc.javaClass(), body, subject);
+        requireReadableRefs(desc, body, subject);
         UUID id = UUID.randomUUID();
 
         String number = resolveNumber(desc, body);
@@ -123,7 +131,7 @@ public class DocumentCommandService {
                 " (" + String.join(", ", columns) + ")" +
                 " VALUES (" + String.join(", ", values) + ")";
 
-        jdbi.useHandle(h -> {
+        jdbi.useTransaction(h -> {
             var update = h.createUpdate(sql)
                     .bind("_id", id)
                     .bind("_number", resolveNumber(desc, body))
@@ -138,22 +146,26 @@ public class DocumentCommandService {
                 EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
             }
             update.execute();
+            guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
         });
 
         insertTabularSections(desc, id, body);
         lifecycle.runAfterWrite(doc);
 
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CREATED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, naturalKey(result)));
         return result;
     }
 
     public Map<String, Object> update(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                       Principal principal) {
+                                       AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
+        guard.preserveRestrictedRefs(desc.tableName(), desc.attributes(), id, body, subject, null);
+        requireReadableRefs(desc, body, subject);
 
         // Reconstruct the stored document, overlay the submitted changes (including tabular rows),
         // and run the write lifecycle (beforeWrite + rules) on the merged state so derived fields
@@ -201,7 +213,7 @@ public class DocumentCommandService {
                     " SET " + String.join(", ", setClauses) +
                     " WHERE _id = :_id" + (hasExpectedVersion ? " AND _version = :_expected_version" : "");
 
-            int updated = jdbi.withHandle(h -> {
+            int updated = jdbi.inTransaction(h -> {
                 var update = h.createUpdate(sql).bind("_id", id);
                 if (body.containsKey("number")) update.bind("_number", body.get("number"));
                 // Same as create: bind the timestamp as a LocalDateTime so Postgres accepts it. (#163)
@@ -216,7 +228,9 @@ public class DocumentCommandService {
                         EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
                     }
                 }
-                return update.execute();
+                int n = update.execute();
+                if (n > 0) guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+                return n;
             });
             if (updated == 0 && hasExpectedVersion) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -237,7 +251,7 @@ public class DocumentCommandService {
         insertTabularSections(desc, id, body);
         lifecycle.runAfterWrite(doc);
 
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UPDATED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, naturalKey(result)));
         return result;
@@ -254,9 +268,11 @@ public class DocumentCommandService {
      * payload.
      */
     public Map<String, Object> validate(DocumentDescriptor desc, UUID id, Map<String, Object> requestBody,
-                                        Principal principal) {
-        access.requireWrite(principal, desc);
+                                        AccessSubject subject) {
+        access.requireWrite(subject, desc);
+        if (id != null) guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         Map<String, Object> body = EntityWriteAliases.document(desc, requestBody);
+        if (id == null) guard.applyDefaults(desc.javaClass(), body, subject);
 
         ValidationErrors errors = new ValidationErrors();
         boolean isNew = id == null;
@@ -290,16 +306,17 @@ public class DocumentCommandService {
         return EntityWriteSupport.validationReport(errors);
     }
 
-    public Map<String, Object> post(DocumentDescriptor desc, UUID id, Principal principal) {
+    public Map<String, Object> post(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         DocumentObject doc = loadDocumentObject(desc, id);
         if (doc.isPosted()) {
             postingService.repost(doc);
         } else {
             postingService.post(doc);
         }
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.POSTED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, naturalKey(result)));
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
@@ -307,18 +324,20 @@ public class DocumentCommandService {
         return result;
     }
 
-    public PostingPreview postingPreview(DocumentDescriptor desc, UUID id, Principal principal) {
-        access.requireRead(principal, desc);
+    public PostingPreview postingPreview(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+        access.requireRead(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.READ);
         DocumentObject doc = loadDocumentObject(desc, id);
         return postingService.preview(doc);
     }
 
-    public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, Principal principal) {
+    public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         DocumentObject doc = loadDocumentObject(desc, id);
         postingService.unpost(doc);
-        Map<String, Object> result = query.get(desc, id);
+        Map<String, Object> result = query.get(subject, desc, id);
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UNPOSTED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, naturalKey(result)));
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
@@ -326,9 +345,19 @@ public class DocumentCommandService {
         return result;
     }
 
-    public void delete(DocumentDescriptor desc, UUID id, Principal principal) {
+    /**
+     * Whether {@code subject} may change existing record {@code id} — inside its record-policy
+     * write scope (entity-level write access is checked by the write itself). Import uses this to
+     * turn an upsert onto someone else's record into a row error instead of an overwrite.
+     */
+    public boolean isWritable(DocumentDescriptor desc, UUID id, AccessSubject subject) {
+        return query.inScope(subject, desc, id, AccessMode.WRITE);
+    }
+
+    public void delete(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(principal, desc);
+        access.requireWrite(subject, desc);
+        guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
 
         // Honour the domain's BeforeDeleteHandler on the UI path too, not only repository.delete
         // (OnnoBeforeDeleteCallback): the loaded aggregate may veto the soft-delete by throwing —
@@ -364,6 +393,20 @@ public class DocumentCommandService {
         );
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.DELETED, EntityChangedEvent.DOCUMENT,
                 desc.logicalName(), id, number));
+    }
+
+    /** Header refs and the refs of every submitted line must point at records the subject may read. */
+    @SuppressWarnings("unchecked")
+    private void requireReadableRefs(DocumentDescriptor desc, Map<String, Object> body, AccessSubject subject) {
+        guard.requireReadableRefs(desc.attributes(), body, subject);
+        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+            if (!(body.get(ts.name()) instanceof List<?> rows)) continue;
+            for (Object row : rows) {
+                if (row instanceof Map<?, ?> m) {
+                    guard.requireReadableRefs(ts.attributes(), (Map<String, Object>) m, subject);
+                }
+            }
+        }
     }
 
     /**

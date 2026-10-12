@@ -39,6 +39,8 @@ export default defineConfig({
           { text: 'Extending onno', link: '/EXTENDING' },
           { text: 'Migrating to 2.0', link: '/MIGRATING_TO_2_0' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
+          { text: 'Record access policies', link: '/RECORD_ACCESS_POLICIES' },
+          { text: '3.4 release notes', link: '/RELEASE_NOTES_3_4' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
           {
             text: 'Building ERPs with AI agents',
@@ -75,6 +77,8 @@ export default defineConfig({
           { text: 'Extending onno', link: '/EXTENDING' },
           { text: 'Migrating to 2.0', link: '/MIGRATING_TO_2_0' },
           { text: 'Headless Read API', link: '/HEADLESS_READ_API' },
+          { text: 'Record access policies', link: '/RECORD_ACCESS_POLICIES' },
+          { text: '3.4 release notes', link: '/RELEASE_NOTES_3_4' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
         ],
       },

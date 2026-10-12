@@ -1,6 +1,11 @@
 package su.onno.ui;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.events.EntityChangedEvent;
+import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.DocumentDescriptor;
+import su.onno.metadata.MetadataRegistry;
 import su.onno.process.ProcessTasksChangedEvent;
 
 import jakarta.annotation.PreDestroy;
@@ -13,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +43,14 @@ import java.util.function.Supplier;
  * thread (the event-publishing thread, or the {@link ClusterUiBridge} relay for peer-node events),
  * where {@code SecurityContextHolder} no longer holds the subscriber's authentication; see
  * {@link UiAccessService#canReceiveEvent(java.util.Set, String, String)}.
+ *
+ * <p><strong>Per-subscriber record scope.</strong> A stream also captures its viewer's full
+ * {@link AccessSubject}. For an event about one catalog/document record (a change, a comment, a
+ * presence update), a subscriber restricted by a record policy receives it only when that record is
+ * inside its read scope — checked with one {@code SELECT _id … WHERE _id = :id AND <scope>} per
+ * event and distinct scope (subscribers sharing a role and attribute values share the query). Soft
+ * deletes keep the row, so a deletion is delivered exactly to the subscribers who could read the
+ * record.
  */
 public class UiEventPublisher {
 
@@ -61,12 +75,16 @@ public class UiEventPublisher {
             SseEmitter emitter,
             Set<String> roles,
             String userId,
-            String username
+            String username,
+            AccessSubject subject
     ) {}
 
     private final List<Subscriber> subscribers = new CopyOnWriteArrayList<>();
     private final UiAccessService access;
     private final Supplier<SseEmitter> emitterFactory;
+    private RecordScopeCompiler scopes;
+    private org.jdbi.v3.core.Jdbi jdbi;
+    private MetadataRegistry registry;
 
     /**
      * Identifies this application-context incarnation. Regenerated whenever the context restarts (a
@@ -107,6 +125,13 @@ public class UiEventPublisher {
                 KEEPALIVE_SECONDS, KEEPALIVE_SECONDS, TimeUnit.SECONDS);
     }
 
+    /** Enable per-record scope filtering of record events (set by the auto-configuration). */
+    public void setRecordScopes(RecordScopeCompiler scopes, org.jdbi.v3.core.Jdbi jdbi, MetadataRegistry registry) {
+        this.scopes = scopes;
+        this.jdbi = jdbi;
+        this.registry = registry;
+    }
+
     /**
      * Open a stream for a viewer holding {@code roles} (capture them with
      * {@link UiAccessService#roles(java.security.Principal)} on the request thread). The role set is
@@ -131,9 +156,17 @@ public class UiEventPublisher {
      * by {@code userId}; process task assignments route by the principal {@code username}.
      */
     public SseEmitter subscribe(Set<String> roles, String userId, String username) {
+        return subscribe(AccessSubject.user(username, roles == null ? Set.of() : roles), userId, username);
+    }
+
+    /**
+     * Open a stream for {@code subject} (resolve it on the request thread). Its roles gate every
+     * broadcast event and its record scope gates every event about one record.
+     */
+    public SseEmitter subscribe(AccessSubject subject, String userId, String username) {
         SseEmitter emitter = emitterFactory.get();
         Subscriber subscriber = new Subscriber(
-                emitter, roles == null ? Set.of() : Set.copyOf(roles), userId, username);
+                emitter, Set.copyOf(subject.roles()), userId, username, subject);
         subscribers.add(subscriber);
         emitter.onCompletion(() -> subscribers.remove(subscriber));
         emitter.onTimeout(() -> subscribers.remove(subscriber));
@@ -239,10 +272,93 @@ public class UiEventPublisher {
         payload.put("naturalKey", naturalKey);
         payload.put("timestamp", Instant.now().toString());
 
+        RecordGate gate = new RecordGate(recordTypeOf(entityType, entityName), id);
         for (Subscriber subscriber : subscribers) {
-            if (access.canReceiveEvent(subscriber.roles(), entityType, entityName)) {
+            if (access.canReceiveEvent(subscriber.roles(), entityType, entityName) && gate.admits(subscriber)) {
                 send(subscriber, type, payload);
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- record-scope gating
+
+    private record RecordType(Class<?> type, String table) {}
+
+    /** The catalog/document an event is about, or {@code null} when it is not about one record. */
+    private RecordType recordTypeOf(String entityType, String entityName) {
+        if (registry == null || entityName == null || "*".equals(entityName)) return null;
+        String normalized = entityName.replace(" ", "").replace("_", "").toLowerCase();
+        boolean catalog = "catalog".equals(entityType) || "comment".equals(entityType);
+        boolean document = "document".equals(entityType) || "comment".equals(entityType);
+        if (catalog) {
+            for (CatalogDescriptor d : registry.allCatalogs()) {
+                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized)) {
+                    return new RecordType(d.javaClass(), d.tableName());
+                }
+            }
+        }
+        if (document) {
+            for (DocumentDescriptor d : registry.allDocuments()) {
+                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase().equals(normalized)) {
+                    return new RecordType(d.javaClass(), d.tableName());
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Decides, per subscriber, whether one record-event may be delivered: unscoped subscribers always
+     * pass; scoped ones pass only when the record is inside their read scope. The in-scope check runs
+     * once per distinct compiled scope (equal clauses — same role and attribute values — share it).
+     */
+    private final class RecordGate {
+        private final RecordType record;
+        private final UUID id;
+        private final Map<ScopeClause, Boolean> verdicts = new HashMap<>();
+
+        RecordGate(RecordType record, Object id) {
+            this.record = record;
+            this.id = asUuid(id);
+        }
+
+        boolean admits(Subscriber subscriber) {
+            if (scopes == null || record == null || subscriber.subject() == null) return true;
+            ScopeClause clause = scopes.clause(record.type(), subscriber.subject(), AccessMode.READ, record.table());
+            if (clause.isAll()) return true;
+            if (id == null) return false; // a scoped viewer never gets an unidentifiable record event
+            return verdicts.computeIfAbsent(clause, c -> {
+                try {
+                    return jdbi.withHandle(h -> c.bind(h.createQuery(
+                                    "SELECT COUNT(*) FROM " + record.table() + " WHERE _id = :_rid" + c.and()))
+                            .bind("_rid", id)
+                            .mapTo(Long.class).one()) > 0;
+                } catch (RuntimeException e) {
+                    log.debug("Record-scope check for SSE event failed; not delivering: {}", e.getMessage());
+                    return false;
+                }
+            });
+        }
+    }
+
+    /** A gate for a notification whose {@code link} routes to one catalog/document record. */
+    private RecordGate recordGateForLink(Object link) {
+        if (link == null) return new RecordGate(null, null);
+        String[] parts = java.util.Arrays.stream(link.toString().split("[/?#]"))
+                .filter(p -> !p.isBlank()).toArray(String[]::new);
+        if (parts.length < 3) return new RecordGate(null, null);
+        String type = "catalogs".equals(parts[0]) ? "catalog" : "documents".equals(parts[0]) ? "document" : null;
+        if (type == null || asUuid(parts[2]) == null) return new RecordGate(null, null);
+        return new RecordGate(recordTypeOf(type, parts[1]), parts[2]);
+    }
+
+    private static UUID asUuid(Object id) {
+        if (id == null) return null;
+        if (id instanceof UUID u) return u;
+        try {
+            return UUID.fromString(id.toString());
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
         }
     }
 
@@ -272,8 +388,9 @@ public class UiEventPublisher {
         payload.put("viewers", viewers);
         payload.put("timestamp", Instant.now().toString());
 
+        RecordGate gate = new RecordGate(recordTypeOf(entityType, entityName), id);
         for (Subscriber subscriber : subscribers) {
-            if (access.canReceiveEvent(subscriber.roles(), entityType, entityName)) {
+            if (access.canReceiveEvent(subscriber.roles(), entityType, entityName) && gate.admits(subscriber)) {
                 send(subscriber, "presence", payload);
             }
         }
@@ -296,8 +413,9 @@ public class UiEventPublisher {
         if (recipientId == null) {
             return;
         }
+        RecordGate gate = recordGateForLink(payload.get("link"));
         for (Subscriber subscriber : subscribers) {
-            if (recipientId.equals(subscriber.userId())) {
+            if (recipientId.equals(subscriber.userId()) && gate.admits(subscriber)) {
                 send(subscriber, "notification", payload);
             }
         }

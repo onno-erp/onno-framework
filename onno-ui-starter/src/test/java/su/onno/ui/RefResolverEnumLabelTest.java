@@ -63,7 +63,7 @@ class RefResolverEnumLabelTest {
         unlabelled.put(statusAttr.columnName(), shippedId);
 
         RefResolver resolver = new RefResolver(registry, null);
-        resolver.resolveAttributes(List.of(labelled, unlabelled), order.attributes());
+        resolver.resolveAttributes(List.of(labelled, unlabelled), order.attributes(), su.onno.access.AccessSubject.system());
 
         assertThat(labelled.get(statusAttr.columnName() + "_display")).isEqualTo("Новый");
         assertThat(unlabelled.get(statusAttr.columnName() + "_display")).isEqualTo("SHIPPED");

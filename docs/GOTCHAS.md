@@ -27,6 +27,25 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   `{label, username, password}`) — under `onno.ui`, not `onno.auth`. They render on the password
   step of the login screen.
 
+## Record-level access
+
+- **Typed repositories are not record-scoped.** `RecordAccessPolicy` is enforced by the generic
+  REST/DivKit/MCP surfaces and the UI starter's query/command services. `CatalogRepository`,
+  `DocumentRepository` and `RegisterRepository` are trusted code (posting, jobs, processes) and see
+  every record. A custom controller, page action or `@McpTool` that serves an external user from a
+  repository must check with `RecordAccess.require(subject, Type.class, id, AccessMode.READ)` (or
+  `filter(...)` for many ids).
+- **Never pass `AccessSubject.system()` on a user's behalf.** It bypasses every policy. Request code
+  declares an `AccessSubject` controller parameter (or calls `AccessSubjectResolver.resolve(principal)`);
+  only background work uses `system()`.
+- **A scoped user without an identity record sees nothing.** `Subject.recordId()` comes from
+  `Layout.identity(...)`; if the login matches no identity row, every scope that reads it is false.
+- **Refs into unreadable entities render restricted — even without policies.** Since 3.4 a ref whose
+  target entity the viewer can't read shows `—` with `{field}Restricted: true` and no id. Grant read
+  access on the target if users need to see those names.
+- **Media is not record-bound.** `/api/media/{key}` is served to any signed-in user who has the key.
+  Don't store customer-private files as media when external users exist.
+
 ## UI chrome & localization
 
 - **`onno.ui.messages` is a fixed key namespace (~190 keys); unknown keys are silently ignored.**

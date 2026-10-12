@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
-import java.security.Principal;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -61,14 +61,14 @@ public class RegisterListController {
                                          @RequestParam(required = false) String from,
                                          @RequestParam(required = false) String to,
                                          HttpServletRequest request,
-                                         Principal principal) {
+                                         AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.movementFilterColumns(desc));
-        long total = query.movementsCount(desc, from, to, filters);
+        long total = query.movementsCount(subject, desc, from, to, filters);
         int rowPosition = rowPosition(request);
-        List<Map<String, Object>> rows = query.movementsWindow(desc, from, to, filters,
+        List<Map<String, Object>> rows = query.movementsWindow(subject, desc, from, to, filters,
                 sort, descending(dir), rowPosition, lim);
         decorateMovementType(rows);
         return envelope(total, rowPosition, rows);
@@ -80,14 +80,14 @@ public class RegisterListController {
                                        @RequestParam(required = false) String sort,
                                        @RequestParam(required = false) String dir,
                                        HttpServletRequest request,
-                                       Principal principal) {
+                                       AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc));
-        long total = query.balanceCount(desc, filters);
+        long total = query.balanceCount(subject, desc, filters);
         int rowPosition = rowPosition(request);
-        List<Map<String, Object>> rows = query.balanceWindow(desc, filters,
+        List<Map<String, Object>> rows = query.balanceWindow(subject, desc, filters,
                 sort, descending(dir), rowPosition, lim);
         return envelope(total, rowPosition, rows);
     }

@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Dimension;
@@ -95,7 +96,7 @@ class InformationRegisterRelatedRowsTest {
 
     @Test
     void scopesRowsToParentAndResolvesDisplayRef() {
-        List<Map<String, Object>> rows = service.relatedRows(regDesc, dim("booking"), booking1);
+        List<Map<String, Object>> rows = service.relatedRows(AccessSubject.system(), regDesc, dim("booking"), booking1);
 
         assertThat(rows).hasSize(2);
         // The display dimension (client) resolves to each client's description.
@@ -108,7 +109,7 @@ class InformationRegisterRelatedRowsTest {
 
     @Test
     void otherParentSeesOnlyItsOwnRows() {
-        List<Map<String, Object>> rows = service.relatedRows(regDesc, dim("booking"), booking2);
+        List<Map<String, Object>> rows = service.relatedRows(AccessSubject.system(), regDesc, dim("booking"), booking2);
 
         assertThat(rows).hasSize(1);
         assertThat(rows.get(0).get(dim("client") + "_display")).isEqualTo("Ada Lovelace");
@@ -116,7 +117,7 @@ class InformationRegisterRelatedRowsTest {
 
     @Test
     void parentWithNoLinksReturnsEmpty() {
-        assertThat(service.relatedRows(regDesc, dim("booking"), UUID.randomUUID())).isEmpty();
+        assertThat(service.relatedRows(AccessSubject.system(), regDesc, dim("booking"), UUID.randomUUID())).isEmpty();
     }
 
     /** The DB column for a register dimension by field name (never hardcode the naming strategy). */

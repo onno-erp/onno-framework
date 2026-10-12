@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.metadata.CatalogDescriptor;
@@ -140,7 +141,7 @@ class CatalogQueryServiceKeysetTest {
     // --- helpers ---------------------------------------------------------------
 
     private KeysetPage page(String cursor, int limit, String sort, boolean descending) {
-        return service.keysetPage(catalog, cursor, limit, sort, descending, null,
+        return service.keysetPage(AccessSubject.system(), catalog, cursor, limit, sort, descending, null,
                 NONE, NONE, NONE, NONE, NONE, NONE, null);
     }
 

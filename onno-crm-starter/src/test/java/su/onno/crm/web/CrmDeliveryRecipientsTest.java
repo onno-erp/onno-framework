@@ -55,7 +55,7 @@ class CrmDeliveryRecipientsTest {
         assertThat(delivery.recipients()).containsExactly("known@example.com", "thread@example.com");
 
         // Sending to a hidden address is refused before the service sees it.
-        when(access.hasAnyRole(any(), any())).thenReturn(true);
+        when(access.hasAnyRole(any(java.security.Principal.class), any())).thenReturn(true);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> controller.send(conversation.getId(),
                         new CrmInboxController.SendMessage("Hello", List.of(), null, "private@example.com"), "support", alice))
                 .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)

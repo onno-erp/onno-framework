@@ -96,12 +96,13 @@ public class OnnoMcpAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public HttpServletStreamableServerTransportProvider onnoMcpTransportProvider(McpJsonMapper json,
-                                                                                 OnnoMcpProperties properties) {
+    public HttpServletStreamableServerTransportProvider onnoMcpTransportProvider(
+            McpJsonMapper json, OnnoMcpProperties properties,
+            org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects) {
         return HttpServletStreamableServerTransportProvider.builder()
                 .jsonMapper(json)
                 .mcpEndpoint(properties.getEndpoint())
-                .contextExtractor(new McpPrincipalContext())
+                .contextExtractor(new McpPrincipalContext(subjects.getIfAvailable()))
                 .build();
     }
 

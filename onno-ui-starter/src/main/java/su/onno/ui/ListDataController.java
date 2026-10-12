@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 
@@ -12,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,9 +58,9 @@ public class ListDataController {
                                            @RequestParam(required = false) String q,
                                            @RequestParam(required = false) String filter,
                                            HttpServletRequest request,
-                                           Principal principal) {
+                                           AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         EntityJsonRepresentation.Mode representation =
                 EntityJsonRepresentation.parse(request.getParameter("representation"));
         // Surgical refresh: when the island asks for specific ids (a single-row live patch), return
@@ -69,7 +69,7 @@ public class ListDataController {
         // (the requested ids matched nothing) rather than falling back to a full page.
         if (request.getParameterValues("ids") != null) {
             List<UUID> ids = parseIds(request);
-            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(desc, ids);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(subject, desc, ids);
             decorateRowActions(desc.javaClass(), picked);
             picked = EntityJsonRepresentation.catalogs(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
@@ -82,15 +82,15 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        KeysetPage kp = catalogQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
+        KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
         kp = new KeysetPage(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation),
                 kp.nextCursor(), kp.hasMore());
         boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
-                () -> catalogQuery.count(desc, q, eq, in, like, prefix, ge, le, filter),
-                () -> catalogQuery.estimateCount(desc, filtered));
+                () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, filter),
+                () -> catalogQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
     }
 
@@ -104,15 +104,15 @@ public class ListDataController {
                                             @RequestParam(required = false) String to,
                                             @RequestParam(required = false) String filter,
                                             HttpServletRequest request,
-                                            Principal principal) {
+                                            AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         EntityJsonRepresentation.Mode representation =
                 EntityJsonRepresentation.parse(request.getParameter("representation"));
         // Surgical refresh by id (single-row live patch) — see catalogPage.
         if (request.getParameterValues("ids") != null) {
             List<UUID> ids = parseIds(request);
-            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(desc, ids);
+            List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(subject, desc, ids);
             decorateRowActions(desc.javaClass(), picked);
             picked = EntityJsonRepresentation.documents(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
@@ -124,15 +124,15 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        KeysetPage kp = documentQuery.keysetPage(desc, request.getParameter("cursor"), limit, sort,
+        KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"), limit, sort,
                 descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
         kp = new KeysetPage(EntityJsonRepresentation.documents(desc, kp.rows(), representation),
                 kp.nextCursor(), kp.hasMore());
         boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
-                () -> documentQuery.count(desc, q, from, to, eq, in, like, prefix, ge, le, filter),
-                () -> documentQuery.estimateCount(desc, filtered));
+                () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, filter),
+                () -> documentQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
     }
 
@@ -150,10 +150,10 @@ public class ListDataController {
                                              @RequestParam(required = false) String q,
                                              @RequestParam(required = false) String filter,
                                              HttpServletRequest request,
-                                             Principal principal) {
+                                             AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
-        access.requireRead(principal, desc);
-        ListGroups.GroupResult result = catalogQuery.groups(desc, groupBy, granularity, q,
+        access.requireRead(subject, desc);
+        ListGroups.GroupResult result = catalogQuery.groups(subject, desc, groupBy, granularity, q,
                 multi(request, "eq"), multi(request, "in"), multi(request, "like"),
                 multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
                 filter, aggregates(request));
@@ -170,10 +170,10 @@ public class ListDataController {
                                               @RequestParam(required = false) String to,
                                               @RequestParam(required = false) String filter,
                                               HttpServletRequest request,
-                                              Principal principal) {
+                                              AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
-        access.requireRead(principal, desc);
-        ListGroups.GroupResult result = documentQuery.groups(desc, groupBy, granularity, q, from, to,
+        access.requireRead(subject, desc);
+        ListGroups.GroupResult result = documentQuery.groups(subject, desc, groupBy, granularity, q, from, to,
                 multi(request, "eq"), multi(request, "in"), multi(request, "like"),
                 multi(request, "prefix"), multi(request, "ge"), multi(request, "le"),
                 filter, aggregates(request));
@@ -189,11 +189,11 @@ public class ListDataController {
     @GetMapping("/catalogs/{name}/aggregate")
     public Map<String, Object> catalogAggregate(@PathVariable String name,
                                                 WidgetBuckets.Request request,
-                                                Principal principal) {
+                                                AccessSubject subject) {
         CatalogDescriptor desc = catalogQuery.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         try {
-            return catalogQuery.aggregateBuckets(desc, request);
+            return catalogQuery.aggregateBuckets(subject, desc, request);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -203,11 +203,11 @@ public class ListDataController {
     @GetMapping("/documents/{name}/aggregate")
     public Map<String, Object> documentAggregate(@PathVariable String name,
                                                  WidgetBuckets.Request request,
-                                                 Principal principal) {
+                                                 AccessSubject subject) {
         DocumentDescriptor desc = documentQuery.require(name);
-        access.requireRead(principal, desc);
+        access.requireRead(subject, desc);
         try {
-            return documentQuery.aggregateBuckets(desc, request);
+            return documentQuery.aggregateBuckets(subject, desc, request);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

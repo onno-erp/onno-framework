@@ -105,6 +105,7 @@ class CatalogCsvImportServiceTest {
                 Code,Name
                 C-001,Alice Updated
                 """.getBytes(StandardCharsets.UTF_8);
+        when(commands.isWritable(any(), any(), any())).thenReturn(true);
         when(commands.update(eq(clients), eq(existingId), any(), any())).thenReturn(Map.of("_id", existingId));
 
         ImportResult result = upsertService.importCatalog(clients, csv, null,

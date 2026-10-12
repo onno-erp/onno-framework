@@ -42,19 +42,28 @@ public final class FormValidationController {
                                        @PathVariable String name,
                                        @PathVariable String key,
                                        @RequestBody Request request,
-                                       Principal principal) {
+                                       Principal principal, su.onno.access.AccessSubject subject) {
         Class<?> entityType;
         String logicalName;
         String normalizedKind;
         if ("documents".equalsIgnoreCase(kind) || "document".equalsIgnoreCase(kind)) {
             DocumentDescriptor descriptor = documents.require(name);
             access.requireWrite(principal, descriptor);
+            // Validating an existing record is a write-side read: it must be inside the write scope.
+            if (request.id() != null
+                    && !documents.inScope(subject, descriptor, request.id(), su.onno.access.AccessMode.WRITE)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            }
             entityType = descriptor.javaClass();
             logicalName = descriptor.logicalName();
             normalizedKind = "document";
         } else if ("catalogs".equalsIgnoreCase(kind) || "catalog".equalsIgnoreCase(kind)) {
             CatalogDescriptor descriptor = catalogs.require(name);
             access.requireWrite(principal, descriptor);
+            if (request.id() != null
+                    && !catalogs.inScope(subject, descriptor, request.id(), su.onno.access.AccessMode.WRITE)) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            }
             entityType = descriptor.javaClass();
             logicalName = descriptor.logicalName();
             normalizedKind = "catalog";

@@ -1,14 +1,17 @@
 package su.onno.ui.comments;
 
+import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
+import su.onno.ui.RecordScopeCompiler;
+import su.onno.ui.ScopeClause;
 import su.onno.ui.UiAccessService;
 
 import org.jdbi.v3.core.Jdbi;
 
-import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -29,7 +32,10 @@ import java.util.UUID;
  *       description/code, document number) and avatar, so renames track automatically;</li>
  *   <li>a mention to an entity the viewer <em>can't</em> read (per the same per-entity read gate as
  *       everything else, {@link UiAccessService#canRead}) resolves as <em>not readable</em> with no
- *       display leaked — the client degrades it to plain text rather than a clickable 403.</li>
+ *       display leaked — the client degrades it to plain text rather than a clickable 403;</li>
+ *   <li>a mention to a record outside the viewer's record scope ({@code RecordAccessPolicy}) is
+ *       equally not readable — indistinguishable from a deleted record, so mentions are no
+ *       existence oracle.</li>
  * </ul>
  *
  * <p>Resolution groups by {@code (kind, name)} so a thread mentioning ten customers costs one query,
@@ -43,11 +49,18 @@ public class MentionResolver {
     private final MetadataRegistry registry;
     private final UiAccessService access;
     private final Jdbi jdbi;
+    private final RecordScopeCompiler scopes;
 
     public MentionResolver(MetadataRegistry registry, UiAccessService access, Jdbi jdbi) {
+        this(registry, access, jdbi, RecordScopeCompiler.unrestricted(registry));
+    }
+
+    public MentionResolver(MetadataRegistry registry, UiAccessService access, Jdbi jdbi,
+                           RecordScopeCompiler scopes) {
         this.registry = registry;
         this.access = access;
         this.jdbi = jdbi;
+        this.scopes = scopes;
     }
 
     /** A mention resolved for one viewer: identity + (when readable) its live display and avatar. */
@@ -67,16 +80,28 @@ public class MentionResolver {
         }
     }
 
-    /** True when {@code viewer} may read the entity a mention points at (deny-by-default, ADMIN bypasses). */
-    public boolean canRead(Principal viewer, MentionRef ref) {
-        return access.canRead(viewer, ref.accessType(), ref.name());
+    /**
+     * True when {@code viewer} may read the record a mention points at: the entity-level grant
+     * (deny-by-default, ADMIN bypasses) and, for a record-scoped viewer, the record's scope.
+     */
+    public boolean canRead(AccessSubject viewer, MentionRef ref) {
+        if (!access.canRead(viewer, ref.accessType(), ref.name())) {
+            return false;
+        }
+        Class<?> type = "catalogs".equals(ref.kind())
+                ? java.util.Optional.ofNullable(catalog(ref.name())).map(CatalogDescriptor::javaClass).orElse(null)
+                : java.util.Optional.ofNullable(document(ref.name())).map(DocumentDescriptor::javaClass).orElse(null);
+        if (type == null || !scopes.isScoped(type, viewer, AccessMode.READ)) {
+            return true;
+        }
+        return resolve(List.of(ref), viewer).get(0).readable();
     }
 
     /**
      * Resolve every distinct mention in {@code refs} for {@code viewer}. Order follows {@code refs};
      * unreadable or unknown mentions are returned with {@code readable=false} and no display.
      */
-    public List<ResolvedMention> resolve(Collection<MentionRef> refs, Principal viewer) {
+    public List<ResolvedMention> resolve(Collection<MentionRef> refs, AccessSubject viewer) {
         if (refs == null || refs.isEmpty()) {
             return List.of();
         }
@@ -107,7 +132,7 @@ public class MentionResolver {
     private record GroupKey(String kind, String name) {
     }
 
-    private void resolveGroup(GroupKey key, Set<UUID> ids, Principal viewer,
+    private void resolveGroup(GroupKey key, Set<UUID> ids, AccessSubject viewer,
                               Map<MentionRef, ResolvedMention> sink) {
         boolean readable = access.canRead(viewer, "catalogs".equals(key.kind()) ? "catalog" : "document", key.name());
         if (!readable) {
@@ -118,13 +143,14 @@ public class MentionResolver {
             return;
         }
         if ("catalogs".equals(key.kind())) {
-            resolveCatalogGroup(key, ids, sink);
+            resolveCatalogGroup(key, ids, viewer, sink);
         } else {
-            resolveDocumentGroup(key, ids, sink);
+            resolveDocumentGroup(key, ids, viewer, sink);
         }
     }
 
-    private void resolveCatalogGroup(GroupKey key, Set<UUID> ids, Map<MentionRef, ResolvedMention> sink) {
+    private void resolveCatalogGroup(GroupKey key, Set<UUID> ids, AccessSubject viewer,
+                                     Map<MentionRef, ResolvedMention> sink) {
         CatalogDescriptor desc = catalog(key.name());
         if (desc == null) {
             putUnresolved(key, ids, sink);
@@ -134,10 +160,11 @@ public class MentionResolver {
                 .map(AttributeDescriptor::columnName)
                 .filter(c -> c.equalsIgnoreCase(AVATAR_COLUMN))
                 .findFirst().orElse(null);
+        ScopeClause scope = scopes.clause(desc.javaClass(), viewer, AccessMode.READ, desc.tableName());
         String sql = "SELECT _id, _description, _code"
                 + (avatarColumn != null ? ", " + avatarColumn + " AS _avatar" : "")
-                + " FROM " + desc.tableName() + " WHERE _id IN (<ids>) AND _deletion_mark = false";
-        Map<UUID, Resolved> rows = jdbi.withHandle(h -> h.createQuery(sql)
+                + " FROM " + desc.tableName() + " WHERE _id IN (<ids>) AND _deletion_mark = false" + scope.and();
+        Map<UUID, Resolved> rows = jdbi.withHandle(h -> scope.bind(h.createQuery(sql))
                 .bindList("ids", new ArrayList<>(ids))
                 .reduceRows(new HashMap<UUID, Resolved>(), (map, rv) -> {
                     String description = rv.getColumn("_description", String.class);
@@ -147,32 +174,43 @@ public class MentionResolver {
                     map.put(rv.getColumn("_id", UUID.class), new Resolved(display, avatar));
                     return map;
                 }));
-        emit(key, ids, desc.logicalName(), rows, sink);
+        emit(key, ids, desc.logicalName(), rows, !scope.isAll(), sink);
     }
 
-    private void resolveDocumentGroup(GroupKey key, Set<UUID> ids, Map<MentionRef, ResolvedMention> sink) {
+    private void resolveDocumentGroup(GroupKey key, Set<UUID> ids, AccessSubject viewer,
+                                      Map<MentionRef, ResolvedMention> sink) {
         DocumentDescriptor desc = document(key.name());
         if (desc == null) {
             putUnresolved(key, ids, sink);
             return;
         }
+        ScopeClause scope = scopes.clause(desc.javaClass(), viewer, AccessMode.READ, desc.tableName());
         String sql = "SELECT _id, _number FROM " + desc.tableName()
-                + " WHERE _id IN (<ids>) AND _deletion_mark = false";
-        Map<UUID, Resolved> rows = jdbi.withHandle(h -> h.createQuery(sql)
+                + " WHERE _id IN (<ids>) AND _deletion_mark = false" + scope.and();
+        Map<UUID, Resolved> rows = jdbi.withHandle(h -> scope.bind(h.createQuery(sql))
                 .bindList("ids", new ArrayList<>(ids))
                 .reduceRows(new HashMap<UUID, Resolved>(), (map, rv) -> {
                     map.put(rv.getColumn("_id", UUID.class),
                             new Resolved(rv.getColumn("_number", String.class), null));
                     return map;
                 }));
-        emit(key, ids, desc.logicalName(), rows, sink);
+        emit(key, ids, desc.logicalName(), rows, !scope.isAll(), sink);
     }
 
-    /** Emit a readable group: each id gets the entity label plus its display/avatar when the record exists. */
-    private void emit(GroupKey key, Set<UUID> ids, String entity, Map<UUID, Resolved> rows,
+    /**
+     * Emit a readable group: each id gets the entity label plus its display/avatar when the record
+     * exists. For a record-scoped viewer a record that didn't resolve (out of scope, or gone) is
+     * not readable at all — the two cases are deliberately indistinguishable.
+     */
+    private void emit(GroupKey key, Set<UUID> ids, String entity, Map<UUID, Resolved> rows, boolean scoped,
                       Map<MentionRef, ResolvedMention> sink) {
         for (UUID id : ids) {
             Resolved hit = rows.get(id);
+            if (hit == null && scoped) {
+                sink.put(new MentionRef(key.kind(), key.name(), id),
+                        new ResolvedMention(key.kind(), key.name(), id, null, null, null, false));
+                continue;
+            }
             String display = hit == null ? null : (hit.display() == null || hit.display().isBlank() ? null : hit.display());
             String avatar = hit == null ? null : hit.avatarUrl();
             sink.put(new MentionRef(key.kind(), key.name(), id),

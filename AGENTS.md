@@ -599,6 +599,41 @@ token id to a typed target step, so parallel work cannot be silently dropped. Wh
 branches are active, map their coordinator to a parallel fork with the same branch enum keys;
 finish or cancel the instance before changing branch cardinality.
 
+### Record-Level Access (External Users)
+
+`@AccessControl` grants a role an *entity*; a `RecordAccessPolicy` bean narrows it to *records*.
+Use it whenever external users (customers, clients, tenants) must only see their own data — do not
+build bespoke endpoints for that.
+
+```java
+@Bean
+RecordAccessPolicy tenantsByOwner() {
+    return RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
+            .read(RecordScope.eq("owner", Subject.recordId()))   // the Layout.identity(...) record
+            .defaults(d -> d.set("owner", Subject.recordId()));  // filled on create
+}
+
+@Bean
+RecordAccessPolicy jobsByTenant() {
+    return RecordAccessPolicy.forDocument(BuildJob.class).appliesTo("CUSTOMER")
+            .read(RecordScope.via("tenant"));                    // visible when the tenant is
+}
+```
+
+Scopes are a closed predicate tree (`eq`, `in`, `isNull`, `via`, `and`, `or`, `not`, `all`,
+`none`) compiled into SQL; values are literals or `Subject.recordId()` / `Subject.username()` /
+`Subject.attribute(name)` (contributed by `AccessSubjectContributor` beans). `write(...)` defaults to
+the read scope; `write(RecordScope.none())` allows changes only through trusted code. `ADMIN` and
+`exemptRoles(...)` are exempt; several applicable policies are OR'ed. Register policies scope by
+dimensions. Startup fails on an invalid policy.
+
+Every UI-starter query/command service method takes an `AccessSubject`. Request code receives it
+as a controller parameter (`AccessSubject subject`), from `ActionContext.subject()` or
+`McpToolContext.subject()`; only trusted background code passes `AccessSubject.system()`. **Typed
+repositories are unscoped** — custom code serving a user from a repository must check with
+`RecordAccess.require(subject, Type.class, id, AccessMode.READ)`. See
+[docs/RECORD_ACCESS_POLICIES.md](docs/RECORD_ACCESS_POLICIES.md).
+
 ### Contexts And Future Services
 
 Use `context` on annotations to mark bounded contexts. At first, contexts live in one monolith.
@@ -922,7 +957,7 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
 - **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
-- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
+- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 

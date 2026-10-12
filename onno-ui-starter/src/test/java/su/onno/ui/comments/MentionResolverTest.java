@@ -1,5 +1,6 @@
 package su.onno.ui.comments;
 
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -161,12 +162,12 @@ class MentionResolverTest {
                 .bind("id", id).bind("number", number).execute());
     }
 
-    private static Principal admin() {
-        return new TestPrincipal("root", List.of(new TestAuthority("ADMIN")));
+    private static AccessSubject admin() {
+        return AccessSubject.user("root", java.util.Set.of("ADMIN"));
     }
 
-    private static Principal nobody() {
-        return new TestPrincipal("guest", List.of());
+    private static AccessSubject nobody() {
+        return AccessSubject.user("guest", java.util.Set.of());
     }
 
     /** A principal whose {@code getAuthorities()} the access service reads reflectively. */

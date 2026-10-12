@@ -142,6 +142,13 @@ in depth in [ARCHITECTURE.md](ARCHITECTURE.md):
 - **Async external workflows are usually submit-then-reconcile.** If the external system doesn't push
   webhooks, model a submit call plus a scheduled reconcile job, and keep an idempotency ledger
   (a starter may own its own `onno_`-prefixed table).
+- **Serve users inside their record scope.** A connector endpoint, page action, widget backend or
+  `@McpTool` that returns or changes host records on a user's behalf takes the caller's
+  `AccessSubject` (controller parameter, `ActionContext.subject()`, `McpToolContext.subject()`) and
+  either reads through the UI starter's query services or checks with `RecordAccess`
+  (`require`/`can`/`filter`/`clause`). Typed repositories are unscoped trusted code. Contribute
+  subject attributes for host policies with an `AccessSubjectContributor` bean. See
+  [Record access policies](RECORD_ACCESS_POLICIES.md).
 - **Expose a focused agent operation with `@McpTool`.** Put it on a public Spring bean method,
   describe inputs with `@McpToolParam`, restrict roles where needed, and mark writes with
   `readOnly = false` so the global MCP write gate applies. Use `McpToolProvider` only when direct
@@ -240,8 +247,9 @@ widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail
 The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
 `onno_tag_links`. Libraries are scoped to the canonical entity kind/name, so tags can be reused
 across its records. Case-insensitive names reuse a definition; removing a chip only removes that
-record's assignment. Standard entity read/write permissions apply. Optional `TagAccessPolicy`
-beans add record-level checks; the CRM uses its workspace customer permissions.
+record's assignment. Standard entity read/write permissions and the record's `RecordAccessPolicy`
+scope apply (read scope to list a record's tags, write scope to change them). Optional
+`TagAccessPolicy` beans add further checks; the CRM uses its workspace customer permissions.
 
 Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
 legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging

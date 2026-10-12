@@ -36,6 +36,12 @@ tasks.named("check") {
     dependsOn(testFrontend)
 }
 
+tasks.named<Test>("test") {
+    // The full-context record-policy conformance suite boots Spring Boot; slf4j-simple is the test
+    // logger, so keep Boot from insisting on Logback.
+    systemProperty("org.springframework.boot.logging.LoggingSystem", "none")
+}
+
 tasks.named<ProcessResources>("processResources") {
     dependsOn(buildFrontend)
     from("src/main/frontend/dist") {
@@ -73,6 +79,11 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.spring.security.core)
+    // The record-policy conformance suite boots a full web context (DataSource, JDBC, MockMvc).
+    testImplementation(libs.spring.boot.starter.data.jdbc) {
+        exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")
+    }
+    testImplementation(libs.spring.test)
     // Context-runner assertions for the auto-configuration gating tests.
     testImplementation(libs.spring.boot.test)
     // In-memory engine for the read-path query-service tests (e.g. information-register

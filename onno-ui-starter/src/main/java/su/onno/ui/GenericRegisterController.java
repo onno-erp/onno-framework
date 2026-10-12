@@ -1,10 +1,10 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.List;
 import java.util.Map;
 
@@ -24,19 +24,19 @@ public class GenericRegisterController {
     public List<Map<String, Object>> movements(@PathVariable String name,
                                                 @RequestParam(required = false) String from,
                                                 @RequestParam(required = false) String to,
-                                                Principal principal) {
+                                                AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
-        return query.movements(desc, from, to);
+        access.requireRead(subject, desc);
+        return query.movements(subject, desc, from, to);
     }
 
     @GetMapping("/{name}/balance")
     public List<Map<String, Object>> balance(@PathVariable String name,
                                              @RequestParam Map<String, String> filters,
-                                             Principal principal) {
+                                             AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
-        return query.balance(desc, filters);
+        access.requireRead(subject, desc);
+        return query.balance(subject, desc, filters);
     }
 
     @GetMapping("/{name}/turnover")
@@ -44,9 +44,9 @@ public class GenericRegisterController {
                                               @RequestParam String from,
                                               @RequestParam String to,
                                               @RequestParam Map<String, String> allParams,
-                                              Principal principal) {
+                                              AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
-        access.requireRead(principal, desc);
-        return query.turnover(desc, from, to, allParams);
+        access.requireRead(subject, desc);
+        return query.turnover(subject, desc, from, to, allParams);
     }
 }
