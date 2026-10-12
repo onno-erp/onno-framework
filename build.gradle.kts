@@ -450,6 +450,10 @@ tasks.register("generateConfigDocs") {
     description = "Regenerate docs/CONFIGURATION.md from the starters' spring-configuration-metadata.json."
     configModuleProjects.forEach { dependsOn(":$it:compileJava") }
     inputs.dir(configNotesDir)
+    // The rendered tables come from each starter's generated metadata; without these inputs a
+    // Javadoc-only change leaves the task UP-TO-DATE and the doc stale.
+    inputs.files(configModuleProjects.map { file("$it/build/classes/java/main/META-INF/spring-configuration-metadata.json") })
+        .optional()
     outputs.file(configDocFile)
     doLast {
         configDocFile.writeText(renderConfigDocs())

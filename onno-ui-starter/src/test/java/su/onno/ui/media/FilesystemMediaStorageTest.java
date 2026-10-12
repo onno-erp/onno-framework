@@ -28,6 +28,34 @@ class FilesystemMediaStorageTest {
     }
 
     @Test
+    void keepsOriginalMetadataAfterRestartAndNeverServesMetadataFiles(@TempDir Path dir) throws Exception {
+        var storage=new FilesystemMediaStorage(dir,"/api/media");
+        var stored=storage.store(new ByteArrayInputStream(new byte[]{1,2}),"合同.pdf","application/pdf",2);
+        var restarted=new FilesystemMediaStorage(dir,"/api/media");
+        assertThat(restarted.load(stored.key()).orElseThrow().filename()).isEqualTo("合同.pdf");
+        assertThat(restarted.load(stored.key()).orElseThrow().contentType()).isEqualTo("application/pdf");
+        assertThat(restarted.load(".metadata/"+stored.key()+".properties")).isEmpty();
+        assertThat(restarted.load("./.metadata/"+stored.key()+".properties")).isEmpty();
+    }
+
+    @Test
+    void invalidOrCorruptSidecarFallsBackToTheProbedType(@TempDir Path dir) throws Exception {
+        var storage = new FilesystemMediaStorage(dir, "/api/media");
+        var stored = storage.store(new ByteArrayInputStream(new byte[]{1}), "a.bin", "application/octet-stream", 1);
+        Path sidecar = dir.resolve(".metadata").resolve(stored.key() + ".properties");
+
+        java.nio.file.Files.writeString(sidecar, "filename=a.bin\ncontentType=not a media type\n");
+        var invalidType = storage.load(stored.key()).orElseThrow();
+        assertThat(invalidType.filename()).isEqualTo("a.bin");
+        assertThat(invalidType.contentType()).isNotEqualTo("not a media type");
+        org.springframework.http.MediaType.parseMediaType(invalidType.contentType());
+
+        // A malformed \\u escape makes Properties.load throw IllegalArgumentException.
+        java.nio.file.Files.writeString(sidecar, "filename=\\uZZZZ\n");
+        assertThat(storage.load(stored.key())).isPresent();
+    }
+
+    @Test
     void roundTripsThroughLoad(@TempDir Path dir) throws Exception {
         FilesystemMediaStorage storage = new FilesystemMediaStorage(dir, "/api/media");
         byte[] bytes = "round-trip".getBytes(StandardCharsets.UTF_8);
@@ -58,6 +86,19 @@ class FilesystemMediaStorageTest {
         FilesystemMediaStorage storage = new FilesystemMediaStorage(dir, "/api/media");
 
         assertThat(storage.load("../../etc/passwd")).isEmpty();
+        assertThat(storage.load("2026/../../outside.txt")).isEmpty();
+    }
+
+    @Test
+    void loadNeverServesTheMetadataSubtree(@TempDir Path dir) throws Exception {
+        FilesystemMediaStorage storage = new FilesystemMediaStorage(dir, "/api/media");
+        StoredMedia stored = storage.store(new ByteArrayInputStream(new byte[] {1}), "a.png", "image/png", 1);
+        String metadataKey = ".metadata/" + stored.key() + ".properties";
+
+        assertThat(dir.resolve(metadataKey)).exists();
+        assertThat(storage.load(metadataKey)).isEmpty();
+        assertThat(storage.load("2026/../" + metadataKey)).isEmpty();
+        assertThat(storage.load(".metadata")).isEmpty();
     }
 
     @Test

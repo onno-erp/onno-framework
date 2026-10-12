@@ -43,11 +43,34 @@ windowing, context menu, batch actions. Server search spans every non-secret col
 text, `Ref<>` by target display value, enums by label (`Searching.java`). Custom bodies go through
 `registerListRenderer` — the toolbar and feed stay framework-owned, the renderer only draws rows.
 
+Composed workspaces may pass `EntityListWidget.initialPage` to reuse a server bootstrap response.
+It contains the feed URL, the effective query (sort/search/filters, without cursor/limit/count),
+rows, total, and next cursor. The host consumes it once only when the feed and query match; changed
+filters and live refreshes still fetch normally. Do not render unverified bootstrap rows or treat
+this as a cache shared between users or workspaces.
+
+Installed widget modules are advertised with module-preload links in the initial HTML, alongside
+their stylesheets, so the browser downloads them in parallel with the host bundle. The host evaluates
+them only after authentication (inside the protected app, once the user is known) — plugin code never
+runs on the login screen. Modules must register components at import time; protected data reads
+belong inside the authenticated component lifecycle. Configured external plugins retain the
+config-based loading path, also gated on authentication.
+
 Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed` and `loadMore()`
 props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
 provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
 query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+The host shows a "Loading more…" status below the renderer while a next window loads; a renderer
+that draws that feedback inside its own pane opts out with
+`registerListRenderer(type, C, { ownsLoadingMore: true })` (or a static `ownsLoadingMore = true` on a
+component passed as `EntityListWidget.renderer`).
+
+`EntityListWidget` props beyond `list`/`renderer`/`toolbarPlacement` — `initialPage`, `toolbarFooter`,
+`toolbarContent`, `headerExtra`, `queryParams`, `refreshKey` and `toolbarOptions` (including
+`filterSidebar`, the docked filter rail beside a custom workspace) — are **host-internal**: they serve
+first-party composed workspaces (the CRM inbox) and are not part of the `@onno/widget-sdk` contract.
+They may change without an SDK version bump; third-party widgets should not rely on them.
 
 Selections larger than the server's 500-id per-request safety cap are split sequentially by the
 shared API client and folded into one batch summary; screens must not implement their own chunking.
@@ -101,6 +124,7 @@ of the row keeps the full context menu. Flat table view only.
 | `Card` | `components/ui/card.tsx` | Island surface (no shadow). |
 | `Avatar` / `PresenceAvatars` | `components/ui/avatar.tsx`, `components/presence-avatars.tsx` | Avatar primitive; face-pile + dicebear default. |
 | `Calendar`/`RangeCalendar`, `DateInput`, `DatePicker`, `DateTimePicker`, `DateRangeFacet`/`TimeRangeFacet` | `components/ui/calendar.tsx`, `ui/date-input.tsx`, `date-picker.tsx`, `date-time-picker.tsx`, `date-range-facet.tsx` | The single date/time-picking system, from form field to filter chip. |
+| `ColorPicker` | `color-picker.tsx` | The single colour control: hex field plus picker, or a compact swatch (`compact`) with `onCommit` for dense rows; exported to widgets. |
 | `ContextMenu` | `components/ui/context-menu.tsx` | Right-click menus (list rows). |
 | `Attachment` | `components/ui/attachment.tsx` | File chips. |
 | `EntityListWidget` | `components/entity-list-widget.tsx` | The list island (see above). |
@@ -237,15 +261,18 @@ Keep `FacetSheet` mounted with its controlled `open` prop; conditionally removin
 
 Top-level mobile section switches use a quick 120ms fade, never a horizontal slide. Opening details and returning to a retained parent use the shared directional slide.
 
-The mobile bottom-bar shell occupies `100dvh` and allocates its Back header, page viewport,
+The mobile bottom-bar shell occupies `100dvh` and places Back inside the page title/actions header through a shared `data-onno-page-header` hook (React forms and the `mobile-header` DivKit extension).
+The route-local shell portal owns the accessible 44px control and preserves dirty-form confirmation;
+headerless/loading/error pages retain a fallback Back row. Desktop headers are unchanged.
+The shell allocates its page viewport,
 and a measured reservation for the floating bottom navigation. Each retained route owns its page scroller;
 full-height list/workspace surfaces consume that allocation and scroll only their inner panes.
 Content-sized forms and dashboards may scroll within the route viewport. The bottom menu has a transparent fixed wrapper, safe-area clearance, and an additional gap above
 the screen edge. Reserve its actual measured height, never guessed padding, for full-height surfaces.
 
 Compact CRM composers use a full-width account selector, an accessible icon Send button,
-and a compact retry action. Hide unavailable attachment actions on compact layouts; desktop
-keeps its existing controls. Preserve message history space and keep the composer in flow.
+and a compact retry action. Keep attachment actions disabled when unavailable, with the reason on their hover wrapper;
+never open the file picker while the channel is unavailable or the file limit is reached. Preserve message history space and keep the composer in flow.
 
 The CRM chat header centers the contact name between balanced action areas. The profile avatar
 on the right opens contact details; do not add a duplicate sidebar toggle or a generic history
@@ -278,3 +305,5 @@ Done for filter/configuration sheets. Both retain the shared close button and sw
 FacetSheet supplies DialogPortalContext to its contents, as DialogShell does. Nested popovers
 and selects must portal into that modal subtree so editing their forms is not treated as an
 outside interaction that dismisses the owning sheet.
+
+CRM voice media uses the shared `VoicePlayer` widget for audio attachments: semantic muted surfaces, field radius, pill playback controls, a keyboard-accessible seek slider, elapsed time, playback speed, and optional download action. Native audio supplies playback underneath the themed controls.

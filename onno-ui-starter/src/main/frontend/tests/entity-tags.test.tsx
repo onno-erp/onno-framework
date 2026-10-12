@@ -21,13 +21,16 @@ it("read-only records have no tag editing controls", async () => {
   expect(screen.queryByRole("button", {name:"Add tag"})).toBeNull();
   expect(screen.queryByRole("button", {name:"Remove tag VIP"})).toBeNull();
 });
-it("only selects existing tags and never offers inline creation", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify([]))));
+it("creates a typed tag inline and assigns it to the record", async () => {
+  const fetcher = vi.fn(async (_url: string, options?: RequestInit) =>
+    new Response(JSON.stringify(options?.method === "POST" ? { id:"new", name:"New tag", color:"#8B78FF" } : [])));
+  vi.stubGlobal("fetch", fetcher);
   render(<EntityTags kind="catalogs" name="Customers" id="record" />);
   fireEvent.click(screen.getByRole("button", {name:"Add tag"}));
-  fireEvent.change(await screen.findByRole("textbox", {name:"Search tags"}), {target:{value:"New tag"}});
-  expect(screen.queryByRole("button", {name:/Create/})).toBeNull();
-  expect(await screen.findByText("No matching tags.")).toBeTruthy();
+  fireEvent.change(await screen.findByRole("textbox", {name:"Search or create tags"}), {target:{value:"New tag"}});
+  fireEvent.click(await screen.findByRole("button", {name:/Create .New tag./}));
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith("/api/tags/catalogs/Customers/record/new", expect.objectContaining({method:"POST"})));
+  expect(fetcher).toHaveBeenCalledWith("/api/tags/catalogs/Customers", expect.objectContaining({method:"POST"}));
 });
 it("toggles tags directly from a checked submenu item", async () => {
   const { EntityTagMenu } = await import("../src/components/entity-tags");

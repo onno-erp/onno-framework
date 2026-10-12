@@ -1,5 +1,7 @@
 package su.onno.crm.service;
 
+import java.util.List;
+import java.util.Objects;
 import su.onno.crm.domain.Conversation;
 import su.onno.crm.domain.ConversationMessage;
 
@@ -21,15 +23,25 @@ public interface CrmMessageTransport {
      * <p>{@code maxAttachments} is how many files this provider will carry on one outbound message;
      * zero means the composer offers no paperclip at all, and {@code attachmentReason} says why, so
      * a channel that simply cannot take files is distinguishable from one that is misconfigured.
+     *
+     * <p>{@code recipient} is the address a reply goes to by default (may be {@code null}) and
+     * {@code recipients} the addresses the composer may choose from; set both with {@link #withRecipients}.
      */
     record Connection(boolean connected, String label, int maxTextLength,
                       ReplyCapability replyCapability, String replyReason,
-                      int maxAttachments, String attachmentReason) {
+                      int maxAttachments, String attachmentReason,
+                      String recipient, List<String> recipients) {
         public Connection {
-            java.util.Objects.requireNonNull(replyCapability);
+            Objects.requireNonNull(replyCapability);
             replyReason=replyReason==null?"":replyReason;
             attachmentReason=attachmentReason==null?"":attachmentReason;
             maxAttachments=Math.max(0,maxAttachments);
+            recipients=recipients==null?List.of():List.copyOf(recipients);
+        }
+        public Connection(boolean connected, String label, int maxTextLength,
+                          ReplyCapability replyCapability, String replyReason,
+                          int maxAttachments, String attachmentReason) {
+            this(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,null,List.of());
         }
         public Connection(boolean connected, String label, int maxTextLength,
                           ReplyCapability replyCapability, String replyReason) {
@@ -40,7 +52,11 @@ public interface CrmMessageTransport {
         }
         /** The same connection, declaring how many files it carries. */
         public Connection withAttachments(int limit, String reason) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason,recipient,recipients);
+        }
+        /** The same connection, declaring the default reply address and the addresses to choose from. */
+        public Connection withRecipients(String recipient, List<String> recipients) {
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients);
         }
         public boolean canSend() { return connected && replyCapability==ReplyCapability.AVAILABLE; }
         public boolean canAttach() { return canSend() && maxAttachments>0; }

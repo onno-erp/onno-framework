@@ -1001,3 +1001,62 @@ onno-icon {
   width: 100%;
   justify-content: flex-start;
 }
+
+/* A filter panel reads vertically, with aligned fields instead of wrapping chip clouds. */
+[data-compact-filter-sheet] [data-list-toolbar] { border: 0; margin: 0; background: transparent; }
+[data-compact-filter-sheet] [data-list-toolbar] > div:first-child { flex-direction: column; align-items: stretch; padding: 0; gap: 12px; }
+[data-compact-filter-sheet] [data-list-toolbar] > div:first-child > div:empty { display: none; }
+[data-compact-filter-sheet] [data-list-toolbar] > div:first-child > div { min-width: 0; }
+[data-compact-filter-sheet] [data-list-toolbar] > div + div { margin-top: 16px; padding: 16px 0 0; }
+[data-compact-filter-sheet] [data-filter-rail] { gap: 16px; }
+@media (pointer: coarse) {
+  [data-compact-filter-sheet] button { min-height: 44px; }
+}
+
+/* Docked inbox controls retain navigation-style selection highlights. */
+[data-filter-sidebar] [data-filter-rail] fieldset > div > button {
+  border-radius: var(--radius-field);
+  color: hsl(var(--muted-foreground));
+}
+[data-filter-sidebar] [data-filter-rail] fieldset > div > button[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+[data-filter-sidebar] legend { padding-left: 12px; }
+
+/* Dense desktop navigation; touch layouts retain their larger targets. */
+@media (hover: hover) and (pointer: fine) {
+  [data-filter-sidebar] button,
+  [data-filter-sidebar] a {
+    min-height: 32px;
+    height: auto;
+    padding: 5px 8px;
+    font-size: 13px;
+    line-height: 20px;
+  }
+  [data-filter-sidebar] fieldset > div { gap: 2px; }
+  [data-filter-sidebar] fieldset > legend + * { margin-top: 4px; }
+  [data-filter-sidebar] legend { padding-left: 8px; font-size: 11px; }
+  [data-filter-sidebar] [data-list-toolbar] > div + div { margin-top: 10px; padding-top: 10px; }
+}
+
+/* Fixed-width contents prevent labels reflowing while the workspace gains/releases space. */
+.onno-filter-sidebar-resize {
+  width: 220px;
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.onno-filter-sidebar-resize[data-sidebar-collapsed="true"] { width: 0; }
+.onno-filter-sidebar-resize > nav {
+  transition: opacity var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+.onno-filter-sidebar-resize[data-sidebar-collapsed="true"] > nav { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .onno-filter-sidebar-resize, .onno-filter-sidebar-resize > nav { transition: none !important; }
+}
+
+/* A fitted WorkspaceToolbar that ran out of room keeps each control's icon and drops its optional label. */
+[data-toolbar-condensed] [data-toolbar-label] { display: none; }

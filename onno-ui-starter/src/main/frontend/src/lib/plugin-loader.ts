@@ -40,6 +40,8 @@ export function injectPluginStyles(urls: string[] | undefined | null): void {
   }
 }
 
+const pendingPlugins = new Map<string, Promise<unknown>>();
+
 export async function loadPlugins(urls: string[] | undefined | null): Promise<void> {
   // Make sure window.onno exists before any plugin module evaluates and reaches for it.
   installPluginHost();
@@ -49,10 +51,26 @@ export async function loadPlugins(urls: string[] | undefined | null): Promise<vo
       try {
         // Absolute, server-served module URL — outside Vite's module graph, so don't let it try to
         // resolve/transform this import at build time.
-        await import(/* @vite-ignore */ url);
+        let pending = pendingPlugins.get(url);
+        if (!pending) {
+          pending = import(/* @vite-ignore */ url);
+          pendingPlugins.set(url, pending);
+        }
+        await pending;
       } catch (err) {
+        pendingPlugins.delete(url);
         console.error(`[onno] failed to load widget plugin: ${url}`, err);
       }
     })
   );
+}
+
+/**
+ * Evaluate the plugin modules the server announced as `<link rel="modulepreload" data-onno-plugin-script>`
+ * (see SpaIndexHtml). The browser has already fetched them in parallel with the host bundle; the caller
+ * evaluates them once the user is authenticated, without waiting for the `/api/ui/config` round trip.
+ */
+export function loadBootPlugins(): void {
+  const urls = Array.from(document.querySelectorAll<HTMLLinkElement>("link[data-onno-plugin-script]"), link => link.getAttribute("href")!).filter(Boolean);
+  void loadPlugins(urls);
 }

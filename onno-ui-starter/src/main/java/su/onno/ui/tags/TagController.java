@@ -31,6 +31,20 @@ public class TagController {
         return TagService.scope(kind,canonical);
     }
     @GetMapping public List<TagService.Tag> library(@PathVariable String kind,@PathVariable String name,Principal user) { return tags.library(require(kind,name,null,user,false)); }
+    public record NewTag(String name, String color) {}
+    /**
+     * Create a tag in this entity's library (or return the existing one with that name) so pickers can
+     * add tags inline. Requires write access to the tagged entity and, when an application catalog
+     * owns the definitions ({@link TagCatalog}), write access to that catalog too.
+     */
+    @PostMapping public TagService.Tag create(@PathVariable String kind,@PathVariable String name,@RequestBody NewTag tag,Principal user) {
+        String scope=require(kind,name,null,user,true);
+        var bound=tags.catalogFor(scope);
+        if(bound.isPresent() && !access.canWrite(user,"catalog",bound.get().catalogName())) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        var created=tags.create(scope,tag==null?null:tag.name(),tag==null?null:tag.color());
+        events.publishEvent(new su.onno.events.EntityChangedEvent("updated","tag",name,null,null));
+        return created;
+    }
     @GetMapping("/{id}") public List<TagService.Tag> assigned(@PathVariable String kind,@PathVariable String name,@PathVariable UUID id,Principal user) {
         return tags.assigned(require(kind,name,id,user,false),id);
     }

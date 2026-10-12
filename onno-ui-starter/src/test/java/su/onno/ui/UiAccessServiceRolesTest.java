@@ -44,6 +44,18 @@ class UiAccessServiceRolesTest {
                 List.of(), List.of("RENTALS"), List.of(), List.of());
     }
 
+    @Test void privacyPoliciesCanExplicitlyConstrainAdministratorsWithoutChangingDefaultPolicies() {
+        UiEntityAccessPolicy ordinary=(roles,type,name,write)->false;
+        UiEntityAccessPolicy privacy=new UiEntityAccessPolicy() {
+            public boolean includesAdministrators() { return true; }
+            public boolean allows(java.util.Set<String> roles,String type,String name,boolean write) { return false; }
+        };
+        var admin=token("admin","ADMIN");
+        assertThat(new UiAccessService(null,()->List.of(ordinary)).canRead(admin,rentalsDoc())).isTrue();
+        assertThat(new UiAccessService(null,()->List.of(privacy)).canRead(admin,rentalsDoc())).isFalse();
+        assertThat(new UiAccessService(null,()->List.of(privacy)).canWrite(admin,rentalsDoc())).isFalse();
+    }
+
     @Test
     void readsAuthoritiesFromAuthorityBearingPrincipal() {
         assertThat(access.roles(token("admin", "ADMIN", "RENTALS"))).contains("ADMIN", "RENTALS");

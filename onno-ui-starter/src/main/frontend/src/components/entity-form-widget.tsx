@@ -713,7 +713,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   return (
     <div className={cn("mx-auto flex w-full flex-wrap justify-center gap-5", sections.length === 0 && "max-w-5xl")}>
       <div className={cn("w-full min-w-0 flex-1", sections.length === 0 && "max-w-2xl")}>
-      <div className="mb-5 flex items-start justify-between gap-3">
+      <div data-onno-page-header="" className="mb-5 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <h1 className="truncate text-xl font-semibold text-foreground">{form.title}</h1>
@@ -956,7 +956,7 @@ export function TabularSectionEditor({
   const columns = useMemo(() => section.attributes
     .filter((a) => a.visibleInForm !== false)
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)), [section]);
-  const title = section.name.charAt(0).toUpperCase() + section.name.slice(1);
+  const title = section.label || section.name.charAt(0).toUpperCase() + section.name.slice(1).replace(/_/g, " ");
   const controls = (cell: Element) => Array.from(cell.querySelectorAll<HTMLElement>(
     'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex="0"]'
   )).filter((el) => el.getAttribute("aria-disabled") !== "true");

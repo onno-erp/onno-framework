@@ -36,6 +36,19 @@ class MediaControllerTest {
     }
 
     @Test
+    void configuredLimitAcceptsTwentyThreeMegabytes(@TempDir Path dir) throws Exception {
+        var props = new MediaProperties();
+        props.setMaxFileSize(org.springframework.util.unit.DataSize.ofMegabytes(25));
+        var controller = new MediaController(new FilesystemMediaStorage(dir,"/api/media"),props);
+        assertThat(controller.limits().get("maxFileSize")).isEqualTo(25L*1024*1024);
+        var multipart = new MediaAutoConfiguration().multipartConfigElement(props);
+        assertThat(multipart.getMaxFileSize()).isEqualTo(25L*1024*1024);
+        assertThat(multipart.getMaxRequestSize()).isGreaterThan(multipart.getMaxFileSize());
+        var stored = controller.upload(file("proposal.pdf","application/pdf",new byte[23*1024*1024]));
+        assertThat(stored.size()).isEqualTo(23L*1024*1024);
+    }
+
+    @Test
     void uploadStoresAndServeRoundTrips(@TempDir Path dir) throws Exception {
         MediaController controller = controller(dir, List.of());
         byte[] bytes = "the-bytes".getBytes(StandardCharsets.UTF_8);
@@ -55,6 +68,17 @@ class MediaControllerTest {
         assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .startsWith("inline;");
         assertThat(served.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+    }
+
+    @Test
+    void voiceAudioIsServedInlineWithItsNormalizedType(@TempDir Path dir) throws Exception {
+        var controller = controller(dir, List.of("audio/*"));
+        var stored = controller.upload(file("voice.webm", "audio/webm;codecs=opus", new byte[]{1, 2}));
+        var served = controller.serve("/" + stored.key());
+        assertThat(served.getHeaders().getContentType()).hasToString("audio/webm");
+        assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).startsWith("inline;");
+        assertThat(served.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(served.getBody().getContentAsByteArray()).containsExactly(1, 2);
     }
 
     @Test
@@ -118,6 +142,35 @@ class MediaControllerTest {
         assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .startsWith("attachment;");
         assertThat(served.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+    }
+
+    @Test
+    void nonAsciiFilenamesAreEncodedPerRfc5987(@TempDir Path dir) throws Exception {
+        MediaController controller = controller(dir, List.of());
+        StoredMedia stored = controller.upload(file("Договор \"final\".pdf", "application/pdf", new byte[] {1}));
+
+        String disposition = controller.serve("/" + stored.key()).getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+
+        assertThat(disposition).startsWith("attachment;").contains("filename*=UTF-8''");
+        assertThat(disposition).doesNotContain("Договор");
+        assertThat(org.springframework.http.ContentDisposition.parse(disposition).getFilename())
+                .isEqualTo("Договор \"final\".pdf");
+    }
+
+    @Test
+    void anUnparseableStoredContentTypeIsServedAsAnOctetStreamDownload(@TempDir Path dir) {
+        MediaStorage storage = new MediaStorage() {
+            @Override public StoredMedia store(InputStream content, String filename, String contentType, long size) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public java.util.Optional<LoadedMedia> load(String key) {
+                return java.util.Optional.of(new LoadedMedia(
+                        new org.springframework.core.io.ByteArrayResource(new byte[] {1}), "not a type", 1, "x.bin"));
+            }
+        };
+        var served = new MediaController(storage, new MediaProperties()).serve("/k");
+        assertThat(served.getHeaders().getContentType()).hasToString("application/octet-stream");
+        assertThat(served.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).startsWith("attachment;");
     }
 
     /** A minimal {@link MultipartFile} over an in-memory byte array. */

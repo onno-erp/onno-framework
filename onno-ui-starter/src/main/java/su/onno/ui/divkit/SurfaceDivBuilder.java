@@ -755,7 +755,7 @@ public final class SurfaceDivBuilder {
         Div.matchWidth(row);
         Div.alignV(row, "center");
         Div.margins(row, 0, 0, 16, 0);
-        return row;
+        return Div.extension(row, "mobile-header", Map.of());
     }
 
     /**

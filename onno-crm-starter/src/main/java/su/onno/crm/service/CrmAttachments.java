@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 import su.onno.crm.domain.ConversationMessage;
@@ -46,9 +47,28 @@ public class CrmAttachments {
     private static final Set<String> IMAGE_TYPES =
             Set.of("image/avif", "image/gif", "image/jpeg", "image/png", "image/webp");
 
+    /**
+     * An inbound file refused by the operator's media policy — {@code onno.media.max-file-size} or
+     * {@code onno.media.allowed-content-types} — or an empty one. Thrown by {@link #ingest}; channel
+     * adapters catch it to skip that file and keep the rest of the message. It extends
+     * {@link IllegalArgumentException}, so a handler written for the earlier behaviour still catches it.
+     */
+    public static final class RejectedAttachment extends IllegalArgumentException {
+        public enum Reason { EMPTY, TOO_LARGE, TYPE_NOT_ALLOWED }
+        private final Reason reason;
+
+        public RejectedAttachment(Reason reason, String message) {
+            super(message);
+            this.reason = Objects.requireNonNull(reason, "reason");
+        }
+        public Reason reason() { return reason; }
+    }
+
     private final MediaStorage storage;
     private final String basePath;
     private final UiMessages messages;
+    private final long maxFileSize;
+    private final List<String> allowedContentTypes;
 
     public CrmAttachments(MediaStorage storage, MediaProperties properties) {
         this(storage, properties, new UiMessages(java.util.Map.of()));
@@ -59,6 +79,11 @@ public class CrmAttachments {
         this.storage = storage;
         var configured = properties == null ? null : properties.getPublicBasePath();
         this.basePath = configured == null || configured.isBlank() ? "/api/media" : configured;
+        var policy = properties == null ? new MediaProperties() : properties;
+        this.maxFileSize = policy.getMaxFileSize() == null ? Long.MAX_VALUE : policy.getMaxFileSize().toBytes();
+        this.allowedContentTypes = policy.getAllowedContentTypes() == null ? List.of()
+                : policy.getAllowedContentTypes().stream().filter(Objects::nonNull).map(t -> t.trim().toLowerCase(Locale.ROOT))
+                        .filter(t -> !t.isEmpty()).toList();
     }
 
     /**
@@ -86,6 +111,39 @@ public class CrmAttachments {
      */
     public String unavailableReason() {
         return storage == null ? messages.get("crm.attachments.disabled") : "";
+    }
+
+    /**
+     * Store bytes supplied by an authenticated channel client, never a caller-supplied URL. Inbound
+     * files come from external senders, so they obey the same operator policy as uploads:
+     * {@code onno.media.max-file-size} and {@code onno.media.allowed-content-types}.
+     *
+     * @throws RejectedAttachment when the file is empty, too large, or of a type the policy refuses
+     * @throws IllegalStateException when media storage is disabled or the store fails
+     */
+    public String ingest(String filename, String contentType, byte[] bytes) {
+        if(storage==null)throw new IllegalStateException(unavailableReason());
+        if(bytes==null || bytes.length==0)
+            throw new RejectedAttachment(RejectedAttachment.Reason.EMPTY, "Incoming attachment is empty");
+        if(bytes.length>maxFileSize)
+            throw new RejectedAttachment(RejectedAttachment.Reason.TOO_LARGE, "Incoming attachment exceeds the " + maxFileSize + "-byte media limit");
+        String safe=Objects.toString(filename,"attachment").replace('\\','/');
+        safe=safe.substring(safe.lastIndexOf('/')+1).replaceAll("[\\p{Cntrl}]", "");
+        if(safe.isBlank())safe="attachment";
+        String type=Objects.toString(contentType,"application/octet-stream").split(";",2)[0].trim().toLowerCase(Locale.ROOT);
+        if(!type.matches("[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+"))type="application/octet-stream";
+        if(!allowed(type))
+            throw new RejectedAttachment(RejectedAttachment.Reason.TYPE_NOT_ALLOWED, "Incoming attachment type is not allowed: " + type);
+        try(var stream=new java.io.ByteArrayInputStream(bytes)) {
+            return storage.store(stream,safe,type,bytes.length).url();
+        }catch(IOException error){throw new IllegalStateException("Could not store incoming attachment",error);}
+    }
+
+    /** Same rule as the upload endpoint: empty allows any type; entries are exact or {@code type/*}. */
+    private boolean allowed(String type) {
+        if (allowedContentTypes.isEmpty()) return true;
+        return allowedContentTypes.stream().anyMatch(pattern -> pattern.equals(type) || pattern.equals("*/*")
+                || (pattern.endsWith("/*") && type.startsWith(pattern.substring(0, pattern.length() - 1))));
     }
 
     /** The stored value for a list of media URLs, or null when there are none. */

@@ -117,6 +117,9 @@ type ShellData = {
   // Route path → authored Lucide icon name, from the same nav item as titles. Detail/form tabs
   // inherit their entity list's icon.
   icons?: Record<string, string>;
+  // Entity list routes (e.g. "/documents/estimates") whose records open in the focused pane
+  // instead of a detail island beside it — EntityView#opensInMain on the server.
+  mainRecordRoutes?: string[];
 };
 
 type WorkspaceTab = { path: string; title: string };
@@ -905,8 +908,11 @@ export function DivKitView() {
       // "main/{kind}/{name}/{id}" — open the record in the focused pane rather than the detail
       // island beside it. A surface that is itself a workspace (an event page, a project page)
       // sends its records here: they replace the workspace instead of stacking next to it.
-      const inMain = rest.startsWith("main/");
-      const path = "/" + (inMain ? rest.slice("main/".length) : rest);
+      const explicitMain = rest.startsWith("main/");
+      const path = "/" + (explicitMain ? rest.slice("main/".length) : rest);
+      const base = recordBasePath(path);
+      const inMain = explicitMain || (base != null
+        && (shell?.mainRecordRoutes ?? []).includes(base.split("/").slice(0, 3).join("/")));
       // On the desktop islands layout, a record opens in its own island to the right;
       // elsewhere (single content pane) it just navigates.
       if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
@@ -926,6 +932,7 @@ export function DivKitView() {
       closePath,
       shell?.home,
       shell?.navStyle,
+      shell?.mainRecordRoutes,
       t,
     ]
   );

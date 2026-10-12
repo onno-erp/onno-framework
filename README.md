@@ -428,3 +428,7 @@ CRM status table or mirrored records. Channel keys and status UUIDs are breaking
 
 Custom list renderers with nested scroll panes can use the SDK's optional pagination state and
 `loadMore()` callback; see [pagination in custom list panes](onno-widget-sdk/README.md#pagination-in-custom-list-panes).
+
+CRM Connections supports host-configured shared/personal sections, provider availability and
+account lifecycle controls. Gmail supports multiple mailboxes with owner-scoped personal inboxes;
+other bundled adapters currently remain shared-only. See [scoped connections](onno-crm-starter/README.md#scoped-connection-accounts).

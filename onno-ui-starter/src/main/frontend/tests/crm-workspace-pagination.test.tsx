@@ -46,6 +46,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   expect(screen.queryByText("6 rows")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", {name:"Table"})).not.toBeInTheDocument();
   await screen.findByText("Person 2");
+  expect(fetcher.mock.calls.filter(([input]) => new URL(String(input), "http://localhost").pathname === "/api/crm/inbox-workspaces/support")).toHaveLength(1);
   if (compact) expect(screen.getByTestId("crm-inbox-workspace").querySelector("button[aria-current=true]")).toBeNull();
   const firstPane = screen.getAllByLabelText("Conversation list")[0];
   Object.defineProperties(firstPane, { clientHeight: { configurable: true, value: 300 }, scrollHeight: { configurable: true, value: 1000 }, scrollTop: { configurable: true, value: 700 } });
@@ -81,4 +82,36 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   await waitFor(() => expect(fetcher.mock.calls.some(([input]) => String(input).includes("ids=chat-6"))).toBe(true));
   expect(screen.getByRole("button", { name: /Person 6/, hidden: true })).toHaveAttribute("aria-current", "true");
   expect(screen.getByRole("button", { name: /Person 1/, hidden: true })).not.toHaveAttribute("aria-current", "true");
+});
+
+it("shows chat skeletons while workspace metadata is still in flight", async () => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  const pending: Array<(response:Response)=>void> = [];
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => pending.push(resolve))));
+  const Workspace = resolveWidget("crmInboxWorkspaces") as ComponentType<any>;
+  const {unmount} = render(<Workspace widget={{extraConfig:{workspace:"support"}}} />);
+  expect(screen.getByText("Conversations")).toBeInTheDocument();
+  const loading = screen.getByRole("status");
+  expect(loading.querySelectorAll(".rounded-full")).toHaveLength(8);
+  expect(screen.getByText("Loading inbox…")).toHaveClass("sr-only");
+  await act(async () => { unmount(); pending.forEach(resolve => resolve(new Response("[]"))); });
+});
+
+it("renders the configured inbox without waiting for workspace choices", async () => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  vi.stubGlobal("IntersectionObserver", ResizeObserverMock);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = new URL(String(input), "http://localhost").pathname;
+    if (path === "/api/crm/inbox-workspaces") return new Promise<Response>(() => {});
+    if (path === "/api/crm/inbox-workspaces/support") return new Response(JSON.stringify({
+      key:"support", config:{folders:[],fields:[],actions:[]},
+      list:{columns:[],filters:[],sort:{column:null,descending:false},pageSize:50,custom:{type:"crmInbox",defaultView:true}},
+      rows:[],total:0,hasMore:false,nextCursor:null,
+    }));
+    return new Response("[]");
+  }));
+  const Workspace = resolveWidget("crmInboxWorkspaces") as ComponentType<any>;
+  render(<Workspace widget={{extraConfig:{workspace:"support",toolbarPlacement:"renderer"}}} />);
+  await screen.findByText("0 chats");
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
 });

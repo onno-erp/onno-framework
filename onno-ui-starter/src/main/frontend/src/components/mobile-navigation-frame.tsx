@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { mountMobileHeaderSlot } from "@/lib/mobile-header";
 import { usePageSlide } from "@/lib/use-page-slide";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -85,17 +87,14 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
     return () => cancelAnimationFrame(frame);
   }, [detail, localDetail, navigationHeight]);
   return <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-    {detail && <header className="z-20 flex h-12 shrink-0 items-center border-b border-border bg-background px-3">
-      <Button variant="ghost" onClick={() => back(currentStack[currentStack.length - 2] ?? mobileParent(path))}>
-        <ArrowLeft className="size-4" />{backLabel}
-      </Button>
-    </header>}
     <div ref={pagesRef} className="relative min-h-0 flex-1 overflow-hidden">
       {retainedRoutes.map(route => <div key={route} data-slide-page={route}
         hidden={route !== path && route !== outgoing} inert={route !== path} aria-hidden={route !== path}
         className={route === path ? "relative h-full w-full overflow-y-auto overflow-x-hidden overscroll-contain" : "absolute inset-0 h-full w-full overflow-y-auto overflow-x-hidden pointer-events-none"}
         style={route === path ? undefined : {transform: "translateX(-100%)"}}
-      >{render(route)}</div>)}
+      ><MobileRouteHeader enabled={!roots.includes(route) && route !== "/" && route !== "/menu"}
+        back={() => back(currentStack[currentStack.length - 2] ?? mobileParent(path))} label={backLabel}
+      >{render(route)}</MobileRouteHeader></div>)}
     </div>
     {showNavigation && <>
       <div aria-hidden="true" className="shrink-0" style={{height:navigationHeight}} />
@@ -104,5 +103,38 @@ export function MobileNavigationFrame({ path, roots, render, navigation, back, b
         {navigation}
       </div>
     </>}
+  </div>;
+}
+
+/** The portal keeps the shell-owned navigation/dirty-form guard inside the page header. */
+function MobileRouteHeader({ enabled, back, label, children }: {
+  enabled: boolean; back: () => void; label: string; children: ReactNode;
+}) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const host = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!enabled || !host.current) return;
+    let header: HTMLElement | null = null;
+    let mounted: ReturnType<typeof mountMobileHeaderSlot> | null = null;
+    const sync = () => {
+      const next = host.current?.querySelector<HTMLElement>("[data-onno-page-header]") ?? null;
+      if (next === header) return;
+      mounted?.dispose();
+      header = next;
+      mounted = next ? mountMobileHeaderSlot(next) : null;
+      setSlot(mounted?.slot ?? null);
+    };
+    // Form portals mount outside this React tree; observe only the explicit header hook.
+    const observer = new MutationObserver(sync);
+    observer.observe(host.current, {childList: true, subtree: true, attributes: true, attributeFilter: ["data-onno-page-header"]});
+    sync();
+    return () => { observer.disconnect(); mounted?.dispose(); };
+  }, [enabled]);
+  const button = <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0"
+    aria-label={label} title={label} onClick={back}><ArrowLeft /></Button>;
+  return <div ref={host} className="contents">
+    {enabled && (slot ? createPortal(button, slot) :
+      <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-3">{button}</header>)}
+    {children}
   </div>;
 }

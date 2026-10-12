@@ -10,16 +10,33 @@ implementation("su.onno:onno-auth-starter:<onno-version>")
 The starter includes `onno-crm-starter` transitively: contact identities, contact merge tools,
 conversations, delivery status, the inbox widget, and the connection cards. It installs through
 Spring Boot auto-configuration; **no component scan of `su.onno` is necessary**. All providers are
-disabled by default. Each provider currently supports one account per application and one worker
-instance; use separate deployments for separate tenants. This is an initial adapter release, not
-multi-account hosted OAuth onboarding. No provider credentials or example sample data ship in it.
+disabled by default. Gmail supports multiple shared and personal mailboxes per application. Telegram supports one bot with a shared ordinary-chat inbox and multiple personal/shared business connections. Instagram and
+WhatsApp currently support one shared account each. Run one worker instance per deployment; use
+separate deployments for separate tenants. No provider credentials or example sample data ship in it.
+
+## Privacy: contacts and shared Telegram business accounts
+
+> **Correspondents become shared contacts.** People who write to a connected account — including a
+> **personal** Gmail mailbox or a **personal** Telegram business account — are resolved into the
+> host's shared contact catalog through `CrmCustomerBinding`. The *conversations* of a personal
+> account stay private to its owner, and its channel identities are hidden from other users, but the
+> contact records themselves are ordinary host catalog records: who can see them is decided by the
+> host's contact permissions, not by this starter. Tell users this before they connect a personal
+> mailbox, and restrict contact access in the host if that is not acceptable.
+
+> **Warning: a SHARED Telegram business account exposes the verifying user's own chats to the team.**
+> Telegram business routes the private chats of the Telegram user who presses Start. On a *shared*
+> account those chats — with friends and family as well as customers — land in a team inbox. In
+> Telegram's Chat Automation / Business chatbot settings, limit the bot to **selected chats** (or
+> exclude personal contacts) rather than all chats, and prefer a dedicated business Telegram account
+> for shared connections.
 
 ## Provider setup
 
 | Provider | Enable property | Private credentials | Delivery |
 | --- | --- | --- | --- |
-| Telegram | `onno.crm.channels.telegram.enabled` | `onno.crm.channels.telegram.token` in external config | Private bot chats, long polling, text replies, avatars |
-| Gmail | `onno.crm.channels.gmail.enabled` | `client-file`, `tokens-file` under the Gmail prefix | Google OAuth, recent inbox/history polling, threaded text replies |
+| Telegram | `onno.crm.channels.telegram.enabled` | `onno.crm.channels.telegram.token` in external config | Ordinary bot chats (optional, `regular-chats-enabled`) and scoped business connections, long polling, replies, incoming and outgoing files |
+| Gmail | `onno.crm.channels.gmail.enabled` | `client-file`, `tokens-file` under the Gmail prefix | Google OAuth, recent inbox/history polling, incoming attachments, threaded replies with files, import of replies sent from Gmail on known threads |
 | Instagram | `onno.crm.channels.instagram.enabled` | `tokens-file` under the Instagram prefix | Instagram Login professional account, provider-visible polling, text replies |
 | WhatsApp | `onno.crm.channels.whatsapp.enabled` | `tokens-file` under the WhatsApp prefix | Cloud API, signed incoming webhooks, text replies, delivery/read receipts |
 
@@ -111,7 +128,9 @@ beans of their concrete types; no duplicate fallback transport should be install
 `Channel.WHATSAPP` in the relevant workspace predicate. The starter supplies no team-specific rules.
 
 All external sends happen after database commit. Interrupted/uncertain sends become FAILED and
-require explicit retry; automatic retries must not create duplicate customer messages. Instagram
+require explicit retry; automatic retries must not create duplicate customer messages. A failure
+before anything was sent (for example a rate-limited Telegram business permission check) leaves the
+reply queued and retries after a backoff that honours the provider's `retry_after`. Instagram
 and WhatsApp enforce the 24-hour customer reply window; template initiation and human-agent
 extensions are not implemented. Unsupported incoming attachments are placeholders; outbound
 attachments are not implemented. Pausing stops sends (and polling where applicable); signed
@@ -160,3 +179,98 @@ setup and branding live in the channels starter. Workspace `.list(...)`/`.view(.
 `ListSpec` resolution for both the inbox renderer and table. Status bindings read an existing host
 catalog or enumeration through `CrmStateConfiguration.catalog(...)`/`.enumeration(...)`, with no
 CRM status table or mirrored records. Channel keys and status UUIDs are breaking storage changes.
+
+## Gmail account ownership and lifecycle
+
+Enable Gmail and supply one private Google Web OAuth client registration for the deployment.
+Connections can then create multiple **shared** accounts (administrators) or **personal** accounts
+(the current user with inbox write access). Each mailbox is bound to a separate inbox and UUID.
+The same mailbox cannot be attached to a second shared/personal account. Reauthorization must use
+the original mailbox, preserving routing and history.
+
+`POST /api/crm/gmail/authorize` accepts `{returnPath, accountId?}`. When `accountId` is present, the
+server rechecks ownership and workspace write permission before authorization and again at callback.
+The one-use session attempt binds the principal, account UUID, return path, expiry, state and PKCE
+verifier. Omitting `accountId` retains the legacy ADMIN-managed deployment account.
+
+Credentials live in owner-only `gmail-<account UUID>.json` files beside the configured `tokens-file`.
+The original `tokens-file` remains the legacy mailbox's credential file. Per-account clients isolate
+refreshes, synchronization, sending and health state. Pause affects only that inbox. Disconnect stops
+sync/sends, removes its local credentials and fails queued replies; conversation history and ownership
+remain. It does not revoke the Google grant; users can revoke that separately in Google. Reconnect
+requires consent again. No real authorization or outbound messages are exercised by automated tests.
+
+The UI advertises disabled providers, but server configuration still enables adapters. For Gmail,
+the OAuth client must be present before Add account becomes available. Other bundled providers
+explicitly advertise shared-only setup. See the CRM starter's scoped account contract for host widget
+configuration and provider extension points.
+
+## Telegram business connections
+
+Enable business mode for the bot in BotFather and configure its token privately. The server remains
+one polling owner for that bot. Keep webhooks disabled for this polling deployment. Ordinary bot
+chats remain the existing shared Telegram inbox; **Telegram business** is a separate managed provider
+(`telegram-business`) supporting both Personal and Shared accounts. CRM ownership controls visibility;
+Telegram mode controls the sender identity. No automated replies are generated by this integration.
+
+In Connections, select Personal or Shared, add Telegram business, and choose Connect. The server
+returns an expiring `t.me` link. Open it in Telegram and press Start to prove your Telegram user.
+Then select the bot in Telegram's Chat Automation / Business chatbot settings, choose allowed chats,
+and grant reply permission. The one-use proof is bound to the CRM account and principal; only a
+matching provider-verified Telegram business owner can attach. Reauthorization must prove the same
+Telegram user. A bot connected to multiple Telegram users routes each to a separate account/inbox.
+
+Business events, message edits/deletions, routing and queues use additive `onno_crm_tg_business_*`
+tables. Unclaimed connections retain only connection metadata; their messages are not imported.
+Incoming private customer messages are deduplicated per connection/chat/message. Replies sent directly by the connected Telegram owner are imported into existing chats as sent
+agent replies. Connected-bot echoes are ignored. External replies clear unread messages up to
+the reply time, preserving later incoming messages and CRM read state. Incoming attachments are stored locally with previews/downloads (up to 20 MB per file); replies can send supported uploads. Each outgoing text/file
+includes `business_connection_id`, checks current reply permission and the 24-hour reply window,
+and refuses changed destinations. Uncertain deliveries fail and need explicit review/retry.
+
+Pause stops imports and sends for that account. Disconnect preserves history/ownership and stops
+queued sends; remove the bot in Telegram to revoke its provider access too. Reconnect uses the
+original Telegram owner. Regular bot chats and business chats never share routing or identity scopes.
+`onno.crm.channels.telegram.regular-chats-enabled=false` makes the bot business-only: ordinary
+(non-business) bot chats are ignored, no ordinary inbox is created, the **Telegram bot** provider is
+shown as unavailable, and replies to previously imported ordinary chats are not sent. An ordinary
+inbox created earlier keeps its history.
+
+**Behaviour change:** while the ordinary Telegram inbox is *paused*, ordinary messages that arrive
+are **discarded**, not queued — polling continues so business chats and onboarding keep working, and
+the cursor moves past those messages. The same applies to a paused business account's chats.
+No historical Telegram conversation import is provided.
+
+Telegram intake handles each update on its own. File downloads and business-connection lookups run
+before the database transaction and CRM workspace lock. A file that cannot be downloaded or stored is
+recorded as a placeholder line (for example `[File could not be imported]`) on the message. An update
+that still fails is retried up to three times on later polls and then skipped (logged with its update
+id), so one bad update cannot stall every other chat.
+
+`POST /api/crm/telegram/business/{account UUID}/authorize` requires account management rights and
+workspace write access, uses the normal CSRF boundary, and returns `{url}`. No bot credential is
+exposed. The existing account API provides pause/resume/check/disconnect and scope selection at
+creation. Changing an account's visibility after it has history is not supported; choose its scope
+before connecting.
+
+Gmail incremental sync imports SENT replies to known CRM threads, deduplicating CRM sends.
+External replies clear earlier CRM unread messages; newer incoming messages remain unread.
+This does not synchronize provider read labels or import unrelated sent-mail conversations.
+
+Gmail imports MIME attachments and inline image parts (up to ten files, 20 MB each), decoding filenames.
+On upgrade it restores attachments on already-imported messages among the latest 50 inbox emails of
+mailboxes connected before attachment import existed, without changing unread state. Mailboxes
+connected afterwards import files from their first sync and are never backfilled. Telegram ordinary/business messages import photos, documents, video,
+audio, voice notes and stickers. Oversized/unavailable Telegram files retain an explanatory placeholder. Files the deployment's media
+policy (`onno.media.*` size and content-type limits) refuses are skipped on both providers with a short
+placeholder note on the message; the rest of the mail or message still imports.
+Telegram cannot recover files from old bot updates whose payloads were not retained.
+
+## Known limitations
+
+- A disconnected Gmail mailbox or Telegram business user stays bound to the account it was first
+  connected to. It cannot be attached to a different account; reconnect the original account instead.
+- One worker instance per deployment polls each provider; there is no leader election.
+- Read state is not synchronized back to providers.
+- `TelegramClient.Update.payload()` exposes Telegram's raw update JSON for adapters inside this
+  starter; it is not a stable API and its shape follows the Telegram Bot API.

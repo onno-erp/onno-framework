@@ -29,10 +29,10 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
 
     public UiAutoConfiguration(UiProperties uiProperties) {
         this.uiProperties = uiProperties;
-        this.spaIndexHtml = new SpaIndexHtml(uiProperties.getPath());
         this.widgetPluginScanner = uiProperties.getPlugins().isEnabled()
                 ? new WidgetPluginScanner(uiProperties.getPlugins().getLocation())
                 : null;
+        this.spaIndexHtml = new SpaIndexHtml(uiProperties.getPath(), widgetPluginScanner);
     }
 
     @Override

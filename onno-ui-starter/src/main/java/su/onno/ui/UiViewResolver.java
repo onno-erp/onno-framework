@@ -80,6 +80,17 @@ public class UiViewResolver {
         return byProfile != null && byProfile.values().stream().anyMatch(EntityView::comments);
     }
 
+    /** Whether any view of this entity opts its records into the main pane ({@link EntityView#opensInMain()}). */
+    public boolean opensInMain(Class<?> entity) {
+        Map<String, EntityView> byProfile = entity == null ? null : views.get(entity);
+        return byProfile != null && byProfile.values().stream().anyMatch(EntityView::opensInMain);
+    }
+
+    /** Every entity with a view (any profile) that opts its records into the main pane, in registration order. */
+    public List<Class<?>> mainPaneEntities() {
+        return views.keySet().stream().filter(this::opensInMain).toList();
+    }
+
     /**
      * The entity's conditional row-formatting function ({@link ListSpec#rowStyle}), or {@code null}
      * when no view declares one. Resolved at the entity level — the default-profile view first,

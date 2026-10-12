@@ -429,8 +429,13 @@ The CRM Inbox presents one row per contact and a chronological timeline across i
 
 ### Record tag API
 
-`GET /api/tags/{kind}/{name}` lists selectable tag definitions. Definitions are managed through
-the owning tag catalog’s ordinary CRUD API; the tag picker does not create definitions. `GET /api/tags/{kind}/{name}/{id}` lists a record's tags.
+`GET /api/tags/{kind}/{name}` lists selectable tag definitions. `POST /api/tags/{kind}/{name}`
+with `{name,color}` returns the existing definition whose name matches case-insensitively, or
+creates one (name 1–500 characters after trimming; `color` is `#RRGGBB`, default `#8b78ff`); the
+record tag picker uses it to create tags inline. It requires write access to the tagged entity and,
+when a `TagCatalog` owns that scope, write access to that catalog as well — creation then goes
+through `TagCatalog.create(name, color)`, whose default delegates to `importTag` with a fresh ID.
+Definitions can still be managed through the owning tag catalog’s ordinary CRUD API. `GET /api/tags/{kind}/{name}/{id}` lists a record's tags.
 `POST /api/tags/{kind}/{name}/{id}/{tagId}` adds an assignment; `DELETE` removes it.
 Kinds are `catalogs` and `documents`; names normalize to the owning entity. Responses contain
 `{id,name,color}`. Definitions have stable UUIDs; assignment mutations are idempotent and reject
@@ -521,3 +526,29 @@ Activity feed entries include `accountLabel` (inbox description and address) aft
 checks. Manual activity writes honor `onno.ui.read-only` in addition to customer/workspace write checks.
 Folder configuration supports `matchNone: true` for visible empty categories; omitted/false preserves
 existing empty-criteria matching. See the [CRM guide](../onno-crm-starter/README.md#unified-inbox-controls-and-manual-activity).
+
+### CRM scoped connection accounts
+
+`GET /api/crm/connection-accounts` lists installed provider capabilities and the caller's visible
+shared/personal accounts; `POST` creates an account from `{provider,scope,label}`.
+`POST /api/crm/connection-accounts/{id}` handles `{action,label?}` (rename, removeDraft, provider
+commands). Ownership comes from the authenticated principal, never the request. Shared management
+uses `CrmChannelAccess`; personal management requires ownership, personal policy, and inbox write
+access. Other users' personal accounts return 404. Gmail OAuth accepts optional `accountId` and
+rechecks ownership on its one-use callback. Each mailbox has separate credentials and inbox routing.
+
+Personal inbox ownership restricts scoped conversation reads/writes and contact projections.
+Generic CRM catalogs/exports/events are unavailable to all roles once personal accounts exist,
+preventing ADMIN from bypassing per-account privacy. Host contacts retain host catalog permissions.
+`UiEntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
+See `onno-crm-starter/README.md` and `onno-crm-channels-starter/README.md` for response fields,
+widget options, lifecycle behavior and remaining shared-only provider limits.
+
+Telegram business onboarding uses `POST /api/crm/telegram/business/{account UUID}/authorize`
+(account ownership, workspace write access and CSRF required). The returned one-use Telegram link
+proves the provider user before attaching a business connection. `telegram-business` managed accounts
+support PERSONAL/SHARED independently of sender mode. Routing, deduplication and delivery are isolated
+from the ordinary shared bot inbox, with reply permissions checked before sends. See the channels
+starter README for lifecycle, skipped paused updates, attachment and history limits.
+
+CRM audio attachments keep the existing `contentType`, `url`, `filename`, `size`, and `image` contract. The inbox renders `audio/*` with playback controls; no additional message field is required. Common audio formats served through `/api/media/{key}` use inline disposition.

@@ -75,9 +75,9 @@ public class CrmActivityController {
         // Agent replies get their author's photo here too, so one contact's history reads the same
         // whether it is opened as a timeline or as a chat.
         Map<String,String> messageAvatars=new HashMap<>();
-        for(var conversation:conversations.findAllActive()) {
-            if(conversation.getCustomer()==null||!canonical.equals(contacts.canonical(conversation.getCustomer()))||
-                    !workspaces.canAccess(conversation,principal,false))continue;
+        var related=conversations.findAllActive().stream()
+            .filter(c->c.getCustomer()!=null&&canonical.equals(contacts.canonical(c.getCustomer()))).toList();
+        for(var conversation:workspaces.accessible(related,principal,false)) {
             String channel=conversation.getChannel();
             String accountLabel=conversation.getInbox()==null ? channel : inboxes.findActiveById(conversation.getInbox().id())
                 .map(account -> account.getDescription()+" · "+account.getAddress()).orElse(channel);

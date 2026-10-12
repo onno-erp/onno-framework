@@ -106,6 +106,8 @@ export interface SystemColumnMeta {
 export interface TabularSectionMeta {
   name: string;
   tableName: string;
+  /** Authored section title (field hint label on the section name); absent → humanized name. */
+  label?: string;
   attributes: AttributeMeta[];
 }
 

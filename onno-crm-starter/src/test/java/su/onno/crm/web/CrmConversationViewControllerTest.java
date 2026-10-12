@@ -18,7 +18,7 @@ class CrmConversationViewControllerTest {
   var visible=new Conversation();visible.setId(UUID.randomUUID());visible.setCustomer(UUID.randomUUID());visible.setChannel(Channel.TELEGRAM);visible.setSubject("Sales call");
   var hidden=new Conversation();hidden.setId(UUID.randomUUID());hidden.setCustomer(UUID.randomUUID());hidden.setChannel(Channel.EMAIL);
   var repository=mock(ConversationRepository.class);when(repository.findActiveById(visible.getId())).thenReturn(Optional.of(visible));when(repository.findActiveById(hidden.getId())).thenReturn(Optional.of(hidden));
-  var workspaces=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel()))),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
+  var workspaces=new CrmInboxWorkspaceService(List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel()))),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
   ObjectProvider<DivKitController> generic=mock(ObjectProvider.class);
   var controller=new CrmConversationViewController(workspaces,access,generic);
   var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),mock(CurrentUserResolver.class),mock(su.onno.ui.comments.CommentService.class),mock(su.onno.ui.comments.CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);

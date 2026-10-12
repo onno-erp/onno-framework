@@ -6,6 +6,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-mail:3.4.4")
     compileOnly(libs.spring.boot.configuration.processor)
     annotationProcessor(libs.spring.boot.configuration.processor)
+    testImplementation(libs.h2)
     testImplementation(libs.spring.boot.starter.test)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

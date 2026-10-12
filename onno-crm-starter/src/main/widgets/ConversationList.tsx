@@ -84,3 +84,37 @@ export function conversationRowOptions(value?: string): ConversationRowOptions {
     return {badges:Array.isArray(parsed?.badges) ? parsed.badges.filter((b:any)=>b && typeof b.field === "string" && typeof b.equals === "string" && typeof b.label === "string").slice(0,30) : [], showAccount:parsed?.showAccount === true, showChannelBadge:parsed?.showChannelBadge !== false, previewLines:parsed?.previewLines === 2 ? 2 : 1};
   } catch {return {};}
 }
+
+/** Shared row placeholders for bootstrap and first-page loading. */
+export function ConversationListSkeleton() {
+  return <div role="status" aria-label={t("crm.inbox.loading")} className="overflow-hidden">
+    <span className="sr-only">{t("crm.inbox.loading")}</span>
+    <div aria-hidden="true" className="motion-safe:animate-pulse">
+      {Array.from({length:8}, (_, i) => <div key={i} className="flex items-center gap-3 px-3 py-3">
+        <div className="size-12 shrink-0 rounded-full bg-muted" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="h-3 w-2/3 rounded-field bg-muted" />
+          <div className="h-3 w-full rounded-field bg-muted" />
+        </div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+/** Keep the list geometry visible while the workspace descriptor is arriving. */
+export function InboxSkeleton() {
+  return <div className="h-full min-h-0 w-full" style={{containerType:"inline-size"}}>
+    <style>{`.crm-inbox-skeleton { grid-template-columns:300px minmax(0,1fr); }
+      @container (max-width:720px) { .crm-inbox-skeleton { grid-template-columns:minmax(0,1fr); } .crm-inbox-skeleton-detail { display:none; } }`}</style>
+    <div className="crm-inbox-skeleton grid h-full min-h-0 gap-3 overflow-hidden">
+      <section className="min-h-0 overflow-hidden rounded-panel border bg-card">
+        <div className="space-y-4 border-b border-border/50 p-3">
+          <div className="text-sm font-semibold">{t("crm.inbox.conversations")}</div>
+          <div aria-hidden="true" className="h-9 rounded-field bg-muted motion-safe:animate-pulse" />
+        </div>
+        <ConversationListSkeleton />
+      </section>
+      <div aria-hidden="true" className="crm-inbox-skeleton-detail rounded-panel border bg-card" />
+    </div>
+  </div>;
+}

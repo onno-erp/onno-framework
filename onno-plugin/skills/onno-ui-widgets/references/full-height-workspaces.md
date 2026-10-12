@@ -59,6 +59,9 @@ A nested list pane owns pagination too: consume `ListRendererProps.hasMore`, `lo
 `loadMoreFailed` and `loadMore()` from the host. Call `loadMore()` near the pane's bottom and
 provide a visible keyboard-accessible load-more/retry button. Stop automatic retry after a failure;
 do not depend on the outer list container scrolling or replace the host's scoped query with your own.
+Since the pane shows its own loading state, register with
+`registerListRenderer(type, C, { ownsLoadingMore: true })` so the host's "Loading more…" status
+below the renderer is suppressed.
 
 Every intermediate flex/grid pane must be able to shrink (`min-h-0`, and `min-w-0` horizontally).
 Keep headers/composers in normal layout with `shrink-0`; only the content bodies scroll.

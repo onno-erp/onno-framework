@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 vi.mock("@onno/widget-sdk", async () => ({
   ...(await import("./widget-sdk-text")),
   ...React,
+  api: (await import("@/lib/api")).api,
   ...await import("../src/components/ui/button"),
   ...await import("../src/components/ui/input"),
   ...await import("../src/components/ui/badge"),
@@ -12,8 +13,8 @@ vi.mock("@onno/widget-sdk", async () => ({
 import { ContactPanel, type Config } from "../../../../../onno-crm-starter/src/main/widgets/CrmWorkspace";
 afterEach(() => { cleanup();vi.unstubAllGlobals(); });
 it("renders host fields without fetching CRM customer or stage catalogs", async () => {
-  const fetch = vi.fn().mockResolvedValue({ok:true,json:async()=>({catalogName:"Guests",canWrite:false,
-    fields:{id:"person",description:"Alex",membership:"Annual"},identities:[],conversations:[]})});
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({catalogName:"Guests",canWrite:false,
+    fields:{id:"person",description:"Alex",membership:"Annual"},identities:[],conversations:[]})));
   vi.stubGlobal("fetch", fetch);
   const config = {fields:[{key:"customer.membership",label:"Membership",section:"Contact",format:"text",visible:true,editable:false}],
     actions:[{key:"edit",label:"Open contact",visible:true}],showAvatar:false,showIdentities:false,showEmpty:false} as Config;
@@ -24,8 +25,8 @@ it("renders host fields without fetching CRM customer or stage catalogs", async 
 });
 
 it("returns to an authored inbox using a readable conversation", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok:true,json:async()=>({catalogName:"Guests",canWrite:false,
-    fields:{id:"person",description:"Alex"},identities:[],conversations:[{id:"chat",channel:"EMAIL",subject:"Wedding"}]})}));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({catalogName:"Guests",canWrite:false,
+    fields:{id:"person",description:"Alex"},identities:[],conversations:[{id:"chat",channel:"EMAIL",subject:"Wedding"}]}))));
   const config = {fields:[],actions:[],showAvatar:false,showIdentities:false} as unknown as Config;
   const navigate=vi.fn();window.addEventListener("onno:action",navigate);
   render(<ContactPanel id="person" inboxRoute="/inbox" config={config} />);

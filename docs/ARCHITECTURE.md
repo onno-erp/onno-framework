@@ -476,6 +476,14 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   view makes the entity reachable by its direct route, but it shows in the sidebar only once a
   `Layout` section also lists it (see `Layout` above). So an `EntityView` is necessary but not
   sufficient for nav presence.
+  `EntityView.opensInMain()` (default `false`) opens the entity's records in the focused workspace
+  pane instead of a detail island beside the list — for records that are full working surfaces. It
+  is resolved per entity (any opted-in view of the entity wins) and only changes the desktop
+  islands layout; single-pane layouts always navigate in place. `GET /api/divkit/shell` returns the
+  resulting `mainRecordRoutes` (e.g. `["/documents/proposal"]`): list routes of opted-in entities
+  that have a view in the active profile and that the viewer can read, derived from the views rather
+  than the navigation so link-only entities are included. The client routes
+  `onno://{kind}/{name}/{id}` for those entities like an explicit `onno://main/...` action.
 
 Server-side rendering uses **DivKit**: the controllers emit DivKit card JSON resolved for the
 caller's persona, roles, theme, and viewport. The same contract drives the bundled React/Vite SPA
@@ -511,7 +519,9 @@ Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed
 props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
 provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
-query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer. The host
+shows a "Loading more…" status below the renderer while a window loads; a renderer that draws its
+own opts out with `registerListRenderer(type, C, { ownsLoadingMore: true })`.
 
 
 It also serves **record detail widgets**. `EntityView.detail(DetailSpec)` declares widgets below the
@@ -724,7 +734,7 @@ agent, stage, tag, opportunity or custom-value business model is installed. `Crm
 assignment using an existing employee/identity catalog. `CrmStateConfiguration` optionally defines
 conversation statuses; without it, incoming messages and replies carry no status.
 
-The host composes pages and navigation explicitly, using `crmInboxWorkspaces`, `crmSettings`, and
+The host composes pages and navigation explicitly, using `crmInboxWorkspaces`, `crmConnections` (alias `crmSettings`), and
 optional `crmContactDetails` widgets. Channel management uses `CrmChannelAccess` (ADMIN by default).
 Only enabled connectors appear. Provider imports invoke the host's optional inbound contact policy;
 they never instantiate a built-in customer. Telegram avatars belong to channel identities.
@@ -733,7 +743,7 @@ The host owns business merging and any auditing or undo. `CrmContactService.tran
 host transaction and moves CRM conversations/identities plus a canonical redirect, preserving
 provider routing. It has no HTTP endpoint or automatic undo and never changes host business fields,
 comments or opportunities. The binding identity, redirects and transaction guard use `onno_crm_*`
-infrastructure tables. Personal-group storage is created only with `CrmFeatures(true)`. Sales remains
+infrastructure tables. Personal-group storage is created only with `CrmFeatures(true)`. Personal provider accounts are opt-in via `CrmFeatures.withPersonalAccounts(true)`; enabling them closes the generic CRM catalogs to ADMIN because generic surfaces cannot filter personal inboxes. Sales remains
 ordinary optional example code (`example/src/sales/java`, compiled with `-PsalesExample`).
 
 `ListSpec.selectionCheckboxes(true)` opts a catalog/document table into Onno row-selection controls.
@@ -843,7 +853,8 @@ The CRM Inbox presents one row per contact and a chronological timeline across i
 ### Record tag API
 
 `GET /api/tags/{kind}/{name}` lists selectable tag definitions. Definitions are managed through
-the owning tag catalog’s ordinary CRUD API; the tag picker does not create definitions. `GET /api/tags/{kind}/{name}/{id}` lists a record's tags.
+the owning tag catalog’s ordinary CRUD API; `POST /api/tags/{kind}/{name}` (`{name,color}`, write access
+to the tagged entity) creates one inline from the tag picker, reusing an existing case-insensitive name. `GET /api/tags/{kind}/{name}/{id}` lists a record's tags.
 `POST /api/tags/{kind}/{name}/{id}/{tagId}` adds an assignment; `DELETE` removes it.
 Kinds are `catalogs` and `documents`; names normalize to the owning entity. Responses contain
 `{id,name,color}`. Definitions have stable UUIDs; assignment mutations are idempotent and reject
@@ -958,3 +969,51 @@ See [unified inbox controls](../onno-crm-starter/README.md#unified-inbox-control
 `layout.shell().mobileItem("/", "Home", 0).mobileItem("/inbox", "Inbox", 1)` adds short labels and bottom-bar priority to existing authorized destinations. Lower order values appear first; unspecified destinations follow in their existing order. The first four appear beside More, where the full navigation remains available. Overrides do not create routes or widen access. Desktop, page titles, and the More menu keep their full labels; screen readers receive the full destination label. Bottom-bar labels use one line.
 
 On bottom-bar shells, declared navigation destinations are top-level screens. Opening another route shows a Back header and hides the bottom bar. Parent surfaces stay mounted until returning or switching top-level destinations, retaining their filters and scroll state. Direct entity links fall back to their catalog/document list. Back asks before discarding a dirty form. Widgets with in-page child states can call SDK `useMobileDetail(active)` when they provide their own Back control; the CRM inbox uses this for an open compact chat. Requests are scoped to the mounted route and released on cleanup.
+
+### CRM scoped connection accounts
+
+`GET /api/crm/connection-accounts` lists installed provider capabilities and the caller's visible
+shared/personal accounts; `POST` creates an account from `{provider,scope,label}`.
+`POST /api/crm/connection-accounts/{id}` handles `{action,label?}` (rename, removeDraft, provider
+commands). Ownership comes from the authenticated principal, never the request. Shared management
+uses `CrmChannelAccess`; personal management requires ownership, personal policy, and inbox write
+access. Other users' personal accounts return 404. Gmail OAuth accepts optional `accountId` and
+rechecks ownership on its one-use callback. Each mailbox has separate credentials and inbox routing.
+
+Personal inbox ownership restricts scoped conversation reads/writes and contact projections.
+Generic CRM catalogs/exports/events are unavailable to all roles once personal accounts exist,
+preventing ADMIN from bypassing per-account privacy. Host contacts retain host catalog permissions.
+`UiEntityAccessPolicy.includesAdministrators()` defaults false; privacy policies explicitly opt in.
+See `onno-crm-starter/README.md` and `onno-crm-channels-starter/README.md` for response fields,
+widget options, lifecycle behavior and remaining shared-only provider limits.
+
+### Reusable page views
+
+`PageView` composes reusable content through `PageBuilder.view(view)`, including in rows and
+asides. Configure view instances at startup; `ListView` and the CRM views freeze on first placement
+and throw `IllegalStateException` if mutated afterwards.
+`ListView<E>` places the existing entity list and accepts `.defaults(d -> d.fill().sort("date", true))`.
+`EntityView<E>` still owns entity columns, fields and actions; permissions and data resolution use
+the existing renderer. A Page owns the route and header; a PageView does not register navigation.
+CRM provides `su.onno.crm.ui.CrmInboxView` (final; declare it as a `@Bean`, inject into the Page)
+for typed inbox presentation: one method per surface plus an optional breakpoint, e.g.
+`header(h -> ...)`, `header(Breakpoint.NARROW|MOBILE, h -> ...)`, `listHeader(MOBILE, ...)`,
+`composer(MOBILE, ...)`. Each configured toolbar fully replaces renderer defaults (unset regions are
+empty; an item may sit in one region only). Workspace beans still own the authorized feed and
+declared filters; `CrmInboxViewValidator` fails startup if a `CrmInboxView` bean names an unknown
+workspace and fails on filter keys the workspace bean does not declare (facets with runtime options use `CrmInboxWorkspace.FacetOptions`). `CrmConnectionsView` types the `crmConnections` connections widget (`crmSettings` remains an alias).
+Existing `page.list(...)` and widget config remain valid.
+
+Telegram business onboarding uses `POST /api/crm/telegram/business/{account UUID}/authorize`
+(account ownership, workspace write access and CSRF required). The returned one-use Telegram link
+proves the provider user before attaching a business connection. `telegram-business` managed accounts
+support PERSONAL/SHARED independently of sender mode. Routing, deduplication and delivery are isolated
+from the ordinary shared bot inbox, with reply permissions checked before sends. See the channels
+starter README for lifecycle, skipped paused updates, attachment and history limits.
+
+CRM attachment ingestion: Gmail MIME files and Telegram ordinary/business files are stored through
+CrmAttachments and MediaStorage, then rendered with local previews/downloads. Incoming files are
+bounded to 20 MB. ConversationMessage Body is optional; its business rule requires text or files.
+Filesystem media keeps private filename/content-type sidecars across restarts.
+
+CRM audio playback lives in the shared inbox widget; common audio formats are served inline by `MediaController`. Audio files use the existing media upload and message attachment flow. Channel delivery remains attachment-based.

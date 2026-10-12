@@ -24,6 +24,7 @@ final class CrmInboxFilters {
             values.forEach((field, choices) -> conditions.add(row -> {
                 Object raw = row.get(field);
                 if (raw == null) return false;
+                if(raw instanceof Collection<?> items && (operator.equals("eq") || operator.equals("in"))) return items.stream().anyMatch(item->choices.contains(Objects.toString(item,"")));
                 String value = raw.toString();
                 return choices.stream().anyMatch(choice -> switch (operator) {
                     case "eq", "in" -> value.equals(choice);

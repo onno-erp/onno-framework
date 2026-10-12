@@ -1,4 +1,4 @@
-import {act, cleanup, fireEvent, render, screen} from "@testing-library/react";
+import {act, cleanup, fireEvent, render, screen, waitFor} from "@testing-library/react";
 import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import {MobileNavigationFrame, mobileParent} from "@/components/mobile-navigation-frame";
 beforeEach(() => { vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} }); });
@@ -68,4 +68,25 @@ it("fades section changes quickly but still slides the next detail and Back", as
   await act(async () => view.rerender(<MobileNavigationFrame {...props} path="/catalogs/contacts"/>));
   expect(animate.mock.calls[0][0][0]).toEqual({transform:"translateX(-100%)"});
   delete (HTMLElement.prototype as Partial<HTMLElement>).animate;
+});
+
+it("integrates one Back into the active page header and preserves the retained parent", async () => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+  function Page({path}: {path: string}) {
+    return <><div data-onno-page-header="" role="banner"><h1>{path}</h1><button>Actions</button></div><input aria-label="Draft" /></>;
+  }
+  const back = vi.fn();
+  const props = {roots:["/documents/weddings"],back,backLabel:"Back",navigation:<nav>Tabs</nav>,render:(path:string)=><Page path={path}/>};
+  const view = render(<MobileNavigationFrame {...props} path="/documents/weddings"/>);
+  fireEvent.change(screen.getByRole("textbox"), {target:{value:"Retained"}});
+  view.rerender(<MobileNavigationFrame {...props} path="/documents/weddings/123"/>);
+  await waitFor(() => expect(screen.getAllByRole("banner")).toHaveLength(1));
+  const button = screen.getByRole("button", {name:"Back"});
+  expect(screen.getByRole("banner")).toContainElement(button);
+  expect(screen.getByRole("banner")).toContainElement(screen.getByRole("button", {name:"Actions"}));
+  fireEvent.click(button);
+  expect(back).toHaveBeenCalledWith("/documents/weddings");
+  view.rerender(<MobileNavigationFrame {...props} path="/documents/weddings"/>);
+  expect(screen.queryByRole("button", {name:"Back"})).toBeNull();
+  expect(screen.getByRole("textbox")).toHaveValue("Retained");
 });

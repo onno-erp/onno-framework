@@ -173,12 +173,13 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. |
-| `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the single-mailbox Gmail OAuth adapter. |
+| `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the Gmail OAuth adapter. Each connected account (shared or personal) authorizes its own mailbox and gets its own inbox. |
 | `onno.crm.channels.gmail.redirect-uri` | `String` | `http://127.0.0.1:8090/api/crm/gmail/callback` | Exact registered Google OAuth callback URI; use HTTPS in deployments. |
 | `onno.crm.channels.gmail.tokens-file` | `String` | — | Private writable Google token JSON file. |
 | `onno.crm.channels.instagram.enabled` | `Boolean` | `false` | Enable the single-account Instagram polling adapter. |
 | `onno.crm.channels.instagram.tokens-file` | `String` | — | Private Instagram token JSON file. |
-| `onno.crm.channels.telegram.enabled` | `Boolean` | `false` | Enable the single-bot Telegram adapter. |
+| `onno.crm.channels.telegram.enabled` | `Boolean` | `false` | Enable the Telegram bot adapter: one server-configured bot that serves ordinary bot chats and, when the bot has business mode, per-user Telegram business connections. |
+| `onno.crm.channels.telegram.regular-chats-enabled` | `Boolean` | `true` | Accept ordinary (non-business) private chats with the bot into a shared Telegram inbox. When false the bot serves Telegram business connections only: ordinary chats are ignored, no ordinary inbox is created, and replies to existing ordinary chats are not sent. |
 | `onno.crm.channels.telegram.token` | `String` | — | Bot token; supply through external secret configuration. |
 | `onno.crm.channels.whatsapp.enabled` | `Boolean` | `false` | Enable the single-number WhatsApp Cloud API adapter. |
 | `onno.crm.channels.whatsapp.tokens-file` | `String` | — | Private WhatsApp token and webhook signing JSON file. |

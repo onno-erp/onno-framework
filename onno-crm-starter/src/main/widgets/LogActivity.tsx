@@ -31,7 +31,7 @@ export function LogActivity({customerId, conversationId, onSaved}: {customerId: 
     finally { setBusy(false); }
   };
   return <Popover open={open} onOpenChange={value => {if (!busy) {setOpen(value); setError("");}}}>
-    <PopoverTrigger asChild><Button size="toolbar" variant="subtle"><Phone className="size-4" />{t("crm.activity.log")}</Button></PopoverTrigger>
+    <PopoverTrigger asChild><Button size="toolbar" variant="subtle" title={t("crm.activity.log")} aria-label={t("crm.activity.log")}><Phone className="size-4" /><span data-toolbar-label>{t("crm.activity.log")}</span></Button></PopoverTrigger>
     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-32px)] space-y-3 p-4" aria-label={t("crm.activity.log")}>
       <div className="text-sm font-semibold">{t("crm.activity.addSummary")}</div>
       <Select value={type} onValueChange={setType} disabled={busy}>

@@ -86,8 +86,24 @@ overwrite host customer fields.
 }
 ```
 
-Use the full constructor for separate read/write roles and a workspace-specific configuration
-function. Workspace roles are application roles; there is no required `CRM_AGENT` or `CRM_MANAGER`
+Use the builder for separate read/write roles, a workspace-specific configuration function, the
+authored list and facets. Write roles default to the read roles; configuration, list and facets are
+optional:
+
+```java
+@Bean CrmInboxWorkspace sales(StageFacet stages) {
+    return CrmInboxWorkspace.builder("sales", "Sales")
+        .readRoles("SALES", "SALES_LEAD")
+        .writeRoles("SALES_LEAD")
+        .selection(conversation -> Channel.TELEGRAM.equals(conversation.getChannel()))
+        .configure(config -> config.withFolders(List.of()))
+        .list(list -> list.filter(Conversation::getSubject).label("Subject").contains())
+        .facet(stages.facet())
+        .build();
+}
+```
+
+The positional constructors remain for compatibility. Workspace roles are application roles; there is no required `CRM_AGENT` or `CRM_MANAGER`
 role. `ADMIN` is the framework superuser. Customer read permissions still apply. A persisted `Inbox`
 represents a channel account; workspace predicates never change delivery destinations.
 
@@ -107,9 +123,9 @@ membership. Internal repositories remain trusted application APIs.
   Customer lifecycle stages remain ordinary host fields.
 - **Folders:** declare `CrmWorkspaceService.Folder` values through `Config.withFolders`. Empty by
   default; criteria intersect, and the first matching folder wins over the authorized loaded rows.
-- **Personal chat groups:** register `new CrmFeatures(true)`. Disabled by default, with no group
+- **Personal chat groups:** register `CrmFeatures.defaults().withChatGroups(true)`. Disabled by default, with no group
   tables created and no group controls shown. Group membership never grants conversation access.
-- **Connections:** embed the `crmSettings` widget wherever wanted. Only enabled connectors appear.
+- **Connections:** place `CrmConnectionsView` (the `crmConnections` widget) wherever wanted. Only enabled connectors appear.
   `CrmChannelAccess` controls credential management and defaults to administrators only.
 - **Sales:** the optional `example/src/sales/java` recipe is a catalog, stage enum, ordinary
   `EntityView` and three standard metric/count widgets. Build it with `-PsalesExample`; it is not
@@ -119,6 +135,14 @@ membership. Internal repositories remain trusted application APIs.
 `ListSpec.selectionCheckboxes(true)` enables checkboxes on any ordinary catalog/document table.
 Selected records use the existing top-toolbar and context-menu batch commands; select-all means
 loaded rows, including expanded groups. CRM does not install a second bulk-action backend.
+
+A host `CrmInboxWorkspace.Facet` adds a multi-select filter resolved from related data by a
+`CrmInboxWorkspace.FacetResolver`. Construct it with `showOnRows=true` (the five-argument form) to
+show each row's matching options as chips in the option's colour, for example contact tags. That is
+not free: the resolver then runs on **every feed page over all conversations the principal may see
+in the workspace** (it runs before filtering and pagination), so keep it to one or two batched
+queries. Without `showOnRows` it runs only when the request filters on that facet. See
+[Sidebar filter content](#sidebar-filter-content-and-pipeline-stages) for options that change at runtime.
 
 Inbox toolbar filters are opt-in and use the ordinary `ListSpec` builder:
 
@@ -150,6 +174,10 @@ claiming one conversation. Retries apply only to failed outbound replies in that
 
 ### Attachments
 
+Email replies expose separate From, To, and Subject rows. Transports opt into recipient selection with `Connection.withRecipients(defaultAddress, allowedAddresses)`. Gmail offers the contact’s linked email identities and defaults to the current thread’s reply address. The optional `recipient` command field is validated against those choices and saved on the outgoing message, including the default, so retries retain the destination. Choosing a different address starts a new email thread within the same CRM conversation. A single address is shown without a dropdown. Email replies expose an editable Subject row separately from the sender account picker. The optional `subject` command field is saved on the outgoing message for delivery and retries; omit it to keep the existing reply subject. Gmail sends a changed subject as a new email thread and associates it with the same CRM conversation. Subjects must be a single line of at most 998 characters. Non-email channels reject subject overrides.
+
+Files can be selected with the paperclip or dropped anywhere in the active conversation pane. The drop target respects reply permissions, channel attachment support, file count and upload size limits. Drops add files to the draft tray; they never send the reply automatically. Internal-note mode does not accept attachment drops.
+
 An outbound reply may carry files. They are stored as references, never as bytes on the message:
 the composer uploads each file through `POST /api/media` and sends back the returned URLs, which
 `ConversationMessage.attachments` keeps newline-joined — the same shape the `gallery` field widget
@@ -162,6 +190,12 @@ files. The contact activity feed carries the files on every message entry, becau
 composer offers a paperclip only where `maxAttachments` is positive and otherwise explains why.
 Turning media ingestion off (`onno.media.enabled=false`) removes the capability entirely rather
 than failing at send time; messages already carrying files still render.
+
+Inbound files come from external senders, so `CrmAttachments.ingest` applies the same operator
+policy as uploads: `onno.media.max-file-size` and `onno.media.allowed-content-types`. A refused
+file throws `CrmAttachments.RejectedAttachment` (an `IllegalArgumentException`) with a `reason()` of
+`EMPTY`, `TOO_LARGE` or `TYPE_NOT_ALLOWED`; a channel adapter should catch it, skip that file and
+keep the rest of the message. Storage being disabled or failing is an `IllegalStateException`.
 
 | Channel | Outbound files |
 | --- | --- |
@@ -195,8 +229,9 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces/{key}` | Authorized rows with filters, cursor/limit, totals, config and permissions |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments}`; each message returns `attachments:[{url,filename,contentType,size,image}]` |
-| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,maxAttachments,attachmentReason}` |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient` (null when not set), so history shows overrides |
+| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection). Addresses known only through another user's personal account are left out |
+| `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
 | `POST /conversations/{id}/read` | Acknowledge unread messages |
 | `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape |
@@ -218,7 +253,8 @@ There is no backward-compatibility layer for the former CRM-owned business model
 ## UI extensions and verification
 
 The packaged widget exposes `crm.chat.header`, `crm.chat.composer`, `crm.chat.aside`,
-`crm.chat.context-menu` and `crm.contact.actions`. Contact extensions receive the bound catalog name
+`crm.chat.context-menu`, `crm.contact.profile` (directly under the profile card) and
+`crm.contact.actions`. Contact extensions receive the bound catalog name
 and host permissions. Add buttons with the shared SDK extension registry; server authorization is
 independent of widget visibility. Custom message renderers use `registerChatMessageRenderer`.
 
@@ -236,7 +272,7 @@ channel, or implement `CrmChannelConnection.definition()` alongside setup and he
 `GET /api/crm/channels/types` returns only registered definitions. Branding belongs to connector
 resources; unknown historical keys use a neutral icon.
 
-CRM installs no Channels page. The host can embed `crmSettings` on any page. This optional widget
+CRM installs no Channels page. The host can place `CrmConnectionsView` (`crmConnections`) on any page. This optional widget
 shows contributed connection descriptors; setup controls come from the ordinary
 `crm.channel.settings` extension slot, with the connection in `context.record`, `canManage` in
 permissions, and `refresh()` after a command. The bundled connector module owns its setup widget
@@ -408,7 +444,7 @@ Explicit toolbar composition uses comma-separated widget settings. Omitted setti
 | `toolbarActions` | Exact server-defined toolbar action keys. Permissions still apply. |
 | `toolbarSecondary` | `channels,accounts`, either one independently, or empty to omit the lower row. |
 
-These settings select contents, not visual ordering. The host retains consistent title/filter/action positions. The wedding inbox uses `toolbarControls=title,search,filters`, `toolbarViewOptions=custom`, `toolbarFilters=status`, and `toolbarSecondary=channels,accounts`. Its Conversations body remains available without Table/Conversations buttons. The reusable `EntityListWidget.toolbarOptions` exposes equivalent `controls`, `views`, `filterKeys`, and `actionKeys` arrays. Visibility is presentation, never authorization.
+These settings select contents, not visual ordering. The host retains consistent title/filter/action positions. For example, a support inbox might use `toolbarControls=title,search,filters`, `toolbarViewOptions=custom`, `toolbarFilters=status`, and `toolbarSecondary=channels,accounts`; its Conversations body then remains available without Table/Conversations buttons. The reusable `EntityListWidget.toolbarOptions` exposes equivalent `controls`, `views`, `filterKeys`, and `actionKeys` arrays. Visibility is presentation, never authorization.
 
 ### Workspace chrome configuration
 
@@ -425,7 +461,7 @@ The following widget config values are JSON objects using the shared toolbar reg
 | Config | Available item IDs |
 | --- | --- |
 | `listToolbar` / `mobileListToolbar` | `title`, `count`, `controls` (the host list toolbar; used with renderer placement) |
-| `chatToolbar` / `mobileChatToolbar` | `back` (compact only), `avatar` (desktop only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
+| `chatToolbar` / `narrowChatToolbar` / `mobileChatToolbar` | `back` (compact only), `avatar` (desktop only), `title`, `contact`, `openContact`, `scheduleCall`, `logActivity`, `extensions`, `actions` (legacy expandable row) |
 | `composerToolbar` / `mobileComposerToolbar` | `mode`, `attach`, `send`, `extensions`, `tools`, `channel` |
 
 Desktop configs override the built-in layout; mobile configs override its individual
@@ -454,6 +490,13 @@ This puts the reply/note switch above the editor and the sending account alongsi
 actions. `tools` opens the shared responsive action panel with meeting, activity, attachment and header extensions.
 Set `mobileChatToolbar.overflow` to `[]` to keep those tools out of the mobile header.
 
+The desktop chat header stays on one row. When it runs out of width it first hides optional
+button labels (elements marked `data-toolbar-label`, e.g. "Log activity") and keeps their icons
+and tooltips; the customer name keeps a minimum width. If it still overflows, `narrowChatToolbar`
+(`CrmInboxView.header(Breakpoint.NARROW, ...)`) replaces the desktop regions, typically moving `extensions` to
+`secondary` so they wrap onto a second row. Header extensions should mark their own optional
+label text with `data-toolbar-label` so they condense with the built-in actions.
+
 ### Conversation row presentation
 
 Conversation rows use `ConversationRowContent` slots for avatar, title, timestamp, preview,
@@ -473,4 +516,227 @@ Desktop chat headers use flexible space for inline actions. The `avatar` item sh
 photo; `contact` is an icon button that toggles the details panel. Compact headers retain the
 centered name and tappable avatar.
 
-Compact inbox filters (`mobileToolbar=sheet`) show channel and account choices directly in labeled groups. Option facets such as Status are also inline in the same panel; selecting a value must not open a second popover or sheet. Search remains in the conversation header, filters apply immediately, and each group exposes its All reset.
+Compact inbox filters (`mobileToolbar=sheet`) show status views, channels with provider logos, and accounts as directly selectable navigation rows. Selecting a channel clears the account selection and restricts the account list to that channel. Search remains in the conversation header and filters apply immediately.
+
+For a docked desktop panel, set `CrmInboxView.filterSidebar(true)` (or widget config `filterSidebar=true`) together with `toolbarPlacement(ToolbarPlacement.IN_LIST)` (`toolbarPlacement=renderer`). A persistent 208px navigation column appears to the left of the inbox when its container is at least 1100px wide, open by default. The conversation header’s navigation toggle collapses or expands it with a width transition, preserving selected filters; reduced-motion preferences disable the transition. The application-level `filterSidebar(false)` still removes the panel entirely. Narrower containers use the shared filter sheet; phones get a bottom sheet. Selections stay in the list query state when the panel closes or changes presentation. The option is off by default and uses the same configured filters and secondary controls. Use `filterSidebar(false)` to remove the desktop panel; with `mobileToolbar(MobileToolbar.SHEET)`, search and the Filters button remain in the conversation header. Desktop navigation uses compact 32px rows; touch controls retain 44px targets. Set `connectionsRoute("/connections")` to add a Manage connections footer linking to an app-owned page (omit `/ui`). Navigation only lists channels and accounts supplied by the authorized workspace; it does not infer totals from a paginated conversation list.
+
+Messages are acknowledged once their history is loaded and the conversation is visible; contact
+metadata and transport availability load independently. Successful acknowledgements clear the
+local unread badge immediately while the shared feed catches up. Failed acknowledgements preserve
+unread state. A newer server row supersedes the local read snapshot.
+
+The attachment action remains visible in reply mode. When unavailable, the button is disabled
+and its wrapper exposes the channel/permission/file-limit reason on hover. It opens the file picker only when attachments are allowed.
+
+## Scoped connection accounts
+
+Hosts still author the route and navigation. The `crmConnections` widget presents shared accounts,
+personal accounts, provider availability, loading skeletons, retries, and account management.
+Place it with the typed `CrmConnectionsView`:
+
+```java
+import su.onno.crm.ui.CrmConnectionsView;
+import static su.onno.crm.service.CrmConnectionAccounts.Scope.*;
+
+p.view(new CrmConnectionsView().title("Connections")
+    .scopes(SHARED, PERSONAL)
+    .defaultScope(SHARED)
+    .sharedLabel("Team accounts")
+    .personalLabel("My accounts")
+    .providers("gmail", "telegram", "instagram", "whatsapp")
+    .showUnavailable(true));
+```
+
+Scopes are `CrmConnectionAccounts.Scope` values, the same enum the accounts API and provider
+descriptors use. It emits the `crmConnections` widget config keys `scopes`, `defaultScope`, `sharedLabel`,
+`personalLabel`, `providers` and `showUnavailable`; the older type name `crmSettings` renders the same
+widget, so raw `p.widget(...).type("crmSettings")` configuration remains supported. `defaultScope` must be one of `scopes`. Like `CrmInboxView`, it
+freezes on first placement. All options are optional. `providers` is an ordered-independent display allowlist; omitted means all
+installed providers. `scopes` controls the scope switcher and its order. These are presentation
+options, not access rules. No page or sidebar destination is installed by the starter.
+
+`CrmAccountProvider` beans contribute provider descriptors even when disabled: branding, description,
+supported scopes, availability, and setup guidance. Their account views and commands remain
+connector-owned. The existing `crm.channel.settings` extension receives `accountId` for managed
+accounts, the provider key, scope, a server-derived `canManage`, and `refresh()`. Legacy
+`CrmChannelConnection` beans remain visible as shared accounts and retain `/api/crm/channels`.
+Provider keys must be unique. Replace a bundled descriptor with a bean named
+`gmailAccountProvider`, `telegramBusinessAccountProvider`, `telegramAccountProvider`,
+`instagramAccountProvider`, or `whatsappAccountProvider`; register a new key for a third-party
+connector. `Descriptor.scopes` is a `List<CrmConnectionAccounts.Scope>` (`SHARED`, `PERSONAL`);
+empty means the adapter only runs on one server-configured shared account.
+
+**Personal accounts are opt-in.** Shared accounts work out of the box. To let users connect their
+own accounts, register `CrmFeatures.defaults().withPersonalAccounts(true)`. Until then the API
+withholds `PERSONAL` from provider descriptors and rejects personal creation, whatever providers
+advertise.
+
+The credential-free `onno_crm_connection_accounts` table stores a UUID, provider key, immutable
+`Scope` (`SHARED`/`PERSONAL`), server-assigned owner (the authenticated principal's name, i.e. the
+OIDC subject), display label, and bound inbox UUID (one account per inbox). Like the adapters'
+state tables it is internal module state created on startup, not a catalog.
+
+Who may do what:
+
+- **Shared accounts** are managed through `CrmChannelAccess.canManage` (ADMIN by default).
+- **Adding a personal account** needs the feature, `CrmChannelAccess.canManagePersonal` (any signed-in
+  user by default; override the bean to restrict) and write access to an inbox workspace.
+- **An existing personal account** is managed only by its owner, never by administrators. The owner
+  keeps control (rename, pause, disconnect) even after losing inbox access or the personal policy,
+  so a mailbox cannot keep syncing out of its owner's reach. There is no administrator revoke yet:
+  to cut off a departed user's mailbox, revoke the provider grant (e.g. the Google OAuth token).
+
+`GET /api/crm/connection-accounts` returns `Listing{providers, accounts, canManageShared,
+canManagePersonal}`; each account is `AccountView{id, provider, scope, label, canRemove,
+connection, canManage}`. No credentials or other users' personal accounts are returned. `POST`
+accepts `{provider, scope, label}`; `POST /{id}` accepts `{action, label?}`. `rename` and
+`removeDraft` are handled by the CRM and are reserved; any other action is forwarded to the
+provider when the account's view offers it. Only an unconnected draft can be removed. Disconnect
+preserves ownership and conversation history. A failing provider action answers 422 with a
+generic message; the cause is logged server-side because upstream errors can quote credentials or
+addresses.
+
+`CrmInboxWorkspaceService` is the single place that applies personal inbox ownership: `canAccess`
+(one indexed lookup) and its batch form `accessible` gate every conversation read, and
+`visibleIdentities` filters contact identities. Scoped endpoints, contact projections, the activity
+feed, attachments and commands all go through it; loops must use the batch form.
+A host subclass of `CrmInboxWorkspaceService` must pass `CrmConnectionAccounts` to the super
+constructor; it is required so a subclass cannot switch the privacy rule off by omission.
+
+**Provider contract:** contact identities created for a managed account must use the account's
+inbox UUID (`account.inboxId().toString()`) as `IncomingContact.connectionKey`. That is how
+`visibleIdentities` recognises identities seen only in someone else's personal inbox.
+
+Generic CRM catalogs (`CrmConversations`, `CrmConversationMessages`, `CrmContactIdentities`,
+`CrmInboxes`), exports, and generic entity events are never open to non-administrators. With
+personal accounts enabled they are closed to ADMIN as well, because their contracts have no
+per-record principal filter; use the scoped CRM APIs. This is configuration, not data, so it does
+not change at runtime when someone connects an account. `UiEntityAccessPolicy.includesAdministrators()`
+is the opt-in for such privacy boundaries; other policies keep the ordinary ADMIN bypass.
+
+Contacts are not private. A correspondent who writes to a personal inbox is resolved into the host's
+shared contact catalog under the host's own permissions, so colleagues may see that the contact
+exists, but not the personal conversation or its channel identity.
+
+Bundled Gmail and Telegram business support shared and personal accounts. The other bundled
+adapters run on one shared, server-configured account and advertise that limitation instead of
+offering nonfunctional personal setup. Provider capability claims must match their actual transport
+and credential isolation.
+
+### Typed inbox presentation
+
+Use `CrmInboxView` instead of handwritten widget JSON for new inbox pages. It is a final class
+implementing core `PageView`; declare it as a `@Bean` and inject it into the `Page` that places it:
+
+```java
+import su.onno.crm.ui.CrmInboxView;
+import static su.onno.crm.ui.CrmInboxView.Breakpoint.*;
+import static su.onno.crm.ui.CrmInboxView.HeaderItem.*;
+
+@Bean
+CrmInboxView supportInboxView() {
+    return new CrmInboxView("support")
+        .toolbarPlacement(CrmInboxView.ToolbarPlacement.IN_LIST)
+        .filters("status", "pipelineStage")
+        .controls(CrmInboxView.Control.SEARCH, CrmInboxView.Control.FILTERS)
+        .views(CrmInboxView.View.INBOX)
+        .secondary(CrmInboxView.Secondary.CHANNELS, CrmInboxView.Secondary.ACCOUNTS)
+        .header(h -> h.start(AVATAR).center(TITLE).end(CONTACT, SCHEDULE_CALL))
+        .header(NARROW, h -> h.start(AVATAR).center(TITLE).end(CONTACT).secondary(SCHEDULE_CALL))
+        .header(MOBILE, h -> h.start(BACK).center(TITLE).end(CONTACT))
+        .composer(MOBILE, c -> c.start(CrmInboxView.ComposerItem.TOOLS).end(CrmInboxView.ComposerItem.SEND));
+}
+@Bean Page inbox(CrmInboxView inbox) { /* compose: p.header(false); p.view(inbox); */ }
+```
+
+Each surface has one method plus an optional `Breakpoint`: `header(...)` (chat header;
+`DEFAULT`, `NARROW`, `MOBILE`), `listHeader(...)` (`DEFAULT`, `MOBILE`) and `composer(...)`
+(`DEFAULT`, `MOBILE`). Unsupported combinations such as `composer(NARROW, ...)` throw
+`IllegalArgumentException`. They emit `chatToolbar`/`narrowChatToolbar`/`mobileChatToolbar`,
+`listToolbar`/`mobileListToolbar` and `composerToolbar`/`mobileComposerToolbar`.
+
+Every configured toolbar is a **full replacement**: all six regions are serialized, unset regions
+as `[]`, so renderer defaults never leak in and nothing needs an empty `.overflow()` to clear it.
+An item may appear in only one region. `MOBILE`/`NARROW` variants also replace the `DEFAULT`
+toolbar rather than patching it; an unconfigured variant falls back to `DEFAULT`.
+
+Enum constants map to renderer ids (`OPEN_CONTACT` → `openContact`). `View.INBOX` emits `custom`
+(the conversation renderer); `ToolbarPlacement.IN_LIST` emits `renderer` and `PAGE_HEADER`
+emits `header`. `CrmRendererContractTest` reads the TypeScript renderers and fails when a Java
+key is not one they understand.
+
+Configure once at startup: the first placement freezes the view, and later configuration calls
+throw `IllegalStateException`. Each placement produces an identical widget descriptor. The constructor
+selects the workspace key; the workspace still defines access and ListSpec filters/facets.
+`filters(...)` selects declared filter keys, while `secondary(...)` selects channel/account
+controls. At startup `CrmInboxViewValidator` checks every `CrmInboxView` **bean**: an unknown workspace
+key fails startup, and so does a filter key the workspace bean does not declare as a ListSpec filter
+or facet. Facets are declared on the workspace bean even when their options change at runtime (see
+`FacetOptions` below), so every valid key is known at startup. Views constructed inline inside `Page.compose` are not visible to it. `rows(...)` configures previews, account/channel badges and
+conditional row labels without JSON. Existing `crmInboxWorkspaces` widget configuration remains
+compatible (raw JSON still merges mobile regions over desktop ones); the class emits that same
+contract and does not change provider availability.
+
+### Sidebar filter content and pipeline stages
+
+The sidebar is a presentation of the workspace's declared filters, not a fixed CRM funnel.
+`CrmInboxView.filters("status", "pipelineStage")` chooses the visible groups and their order;
+`filters("pipelineStage")` shows only the pipeline, and `filters()` hides all filter groups.
+`secondary(Secondary.CHANNELS, Secondary.ACCOUNTS)` independently selects channel/account navigation;
+`secondary()` hides both. `filterSidebar(false)` switches off the desktop navigation card.
+Labels come from each filter declaration. Option colours are rendered in both the sidebar and sheet.
+Conversation status colours come from the app's `CrmStateConfiguration` binding.
+
+Use `builder(...).facet(new CrmInboxWorkspace.Facet(key, label, options, resolver))` (or the
+`facet(...)` wither on an existing workspace) for a filter derived from related business records,
+such as deal stages:
+
+```java
+var stage = new CrmInboxWorkspace.Facet("pipelineStage", "Pipeline stage",
+    List.of(new CrmInboxWorkspace.FacetOption("WON", "Won", "#10B981")),
+    (conversations, principal) -> stagesByConversation(conversations, principal));
+```
+
+When the options are runtime data — an editable tag library, stages users can rename — pass a
+`CrmInboxWorkspace.FacetOptions` source instead of a list. It is evaluated once per inbox read, so
+declare the facet statically on the workspace bean; do not subclass `CrmInboxWorkspaceService`:
+
+```java
+var tags = new CrmInboxWorkspace.Facet("tags", "Tags",
+    () -> tagLibrary.list().stream()
+        .map(tag -> new CrmInboxWorkspace.FacetOption(tag.id().toString(), tag.name(), tag.color())).toList(),
+    (conversations, principal) -> tagsByConversation(conversations, principal),
+    true); // showOnRows
+```
+
+While a source yields no options the facet is left out of the filter metadata and adds no row chips;
+its key stays valid, so a stale `in=tags,...` link matches nothing rather than failing.
+
+Each `FacetOption(value, label, color)` has a stable wire value and optional `#RRGGBB` colour.
+The resolver receives authorized conversations and the principal, and returns a map from conversation
+ID to matching values. It must enforce access to any related records it reads. It runs once per
+requested facet, before filtering, totals and pagination. Multiple values within one group are OR;
+different groups combine with AND. It never expands workspace or personal-account access.
+A contact linked to several business records may contribute several stage values. Missing links
+match no stage, while All applies no stage constraint. Facet keys must not collide with each other,
+with the authored list's filters, with any `Conversation` field name (inherited catalog fields such
+as `id`, `code` and `description` included), or with a key the feed computes for each row
+(`<field>Display`, `<field>Color`, `<field>Ref`, `customerAvatar`, `rowBadges`). Every
+`CrmInboxWorkspace` constructor and the builder reject such facets, and null facets, at construction.
+
+Keep stage definitions in the host app's catalog or enumeration. A deals app, for instance, derives
+its pipeline options and colours from its own `Stage`, resolving open deals through their primary
+contact; the conversation lifecycle remains a separate `CrmStateConfiguration`.
+
+Messages may contain attachments without a text body. Validation requires at least text or a
+file reference; the Body attribute is optional so file-only replies reach channel delivery.
+
+### Voice messages
+
+The shared inbox plays `audio/*` attachments inline, with onno-themed playback controls (play/pause, seek, time and speed) and a download
+link when a browser cannot decode the file. Playback is manual and audio is not preloaded. Existing
+Telegram voice imports use this renderer without a data migration.
+
+Audio files can still be attached through the existing file picker and delivered through channel
+attachment transports. Browser recording and transcription are not included. Playback support
+depends on the browser and audio format.

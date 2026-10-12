@@ -1060,8 +1060,10 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
 `./gradlew bootJar` compiles each `.tsx` (managed Node + esbuild, React aliased to the host SPA so
 the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
 The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises
-them as `pluginScripts` from `GET /api/config`; the SPA dynamic-imports each at boot and each
-self-registers. At startup the UI starter stages discovered plugin JS/CSS into a stable temporary
+them as `pluginScripts` from `GET /api/config`. The served `index.html` also carries a
+`<link rel="modulepreload" data-onno-plugin-script>` per installed module (inserted after the opening
+`<head>` tag, attributes allowed) so the browser fetches them alongside the host bundle; the SPA
+evaluates them only once a user is signed in — never on the login screen — and each self-registers. At startup the UI starter stages discovered plugin JS/CSS into a stable temporary
 serve directory. This prevents a Gradle continuous build from rewriting a dependency JAR while
 Spring is serving a plugin resource. An unregistered `type(...)` renders a labelled placeholder
 rather than vanishing.
@@ -1271,6 +1273,7 @@ Comments are **opt-in per entity**, and off by default. An entity gets a thread 
 public class BookingView implements EntityView {
     @Override public Class<?> entity() { return Booking.class; }
     @Override public boolean comments() { return true; }   // off by default; opt in here
+    @Override public boolean opensInMain() { return true; } // open records in the main pane, not beside the list
 }
 ```
 
@@ -1562,8 +1565,8 @@ Commands must enforce their own server-side authorization; unknown widget types 
 ### Structured record tags
 
 `EntityTags` is a host/SDK component with `{ kind: "catalogs" | "documents", name, id,
-readOnly? }`. It displays colored chips and supports selecting existing catalog tags and adding/removing
-individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
+readOnly? }`. It displays colored chips and supports selecting existing tags, creating a tag inline
+(type a new name and press Enter or choose *Create*), and adding/removing individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
 widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail configuration.
 
 The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
@@ -1575,7 +1578,9 @@ beans add record-level checks; the CRM uses its workspace customer permissions.
 Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
 legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging
 service owns record assignments. CRM provides `CrmTags`, available under Configuration → Tags.
-The Add tag picker only searches/selects existing catalog entries. Legacy IDs and assignments
+The Add tag picker searches existing entries and can create a new one through
+`POST /api/tags/{kind}/{name}` (`{name,color}`; requires write access to the tagged entity), which goes
+through `TagCatalog.importTag` when a catalog is bound. Legacy IDs and assignments
 survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
 
 ### UI extension outlets
@@ -1600,6 +1605,15 @@ The current response renders before a queued refresh; filter changes still disca
 and failed background refreshes preserve the visible rows.
 
 ### Date and time fields
+
+Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
+field plus a picker popover. `compact` shows only a round swatch (the hex field moves into the
+popover) for dense rows; `onCommit` fires once with the final colour when the popover closes, so a
+row can save without a request per drag step:
+
+```tsx
+<ColorPicker compact aria-label="Stage colour" value={color} onChange={setColor} onCommit={save} />
+```
 
 Import `DatePicker` for dates and `DateTimePicker` for local dates with 24-hour time:
 
@@ -1656,3 +1670,13 @@ For touch layouts, `toolbarOptions.compactPresentation="sheet"` replaces the too
 an always-visible full-width search field and a Filters disclosure. The existing controls
 (including secondary contributions) stay in a shared bottom sheet; filter/query state stays
 with the list. Desktop retains the inline toolbar. Active filters mark the disclosure.
+
+`UiEntityAccessPolicy.includesAdministrators()` defaults to false. A policy may explicitly return
+true to enforce a privacy boundary on ADMIN as well; per-entity role superuser semantics otherwise
+remain unchanged. CRM uses this to close generic catalog/export/event bypasses for personal inboxes.
+
+Filesystem media storage preserves the original filename and content type in private metadata
+sidecars, including across restarts. Existing files without metadata remain readable using
+their storage filename and detected type. The media endpoint never serves metadata sidecars.
+
+Common audio media types (Ogg, MP3, MP4, WebM, WAV, AAC and FLAC) are served inline for voice-message playback, retaining `nosniff`. Other file types retain their existing disposition policy.

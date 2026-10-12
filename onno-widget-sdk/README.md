@@ -25,7 +25,7 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 ```
 
 - `registerWidget(type, Component)` — register (or override) the renderer for a widget type.
-- `registerListRenderer(type, Component)` — register the **body renderer for a custom list view**:
+- `registerListRenderer(type, Component, options?)` — register the **body renderer for a custom list view**:
   the component an entity's server-side `list.custom("type")` resolves. Same registry as
   `registerWidget`, list-shaped props (`ListRendererProps`): `rows` (the current window, fed by the
   framework-owned search/filters/sort/pagination), `list` (the descriptor — `kind`, `name`, `title`,
@@ -39,9 +39,9 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   access to the same shared stream for widgets with unusual matching needs. Never open a separate
   `EventSource` from a widget.
 - `api` — a read-only REST client (`listCatalog`, `getCatalogItem`, `listDocuments`, `getDocument`,
-  `getBalance`, `getTurnover`, `getMovements`). List calls return one bounded keyset window.
-  Same-origin,
-  session + CSRF handled by the host. No writes.
+  `getBalance`, `getTurnover`, `getMovements`, plus the `getJson` escape hatch below). List calls
+  return one bounded keyset window. Same-origin, session + CSRF handled by the host. No writes. Each
+  call resolves to the widget's own deep copy of the response, so mutating it never affects the host.
 - **UI primitives** — the host's real design-system controls, so a widget matches the product instead
   of shipping hand-rolled lookalikes. Import them **by name** (`import { DatePicker, Select, Button }
   from "@onno/widget-sdk"`) or off the `ui` object (`ui.Select`). Curated subset — `Button`, `Badge`,
@@ -253,7 +253,27 @@ provide an accessible load-more/retry button (disabled while loading). Stop auto
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
 query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
 
+While a next window loads, the host shows its own "Loading more…" status below the renderer. A
+renderer that draws that feedback inside its own pane opts out at registration:
+
+```tsx
+registerListRenderer("inbox", Inbox, { ownsLoadingMore: true });
+```
+
+Only the `EntityListWidget` props documented here (`list`, `renderer`, `toolbarPlacement`) are SDK
+contract. Others the host accepts — `initialPage`, `toolbarFooter`, `toolbarOptions.filterSidebar`
+and similar — are host-internal hooks for first-party workspaces and may change without notice.
+
 ### Date and time fields
+
+Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
+field plus a picker popover. `compact` shows only a round swatch (the hex field moves into the
+popover) for dense rows; `onCommit` fires once with the final colour when the popover closes, so a
+row can save without a request per drag step:
+
+```tsx
+<ColorPicker compact aria-label="Stage colour" value={color} onChange={setColor} onCommit={save} />
+```
 
 Import `DatePicker` for dates and `DateTimePicker` for local dates with 24-hour time:
 
@@ -319,6 +339,21 @@ The overflow disclosure hosts ordinary controls, including disabled buttons.
   compactLayout={{end: ["save"], overflow: ["export"]}} />
 ```
 
+`fit` keeps a single-row (non-`compact`, non-`balanced`) toolbar inside its width. When the items
+overflow, the toolbar first hides every descendant marked `data-toolbar-label` — wrap a button's
+optional text in `<span data-toolbar-label>` and keep its icon and `aria-label` outside, so the control
+stays identifiable — and, if it still overflows, applies `narrowLayout` (e.g. moving tools into
+`secondary` or `overflow`):
+
+```tsx
+<WorkspaceToolbar fit narrowLayout={{start: ["title"], overflow: ["log"]}}
+  items={[
+    {id: "title", content: <h2>Orders</h2>},
+    {id: "log", content: <Button size="toolbar" aria-label="Log call"><Phone className="size-4" /><span data-toolbar-label>Log call</span></Button>},
+  ]}
+  layout={{start: ["title"], end: ["log"]}} />
+```
+
 `EntityListWidget toolbarPlacement="renderer"` passes the host-owned toolbar to a custom
 list renderer as `props.toolbar`. Render it exactly once inside the workspace, including
 when `rows` is empty, so users can clear filters. Query, permissions, actions and pagination
@@ -328,3 +363,21 @@ host toolbar even when a custom renderer opts into internal placement.
 Custom renderers with delegated toolbars remain mounted during query reloads and receive
 `loading: true`, preserving search focus and open filter controls. Use that flag to show a
 loading state in the body rather than unmounting the toolbar.
+
+`api.getJson<T>("/api/extension/path")` supports authenticated extension reads through the host's
+shared GET client. The path is typed as `ApiPath` (`` `/api/${string}` ``); at runtime the host
+rejects anything that is not a same-origin `/api/…` path after URL normalization, including `.`/`..`
+segments (plain or percent-encoded), backslashes and absolute or protocol-relative URLs. Concurrent
+requests to the same URL share one in-flight request, but each caller receives its own deep copy
+(`structuredClone`), so a widget may mutate the result freely; completed responses are not cached.
+`getJson` is a **convenience over the app's same-origin session, not a security boundary**: plugin
+code runs first-party with the user's full session, and the server's endpoint authorization is what
+protects data. Prefer the typed reads (`listCatalog`, `getDocument`, …) where they fit; use `getJson`
+for an extension's own read endpoints. Mutations still belong to the extension's command API.
+`getJson` is a required member of `OnnoReadApi`, so the widget SDK needs a host that provides it.
+
+`DialogShell` is available from the SDK for accessible widget dialogs, typed by `DialogShellProps`.
+Pass `title`, `onOpenChange` and children, plus optional `description`, `footer`, `icon`, `tone`
+(`info`/`success`/`warning`/`error`), `size` (`sm`/`md`/`lg`; use `lg` for comparisons),
+`dismissable`, `open` and `role="alertdialog"`. It handles focus, mobile layering, and nested
+Select pickers through the host modal.

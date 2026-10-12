@@ -51,12 +51,23 @@ export interface DashboardWidgetMeta {
 /** A read record from the REST API — logical field name → value (`FieldDisplay`/`FieldRef` sidecars included). */
 export type EntityRecord = Record<string, unknown>;
 
+/** A same-origin REST path, e.g. `/api/extension/stats`. */
+export type ApiPath = `/api/${string}`;
+
 /**
  * The read-only data client handed to widgets. Deliberately no create/update/delete/post — a widget
  * reads and renders. Every call is same-origin and rides the app's session + CSRF like the rest of
  * the UI.
  */
 export interface OnnoReadApi {
+  /**
+   * Authenticated same-origin GET of an extension endpoint. The path must start with `/api/` and may
+   * not contain `.`/`..` segments (also percent-encoded); the host rejects anything else. Concurrent
+   * identical reads share one in-flight request, but each caller receives its own deep copy;
+   * completed responses are not cached. A convenience over the app's session, not a security
+   * boundary — prefer the typed reads below. Mutations belong to the extension's command API.
+   */
+  getJson<T>(path: ApiPath): Promise<T>;
   /** The first bounded keyset window (at most 500 rows), never an unbounded collection read. */
   listCatalog(name: string, filter?: string): Promise<EntityRecord[]>;
   getCatalogItem(name: string, id: string): Promise<EntityRecord>;
@@ -128,6 +139,18 @@ export interface ListRendererProps {
   /** The record's {@code onno://} detail route, or null when it has none. */
   openUrl: (row: EntityRecord) => string | null;
 }
+
+/** Options for {@code registerListRenderer}. */
+export interface ListRendererOptions {
+  /**
+   * The renderer shows its own next-window feedback (spinner/retry inside its scrolling pane), so the
+   * host omits its default "Loading more…" indicator below the renderer. Default false.
+   */
+  ownsLoadingMore?: boolean;
+}
+
+/** A list renderer component, optionally marked as owning its loading-more feedback. */
+export type ListRendererComponent = import("react").ComponentType<ListRendererProps> & { ownsLoadingMore?: boolean };
 
 /** One event delivered by the host's shared, authenticated live-update stream. */
 export interface UiEvent {
@@ -203,6 +226,17 @@ export interface OnnoUi {
     isInvalid?: boolean;
     className?: string;
   }>;
+  /** The form's colour control: hex field plus picker; `compact` shows only a round swatch. `onCommit` fires once when the picker closes. */
+  ColorPicker: import("react").ComponentType<{
+    value?: string;
+    onChange: (value: string) => void;
+    onCommit?: (value: string) => void;
+    invalid?: boolean;
+    placeholder?: string;
+    compact?: boolean;
+    disabled?: boolean;
+    "aria-label"?: string;
+  }>;
   Card: import("react").ComponentType<any>;
   CardHeader: import("react").ComponentType<any>;
   CardTitle: import("react").ComponentType<any>;
@@ -211,6 +245,8 @@ export interface OnnoUi {
   Popover: import("react").ComponentType<any>;
   PopoverAnchor: import("react").ComponentType<any>;
   PopoverTrigger: import("react").ComponentType<any>;
+  /** Accessible modal with focus containment and restoration, Escape/backdrop dismissal and nested picker support. */
+  DialogShell: import("react").ComponentType<DialogShellProps>;
   ResponsiveActionPanel: import("react").ComponentType<any>;
   PopoverContent: import("react").ComponentType<any>;
   /** Standard list surface with its host-owned header, filters and view controls. */
@@ -282,4 +318,23 @@ export interface ChatMessageRenderer {
 }
 
 export type WorkspaceToolbarLayout = Partial<Record<"start" | "center" | "end" | "secondary" | "overflow" | "hidden", string[]>>;
-export interface WorkspaceToolbarProps { items: {id: string; content: import("react").ReactNode}[]; layout?: WorkspaceToolbarLayout; compactLayout?: WorkspaceToolbarLayout; compact?: boolean; balanced?: boolean; className?: string; }
+export interface WorkspaceToolbarProps { items: {id: string; content: import("react").ReactNode}[]; layout?: WorkspaceToolbarLayout; compactLayout?: WorkspaceToolbarLayout; compact?: boolean; balanced?: boolean; fit?: boolean; narrowLayout?: WorkspaceToolbarLayout; className?: string; }
+
+export type DialogShellSize = "sm" | "md" | "lg";
+export interface DialogShellProps {
+  /** Defaults to `true`; unmount the shell or pass `false` to close it. */
+  open?: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string | null;
+  /** Colours the header icon; defaults to `"info"`. */
+  tone?: "info" | "success" | "warning" | "error";
+  /** Defaults to `"md"`; use `"lg"` for comparisons. */
+  size?: DialogShellSize;
+  icon?: import("react").ReactNode;
+  /** Whether Escape and backdrop clicks close the dialog; defaults to `true`. */
+  dismissable?: boolean;
+  footer?: import("react").ReactNode;
+  children?: import("react").ReactNode;
+  role?: "dialog" | "alertdialog";
+}

@@ -11,7 +11,10 @@ frontend state, screenshots in docs, or public configuration responses. Store pr
 private server-owned files and use `onno.crm.channels.<provider>.*` configuration.
 
 - **Telegram:** bot token, one polling owner, no conflicting webhook. The adapter handles private
-  bot chats; a Telegram username is not a verified email/phone identity.
+  bot chats and scoped business connections; a Telegram username is not a verified email/phone identity.
+  For business mode, enable it in BotFather, add a Personal/Shared Telegram business account, use
+  its expiring Connect link and press Start, then connect the bot in Telegram Chat Automation /
+  Business settings with reply permission. Do not equate business mode with personal CRM visibility.
 - **Gmail:** enable Gmail API; configure test users/consent; use a Web OAuth client with the exact
   `gmail.redirect-uri`. CRM managers use Connect Google account. The callback validates state,
   PKCE, identity and scopes, then stores refresh credentials. Initial sync is bounded, not a full
@@ -38,6 +41,6 @@ Sending a real test message requires the user's authorized recipient/content; us
 outbound verification otherwise.
 
 Report account verification, inbound synchronization, outbound verification and webhook readiness
-separately. State test-mode limits, token expiry and unsupported attachments/templates. The current
-starter supports one account per provider/application and one worker instance, not tenant-wide
-multi-account onboarding. Read the matching-version module README for complete setup contracts.
+separately. State test-mode limits, token expiry and unsupported attachments/templates. Gmail supports multiple shared/personal mailboxes with isolated credentials and inbox routing.
+Telegram also supports personal/shared business connections with one polling bot; ordinary bot chats, Instagram and WhatsApp remain shared-account adapters. One worker instance per
+deployment is still required. Read the matching-version module README for complete setup contracts.

@@ -35,11 +35,12 @@ class CrmInboxWorkspaceSecurityTest {
         when(access.hasAnyRole(eq(alice),anyList())).thenReturn(true);
         var definitions=List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel())),
                 new CrmInboxWorkspace("support","Support",Set.of("SUPPORT"),c->Channel.EMAIL.equals(c.getChannel())));
-        workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
+        workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
         var users=mock(CurrentUserResolver.class);
         var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces,
             mock(CommentAuthorAvatars.class),
-            new su.onno.crm.service.CrmAttachments(mock(su.onno.ui.media.MediaStorage.class),new su.onno.ui.media.MediaProperties()));
+            new su.onno.crm.service.CrmAttachments(mock(su.onno.ui.media.MediaStorage.class),new su.onno.ui.media.MediaProperties()),
+            mock(su.onno.crm.repository.ContactIdentityRepository.class),su.onno.crm.TestBindings.readableContacts());
         var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),users,comments,
                 mock(CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
         http=MockMvcBuilders.standaloneSetup(controller,scoped).build();
@@ -57,6 +58,12 @@ class CrmInboxWorkspaceSecurityTest {
         http.perform(get("/api/crm/conversations/"+sales.getId()+"/messages").principal(alice)).andExpect(status().isForbidden());
         verifyNoInteractions(commands);
     }
+    @Test void statusChangeRequiresAStatus() throws Exception {
+        String path="/api/crm/conversations/"+sales.getId()+"/status";
+        http.perform(post(path).param("workspace","sales").principal(alice).contentType("application/json").content("{}")).andExpect(status().isBadRequest());
+        http.perform(post(path).param("workspace","sales").principal(alice).contentType("application/json")).andExpect(status().isBadRequest());
+        verifyNoInteractions(commands);
+    }
     @Test void notesCannotBypassWorkspaceMembership() throws Exception {
         String path="/api/crm/inbox-workspaces/sales/conversations/"+support.getId()+"/comments";
         http.perform(get(path).principal(alice)).andExpect(status().isForbidden());
@@ -65,15 +72,13 @@ class CrmInboxWorkspaceSecurityTest {
     }
     @Test void readOnlyRoleDoesNotGrantWriteAccessAndRoutingRemainsUntouched() {
         var workspace=new CrmInboxWorkspace("audit","Audit",Set.of("SALES"),Set.of("SUPPORT"),c->true,c->c);
-        var scoped=new CrmInboxWorkspaceService(List.of(workspace),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts());
+        var scoped=new CrmInboxWorkspaceService(List.of(workspace),repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
         assertThat(scoped.requireConversation("audit",sales.getId(),alice,false)).isSameAs(sales);
         assertThatThrownBy(()->scoped.requireConversation("audit",sales.getId(),alice,true)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         verify(repository,never()).save(any());
     }
     @Test void genericGateBlocksAgentsAndLeavesAdminToolsAvailable() {
-        var provider=mock(org.springframework.beans.factory.ObjectProvider.class);
-        when(provider.orderedStream()).thenAnswer(invocation->java.util.stream.Stream.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->true)));
-        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess();
+        var policy=new OnnoCrmAutoConfiguration().crmWorkspaceGenericAccess(su.onno.crm.service.CrmFeatures.defaults());
         assertThat(policy.allows(Set.of("CRM_AGENT"),"catalog","crmconversations",false)).isFalse();
         assertThat(policy.allows(Set.of("CRM_MANAGER"),"catalog","crmconversationmessages",true)).isFalse();
         assertThat(policy.allows(Set.of("ADMIN"),"catalog","crmconversations",true)).isTrue();

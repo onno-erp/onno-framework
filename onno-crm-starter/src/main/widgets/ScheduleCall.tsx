@@ -45,7 +45,7 @@ export function ScheduleCall({customerId, conversationId, onSaved, onInvitation}
     } catch(e) {setError((e as Error).message);} finally {setBusy(false);}
   };
   return <Popover open={open} onOpenChange={value=>{if(!busy){setOpen(value);setError("");}}}>
-    <PopoverTrigger asChild><Button size="toolbar" variant="subtle"><Video className="size-4" />{t("crm.zoom.schedule")}</Button></PopoverTrigger>
+    <PopoverTrigger asChild><Button size="toolbar" variant="subtle" title={t("crm.zoom.schedule")} aria-label={t("crm.zoom.schedule")}><Video className="size-4" /><span data-toolbar-label>{t("crm.zoom.schedule")}</span></Button></PopoverTrigger>
     <PopoverContent align="end" className="w-96 max-w-[calc(100vw-32px)] space-y-3 p-4" aria-label={t("crm.zoom.scheduleCall")}>
       <div className="text-sm font-semibold">{t("crm.zoom.scheduleCall")}</div>
       <div className="space-y-1"><div className="text-sm font-medium">{t("crm.zoom.dateTime")}</div><DatePicker value={when} onChange={setWhen} includeTime aria-label={t("crm.zoom.dateTime")} isDisabled={busy} /><p className="text-xs text-muted-foreground">Time zone: {Intl.DateTimeFormat().resolvedOptions().timeZone}</p></div>
