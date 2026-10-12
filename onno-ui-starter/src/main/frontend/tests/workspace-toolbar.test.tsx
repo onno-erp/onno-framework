@@ -1,0 +1,42 @@
+import {act, cleanup, fireEvent, render, screen} from "@testing-library/react";
+import {afterEach, expect, it, vi} from "vitest";
+import {WorkspaceToolbar} from "@/components/ui/workspace-toolbar";
+afterEach(cleanup);
+it("orders authorized controls, hides omitted items, and applies compact overrides", () => {
+  const items = ["title","save","delete","search"].map(id => ({id,content:<button>{id}</button>}));
+  const layout = {start:["title"],end:["save"],secondary:["search"]};
+  const view = render(<WorkspaceToolbar items={items} layout={layout} />);
+  expect(screen.queryByText("delete")).toBeNull();
+  expect(screen.getAllByRole("button").map(el=>el.textContent)).toEqual(["title","save","search"]);
+  view.rerender(<WorkspaceToolbar items={items} layout={layout} compact compactLayout={{start:[],end:["save","title"],hidden:["search"]}} />);
+  expect(screen.getAllByRole("button").map(el=>el.textContent)).toEqual(["save","title"]);
+});
+it("renders duplicates once and preserves handlers and disabled state in overflow", () => {
+  const action = vi.fn();
+  render(<WorkspaceToolbar items={[{id:"save",content:<button onClick={action}>Save</button>},{id:"delete",content:<button disabled>Delete</button>}]} layout={{start:["save"],end:["save"],overflow:["delete","unknown"]}} />);
+  expect(screen.getAllByText("Save")).toHaveLength(1);
+  fireEvent.click(screen.getByText("Save"));
+  expect(action).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button",{name:"More"}));
+  expect(screen.getByText("Delete")).toBeDisabled();
+});
+it("condenses labels, then applies the narrow layout, and restores both when space returns", () => {
+  let width = 1000;
+  const observers: (() => void)[] = [];
+  vi.stubGlobal("ResizeObserver", class { constructor(cb: () => void) { observers.push(cb); } observe() {} disconnect() {} });
+  const needs = (el: HTMLElement) => el.closest("[data-toolbar-condensed]") ? ((el.parentElement?.children.length ?? 0) > 1 ? 500 : 700) : 900;
+  const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) { return width; });
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (this: HTMLElement) { return Math.max(width, needs(this)); });
+  const items = [{id:"title",content:<span>Bella</span>},{id:"log",content:<button><span data-toolbar-label>Log activity</span></button>},{id:"tools",content:<span data-testid="tools">tools</span>}];
+  const view = render(<WorkspaceToolbar fit items={items} layout={{center:["title"],end:["tools","log"]}} narrowLayout={{end:["log"],secondary:["tools"]}} />);
+  const root = () => view.container.firstElementChild as HTMLElement;
+  expect(root().hasAttribute("data-toolbar-condensed")).toBe(false);
+  width = 800; act(() => observers.at(-1)!());
+  expect(root().hasAttribute("data-toolbar-condensed")).toBe(true);
+  expect(screen.getByTestId("tools").parentElement?.className).not.toContain("mt-2");
+  width = 600; act(() => observers.at(-1)!());
+  expect(screen.getByTestId("tools").parentElement?.className).toContain("mt-2");
+  width = 1000; act(() => observers.at(-1)!());
+  expect(root().hasAttribute("data-toolbar-condensed")).toBe(false);
+  client.mockRestore(); scroll.mockRestore(); vi.unstubAllGlobals();
+});

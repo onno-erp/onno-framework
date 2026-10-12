@@ -30,7 +30,7 @@ public class UiAccessService {
         this.policies = policies;
     }
     private boolean allowed(Set<String> roles, String type, String name, boolean write) {
-        return roles.contains(SUPERUSER_ROLE) || policies.get().stream().allMatch(policy -> policy.allows(roles, type, normalizeName(name), write));
+        return policies.get().stream().allMatch(policy -> (roles.contains(SUPERUSER_ROLE) && !policy.includesAdministrators()) || policy.allows(roles, type, normalizeName(name), write));
     }
 
     public UiAccessService(MetadataRegistry registry) {

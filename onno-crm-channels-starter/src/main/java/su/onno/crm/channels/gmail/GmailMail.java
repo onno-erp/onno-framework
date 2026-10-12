@@ -8,18 +8,34 @@ import java.util.*;
 
 /** MIME stays plain text in the CRM; no remote HTML or attachment content is executed. */
 final class GmailMail {
-    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt) {}
+    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files) {}
     static Incoming read(String raw) throws Exception {
         var message=new MimeMessage(Session.getInstance(new Properties()),new ByteArrayInputStream(Base64.getUrlDecoder().decode(raw)));
         var from=(InternetAddress)message.getFrom()[0];
         var reply=(InternetAddress)message.getReplyTo()[0];
+        var files=new ArrayList<Outgoing>();collect(message,files);
         return new Incoming(from.getAddress(),from.getPersonal()==null?from.getAddress():from.getPersonal(),reply.getAddress(),
             Objects.toString(message.getSubject(),"(No subject)"),Objects.toString(message.getMessageID(),""),nonEmptyBody(body(message)),
-            message.getSentDate()==null?Instant.now():message.getSentDate().toInstant());
+            message.getSentDate()==null?Instant.now():message.getSentDate().toInstant(),List.copyOf(files));
+    }
+    private static void collect(Part part,List<Outgoing> files) throws Exception {
+        if(part.isMimeType("multipart/*")) {
+            var multi=(Multipart)part.getContent();
+            for(int i=0;i<multi.getCount();i++)collect(multi.getBodyPart(i),files);
+        } else if(Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()) || part.getFileName()!=null
+                || Part.INLINE.equalsIgnoreCase(part.getDisposition()) && !part.isMimeType("text/*")) {
+            if(files.size()>=10)return;
+            try(var stream=part.getInputStream()) {
+                byte[] bytes=stream.readNBytes(20*1024*1024+1);
+                if(bytes.length==0 || bytes.length>20*1024*1024)return;
+                String filename=MimeUtility.decodeText(Objects.toString(part.getFileName(),"attachment"));
+                files.add(new Outgoing(filename,new ContentType(part.getContentType()).getBaseType(),bytes));
+            }
+        }
     }
     private static String nonEmptyBody(String value) { String text=value.strip();return text.isBlank()?"[Empty email]":text; }
     private static String body(Part part) throws Exception {
-        if(Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()))return "[Attachment: "+Objects.toString(part.getFileName(),"file")+"]";
+        if(Part.ATTACHMENT.equalsIgnoreCase(part.getDisposition()))return "[Attachment: "+MimeUtility.decodeText(Objects.toString(part.getFileName(),"file"))+"]";
         if(part.isMimeType("text/plain"))return part.getContent().toString();
         if(part.isMimeType("multipart/*")) {
             Multipart multipart=(Multipart)part.getContent();
@@ -43,10 +59,15 @@ final class GmailMail {
      */
     static String reply(String from,String to,String subject,String reference,String body,
             List<Outgoing> files,UUID id) throws Exception {
+        return compose(from,to,subject.regionMatches(true,0,"Re:",0,3)?subject:"Re: "+subject,reference,body,files,id);
+    }
+    static String compose(String from,String to,String subject,String reference,String body,
+            List<Outgoing> files,UUID id) throws Exception {
+        if(subject.contains("\r")||subject.contains("\n"))throw new IllegalArgumentException("Invalid email subject");
         if(from.contains("\r")||from.contains("\n")||to.contains("\r")||to.contains("\n")||reference.contains("\r")||reference.contains("\n"))throw new IllegalArgumentException("Invalid email header");
         var message=new MimeMessage(Session.getInstance(new Properties()));
         message.setFrom(new InternetAddress(from,true));message.setRecipient(Message.RecipientType.TO,new InternetAddress(to,true));
-        message.setSubject(subject.startsWith("Re:")?subject:"Re: "+subject,"UTF-8");
+        message.setSubject(subject,"UTF-8");
         if(files.isEmpty())message.setText(body,"UTF-8");
         else {
             var parts=new MimeMultipart("mixed");

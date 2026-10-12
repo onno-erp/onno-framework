@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EntityListWidget, type ListDescriptor, type ListRendererProps } from "@/components/entity-list-widget";
+import { EntityListWidget, type ListDescriptor, type ListRendererComponent, type ListRendererProps } from "@/components/entity-list-widget";
 import { conversationCount, ConversationList } from "../../../../../onno-crm-starter/src/main/widgets/ConversationList";
 
 vi.mock("@onno/widget-sdk", async () => ({ ...(await import("@/components/ui/button")), ...(await import("./widget-sdk-text")) }));
@@ -18,6 +18,11 @@ const list: ListDescriptor = {
 };
 function Inbox(props: ListRendererProps) {
   return <ConversationList {...props}><span>{conversationCount(props.total, props.rows.length)}</span>{props.rows.map(row => <p key={String(row.id)}>{String(row.description)}</p>)}</ConversationList>;
+}
+// The CRM inbox draws its own next-window feedback inside the conversation pane.
+(Inbox as ListRendererComponent).ownsLoadingMore = true;
+function PlainTiles({ rows, loadMore }: ListRendererProps) {
+  return <div>{rows.map(row => <p key={String(row.id)}>{String(row.description)}</p>)}<button onClick={loadMore}>More</button></div>;
 }
 function scroll() {
   const pane = screen.getByLabelText("Conversation list");
@@ -70,10 +75,24 @@ describe("CRM inner-pane keyset pagination", () => {
     expect(screen.getByText("one")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry loading conversations" }));
     expect(screen.getAllByLabelText("Conversation list")[0]).toHaveAttribute("aria-busy", "true");
+    const indicator = screen.getByText("Loading more conversations…");
+    expect(screen.getByLabelText("Conversation list")).toContainElement(indicator);
+    expect(screen.queryByText("Loading more…")).not.toBeInTheDocument();
     scroll(); expect(fetcher).toHaveBeenCalledTimes(3);
     await act(async () => pending.resolve(page(["three"], null)));
     await screen.findByText("three");
     expect(fetcher.mock.calls[1][0]).toBe(fetcher.mock.calls[2][0]);
+  });
+  it("shows the host loading-more indicator for renderers that do not own it", async () => {
+    const pending = deferred();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(page(["one", "two"], "cursor-2")).mockReturnValueOnce(pending.promise));
+    render(<EntityListWidget list={list} renderer={PlainTiles} />);
+    await screen.findByText("one");
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(await screen.findByText("Loading more…")).toBeInTheDocument();
+    await act(async () => pending.resolve(page(["three"], null)));
+    await screen.findByText("three");
+    expect(screen.queryByText("Loading more…")).not.toBeInTheDocument();
   });
   it.each([200, 503])("discards a superseded filter page (%s) without clearing the newer request's busy guard", async status => {
     const old = deferred(), current = deferred();
@@ -184,4 +203,28 @@ describe("CRM inner-pane keyset pagination", () => {
     rerender(<ConversationList>Static</ConversationList>);
     scroll(); expect(screen.getByText("Static")).toBeInTheDocument();
   });
+});
+
+// Bootstrap is a one-use response bound to the exact data scope, never a cross-query cache.
+it("hydrates a matching first page and continues from its cursor without refetching", async () => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  const fetcher = vi.fn().mockResolvedValue(page(["second"], null));
+  vi.stubGlobal("fetch", fetcher);
+  render(<EntityListWidget list={list} renderer={Inbox} initialPage={{feed,query:"",rows:[{id:"first",description:"first"}],total:2,nextCursor:"next",hasMore:true}} />);
+  await screen.findByText("first");
+  expect(fetcher).not.toHaveBeenCalled();
+  scroll();
+  await screen.findByText("second");
+  expect(new URL(fetcher.mock.calls[0][0], "http://localhost").searchParams.get("cursor")).toBe("next");
+});
+
+it("rejects bootstrap rows for a different filter scope", async () => {
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+  const fetcher = vi.fn().mockResolvedValue(page(["filtered"], null));
+  vi.stubGlobal("fetch", fetcher);
+  render(<EntityListWidget list={list} renderer={Inbox} queryParams={{eq:["channel,EMAIL"]}}
+    initialPage={{feed,query:"",rows:[{id:"unfiltered",description:"unfiltered"}],nextCursor:null,hasMore:false}} />);
+  await screen.findByText("filtered");
+  expect(screen.queryByText("unfiltered")).not.toBeInTheDocument();
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

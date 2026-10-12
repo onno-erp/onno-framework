@@ -18,6 +18,7 @@ import type { UiEvent } from "@/lib/types";
 import { cn, copyToClipboard } from "@/lib/utils";
 import { stripBasePath, withBasePath } from "@/lib/base-path";
 import { clearFormDirty, isFormDirty } from "@/lib/dirty-forms";
+import { MobileNavigationFrame } from "@/components/mobile-navigation-frame";
 import { ContentPane, type LiveRegistry } from "@/views/content-pane";
 import type { ContentAction } from "@/views/divkit-content";
 import { DynamicLucide, ICON_CUSTOM_COMPONENTS, setIconActivePath } from "@/lib/icon-bridge";
@@ -116,6 +117,9 @@ type ShellData = {
   // Route path → authored Lucide icon name, from the same nav item as titles. Detail/form tabs
   // inherit their entity list's icon.
   icons?: Record<string, string>;
+  // Entity list routes (e.g. "/documents/estimates") whose records open in the focused pane
+  // instead of a detail island beside it — EntityView#opensInMain on the server.
+  mainRecordRoutes?: string[];
 };
 
 type WorkspaceTab = { path: string; title: string };
@@ -904,8 +908,11 @@ export function DivKitView() {
       // "main/{kind}/{name}/{id}" — open the record in the focused pane rather than the detail
       // island beside it. A surface that is itself a workspace (an event page, a project page)
       // sends its records here: they replace the workspace instead of stacking next to it.
-      const inMain = rest.startsWith("main/");
-      const path = "/" + (inMain ? rest.slice("main/".length) : rest);
+      const explicitMain = rest.startsWith("main/");
+      const path = "/" + (explicitMain ? rest.slice("main/".length) : rest);
+      const base = recordBasePath(path);
+      const inMain = explicitMain || (base != null
+        && (shell?.mainRecordRoutes ?? []).includes(base.split("/").slice(0, 3).join("/")));
       // On the desktop islands layout, a record opens in its own island to the right;
       // elsewhere (single content pane) it just navigates.
       if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
@@ -925,6 +932,7 @@ export function DivKitView() {
       closePath,
       shell?.home,
       shell?.navStyle,
+      shell?.mainRecordRoutes,
       t,
     ]
   );
@@ -2053,11 +2061,23 @@ export function DivKitView() {
     // Full-width centered on small phones; a compact corner island on tablets and
     // large phones (pinned bottom-right). Account lives on the /account page here.
     return (
-      <div className="min-h-screen w-full overflow-x-hidden" style={{ background: pageBg }}>
-        <div className="pb-24">{plainContent}</div>
-        <nav className="fixed inset-x-0 bottom-0 z-10">
-          <div className={viewport === "tablet" ? "ml-auto w-fit" : "mx-auto max-w-md"}>{navEl}</div>
-        </nav>
+      <div className="h-[100dvh] w-full overflow-hidden" style={{ background: pageBg }}>
+        <MobileNavigationFrame key={profile || "default"}
+          path={focusedPane?.activePath || location.pathname}
+          roots={(shell?.navigation ?? []).flatMap(section => section.items.map(item => item.path))}
+          backLabel={t("action.back")}
+          back={path => {
+            const current = focusedPane?.activePath || location.pathname;
+            if (isFormDirty(current)) setConfirm({title:t("confirm.discard.title"), message:t("confirm.discard.message"),
+              confirmLabel:t("action.discard"), danger:true, onConfirm:() => {clearFormDirty(current); openPath(path);}});
+            else openPath(path);
+          }}
+          render={path => <ContentPane path={path} viewport={viewport} theme={resolvedTheme} profile={profile}
+            onAction={onCustomAction} registry={liveRegistry.current} skeletonBg={skeletonBg} onNotFound={handleContentNotFound} />}
+          navigation={<nav className="pointer-events-none bg-transparent">
+            <div className={viewport === "tablet" ? "pointer-events-auto ml-auto w-fit" : "pointer-events-auto mx-auto max-w-md"}>{navEl}</div>
+          </nav>}
+        />
         {rowMenuEl}
         {confirmEl}
       </div>

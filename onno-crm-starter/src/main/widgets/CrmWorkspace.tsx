@@ -1,9 +1,11 @@
-import { text as t, useTranslate } from "@onno/widget-sdk";
+import { CrmConnections } from "./CrmConnections";
+import { api, text as t, useTranslate } from "@onno/widget-sdk";
 import type { ReactNode } from "react";
 import { ContactAvatarImage } from "./ContactAvatarImage";
 import { ExtensionSlot } from "@onno/widget-sdk";
 import { RefreshCw, Pause, Play, KeyRound, Loader2, Copy, Check } from "lucide-react";
 import { ChannelLogo } from "./ChannelLogo";
+import { LinkedText } from "./LinkedText";
 import { Label, Button, Input, Badge, toast, registerWidget, useCallback, useEffect, useState, useUiEvents, type EntityRecord, type WidgetProps } from "@onno/widget-sdk";
 
 export type DisplayField = { key: string; label: string; section: string; format: string; visible: boolean; editable: boolean };
@@ -12,6 +14,7 @@ export type Config = { folders: ConversationFolder[]; fields: DisplayField[]; ac
 type Workspace = { version: number; config: Config; availableFields: DisplayField[] };
 type Contact = { catalogName: string; canWrite: boolean; fields: Record<string, unknown>; identities: { id: string; channel: string; address: string; externalId: string; verified: boolean }[]; conversations: { id: string; subject: string; channel: string }[] };
 export async function request<T>(path: string, body?: unknown): Promise<T> {
+  if (body === undefined) return api.getJson<T>(`/api/crm${path}`);
   const token = document.cookie.split(";").map(s => s.trim()).find(s => s.startsWith("XSRF-TOKEN="))?.slice(11);
   const response = await fetch(`/api/crm${path}`, { credentials: "same-origin", ...(body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { "X-XSRF-TOKEN": decodeURIComponent(token) } : {}) }, body: JSON.stringify(body) }) });
   if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.message || error.detail || `Request failed (${response.status})`); }
@@ -28,27 +31,6 @@ export function useWorkspace() {
 }
 export function action(config: Config | undefined, key: string) { return config?.actions.find(a => a.key === key && a.visible); }
 export function rowValue(row: EntityRecord, key: string) { const field = key.replace(/^conversation\./, ""); return String(row[`${field}Display`] ?? row[field] ?? ""); }
-type ChannelConnection = { key: string; label: string; channel: string; state: string; account: string; description: string; actions: string[] };
-function CrmSettings() {
-  const [channels,setChannels]=useState<ChannelConnection[]>([]);
-  const [canManage,setCanManage]=useState(false);
-  const [error,setError]=useState("");
-  const load=useCallback(async()=>{
-    const result=await request<{channels:ChannelConnection[];canManage:boolean}>("/channels");
-    setChannels(result.channels);setCanManage(result.canManage);
-  },[]);
-  useEffect(()=>{void load().catch(e=>setError(e.message));},[load]);
-  return <div className="space-y-4">
-    {error && <p role="alert">{error}</p>}
-    {!channels.length && <p>{t("crm.settings.noConnectors")}</p>}
-    {channels.map(channel=><section key={channel.key} className="space-y-3 rounded-panel border border-border p-4">
-      <h3>{channel.label}</h3><p>{channel.account}</p><p>{channel.description}</p>
-      <Badge>{channel.state}</Badge>
-      <ExtensionSlot name="crm.channel.settings" context={{surface:"crm-channel",record:channel,
-        permissions:{canManage},refresh:load}} />
-    </section>)}
-  </div>;
-}
 
 function Display({ value, format, color }: { value: unknown; format: string; color?: string }) {
   if (value == null || value === "") return <span className="text-muted-foreground/70">—</span>;
@@ -58,7 +40,7 @@ function Display({ value, format, color }: { value: unknown; format: string; col
   if (format === "number" && Number.isFinite(Number(text))) return <span className="tabular-nums">{Number(text).toLocaleString()}</span>;
   if (format === "date" && !Number.isNaN(Date.parse(text))) return <span className="tabular-nums">{new Date(text).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span>;
   const href = format === "email" ? `mailto:${text}` : format === "phone" ? `tel:${text}` : format === "url" && /^https?:\/\//.test(text) ? text : null;
-  return href ? <a className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary" href={href} target={format === "url" ? "_blank" : undefined} rel="noreferrer">{text}</a> : <>{text}</>;
+  return href ? <a className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary" href={href} target={format === "url" ? "_blank" : undefined} rel="noreferrer">{text}</a> : <LinkedText text={text} className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary" />;
 }
 
 /**
@@ -98,7 +80,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
   </Button>;
 }
-export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute }: { inboxRoute?: string; id: string; row?: EntityRecord; config: Config; customer?: EntityRecord | null }) {
+export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute, presentation = "sidebar" }: { presentation?: "sidebar" | "card"; inboxRoute?: string; id: string; row?: EntityRecord; config: Config; customer?: EntityRecord | null }) {
+  const card = presentation === "card";
   const [contact, setContact] = useState<Contact | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(async () => { const c = await request<Contact>(`/contacts/${id}`); setContact(c); }, [id]);
@@ -124,24 +107,30 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
     .map(section => ({ section, fields: rows.filter(f => f.section === section && (config.showEmpty || (value(f) != null && value(f) !== ""))) }))
     .filter(group => group.fields.length > 0);
   const primary = contact.identities.find(identity => identity.address) ?? contact.identities[0];
-  return <div className="p-4 text-xs">
-    <header className="flex items-center gap-3 pb-3">
-      {config.showAvatar && <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground">
+  return <div data-contact-card={card || undefined} className={card ? "space-y-3 p-3 text-sm" : "p-4 text-xs"}>
+    <style>{`[data-contact-card] dt { font-size:12px; } [data-contact-card] dd { font-size:14px; } [data-contact-card] dl > .group { padding:6px 0; } [data-contact-card] button[title^="Copy"] { opacity:1; width:32px; height:32px; }`}</style>
+    <header className={card ? "flex flex-col items-center gap-3 rounded-panel border border-border/60 bg-muted/30 px-4 py-6 text-center" : "flex items-center gap-3 pb-3"}>
+      {config.showAvatar && <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-sm font-medium text-muted-foreground ${card ? "size-16" : "size-11"}`}>
         {name.slice(0, 2).toUpperCase()}
         <ContactAvatarImage name={name} url={typeof contact.fields.avatarUrl === "string" ? contact.fields.avatarUrl : null} />
       </span>}
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-sm font-semibold leading-5 text-foreground" title={name}>{name}</h2>
-        {primary ? <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <h2 className={card ? "break-words text-lg font-semibold text-foreground" : "truncate text-sm font-semibold leading-5 text-foreground"} title={name}>{name}</h2>
+        {primary ? <span className={`mt-1 flex items-center gap-1.5 text-muted-foreground ${card ? "justify-center text-sm" : "text-[11px]"}`}>
           <ChannelLogo channel={primary.channel} className="size-3.5" />
           <span className="truncate">{primary.address || primary.externalId}</span>
         </span> : null}
       </div>
     </header>
+    {/* Profile-level host content, such as tags, sits right under the profile rather than below the field cards. */}
+    <ExtensionSlot name="crm.contact.profile" className={card ? "px-1" : "pb-3"} context={{
+      surface: "crm-contact", kind: "catalogs", name: contact.catalogName, recordId: currentId, record: contact.fields,
+      permissions: { canWrite: contact.canWrite },
+    }} />
     {chips.length > 0 && <div className="flex flex-wrap gap-1.5 pb-3">
       {chips.map(f => <StageBadge key={f.key} text={String(value(f))} color={color(f)} />)}
     </div>}
-    {sections.map(group => <section key={group.section} className="border-t border-border/60 py-3">
+    {sections.map(group => <section key={group.section} className={card ? "rounded-panel border border-border/60 p-4" : "border-t border-border/60 py-3"}>
       <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.section}</h3>
       <dl>{group.fields.map(f => {
         const text = value(f) == null ? "" : String(value(f));
@@ -156,7 +145,7 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
         </div>;
       })}</dl>
     </section>)}
-    {config.showIdentities && <section className="border-t border-border/60 py-3">
+    {config.showIdentities && <section className={card ? "rounded-panel border border-border/60 p-4" : "border-t border-border/60 py-3"}>
       <h3 className="pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{t("crm.contact.identities")}</h3>
       {contact.identities.length ? <ul className="space-y-1.5">{contact.identities.map(i => <li key={i.id} className="group flex items-center gap-2">
         <ChannelLogo channel={i.channel} className="size-4" />
@@ -176,5 +165,7 @@ export function ContactPanel({ id, row = {}, config, customer = null, inboxRoute
   </div>;
 }
 function ContactDetails({ widget }: WidgetProps) { const { workspace, error } = useWorkspace(); return widget.record && workspace ? <ContactPanel id={widget.record.id} inboxRoute={widget.extraConfig?.inboxRoute} customer={widget.record.data} config={workspace.config} /> : <p>{error || "Open a saved customer to view contact details."}</p>; }
-registerWidget("crmSettings", CrmSettings);
+registerWidget("crmConnections", CrmConnections);
+// Original type name, kept so pages authored before CrmConnectionsView emitted crmConnections still render.
+registerWidget("crmSettings", CrmConnections);
 registerWidget("crmContactDetails", ContactDetails);

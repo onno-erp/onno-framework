@@ -17,8 +17,13 @@ public class TagController {
     private final UiAccessService access;
     private final CatalogQueryService catalogs;
     private final DocumentQueryService documents;
+    /** Null when record policies are not configured; then no subject is record-restricted. */
+    private final RecordAccess recordAccess;
     public TagController(TagService tags, UiAccessService access, CatalogQueryService catalogs, DocumentQueryService documents, java.util.List<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events) {
-        this.policies=policies; this.events=events; this.tags=tags; this.access=access; this.catalogs=catalogs; this.documents=documents;
+        this(tags,access,catalogs,documents,policies,events,null);
+    }
+    public TagController(TagService tags, UiAccessService access, CatalogQueryService catalogs, DocumentQueryService documents, java.util.List<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events, RecordAccess recordAccess) {
+        this.policies=policies; this.events=events; this.tags=tags; this.access=access; this.catalogs=catalogs; this.documents=documents; this.recordAccess=recordAccess;
     }
     /**
      * Entity grant, then — for a record — that it is live and inside the caller's record scope (read
@@ -37,6 +42,23 @@ public class TagController {
         return TagService.scope(kind,canonical);
     }
     @GetMapping public List<TagService.Tag> library(@PathVariable String kind,@PathVariable String name,Principal user,su.onno.access.AccessSubject subject) { return tags.library(require(kind,name,null,user,subject,false)); }
+    public record NewTag(String name, String color) {}
+    /**
+     * Create a tag in this entity's library (or return the existing one with that name) so pickers can
+     * add tags inline. Requires write access to the tagged entity and, when an application catalog
+     * owns the definitions ({@link TagCatalog}), write access to that catalog too. The library is
+     * shared by every record of the entity, so a record-restricted subject (an external user under a
+     * {@link su.onno.access.RecordAccessPolicy}) cannot add to it; it can still assign existing tags.
+     */
+    @PostMapping public TagService.Tag create(@PathVariable String kind,@PathVariable String name,@RequestBody NewTag tag,Principal user,su.onno.access.AccessSubject subject) {
+        String scope=require(kind,name,null,user,subject,true);
+        if(recordAccess!=null && subject!=null && recordAccess.policies().restricts(subject)) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        var bound=tags.catalogFor(scope);
+        if(bound.isPresent() && !access.canWrite(user,"catalog",bound.get().catalogName())) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        var created=tags.create(scope,tag==null?null:tag.name(),tag==null?null:tag.color());
+        events.publishEvent(new su.onno.events.EntityChangedEvent("updated","tag",name,null,null));
+        return created;
+    }
     @GetMapping("/{id}") public List<TagService.Tag> assigned(@PathVariable String kind,@PathVariable String name,@PathVariable UUID id,Principal user,su.onno.access.AccessSubject subject) {
         return tags.assigned(require(kind,name,id,user,subject,false),id);
     }

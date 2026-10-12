@@ -67,6 +67,35 @@ class ConversationServiceTest {
     }
 
     @Test
+    void recipientIsCapturedAndRestrictedToContactAddresses() {
+        when(transport.connection(conversation)).thenReturn(new CrmMessageTransport.Connection(true,"Email",8000)
+            .withRecipients("personal@example.com",java.util.List.of("personal@example.com","work@example.com")));
+        var defaultReply=service.addMessage(conversationId,new ConversationService.Reply("Hi","Agent"));
+        assertThat(defaultReply.getRecipient()).isEqualTo("personal@example.com");
+        var alternate=service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,"work@example.com"));
+        assertThat(alternate.getRecipient()).isEqualTo("work@example.com");
+        assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,"stranger@example.com")))
+            .hasMessage("Choose an email address linked to this contact");
+        assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hi",java.util.List.of(),"Agent",null,null,"work@example.com\r\nBcc: stranger@example.com")))
+            .hasMessage("Invalid email recipient");
+    }
+
+    @Test
+    void emailSubjectIsSavedWithQueuedMessage() {
+        var saved=service.addMessage(conversationId,new ConversationService.Reply("Hello",java.util.List.of(),"Agent",null,"  Booking proposal  "));
+        assertThat(saved.getSubject()).isEqualTo("Booking proposal");
+        verify(transport).enqueue(conversation,saved);
+    }
+
+    @Test
+    void invalidEmailSubjectIsRejectedBeforeWriting() {
+        org.mockito.Mockito.lenient().when(statuses.reply()).thenReturn(statusRef(ConversationStatus.WAITING_CUSTOMER));
+        for(String subject:java.util.List.of("hello\r\nBcc: someone@example.com","x".repeat(999)))
+            assertThatThrownBy(()->service.addMessage(conversationId,new ConversationService.Reply("Hello",java.util.List.of(),"Agent",null,subject))).isInstanceOf(IllegalArgumentException.class);
+        verify(messages,never()).save(any());
+    }
+
+    @Test
     void replyAppendsOutboundMessageAndMovesConversationToWaiting() {
         ConversationMessage saved = service.addMessage(
                 conversationId,

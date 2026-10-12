@@ -17,9 +17,13 @@ public class CrmInboxWorkspaceService {
     private final UiAccessService access;
     private final CrmWorkspaceService configuration;
     private final CrmContactService contacts;
+    /** Personal-account privacy. Required: a subclass must not be able to opt out by omission. */
+    private final CrmConnectionAccounts connectionAccounts;
     public CrmInboxWorkspaceService(List<CrmInboxWorkspace> definitions, ConversationRepository conversations,
-                                    UiAccessService access, CrmWorkspaceService configuration, CrmContactService contacts) {
+                                    UiAccessService access, CrmWorkspaceService configuration, CrmContactService contacts,
+                                    CrmConnectionAccounts connectionAccounts) {
         this.definitions=List.copyOf(definitions);this.conversations=conversations;this.access=access;this.configuration=configuration;this.contacts=contacts;
+        this.connectionAccounts=java.util.Objects.requireNonNull(connectionAccounts,"connectionAccounts");
         Set<String> keys=new HashSet<>();
         for(var definition:definitions) {
             if(!keys.add(definition.key())) throw new IllegalArgumentException("Duplicate inbox workspace key: "+definition.key());
@@ -49,8 +53,14 @@ public class CrmInboxWorkspaceService {
         return conversations.findAllActive().stream().filter(workspace.selection()).sorted(
             Comparator.comparing(Conversation::getLastMessageAt,Comparator.nullsLast(Comparator.reverseOrder())).thenComparing(Conversation::getId)).toList();
     }
+    /**
+     * The one conversation access rule: not in another user's personal inbox, customer readable, and
+     * claimed by a workspace this principal may use. Every CRM read goes through this method or its
+     * batch form {@link #accessible}; loops must use the batch form.
+     */
     public boolean canAccess(Conversation conversation,Principal principal,boolean write) {
-        return conversation.getCustomer()!=null && contacts.canRead(conversation.getCustomer(),principal)
+        return !hidden(conversation,principal)
+            && conversation.getCustomer()!=null && contacts.canRead(conversation.getCustomer(),principal)
             && definitions.stream().anyMatch(w->permitted(w,principal,write)&&w.selection().test(conversation));
     }
 
@@ -71,7 +81,9 @@ public class CrmInboxWorkspaceService {
         if(workspaces.isEmpty()) return List.of();
         var readable=contacts.readable(candidates.stream().map(Conversation::getCustomer)
             .filter(java.util.Objects::nonNull).distinct().toList(),principal);
+        var hidden=hiddenInboxes(principal);
         return candidates.stream()
+            .filter(c->c.getInbox()==null || !hidden.contains(c.getInbox().id()))
             .filter(c->c.getCustomer()!=null && readable.contains(c.getCustomer()))
             .filter(c->workspaces.stream().anyMatch(w->w.selection().test(c)))
             .toList();
@@ -92,13 +104,28 @@ public class CrmInboxWorkspaceService {
         contacts.requireRead(customer,principal);
         final UUID canonicalCustomer=customer;
         var related=conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&canonicalCustomer.equals(c.getCustomer())).toList();
-        if(related.stream().noneMatch(c->canAccess(c,principal,write)))throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Contact is outside your inbox workspaces");
+        if(accessible(related,principal,write).isEmpty())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Contact is outside your inbox workspaces");
     }
     public void requireAllCustomerConversations(UUID customer,Principal principal) {
         customer=contacts.canonical(customer);
         contacts.requireRead(customer,principal);
         final UUID canonicalCustomer=customer;
-        if(conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&canonicalCustomer.equals(c.getCustomer())).anyMatch(c->!canAccess(c,principal,true)))
+        var related=conversations.findAllActive().stream().filter(c->c.getCustomer()!=null&&canonicalCustomer.equals(c.getCustomer())).toList();
+        if(accessible(related,principal,true).size()!=related.size())
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,"All affected conversations must be writable");
+    }
+
+    /** Contact identities this principal may see: those of another user's personal account are left out. */
+    public <I extends su.onno.crm.domain.ContactIdentity> List<I> visibleIdentities(List<I> identities,Principal principal) {
+        var hidden=hiddenInboxes(principal);
+        if(hidden.isEmpty())return identities;
+        var keys=hidden.stream().map(UUID::toString).collect(java.util.stream.Collectors.toSet());
+        return identities.stream().filter(i->!keys.contains(i.getConnectionKey())).toList();
+    }
+    private boolean hidden(Conversation conversation,Principal principal) {
+        return conversation.getInbox()!=null && connectionAccounts.isHidden(conversation.getInbox().id(),principal);
+    }
+    private Set<UUID> hiddenInboxes(Principal principal) {
+        return connectionAccounts.hiddenInboxes(principal);
     }
 }

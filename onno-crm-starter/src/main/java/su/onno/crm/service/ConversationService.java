@@ -45,6 +45,13 @@ public class ConversationService {
         this.statuses = statuses;this.agents = agents;
     }
 
+    @Transactional
+    public Conversation changeStatus(UUID id, UUID status) {
+        var conversation = requireConversation(id);
+        conversation.setStatus(statuses.active(status));
+        return conversations.save(conversation);
+    }
+
     public List<ConversationMessage> messages(UUID conversationId) {
         requireConversation(conversationId);
         return messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(
@@ -62,10 +69,12 @@ public class ConversationService {
      *              because a quote sent with no covering note is still a message. The channel
      *              decides whether files travel at all, and how many.
      */
-    public record Reply(String body, List<String> files, String authorName, String authorId) {
+    public record Reply(String body, List<String> files, String authorName, String authorId, String subject, String recipient) {
         public Reply {
             files = files == null ? List.of() : List.copyOf(files);
         }
+        public Reply(String body, List<String> files, String authorName, String authorId, String subject) { this(body,files,authorName,authorId,subject,null); }
+        public Reply(String body, List<String> files, String authorName, String authorId) { this(body, files, authorName, authorId, null); }
         public Reply(String body, String authorName) { this(body, List.of(), authorName, null); }
     }
 
@@ -84,6 +93,14 @@ public class ConversationService {
     @Transactional
     public ConversationMessage addMessage(UUID conversationId, Reply reply) {
         Conversation conversation = requireConversation(conversationId);
+        String subject = reply.subject();
+        if (subject != null) {
+            if (!su.onno.crm.domain.Channel.EMAIL.equals(conversation.getChannel()))
+                throw new IllegalArgumentException("Only email messages have a subject");
+            if (subject.contains("\r") || subject.contains("\n") || subject.length() > 998)
+                throw new IllegalArgumentException("Subject must be one line, at most 998 characters");
+            subject = subject.strip();
+        }
         String normalized = reply.body() == null ? "" : reply.body().trim();
         List<String> accepted = attachments.accept(reply.files());
         if (normalized.isEmpty() && accepted.isEmpty()) {
@@ -92,6 +109,14 @@ public class ConversationService {
 
         var connection = transport.connection(conversation);
         if (!connection.canSend()) throw new IllegalArgumentException(connection.unavailableReason());
+        String recipient=reply.recipient()==null?connection.recipient():reply.recipient().strip();
+        if(recipient!=null) {
+            if(!su.onno.crm.domain.Channel.EMAIL.equals(conversation.getChannel()))throw new IllegalArgumentException("Only email replies have a recipient");
+            if(recipient.length()>320 || recipient.contains("\r") || recipient.contains("\n"))throw new IllegalArgumentException("Invalid email recipient");
+            String chosen=recipient;
+            recipient=connection.recipients().stream().filter(address->address.equalsIgnoreCase(chosen)).findFirst()
+                .orElseThrow(()->new IllegalArgumentException("Choose an email address linked to this contact"));
+        }
         if (normalized.length() > Math.min(8000, connection.maxTextLength())) {
             throw new IllegalArgumentException("Message is too long (maximum " + connection.maxTextLength() + " characters)");
         }
@@ -109,6 +134,8 @@ public class ConversationService {
                 ? "CRM agent" : reply.authorName());
         message.setAuthorId(reply.authorId() == null || reply.authorId().isBlank() ? null : reply.authorId());
         message.setBody(normalized);
+        message.setSubject(subject);
+        message.setRecipient(recipient);
         message.setAttachments(attachments.store(accepted));
         // A files-only message still needs something to read in a conversation list, so the preview
         // names the files rather than leaving the row blank.

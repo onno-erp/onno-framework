@@ -2,8 +2,10 @@ package su.onno.ui.media;
 
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
@@ -17,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +40,14 @@ public class MediaController {
 
     private static final String X_CONTENT_TYPE_OPTIONS = "X-Content-Type-Options";
     private static final Set<String> SAFE_INLINE_CONTENT_TYPES = Set.of(
+            "audio/ogg",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/webm",
+            "audio/wav",
+            "audio/x-wav",
+            "audio/aac",
+            "audio/flac",
             "image/avif",
             "image/gif",
             "image/jpeg",
@@ -49,6 +60,12 @@ public class MediaController {
     public MediaController(MediaStorage storage, MediaProperties properties) {
         this.storage = storage;
         this.properties = properties;
+    }
+
+    /** Lets clients reject oversized selections before sending a multipart request. */
+    @GetMapping("/limits")
+    public java.util.Map<String, Long> limits() {
+        return java.util.Map.of("maxFileSize", properties.getMaxFileSize().toBytes());
     }
 
     @PostMapping
@@ -75,21 +92,36 @@ public class MediaController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
         LoadedMedia media = loaded.get();
+        MediaType contentType = servedContentType(media.contentType());
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(media.contentType()))
+                .contentType(contentType)
                 .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
                 // Keys are immutable (uuid-named), so the bytes behind one never change.
                 .cacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable());
         if (media.size() >= 0) {
             builder.contentLength(media.size());
         }
-        String disposition = SAFE_INLINE_CONTENT_TYPES.contains(
-                normalizeContentType(media.contentType())) ? "inline" : "attachment";
-        String filename = media.filename() == null
-                ? ""
-                : "; filename=\"" + media.filename().replace("\"", "") + "\"";
-        builder.header(HttpHeaders.CONTENT_DISPOSITION, disposition + filename);
+        boolean inline = SAFE_INLINE_CONTENT_TYPES.contains(normalizeContentType(contentType.toString()));
+        ContentDisposition.Builder disposition = inline ? ContentDisposition.inline() : ContentDisposition.attachment();
+        if (media.filename() != null && !media.filename().isBlank()) {
+            // RFC 6266/5987: an ASCII-safe filename plus filename*=UTF-8''… with quotes, control
+            // characters and non-ASCII escaped, so an uploaded name can never break out of the header.
+            disposition.filename(media.filename(), StandardCharsets.UTF_8);
+        }
+        builder.header(HttpHeaders.CONTENT_DISPOSITION, disposition.build().toString());
         return builder.body(media.resource());
+    }
+
+    /** The stored content type, or {@code application/octet-stream} when a storage returns an unparseable one. */
+    private static MediaType servedContentType(String stored) {
+        if (stored == null || stored.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        try {
+            return MediaType.parseMediaType(stored);
+        } catch (InvalidMediaTypeException e) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 
     /** Reduce a raw client content type to its bare {@code type/subtype}, lower-cased. */

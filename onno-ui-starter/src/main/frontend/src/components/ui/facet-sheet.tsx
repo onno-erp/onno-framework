@@ -1,4 +1,5 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { DialogPortalContext } from "./dialog-portal";
+import { createContext, useContext, useRef, useState, useCallback, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Drawer } from "vaul";
 import { useMessages } from "@/providers/messages-provider";
@@ -10,6 +11,8 @@ import { useMessages } from "@/providers/messages-provider";
  */
 
 export type FacetOverlay = "sheet" | "modal" | "popover";
+
+const FacetSheetContext = createContext(false);
 
 const MOBILE_QUERY = "(max-width: 767px)";
 const TABLET_QUERY = "(min-width: 768px) and (max-width: 1023px)";
@@ -43,23 +46,37 @@ export function useTouchLayout(): boolean {
  */
 export function FacetSheet({
   label,
+  open = true,
   onClose,
   footer,
   children,
 }: {
   label: string;
+  /** Keep mounted and toggle open so the drawer can finish its exit animation. */
+  open?: boolean;
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
 }) {
   const t = useMessages();
   const overlay = useFacetOverlay();
+  const nested = useContext(FacetSheetContext);
+  const Root = nested ? Drawer.NestedRoot : Drawer.Root;
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const setContentRef = useCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node;
+    setPortalContainer(node);
+  }, []);
   const onOpenChange = (open: boolean) => {
     if (!open) onClose();
   };
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        const dialogs = document.querySelectorAll('[role="dialog"]:not([data-state="closed"])');
+        if (contentRef.current && dialogs.length && dialogs[dialogs.length - 1] !== contentRef.current) return;
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
@@ -68,10 +85,11 @@ export function FacetSheet({
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, [onClose, open]);
   if (overlay === "modal") {
+    if (!open) return null;
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
+      <div ref={setContentRef} className="fixed inset-0 z-50 flex items-center justify-center p-6" role="dialog" aria-modal="true">
         <button type="button" aria-label={t("action.close")} className="absolute inset-0 bg-black/50" onClick={onClose} />
         <div className="relative flex max-h-[82dvh] w-full max-w-xl flex-col overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none">
           <div className="flex shrink-0 items-center justify-between border-b px-4 py-3">
@@ -85,17 +103,17 @@ export function FacetSheet({
               <X className="size-4" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <DialogPortalContext.Provider value={portalContainer}><div className="min-h-0 flex-1 overflow-y-auto">{children}</div></DialogPortalContext.Provider>
           {footer ? <div className="flex shrink-0 gap-2 border-t px-4 py-3">{footer}</div> : null}
         </div>
       </div>
     );
   }
   return (
-    <Drawer.Root open onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
+    <FacetSheetContext.Provider value={true}><Root open={open} onOpenChange={onOpenChange} direction="bottom" closeThreshold={0.32}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t bg-popover pb-[max(env(safe-area-inset-bottom),0.75rem)] text-popover-foreground shadow-md outline-none">
+        <Drawer.Content ref={setContentRef} className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85dvh] flex-col rounded-t-2xl border-t bg-popover pb-[max(env(safe-area-inset-bottom),0.75rem)] text-popover-foreground shadow-md outline-none">
           <Drawer.Handle className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-border" />
           <Drawer.Title className="sr-only">{label}</Drawer.Title>
           <div className="flex shrink-0 items-center justify-between px-4 pt-2">
@@ -109,11 +127,11 @@ export function FacetSheet({
               <X className="size-4" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <DialogPortalContext.Provider value={portalContainer}><div className="min-h-0 flex-1 overflow-y-auto">{children}</div></DialogPortalContext.Provider>
           {footer ? <div className="flex shrink-0 gap-2 border-t px-4 pt-3">{footer}</div> : null}
         </Drawer.Content>
       </Drawer.Portal>
-    </Drawer.Root>
+    </Root></FacetSheetContext.Provider>
   );
 }
 

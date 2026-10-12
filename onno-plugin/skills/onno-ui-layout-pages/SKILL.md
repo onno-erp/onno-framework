@@ -22,7 +22,8 @@ belong in `EntityView`, not here.
   shell. Mixed `.page(...)`, `.catalog(...)`, `.document(...)`, and `.register(...)` calls retain
   declaration order inside the drawer.
 - A `Page` can live at `/`, `/settings`, any custom route, or a default entity route.
-- A custom page route appears in nav only when a layout section links it with `.page(...)`.
+- **Home is automatic.** An authored `Page.route()` of `/` (or dashboard widgets for the active layout/profile) makes onno add one leading home navigation item. Set its label with `PageBuilder.title("Overview")`. Do not also add `.page("/", ...)` to a section or `spec.link("/", ...)`: those create a second entry for the same destination. With neither a root page nor dashboard widgets, no home item is added.
+- For other custom routes, use `spec.link("/inbox", "Inbox", "inbox")` for a direct top-level entry, or `spec.section("Operations").page("/reports", "Reports", "chart")` for a nested entry. Author route paths without the browser's `/ui` prefix.
 - For an entity-backed fullscreen workspace, use `page.list(Entity.class, view -> view.fill())`.
   `page.bare()` only removes the authored page header; it does not allocate height or remove page
   padding. Read [the full-height recipe](../onno-ui-widgets/references/full-height-workspaces.md)
@@ -41,3 +42,20 @@ belong in `EntityView`, not here.
   default; add `.markFrame(false)` when the artwork already contains its own frame or enclosing shape.
 
 Read [references/examples.md](references/examples.md) before writing layout/page code.
+
+### Reusable page views
+
+`PageView` composes reusable content through `PageBuilder.view(view)`, including in rows and
+asides. Configure view instances at startup; `ListView` and the CRM views freeze on first placement
+and throw `IllegalStateException` if mutated afterwards.
+`ListView<E>` places the existing entity list and accepts `.defaults(d -> d.fill().sort("date", true))`.
+`EntityView<E>` still owns entity columns, fields and actions; permissions and data resolution use
+the existing renderer. A Page owns the route and header; a PageView does not register navigation.
+CRM provides `su.onno.crm.ui.CrmInboxView` (final; declare it as a `@Bean`, inject into the Page)
+for typed inbox presentation: one method per surface plus an optional breakpoint, e.g.
+`header(h -> ...)`, `header(Breakpoint.NARROW|MOBILE, h -> ...)`, `listHeader(MOBILE, ...)`,
+`composer(MOBILE, ...)`. Each configured toolbar fully replaces renderer defaults (unset regions are
+empty; an item may sit in one region only). Workspace beans still own the authorized feed and
+declared filters; `CrmInboxViewValidator` fails startup if a `CrmInboxView` bean names an unknown
+workspace and fails on filter keys the workspace bean does not declare (facets with runtime options use `CrmInboxWorkspace.FacetOptions`). `CrmConnectionsView` types the `crmConnections` connections widget (`crmSettings` remains an alias).
+Existing `page.list(...)` and widget config remain valid.

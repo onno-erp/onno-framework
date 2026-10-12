@@ -56,7 +56,12 @@ public class CrmInboxWorkspaceController {
         if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page cursor");
         var spec=workspace.listSpec();
         if(states.source().isEmpty())spec.hide(Conversation::getStatus);
-        var declared=spec.filters().stream().filter(f->!f.field().equals("status") || !states.source().isEmpty()).filter(f->!f.field().equals("priority") || !priorities.choices().source().isEmpty()).toList();
+        // Facet options are evaluated once per read. A facet with no options right now stays a valid
+        // filter key (a stale link matches nothing rather than failing) but is not offered or chipped.
+        var facetOptions=new LinkedHashMap<String,List<CrmInboxWorkspace.FacetOption>>();
+        workspace.facets().forEach(f->facetOptions.put(f.key(),f.options()));
+        var offeredFacets=workspace.facets().stream().filter(f->!facetOptions.get(f.key()).isEmpty()).toList();
+        var declared=java.util.stream.Stream.concat(spec.filters().stream(),workspace.facets().stream().map(f->f.definition(facetOptions.get(f.key())))).filter(f->!f.field().equals("status") || !states.source().isEmpty()).filter(f->!f.field().equals("priority") || !priorities.choices().source().isEmpty()).toList();
         var filters = CrmInboxFilters.predicate(declared, params);
         String search=q.strip().toLowerCase(Locale.ROOT);
         var members=workspaces.members(workspace);
@@ -122,6 +127,24 @@ public class CrmInboxWorkspaceController {
         // Authorization still precedes counting, filtering, pagination and decoration — as one pass
         // over the list rather than a permission check and a contact read per row.
         var authorized=workspaces.accessible(members,principal,false);
+        var facetValues=new LinkedHashMap<String,Map<UUID,List<String>>>();
+        for(var facet:workspace.facets()) {
+            if((facet.showOnRows() && offeredFacets.contains(facet)) || params.getOrDefault("in",List.of()).stream().anyMatch(v->v.startsWith(facet.key()+",")))
+                facetValues.put(facet.key(),facet.resolver().resolve(authorized,principal));
+        }
+        // Row chips for facets that opt in: the option's label and colour, in option order.
+        var rowFacets=offeredFacets.stream().filter(CrmInboxWorkspace.Facet::showOnRows).toList();
+        java.util.function.Function<Map<String,Object>,Map<String,Object>> rowBadges=row->{
+            if(rowFacets.isEmpty()) return row;
+            var chips=new ArrayList<Map<String,String>>();
+            for(var facet:rowFacets) {
+                var values=facetValues.getOrDefault(facet.key(),Map.of()).getOrDefault((UUID)row.get("id"),List.of());
+                for(var option:facetOptions.get(facet.key())) if(values.contains(option.value()))
+                    chips.add(Map.of("label",option.label(),"color",Objects.toString(option.color(),"")));
+            }
+            row.put("rowBadges",chips);
+            return row;
+        };
         String requestedSort=params.containsKey("sort")?params.getFirst("sort"):spec.sortField();
         boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
         var byId=new HashMap<UUID,Conversation>();
@@ -138,6 +161,8 @@ public class CrmInboxWorkspaceController {
         };
         if(!pageBeforeDecoration) prefetchContacts.accept(authorized);
         var records=authorized.stream().map(pageBeforeDecoration?CrmInboxRows::raw:decorate)
+            .map(row->{ facetValues.forEach((field,values)->row.put(field,values.getOrDefault((UUID)row.get("id"),List.of()))); return row; })
+            .map(rowBadges)
             .filter(filters).filter(row->search.isEmpty()||(Objects.toString(row.get("customerDisplay"),"")+" "+Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)).toList();
         String sort=params.getFirst("sort");
         if(sort==null)sort=spec.sortField();
@@ -164,7 +189,10 @@ public class CrmInboxWorkspaceController {
         if(pageBeforeDecoration) {
             var onPage=page.stream().map(row->byId.get((UUID)row.get("id"))).filter(Objects::nonNull).toList();
             prefetchContacts.accept(onPage);
-            page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id")))).toList();
+            // Decoration builds fresh rows, so carry the resolved facet values and their row chips over.
+            page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id"))))
+                .map(row->{ facetValues.forEach((field,values)->row.put(field,values.getOrDefault((UUID)row.get("id"),List.of()))); return row; })
+                .map(rowBadges).toList();
         }
         var resolved=listViews.catalogList(descriptor,spec);
         Map<String,String> fieldNames=new HashMap<>();
@@ -176,8 +204,17 @@ public class CrmInboxWorkspaceController {
         list.put("columns",resolved.columns().stream().filter(c->!c.fieldName().equals("status") || !states.source().isEmpty())
             .filter(c->!c.fieldName().equals("priority") || !priorities.choices().source().isEmpty())
             .map(c->new ResolvedListView.Column(c.label(),c.fieldName(),c.fieldName(),c.width(),c.widget(),c.format(),c.hint(),c.cellMenu())).toList());
-        list.put("filters",resolved.filters().stream().filter(f->declared.stream().anyMatch(d->d.field().equals(f.key())))
-            .map(f->Map.of("key",f.key(),"label",Objects.toString(f.label(),f.key()),"column",fieldNames.getOrDefault(f.columnName(),f.columnName()),"type",f.type(),"options",f.options())).toList());
+        var filterMetadata=new ArrayList<Map<String,Object>>();
+        resolved.filters().stream().filter(f->declared.stream().anyMatch(d->d.field().equals(f.key()))).forEach(f->{
+            var options=f.options().stream().map(o->{
+                String color=o.color();
+                if(f.key().equals("status")) color=states.conversationStatuses().stream().filter(state->state.choice().id().toString().equals(o.value())).map(state->state.choice().color()).findFirst().orElse(Objects.toString(color,""));
+                return new ResolvedListView.Option(o.value(),o.label(),color,o.avatarUrl());
+            }).toList();
+            filterMetadata.add(Map.of("key",f.key(),"label",Objects.toString(f.label(),f.key()),"column",fieldNames.getOrDefault(f.columnName(),f.columnName()),"type",f.type(),"options",options));
+        });
+        offeredFacets.forEach(f->filterMetadata.add(Map.of("key",f.key(),"label",f.label(),"column",f.key(),"type","multiOptions","options",facetOptions.get(f.key()))));
+        list.put("filters",filterMetadata);
         list.put("custom",resolved.customView());
         // Scope before publishing account choices; filters and pagination must not hide other accounts.
         // One sample per distinct account keeps the choices complete without decorating every
@@ -191,7 +228,8 @@ public class CrmInboxWorkspaceController {
             .map(row->Map.of("id",row.get("inbox").toString(),"channel",Objects.toString(row.get("channel"),""),
                 "label",Objects.toString(row.get("inboxDisplay"),row.get("inbox").toString())))
             .distinct().toList());
-        return Map.of("list",list,"key",workspace.key(),"label",workspace.label(),"filters",declared,"config",config,"canWrite",canWrite,
+        var offeredFilters=declared.stream().filter(f->!facetOptions.containsKey(f.field()) || !facetOptions.get(f.field()).isEmpty()).toList();
+        return Map.of("list",list,"key",workspace.key(),"label",workspace.label(),"filters",offeredFilters,"config",config,"canWrite",canWrite,
             "rows",page,"total",records.size(),"hasMore",end<records.size(),"nextCursor",end<records.size()?Integer.toString(end):"");
     }
     @GetMapping("/{key}/conversations/{id}/comments") public Object notes(@PathVariable String key,@PathVariable UUID id,Principal principal) {

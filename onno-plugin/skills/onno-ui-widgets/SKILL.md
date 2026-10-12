@@ -75,3 +75,12 @@ registrations in the example/consumer bundle. Retain unregister callbacks for dy
 plugins; use `registerChatMessageRenderer` for timeline bodies. Visibility never replaces backend
 authorization, and contributions handle their own async errors. Verify an ordinary entity surface
 as well as CRM, and check that removing a plugin leaves no dead controls in the reusable bundle.
+
+For configurable operational headers/action rows, use SDK `WorkspaceToolbar` with stable
+item IDs and ordered `start`/`center`/`end`/`secondary`/`overflow` regions. Compact overrides
+and hidden IDs affect presentation only; supply already-authorized controls. Do not build a
+CRM-specific layout primitive for a generic ERP need. `EntityListWidget` can hand its real
+controls to a custom renderer with `toolbarPlacement="renderer"`; render `props.toolbar`
+once inside the workspace, including empty results, while the host retains query/pagination.
+See `onno-widget-sdk/README.md` for the contract and `onno-crm-starter/README.md` for the
+CRM widget's layout config keys.

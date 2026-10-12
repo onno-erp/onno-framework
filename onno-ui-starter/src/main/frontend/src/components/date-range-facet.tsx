@@ -350,28 +350,26 @@ export function TimeRangeFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={(
+            <div className="flex w-full items-center justify-between gap-3">
+              {granularitySelect}
+              <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
+            </div>
+          )}
+        >
+          <DateRangePanel
+            ariaLabel={label}
+            from={calendarRange?.from ?? ""}
+            to={calendarRange?.to ?? ""}
+            onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
             onClose={() => setOpen(false)}
-            footer={(
-              <div className="flex w-full items-center justify-between gap-3">
-                {granularitySelect}
-                <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
-              </div>
-            )}
-          >
-            <DateRangePanel
-              ariaLabel={label}
-              from={calendarRange?.from ?? ""}
-              to={calendarRange?.to ?? ""}
-              onChange={({ from, to }) => onAbsolute(from || undefined, to || undefined)}
-              onClose={() => setOpen(false)}
-              presetItems={items}
-              touch={phoneSheet}
-            />
-          </FacetSheet>
-        ) : null}
+            presetItems={items}
+            touch={phoneSheet}
+          />
+        </FacetSheet>
       </>
     );
   }

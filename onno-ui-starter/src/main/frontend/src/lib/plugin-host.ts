@@ -1,3 +1,7 @@
+import { DialogShell } from "@/components/ui/dialog-shell";
+import { ResponsiveActionPanel } from "@/components/ui/responsive-action-panel";
+import { WorkspaceToolbar } from "@/components/ui/workspace-toolbar";
+import { usePageSlide } from "@/lib/use-page-slide";
 import { extensions } from "./ui-extensions";
 import { CommentComposer, CommentBody } from "@/components/entity-comments-widget";
 import { EntityTagMenu, EntityTags } from "@/components/entity-tags";
@@ -24,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Segmented } from "@/components/ui/segmented";
 import { DatePicker } from "@/components/date-picker";
 import { DateTimePicker } from "@/components/date-time-picker";
+import { ColorPicker } from "@/components/color-picker";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
@@ -55,6 +60,8 @@ import {
  * never drifts from the product's look. Curated subset; grow it as widgets need more (issue #243).
  */
 export interface OnnoUi {
+  WorkspaceToolbar: typeof WorkspaceToolbar;
+  usePageSlide: typeof usePageSlide;
   ContextMenuContent: typeof ContextMenuContent;
   ContextMenuItem: typeof ContextMenuItem;
   EntityTagMenu: typeof EntityTagMenu;
@@ -74,6 +81,7 @@ export interface OnnoUi {
   Segmented: typeof Segmented;
   DatePicker: typeof DatePicker;
   DateTimePicker: typeof DateTimePicker;
+  ColorPicker: typeof ColorPicker;
   Card: typeof Card;
   CardHeader: typeof CardHeader;
   CardTitle: typeof CardTitle;
@@ -82,6 +90,8 @@ export interface OnnoUi {
   Popover: typeof Popover;
   PopoverAnchor: typeof PopoverAnchor;
   PopoverTrigger: typeof PopoverTrigger;
+  DialogShell: typeof DialogShell;
+  ResponsiveActionPanel: typeof ResponsiveActionPanel;
   PopoverContent: typeof PopoverContent;
   Select: typeof Select;
   SelectContent: typeof SelectContent;
@@ -148,6 +158,7 @@ const events: OnnoHost["events"] = Object.freeze({
  */
 export type OnnoReadApi = Pick<
   typeof api,
+  | "getJson"
   | "listCatalog"
   | "getCatalogItem"
   | "listDocuments"
@@ -166,6 +177,8 @@ declare global {
 // The curated UI primitives handed to widgets. Same instances the host renders with, so a widget's
 // controls are the product's controls — see {@link OnnoUi}.
 const ui: OnnoUi = {
+  WorkspaceToolbar,
+  usePageSlide,
   EntityTagMenu,
   ContextMenuSub,
   EntityTags,
@@ -185,6 +198,7 @@ const ui: OnnoUi = {
   Segmented,
   DatePicker,
   DateTimePicker,
+  ColorPicker,
   Card,
   CardHeader,
   CardTitle,
@@ -193,6 +207,8 @@ const ui: OnnoUi = {
   Popover,
   PopoverAnchor,
   PopoverTrigger,
+  DialogShell,
+  ResponsiveActionPanel,
   PopoverContent,
   Select,
   SelectContent,
@@ -202,14 +218,30 @@ const ui: OnnoUi = {
   SelectValue,
 };
 
+/** A deep copy of a JSON response; structuredClone where available, a JSON round-trip otherwise. */
+function detachedCopy<T>(value: T): T {
+  if (value === undefined || value === null) return value;
+  return typeof structuredClone === "function" ? structuredClone(value) : (JSON.parse(JSON.stringify(value)) as T);
+}
+
+/**
+ * Host reads share in-flight GET promises, so the resolved object can be the very one the host is
+ * rendering. Plugins get their own deep copy: a widget that mutates a response must not corrupt host
+ * state (or another widget's).
+ */
+function detached<A extends unknown[], R>(read: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
+  return (...args) => read(...args).then(detachedCopy);
+}
+
 const readApi: OnnoReadApi = {
-  listCatalog: api.listCatalog,
-  getCatalogItem: api.getCatalogItem,
-  listDocuments: api.listDocuments,
-  getDocument: api.getDocument,
-  getBalance: api.getBalance,
-  getTurnover: api.getTurnover,
-  getMovements: api.getMovements,
+  getJson: detached(api.getJson) as OnnoReadApi["getJson"],
+  listCatalog: detached(api.listCatalog),
+  getCatalogItem: detached(api.getCatalogItem),
+  listDocuments: detached(api.listDocuments),
+  getDocument: detached(api.getDocument),
+  getBalance: detached(api.getBalance),
+  getTurnover: detached(api.getTurnover),
+  getMovements: detached(api.getMovements),
 };
 
 /**

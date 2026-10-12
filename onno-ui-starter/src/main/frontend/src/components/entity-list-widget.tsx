@@ -1,8 +1,9 @@
+import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "@/components/ui/toast";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -194,6 +195,8 @@ export type ListCustomConfig = { type: string; label?: string; defaultView?: boo
  * draws the rows it's handed and opens a record through the callback.
  */
 export type ListRendererProps = {
+  loading?: boolean;
+  toolbar?: ReactNode;
   /** More keyset windows remain. Renderers with an inner scroll pane should request them there. */
   hasMore?: boolean;
   /** A next-window request is in flight. */
@@ -213,6 +216,12 @@ export type ListRendererProps = {
   /** The record's {@code onno://} detail route, or null when it has none. */
   openUrl: (row: EntityRecord) => string | null;
 };
+/**
+ * A custom list renderer. The host shows a "Loading more…" indicator below it while a next window
+ * loads, unless the component carries {@code ownsLoadingMore} (set by the SDK's
+ * {@code registerListRenderer(type, C, { ownsLoadingMore: true })}) because it draws that feedback itself.
+ */
+export type ListRendererComponent = ComponentType<ListRendererProps> & { ownsLoadingMore?: boolean };
 /** A column the list can be grouped by; `date` columns bucket by a chosen day/month/year granularity. */
 export type GroupableColumn = { columnName: string; label: string; date: boolean };
 /** A per-group subtotal: an aggregate `fn` over `columnName`, shown with `format` and headed `label`. */
@@ -432,6 +441,7 @@ export function eventMatches(event: UiEvent, kind: string, name: string): boolea
  */
 const facetTriggerCls = (active: boolean) =>
   cn(
+    "onno-facet-trigger",
     buttonVariants({ variant: "subtle", size: "toolbar" }),
     active
       ? "border-solid border-primary/40 bg-primary/5 text-foreground hover:bg-primary/10"
@@ -543,12 +553,14 @@ function FacetOptionRow({
  * (what the query binds); labels are what the user reads. Empty → no constraint.
  */
 export function OptionsFacet({
+  inline = false,
   label,
   options,
   multi,
   selected,
   onChange,
 }: {
+  inline?: boolean;
   label: string;
   options: FilterOption[];
   multi: boolean;
@@ -579,6 +591,16 @@ export function OptionsFacet({
     }
   };
 
+  if (inline) return <fieldset className="w-full min-w-0 space-y-2">
+    <legend className="text-xs font-semibold text-muted-foreground">{label}</legend>
+    {searchable && <Input aria-label={`${t("list.searchLabel")} ${label}`} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("list.searchLabel")} />}
+    <div className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+      <Button size="sm" className="min-h-10 w-full justify-between rounded-field px-3 text-left" variant={!active ? "secondary" : "ghost"} aria-pressed={!active} onClick={() => onChange([])}>{t("list.all")}{!active && <Check className="size-4 shrink-0" />}</Button>
+      {visible.map(option => <Button key={option.value} size="sm" className="min-h-10 w-full justify-between gap-3 whitespace-normal rounded-field px-3 text-left" variant={selected.includes(option.value) ? "secondary" : "ghost"} aria-pressed={selected.includes(option.value)} onClick={() => toggle(option.value)}><span className="flex min-w-0 items-center gap-2">{option.color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{backgroundColor:option.color}} />}{option.label}</span>{selected.includes(option.value) && <Check className="size-4 shrink-0" />}</Button>)}
+      {searchable && !visible.length && <p className="text-sm text-muted-foreground">{t("empty.noMatches")}</p>}
+    </div>
+  </fieldset>;
+
   const trigger = (
     <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
       <ListFilter className="size-3.5 shrink-0 opacity-60" />
@@ -605,58 +627,56 @@ export function OptionsFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => close(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    onChange([]);
-                    close(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton onClick={() => close(false)}>{t("list.done")}</SheetDoneButton>
-              </>
-            }
-          >
-            <div className="px-2 py-2">
-              {searchable ? (
-                <div className="mx-1 mb-1.5 flex items-center gap-2 rounded-field bg-muted px-3">
-                  <Search className="size-4 shrink-0 opacity-50" />
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={t("list.search")}
-                    className="h-10 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
-                  />
-                </div>
-              ) : null}
-              {searchable && visible.length === 0 ? (
-                <div className="px-3 py-4 text-center text-sm text-muted-foreground">
-                  {t("empty.noMatches")}
-                </div>
-              ) : null}
-              {visible.map((o) => {
-                const on = selected.includes(o.value);
-                return (
-                  <FacetOptionRow
-                    key={o.value}
-                    option={o}
-                    selected={on}
-                    multi={multi}
-                    touch
-                    onSelect={() => toggle(o.value)}
-                  />
-                );
-              })}
-            </div>
-          </FacetSheet>
-        ) : null}
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => close(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  onChange([]);
+                  close(false);
+                }}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton onClick={() => close(false)}>{t("list.done")}</SheetDoneButton>
+            </>
+          }
+        >
+          <div className="px-2 py-2">
+            {searchable ? (
+              <div className="mx-1 mb-1.5 flex items-center gap-2 rounded-field bg-muted px-3">
+                <Search className="size-4 shrink-0 opacity-50" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t("list.search")}
+                  className="h-10 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+            ) : null}
+            {searchable && visible.length === 0 ? (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                {t("empty.noMatches")}
+              </div>
+            ) : null}
+            {visible.map((o) => {
+              const on = selected.includes(o.value);
+              return (
+                <FacetOptionRow
+                  key={o.value}
+                  option={o}
+                  selected={on}
+                  multi={multi}
+                  touch
+                  onSelect={() => toggle(o.value)}
+                />
+              );
+            })}
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -767,50 +787,48 @@ function TextFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => setOpen(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    setText("");
-                    onCommit("");
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton
-                  onClick={() => {
-                    onCommit(text);
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.done")}
-                </SheetDoneButton>
-              </>
-            }
-          >
-            <div className="relative px-4 py-3">
-              <Search className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-              <Input
-                autoFocus
-                value={text}
-                placeholder={label}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    onCommit(text);
-                    setOpen(false);
-                  }
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  setText("");
+                  onCommit("");
+                  setOpen(false);
                 }}
-                className="h-11 rounded-field pl-10 text-[15px]"
-              />
-            </div>
-          </FacetSheet>
-        ) : null}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton
+                onClick={() => {
+                  onCommit(text);
+                  setOpen(false);
+                }}
+              >
+                {t("list.done")}
+              </SheetDoneButton>
+            </>
+          }
+        >
+          <div className="relative px-4 py-3">
+            <Search className="pointer-events-none absolute left-7 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
+              autoFocus
+              value={text}
+              placeholder={label}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  onCommit(text);
+                  setOpen(false);
+                }
+              }}
+              className="h-11 rounded-field pl-10 text-[15px]"
+            />
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -1026,52 +1044,50 @@ function DateRangeFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={label}
-            onClose={() => setOpen(false)}
-            footer={
-              <>
-                <SheetClearButton
-                  onClick={() => {
-                    onChange({ from: "", to: "" });
-                    setOpen(false);
-                  }}
-                >
-                  {t("list.clear")}
-                </SheetClearButton>
-                <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
-              </>
-            }
-          >
-            <div className="grid grid-cols-3 gap-2 px-4 pt-3">
-              {presets.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => {
-                    setRange(p.start, p.end);
-                    setOpen(false);
-                  }}
-                  className="h-9 rounded-field border border-input px-2 text-xs font-medium text-foreground transition-colors active:bg-accent"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex justify-center">
-              <RangeCalendar
-                aria-label={label}
-                value={range}
-                numberOfMonths={1}
-                touch
-                onChange={(v) => {
-                  if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <SheetClearButton
+                onClick={() => {
+                  onChange({ from: "", to: "" });
+                  setOpen(false);
                 }}
-              />
-            </div>
-          </FacetSheet>
-        ) : null}
+              >
+                {t("list.clear")}
+              </SheetClearButton>
+              <SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>
+            </>
+          }
+        >
+          <div className="grid grid-cols-3 gap-2 px-4 pt-3">
+            {presets.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => {
+                  setRange(p.start, p.end);
+                  setOpen(false);
+                }}
+                className="h-9 rounded-field border border-input px-2 text-xs font-medium text-foreground transition-colors active:bg-accent"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-center">
+            <RangeCalendar
+              aria-label={label}
+              value={range}
+              numberOfMonths={1}
+              touch
+              onChange={(v) => {
+                if (v) setRange(v.start as CalendarDate, v.end as CalendarDate);
+              }}
+            />
+          </div>
+        </FacetSheet>
       </>
     );
   }
@@ -1184,56 +1200,54 @@ function GroupByFacet({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet
-            label={t("list.groupBy")}
-            onClose={() => setOpen(false)}
-            footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
-          >
-            <div className="px-2 py-2">
-              {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
-                const on = (groupBy || "") === g.columnName;
-                return (
-                  <button
-                    key={g.columnName || "__none"}
-                    type="button"
-                    onClick={() => choose(g.columnName)}
-                    className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
-                  >
-                    <span
-                      className={cn(
-                        "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                      )}
-                    >
-                      {on ? <Check className="size-3.5" /> : null}
-                    </span>
-                    <span className="truncate">{g.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {col?.date ? (
-              <div className="flex items-center gap-2 border-t px-4 py-3">
-                {(["day", "month", "year"] as const).map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => onGranularity(g)}
+        <FacetSheet open={open}
+          label={t("list.groupBy")}
+          onClose={() => setOpen(false)}
+          footer={<SheetDoneButton onClick={() => setOpen(false)}>{t("list.done")}</SheetDoneButton>}
+        >
+          <div className="px-2 py-2">
+            {[{ columnName: "", label: t("list.groupNone"), date: false }, ...groupable].map((g) => {
+              const on = (groupBy || "") === g.columnName;
+              return (
+                <button
+                  key={g.columnName || "__none"}
+                  type="button"
+                  onClick={() => choose(g.columnName)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-field px-3 py-2 text-left text-[15px] transition-colors active:bg-accent"
+                >
+                  <span
                     className={cn(
-                      "h-10 flex-1 rounded-control text-sm font-medium transition-colors",
-                      granularity === g
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground active:bg-accent/60"
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                      on ? "border-primary bg-primary text-primary-foreground" : "border-input"
                     )}
                   >
-                    {granLabels[g]}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </FacetSheet>
-        ) : null}
+                    {on ? <Check className="size-3.5" /> : null}
+                  </span>
+                  <span className="truncate">{g.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {col?.date ? (
+            <div className="flex items-center gap-2 border-t px-4 py-3">
+              {(["day", "month", "year"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => onGranularity(g)}
+                  className={cn(
+                    "h-10 flex-1 rounded-control text-sm font-medium transition-colors",
+                    granularity === g
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground active:bg-accent/60"
+                  )}
+                >
+                  {granLabels[g]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </FacetSheet>
       </>
     );
   }
@@ -1302,26 +1316,78 @@ const OVERSCAN = 8;
 export function EntityListWidget({
   list,
   headerExtra,
+  toolbarContent,
+  toolbarFooter,
+  toolbarPlacement = "header",
+  toolbarOptions,
   queryParams,
   renderer,
   refreshKey,
+  initialPage,
 }: {
   list: ListDescriptor;
   renderer?: ComponentType<ListRendererProps>;
   refreshKey?: number;
+  /** One-use bootstrap response. Query excludes cursor/limit/count; must match the active feed and filters. */
+  initialPage?: { feed: string; query: string; rows: EntityRecord[]; total?: number; nextCursor: string | null; hasMore: boolean };
   /** Additional server-validated constraints supplied by a composed workspace. */
   queryParams?: Record<string, string[]>;
   // Host-provided control rendered in the control island right after the title — the register
   // surface parks its Balance/Movements toggle here so the view switch lives with the list's own
   // controls instead of floating above the card.
   headerExtra?: ReactNode;
+  /** Full-width secondary controls inside the same toolbar surface. */
+  toolbarContent?: ReactNode;
+  /** Workspace navigation actions, separate from query controls. */
+  toolbarFooter?: ReactNode;
+  /** Custom renderers may place the host controls within their own workspace. */
+  toolbarPlacement?: "header" | "renderer";
+  toolbarOptions?: {
+    title?: boolean; count?: boolean; viewSwitcher?: boolean; search?: boolean;
+    controls?: string[]; views?: Array<"table" | "map" | "custom">;
+    filterKeys?: string[]; actionKeys?: string[];
+    compactPresentation?: "inline" | "sheet";
+    /** Show persistent navigation beside a custom workspace when its container has room. */
+    filterSidebar?: boolean;
+  };
 }) {
+  const bootstrapPage = useRef(initialPage);
   const { kind, name, columns, pageSize } = list;
+  const touchToolbar = useTouchLayout();
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarId = useId();
+  const [toolbarElement, setToolbarElement] = useState<HTMLDivElement | null>(null);
+  const [availableToolbarWidth, setAvailableToolbarWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!toolbarElement) return;
+    const measure = () => {
+      const width = toolbarElement.getBoundingClientRect().width;
+      if (width > 0) setAvailableToolbarWidth(width);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(toolbarElement);
+    return () => observer.disconnect();
+  }, [toolbarElement]);
+  const mobileControls = toolbarOptions?.filterSidebar || (touchToolbar || (availableToolbarWidth != null && availableToolbarWidth < 560))
+    && toolbarOptions?.compactPresentation === "sheet";
+  const showControl = (key: string) => !toolbarOptions?.controls || toolbarOptions.controls.includes(key);
   const queryParamSig = JSON.stringify(queryParams ?? {});
   const t = useMessages();
   // Ambient presence: other users viewing each row's record, looked up by row id at render time.
   const viewersById = useViewersById();
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !toolbarOptions?.filterSidebar) return;
+    const measure = () => setWorkspaceWidth(root.getBoundingClientRect().width);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [toolbarOptions?.filterSidebar]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const gen = useRef(0); // bumped on each query so a stale window fetch is ignored
   const windowRequest = useRef<number | null>(null);
@@ -1445,7 +1511,7 @@ export function EntityListWidget({
     if (list.custom?.defaultView) return "custom";
     return list.map?.defaultView ? "map" : "table";
   });
-  const mapMode = !!list.map && view === "map";
+
   // The custom body renderer, resolved live from the widget registry: a plugin registering after
   // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
   // list degrades to the default grid rather than failing (no toggle, no blank body).
@@ -1459,7 +1525,12 @@ export function EntityListWidget({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [customType, registryVersion, renderer]
   );
-  const customMode = view === "custom" && !!CustomRenderer;
+  const availableViews = (["table", ...(list.map ? ["map"] : []), ...(CustomRenderer ? ["custom"] : [])] as Array<"table" | "map" | "custom">);
+  const configuredViews = toolbarOptions?.views?.filter(value => availableViews.includes(value));
+  const allowedViews = configuredViews?.length ? configuredViews : availableViews;
+  const activeView = allowedViews.includes(view) ? view : allowedViews[0];
+  const mapMode = !!list.map && activeView === "map";
+  const customMode = activeView === "custom" && !!CustomRenderer;
   // Grouped view replaces the flat table (never shown together with the map or a custom body).
   const grouped = !!groupBy && !mapMode && !customMode;
   // Catalog/document rows open their record; register rows (movements/balance) have no detail route,
@@ -1732,6 +1803,17 @@ export function EntityListWidget({
         setPageRows(null);
       }
       const params = buildParams();
+      const bootstrap = bootstrapPage.current;
+      bootstrapPage.current = undefined;
+      const canonical = (value: URLSearchParams) => { value.sort(); return value.toString(); };
+      if (!soft && bootstrap?.feed === feedBase && canonical(new URLSearchParams(bootstrap.query)) === canonical(new URLSearchParams(params))) {
+        setTotal(typeof bootstrap.total === "number" ? bootstrap.total : null);
+        cursorRef.current = bootstrap.nextCursor;
+        setHasMore(bootstrap.hasMore);
+        setPageRows(bootstrap.rows);
+        finishWindow(myGen);
+        return;
+      }
       // A soft reload re-fetches everything already loaded in one window (so a live change
       // doesn't yank the user back to the top); a hard load fetches just the first window.
       const loaded = rowsRef.current?.length ?? 0;
@@ -2586,38 +2668,21 @@ export function EntityListWidget({
       })()
     : null;
 
-  return (
-    // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
-    // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
-    // As its own route surface the island takes the full height from its top to the window bottom
-    // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
-    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
-    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
-    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
-    <div
-      ref={rootRef}
-      className={cn(
-        "pointer-events-auto flex min-h-0 flex-col",
-        surfaceMode && "overflow-hidden",
-        surfaceMode && ownsSurfacePadding && "p-4 sm:p-6"
-      )}
-      style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
-    >
-      {/* Control island — three zones on one line: title/count stay visible on the left, facets get
-          the flexible middle rail (and scroll independently when they do not fit), while search and
-          actions stay visible on the right. The whole toolbar must never become one long scroller:
-          that pushes the primary actions offscreen precisely when space is scarce. */}
-      <div className="mb-3 flex shrink-0 items-center gap-2 overflow-hidden rounded-card border border-border/70 bg-card px-2.5 py-2">
+  const relocateToolbar = toolbarPlacement === "renderer" && customMode && !!CustomRenderer;
+  const dockFilters = !!toolbarOptions?.filterSidebar && relocateToolbar && !touchToolbar && workspaceWidth >= 1100;
+  const listToolbar = (
+      <div data-list-toolbar="" className={relocateToolbar ? "shrink-0 min-w-0 border-b border-border/50 bg-card" : "mb-3 shrink-0 overflow-hidden rounded-card border border-border/70 bg-card"}>
+      <div className="flex min-w-0 items-center gap-2 px-2.5 py-2">
         {/* title + host control + row count. The host-provided control (e.g. the register's
             Balance/Movements toggle) sits between the fixed title and the count, so a changing
             count (or the "…" while it loads) never shifts the control the user is clicking. */}
         <div className="mr-1 flex min-h-8 min-w-0 items-center gap-2">
-          <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>
+          {showControl("title") && toolbarOptions?.title !== false && <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>}
           {headerExtra}
           {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
-          <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+          {showControl("count") && toolbarOptions?.count !== false && <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
-          </span>
+          </span>}
           {selected.size ? (
             <button
               type="button"
@@ -2639,6 +2704,7 @@ export function EntityListWidget({
             left/right fades that signal chips hidden past either edge. */}
         <div className="relative flex min-w-0 flex-1 items-center">
           <div
+            data-filter-rail=""
             ref={railRef}
             onScroll={measureRail}
             className="-mx-1 -my-1 flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -2669,7 +2735,7 @@ export function EntityListWidget({
           {/* group-by (+ granularity for a date column) — a facet chip like the filters beside it.
               Hidden on the map (it fetches its own rows) and on a custom body (grouping renders the
               grouped table, which the custom renderer replaces). */}
-          {!mapMode && !customMode && groupable.length ? (
+          {!mapMode && !customMode && showControl("grouping") && groupable.length ? (
             <GroupByFacet
               groupable={groupable}
               groupBy={groupBy}
@@ -2681,7 +2747,7 @@ export function EntityListWidget({
 
         {/* filter facets */}
         {!mapMode &&
-          filters.map((f) => {
+          filters.filter(f => showControl("filters") && (!toolbarOptions?.filterKeys || toolbarOptions.filterKeys.includes(f.key))).sort((a,b)=>toolbarOptions?.filterKeys ? toolbarOptions.filterKeys.indexOf(a.key)-toolbarOptions.filterKeys.indexOf(b.key) : 0).map((f) => {
             if (f.type === "dateRange") {
               return (
                 <DateRangeFacet
@@ -2699,6 +2765,7 @@ export function EntityListWidget({
               const selected = multi ? st?.in ?? [] : st?.eq ? [st.eq] : [];
               return (
                 <OptionsFacet
+                  inline={mobileControls}
                   key={f.key}
                   label={f.label}
                   options={f.options}
@@ -2723,7 +2790,7 @@ export function EntityListWidget({
             );
           })}
         {!mapMode &&
-          toolbarInputs.map((inp) => (
+          toolbarInputs.filter(() => showControl("inputs")).map((inp) => (
             <label key={inp.key} className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
               <span className="whitespace-nowrap">{inp.label}</span>
               {inp.type === "select" ? (
@@ -2796,17 +2863,17 @@ export function EntityListWidget({
         {/* right cluster — search, view toggle, custom actions, New */}
         <div className="ml-auto flex shrink-0 flex-nowrap items-center gap-2">
           {/* search — a facet-grammar chip that expands inline into the search input (SearchChip) */}
-          {!mapMode && list.searchable ? (
+          {!mobileControls && !mapMode && list.searchable && showControl("search") && toolbarOptions?.search !== false ? (
             <SearchChip label={t("list.searchLabel")} value={query} onCommit={setQuery} openWidth={constrainedActions ? 160 : 208} />
           ) : null}
-          {list.map || (list.custom && CustomRenderer) ? (
+          {showControl("views") && toolbarOptions?.viewSwitcher !== false && allowedViews.length > 1 ? (
             // Table plus whichever alternate bodies the list declares. The custom option only
             // appears once its type is registered — an unknown renderer degrades to the plain grid.
             <Segmented
-              value={customMode ? "custom" : view === "custom" ? "table" : view}
+              value={activeView}
               onChange={setView}
               options={[
-                { value: "table", icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
+                { value: "table" as const, icon: Table2, label: compact ? undefined : t("list.tableView"), ariaLabel: t("list.tableView") },
                 ...(list.map
                   ? [{ value: "map" as const, icon: MapIcon, label: compact ? undefined : t("list.mapView"), ariaLabel: t("list.mapView") }]
                   : []),
@@ -2818,11 +2885,11 @@ export function EntityListWidget({
                       ariaLabel: list.custom.label || t("list.customView"),
                     }]
                   : []),
-              ]}
+              ].filter(option => allowedViews.includes(option.value as "table" | "map" | "custom"))}
             />
           ) : null}
-          <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />
-          {toolbarActions.map((a) => {
+          {showControl("extensions") && <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
+          {toolbarActions.filter(a => showControl("actions") && (!toolbarOptions?.actionKeys || toolbarOptions.actionKeys.includes(a.key))).map((a) => {
             const busy = pending.has(a.key);
             const iconOnly = compact && (!!a.icon || !!a.logo);
             return (
@@ -2849,7 +2916,7 @@ export function EntityListWidget({
               </button>
             );
           })}
-          {list.newUrl ? (
+          {list.newUrl && showControl("create") ? (
             <button
               type="button"
               onClick={() => dispatchAction(list.newUrl!)}
@@ -2866,6 +2933,53 @@ export function EntityListWidget({
           ) : null}
         </div>
       </div>
+      {toolbarContent && <div className="border-t border-border/50 px-2.5 py-2">{toolbarContent}</div>}
+      </div>
+
+  );
+
+  const filterTrigger = <Button variant="subtle" aria-label={t("list.filters")} aria-expanded={filterSheetOpen} onClick={dockFilters || toolbarOptions?.filterSidebar ? () => setFilterSheetOpen(value => !value) : undefined} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0"><ListFilter className="size-4" />{activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}</Button>;
+  const filterContents = <div data-compact-filter-sheet="" className="onno-compact-controls w-full min-w-0">{listToolbar}</div>;
+  const toolbarPresentation = mobileControls ? <div data-compact-list-toolbar="" className="onno-compact-controls min-w-0 w-full">
+    <div className="flex items-center gap-2">
+      {dockFilters && <Button variant="subtle" aria-label={t(sidebarCollapsed ? "list.showSidebar" : "list.hideSidebar")} title={t(sidebarCollapsed ? "list.showSidebar" : "list.hideSidebar")} aria-expanded={!sidebarCollapsed} aria-controls={sidebarId} onClick={() => setSidebarCollapsed(value => !value)} className="relative size-9 shrink-0 rounded-field border-input bg-muted p-0">
+        {sidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+        {sidebarCollapsed && activeFilterCount + (queryParams?.eq?.length ?? 0) > 0 && <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />}
+      </Button>}
+      {list.searchable && showControl("search") && toolbarOptions?.search !== false && <div className="relative min-w-0 flex-1">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input aria-label={t("list.searchLabel")} placeholder={t("list.searchLabel")} value={query} onChange={event=>setQuery(event.target.value)} className="h-9 w-full border border-input bg-muted pl-9 text-base placeholder:text-sm shadow-none" />
+      </div>}
+      {dockFilters ? null : toolbarOptions?.filterSidebar ? <>
+        {filterTrigger}
+        <FacetSheet label={t("list.filters")} open={filterSheetOpen} onClose={() => setFilterSheetOpen(false)} footer={<SheetDoneButton onClick={() => setFilterSheetOpen(false)}>{t("list.done")}</SheetDoneButton>}>
+          <div className="p-4">{filterContents}{toolbarFooter && <div className="mt-4 border-t pt-3">{toolbarFooter}</div>}</div>
+        </FacetSheet>
+      </> : <ResponsiveActionPanel label={t("list.filters")} open={filterSheetOpen} onOpenChange={setFilterSheetOpen} trigger={filterTrigger}>
+        <div className="w-80 max-w-full max-h-[65vh] overflow-y-auto"><div className="px-2.5 pb-2 text-sm font-semibold">{t("list.filters")}</div>{filterContents}{toolbarFooter && <div className="mt-3 border-t pt-2">{toolbarFooter}</div>}</div>
+      </ResponsiveActionPanel>}
+    </div>
+  </div> : listToolbar;
+  const presentedToolbar = <div ref={setToolbarElement} data-toolbar-container="" className="min-w-0 w-full">{toolbarPresentation}</div>;
+
+  return (
+    // DivKit wraps custom blocks in spans with pointer-events:none, which the island inherits —
+    // re-assert pointer-events:auto here so hover, row clicks and the right-click menu all work.
+    // As its own route surface the island takes the full height from its top to the window bottom
+    // (equal padding all round) and scrolls only its list body inside — so the page never scrolls.
+    // Embedded in a page, it flows with the host page (which owns scrolling) and carries no
+    // outer spacing: PageDivBuilder owns the gap between sibling blocks and columns. Keeping that
+    // spacing out of the list lets its toolbar align with adjacent cards in composed layouts.
+    <div
+      ref={rootRef}
+      className={cn(
+        "pointer-events-auto flex min-h-0 flex-col",
+        surfaceMode && "overflow-hidden",
+        surfaceMode && ownsSurfacePadding && "p-4 sm:p-6"
+      )}
+      style={surfaceMode && surfaceH != null ? { height: surfaceH } : undefined}
+    >
+      {!relocateToolbar && presentedToolbar}
 
       {mapMode ? (
         // Only catalog/document lists ever declare a map config, so mapMode is never true for a
@@ -2875,30 +2989,39 @@ export function EntityListWidget({
         </div>
       ) : customMode && CustomRenderer ? (
         // Custom body (ListSpec.custom): the registered renderer draws the rows; the island keeps
-        // the toolbar (search, filters, sort) and keyset feed. No card chrome: the renderer owns
+        // ownership of toolbar state and the keyset feed; placement may be delegated. The renderer owns
         // its own look.
-        <div className={cn("relative flex flex-col", surfaceMode && "min-h-0 flex-1")}>
+        <div className={cn("relative flex min-w-0", surfaceMode && "min-h-0 flex-1")}>
+          {dockFilters && <div id={sidebarId} data-sidebar-collapsed={sidebarCollapsed} className="onno-filter-sidebar-resize" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed}>
+          <nav aria-label={list.title} data-filter-sidebar="" className="flex h-full w-52 shrink-0 flex-col overflow-hidden rounded-panel border border-border/60 bg-card">
+            <div className="flex shrink-0 items-center border-b border-border/50 p-3">
+              <h2 className="text-sm font-semibold">{list.title}</h2>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">{filterContents}</div>
+            {toolbarFooter && <div className="shrink-0 border-t border-border/50 p-2">{toolbarFooter}</div>}
+          </nav></div>}
           <div
             ref={scrollRef}
             onScroll={onScroll}
-            className={cn("overflow-auto", surfaceMode && "min-h-0 flex-1")}
+            className={cn("min-w-0 flex-1 overflow-auto", surfaceMode && "min-h-0")}
             style={surfaceMode ? undefined : { maxHeight: maxBodyH }}
           >
-            {pageRows == null ? (
+            {pageRows == null && !relocateToolbar ? (
               <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
                 {t("loading.generic")}
               </div>
-            ) : loadedRows.length === 0 ? (
+            ) : loadedRows.length === 0 && !relocateToolbar ? (
               <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                 {debounced ? t("empty.noMatches") : t("empty.noRecords")}
               </div>
             ) : (
-              <CustomRenderer rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
+              <CustomRenderer loading={pageRows == null} toolbar={relocateToolbar ? presentedToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
-            {loadingMore ? (
-              <div className={cn("flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground", surfaceMode && "pointer-events-none absolute bottom-0 inset-x-0")}>
+            {/* Renderers registered with { ownsLoadingMore: true } draw this feedback inside their own pane. */}
+            {loadingMore && !(CustomRenderer as ListRendererComponent).ownsLoadingMore ? (
+              <div role="status" className={cn("flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground", surfaceMode && "pointer-events-none absolute bottom-0 inset-x-0")}>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}
               </div>

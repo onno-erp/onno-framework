@@ -4,6 +4,8 @@ import type {
   ChatMessageRenderer,
   ChatMessageRendererProps,
   DashboardWidgetMeta,
+  ListRendererComponent,
+  ListRendererOptions,
   ListRendererProps,
   OnnoEvents,
   OnnoHost,
@@ -14,13 +16,18 @@ import type {
 } from "./types";
 
 export type {
+  ApiPath,
   ChatMessage,
   ChatMessageRenderer,
   ChatMessageRendererProps,
   DashboardWidgetMeta,
+  DialogShellProps,
+  DialogShellSize,
   EntityRecord,
   ListRendererColumn,
+  ListRendererComponent,
   ListRendererDescriptor,
+  ListRendererOptions,
   ListRendererProps,
   OnnoReadApi,
   OnnoEvents,
@@ -110,14 +117,22 @@ export const registerWidget: (
  *   }
  *   registerListRenderer("bookTiles", BookTiles);
  *   // server: list.custom("bookTiles").label("Shelf")
+ *
+ * The host shows its own "Loading more…" indicator under the renderer while a next window loads.
+ * A renderer that draws that feedback inside its own scrolling pane passes
+ * {@code { ownsLoadingMore: true }} to suppress the host indicator.
  */
 export const registerListRenderer = (
   rendererType: string,
-  component: ComponentType<ListRendererProps>
-): void =>
+  component: ComponentType<ListRendererProps>,
+  options?: ListRendererOptions
+): void => {
+  // The host reads the opt-out as a static marker on the component, so it survives the shared registry.
+  if (options?.ownsLoadingMore) (component as ListRendererComponent).ownsLoadingMore = true;
   // The host registry stores both prop shapes; the list island renders this entry with
   // ListRendererProps (dashboards never resolve a type an EntityView declared for its list).
   host.registerWidget(rendererType, component as unknown as ComponentType<{ widget: DashboardWidgetMeta }>);
+};
 
 /** Props for a ListSpec.selectionWidget: current selection and a callback after a successful operation. */
 export type ListSelectionProps = { ids: string[]; complete: () => void };
@@ -273,6 +288,7 @@ export const {
   Segmented,
   DatePicker,
   DateTimePicker,
+  ColorPicker,
   Card,
   CardHeader,
   CardTitle,
@@ -286,6 +302,8 @@ export const {
   Popover,
   PopoverAnchor,
   PopoverTrigger,
+  DialogShell,
+  ResponsiveActionPanel,
   PopoverContent,
   Select,
   SelectContent,
@@ -364,3 +382,20 @@ export function registerExtension(extension: import("./extensions").UiExtension)
   return host.extensions.register(extension);
 }
 export const ExtensionSlot: ComponentType<import("./extensions").ExtensionSlotProps> = host.extensions?.Slot ?? (() => null);
+
+/** Hide mobile bottom navigation while a widget shows a child state with its own Back control.
+ * Automatically releases the request on unmount. Desktop navigation is unaffected. */
+export function useMobileDetail(active: boolean): void {
+  const id = React.useId();
+  const path = React.useRef(window.location.pathname);
+  React.useEffect(() => {
+    window.dispatchEvent(new CustomEvent("onno:mobile-detail", {detail:{id, path:path.current, active}}));
+    return () => {window.dispatchEvent(new CustomEvent("onno:mobile-detail", {detail:{id, active:false}}));};
+  }, [id, active]);
+}
+
+/** Animate navigation between direct children marked data-slide-page; initial load snaps. */
+export const usePageSlide: NonNullable<OnnoUi["usePageSlide"]> = host.ui.usePageSlide ?? (() => {});
+
+export const WorkspaceToolbar = host.ui.WorkspaceToolbar;
+export type { WorkspaceToolbarLayout, WorkspaceToolbarProps } from "./types";

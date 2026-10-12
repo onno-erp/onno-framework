@@ -20,5 +20,5 @@ public class TagsAutoConfiguration {
     }
     @Bean public TagService tagService(Jdbi jdbi, org.springframework.beans.factory.ObjectProvider<TagCatalog> catalogs) { return new TagService(jdbi,catalogs.orderedStream().toList()); }
     @SuppressWarnings("deprecation")
-    @Bean public TagController tagController(TagService tags,UiAccessService access,CatalogQueryService catalogs,DocumentQueryService documents, org.springframework.beans.factory.ObjectProvider<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events) { return new TagController(tags,access,catalogs,documents,policies.orderedStream().toList(),events); }
+    @Bean public TagController tagController(TagService tags,UiAccessService access,CatalogQueryService catalogs,DocumentQueryService documents, org.springframework.beans.factory.ObjectProvider<TagAccessPolicy> policies, org.springframework.context.ApplicationEventPublisher events, org.springframework.beans.factory.ObjectProvider<su.onno.ui.RecordAccess> recordAccess) { return new TagController(tags,access,catalogs,documents,policies.orderedStream().toList(),events,recordAccess.getIfAvailable()); }
 }

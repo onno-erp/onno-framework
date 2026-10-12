@@ -29,13 +29,20 @@ public class TelegramClient {
         this.json = json;
     }
 
-    public record Bot(long id, String username) {}
+    public record Bot(long id, String username, boolean business) {
+        public Bot(long id, String username) { this(id, username, false); }
+    }
     public record Update(long id, long chatId, long senderId, long messageId, long date,
-                         String name, String username, String text, boolean privateChat) {}
+                         String name, String username, String text, boolean privateChat, JsonNode payload) {
+        public Update(long id, long chatId, long senderId, long messageId, long date,
+                      String name, String username, String text, boolean privateChat) {
+            this(id, chatId, senderId, messageId, date, name, username, text, privateChat, null);
+        }
+    }
 
     public Bot bot() {
         JsonNode result = call("getMe", Map.of());
-        return new Bot(result.path("id").asLong(), result.path("username").asText());
+        return new Bot(result.path("id").asLong(), result.path("username").asText(), result.path("can_connect_to_business").asBoolean());
     }
 
     public boolean hasWebhook() {
@@ -44,7 +51,7 @@ public class TelegramClient {
 
     public List<Update> updates(long offset) {
         JsonNode result = call("getUpdates", Map.of("offset", offset, "timeout", 10,
-                "limit", 50, "allowed_updates", List.of("message")));
+                "limit", 50, "allowed_updates", List.of("message", "business_connection", "business_message", "edited_business_message", "deleted_business_messages")));
         List<Update> updates = new ArrayList<>();
         for (JsonNode update : result) {
             JsonNode message = update.path("message");
@@ -52,17 +59,26 @@ public class TelegramClient {
             String name = (from.path("first_name").asText() + " " + from.path("last_name").asText()).trim();
             String text = message.hasNonNull("text") ? message.path("text").asText()
                     : message.hasNonNull("caption") ? "[Attachment] " + message.path("caption").asText()
-                    : message.has("message_id") ? "[Non-text message — attachments are not supported yet]" : null;
+                    : message.has("message_id") ? "[Attachment]" : null;
             updates.add(new Update(update.path("update_id").asLong(), message.path("chat").path("id").asLong(),
                     from.path("id").asLong(), message.path("message_id").asLong(), message.path("date").asLong(),
                     name, from.path("username").asText(), text,
-                    "private".equals(message.path("chat").path("type").asText()) && !from.path("is_bot").asBoolean()));
+                    "private".equals(message.path("chat").path("type").asText()) && !from.path("is_bot").asBoolean(), update));
         }
         return updates;
     }
 
-    public long send(long chatId, String text) {
-        return call("sendMessage", Map.of("chat_id", chatId, "text", text)).path("message_id").asLong();
+    public JsonNode businessConnection(String id) {
+        return call("getBusinessConnection", Map.of("business_connection_id", id));
+    }
+
+    public long send(long chatId, String text) { return send(chatId, text, null); }
+
+    public long send(long chatId, String text, String businessConnection) {
+        var body = new java.util.LinkedHashMap<String, Object>();
+        body.put("chat_id", chatId); body.put("text", text);
+        if (businessConnection != null) body.put("business_connection_id", businessConnection);
+        return call("sendMessage", body).path("message_id").asLong();
     }
 
     /** Telegram truncates beyond this, so a longer note is sent as its own message before the file. */
@@ -77,6 +93,10 @@ public class TelegramClient {
      * would otherwise reject it outright.
      */
     public long sendFile(long chatId, String filename, String contentType, byte[] content, String caption) {
+        return sendFile(chatId, filename, contentType, content, caption, null);
+    }
+
+    public long sendFile(long chatId, String filename, String contentType, byte[] content, String caption, String businessConnection) {
         if (content == null || content.length == 0) throw new ApiFailure(0, 0);
         if (content.length > UPLOAD_LIMIT) throw new IllegalArgumentException("File is larger than Telegram accepts (50 MB)");
         boolean photo = contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).startsWith("image/")
@@ -84,6 +104,7 @@ public class TelegramClient {
                 && content.length <= PHOTO_LIMIT;
         var fields = new java.util.LinkedHashMap<String, String>();
         fields.put("chat_id", Long.toString(chatId));
+        if (businessConnection != null) fields.put("business_connection_id", businessConnection);
         if (caption != null && !caption.isBlank()) fields.put("caption", caption);
         return multipart(photo ? "sendPhoto" : "sendDocument", fields, photo ? "photo" : "document",
                 filename == null || filename.isBlank() ? "attachment" : filename,
@@ -131,6 +152,24 @@ public class TelegramClient {
             // As in call(): JDK HTTP messages can carry the URL, and the URL carries the bot token.
             throw new ApiFailure(0, 0);
         }
+    }
+
+    /** Download only Telegram's validated file path, bounded to the Bot API download limit. */
+    public byte[] download(String fileId) {
+        JsonNode file=call("getFile",Map.of("file_id",fileId));
+        if(file.path("file_size").asLong()>20L*1024*1024)throw new IllegalArgumentException("Telegram file exceeds 20 MB");
+        String path=file.path("file_path").asText();
+        if(!path.matches("[a-zA-Z0-9_./-]+") || path.contains("..") || path.startsWith("/"))throw new ApiFailure(0,0);
+        try {
+            var response=http.send(HttpRequest.newBuilder(URI.create(fileEndpoint+path)).timeout(Duration.ofSeconds(30)).GET().build(),HttpResponse.BodyHandlers.ofInputStream());
+            try(var stream=response.body()) {
+                if(response.statusCode()!=200)throw new ApiFailure(response.statusCode(),0);
+                byte[] bytes=stream.readNBytes(20*1024*1024+1);
+                if(bytes.length==0 || bytes.length>20*1024*1024)throw new ApiFailure(0,0);
+                return bytes;
+            }
+        }catch(InterruptedException error){Thread.currentThread().interrupt();throw new ApiFailure(0,0);}
+        catch(java.io.IOException error){throw new ApiFailure(0,0);}
     }
 
     /** Smallest available profile image, bounded to 1 MiB, or null when none is available. */

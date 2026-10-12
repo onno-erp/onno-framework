@@ -24,6 +24,7 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
 - `actions(ActionSpec)` for toolbar, row, and detail buttons.
 - `inputs(InputSpec)` for toolbar inputs when the surface needs them.
 - `comments()` to opt the entity into comments when the global feature is enabled.
+- `opensInMain()` to open records in the focused pane instead of a detail island beside the list (desktop islands layout). Applies to every readable opted-in entity, including ones not placed in the nav (the shell's `mainRecordRoutes`).
 
 Use `EntityView<E>` and getter references. Prefer `field/refField/rowField/rowRefField` typed
 overloads; raw types and string Java-field names are only dynamic escape hatches. Expression text

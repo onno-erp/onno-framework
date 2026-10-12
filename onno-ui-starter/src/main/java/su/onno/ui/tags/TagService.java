@@ -18,6 +18,8 @@ public class TagService {
             h.execute("CREATE TABLE IF NOT EXISTS onno_tag_imports (scope VARCHAR(200) NOT NULL, record_id UUID NOT NULL, PRIMARY KEY(scope,record_id))");
         });
     }
+    /** The application catalog that owns this scope's definitions, if one is bound. */
+    public Optional<TagCatalog> catalogFor(String scope) { return catalog(scope); }
     private Optional<TagCatalog> catalog(String scope) { return catalogs.stream().filter(c -> c.scope().equals(scope)).findFirst(); }
     private List<Tag> catalogLibrary(TagCatalog catalog) {
         // Preserve legacy IDs. Imports are idempotent and never overwrite catalog edits/deletions.
@@ -50,7 +52,7 @@ public class TagService {
         var bound=catalog(scope);
         if(bound.isPresent()) {
             var existing=library(scope).stream().filter(t -> t.name().equalsIgnoreCase(label)).findFirst();
-            return existing.orElseGet(() -> bound.get().importTag(tag.id(),label,tint));
+            return existing.orElseGet(() -> bound.get().create(label,tint));
         }
         try {
             jdbi.useHandle(h -> h.createUpdate("INSERT INTO onno_tags(id,scope,name,normalized,color) VALUES (:id,:s,:n,:key,:c)")

@@ -951,11 +951,13 @@ The compiler checks the field references, the IDE refactors through them, and th
 
 ### UI Authoring (Layout / Page / EntityView)
 
+Home navigation is automatic for an authored `/` Page or active dashboard widgets. Never add a second root link using `section(...).page("/", ...)` or `spec.link("/", ...)`. Label home through the root Page title. Non-root pages use `spec.link(...)` for direct rail navigation or `.page(...)` within a section. Verify one root destination in the resolved desktop and mobile shell; see [layout/page guidance](onno-plugin/skills/onno-ui-layout-pages/SKILL.md).
+
 UI is authored as Java classes registered as Spring beans — never as annotations on domain classes. Three kinds:
 
 - **`Layout`** — navigation structure + shell (nav presentation) + persona. The default layout (`profile() == null`) is the back-office shell and is the only place to configure application-wide shell, branding, or `identity(...)`; startup rejects those settings on named profiles. One layout per persona declares its roles and curated sections. `configure(LayoutSpec)`: `spec.shell().nav(NavStyle.SIDEBAR)`, `spec.section("Sales").icon("euro").catalog(Customer.class).document(Invoice.class)`. **Nav is curated:** a catalog/document/register shows in the sidebar only if a section lists it. An entity with an `EntityView` but no section is reachable by its direct route (`/catalogs/{name}`) yet absent from the nav. A section can also link an authored page at a custom route with `.page(route, label, icon)` (e.g. `spec.section("Reports").page("/ops", "Sales Ops", "activity")`). (Earlier versions auto-listed unclaimed catalogs under default groups; that was removed — cf. #69.)
 - **`Page`** — a route whose content you compose: `compose(PageBuilder)` with `b.title(...)`, `b.widget(...)`, `b.text(...)`, `b.list(entity)` (the full interactive list, embedded), `b.actions(...)`, `b.custom(...)`, `b.bare()`/`b.header(false)` to drop the header row, `b.row(r -> r.col(width, c -> …)…)` for arbitrary column layout (nestable; widths are fractions / `"<n>px"` / null=equal; columns stack on mobile), and `b.aside(a -> …)` as the right-rail shortcut — any widget works on any page, in any region. **Everything is a page:** the home dashboard (`/`), settings (`/settings`), a default surface route (`/catalogs/{name}` / `/documents/{name}` / `/registers/{name}` — an authored page there *overrides* the default list/report surface), and arbitrary custom routes (`/ops`, `/reports`) are all just pages. The framework serves a good default; a registered `Page` bean at a route replaces it. `profile()`/`viewport()` scope a page to a persona/device (most-specific match wins, like `EntityView`). A widget's `.type("…")` may name a **custom widget** the framework has no built-in for: author a React component in `src/main/widgets/*.tsx` (using `@onno/widget-sdk`), apply the `su.onno.widgets` Gradle plugin, and it compiles + serves + auto-loads with no frontend project. See `onno-ui-starter/README.md` → "Pages — everything is a page" and "Authoring a custom widget".
-- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
+- **`EntityView`** — per-entity list columns (`list(ListSpec)`) and field hints (`fields(EntityConfigBuilder)`). A view with `profile()` set replaces the default view for that profile on both the list and the record surface (fields, `detail(...)` widgets, action placement, validations). An `EntityView` is what makes a surface *served* — no view → `404` (the view layer is the allowlist). It is **necessary but not sufficient for nav presence**: the entity is reachable by direct route but stays out of the sidebar until a `Layout` section also lists it (see Layout above). Override `comments()` to return `true` to opt that catalog/document into the per-entity discussion thread (`/api/comments`); it is off by default and gated by the global `onno.comments.enabled` switch. Override `opensInMain()` to return `true` when the entity's records are full working surfaces: on the desktop islands layout, opening one (list row, ref link, `onno://{kind}/{name}/{id}` from a widget) replaces the focused pane instead of opening a detail island beside the list; the shell advertises those list routes as `mainRecordRoutes` for every readable opted-in entity, whether or not a `Layout` places it in the nav. `list.rowStyle(row -> …)` adds **conditional row formatting**: the function runs server-side per row (same `ActionRow` as state-aware actions) and returns a semantic `ListSpec.RowStyle` tone (`DANGER`/`WARNING`/`SUCCESS`/`ACCENT`/`MUTED`) or `null` — e.g. urgent rows tinted red, cancelled ones faded; the grid renders it as a theme-aware translucent wash.
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default.
 
@@ -1159,7 +1161,7 @@ customer-stage model, EAV custom fields, business merge editor or navigation is 
 and CRUD remain ordinary host catalogs and EntityViews. Provider imports call an explicit host
 inbound-contact policy. Customer UUIDs in CRM are scoped to the persisted binding identity; do not
 rebind a database to another catalog without migrating links. Workspace roles and host customer
-permissions both apply. Personal chat groups require `CrmFeatures(true)`; conversation statuses
+permissions both apply. Personal chat groups require `CrmFeatures(true)`, and personal provider accounts require `CrmFeatures.defaults().withPersonalAccounts(true)` (which also closes generic CRM catalogs to ADMIN); conversation statuses
 require optional `CrmStateConfiguration`. Sales is an opt-in example source set (`-PsalesExample`).
 
 The host owns consolidation, audit and any reversal. Its transaction may call
@@ -1228,3 +1230,28 @@ with `{inputs:{...}}`). It checks workspace write access, application read-only 
 and record visibility/enabled rules. CRM adds no business-field mutations or automatic history
 messages for these actions. Hosts own the handler and any desired history records. Connector code
 can still use the low-level identity-link service for provider routing.
+
+### Personal CRM connection privacy
+
+The configurable `crmConnections` widget (alias `crmSettings`; typed as `CrmConnectionsView`) uses `CrmAccountProvider` descriptors and durable
+`CrmConnectionAccounts` ownership. Gmail supports multiple shared/personal accounts; other bundled
+adapters remain shared-only. Personal ownership restricts scoped APIs even for other administrators.
+Generic CRM catalogs/exports/events are denied once personal accounts exist. The deny-only
+`UiEntityAccessPolicy.includesAdministrators()` opt-in preserves default ADMIN behavior for existing
+policies while allowing these privacy boundaries. Keep docs, permission tests and OAuth isolation
+tests aligned when extending providers.
+
+Reusable page content uses `PageView` and `PageBuilder.view(view)`. `ListView<E>` wraps existing
+list defaults; CRM `CrmInboxView` (a `@Bean`, frozen on first placement, workspace key validated
+at startup) and `CrmConnectionsView` author typed presentation;
+`CrmRendererContractTest` keeps their keys aligned with the TS renderers. Keep EntityView metadata and workspace
+authorization separate; these view classes neither register routes nor grant access.
+
+Telegram business accounts use the `telegram-business` managed provider and personal/shared account
+ownership. Never infer CRM ownership from a Telegram connection event: require the expiring /start
+proof from the matching Telegram user. Keep business_connection_id on every outbound text/upload,
+recheck rights, and never fall back to sending as the ordinary bot.
+
+CRM file-only messages rely on conditional text-or-attachments validation: keep the Body attribute
+optional. Gmail/Telegram ingest provider file bytes through CrmAttachments; never persist token-bearing
+provider download URLs. Filesystem media metadata lives under an unservable .metadata directory.

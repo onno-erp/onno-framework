@@ -1,4 +1,6 @@
-import { conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
+import { VoicePlayer } from "./VoicePlayer";
+import { InboxChannelNavigation } from "./InboxChannelNavigation";
+import { InboxSkeleton, ConversationListSkeleton, ConversationRowContent, conversationRowOptions, type ConversationRowOptions, conversationCount, ConversationList, type ConversationPagination } from "./ConversationList";
 import { CallActivityCard, callActivity } from "./CallActivityCard";
 import { ContactAvatarImage } from "./ContactAvatarImage";
 import { ScheduleCall } from "./ScheduleCall";
@@ -14,7 +16,7 @@ import { contactChats, replySelection, type ReplySelection } from "./contactChat
 import { ContactRowMenu } from "./ContactRowMenu";
 import { useInboxEscape } from "./useInboxEscape";
 import { useConversationRead } from "./useConversationRead";
-import { ChatMessageBody, text as hostText, useTranslate } from "@onno/widget-sdk";
+import { ChatMessageBody, text as hostText, useTranslate, useMobileDetail, usePageSlide, WorkspaceToolbar, type WorkspaceToolbarLayout } from "@onno/widget-sdk";
 
 /**
  * Every label in this widget resolves through the app's chrome strings, so the inbox reads in the
@@ -23,10 +25,12 @@ import { ChatMessageBody, text as hostText, useTranslate } from "@onno/widget-sd
  * tree re-renders when the server's `onno.ui.messages` overlay arrives.
  */
 const t = hostText;
-import { useId } from "react";
+import { useId, type DragEvent } from "react";
 import { ChannelLogo } from "./ChannelLogo";
+import { LinkedText } from "./LinkedText";
 import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
 import {
+  ResponsiveActionPanel,
   Badge,
   Input,
   EntityListWidget,
@@ -53,13 +57,15 @@ import {
   type EntityRecord,
   type ListRendererProps,
 } from "@onno/widget-sdk";
-import { Activity, Folder, ChevronRight, ArrowLeft, PanelRight, X, Paperclip } from "lucide-react";
+import { Settings2, ContactRound, Plus, Activity, Folder, ChevronRight, ArrowLeft, X, Paperclip, MoreHorizontal, Send, RefreshCw } from "lucide-react";
 
 type Message = {
   id: string;
   conversationId?: string;
   accountLabel?: string;
-  subject?: string;
+  subject?: string | null;
+  /** Address an outbound email was queued to; shown so history reflects a changed recipient. */
+  recipient?: string | null;
   kind: "CUSTOMER_MESSAGE" | "AGENT_REPLY" | "SYSTEM_EVENT";
   direction: "INBOUND" | "OUTBOUND" | "INTERNAL";
   channel: string;
@@ -74,7 +80,7 @@ type Message = {
 /** A file on a message. The url is a reference issued by `/api/media`, never the bytes themselves. */
 type Attachment = { url: string; filename: string; contentType: string; size: number; image: boolean };
 
-type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string; maxAttachments?: number; attachmentReason?: string };
+type DeliveryConnection = { connected: boolean; label: string; maxTextLength: number; replyCapability: "AVAILABLE" | "READ_ONLY" | "WINDOW_CLOSED"; replyReason: string; maxAttachments?: number; attachmentReason?: string; recipient?: string; recipients?: string[] };
 
 type Comment = {
   id: string;
@@ -88,7 +94,7 @@ type Comment = {
 type ComposerMode = "reply" | "note";
 
 // One surface treatment for the header, composer, and contact-details island.
-const islandSurface = "rounded-panel bg-card dark:bg-muted/40 backdrop-blur-md shadow-md shadow-black/10 ring-1 ring-border/60";
+const islandSurface = "rounded-panel bg-card border border-border/60";
 
 function string(row: EntityRecord | null, key: string, fallback = ""): string {
   const value = row?.[key];
@@ -214,8 +220,9 @@ function ConversationRow({
   selected,
   onSelect,
   config,
-  groups, groupKey, onGroupChange, workspaceKey,
+  groups, groupKey, onGroupChange, workspaceKey, appearance = {},
 }: {
+  appearance?: ConversationRowOptions;
   workspaceKey?: string;
   groups?: ChatGroup[]; groupKey?: string; onGroupChange?: (change: GroupChange) => Promise<void>;
   config?: Config;
@@ -226,40 +233,37 @@ function ConversationRow({
   const customer = string(row, "customerDisplay", string(row, "description", t("crm.chat.unknownCustomer")));
   const unread = Number(row.unreadCount ?? 0);
   const channel = conversationChannel(row);
+  const badges = (appearance.badges ?? []).filter(badge => rowValue(row, badge.field) === badge.equals);
+  // Host facets that opt into showOnRows (for example contact tags) arrive resolved with their colours.
+  const facetBadges = Array.isArray(row.rowBadges) ? (row.rowBadges as {label?: unknown; color?: unknown}[])
+    .filter(b => typeof b?.label === "string").map(b => ({label: String(b.label), color: typeof b.color === "string" && /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : ""})) : [];
+  const chipCount = badges.length + facetBadges.length;
   return (
     <ContactRowMenu record={row} workspaceKey={workspaceKey} groups={groups} groupKey={groupKey} conversationId={String(row.id)} onGroupChange={onGroupChange} id={String(row.customer ?? "")} canEdit={!!action(config, "edit")} onOpen={onSelect}>
     <Button variant="ghost"
       type="button"
       onClick={onSelect}
       aria-current={selected ? "true" : undefined}
-      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
+      className={`h-auto whitespace-normal font-normal relative block min-w-0 w-full max-w-full rounded-field px-2 ${chipCount ? "py-2" : "py-3"} text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected
         ? "bg-primary/20"
-        : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-16 after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
+        : "bg-transparent hover:bg-muted/50 after:absolute after:bottom-0 after:left-[68px] after:right-3 after:h-px after:bg-border/40 last:after:hidden"}`}
     >
-      <div className="flex items-start gap-2.5">
-        {config?.showAvatar !== false && <Avatar name={customer} url={string(row, "customerAvatar")} channel={channel} className="size-10" />}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-[13px] font-semibold text-foreground">{config ? rowValue(row, config.listTitle) : customer}</span>
-            <time className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
-              {config?.showTimestamps !== false ? compactTime(row.lastMessageAt) : ""}
-            </time>
-          </div>
-          <div className="mt-0.5 truncate text-[11px] font-medium text-foreground/80">
-            {string(row, "inboxDisplay", channel)}
-          </div>
-          <div className="mt-1 flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-              {config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
-            </span>
-            {unread > 0 ? (
-              <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                {unread > 9 ? "9+" : unread}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <ConversationRowContent
+        avatar={config?.showAvatar !== false && <Avatar name={customer} url={string(row, "customerAvatar")} channel={appearance.showChannelBadge !== false ? channel : undefined} className="size-12" />}
+        title={config ? rowValue(row, config.listTitle) : customer}
+        timestamp={config?.showTimestamps !== false && <time>{compactTime(row.lastMessageAt)}</time>}
+        metadata={appearance.showAccount && string(row, "inboxDisplay", channel)}
+        preview={config ? rowValue(row, config.listPreview) : string(row, "lastMessagePreview", t("crm.chat.noMessages"))}
+        badges={chipCount > 0 ? <>
+          {/* Like Telegram folder labels: a tinted chip normally, inverted to a solid light chip on the highlighted row. */}
+          {facetBadges.map((badge,index)=><span key={`facet-${badge.label}-${index}`}
+            className={`max-w-full min-w-0 shrink-0 truncate rounded px-1 text-[9px] leading-4 font-semibold uppercase tracking-wide ${selected ? "bg-white shadow-sm" : "bg-primary/15"} text-primary`}
+            style={badge.color ? (selected ? {color:badge.color} : {backgroundColor:`${badge.color}26`, color:badge.color}) : undefined}>{badge.label}</span>)}
+          {badges.map((badge,index)=><span key={`${badge.label}-${index}`} className={`max-w-full min-w-0 truncate rounded px-1 text-[9px] leading-4 font-medium uppercase text-primary ${selected ? "bg-white shadow-sm" : "bg-primary/15"}`}>{badge.label}</span>)}
+        </> : null}
+        previewLines={appearance.previewLines}
+        trailing={unread > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-xs font-medium text-primary-foreground">{unread > 99 ? "99+" : unread}</span>}
+      />
     </Button>
     </ContactRowMenu>
   );
@@ -276,8 +280,7 @@ function fileSize(bytes: number): string {
 }
 
 /**
- * The files on a message. An image shows itself, because that is what was sent; anything else is a
- * named link, since a spreadsheet has no useful preview and a filename is what people look for.
+ * Message media previews, with a download link for audio and other files.
  */
 function Attachments({ files, outbound }: { files: Attachment[]; outbound: boolean }) {
   if (!files.length) return null;
@@ -288,6 +291,8 @@ function Attachments({ files, outbound }: { files: Attachment[]; outbound: boole
           <img src={file.url} alt={file.filename} loading="lazy"
             className="max-h-64 w-auto max-w-full rounded-field object-cover" />
         </a>
+      ) : /^audio\//i.test(file.contentType.trim()) ? (
+        <VoicePlayer key={file.url} src={file.url} label={file.filename} download={file.filename} outbound={outbound} />
       ) : (
         <a key={file.url} href={file.url} target="_blank" rel="noreferrer" download={file.filename}
           className={outbound
@@ -308,8 +313,8 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
     <div className={outbound ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={message.authorName} url={avatarUrl} channel={channel || message.channel} />}
       <div className={outbound
-        ? "max-w-[72%] rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
-        : "max-w-[72%] rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground"}
+        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
+        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground"}
       >
         <div className="flex items-center gap-1.5">
           <span className={outbound
@@ -319,8 +324,11 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
             {message.authorName}
           </span>
         </div>
+        {outbound && (message.subject || message.recipient) ? <p className="mt-0.5 truncate text-[11px] text-primary-foreground/75">
+          {[message.recipient && `→ ${message.recipient}`, message.subject].filter(Boolean).join(" · ")}
+        </p> : null}
         <ChatMessageBody message={message} fallback={message.body?.trim()
-          ? <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5">{message.body}</p> : null} />
+          ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><LinkedText text={message.body} /></p> : null} />
         <Attachments files={message.attachments ?? []} outbound={outbound} />
         <div className={outbound
           ? "mt-1 flex justify-end gap-1.5 text-[10px] text-primary-foreground/70"
@@ -360,15 +368,15 @@ function TimelineComment({ comment, config }: { comment: Comment; config?: Confi
     <div className={comment.mine ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={author} url={comment.authorAvatarUrl} />}
       <div className={comment.mine
-        ? "max-w-[72%] rounded-panel rounded-br-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"
-        : "max-w-[72%] rounded-panel rounded-bl-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"}
+        ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"
+        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-amber-400/45 bg-amber-400/10 px-3.5 py-2.5 text-foreground"}
       >
         <div className="flex items-center gap-1.5">
           <ChannelIcon channel="" comment />
           <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">{author}</span>
           <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">{t("crm.chat.internal")}</span>
         </div>
-        <p className="mt-1 whitespace-pre-wrap text-[13px] leading-5"><CommentBody body={comment.body} /></p>
+        <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><CommentBody body={comment.body} /></p>
         <time className="mt-1 block text-right text-[10px] text-muted-foreground">
           {config?.showTimestamps !== false && comment.createdAt ? fullTime(comment.createdAt) : ""}
         </time>
@@ -405,11 +413,23 @@ function matchesFolder(row: EntityRecord, folder: ConversationFolder): boolean {
     && (!folder.unreadOnly || Number(row.unreadCount ?? 0) > 0);
 }
 
-function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean }) {
+type InboxChrome = { conversationRow?: ConversationRowOptions; list?: WorkspaceToolbarLayout; mobileList?: WorkspaceToolbarLayout; chat?: WorkspaceToolbarLayout; narrowChat?: WorkspaceToolbarLayout; mobileChat?: WorkspaceToolbarLayout; composer?: WorkspaceToolbarLayout; mobileComposer?: WorkspaceToolbarLayout };
+function toolbarLayout(value?: string): WorkspaceToolbarLayout | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    return Object.fromEntries(["start", "center", "end", "secondary", "overflow", "hidden"].filter(key => Array.isArray(parsed[key])).map(key => [key, parsed[key].filter((id:unknown) => typeof id === "string")]));
+  } catch { return undefined; }
+}
+function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, scopedConfig, workspaceKey, initialFolder, flat, ...pagination }: Pick<ListRendererProps, "rows" | "total" | "open"> & ConversationPagination & { scopedConfig?: Config; workspaceKey?: string; initialFolder?: string; flat?: boolean; toolbar?: React.ReactNode; loading?: boolean; chrome?: InboxChrome }) {
   // Subscribe once at the root: `t` reads the store without subscribing, so this is what makes the
   // whole widget re-render into the server's language when /api/config lands after first paint.
   useTranslate();
-  const rows = useMemo(() => contactChats(channelRows), [channelRows]);
+  // Apply confirmed reads immediately; a new server row always supersedes this local snapshot.
+  const [readRows, setReadRows] = useState<Map<string, EntityRecord>>(() => new Map());
+  const rows = useMemo(() => contactChats(channelRows.map(row => readRows.get(String(row.id)) === row
+    ? {...row, unreadCount: 0} : row)), [channelRows, readRows]);
   const { workspace, error: configError } = useWorkspace();
   const config = scopedConfig ?? workspace?.config;
   const command = <T,>(path: string, body: unknown = {}) => crmCommand<T>(workspaceKey && path.startsWith("/api/crm/conversations/") ? `${path}?workspace=${encodeURIComponent(workspaceKey)}` : path, body);
@@ -455,6 +475,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const { statuses: conversationStatuses } = useConversationStatuses();
   const [selectedId, setSelectedId] = useState<string | null>(rows.length ? String(rows[0].id) : null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadedActivityId, setLoadedActivityId] = useState<string | null>(null);
+  const loadSequence = useRef(0);
   const [loadedConversationId, setLoadedConversationId] = useState<string | null>(null);
   const [deliveryFailed, setDeliveryFailed] = useState(false);
   const [delivery, setDelivery] = useState<DeliveryConnection | null>(null);
@@ -467,34 +489,52 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
 
   const [mode, setMode] = useState<ComposerMode>("reply");
   const [draft, setDraft] = useState("");
+  const [recipientDraft, setRecipientDraft] = useState<string | null>(null);
+  const [subjectDraft, setSubjectDraft] = useState<string | null>(null);
+  const subjectId = useId();
+  useEffect(() => { setSubjectDraft(null); setRecipientDraft(null); }, [selectedId]);
   const [noteDraft, setNoteDraft] = useState("");
   const [noteBody, setNoteBody] = useState("");
   // Files already uploaded and waiting to go with the next reply, and the ones still uploading.
   const [pending, setPending] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const fileDragDepth = useRef(0);
+  useEffect(() => { fileDragDepth.current = 0; setFileDragActive(false); }, [selectedId, mode]);
   const [busy, setBusy] = useState(false);
   const [historyPages, setHistoryPages] = useState(1);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const folderSlideRef = useRef<HTMLDivElement | null>(null);
+  const [detailOverlay, setDetailOverlay] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(() => new URLSearchParams(window.location.search).has("conversation"));
+  const actionsId = useId();
   const contactPanelToggleRef = useRef<HTMLButtonElement | null>(null);
-  const closeContactPanel = () => { setContactPanelOpen(false); contactPanelToggleRef.current?.focus(); };
+  const closeContactPanel = () => { setContactPanelOpen(false); requestAnimationFrame(() => contactPanelToggleRef.current?.focus({ preventScroll: true })); };
+  const contactPanelCloseRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => { if (contactPanelOpen && detailOverlay) contactPanelCloseRef.current?.focus({ preventScroll: true }); }, [contactPanelOpen, detailOverlay]);
   const contactPanelId = useId();
   const replySelectionRef = useRef<ReplySelection | null>(null);
-  const draftRef = useRef(draft); draftRef.current = draft || noteDraft;
+  const draftRef = useRef(draft); draftRef.current = draft || noteDraft || (subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient) ? "email draft" : "");
   const [error, setError] = useState<string | null>(null);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
-  const composerRef = useRef<HTMLDivElement | null>(null);
-  const [composerHeight, setComposerHeight] = useState(220);
+  // Respond to the allocated pane, including a narrow split pane on a wide screen.
   useEffect(() => {
-    const composer = composerRef.current;
-    if (!composer) return;
-    const measure = () => setComposerHeight(composer.getBoundingClientRect().height);
+    const root = inboxRootRef.current;
+    if (!root) return;
+    const measure = () => {
+      const nextCompact = root.clientWidth < 720;
+      setCompact(nextCompact);
+      setDetailOverlay(root.clientWidth < 1100);
+    };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(composer);
+    observer.observe(root);
     return () => observer.disconnect();
-  }, [selectedId]);
+  }, [!!config, rows.length > 0]);
 
   const selected = useMemo(
     () => channelRows.find((row) => String(row.id) === selectedId) ?? null,
@@ -502,15 +542,26 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   );
 
   const dismissChat = useCallback(() => {
+    if (compact) {
+      setMobileChatOpen(false);
+      setContactPanelOpen(false);
+      inboxRootRef.current?.focus({ preventScroll: true });
+      return;
+    }
     selectionDismissedRef.current = true;
     selectionRef.current = null;
     replySelectionRef.current = null;
     setSelectedId(null);
+    setMobileChatOpen(false);
     setContactPanelOpen(false);
     inboxRootRef.current?.focus({ preventScroll: true });
-  }, []);
+  }, [compact]);
   const dismissFolder = useCallback(() => setFolderKey(null), []);
   useInboxEscape(inboxRootRef, selected ? dismissChat : null, activeFolder ? dismissFolder : null);
+
+  useMobileDetail(compact && mobileChatOpen && !!selected);
+  usePageSlide(inboxRootRef, contactPanelOpen ? "contact" : mobileChatOpen ? "chat" : "list", compact);
+  usePageSlide(folderSlideRef, activeFolder ? "folder" : "root");
 
   const customerAvatarUrl = string(customer, "avatarUrl", string(selected, "customerAvatar"));
 
@@ -531,8 +582,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   useEffect(() => { setDraft(""); setNoteDraft(""); setNoteBody(""); setHistoryPages(1); }, [selected?.customer]);
 
   useEffect(() => {
-    timelineEndRef.current?.scrollIntoView({ block: "end" });
-  }, [selectedId, timeline.length, composerHeight]);
+    const history = timelineEndRef.current?.parentElement;
+    if (history) history.scrollTop = history.scrollHeight;
+  }, [selectedId, timeline.length, mobileChatOpen]);
 
   useEffect(() => {
     if (selectionDismissedRef.current && selectedId === null) return;
@@ -545,19 +597,23 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   }, []);
 
   const loadSelected = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     if (!selected) {
       setMessages([]);
       setComments([]);
       setCustomer(null);
+      setLoadedActivityId(null);
       return;
     }
     const id = String(selected.id);
     const customerId = String(selected.customer ?? "");
+    const current = () => selectionRef.current === id && loadSequence.current === sequence;
     setDeliveryFailed(false);
-    try {
-      const [activity, nextCustomer, nextDelivery] = await Promise.all([
-        (async () => {
-          // This feed, not /messages, is what the chat pane renders — so it has to carry the files.
+    setError(null);
+    // History/read acknowledgement must not wait for contact decoration or transport availability.
+    await Promise.all([
+      (async () => {
+        try {
           type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[]};
           const entries:ActivityEntry[]=[];let hasMore=false;
           for(let page=0;page<historyPages;page++) {
@@ -565,33 +621,43 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             if(!response.ok)throw new Error(t("crm.error.history"));
             const result=await response.json() as {entries:ActivityEntry[];hasMore:boolean};entries.push(...result.entries);hasMore=result.hasMore;if(!hasMore)break;
           }
-          return {entries,hasMore};
-        })(),
-        customerId ? request<{fields: EntityRecord}>(`/contacts/${customerId}`).then(c=>c.fields) : Promise.resolve(null),
-        fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" }).then(async (response) => {
+          if (!current()) return;
+          setHasMoreHistory(hasMore);
+          const chronological = [...entries].reverse();
+          setMessages(chronological.filter(entry => entry.kind !== "NOTE").map(entry => ({ ...entry, id: entry.id.replace(/^message:/, ""), sentAt: entry.at })) as Message[]);
+          setComments(chronological.filter(entry => entry.kind === "NOTE").map(entry => ({id:entry.id, authorName:entry.authorName, authorAvatarUrl:entry.authorAvatarUrl, body:entry.body, createdAt:entry.at, mine:entry.mine})));
+          setLoadedActivityId(id);
+          const nextReply = replySelection(customerId, entries, replySelectionRef.current, !!draftRef.current.trim());
+          replySelectionRef.current = nextReply.state;
+          if (nextReply.conversationId && channelRows.some(row => String(row.id) === nextReply.conversationId)) setSelectedId(nextReply.conversationId);
+        } catch (loadError) {
+          if (current()) setError(loadError instanceof Error ? loadError.message : t("crm.error.history"));
+        }
+      })(),
+      (async () => {
+        try {
+          const nextCustomer = customerId ? await request<{fields: EntityRecord}>(`/contacts/${customerId}`) : null;
+          if (current()) setCustomer(nextCustomer?.fields ?? null);
+        } catch (loadError) {
+          if (current()) setError(loadError instanceof Error ? loadError.message : t("crm.error.conversation"));
+        }
+      })(),
+      (async () => {
+        try {
+          const response = await fetch(`/api/crm/conversations/${id}/delivery${workspaceKey ? `?workspace=${encodeURIComponent(workspaceKey)}` : ""}`, { credentials: "same-origin" });
           if (!response.ok) throw new Error(t("crm.error.connection"));
-          return response.json() as Promise<DeliveryConnection>;
-        }),
-      ]);
-      if (selectionRef.current !== id) return;
-      setDelivery(nextDelivery);
-      setHasMoreHistory(activity.hasMore);
-      const entries = [...activity.entries].reverse();
-      setMessages(entries.filter(entry => entry.kind !== "NOTE").map(entry => ({ ...entry, id: entry.id.replace(/^message:/, ""), sentAt: entry.at })) as Message[]);
-      setComments(entries.filter(entry => entry.kind === "NOTE").map(entry => ({id:entry.id, authorName:entry.authorName, authorAvatarUrl:entry.authorAvatarUrl, body:entry.body, createdAt:entry.at, mine:entry.mine})));
-      const nextReply = replySelection(customerId, activity.entries, replySelectionRef.current, !!draftRef.current.trim());
-      replySelectionRef.current = nextReply.state;
-      if (nextReply.conversationId && channelRows.some(row => String(row.id) === nextReply.conversationId)) setSelectedId(nextReply.conversationId);
-      setLoadedConversationId(id);
-
-      setCustomer(nextCustomer);
-      setError(null);
-    } catch (loadError) {
-      if (selectionRef.current !== id) return;
-      setDelivery(null);
-      setDeliveryFailed(true);
-      setError(loadError instanceof Error ? loadError.message : t("crm.error.conversation"));
-    }
+          const nextDelivery = await response.json() as DeliveryConnection;
+          if (!current()) return;
+          setDelivery(nextDelivery);
+          setLoadedConversationId(id);
+        } catch (loadError) {
+          if (!current()) return;
+          setDelivery(null);
+          setDeliveryFailed(true);
+          setError(loadError instanceof Error ? loadError.message : t("crm.error.connection"));
+        }
+      })(),
+    ]);
   }, [selected, workspaceKey, channelRows, historyPages]);
 
   useEffect(() => { void loadSelected(); }, [loadSelected]);
@@ -615,20 +681,67 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   const attachState = (() => {
     if (replyState.disabled) return { disabled: true, reason: replyState.message || "Replies are unavailable" };
     const limit = delivery?.maxAttachments ?? 0;
+    if (uploading > 0) return { disabled: true, reason: t("crm.chat.uploading", { count: uploading }) };
     if (limit <= 0) return { disabled: true, reason: delivery?.attachmentReason || t("crm.chat.attachUnavailable") };
     if (pending.length >= limit) return { disabled: true, reason: t("crm.chat.attachLimit", { count: limit }) };
     return { disabled: false, reason: t("crm.chat.attach") };
   })();
+  useEffect(() => {
+    if (mode === "reply" && (draft.trim() || pending.length || subjectDraft !== null) && delivery?.recipient)
+      setRecipientDraft(current => current ?? delivery.recipient ?? null);
+  }, [mode, draft, pending.length, subjectDraft, delivery?.recipient]);
+  const showAttachments = mode === "reply" && !!action(config, "sendReply");
+  const chooseAttachment = () => {
+    if (attachState.disabled) return;
+    fileInputRef.current?.click();
+  };
   const composerStatusId = useId();
+  const fileDropReason = mode !== "reply" ? t("crm.chat.dropReplyOnly") : attachState.disabled ? attachState.reason : null;
+  const isFileDrag = (event: DragEvent) => Array.from(event.dataTransfer.types).includes("Files");
+  const clearFileDrag = () => { fileDragDepth.current = 0; setFileDragActive(false); };
+  const fileDragEnter = (event: DragEvent) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    fileDragDepth.current += 1;
+    setFileDragActive(true);
+  };
+  const fileDragOver = (event: DragEvent) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = fileDropReason ? "none" : "copy";
+  };
+  const fileDragLeave = (event: DragEvent) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+    if (!fileDragDepth.current) setFileDragActive(false);
+  };
+  const filesDropped = (event: DragEvent) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    clearFileDrag();
+    if (fileDropReason) { setError(fileDropReason); return; }
+    void attach(event.dataTransfer.files);
+  };
 
-  const acknowledgeRead = useCallback(() => Promise.all(channelRows.filter(row => String(row.customer) === String(selected?.customer) && Number(row.unreadCount || 0)>0).map(row => command(`/api/crm/conversations/${row.id}/read`))), [channelRows, selected?.customer, workspaceKey]);
-  const readRevision = selected && loadedConversationId === selectedId
+  const acknowledgeRead = useCallback(() => Promise.all(channelRows.filter(row =>
+    String(row.customer) === String(selected?.customer) && Number(row.unreadCount || 0) > 0 && readRows.get(String(row.id)) !== row
+  ).map(async row => {
+    await command(`/api/crm/conversations/${row.id}/read`);
+    setReadRows(previous => new Map(previous).set(String(row.id), row));
+  })), [channelRows, selected?.customer, workspaceKey, readRows]);
+  const readRevision = selected && loadedActivityId === selectedId
     ? JSON.stringify([workspaceKey, selectedId, selected.unreadCount,
       messages.filter(message => message.direction === "INBOUND").map(message => message.id)])
     : null;
   useConversationRead(timelineEndRef, readRevision, acknowledgeRead);
 
   const select = (row: EntityRecord) => {
+    setMobileChatOpen(true);
+    setActionsOpen(false);
+    setContactPanelOpen(false);
+    if (String(row.id) === selectedId) return;
     selectionDismissedRef.current = false;
     replySelectionRef.current = null;
     if (activeFolder && owner(row)?.key !== activeFolder.key) setFolderKey(owner(row)?.key ?? null);
@@ -646,12 +759,29 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
    * the server refuses says so while there is still a composer to say it in.
    */
   const attach = async (files: FileList | null) => {
-    if (!files?.length) return;
+    if (!files?.length || attachState.disabled) return;
+    const conversationId = selectedId;
+    let maxFileSize: number;
+    try {
+      const limits = await fetch("/api/media/limits", {credentials:"same-origin"});
+      if (!limits.ok) throw new Error(t("crm.chat.uploadLimitsUnavailable"));
+      const policy = await limits.json();
+      if (typeof policy.maxFileSize !== "number" || policy.maxFileSize <= 0) throw new Error(t("crm.chat.uploadLimitsUnavailable"));
+      maxFileSize = policy.maxFileSize;
+    } catch {
+      setError(t("crm.chat.uploadLimitsUnavailable"));
+      return;
+    }
+    if (selectionRef.current !== conversationId) return;
     const room = (delivery?.maxAttachments ?? 0) - pending.length;
     const chosen = Array.from(files).slice(0, Math.max(0, room));
     if (chosen.length < files.length) setError(t("crm.chat.attachTooMany", { count: delivery?.maxAttachments ?? 0 }));
     else setError(null);
     for (const file of chosen) {
+      if (file.size > maxFileSize) {
+        setError(t("crm.chat.uploadTooLarge", {name:file.name, limit:fileSize(maxFileSize)}));
+        continue;
+      }
       setUploading(count => count + 1);
       try {
         const form = new FormData();
@@ -664,6 +794,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           throw new Error(failure.message || failure.detail || t("crm.chat.uploadFailedFile", { name: file.name }));
         }
         const stored = await response.json();
+        if (selectionRef.current !== conversationId) break;
         setPending(current => current.some(item => item.url === stored.url) ? current : [...current, {
           url: stored.url, filename: stored.filename || file.name,
           contentType: stored.contentType || file.type || "application/octet-stream",
@@ -671,7 +802,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
           image: /^image\/(png|jpeg|gif|webp|avif)$/.test(stored.contentType || file.type || ""),
         }]);
       } catch (uploadError) {
-        setError(uploadError instanceof Error ? uploadError.message : t("crm.chat.uploadFailed"));
+        if (selectionRef.current === conversationId) setError(uploadError instanceof Error ? uploadError.message : t("crm.chat.uploadFailed"));
       } finally {
         setUploading(count => count - 1);
       }
@@ -694,10 +825,12 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       } else {
         await command(`/api/crm/conversations/${String(selected.id)}/messages`, {
           body: draft,
+          recipient: conversationChannel(selected) === "EMAIL" ? recipientDraft ?? delivery?.recipient : undefined,
+          subject: conversationChannel(selected) === "EMAIL" ? subjectDraft : undefined,
           attachments: pending.map(file => file.url),
         });
       }
-      if (mode === "note") { setNoteDraft(""); setNoteBody(""); } else { setDraft(""); setPending([]); }
+      if (mode === "note") { setNoteDraft(""); setNoteBody(""); } else { setDraft(""); setSubjectDraft(null); setRecipientDraft(null); setPending([]); }
       await loadSelected();
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : t("crm.error.send"));
@@ -743,9 +876,9 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       await loadSelected();return result;
     },
   };
-  if (!config) return <p className="p-4 text-sm">{configError || "Loading CRM workspace…"}</p>;
+  if (!config) return configError ? <p role="alert" className="p-4 text-sm">{configError}</p> : <InboxSkeleton />;
 
-  if (!rows.length && !folders.length) {
+  if (!loading && !toolbar && !rows.length && !folders.length) {
     return (
       <div className="rounded-panel border border-dashed border-border px-6 py-16 text-center">
         <div className="text-sm font-medium text-foreground">{t("crm.inbox.noMatches")}</div>
@@ -754,6 +887,29 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
     );
   }
 
+  const senderOptions = channelRows.filter(row => String(row.id) === selectedId || (!!selected?.customer && String(row.customer) === String(selected.customer)));
+  const senderIdentity = selected && <span className="flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4" /><span className="truncate">{string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span>;
+  const sendingAccount = selected ? <div data-sender-account className="flex min-w-0 max-w-full items-center gap-2 text-xs">
+    {!compact && <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.from")}</span>}
+    {senderOptions.length === 1 ? <span className="flex h-9 min-w-0 items-center px-1">{senderIdentity}</span> : (<Select value={selectedId || ""} disabled={busy || !!draft.trim() || subjectDraft !== null || (recipientDraft !== null && recipientDraft !== delivery?.recipient) || mode === "note"}
+                onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
+                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className="h-9 w-auto max-w-full min-w-0 gap-2 rounded-field border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted focus:ring-1"
+                  title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
+                  <SelectValue>{senderIdentity}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {senderOptions.map(row => (
+                    <SelectItem key={String(row.id)} value={String(row.id)}>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <ChannelLogo channel={conversationChannel(row)} className="size-4" />
+                        <span className="truncate">{string(row, "inboxDisplay", conversationChannel(row))}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>)}
+    </div> : null;
+
   return (
     <div
       ref={inboxRootRef}
@@ -761,46 +917,72 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       data-testid="crm-inbox-workspace"
       className="crm-chat-layout relative grid h-full min-h-0 max-h-full w-full overflow-hidden overscroll-none"
       data-contact-open={!!(contactPanelOpen && selected && config)}
+      data-compact={compact}
+      data-detail-overlay={detailOverlay}
+      data-chat-open={mobileChatOpen && !!selected}
       style={{ height: "100%", minHeight: 0, maxHeight: "100%", contain: "layout size" }}
     >
-      <section aria-label={t("crm.inbox.chatSelection")} className={`${islandSurface} my-1 ml-1 hidden min-h-0 min-w-0 flex-col overflow-hidden md:!flex`}>
+      <section data-slide-page="list" aria-label={t("crm.inbox.chatSelection")} aria-hidden={compact && mobileChatOpen && !!selected} inert={compact && mobileChatOpen && !!selected} className={`${islandSurface} crm-conversation-pane min-h-0 min-w-0 flex flex-col overflow-hidden`}>
         <style>{`
-          .crm-chat-layout { --chat-start-inset:4px; --chat-end-inset:4px; --contact-width: min(320px, 44vw); --contact-motion: 280ms; --contact-ease: cubic-bezier(.22,1,.36,1); grid-template-columns: 0px minmax(0,1fr) 0px; transition: grid-template-columns var(--contact-motion) var(--contact-ease); }
-          .crm-chat-layout[data-contact-open="true"] { --chat-end-inset:8px; grid-template-columns: 0px minmax(0,1fr) var(--contact-width); }
-          .crm-chat-layout > section { grid-column:1; grid-row:1; }
-          .crm-chat-layout > main { grid-column:2; grid-row:1; }
-          .crm-chat-header { margin:4px var(--chat-end-inset) 0 var(--chat-start-inset); }
-          .crm-chat-composer { padding-left:var(--chat-start-inset); padding-right:var(--chat-end-inset); }
-          .crm-contact-slot { grid-column:3; grid-row:1; position:relative; min-width:0; min-height:0; overflow:hidden; }
-          .crm-contact-island { position:absolute; top:4px; bottom:4px; right:4px; width:calc(var(--contact-width) - 8px); transform:translateX(16px); opacity:0; visibility:hidden; transition:transform var(--contact-motion) var(--contact-ease), opacity var(--contact-motion) var(--contact-ease), visibility 0s var(--contact-motion); }
-          .crm-chat-layout[data-contact-open="true"] .crm-contact-island { transform:translateX(0); opacity:1; visibility:visible; transition-delay:0s; }
-          @media (min-width:768px) {
-            .crm-chat-layout { --chat-start-inset:12px; grid-template-columns:260px minmax(0,1fr) 0px; }
-            .crm-chat-layout[data-contact-open="true"] { grid-template-columns:260px minmax(0,1fr) var(--contact-width); }
-          }
-          @media (min-width:1280px) {
-            .crm-chat-layout { grid-template-columns:300px minmax(0,1fr) 0px; }
-            .crm-chat-layout[data-contact-open="true"] { grid-template-columns:300px minmax(0,1fr) var(--contact-width); }
-          }
-          @media (prefers-reduced-motion:reduce) { .crm-chat-layout, .crm-contact-island { transition:none; } }
-          .crm-folder-slide { --page-slide-dur: 300ms; --page-slide-ease: cubic-bezier(0.2,0.7,0.2,1); }
-          .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; will-change:transform; transition:transform var(--page-slide-dur) var(--page-slide-ease); }
+          .crm-chat-layout { --contact-width:320px; --contact-gap:12px; grid-template-columns:300px minmax(0,1fr) auto; column-gap:0; }
+          .crm-chat-layout > section { grid-column:1; grid-row:1; margin-right:12px; }
+          .crm-chat-layout > main { grid-column:2; grid-row:1; border-radius:var(--radius-panel, 16px); background:hsl(var(--card)); }
+          .crm-chat-header { --workspace-toolbar-edge:88px; margin:0; border-bottom:1px solid hsl(var(--border)); border-radius:0; }
+          .crm-chat-composer { margin:0 12px 12px; max-height:45%; overflow-y:auto; }
+          .crm-chat-composer textarea { min-height:64px; max-height:144px; }
+          /* Like the inbox navigation rail: the slot's width animates while the island keeps its size and fades. */
+          .crm-contact-slot { grid-column:3; grid-row:1; min-width:0; min-height:0; overflow:hidden; width:0;
+            transition:width var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+          .crm-contact-slot > .crm-contact-island { width:var(--contact-width); margin-left:var(--contact-gap); opacity:0;
+            transition:opacity var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+          .crm-contact-island { height:100%; }
+          .crm-chat-layout[data-contact-open="true"] .crm-contact-slot { width:calc(var(--contact-width) + var(--contact-gap)); }
+          .crm-chat-layout[data-contact-open="true"] .crm-contact-slot > .crm-contact-island { opacity:1; }
+          .crm-chat-layout[data-detail-overlay="true"]:not([data-compact="true"]) .crm-contact-slot { position:absolute; inset:0 0 0 auto; width:min(360px,100%); z-index:30;
+            transform:translate3d(105%,0,0); transition:transform var(--resize-dur, 300ms) var(--resize-ease, cubic-bezier(0.22, 1, 0.36, 1)); }
+          .crm-chat-layout[data-detail-overlay="true"]:not([data-compact="true"]) .crm-contact-slot > .crm-contact-island { width:100%; margin-left:0; opacity:1; }
+          .crm-chat-layout[data-detail-overlay="true"][data-contact-open="true"]:not([data-compact="true"]) .crm-contact-slot { transform:translate3d(0,0,0); }
+          @media (prefers-reduced-motion: reduce) { .crm-contact-slot, .crm-contact-slot > .crm-contact-island { transition:none !important; } }
+          .crm-chat-layout[data-compact="true"] { grid-template-columns:minmax(0,1fr); gap:0; }
+          .crm-chat-layout[data-compact="true"] > section,
+          .crm-chat-layout[data-compact="true"] > main { grid-column:1; grid-row:1; position:absolute; inset:0; width:100%; height:100%; transform:translate3d(0,0,0); backface-visibility:hidden; }
+          .crm-chat-layout[data-compact="true"][data-chat-open="false"] > main { transform:translate3d(100%,0,0); pointer-events:none; }
+          .crm-chat-layout[data-compact="true"][data-chat-open="true"] > section { transform:translate3d(-100%,0,0); pointer-events:none; }
+          .crm-chat-layout[data-compact="true"] .crm-chat-composer { margin:0 8px 8px; }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot { grid-column:1; grid-row:1; display:block; position:absolute; inset:0; width:100%; height:100%; z-index:30; transform:translateX(100%); }
+          .crm-chat-layout[data-compact="true"][data-contact-open="true"] .crm-contact-slot { transform:translateX(0); }
+          .crm-chat-layout[data-compact="true"][data-contact-open="true"] > main { transform:translateX(-100%); }
+          .crm-chat-layout[data-compact="true"] .crm-contact-island { background:hsl(var(--card)); }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot { width:100%; transition:none; }
+          .crm-chat-layout[data-compact="true"] .crm-contact-slot > .crm-contact-island { width:100%; margin-left:0; opacity:1; transition:none; }
+          .crm-chat-layout[data-compact="true"] > section { margin-right:0; }
+          .crm-chat-layout [data-chat-history] { scrollbar-gutter:stable; }
+          .crm-chat-layout [data-chat-history] > * { max-width:880px; margin-left:auto; margin-right:auto; }
+          .crm-folder-slide > .crm-folder-page { position:absolute; inset:0; width:100%; max-width:100%; min-width:0; overflow:hidden; transform:translate3d(0,0,0); backface-visibility:hidden; }
           .crm-folder-slide[data-open="false"] > .crm-folder-detail { transform:translate3d(100%,0,0); pointer-events:none; }
           .crm-folder-slide[data-open="true"] > .crm-folder-root { transform:translate3d(-100%,0,0); pointer-events:none; }
-          @media (prefers-reduced-motion: reduce) { .crm-folder-slide > .crm-folder-page { transition:none; } }
         `}</style>
-        <div className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
-          <div ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
-            <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
+        {toolbar && <WorkspaceToolbar compact={compact} className="shrink-0 border-b border-border/50 p-3"
+          layout={{start:["title"], end:["count"], secondary:["controls"], ...chrome?.list}}
+          compactLayout={chrome?.mobileList}
+          items={[
+            {id:"title",content:<span className="text-sm font-semibold">{t("crm.inbox.conversations")}</span>},
+            {id:"count",content:<span className="whitespace-nowrap text-xs text-muted-foreground">{conversationCount(total, channelRows.length)}</span>},
+            {id:"controls",content:<div className="min-w-0 w-full">{toolbar}</div>},
+          ]} />}
+        <div ref={folderSlideRef} className="crm-folder-slide relative min-h-0 min-w-0 w-full flex-1 overflow-hidden" data-open={!!activeFolder}>
+          <div data-slide-page="root" ref={rootListRef} className="crm-folder-page crm-folder-root flex min-h-0 min-w-0 flex-col" aria-hidden={!!activeFolder} {...(activeFolder ? {inert: true} : {})}>
+            {!toolbar && <div className="flex min-h-16 shrink-0 flex-col justify-center border-b border-border/50 px-3 py-3">
               <div className="text-sm font-semibold">{t("crm.inbox.conversations")}</div>{chatGroups.error && <p role="alert" className="text-xs text-destructive">{chatGroups.error}</p>}
               <div className="mt-0.5 text-[11px] text-muted-foreground">{conversationCount(total, channelRows.length)}{folders.length ? ` · ${folders.length} folders` : ""}</div>
-            </div>
+            </div>}
             <ConversationList {...pagination} active={!activeFolder}>
+              {!rows.length && !folders.length && (loading ? <ConversationListSkeleton /> : <p className="p-4 text-sm text-muted-foreground">{t("crm.inbox.noMatches")}</p>)}
               {(() => {
                 const shown = new Set<string>();
                 const entries = rows.map(row => {
                   const folder = owner(row);
-                  if (!folder) return <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
+                  if (!folder) return <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />;
                   if (shown.has(folder.key)) return null;
                   shown.add(folder.key);
                   const members = folderRows(folder.key);
@@ -814,7 +996,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               })()}
             </ConversationList>
           </div>
-          <div ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
+          <div data-slide-page="folder" ref={detailListRef} className="crm-folder-page crm-folder-detail flex min-h-0 min-w-0 flex-col" aria-hidden={!activeFolder} {...(!activeFolder ? {inert: true} : {})}>
             <div className="flex min-h-16 shrink-0 items-center gap-2 border-b border-border/50 px-3 py-3">
               <Button variant="ghost" size="sm" aria-label={t("crm.inbox.back")} onClick={() => setFolderKey(null)}><ArrowLeft className="size-4" /></Button>
               {displayedFolder && <FolderTile folder={displayedFolder} size="size-8" icon={16} />}
@@ -822,7 +1004,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               {chatGroups.groups.filter(group => group.key === displayedFolder?.key).map(group => <ChatGroupActions key={group.key} group={group} change={chatGroups.change} />)}
             </div>
             <ConversationList {...pagination} active={!!activeFolder}>
-              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
+              {displayedFolder && detailRows.map(row => <ConversationRow key={String(row.id)} appearance={chrome?.conversationRow} row={row} config={config} workspaceKey={workspaceKey} groups={chatGroups.groups} groupKey={chatGroups.groups.find(group => group.customerIds.includes(String(row.customer)))?.key} onGroupChange={chatGroups.ready ? chatGroups.change : undefined} selected={(!compact || mobileChatOpen) && String(row.customer || row.id) === String(selected?.customer || selectedId)} onSelect={() => select(row)} />)}
               {displayedFolder && !detailRows.length && <p className="px-3 py-8 text-center text-xs text-muted-foreground">{t("crm.inbox.emptyFolder")}</p>}
             </ConversationList>
           </div>
@@ -830,12 +1012,27 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
       </section>
 
       {selected ? (
-        <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
-          <header className={`${islandSurface} crm-chat-header z-10 flex min-h-16 shrink-0 flex-wrap items-center gap-2 px-4 py-3`}>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>
-              <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{t("crm.inbox.allChannelsSubtitle")}</div>
-            </div>
+        <main onDragEnter={fileDragEnter} onDragOver={fileDragOver} onDragLeave={fileDragLeave} onDrop={filesDropped} onDragEnd={clearFileDrag} data-file-drop-zone data-slide-page="chat" className="relative flex min-h-0 min-w-0 flex-col overflow-hidden border border-border/60" aria-hidden={compact && (!mobileChatOpen || contactPanelOpen)} inert={(compact && !mobileChatOpen) || (contactPanelOpen && detailOverlay)}>
+          <header className="crm-chat-header z-10 shrink-0 px-3 py-2">
+            <WorkspaceToolbar compact={compact} balanced={compact} className="flex min-h-11 flex-col justify-center"
+              layout={{start:["back"], center:["title"], end:["actions","contact"], ...chrome?.chat}}
+              compactLayout={chrome?.mobileChat} fit narrowLayout={chrome?.narrowChat}
+              items={[
+                {id:"back",content:compact && <Button size="toolbar" variant="ghost" aria-label={t("crm.inbox.back")} onClick={() => { setMobileChatOpen(false); setContactPanelOpen(false); inboxRootRef.current?.focus({preventScroll:true}); }}><ArrowLeft className="size-4" /></Button>},
+                {id:"actions",content:<Button size="toolbar" variant={actionsOpen ? "secondary" : "ghost"} aria-label={t("crm.chat.actions")} aria-expanded={actionsOpen} aria-controls={actionsId} onClick={() => setActionsOpen(value => !value)}><MoreHorizontal className="size-4" /></Button>},
+                {id:"openContact",content:action(config, "edit") && !!selected.customerRef && <Button size="toolbar" variant="ghost" onClick={() => {
+                  const ref = selected.customerRef as {type:string;id:string};
+                  window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
+                }}>{t("crm.contact.open")}</Button>},
+                {id:"scheduleCall",content:action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />},
+                {id:"logActivity",content:action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />},
+                {id:"extensions",content:<ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />},
+                {id:"title",content:<div className="min-w-0 truncate text-sm font-semibold text-foreground">{string(selected, "customerDisplay", "Customer")}</div>},
+                {id:"avatar",content:!compact && <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" />},
+                {id:"contact",content:<Button ref={contactPanelToggleRef} variant={compact ? "ghost" : "subtle"} size="toolbar" className={compact ? "size-11 shrink-0 rounded-full p-1" : "w-8 shrink-0 p-0"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}>{compact ? <Avatar name={string(selected, "customerDisplay", "Customer")} url={customerAvatarUrl} className="size-9" /> : <ContactRound className="size-4" />}</Button>},
+              ]} />
+          </header>
+          {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
             {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
               const ref = selected.customerRef as {type:string;id:string};
               window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
@@ -843,9 +1040,8 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             {action(config, "logActivity") && <ScheduleCall key={`call:${selected.customer}`} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => { setMode("reply"); setDraft(previous => previous ? `${previous}\n\n${text}` : text); }} />}
             {action(config, "logActivity") && <LogActivity key={String(selected.customer)} customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
             <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-wrap items-center gap-2" />
-            {config && <Button ref={contactPanelToggleRef} size="toolbar" variant={contactPanelOpen ? "secondary" : "subtle"} aria-label={contactPanelOpen ? t("crm.contact.hide") : t("crm.contact.show")} title={t("crm.contact.details")} aria-expanded={contactPanelOpen} aria-controls={contactPanelId} onClick={() => setContactPanelOpen(value => !value)}><PanelRight className="size-4" /></Button>}
-          </header>
-          <div data-chat-history className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-5" style={{ paddingBottom: composerHeight + 16 }}>
+          </div>}
+          <div data-chat-history className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-5">
 
             {hasMoreHistory && <Button size="sm" variant="ghost" onClick={() => setHistoryPages(value => value+1)}>{t("crm.chat.loadEarlier")}</Button>}
             {timeline.map((entry) => entry.message ? (
@@ -868,39 +1064,47 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
             {!timeline.length && !error ? (
               <div className="py-16 text-center text-xs text-muted-foreground">{t("crm.chat.noMessages")}</div>
             ) : null}
-            <div ref={timelineEndRef} style={{ scrollMarginBottom: composerHeight + 16 }} />
+            <div ref={timelineEndRef} />
           </div>
 
-          <div ref={composerRef} data-chat-composer className="crm-chat-composer pointer-events-none absolute inset-x-0 bottom-0 z-10 pb-1 pt-2">
-            <div className={`${islandSurface} pointer-events-auto p-3 focus-within:ring-ring/40 ${mode === "note" ? "ring-amber-500/30" : ""}`}>
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <Select value={selectedId || ""} disabled={busy || !!draft.trim() || mode === "note"}
-                onValueChange={(id: string) => { const target = channelRows.find(row => String(row.id) === id); if (target) setSelectedId(String(target.id)); }}>
-                <SelectTrigger aria-label={t("crm.chat.sendFrom")} className="w-auto max-w-full min-w-0"
-                  title={draft.trim() ? "Send or clear your draft before changing channels" : "Choose a conversation for this contact"}>
-                  <SelectValue><span className="inline-flex min-w-0 items-center gap-2"><ChannelLogo channel={conversationChannel(selected)} className="size-4 shrink-0" /><span className="truncate">{"From: " + string(selected, "inboxDisplay", delivery?.label || conversationChannel(selected))}</span></span></SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {channelRows.filter(row => String(row.id) === selectedId || (!!selected.customer && String(row.customer) === String(selected.customer))).map(row => (
-                    <SelectItem key={String(row.id)} value={String(row.id)}>
-                      <span className="inline-flex items-center gap-2">
-                        <ChannelLogo channel={conversationChannel(row)} className="size-4" />
-                        {string(row, "inboxDisplay", conversationChannel(row))} · {string(row, "subject", t("crm.chat.conversation"))}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <span title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
+                          <input ref={fileInputRef} type="file" multiple className="hidden"
+                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
+                    void attach(event.target.files); event.target.value = "";
+                  }} />
+          <div data-chat-composer className="crm-chat-composer shrink-0 rounded-panel border border-border">
+            <div className={`${compact ? "p-2" : "p-3"} ${mode === "note" ? "bg-amber-400/5" : ""}`}>
+            <div className={`mb-2 flex items-center justify-between ${compact ? "gap-1" : "gap-3"}`}>
+              {compact && chrome?.mobileComposer?.center?.includes("channel") ? <Segmented value={mode} onChange={(value: ComposerMode) => { if (!busy) setMode(value); }} options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({value:a.key as ComposerMode,label:a.label}))} /> : sendingAccount}
+
+              <span hidden={compact && mode === "reply"} title={mode === "reply" ? delivery?.label : undefined} className="text-[10px] text-muted-foreground">
                 {mode === "note" ? "Visible to your team only" : ""}
               </span>
             </div>
+            {mode === "reply" && conversationChannel(selected) === "EMAIL" && !!delivery?.recipient && <div className="mb-1 flex min-w-0 items-center gap-2 text-xs">
+              <span className="w-12 shrink-0 text-muted-foreground">{t("crm.chat.to")}</span>
+              {(delivery.recipients?.length ?? 0) > 1 ? <Select value={recipientDraft ?? delivery.recipient} disabled={busy || replyState.disabled}
+                onValueChange={(value:string)=>setRecipientDraft(value===delivery.recipient?null:value)}>
+                <SelectTrigger aria-label={t("crm.chat.to")} className="h-9 w-auto max-w-full min-w-0 gap-2 border-0 bg-transparent px-1 text-xs shadow-none hover:bg-muted"><SelectValue /></SelectTrigger>
+                <SelectContent>{delivery.recipients?.map(address=><SelectItem key={address} value={address}>{address}</SelectItem>)}</SelectContent>
+              </Select> : <span className="flex h-9 min-w-0 items-center truncate px-1">{recipientDraft ?? delivery.recipient}</span>}
+            </div>}
+            {mode === "reply" && recipientDraft !== null && recipientDraft !== delivery?.recipient && <p className="mb-2 text-xs text-muted-foreground">{t("crm.chat.newRecipientThread")}</p>}
+            {mode === "reply" && conversationChannel(selected) === "EMAIL" && <div className="mb-2">
+              <div className="flex min-w-0 items-center gap-2 border-b border-border/60 pb-1 transition-colors focus-within:border-primary">
+                <label htmlFor={subjectId} className="w-12 shrink-0 text-xs text-muted-foreground">{t("crm.chat.subject")}</label>
+                <Input id={subjectId} value={subjectDraft ?? string(selected, "subject", "")}
+                  maxLength={998} disabled={busy || replyState.disabled}
+                  className="h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-1 py-0 text-sm shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
+                  onChange={(event: { target: { value: string } }) => setSubjectDraft(event.target.value === string(selected, "subject", "") ? null : event.target.value)} />
+              </div>
+              {subjectDraft !== null && <p className="mt-1 text-[10px] text-muted-foreground">{t("crm.chat.newSubjectThread")}</p>}
+            </div>}
             <div hidden={mode !== "note"}>
               <NoteInput key={String(selected.customer)} value={noteDraft}
                 disabled={busy || !action(config, "note")} onChange={(text, body) => {setNoteDraft(text); setNoteBody(body);}}
                 onSubmit={() => void submit()} />
             </div>
-            {mode === "reply" && <Textarea
+            {mode === "reply" && !replyState.disabled && <Textarea
               value={draft}
               disabled={replyState.disabled}
               onChange={(event: { target: { value: string } }) => setDraft(event.target.value)}
@@ -914,7 +1118,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
               aria-describedby={replyState.message ? composerStatusId : undefined}
               maxLength={mode === "reply" ? delivery?.maxTextLength ?? 4096 : 8000}
               aria-label={mode === "reply" ? "Write a reply" : "Write an internal note"}
-              className="min-h-20 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
+              className="min-h-16 resize-none border-0 bg-transparent dark:bg-transparent px-2 shadow-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none"
             />}
             {/* What is about to go with the reply. It sits under the text because that is the order
                 it will arrive in, and each chip can be taken back out before sending. */}
@@ -935,53 +1139,66 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
                 {t("crm.chat.uploading", { count: uploading })}
               </span>}
             </div>}
-            {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className="flex items-center gap-2 rounded-field bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+            {mode === "reply" && replyState.message && <div id={composerStatusId} role="status" className={`flex items-center gap-2 rounded-field bg-muted/50 text-xs text-muted-foreground ${compact ? "px-2 py-1" : "px-3 py-2"}`}>
               <span className="flex-1">{replyState.message}</span>
-              {replyState.retry && <Button variant="ghost" onClick={() => void loadSelected()}>{t("crm.chat.checkAgain")}</Button>}
+              {replyState.retry && <Button variant="ghost" aria-label={t("crm.chat.checkAgain")} className={compact ? "size-10 shrink-0 p-0" : undefined} onClick={() => void loadSelected()}>{compact ? <RefreshCw className="size-4" /> : t("crm.chat.checkAgain")}</Button>}
             </div>}
             {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Segmented
+            <WorkspaceToolbar compact={compact} className="mt-2"
+              layout={{start:["mode","attach"], end:["send"], secondary:["extensions"], ...chrome?.composer}}
+              compactLayout={chrome?.mobileComposer}
+              items={[
+                {id:"channel",content:sendingAccount},
+                {id:"tools",content:<ResponsiveActionPanel presentation="actions" label={t("crm.chat.actions")} align="start" trigger={<Button variant="ghost" className="size-10 shrink-0 p-0" aria-label={t("crm.chat.actions")}><Plus className="size-5" /></Button>}>
+                    {action(config, "logActivity") && <ScheduleCall customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} onInvitation={text => {setMode("reply");setDraft(previous => previous ? `${previous}\n\n${text}` : text);}} />}
+                    {action(config, "logActivity") && <LogActivity customerId={String(selected.customer)} conversationId={String(selected.id)} onSaved={loadSelected} />}
+                    {showAttachments && <span className="inline-flex" title={attachState.reason}><Button type="button" variant="ghost" size="toolbar" disabled={attachState.disabled} aria-description={attachState.disabled ? attachState.reason : undefined} onClick={chooseAttachment}><Paperclip className="size-4" />{t("crm.chat.attach")}</Button></span>}
+                    <ExtensionSlot name="crm.chat.header" context={extensionContext} className="flex flex-col gap-2" />
+                  </ResponsiveActionPanel>},
+                {id:"mode",content:(<Segmented
                 value={mode}
                 onChange={(value: ComposerMode) => { if (!busy) setMode(value); }}
                 options={(config?.actions ?? []).filter(a => a.visible && ["reply", "note"].includes(a.key)).map(a => ({ value: a.key as ComposerMode, label: a.label }))}
-              />
-              {/* Offered only where the channel actually carries files; the title says why not. */}
-              {mode === "reply" && action(config, "sendReply") && <>
-                <input ref={fileInputRef} type="file" multiple className="hidden"
-                  onChange={(event: { target: { files: FileList | null; value: string } }) => {
-                    void attach(event.target.files); event.target.value = "";
-                  }} />
+              />)},
+                {id:"attach",content:(showAttachments && <span className="inline-flex" title={attachState.reason}>
+
                 <Button variant="ghost" type="button" aria-label={t("crm.chat.attach")}
-                  title={attachState.disabled ? attachState.reason : t("crm.chat.attach")}
-                  disabled={attachState.disabled || busy}
-                  onClick={() => fileInputRef.current?.click()}>
+                  disabled={attachState.disabled}
+                  aria-description={attachState.disabled ? attachState.reason : undefined}
+                  onClick={chooseAttachment}>
                   <Paperclip className="size-4" />
                 </Button>
-              </>}
-              <ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
+              </span>)},
+                {id:"extensions",content:(<ExtensionSlot name="crm.chat.composer" context={{ ...extensionContext,
                 insertDraft: mode === "reply" ? extensionContext.insertDraft : undefined,
-              }} className="flex items-center gap-2" />
-              <span className="flex-1" />
-              {action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
-                {busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
-              </Button>}
-            </div>
+              }} className="flex items-center gap-2" />)},
+                {id:"send",content:(action(config, mode === "reply" ? "sendReply" : "sendNote") && <Button aria-label={busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label} className={compact ? "size-10 shrink-0 p-0" : undefined} disabled={!action(config, mode) || busy || uploading > 0 || (!(mode === "note" ? noteDraft : draft).trim() && !(mode === "reply" && pending.length > 0)) || (mode === "reply" && replyState.disabled)} onClick={() => void submit()}>
+                {compact ? <Send className="size-4" /> : busy ? "Sending…" : action(config, mode === "reply" ? "sendReply" : "sendNote")?.label}
+              </Button>)},
+              ]} />
             </div>
           </div>
+          {fileDragActive && <div className="pointer-events-none absolute inset-2 z-50 flex items-center justify-center rounded-panel border-2 border-dashed border-primary bg-background/95 p-6 text-center" role="status">
+            <div className="flex flex-col items-center gap-3">
+              <Paperclip className="size-8 text-primary" aria-hidden="true" />
+              <p className="text-sm font-medium">{fileDropReason || t("crm.chat.dropFiles")}</p>
+              {!fileDropReason && <p className="text-xs text-muted-foreground">{t("crm.chat.dropFilesHint")}</p>}
+            </div>
+          </div>}
         </main>
       ) : <main className="flex items-center justify-center p-6 text-sm text-muted-foreground">{t("crm.chat.chooseConversation")}</main>}
 
-      <div className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
+      <div data-slide-page="contact" className="crm-contact-slot" aria-hidden={!contactPanelOpen} {...(!contactPanelOpen ? {inert:true} : {})}>
         {selected && config ? <aside id={contactPanelId} aria-label={t("crm.contact.details")}
           className={`${islandSurface} crm-contact-island flex flex-col overflow-hidden`}
           onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); closeContactPanel(); } }}>
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 py-3">
-            <span className="text-sm font-semibold">{t("crm.contact.details")}</span>
-            <Button size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>
+          <div className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
+            {compact && <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><ArrowLeft className="size-4" /></Button>}
+            <span className={compact ? "flex-1 text-center text-sm font-semibold" : "text-sm font-semibold"}>{t("crm.contact.details")}</span>
+            {compact ? <span className="w-9" /> : <Button ref={contactPanelCloseRef} size="sm" variant="ghost" aria-label={t("crm.contact.close")} onClick={closeContactPanel}><X className="size-4" /></Button>}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <ContactPanel key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
+            <ContactPanel presentation="card" key={String(selected.customer)} id={String(selected.customer)} row={selected} customer={customer} config={config} />
             <ExtensionSlot name="crm.chat.aside" context={extensionContext} className="space-y-3 p-4" />
           </div>
         </aside> : null}
@@ -990,7 +1207,7 @@ function CrmInbox({ rows: channelRows, total, open, scopedConfig, workspaceKey, 
   );
 }
 
-registerListRenderer("crmInbox", CrmInbox);
+registerListRenderer("crmInbox", CrmInbox, { ownsLoadingMore: true });
 
 
 /**
@@ -1014,12 +1231,11 @@ function ShellIcon({ name, size = 14 }: { name: string; size?: number }) {
 }
 
 type WorkspaceSummary = { key: string; label: string; canWrite: boolean };
-type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean };
-async function workspaceRead<T>(path: string): Promise<T> {
-  const response = await fetch(`/api/crm/inbox-workspaces${path}`, {credentials:"same-origin"});
-  if (!response.ok) throw new Error(response.status === 403 ? "You do not have access to this inbox." : "Could not load inbox.");
-  return response.json();
+type WorkspaceFeed = { list: Record<string,any>; filters: {field:string;label:string;type:string;options:{value:string;label:string;avatarUrl?:string}[]}[]; key: string; label: string; config: Config; canWrite: boolean; rows: EntityRecord[]; total: number; hasMore: boolean; nextCursor: string | null };
+function workspaceRead<T>(path: string): Promise<T> {
+  return api.getJson<T>(`/api/crm/inbox-workspaces${path}`);
 }
+
 function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   const { statuses } = useConversationStatuses();
   const configuredKey = widget.extraConfig?.workspace || "";
@@ -1038,8 +1254,13 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   // the folding and the folder it wants opened, instead of dropping the reader at the root list.
   const routedMode = route.get("mode") || "";
   const routedFolder = route.get("folder") || "";
-  const showChannelFilters = widget.extraConfig?.channelFilters === "true";
-  const showAccountFilter = widget.extraConfig?.accountFilter !== "false";
+  const configuredList = (key: string) => widget.extraConfig?.[key] === undefined ? undefined
+    : widget.extraConfig[key].split(",").map(value => value.trim()).filter(Boolean);
+  const mainControls = configuredList("toolbarControls");
+  const showToolbarControl = (key:string) => !mainControls || mainControls.includes(key);
+  const secondaryControls = configuredList("toolbarSecondary");
+  const showChannelFilters = secondaryControls ? secondaryControls.includes("channels") : widget.extraConfig?.channelFilters === "true";
+  const showAccountFilter = secondaryControls ? secondaryControls.includes("accounts") : showChannelFilters && widget.extraConfig?.accountFilter !== "false";
   const [mode, setMode] = useState(
     [routedMode, configuredKey].find(key => key && modeKeys.includes(key)) || modeKeys[0] || ""
   );
@@ -1060,16 +1281,29 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   const [refreshKey,setRefreshKey] = useState(0);
   useEffect(() => {
     let live=true;
-    void workspaceRead<WorkspaceSummary[]>("").then(async items => {
+    setError("");
+    // Choices are independent of the configured workspace. Only fallback selection waits for them.
+    const choices = workspaceRead<WorkspaceSummary[]>("");
+    void choices.then(items => {
       if(live)setModeLabels(Object.fromEntries(items.map(item=>[item.key,item.label])));
-      // An unavailable mode must not strand the page: fall back to the configured workspace, then
-      // to whatever this account can actually read.
-      const available=new Set(items.map(item=>item.key));
-      const key=[mode,configuredKey].find(candidate=>candidate && available.has(candidate)) || items[0]?.key;
-      if(!key) throw new Error(t("crm.error.noWorkspaces"));
-      const result=await workspaceRead<WorkspaceFeed>(`/${encodeURIComponent(key)}${conversationPath}`);
-      if(live)setFeed(result);
-    }).catch(e=>{if(live)setError(e.message);});
+    }).catch(() => {});
+    const preferred = mode || configuredKey;
+    const read = (key: string) => workspaceRead<WorkspaceFeed>(`/${encodeURIComponent(key)}${conversationPath}`);
+    void (async () => {
+      if (preferred) {
+        try { return await read(preferred); }
+        catch (failure) {
+          // Keep the previous fallback for a mode that is no longer accessible.
+          const items = await choices;
+          const fallback = items.find(item => item.key === configuredKey && item.key !== preferred) || items.find(item => item.key !== preferred);
+          if (!fallback) throw failure;
+          return read(fallback.key);
+        }
+      }
+      const items = await choices;
+      if (!items.length) throw new Error(t("crm.error.noWorkspaces"));
+      return read(items[0].key);
+    })().then(result => {if(live)setFeed(result);}).catch(e=>{if(live)setError(e.message);});
     return ()=>{live=false;};
     // refreshKey: an inbox-page invalidation re-reads the workspace, not just its rows — folders are
     // computed from application data (stage, event membership) and move when that data moves.
@@ -1084,19 +1318,32 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
   // Honour the routed folder only while the feed it belongs to is the one on screen.
   const folderRef = useRef(routedFolder);
   folderRef.current = feed && routedMode && feed.key !== routedMode ? "" : routedFolder;
+  const chromeRef = useRef<InboxChrome>({});
+  chromeRef.current = {conversationRow:conversationRowOptions(widget.extraConfig?.conversationRow), list:toolbarLayout(widget.extraConfig?.listToolbar), mobileList:toolbarLayout(widget.extraConfig?.mobileListToolbar), chat:toolbarLayout(widget.extraConfig?.chatToolbar), narrowChat:toolbarLayout(widget.extraConfig?.narrowChatToolbar), mobileChat:toolbarLayout(widget.extraConfig?.mobileChatToolbar), composer:toolbarLayout(widget.extraConfig?.composerToolbar), mobileComposer:toolbarLayout(widget.extraConfig?.mobileComposerToolbar)};
   const flatRef = useRef(flat);
   flatRef.current = flat;
-  const renderer = useMemo(() => function WorkspaceBody(props: ListRendererProps) {
+  // The inbox draws its own "loading more" row inside the conversation list.
+  const renderer = useMemo(() => Object.assign(function WorkspaceBody(props: ListRendererProps) {
     const current = feedRef.current;
     return current ? <CrmInbox {...props} open={()=>{}} scopedConfig={current.config} workspaceKey={current.key}
-      initialFolder={folderRef.current} flat={flatRef.current} /> : null;
-  },[]);
+      initialFolder={folderRef.current} flat={flatRef.current} chrome={chromeRef.current} /> : null;
+  }, { ownsLoadingMore: true }),[]);
   const list = useMemo(()=>feed ? {
     ...feed.list,
-    filters: showChannelFilters ? feed.list.filters.filter((filter: {key:string}) => !["channel", "inbox"].includes(filter.key)) : feed.list.filters,
+    filters: (showChannelFilters ? feed.list.filters.filter((filter: {key:string}) => !["channel", "inbox"].includes(filter.key)) : feed.list.filters),
     kind:"catalogs", name:"crm_conversations", embedded:true, fill:true, canWrite:false, newUrl:null,
     feed:`/api/crm/inbox-workspaces/${encodeURIComponent(feed.key)}${conversationPath}`,
-  } : null,[feed,widget.title,conversationPath,statuses,showChannelFilters]);
+  } : null,[feed,widget.title,widget.extraConfig?.filterSidebar,conversationPath,statuses,showChannelFilters]);
+  const initialPage = useMemo(() => {
+    if (!feed || !list) return undefined;
+    const query = new URLSearchParams();
+    if (feed.list.sort?.column) {
+      query.set("sort", feed.list.sort.column);
+      query.set("dir", feed.list.sort.descending ? "desc" : "asc");
+    }
+    return {feed:list.feed, query:query.toString(), rows:feed.rows, total:feed.total,
+      nextCursor:feed.nextCursor ?? null, hasMore:feed.hasMore};
+  }, [feed, list]);
   const queryParams = useMemo(() => ({eq: [channel && `channel,${channel}`, showAccountFilter && account && `inbox,${account}`].filter(Boolean) as string[]}), [channel,account,showAccountFilter]);
   const accounts = (feed?.list.channelAccounts ?? []) as {id:string;channel:string;label:string}[];
   // A feed need not declare filters at all; the channel bar degrades to empty rather than throwing.
@@ -1109,13 +1356,28 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {entry.icon ? <ShellIcon name={entry.icon} /> : null}{modeLabels[entry.key] || entry.key}
     </Button>)}
   </div> : undefined;
-  const channelControls = showChannelFilters ? <div className="flex min-w-0 flex-wrap items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
-    <div className="flex flex-wrap items-center gap-1" aria-label={t("crm.chat.channel")}>
+  const flatChannelControls = <InboxChannelNavigation channels={channels}
+    accounts={accounts.map(item=>({...item,label:accountLabels.find(option=>option.value===item.id)?.label || item.label}))}
+    channel={channel} account={account} showChannels={showChannelFilters} showAccounts={showAccountFilter}
+    onChannel={setChannel} onAccount={setAccount} />;
+  const connectionsRoute = widget.extraConfig?.connectionsRoute;
+  const connectionsLink = connectionsRoute?.startsWith("/") && !connectionsRoute.startsWith("//")
+    ? <Button type="button" variant="ghost" onClick={() => window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://${connectionsRoute.slice(1)}`}))}
+        className="min-h-10 w-full justify-start gap-2.5 rounded-field px-3 text-sm font-normal text-muted-foreground hover:bg-muted hover:text-foreground"><Settings2 className="size-4" />{t("crm.inbox.manageConnections")}</Button> : undefined;
+  const channelControls = showChannelFilters || showAccountFilter ? <div className="crm-channel-bar flex min-w-0 items-center gap-2" aria-label={t("crm.inbox.channelsAndAccounts")}>
+    {showChannelFilters && <><div className="crm-channel-buttons flex min-w-0 items-center gap-1 overflow-x-auto" aria-label={t("crm.chat.channel")}>
       <Button size="toolbar" variant={!channel ? "secondary" : "ghost"} aria-pressed={!channel} onClick={() => {setChannel(""); setAccount("");}}>{t("crm.inbox.allChannels")}</Button>
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
     </div>
+    <div className="crm-channel-select min-w-0 flex-1">
+      <Select value={channel || "all"} onValueChange={value => { setChannel(value === "all" ? "" : value); setAccount(""); }}>
+        <SelectTrigger aria-label={t("crm.chat.channel")} className="w-full min-w-0"><SelectValue>{channel ? channels.find(item => item.value === channel)?.label || channel : t("crm.inbox.allChannels")}</SelectValue></SelectTrigger>
+        <SelectContent><SelectItem value="all">{t("crm.inbox.allChannels")}</SelectItem>{channels.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+      </Select>
+    </div>
+    </> }
     {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
-      <SelectTrigger aria-label={t("crm.inbox.account")} className="w-52"><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label={t("crm.inbox.account")} className="crm-account-select ml-auto w-52 min-w-0"><SelectValue>{account ? accountLabels.find(item => item.value === account)?.label || accounts.find(item => item.id === account)?.label || account : t("crm.inbox.allAccounts")}</SelectValue></SelectTrigger>
       <SelectContent><SelectItem value="all">{t("crm.inbox.allAccounts")}</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
     </Select>}
   </div> : undefined;
@@ -1127,7 +1389,35 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
     context={{ surface: "crm-inbox", workspaceKey: feed?.key, route: route.get("mode") || "", permissions: {},
       record: { folders: feed?.config.folders.length ?? 0, grouping: widget.extraConfig?.grouping ?? "true" },
       view: viewState, refresh: () => setRefreshKey(key => key + 1) }} />;
-  const headerExtra = <div className="flex min-w-0 flex-wrap items-center gap-3">{modeControls}{channelControls}{toolbar}</div>;
-  return list ? <EntityListWidget list={list} renderer={renderer} refreshKey={refreshKey} headerExtra={headerExtra} queryParams={queryParams} /> : <p>{t("crm.inbox.loading")}</p>;
+  return list ? <div data-toolbar-placement={widget.extraConfig?.toolbarPlacement} className="crm-inbox-page flex h-full min-h-0 min-w-0 flex-col gap-3">
+    <style>{`
+      .crm-inbox-page { container-type:inline-size; }
+      [data-inbox-channel-navigation] button[aria-pressed="true"] { background:hsl(var(--primary) / 0.12); color:hsl(var(--primary)); font-weight:600; }
+      @media (hover:hover) and (pointer:fine) {
+        [data-filter-sidebar] [data-inbox-channel-navigation] fieldset > div > * + * { margin-top:2px; }
+        [data-filter-sidebar] [data-inbox-channel-navigation] > * + * { margin-top:12px; }
+      }
+      .crm-channel-select { display:none; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-channel-buttons { display:none; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-channel-select { display:block; }
+      .crm-inbox-page[data-toolbar-placement="renderer"] .crm-account-select { width:45%; }
+      .crm-channel-buttons > button { flex-shrink:0; }
+      [data-compact-filter-sheet] .crm-channel-bar { flex-direction:column; align-items:stretch; gap:12px; }
+      [data-compact-filter-sheet] .crm-channel-buttons { display:none; }
+      [data-compact-filter-sheet] .crm-channel-select { display:block; flex:none; }
+      [data-compact-filter-sheet] .crm-account-select { margin:0; width:100%; }
+      @container (max-width:720px) {
+        .crm-channel-buttons { display:none; }
+        .crm-channel-select { display:block; }
+        .crm-account-select { width:45%; }
+      }
+    `}</style>
+    <EntityListWidget key={`${feed?.key}${conversationPath}`} initialPage={initialPage} list={list} renderer={renderer} toolbarPlacement={widget.extraConfig?.toolbarPlacement === "renderer" ? "renderer" : "header"} refreshKey={refreshKey} headerExtra={<>{showToolbarControl("workspaces") && modeControls}{showToolbarControl("extensions") && toolbar}</>} toolbarContent={widget.extraConfig?.filterSidebar === "true" || widget.extraConfig?.mobileToolbar === "sheet" ? flatChannelControls : channelControls}
+      toolbarFooter={connectionsLink}
+      toolbarOptions={{filterSidebar:widget.extraConfig?.filterSidebar === "true", compactPresentation:widget.extraConfig?.mobileToolbar === "sheet" ? "sheet" : "inline", controls:configuredList("toolbarControls"),
+        views:configuredList("toolbarViewOptions") as Array<"table" | "map" | "custom"> | undefined,
+        filterKeys:configuredList("toolbarFilters"), actionKeys:configuredList("toolbarActions"), title:widget.extraConfig?.toolbarTitle !== "false", count:widget.extraConfig?.toolbarCount !== "false",
+        viewSwitcher:widget.extraConfig?.toolbarViews !== "false", search:widget.extraConfig?.toolbarSearch !== "false"}} queryParams={queryParams} />
+  </div> : <InboxSkeleton />;
 }
 registerWidget("crmInboxWorkspaces", InboxWorkspaces);

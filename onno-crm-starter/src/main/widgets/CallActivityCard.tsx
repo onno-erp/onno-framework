@@ -26,7 +26,7 @@ export function CallActivityCard({activity,author,at}: {activity:NonNullable<Ret
   const [expanded,setExpanded]=useState(false);
   const long=activity.summary.length>360;
   const Icon=activity.meeting?Video:Phone;
-  return <article aria-label={activity.title} className="mx-auto w-full max-w-lg overflow-hidden rounded-panel border border-border bg-card text-foreground shadow-sm">
+  return <article aria-label={activity.title} className="mx-auto w-full max-w-[24rem] overflow-hidden rounded-panel border border-border bg-card text-foreground shadow-sm">
     <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-field bg-primary/10 text-primary"><Icon className="size-4" /></span>
       <div className="min-w-0 flex-1"><h3 className="text-sm font-semibold">{activity.title}</h3><p className="mt-0.5 text-[11px] text-muted-foreground">{author}{at ? ` · ${at}` : ""}</p></div>

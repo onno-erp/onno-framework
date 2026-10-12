@@ -418,8 +418,49 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Validates a plugin-supplied read path and returns its normalized same-origin form
+ * (`/api/...` plus any query string). Rejects `..`/`.` segments (also percent-encoded), absolute or
+ * protocol-relative URLs, and anything that does not resolve under `/api/`. This keeps plugin reads
+ * on the documented extension surface; it is not a security boundary (plugins share the session).
+ */
+export function normalizeExtensionApiPath(path: string): string {
+  const invalid = () => new Error(`Expected a same-origin /api/ path, got "${path}"`);
+  if (typeof path !== "string" || !path.startsWith("/api/") || path.startsWith("//") || path.includes("\\")) {
+    throw invalid();
+  }
+  const pathname = path.split(/[?#]/, 1)[0];
+  const segments = pathname.split("/").map((segment) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      throw invalid();
+    }
+  });
+  if (segments.some((segment) => segment === ".." || segment === "." || segment.includes("/") || segment.includes("\\"))) {
+    throw invalid();
+  }
+  const url = new URL(path, window.location.origin);
+  if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/")) throw invalid();
+  return url.pathname + url.search;
+}
+
 // Config & theme
 export const api = {
+  /**
+   * Authenticated extension read. The path is validated by {@link normalizeExtensionApiPath} and shares
+   * the host's in-flight GET deduplication, never a response cache. Plugin callers get a deep copy via
+   * the plugin host, so a mutating widget cannot corrupt the object the host renders.
+   */
+  getJson: <T,>(path: string): Promise<T> => {
+    let normalized: string;
+    try {
+      normalized = normalizeExtensionApiPath(path);
+    } catch (e) {
+      return Promise.reject(e);
+    }
+    return fetchJson<T>(normalized, undefined, {silent:true});
+  },
   getCurrentUser: () => fetchJson<AuthUser>(`${BASE}/auth/me`),
   login: (username: string, password: string) =>
     fetchJson<AuthUser>(`${BASE}/auth/login`, {

@@ -47,7 +47,15 @@ public class ConversationMessage extends CatalogObject implements Validated {
     @Attribute(displayName = "Author id", length = 64)
     private String authorId;
 
-    @Attribute(displayName = "Body", required = true, length = 8000)
+    /** Optional email subject override, retained for queued delivery and retries. */
+    @Attribute(displayName = "Subject", length = 998)
+    private String subject;
+
+    /** Recipient captured when queued, so retries cannot switch address. */
+    @Attribute(displayName = "Recipient", length = 320)
+    private String recipient;
+
+    @Attribute(displayName = "Body", length = 8000)
     private String body;
 
     @Attribute(displayName = "Sent at", required = true)

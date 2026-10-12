@@ -1,3 +1,4 @@
+import { MobileHeaderExtension } from "@/lib/mobile-header";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   render,
@@ -65,7 +66,7 @@ class RowExtension {
   }
 }
 
-const CONTENT_EXTENSIONS: Extensions = new Map([["row", RowExtension]]);
+const CONTENT_EXTENSIONS: Extensions = new Map<string, typeof RowExtension | typeof MobileHeaderExtension>([["row", RowExtension], ["mobile-header", MobileHeaderExtension]]);
 
 // The content endpoint envelope: a DivKit card plus an optional seed for the
 // variables the card binds — numbers (e.g. the list count) or strings (form fields).

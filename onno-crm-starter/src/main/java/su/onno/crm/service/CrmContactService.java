@@ -20,22 +20,44 @@ public class CrmContactService {
     private final CrmWorkspaceService workspace;
     private final JdbcTemplate jdbc;
     private final UiAccessService access;
-    private su.onno.ui.RecordAccess recordAccess;
-    private su.onno.ui.AccessSubjectResolver subjects;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.ui.RecordAccess> recordAccess;
+    private org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects;
 
     /**
      * Apply the bound customer catalog's {@code RecordAccessPolicy} on top of {@code readableWhen}:
      * a customer outside the viewer's record scope is unreadable here too, so the inbox, contact
      * panel and merge commands never surface it.
      */
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    /** Manual wiring (tests, non-Spring use); Spring injects lazily through {@link #lazyRecordAccess}. */
     public void setRecordAccess(su.onno.ui.RecordAccess recordAccess, su.onno.ui.AccessSubjectResolver subjects) {
+        this.recordAccess = provider(recordAccess);
+        this.subjects = provider(subjects);
+    }
+
+    /**
+     * Resolved on first use, not at construction: the subject resolver depends on every EntityView,
+     * and host views commonly depend on CRM services, which would otherwise form a creation cycle.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    void lazyRecordAccess(org.springframework.beans.factory.ObjectProvider<su.onno.ui.RecordAccess> recordAccess,
+                          org.springframework.beans.factory.ObjectProvider<su.onno.ui.AccessSubjectResolver> subjects) {
         this.recordAccess = recordAccess;
         this.subjects = subjects;
     }
 
+    private static <T> org.springframework.beans.factory.ObjectProvider<T> provider(T value) {
+        return new org.springframework.beans.factory.ObjectProvider<>() {
+            @Override public T getObject() { return value; }
+            @Override public T getObject(Object... args) { return value; }
+            @Override public T getIfAvailable() { return value; }
+            @Override public T getIfUnique() { return value; }
+        };
+    }
+
     /** The subset of canonical customer ids inside the viewer's record scope (all when unscoped). */
     private Set<UUID> inRecordScope(Collection<UUID> canonicalIds, Principal principal) {
+        var recordAccess = this.recordAccess == null ? null : this.recordAccess.getIfAvailable();
+        var subjects = this.subjects == null ? null : this.subjects.getIfAvailable();
         if (recordAccess == null || subjects == null || canonicalIds.isEmpty()) return new HashSet<>(canonicalIds);
         Class<?> type = binding.catalog().type();
         var subject = subjects.resolve(principal);

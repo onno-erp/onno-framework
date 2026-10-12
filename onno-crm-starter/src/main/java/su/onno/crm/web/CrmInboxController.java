@@ -37,6 +37,8 @@ public class CrmInboxController {
     private final su.onno.crm.service.CrmInboxWorkspaceService workspaces;
     private final CommentAuthorAvatars authorAvatars;
     private final su.onno.crm.service.CrmAttachments attachments;
+    private final su.onno.crm.repository.ContactIdentityRepository identities;
+    private final su.onno.crm.service.CrmContactService contacts;
 
     public CrmInboxController(
             ConversationService service,
@@ -44,8 +46,12 @@ public class CrmInboxController {
             CrmAgentIdentityResolver agentIdentities,
             UiAccessService access, su.onno.crm.service.CrmInboxWorkspaceService workspaces,
             CommentAuthorAvatars authorAvatars,
-            su.onno.crm.service.CrmAttachments attachments
+            su.onno.crm.service.CrmAttachments attachments,
+            su.onno.crm.repository.ContactIdentityRepository identities,
+            su.onno.crm.service.CrmContactService contacts
     ) {
+        this.identities = identities;
+        this.contacts = contacts;
         this.service = service;
         this.currentUsers = currentUsers;
         this.agentIdentities = agentIdentities;
@@ -75,20 +81,61 @@ public class CrmInboxController {
             @org.springframework.web.bind.annotation.RequestParam(required=false) String workspace, Principal principal
     ) {
         requireCrmAccess(principal);
-        workspaces.requireConversation(workspace,id,principal,true);
+        var conversation=workspaces.requireConversation(workspace,id,principal,true);
+        requireVisibleRecipient(conversation,id,request==null?null:request.recipient(),principal);
         var user = currentUsers.resolve(principal);
         return view(service.addMessage(id, new ConversationService.Reply(
                 request == null ? null : request.body(),
                 request == null ? java.util.List.of() : request.attachments(),
                 user.displayName(),
-                user.recordId())), user.avatarUrl());
+                user.recordId(), request == null ? null : request.subject(), request == null ? null : request.recipient())), user.avatarUrl());
+    }
+
+    /**
+     * A chosen recipient must be one this principal can see: an address known only from another
+     * user's personal inbox is rejected exactly as if it were unknown.
+     */
+    private void requireVisibleRecipient(Conversation conversation, UUID id, String recipient, Principal principal) {
+        if (recipient == null || recipient.isBlank()) return;
+        var visible = withoutHiddenRecipients(conversation, service.delivery(id), principal);
+        String chosen = recipient.strip();
+        boolean known = chosen.equalsIgnoreCase(visible.recipient())
+                || visible.recipients().stream().anyMatch(address -> address.equalsIgnoreCase(chosen));
+        if (!known) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose one of the contact's email addresses");
     }
 
     @GetMapping("/{id}/delivery")
     public su.onno.crm.service.CrmMessageTransport.Connection delivery(@PathVariable UUID id, @org.springframework.web.bind.annotation.RequestParam(required=false) String workspace, Principal principal) {
         requireCrmAccess(principal);
-        workspaces.requireConversation(workspace,id,principal,false);
-        return service.delivery(id);
+        var conversation=workspaces.requireConversation(workspace,id,principal,false);
+        return withoutHiddenRecipients(conversation,service.delivery(id),principal);
+    }
+
+    /**
+     * A transport offers every address it knows for the customer. Addresses learned only through
+     * another user's personal account are that user's to see, so they are dropped here; the thread's
+     * own reply address stays, because the principal can already read this conversation.
+     */
+    private su.onno.crm.service.CrmMessageTransport.Connection withoutHiddenRecipients(Conversation conversation,
+            su.onno.crm.service.CrmMessageTransport.Connection connection, Principal principal) {
+        if(connection.recipients()==null || connection.recipients().isEmpty() || conversation.getCustomer()==null)return connection;
+        var all=identities.findByCustomerAndDeletionMarkFalse(contacts.canonical(conversation.getCustomer())).stream()
+            .filter(identity->su.onno.crm.domain.Channel.EMAIL.equals(identity.getChannel())).toList();
+        var visible=workspaces.visibleIdentities(all,principal);
+        if(visible.size()==all.size())return connection;
+        var allowed=new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        visible.forEach(identity->allowed.add(address(identity.getAddress())));
+        var hidden=new java.util.TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
+        all.stream().filter(identity->!visible.contains(identity)).map(identity->address(identity.getAddress()))
+            .filter(address->!allowed.contains(address) && !address.equalsIgnoreCase(Objects.toString(connection.recipient(),"")))
+            .forEach(hidden::add);
+        return connection.withRecipients(connection.recipient(),
+            connection.recipients().stream().filter(address->!hidden.contains(address(address))).toList());
+    }
+    private static String address(String value) {
+        String text=Objects.toString(value,"").strip();
+        int open=text.lastIndexOf('<'),close=text.lastIndexOf('>');
+        return (open>=0 && close>open ? text.substring(open+1,close) : text).strip();
     }
 
     @PostMapping("/{id}/messages/{messageId}/retry")
@@ -98,6 +145,17 @@ public class CrmInboxController {
         ConversationMessage retried = service.retryMessage(id, messageId);
         return view(retried, retried.getAuthorId() == null
                 ? null : authorAvatars.avatarFor(retried.getAuthorId()));
+    }
+
+    public record StatusChange(UUID status) {}
+    @PostMapping("/{id}/status")
+    public ConversationState changeStatus(@PathVariable UUID id, @RequestBody(required=false) StatusChange change,
+            @org.springframework.web.bind.annotation.RequestParam(required=false) String workspace, Principal principal) {
+        requireCrmAccess(principal);
+        workspaces.requireConversation(workspace,id,principal,true);
+        if(change==null || change.status()==null)
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST,"Choose a conversation status");
+        return ConversationState.from(service.changeStatus(id, change.status()));
     }
 
     @PostMapping("/{id}/read")
@@ -118,10 +176,12 @@ public class CrmInboxController {
     }
 
     /** {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links. */
-    public record SendMessage(String body, List<String> attachments) {
+    public record SendMessage(String body, List<String> attachments, String subject, String recipient) {
         public SendMessage {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
         }
+        public SendMessage(String body, List<String> attachments, String subject) { this(body,attachments,subject,null); }
+        public SendMessage(String body, List<String> attachments) { this(body, attachments, null); }
         public SendMessage(String body) { this(body, List.of()); }
     }
 
@@ -151,7 +211,11 @@ public class CrmInboxController {
              *  its generated fallback. Never set for an inbound message — that face is the contact's,
              *  and the renderer already has it. */
             String authorAvatarUrl,
-            List<su.onno.crm.service.CrmAttachments.View> attachments
+            List<su.onno.crm.service.CrmAttachments.View> attachments,
+            /** Email subject stored with the message (an override when the agent changed it); null otherwise. */
+            String subject,
+            /** Recipient address captured when the message was queued; null for inbound and non-email messages. */
+            String recipient
     ) {}
 
     private MessageView view(ConversationMessage message, String authorAvatarUrl) {
@@ -165,6 +229,8 @@ public class CrmInboxController {
                 message.getSentAt(),
                 message.getDeliveryStatus().name(),
                 authorAvatarUrl,
-                attachments.viewsOf(message));
+                attachments.viewsOf(message),
+                message.getSubject(),
+                message.getRecipient());
     }
 }

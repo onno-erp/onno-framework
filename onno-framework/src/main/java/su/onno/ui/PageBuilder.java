@@ -59,6 +59,12 @@ public final class PageBuilder {
         return header(false);
     }
 
+    /** Place a reusable view in this page or nested page region. */
+    public PageBuilder view(PageView view) {
+        java.util.Objects.requireNonNull(view, "view").compose(this);
+        return this;
+    }
+
     /** Add a dashboard widget; returns the widget builder for further config. */
     public UiLayoutBuilder.WidgetBuilder<Void> widget(String title) {
         return widgetHost.widget(title);
@@ -367,6 +373,17 @@ public final class PageBuilder {
             this.sortColumn = column;
             this.sortDescending = descending;
             return this;
+        }
+
+        void copyFrom(ListDefaults source) {
+            filter = source.filter;
+            groupBy = source.groupBy;
+            groupByDateGranularity = source.groupByDateGranularity;
+            fill = source.fill;
+            defaultFilters.putAll(source.defaultFilters);
+            defaultFirstFilterOptions.addAll(source.defaultFirstFilterOptions);
+            sortColumn = source.sortColumn;
+            sortDescending = source.sortDescending;
         }
 
         Map<String, Object> build() {

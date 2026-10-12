@@ -112,4 +112,18 @@ public interface EntityView<E> {
     default boolean comments() {
         return false;
     }
+
+    /**
+     * Whether this entity's records open in the main workspace pane instead of a detail island beside
+     * the list. The default {@code false} keeps the desktop master-detail split; return {@code true}
+     * for records that are full working surfaces (a priced proposal, a project), so opening one from a
+     * list, ref link or widget replaces the focused pane with the record. Single-pane layouts always
+     * navigate in place, so the flag only affects the sidebar islands layout.
+     *
+     * <p>Resolved per entity (not per profile): if any of an entity's views opts in, its records open
+     * in the main pane.</p>
+     */
+    default boolean opensInMain() {
+        return false;
+    }
 }

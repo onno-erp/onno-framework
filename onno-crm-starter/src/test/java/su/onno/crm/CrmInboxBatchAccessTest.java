@@ -42,7 +42,7 @@ class CrmInboxBatchAccessTest {
 
     private CrmInboxWorkspaceService service(List<CrmInboxWorkspace> definitions) {
         return new CrmInboxWorkspaceService(definitions, mock(su.onno.crm.repository.ConversationRepository.class),
-                access, mock(CrmWorkspaceService.class), contacts);
+                access, mock(CrmWorkspaceService.class), contacts,org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
     }
 
     @Test

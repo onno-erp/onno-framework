@@ -29,6 +29,13 @@ public class GmailClient {
             @Value("${onno.crm.channels.gmail.redirect-uri:http://127.0.0.1:8090/api/crm/gmail/callback}") String redirectUri) {
         this.json=json;this.clientFile=Path.of(clientFile);this.tokensFile=Path.of(tokensFile);this.redirectUri=redirectUri;
     }
+    private final java.util.concurrent.ConcurrentMap<java.util.UUID,GmailClient> accountClients=new java.util.concurrent.ConcurrentHashMap<>();
+    public GmailClient forAccount(java.util.UUID id) {
+        return accountClients.computeIfAbsent(id,key->new GmailClient(json,clientFile.toString(),tokensFile.toAbsolutePath().getParent().resolve("gmail-"+key+".json").toString(),redirectUri));
+    }
+    public synchronized void disconnect() {
+        try { Files.deleteIfExists(tokensFile); } catch(java.io.IOException error) { throw new IllegalStateException("Could not remove account credentials"); }
+    }
     public boolean configured() { return Files.isRegularFile(clientFile); }
     public boolean authorized() { return Files.isRegularFile(tokensFile); }
     private JsonNode credentials() {
@@ -78,7 +85,9 @@ public class GmailClient {
     }
     public JsonNode get(String path) {return request("GET","https://gmail.googleapis.com/gmail/v1/users/me/"+path,accessToken(),null);}
     public JsonNode send(String raw,String threadId) {
-        return request("POST","https://gmail.googleapis.com/gmail/v1/users/me/messages/send",accessToken(),json.createObjectNode().put("raw",raw).put("threadId",threadId));
+        var payload=json.createObjectNode().put("raw",raw);
+        if(threadId!=null&&!threadId.isBlank())payload.put("threadId",threadId);
+        return request("POST","https://gmail.googleapis.com/gmail/v1/users/me/messages/send",accessToken(),payload);
     }
     private JsonNode postForm(String url,Map<String,String> fields) {
         return execute(HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30)).header("Content-Type","application/x-www-form-urlencoded")

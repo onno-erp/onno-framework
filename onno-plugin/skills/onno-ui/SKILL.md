@@ -28,6 +28,11 @@ placement and validations alike.
 
 ## Layout
 
+The `/` home entry is automatic when a root Page or dashboard widgets exist. Set its label through
+the root Page title; do not link `/` again with `.page(...)` or `spec.link(...)`. For other routes,
+use `spec.link(...)` for direct navigation or `.page(...)` inside a section. Follow
+[the layout/page skill](../onno-ui-layout-pages/SKILL.md), including its shell uniqueness checks.
+
 Use `spec.section("Sales").icon("...").catalog(Customer.class).document(Invoice.class)` for entity
 links and `.page("/ops", "Sales Ops", "activity")` for authored pages. Use `profile()` and
 `viewport()` for personas: `Layout.profile()` names the persona and

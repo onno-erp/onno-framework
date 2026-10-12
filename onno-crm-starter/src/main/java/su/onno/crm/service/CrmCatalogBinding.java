@@ -35,7 +35,7 @@ public final class CrmCatalogBinding<T extends CatalogObject> {
     /**
      * The same projection, filed under a named section. The contact panel groups its fields by
      * section and draws one heading per group, so a host that exposes more than a handful of fields
-     * can say which belong together — "The wedding" apart from "Pipeline" — instead of handing the
+     * can say which belong together — "Billing" apart from "Pipeline" — instead of handing the
      * reader one undifferentiated list.
      */
     public CrmCatalogBinding<T> field(String key, String label, String section, String format, Function<T, ?> getter) {

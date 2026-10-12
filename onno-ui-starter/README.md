@@ -127,6 +127,12 @@ does not override the host. Viewport-specific layouts augment the universal cont
 viewport. This lets a starter such as a CRM module bring its Inbox/Sales routes into an existing
 application while preserving that application's shell.
 
+The shell automatically adds one home entry when an authored `/` Page or dashboard widgets exist
+for the active profile/viewport. Do not also declare `.page("/", ...)` or `spec.link("/", ...)`: that
+creates duplicate navigation to the same page. Other custom pages require an explicit link.
+Verify resolved `navigation[*].items` from `/api/divkit/shell` has exactly one root path on desktop
+and mobile for each applicable role.
+
 The home/dashboard entry is the one nav/tab label that can also be chrome: it uses the authored `/`
 `Page`'s `title` when set (localize it with `b.title(...)`), otherwise the `nav.dashboard` key — so a
 widget-grid dashboard with no authored page still localizes its sidebar item and tab via
@@ -781,8 +787,9 @@ class SalesOpsPage implements Page {
 - **Right rail** (shortcut). `b.aside(a -> { … })` is the common two-column case — a narrow side
   column beside the main content (stat tiles to the right of a `b.list(...)`); stacks below on mobile.
   Equivalent to a `row` with a flexible main column and a fixed rail.
-- **Link it in the nav.** A custom route only appears in the sidebar once a `Layout` section lists
-  it: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
+- **Link non-root routes in the nav.** The `/` home route is automatic when an authored root Page
+  or dashboard widgets exist. Never link it again in a section or with `spec.link("/", ...)`.
+  For another custom route, use `spec.link(...)` for direct navigation or a section entry: `spec.section("Reports").page("/ops", "Sales Ops", "activity")` — the page peer of
   `.catalog(...)`/`.document(...)`.
 
 ### Process task inbox
@@ -1058,8 +1065,10 @@ the `su.onno.widgets` Gradle plugin. No `package.json`, no `npm`, no frontend fo
 `./gradlew bootJar` compiles each `.tsx` (managed Node + esbuild, React aliased to the host SPA so
 the output is a ~1 KB module with no React of its own) into `onno-plugins/<name>.js` on the classpath.
 The starter scans that location, serves the modules under `{onno.ui.path}/plugins/**`, and advertises
-them as `pluginScripts` from `GET /api/config`; the SPA dynamic-imports each at boot and each
-self-registers. At startup the UI starter stages discovered plugin JS/CSS into a stable temporary
+them as `pluginScripts` from `GET /api/config`. The served `index.html` also carries a
+`<link rel="modulepreload" data-onno-plugin-script>` per installed module (inserted after the opening
+`<head>` tag, attributes allowed) so the browser fetches them alongside the host bundle; the SPA
+evaluates them only once a user is signed in — never on the login screen — and each self-registers. At startup the UI starter stages discovered plugin JS/CSS into a stable temporary
 serve directory. This prevents a Gradle continuous build from rewriting a dependency JAR while
 Spring is serving a plugin resource. An unregistered `type(...)` renders a labelled placeholder
 rather than vanishing.
@@ -1271,6 +1280,7 @@ Comments are **opt-in per entity**, and off by default. An entity gets a thread 
 public class BookingView implements EntityView {
     @Override public Class<?> entity() { return Booking.class; }
     @Override public boolean comments() { return true; }   // off by default; opt in here
+    @Override public boolean opensInMain() { return true; } // open records in the main pane, not beside the list
 }
 ```
 
@@ -1568,8 +1578,8 @@ Commands must enforce their own server-side authorization; unknown widget types 
 ### Structured record tags
 
 `EntityTags` is a host/SDK component with `{ kind: "catalogs" | "documents", name, id,
-readOnly? }`. It displays colored chips and supports selecting existing catalog tags and adding/removing
-individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
+readOnly? }`. It displays colored chips and supports selecting existing tags, creating a tag inline
+(type a new name and press Enter or choose *Create*), and adding/removing individual assignments. Use `<EntityTags kind="catalogs" name="customers" id={id} />` in
 widgets, or `detail.widget("Tags").type("entityTags")` in an EntityView's detail configuration.
 
 The UI starter stores stable tag IDs, names, colors, and record assignments in `onno_tags` and
@@ -1581,7 +1591,9 @@ beans add record-level checks; the CRM uses its workspace customer permissions.
 Bind an ordinary application tag catalog with a `TagCatalog` bean (`scope`, `list`, and an idempotent
 legacy `importTag`). The catalog owns names, colors, permissions, and soft deletion; the tagging
 service owns record assignments. CRM provides `CrmTags`, available under Configuration → Tags.
-The Add tag picker only searches/selects existing catalog entries. Legacy IDs and assignments
+The Add tag picker searches existing entries and can create a new one through
+`POST /api/tags/{kind}/{name}` (`{name,color}`; requires write access to the tagged entity), which goes
+through `TagCatalog.importTag` when a catalog is bound. Legacy IDs and assignments
 survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
 
 ### UI extension outlets
@@ -1606,6 +1618,15 @@ The current response renders before a queued refresh; filter changes still disca
 and failed background refreshes preserve the visible rows.
 
 ### Date and time fields
+
+Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
+field plus a picker popover. `compact` shows only a round swatch (the hex field moves into the
+popover) for dense rows; `onCommit` fires once with the final colour when the popover closes, so a
+row can save without a request per drag step:
+
+```tsx
+<ColorPicker compact aria-label="Stage colour" value={color} onChange={setColor} onCommit={save} />
+```
 
 Import `DatePicker` for dates and `DateTimePicker` for local dates with 24-hour time:
 
@@ -1643,3 +1664,32 @@ Undo remove restores the most
 recently removed row at its original position while preserving subsequent edits to other rows.
 These edits remain in the document draft until the document is saved. Read-only forms hide
 row actions and disable cells.
+
+### Mobile navigation presentation
+
+`layout.shell().mobileItem("/", "Home", 0).mobileItem("/inbox", "Inbox", 1)` adds short labels and bottom-bar priority to existing authorized destinations. Lower order values appear first; unspecified destinations follow in their existing order. The first four appear beside More, where the full navigation remains available. Overrides do not create routes or widen access. Desktop, page titles, and the More menu keep their full labels; screen readers receive the full destination label. Bottom-bar labels use one line.
+
+On bottom-bar shells, declared navigation destinations are top-level screens. Opening another route shows a Back header and hides the bottom bar. Parent surfaces stay mounted until returning or switching top-level destinations, retaining their filters and scroll state. Direct entity links fall back to their catalog/document list. Back asks before discarding a dirty form. Widgets with in-page child states can call SDK `useMobileDetail(active)` when they provide their own Back control; the CRM inbox uses this for an open compact chat. Requests are scoped to the mounted route and released on cleanup.
+
+Composed list toolbars support `toolbarOptions: { title, count, search, viewSwitcher }` (each defaults to visible), a compact `headerExtra` slot beside the title, and a full-width `toolbarContent` row inside the same bordered toolbar. Use the second row for channel/account selectors or other controls that need room on phones. Visibility options change presentation only.
+
+Custom operational workspaces can opt into `EntityListWidget toolbarPlacement="renderer"`.
+Their `ListRendererProps.toolbar` contains the actual host controls, not duplicated search or
+filter state. Keep it mounted even for empty results. Other views retain the ordinary toolbar.
+Use shared `WorkspaceToolbar` for domain-neutral placement/visibility/mobile overrides in
+workspace headers and action rows; see `onno-widget-sdk/README.md` for its layout contract.
+
+For touch layouts, `toolbarOptions.compactPresentation="sheet"` replaces the toolbar with
+an always-visible full-width search field and a Filters disclosure. The existing controls
+(including secondary contributions) stay in a shared bottom sheet; filter/query state stays
+with the list. Desktop retains the inline toolbar. Active filters mark the disclosure.
+
+`UiEntityAccessPolicy.includesAdministrators()` defaults to false. A policy may explicitly return
+true to enforce a privacy boundary on ADMIN as well; per-entity role superuser semantics otherwise
+remain unchanged. CRM uses this to close generic catalog/export/event bypasses for personal inboxes.
+
+Filesystem media storage preserves the original filename and content type in private metadata
+sidecars, including across restarts. Existing files without metadata remain readable using
+their storage filename and detected type. The media endpoint never serves metadata sidecars.
+
+Common audio media types (Ogg, MP3, MP4, WebM, WAV, AAC and FLAC) are served inline for voice-message playback, retaining `nosniff`. Other file types retain their existing disposition policy.

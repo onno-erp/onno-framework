@@ -126,6 +126,8 @@ class RecordPolicyConformanceTest {
                 "POST /api/comments/{commentId}/reactions", "DELETE /api/comments/{commentId}",
                 "GET /api/tags/{kind}/{name}", "GET /api/tags/{kind}/{name}/{id}",
                 "POST /api/tags/{kind}/{name}/{id}/{tag}", "DELETE /api/tags/{kind}/{name}/{id}/{tag}",
+                // Library definitions are shared; record-restricted subjects are refused outright.
+                "POST /api/tags/{kind}/{name}",
                 "GET /api/presence", "POST /api/presence",
                 "GET /api/actions/{kind}/{name}", "POST /api/actions/{kind}/{name}/{key}",
                 "GET /api/actions/{kind}/{name}/{key}/form", "POST /api/actions/{kind}/{name}/{key}/batch",
@@ -156,7 +158,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/tasks/{workItemId}/history", "POST /api/tasks/{workItemId}/delegate",
                 "POST /api/tasks/{workItemId}/complete",
                 // Media is not record-bound yet (design §8, follow-up): no record data is served.
-                "POST /api/media", "GET /api/media/{*key}",
+                "POST /api/media", "GET /api/media/{*key}", "GET /api/media/limits",
                 "GET /error", "* /error")) {
             ROUTES.put(r, Route.NO_ENTITY_DATA);
         }
@@ -402,6 +404,7 @@ class RecordPolicyConformanceTest {
         status(get("/api/tags/catalogs/LkTenants/" + tenantB), 404);
         status(post("/api/tags/catalogs/LkTenants/" + tenantB + "/" + UUID.randomUUID()), 404);
         status(delete("/api/tags/catalogs/LkTenants/" + tenantB + "/" + UUID.randomUUID()), 404);
+        status(post("/api/tags/catalogs/LkTenants").contentType("application/json").content("{\"name\":\"Leak\"}"), 403);
 
         Map<String, Object> snapshot = jsonMap(ok(get("/api/presence")));
         assertThat((List<?>) snapshot.get("records")).isEmpty();

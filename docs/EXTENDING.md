@@ -358,9 +358,23 @@ Custom list renderers receive optional `hasMore`, `loadingMore`, `loadMoreFailed
 props. A renderer with its own scrolling pane must call `loadMore()` near that pane's bottom and
 provide an accessible load-more/retry button (disabled while loading). Stop automatic retries after
 `loadMoreFailed`; an explicit retry uses the same cursor. The host retains the scoped feed, filters,
-query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer.
+query generation, row deduplication and loading guard. Do not fetch the entire catalog in a renderer. The host
+shows a "Loading more…" status below the renderer while a window loads; a renderer that draws its
+own opts out with `registerListRenderer(type, C, { ownsLoadingMore: true })`.
 
 Custom list renderers receive optional `ListRendererProps.total`, the server count matching the
 current search and filters, independently of how many pages are loaded. A null/omitted total means
 unknown. The inbox uses this count in its main chat header; folder counts remain scoped to loaded
 rows and are labeled as the current view.
+
+### Connection providers and account privacy
+
+Contribute `CrmAccountProvider` beans for installed-provider metadata, supported account scopes,
+availability/setup guidance, account views and commands. Pair them with `crm.channel.settings`
+extensions for provider-owned authorization UI; managed contexts include accountId, scope and
+server-derived canManage. Use `CrmConnectionAccounts` for credential-free ownership/inbox binding,
+and private connector storage for secrets. Do not advertise personal scope without isolated
+credentials and inbox routing: advertising `PERSONAL` also closes the generic CRM catalogs to
+administrators. Existing `CrmChannelConnection` beans remain shared legacy accounts.
+For explicit privacy boundaries, `UiEntityAccessPolicy.includesAdministrators()` opts out of the
+ordinary ADMIN bypass. See the CRM starter README for full contracts and widget configuration.

@@ -24,7 +24,11 @@ public final class ShellLayoutBuilder {
 
     public record ProfileLink(String id, String title) {}
 
-    public record NavItem(String label, String url, String icon, String path) {}
+    public record NavItem(String label, String url, String icon, String path, String mobileLabel, int mobileOrder) {
+        public NavItem(String label, String url, String icon, String path) {
+            this(label, url, icon, path, label, Integer.MAX_VALUE);
+        }
+    }
 
     public record NavSection(String title, String icon, List<NavItem> items) {}
 
@@ -469,6 +473,7 @@ public final class ShellLayoutBuilder {
         }
 
         List<Map<String, Object>> tabs = new ArrayList<>();
+        items.sort(java.util.Comparator.comparingInt(NavItem::mobileOrder));
         int primary = Math.min(MAX_PRIMARY_TABS, items.size());
         for (NavItem item : items.subList(0, primary)) {
             tabs.add(bottomTab(item, p, compact, false));
@@ -501,8 +506,8 @@ public final class ShellLayoutBuilder {
 
     private static Map<String, Object> bottomTab(NavItem item, Palette p, boolean compact, boolean unreadDot) {
         String color = activeColor(item.path(), p.primary(), p.muted());
-        Map<String, Object> label = Div.text(item.label(), 12, "regular");
-        Div.maxLines(label, compact ? 1 : 2);
+        Map<String, Object> label = Div.text(item.mobileLabel(), 12, "regular");
+        Div.maxLines(label, 1);
         Div.color(label, color);
         Div.textAlign(label, "center");
 
@@ -526,6 +531,7 @@ public final class ShellLayoutBuilder {
         Div.corner(tab, Radii.TAB);
         Div.alignH(tab, "center");
         Div.background(tab, activeColor(item.path(), p.primarySoft(), TRANSPARENT));
+        tab.put("accessibility", Map.of("description", item.label()));
         Div.action(tab, "nav", item.url());
         return tab;
     }

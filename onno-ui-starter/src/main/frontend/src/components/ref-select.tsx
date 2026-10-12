@@ -219,11 +219,9 @@ export function RefSelect({
     return (
       <>
         {trigger}
-        {open ? (
-          <FacetSheet label={t("form.select", { name: targetName })} onClose={() => setOpen(false)}>
-            {content}
-          </FacetSheet>
-        ) : null}
+        <FacetSheet open={open} label={t("form.select", { name: targetName })} onClose={() => setOpen(false)}>
+          {content}
+        </FacetSheet>
       </>
     );
   }

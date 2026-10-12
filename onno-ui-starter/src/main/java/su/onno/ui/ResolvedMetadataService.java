@@ -195,6 +195,11 @@ public class ResolvedMetadataService {
             Map<String, Object> tsMap = new LinkedHashMap<>();
             tsMap.put("name", ts.name());
             tsMap.put("tableName", ts.tableName());
+            // f.field("items").label("Lines") titles the section's grid; absent → client humanizes the name.
+            FieldHint sectionHint = hints.get(ts.name());
+            if (sectionHint != null && sectionHint.label() != null && !sectionHint.label().isBlank()) {
+                tsMap.put("label", sectionHint.label());
+            }
             // Tabular-section column hints are addressed with a section-scoped key on the document's
             // own EntityView — e.g. f.field("items.unitPrice").format("currency:USD"). The prefix is
             // the section name; it keeps a line-field hint from colliding with a same-named top-level

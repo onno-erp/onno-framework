@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route, useLocation } from "react-router";
 import { api } from "@/lib/api";
-import { injectPluginStyles, loadPlugins } from "@/lib/plugin-loader";
+import { injectPluginStyles, loadPlugins, loadBootPlugins } from "@/lib/plugin-loader";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { BrandingProvider } from "@/providers/branding-provider";
 import { MessagesProvider, useMessages } from "@/providers/messages-provider";
@@ -33,10 +33,17 @@ function ProtectedApp() {
   const location = useLocation();
   const t = useMessages();
 
-  // Load consumer widget plugins once the authenticated shell mounts. Each plugin self-registers its
-  // widget types with window.onno.registerWidget; the DivKit content then renders div-custom widgets
-  // of those types. Fire-and-forget — registerWidget re-publishes, so late arrivals still render.
+  const authenticated = !!user;
+
+  // Load consumer widget plugins only once a user is signed in: plugin code runs with the app's
+  // session, so it never evaluates on the login screen. The server's modulepreload links have already
+  // fetched the boot modules, so evaluating them here costs no extra round trip. Each plugin
+  // self-registers its widget types with window.onno.registerWidget; the DivKit content then renders
+  // div-custom widgets of those types. Fire-and-forget — registerWidget re-publishes, so late
+  // arrivals still render.
   useEffect(() => {
+    if (!authenticated) return;
+    loadBootPlugins();
     let cancelled = false;
     api
       .getConfig()
@@ -54,7 +61,7 @@ function ProtectedApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
     recordRouteView(location.pathname);

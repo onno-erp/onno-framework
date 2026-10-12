@@ -176,7 +176,7 @@ final class Components {
         // 4 + the root's 8dp item spacing = 12dp under the header — the same gutter the widget
         // grid uses between rows, so the header doesn't sit visibly farther from the content.
         Div.margins(header, 0, 0, 4, 0);
-        return header;
+        return Div.extension(header, "mobile-header", Map.of());
     }
 
     static Map<String, Object> card(List<Map<String, Object>> items, Palette p) {

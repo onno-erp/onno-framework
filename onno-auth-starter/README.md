@@ -458,3 +458,7 @@ form behind a back link — so it stays uncluttered; single-method screens rende
 - **`{baseUrl}` resolves from the request.** Behind a reverse proxy, make sure forwarded-header
   handling is on (`server.forward-headers-strategy=framework`) so `{baseUrl}` expands to the public
   origin and not the internal `http://localhost`.
+
+ADMIN bypasses entity role checks and ordinary `UiEntityAccessPolicy` gates. Policies explicitly
+returning `includesAdministrators() == true` enforce additional privacy boundaries even for ADMIN
+(for example, CRM personal-account records must use owner-scoped APIs).

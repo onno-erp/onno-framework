@@ -233,7 +233,37 @@ public class DivKitController implements DisposableBean {
         }
         out.put("titles", titles);
         out.put("icons", icons);
+        out.put("mainRecordRoutes", mainRecordRoutes(viewResolver, catalogQuery, documentQuery, access,
+                principal, activeProfile.id()));
         return out;
+    }
+
+    /**
+     * Entity list routes ({@code /catalogs/{name}}, {@code /documents/{name}}) whose records open in
+     * the focused pane rather than a detail island beside it ({@link EntityView#opensInMain()}). The
+     * client routes onno://{kind}/{name}/{id} for these exactly like an explicit onno://main/...
+     * action. Derived from the views rather than the navigation, so an entity reached only through
+     * links (not placed in the nav) still opens in the main pane.
+     */
+    static List<String> mainRecordRoutes(UiViewResolver viewResolver, CatalogQueryService catalogQuery,
+                                         DocumentQueryService documentQuery, UiAccessService access,
+                                         Principal principal, String profileId) {
+        List<String> routes = new ArrayList<>();
+        for (Class<?> entity : viewResolver.mainPaneEntities()) {
+            if (!viewResolver.hasView(entity, profileId)) {
+                continue;
+            }
+            CatalogDescriptor catalog = catalogQuery.forClass(entity);
+            if (catalog != null && access.canRead(principal, catalog)) {
+                routes.add("/catalogs/" + toSnakeCase(catalog.logicalName()));
+                continue;
+            }
+            DocumentDescriptor document = documentQuery.forClass(entity);
+            if (document != null && access.canRead(principal, document)) {
+                routes.add("/documents/" + toSnakeCase(document.logicalName()));
+            }
+        }
+        return routes;
     }
 
     @GetMapping("/account")
@@ -1106,7 +1136,13 @@ public class DivKitController implements DisposableBean {
         // a Page at "/settings" (e.g. a .widget(...).type("setting") input bound to a @Constant) and
         // links it like any other page — section(...).page("/settings", "Settings", "settings"), scoped
         // to an admin profile if it should be admin-only. The /api/settings endpoints enforce ADMIN on write.
-        return nav;
+        var mobileItems = layoutSet.forViewport(vp).shell().mobileItems();
+        return nav.stream().map(section -> new ShellLayoutBuilder.NavSection(section.title(), section.icon(),
+                section.items().stream().map(item -> {
+                    var mobile = mobileItems.get(item.path());
+                    return mobile == null ? item : new ShellLayoutBuilder.NavItem(item.label(), item.url(),
+                            item.icon(), item.path(), mobile.label(), mobile.order());
+                }).toList())).toList();
     }
 
     /**
