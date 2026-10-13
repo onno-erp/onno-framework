@@ -199,6 +199,15 @@ public final class UiMessages {
         d.put("crm.chat.noMessages", "No messages yet");
         d.put("crm.chat.removeFile", "Remove {name}");
         d.put("crm.chat.retryWarning", "Check the channel before retrying: an interrupted attempt may already have sent the message.");
+        d.put("crm.email.frameTitle", "Email content");
+        d.put("crm.email.expand", "Show full email");
+        d.put("crm.email.collapse", "Collapse email");
+        d.put("crm.media.viewer", "Media viewer");
+        d.put("crm.media.previous", "Previous");
+        d.put("crm.media.next", "Next");
+        d.put("crm.media.close", "Close");
+        d.put("crm.media.download", "Download");
+        d.put("crm.media.open", "Open image {index} of {count}");
         d.put("crm.chat.sendFrom", "Send from");
         d.put("crm.chat.teamMember", "Team member");
         d.put("crm.chat.unknownCustomer", "Unknown customer");
@@ -305,6 +314,25 @@ public final class UiMessages {
         d.put("calendar.open", "Open calendar");
         d.put("calendar.readOnly", "read only");
         d.put("calendar.emptyThisMonth", "No {name} this month.");
+        d.put("calendar.agenda", "Agenda");
+        d.put("calendar.allDay", "All day");
+        d.put("calendar.allOf", "All: {name}");
+        d.put("calendar.onlyMe", "Only me");
+        d.put("calendar.overdue", "Overdue");
+        d.put("calendar.legend", "Calendar sources");
+        d.put("calendar.emptyRange", "Nothing planned this month.");
+        d.put("calendar.moveFailed", "Could not reschedule this item.");
+        d.put("calendar.loadFailed", "Could not load the calendar.");
+        d.put("calendar.jumpTo", "Go to a month or year");
+        d.put("calendar.back", "Back");
+        d.put("calendar.itemCount", "{count} planned");
+        d.put("calendar.year", "Year");
+        d.put("calendar.close", "Close");
+        d.put("calendar.done", "Done");
+        d.put("calendar.when", "When");
+        d.put("calendar.openItem", "Open");
+        d.put("calendar.minutes", "{count} min");
+        d.put("calendar.hours", "{count} h");
 
         // Time-range picker chrome (dashboard shared date-range control).
         d.put("timeRange.dateRange", "Date range");

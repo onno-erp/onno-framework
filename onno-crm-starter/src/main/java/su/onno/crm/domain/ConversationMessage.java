@@ -58,6 +58,14 @@ public class ConversationMessage extends CatalogObject implements Validated {
     @Attribute(displayName = "Body", length = 8000)
     private String body;
 
+    /**
+     * Sanitized HTML of an email, when the provider supplied one. {@link #body} keeps the plain-text
+     * version for previews, search and channels without HTML; the inbox renders this instead when
+     * present, isolated in a sandboxed frame. Transports must sanitize before storing.
+     */
+    @Attribute(displayName = "HTML body", length = 1_000_000)
+    private String bodyHtml;
+
     @Attribute(displayName = "Sent at", required = true)
     private LocalDateTime sentAt = LocalDateTime.now();
 

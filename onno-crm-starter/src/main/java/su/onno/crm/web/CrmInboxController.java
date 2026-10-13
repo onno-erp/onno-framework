@@ -215,7 +215,9 @@ public class CrmInboxController {
             /** Email subject stored with the message (an override when the agent changed it); null otherwise. */
             String subject,
             /** Recipient address captured when the message was queued; null for inbound and non-email messages. */
-            String recipient
+            String recipient,
+            /** Sanitized email HTML; null when the message is plain text. Render isolated, never inline. */
+            String bodyHtml
     ) {}
 
     private MessageView view(ConversationMessage message, String authorAvatarUrl) {
@@ -231,6 +233,7 @@ public class CrmInboxController {
                 authorAvatarUrl,
                 attachments.viewsOf(message),
                 message.getSubject(),
-                message.getRecipient());
+                message.getRecipient(),
+                message.getBodyHtml());
     }
 }

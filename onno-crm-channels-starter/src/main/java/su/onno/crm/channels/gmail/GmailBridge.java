@@ -66,6 +66,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
      */
     private void createBackfillMarkers() {
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_gmail_files_backfill_v2 (account VARCHAR(320) PRIMARY KEY)");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_gmail_html_backfill (account VARCHAR(320) PRIMARY KEY)");
     }
     private record Account(String email,UUID inbox,String history,boolean active,UUID connectionId) {}
     private List<Account> accounts() { return jdbc.query("SELECT account,inbox_id,history_id,active,connection_id FROM onno_crm_gmail_account",(rs,n)->new Account(rs.getString(1),rs.getObject(2,UUID.class),rs.getString(3),rs.getBoolean(4),rs.getObject(5,UUID.class))); }
@@ -86,6 +87,8 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 // A new mailbox imports files from its first sync; it must never be backfilled.
                 if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_files_backfill_v2 WHERE account=?",Integer.class,email)==0)
                     jdbc.update("INSERT INTO onno_crm_gmail_files_backfill_v2 VALUES (?)",email);
+                if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_html_backfill WHERE account=?",Integer.class,email)==0)
+                    jdbc.update("INSERT INTO onno_crm_gmail_html_backfill VALUES (?)",email);
                 if(connectionId!=null)connectionAccounts.bindInbox(connectionId,inbox.getId());}
             else{jdbc.update("UPDATE onno_crm_gmail_account SET active=TRUE WHERE account=?",email);inboxes.findActiveById(old.inbox).ifPresent(i->{i.setActive(true);inboxes.save(i);});}});if(connectionId==null)failure="";else accountFailures.remove(connectionId);
     }
@@ -145,7 +148,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         else if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='QUEUED' WHERE message_id=? AND state='FAILED'",message.getId())!=1)throw new IllegalArgumentException("Reply is already queued or sent");}
     synchronized void tick(){if(!ready)return;for(var a:accounts()) {
         if(!a.active || !client(a).authorized())continue;
-        try {deliver(a);sync(a);backfillFiles(a);if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
+        try {deliver(a);sync(a);backfillFiles(a);backfillHtml(a);if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
         catch(Exception e){String message="Gmail synchronization failed; check connection or reconnect";if(a.connectionId==null)failure=message;else accountFailures.put(a.connectionId,message);log.warn("Gmail synchronization deferred ({})",e.getClass().getSimpleName());}
     }}
     private void sync(Account a) throws Exception {
@@ -181,7 +184,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                     var reply=new ConversationMessage();reply.setConversation(Ref.of(Conversation.class,c.getId()));reply.setChannel(Channel.EMAIL);
                     reply.setKind(MessageKind.AGENT_REPLY);reply.setDirection(MessageDirection.OUTBOUND);reply.setDeliveryStatus(DeliveryStatus.SENT);
                     var files=importFiles(mail);
-                    reply.setAuthorName(cut(mail.name(),200));reply.setBody(cut(files.withNotes(mail.text()),8000));reply.setDescription(cut(mail.text(),100));
+                    reply.setAuthorName(cut(mail.name(),200));reply.setBody(cut(files.withNotes(mail.text()),8000));reply.setBodyHtml(files.html(mail));reply.setDescription(cut(mail.text(),100));
                     reply.setSentAt(receivedAt);reply.setExternalMessageId("gmail:"+id);reply.setAttachments(files.urls());messages.save(reply);
                     su.onno.crm.channels.ExternalReplyReadState.answered(c,reply,history,su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK);
                     if(c.getLastMessageAt()==null || !reply.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(reply.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
@@ -192,7 +195,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 if(linked==null||contacts.canonical(linked.getCustomer()).equals(canonical))contacts.link(canonical,Channel.EMAIL,a.inbox.toString(),mail.sender().toLowerCase(Locale.ROOT),mail.sender(),false);
                 var message=new ConversationMessage();message.setConversation(Ref.of(Conversation.class,c.getId()));message.setChannel(Channel.EMAIL);message.setKind(MessageKind.CUSTOMER_MESSAGE);message.setDirection(MessageDirection.INBOUND);message.setAuthorName(cut(mail.name(),200));
                 var files=importFiles(mail);
-                message.setBody(cut(files.withNotes(mail.text()),8000));message.setDescription(cut(mail.text(),100));message.setSentAt(receivedAt);message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));message.setAttachments(files.urls());messages.save(message);
+                message.setBody(cut(files.withNotes(mail.text()),8000));message.setBodyHtml(files.html(mail));message.setDescription(cut(mail.text(),100));message.setSentAt(receivedAt);message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));message.setAttachments(files.urls());messages.save(message);
                 if(c.getLastMessageAt()==null||!message.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(message.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
                 jdbc.update("UPDATE onno_crm_gmail_thread SET reply_to=?,subject=?,reference_id=?,last_received=? WHERE account=? AND thread_id=? AND (last_received IS NULL OR last_received<=?)",cut(mail.replyTo(),320),cut(mail.subject(),998),cut(mail.messageId(),998),message.getSentAt(),a.email,thread,message.getSentAt());
                 if(su.onno.crm.channels.ExternalReplyReadState.unread(message,messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,c.getId())),su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK)){c.setUnreadCount(c.getUnreadCount()+1);c.setStatus(statuses.incoming());}conversations.save(c);}
@@ -221,10 +224,45 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         }
         jdbc.update("INSERT INTO onno_crm_gmail_files_backfill_v2 VALUES (?)",a.email);
     }
+    /**
+     * Once per mailbox, give recent emails imported before HTML bodies were kept their sanitized
+     * HTML. Inline {@code cid:} images are matched to the message's already-stored files by name,
+     * so nothing is downloaded or stored twice.
+     */
+    private void backfillHtml(Account a) throws Exception {
+        if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_html_backfill WHERE account=?",Integer.class,a.email)>0)return;
+        var page=client(a).get("messages?labelIds=INBOX&maxResults=50");
+        for(var item:page.path("messages")) {
+            String id=item.path("id").asText();
+            var raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");
+            var ids=jdbc.query("SELECT conversation_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=?",(rs,n)->rs.getObject(1,UUID.class),a.email,raw.path("threadId").asText());
+            if(ids.isEmpty())continue;
+            var existing=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,ids.getFirst())).stream()
+                    .filter(m->Objects.equals(m.getExternalMessageId(),"gmail:"+a.email+":"+id)&&m.getBodyHtml()==null).findFirst();
+            if(existing.isEmpty())continue;
+            var mail=GmailMail.read(raw.path("raw").asText());
+            if(mail.html()==null)continue;
+            tx.executeWithoutResult(status->{workspace.lock();var message=messages.findActiveById(existing.get().getId()).orElse(null);
+                if(message!=null){
+                    var byName=new HashMap<String,String>();
+                    for(var file:attachments.of(message))byName.putIfAbsent(file.filename(),file.url());
+                    var byContentId=new HashMap<String,String>();
+                    for(var file:mail.files())if(file.contentId()!=null&&byName.containsKey(file.filename()))byContentId.put(file.contentId(),byName.get(file.filename()));
+                    message.setBodyHtml(EmailHtml.resolveContentIds(mail.html(),byContentId));messages.save(message);
+                }
+            });
+        }
+        jdbc.update("INSERT INTO onno_crm_gmail_html_backfill VALUES (?)",a.email);
+    }
     /** Stored attachment value (or null) plus placeholder lines for files the media policy refused. */
-    record ImportedFiles(String urls, List<String> notes) {
+    record ImportedFiles(String urls, List<String> notes, Map<String, String> urlsByContentId) {
+        ImportedFiles(String urls, List<String> notes) { this(urls, notes, Map.of()); }
         String withNotes(String text) {
             return notes.isEmpty() ? text : text + "\n" + String.join("\n", notes);
+        }
+        /** The mail's sanitized HTML with inline {@code cid:} images pointed at the stored files. */
+        String html(GmailMail.Incoming mail) {
+            return EmailHtml.resolveContentIds(mail.html(), urlsByContentId);
         }
     }
 
@@ -237,9 +275,12 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         if (attachments.limit() == 0 || mail.files().isEmpty()) return new ImportedFiles(null, List.of());
         var urls = new ArrayList<String>();
         var notes = new ArrayList<String>();
+        var byContentId = new HashMap<String, String>();
         for (var file : mail.files()) {
             try {
-                urls.add(attachments.ingest(file.filename(), file.contentType(), file.content()));
+                String url = attachments.ingest(file.filename(), file.contentType(), file.content());
+                urls.add(url);
+                if (file.contentId() != null) byContentId.put(file.contentId(), url);
             } catch (CrmAttachments.RejectedAttachment rejected) {
                 notes.add(switch (rejected.reason()) {
                     case EMPTY -> "[Empty file skipped]";
@@ -248,7 +289,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 });
             }
         }
-        return new ImportedFiles(urls.isEmpty() ? null : attachments.store(urls), List.copyOf(notes));
+        return new ImportedFiles(urls.isEmpty() ? null : attachments.store(urls), List.copyOf(notes), Map.copyOf(byContentId));
     }
     private void deliver(Account a){for(UUID id:jdbc.query("SELECT message_id FROM onno_crm_gmail_outbox WHERE account=? AND state='QUEUED'",(rs,n)->rs.getObject(1,UUID.class),a.email)){
         if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='SENDING' WHERE message_id=? AND state='QUEUED'",id)!=1)continue;

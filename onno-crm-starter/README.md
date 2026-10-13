@@ -168,6 +168,12 @@ that is zero).
 When unavailable, the label explains why replies are blocked. The composer disables replies while
 checking, sending or unavailable, preserves drafts, and offers a connection recheck. Internal notes
 remain independent of channel connectivity.
+Messages may carry a sanitized `bodyHtml` (returned by the inbox and contact activity endpoints).
+The inbox renders it in a script-less sandboxed frame with its own CSP, zoomed down to the bubble
+width when the email is laid out wider; remote images load (so senders' open-tracking pixels fire),
+and emails taller than 480 px start collapsed. Several
+image attachments on one message are drawn as an album grid above the caption, and any image
+opens a full-screen viewer (arrow keys or swipe to step, Escape to close).
 `enqueue(conversation, message)` runs in the same transaction as the outgoing message. Connectors
 write a durable outbox and deliver after commit. `CrmMessageRouter` rejects multiple providers
 claiming one conversation. Retries apply only to failed outbound replies in that conversation.

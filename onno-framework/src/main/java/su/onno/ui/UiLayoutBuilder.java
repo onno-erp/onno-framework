@@ -281,6 +281,27 @@ public class UiLayoutBuilder {
             return (WidgetBuilder<N>) this;
         }
 
+        /**
+         * Back a {@code calendar} widget with every {@link su.onno.ui.calendar.CalendarSource} bean of
+         * this calendar name (and its {@link su.onno.ui.calendar.CalendarFacet} filters) instead of a
+         * single catalog or document.
+         */
+        public WidgetBuilder<E> calendar(String name) {
+            this.extraConfig.put("calendar", name);
+            return this;
+        }
+
+        /**
+         * Let the widget take the rest of the tab's height and scroll inside it, so the page itself
+         * never scrolls (the list surface's {@code fill()} contract for widgets). Honoured by
+         * widgets with an internal scroller: currently {@code calendar}. Pair with
+         * {@code width("full")} and make it the page's last block.
+         */
+        public WidgetBuilder<E> fill() {
+            this.extraConfig.put("fill", "true");
+            return this;
+        }
+
         public WidgetBuilder<E> maxItems(int maxItems) {
             this.maxItems = maxItems;
             return this;

@@ -145,6 +145,12 @@ class RecordPolicyConformanceTest {
             ROUTES.put(r, Route.SCOPED);
         }
         ROUTES.put("GET /api/events", Route.SCOPED_ELSEWHERE);
+        // Calendar items come from app CalendarSource beans, which own their record scoping; the
+        // framework only gates each source by canRead/canReschedule (CalendarControllerTest).
+        for (String r : List.of("GET /api/calendars/{calendar}", "GET /api/calendars/{calendar}/items",
+                "PUT /api/calendars/{calendar}/items/{id}")) {
+            ROUTES.put(r, Route.SCOPED_ELSEWHERE);
+        }
         for (String r : List.of(
                 "GET /", "GET /api/theme", "GET /api/config", "GET /api/branding",
                 "GET /api/divkit/shell", "GET /api/divkit/account", "GET /api/divkit/menu",

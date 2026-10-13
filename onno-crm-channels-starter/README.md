@@ -266,6 +266,14 @@ policy (`onno.media.*` size and content-type limits) refuses are skipped on both
 placeholder note on the message; the rest of the mail or message still imports.
 Telegram cannot recover files from old bot updates whose payloads were not retained.
 
+Gmail also keeps an email's HTML part. It is sanitized on import with an allowlist (layout tables,
+inline styles and images stay; scripts, event handlers, forms, frames and non-http(s)/mailto/cid
+URLs are removed), capped at 500,000 characters, and stored in `ConversationMessage.bodyHtml`
+alongside the plain-text `body`. Inline `cid:` images point at their stored attachment copies.
+HTML-only mail gets a readable plain-text body. Once per mailbox, the latest 50 inbox emails that
+were imported before HTML was kept receive their HTML without re-downloading files. Outgoing
+replies stay plain text.
+
 ## Known limitations
 
 - A disconnected Gmail mailbox or Telegram business user stays bound to the account it was first
