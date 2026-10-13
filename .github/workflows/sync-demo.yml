@@ -6,7 +6,8 @@ name: Sync demo (onno-demo)
 # triggers its existing deploy (onno-cloud TenantBuildService), so the demo redeploys on the release.
 #
 # Why per-release (not per-commit): onno-demo builds against *published* su.onno:* artifacts, so it
-# can only use a feature once that feature is released. Tag → publish → sync → redeploy keeps the
+# can only use a feature once that feature is released — hence the wait step below, since the tag
+# triggers this workflow and Publish Packages concurrently. Tag → publish → sync → redeploy keeps the
 # demo == latest release with zero hand-maintenance (onno-demo becomes a generated mirror). For a
 # HEAD-tracking demo you would instead publish a -SNAPSHOT on main pushes and trigger on `push: main`.
 #
@@ -41,6 +42,30 @@ jobs:
           else
             echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
+
+      # The tag starts this workflow and Publish Packages at the same moment, and this one finishes in
+      # seconds — so without waiting, onno-demo was pinned to a version that wasn't downloadable yet
+      # and its deploy failed resolving su.onno:* / the su.onno.widgets plugin (seen on 4.1.0). Wait
+      # until both places the demo build resolves from serve the release: the core on Maven Central
+      # (which also lags the Central Portal upload) and the widgets plugin on the onno-cloud registry
+      # (mirrored at the end of Publish Packages).
+      - name: Wait for the release to be resolvable
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          CORE="https://repo1.maven.org/maven2/su/onno/onno-framework/$V/onno-framework-$V.pom"
+          PLUGIN="https://cloud.onno.su/modules/su/onno/widgets/su.onno.widgets.gradle.plugin/$V/su.onno.widgets.gradle.plugin-$V.pom"
+          for i in $(seq 1 180); do
+            core=$(curl -s -o /dev/null -w '%{http_code}' "$CORE")
+            plugin=$(curl -s -o /dev/null -w '%{http_code}' "$PLUGIN")
+            if [ "$core" = 200 ] && [ "$plugin" = 200 ]; then
+              echo "onno $V is published (Central + registry)."
+              exit 0
+            fi
+            echo "waiting for onno $V: central=$core registry-plugin=$plugin (attempt $i/180)"
+            sleep 30
+          done
+          echo "onno $V still not resolvable after 90 minutes — not pinning onno-demo to it." >&2
+          exit 1
 
       - name: Check out onno-framework (this release)
         uses: actions/checkout@v5
