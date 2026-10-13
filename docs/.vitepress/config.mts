@@ -42,6 +42,7 @@ export default defineConfig({
           { text: 'Record access policies', link: '/RECORD_ACCESS_POLICIES' },
           { text: '3.4 release notes', link: '/RELEASE_NOTES_3_4' },
           { text: '4.0 release notes', link: '/RELEASE_NOTES_4_0' },
+          { text: '4.1 release notes', link: '/RELEASE_NOTES_4_1' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
           {
             text: 'Building ERPs with AI agents',
@@ -81,6 +82,7 @@ export default defineConfig({
           { text: 'Record access policies', link: '/RECORD_ACCESS_POLICIES' },
           { text: '3.4 release notes', link: '/RELEASE_NOTES_3_4' },
           { text: '4.0 release notes', link: '/RELEASE_NOTES_4_0' },
+          { text: '4.1 release notes', link: '/RELEASE_NOTES_4_1' },
           { text: 'Media Uploads', link: '/MEDIA_UPLOADS' },
         ],
       },

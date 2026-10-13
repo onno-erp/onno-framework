@@ -1,4 +1,5 @@
 import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
+import { nearestScrollAncestor, trailingPaddingTo } from "@/lib/fill-height";
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
@@ -317,24 +318,6 @@ function hoveredRowId(kind: string, name: string): string | null {
   return url.slice(url.lastIndexOf("/") + 1);
 }
 
-/** Nearest ancestor that can scroll vertically — the DivKit page wrapper on route surfaces. */
-function nearestScrollAncestor(el: HTMLElement): HTMLElement | null {
-  for (let p = el.parentElement; p; p = p.parentElement) {
-    const o = getComputedStyle(p).overflowY;
-    if (o === "auto" || o === "scroll") return p;
-  }
-  return null;
-}
-
-/** Bottom padding contributed by layout wrappers between an island and its page scroller. */
-function trailingPaddingTo(el: HTMLElement, boundary: HTMLElement): number {
-  let padding = 0;
-  for (let p = el.parentElement; p && p !== boundary; p = p.parentElement) {
-    padding += Number.parseFloat(getComputedStyle(p).paddingBottom) || 0;
-  }
-  return padding;
-}
-
 /** The underlying cell string: a resolved ref/enum label, the posted badge, or the raw value. */
 function rawCellValue(row: EntityRecord, col: ListColumn, t: Translate): string {
   const key = responseKey(col);
@@ -381,6 +364,19 @@ export function ListCell({ row, col }: { row: EntityRecord; col: ListColumn }) {
       );
     }
     return <span className="text-xs text-destructive">Invalid media URL</span>;
+  }
+  // A widget("color") column holds a #RRGGBB value: show a swatch beside the hex text.
+  if (col.widget === "color" && raw && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw)) {
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span
+          aria-hidden
+          className="size-3.5 shrink-0 rounded-full border border-border"
+          style={{ backgroundColor: raw }}
+        />
+        <span className="truncate text-foreground">{raw}</span>
+      </span>
+    );
   }
   // A Ref column whose target carries an avatar (resolved into FieldAvatar by logical reads): show
   // the photo as a small round avatar beside the display text (issue #182). The data is already

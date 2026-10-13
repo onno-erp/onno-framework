@@ -896,12 +896,78 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `stat` | KPI tile with trend | Headline aggregate + period-over-period delta + a sparkline of the series. |
 | `sparkline` | Compact KPI tile | Headline aggregate + an inline sparkline (no delta). |
 | `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
-| `calendar` | FullCalendar | Documents only; drag-to-reschedule. |
+| `calendar` | FullCalendar month/week + agenda | One `document` or `catalog` (`dateField`, optional `endDateField`), or every `CalendarSource` of `.calendar(name)`. Drag-to-reschedule where the viewer may write. See [Calendar widget](#calendar-widget). |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
 | `kanban` | Drag board grouped by a field | |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `latField`+`lngField` for points and/or `geoJsonField` for points, paths, and areas; features link to the record and label from `.titleField(...)`. |
 | `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
+
+### Calendar widget
+
+The `calendar` widget has a year planner, a month grid that scrolls continuously through weeks, a
+week grid that scrolls sideways through days (hours down, day headers and the all-day row pinned),
+and a day-grouped agenda (always on phones). Clicking an item or "+N more" opens a card beside it;
+the period title opens a month/year jump picker. The chosen view, filters and hidden legend entries
+are remembered per viewer. Add `.fill()` (with `width("full")`, as the page's last block) to let the
+calendar take the rest of the tab so only the calendar scrolls, never the page.
+
+**One entity.** Point it at a document or a catalog:
+
+```java
+page.widget("Bookings").type("calendar").catalog(Booking.class)
+    .dateField(Booking::getStartsAt).endDateField(Booking::getEndsAt).titleField(Booking::getGuest)
+    .config("allDay", "false");
+```
+
+Documents are windowed on their system `date` (a move keeps `date` and a custom `dateField` aligned);
+catalogs are windowed on `dateField` itself through the list feed's `ge`/`le` bounds, and a move
+writes only `dateField`/`endDateField`. Clicks open the record; rescheduling needs write access
+(`canWrite`) and is off with `config("readOnly", "true")`. Changes to the entity refresh the widget live.
+
+**Several sources.** For a calendar spanning entities, deriving items from business rules, or
+needing filters, register `su.onno.ui.calendar.CalendarSource` beans that share a calendar name and
+render them with `.calendar(name)`:
+
+```java
+page.widget("Calendar").type("calendar").calendar("studio").width("full");
+
+@Bean CalendarSource meetings(FollowUpRepository followUps, UiAccessService access) {
+    return new CalendarSource() {
+        public String calendar() { return "studio"; }
+        public String key() { return "meetings"; }        // legend toggle + item id prefix
+        public String label() { return "Meetings"; }
+        public String color() { return "#60A5FA"; }
+        public boolean canRead(Principal p) { return access.canRead(p, "catalog", "FollowUps"); }
+        public Set<String> watches() { return Set.of("FollowUps"); } // live refresh
+        public List<CalendarItem> items(CalendarQuery q) {
+            return followUps.findAllActive().stream().map(f -> CalendarItem
+                .builder(f.getId().toString(), f.getDescription(), f.getScheduledAt())
+                .end(f.getScheduledAt().plusHours(1)).link("catalogs/follow_ups/" + f.getId())
+                .task(f.isDone()).facet("owner", f.getOwner().id()).build()).toList();
+        }
+        public boolean canReschedule(Principal p) { return access.canWrite(p, "catalog", "FollowUps"); }
+        public void reschedule(String id, CalendarMove move, Principal p) { /* load, set, save */ }
+    };
+}
+```
+
+Each source gets one legend entry (also a show/hide toggle). Items may set their own colour,
+subtitle, trailing `meta`, `link` (an in-app route opened on click), `task(done)` (done items are
+struck through; open ones past their end are flagged overdue) and `editable(false)`.
+`CalendarFacet` beans of the same calendar add filter pickers ("Planner", "Client"); items carry
+their facet values via `facet(key, value)`, the framework applies the filter, and a facet whose
+`me(principal)` resolves offers "Only me". `reschedule` receives the source-local id and a
+`CalendarMove(start, end, allDay)` — `allDay` is true for a drop onto a day cell, so a source can keep
+the time of day — and may throw `IllegalArgumentException` to refuse a move with a message; the item
+snaps back. Endpoints (all re-check `canRead`/`canReschedule` per call):
+`GET /api/calendars/{name}` (legend, filters, watched entities), `GET /api/calendars/{name}/items?from=&to=&facet=key:value`
+(inclusive days, at most 400; items prefixed `source:id`), `PUT /api/calendars/{name}/items/{id}` with
+`{start, end, allDay}` (204).
+
+Sources read through repositories, so the generic endpoints' per-record policies do not apply to
+them: a source decides what a viewer may see and move (entity `canRead`/`canWrite`, plus any
+record-level rule the app has) in `canRead`, `items` and `reschedule`.
 
 > `stat`, `sparkline` and `gauge` read the same source + aggregate config as `chart`
 > (`metric`/`metricField`, `groupBy`/`groupByDate`); `stat`/`sparkline` also take `kind` =

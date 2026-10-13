@@ -511,6 +511,19 @@ export const api = {
       `${BASE}/list/catalogs/${name}?${params.toString()}`
     ).then((page) => page.rows ?? []);
   },
+  /** One window of catalog rows for a calendar: `params` carries the ge/le bounds on its date column. */
+  listCatalogWindow: (name: string, params: URLSearchParams) =>
+    fetchJson<{ rows?: EntityRecord[] }>(`${BASE}/list/catalogs/${toSnakeCase(name)}?${params.toString()}`)
+      .then((page) => page.rows ?? []),
+  // Source-backed calendars (CalendarSource beans): legend + filters, items, drag-to-reschedule.
+  calendarMeta: <T>(calendar: string) => fetchJson<T>(`${BASE}/calendars/${encodeURIComponent(calendar)}`),
+  calendarItems: <T>(calendar: string, params: URLSearchParams) =>
+    fetchJson<T>(`${BASE}/calendars/${encodeURIComponent(calendar)}/items?${params.toString()}`),
+  rescheduleCalendarItem: (calendar: string, id: string, move: { start: string; end: string | null; allDay: boolean }) =>
+    fetchJson<void>(`${BASE}/calendars/${encodeURIComponent(calendar)}/items/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(move),
+    }),
   searchRefOptions: (request: RefOptionSearch) =>
     fetchJson<EntityRecord[]>(`${BASE}/ref-options/search`, {
       method: "POST",

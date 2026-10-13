@@ -28,6 +28,8 @@ const t = hostText;
 import { useId, type DragEvent } from "react";
 import { ChannelLogo } from "./ChannelLogo";
 import { LinkedText } from "./LinkedText";
+import { EmailHtmlBody } from "./EmailHtmlBody";
+import { MediaGrid } from "./MediaGrid";
 import { request, ContactPanel, useWorkspace, action, rowValue, type Config, type ConversationFolder } from "./CrmWorkspace";
 import {
   ResponsiveActionPanel,
@@ -75,6 +77,8 @@ type Message = {
   sentAt: string;
   deliveryStatus: string;
   attachments?: Attachment[];
+  /** Sanitized email HTML; rendered in a sandboxed frame instead of the plain-text body. */
+  bodyHtml?: string | null;
 };
 
 /** A file on a message. The url is a reference issued by `/api/media`, never the bytes themselves. */
@@ -280,18 +284,14 @@ function fileSize(bytes: number): string {
 }
 
 /**
- * Message media previews, with a download link for audio and other files.
+ * Non-image files on a message: a player for audio, a download chip for everything else. Images are
+ * drawn separately, as one album above the caption ({@link MediaGrid}).
  */
 function Attachments({ files, outbound }: { files: Attachment[]; outbound: boolean }) {
   if (!files.length) return null;
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
-      {files.map(file => file.image ? (
-        <a key={file.url} href={file.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-field">
-          <img src={file.url} alt={file.filename} loading="lazy"
-            className="max-h-64 w-auto max-w-full rounded-field object-cover" />
-        </a>
-      ) : /^audio\//i.test(file.contentType.trim()) ? (
+      {files.map(file => /^audio\//i.test(file.contentType.trim()) ? (
         <VoicePlayer key={file.url} src={file.url} label={file.filename} download={file.filename} outbound={outbound} />
       ) : (
         <a key={file.url} href={file.url} target="_blank" rel="noreferrer" download={file.filename}
@@ -309,12 +309,18 @@ function Attachments({ files, outbound }: { files: Attachment[]; outbound: boole
 
 function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: { channel?: string; config?: Config; message: Message; avatarUrl?: string | null; retry: () => void; busy: boolean }) {
   const outbound = message.direction === "OUTBOUND";
+  const html = message.bodyHtml?.trim() ? message.bodyHtml : null;
+  // Inline email images already appear inside the HTML; list only the files it does not show.
+  const files = (message.attachments ?? []).filter(file => !html || !html.includes(file.url));
+  const images = files.filter(file => file.image);
+  const others = files.filter(file => !file.image);
   return (
     <div className={outbound ? "flex flex-row-reverse items-end gap-2" : "flex items-end gap-2"}>
       {config?.showAvatar !== false && <Avatar name={message.authorName} url={avatarUrl} channel={channel || message.channel} />}
-      <div className={outbound
+      <div className={(outbound
         ? "min-w-0 max-w-[85%] break-words rounded-panel rounded-br-field bg-primary px-3.5 py-2.5 text-primary-foreground"
-        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground"}
+        : "min-w-0 max-w-[85%] break-words rounded-panel rounded-bl-field border border-border bg-card px-3.5 py-2.5 text-foreground")
+        + (html ? " w-full sm:w-[85%]" : "")}
       >
         <div className="flex items-center gap-1.5">
           <span className={outbound
@@ -327,9 +333,10 @@ function TimelineMessage({ message, avatarUrl, retry, busy, config, channel }: {
         {outbound && (message.subject || message.recipient) ? <p className="mt-0.5 truncate text-[11px] text-primary-foreground/75">
           {[message.recipient && `→ ${message.recipient}`, message.subject].filter(Boolean).join(" · ")}
         </p> : null}
-        <ChatMessageBody message={message} fallback={message.body?.trim()
+        <MediaGrid images={images} />
+        <ChatMessageBody message={message} fallback={html ? <EmailHtmlBody html={html} /> : message.body?.trim()
           ? <p className="mt-1 whitespace-pre-wrap text-sm leading-6"><LinkedText text={message.body} /></p> : null} />
-        <Attachments files={message.attachments ?? []} outbound={outbound} />
+        <Attachments files={others} outbound={outbound} />
         <div className={outbound
           ? "mt-1 flex justify-end gap-1.5 text-[10px] text-primary-foreground/70"
           : "mt-1 flex justify-end gap-1.5 text-[10px] text-muted-foreground"}
@@ -614,7 +621,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
     await Promise.all([
       (async () => {
         try {
-          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[]};
+          type ActivityEntry = {id:string;conversationId:string;kind:string;direction:string;channel:string;authorName:string;authorAvatarUrl:string|null;mine:boolean;body:string;at:string;deliveryStatus:string;attachments?:Attachment[];bodyHtml?:string|null};
           const entries:ActivityEntry[]=[];let hasMore=false;
           for(let page=0;page<historyPages;page++) {
             const response=await fetch(`/api/crm/contacts/${customerId}/activity?limit=100&offset=${page*100}`,{credentials:"same-origin"});

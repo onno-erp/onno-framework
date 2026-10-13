@@ -144,6 +144,13 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public CalendarController calendarController(
+            org.springframework.beans.factory.ObjectProvider<su.onno.ui.calendar.CalendarSource> sources,
+            org.springframework.beans.factory.ObjectProvider<su.onno.ui.calendar.CalendarFacet> facets) {
+        return new CalendarController(sources.orderedStream().toList(), facets.orderedStream().toList());
+    }
+
+    @Bean
     public UiActionResolver uiActionResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
         return new UiActionResolver(entityViews.orderedStream().toList());
