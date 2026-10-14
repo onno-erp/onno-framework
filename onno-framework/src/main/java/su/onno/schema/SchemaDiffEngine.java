@@ -5,8 +5,11 @@ import su.onno.schema.SchemaChange.Type;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import static su.onno.schema.DatabaseIntrospector.upper;
@@ -53,18 +56,70 @@ public class SchemaDiffEngine {
         }
 
         if (previous != null) {
+            List<SchemaChange> dropTables = new ArrayList<>();
             for (String snapshotTable : previous.tables().keySet()) {
                 String tUpper = upper(snapshotTable);
                 if (!desiredTablesUpper.contains(tUpper)
                         && !renamedAwayTables.contains(tUpper)
                         && db.hasTable(snapshotTable)) {
-                    changes.add(new SchemaChange(Type.DROP_TABLE, snapshotTable, null,
+                    dropTables.add(new SchemaChange(Type.DROP_TABLE, snapshotTable, null,
                             "no longer in the metadata model", true,
                             List.of(DdlRenderer.dropTable(snapshotTable))));
                 }
             }
+            changes.addAll(orderDropTables(dropTables, db));
         }
         return new MigrationPlan(List.copyOf(changes));
+    }
+
+    private List<SchemaChange> orderDropTables(List<SchemaChange> dropTables, DbState db) {
+        if (dropTables.size() < 2) {
+            return dropTables;
+        }
+
+        Map<String, SchemaChange> byTable = new LinkedHashMap<>();
+        for (SchemaChange change : dropTables) {
+            byTable.put(upper(change.table()), change);
+        }
+
+        Map<String, Set<String>> childrenByParent = new LinkedHashMap<>();
+        for (SchemaChange change : dropTables) {
+            String child = upper(change.table());
+            for (String parent : db.referencedTables(change.table())) {
+                if (byTable.containsKey(parent)) {
+                    childrenByParent.computeIfAbsent(parent, ignored -> new LinkedHashSet<>()).add(child);
+                }
+            }
+        }
+
+        List<SchemaChange> ordered = new ArrayList<>();
+        Set<String> visiting = new HashSet<>();
+        Set<String> visited = new HashSet<>();
+        for (String table : byTable.keySet()) {
+            addDropAfterChildren(table, byTable, childrenByParent, visiting, visited, ordered);
+        }
+        return ordered;
+    }
+
+    private void addDropAfterChildren(
+            String table,
+            Map<String, SchemaChange> byTable,
+            Map<String, Set<String>> childrenByParent,
+            Set<String> visiting,
+            Set<String> visited,
+            List<SchemaChange> ordered) {
+        if (visited.contains(table)) {
+            return;
+        }
+        if (!visiting.add(table)) {
+            return;
+        }
+        for (String child : childrenByParent.getOrDefault(table, Set.of())) {
+            addDropAfterChildren(child, byTable, childrenByParent, visiting, visited, ordered);
+        }
+        visiting.remove(table);
+        visited.add(table);
+        ordered.add(byTable.get(table));
     }
 
     private void diffTable(TableModel table, SchemaSnapshot previous, DbState db,
