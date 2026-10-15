@@ -45,9 +45,6 @@ final class KeysetWindow {
      * @param focus       the record whose surrounding window to return, or {@code null}
      */
     record Position(String cursorToken, String beforeToken, UUID focus) {
-        static Position after(String cursorToken) {
-            return new Position(cursorToken, null, null);
-        }
     }
 
     /** A window of raw rows plus its bounds — the service decorates the rows into a {@link KeysetPage}. */

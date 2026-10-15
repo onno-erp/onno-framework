@@ -246,6 +246,38 @@ class KeysetFocusWindowTest {
     }
 
     @Test
+    void subMillisecondDocumentDatesPageBothWaysWithoutDuplicatesOrGaps() {
+        // A document's date defaults to LocalDateTime.now(): microsecond precision, and several
+        // documents may share one millisecond. Cursors must keep that precision, or the seek
+        // boundary drifts and the window above repeats its neighbour's first row.
+        List<UUID> ids = new ArrayList<>();
+        LocalDateTime start = LocalDateTime.of(2026, 3, 1, 12, 0, 0, 123_456_000);
+        for (int i = 0; i < 60; i++) {
+            ids.add(insertOrder(String.format("O-%04d", i + 1), start.plusNanos(i * 250_000L))); // 4 per ms
+        }
+        KeysetPage window = documents.keysetPage(AccessSubject.system(), document, null, null, ids.get(30), 10,
+                null, false, null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, null);
+        assertThat(window.focus()).isEqualTo(ids.get(30));
+
+        List<String> all = new ArrayList<>(numbers(window));
+        KeysetPage page = window;
+        while (page.hasPrevious()) {
+            page = documents.keysetPage(AccessSubject.system(), document, null, page.prevCursor(), null, 10,
+                    null, false, null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, null);
+            all.addAll(0, numbers(page));
+        }
+        page = window;
+        while (page.hasMore()) {
+            page = documents.keysetPage(AccessSubject.system(), document, page.nextCursor(), null, null, 10,
+                    null, false, null, null, null, NONE, NONE, NONE, NONE, NONE, NONE, null);
+            all.addAll(numbers(page));
+        }
+        List<String> newestFirst = new ArrayList<>();
+        for (int i = 60; i >= 1; i--) newestFirst.add(String.format("O-%04d", i));
+        assertThat(all).isEqualTo(newestFirst);
+    }
+
+    @Test
     void aCursorTakesPrecedenceOverFocus() {
         List<UUID> ids = insertClients(30, "gold");
         String next = catalogPage(AccessSubject.system(), null, null, null, 10).nextCursor();

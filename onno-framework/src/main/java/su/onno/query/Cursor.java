@@ -6,7 +6,6 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
@@ -20,9 +19,12 @@ import java.util.UUID;
  *
  * <p>The wire form is URL-safe Base64 of a tagged, unit-separated record:
  * {@code v1␟{column}␟{a|d}␟{typeTag}␟{value}␟{uuid}}. The value is typed (string, long, decimal,
- * boolean, timestamp-as-epoch-millis, uuid, or null) so it round-trips back to a JDBI-bindable
- * object that compares correctly against its column — a date cursor binds as a {@link Timestamp},
- * not a string. The token is a <em>position</em>, not a credential: every field is re-validated and
+ * boolean, local date-time at full nanosecond precision, uuid, or null) so it round-trips back to a
+ * JDBI-bindable object that compares correctly against its column — a date cursor binds as a
+ * {@link Timestamp}, not a string. Full precision matters: a document date defaults to
+ * {@code LocalDateTime.now()} (microseconds), and a truncated cursor value would move the seek
+ * boundary, repeating or skipping rows that share the truncated instant. Tokens minted with the
+ * earlier epoch-millis encoding still decode. The token is a <em>position</em>, not a credential: every field is re-validated and
  * the value is always bound as a parameter, so a tampered token can only point at a different row,
  * never inject SQL.
  *
@@ -89,14 +91,14 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
         if (v instanceof BigDecimal || v instanceof Double || v instanceof Float) return "N";
         if (v instanceof Number) return "L"; // Long/Integer/Short/Byte
         if (v instanceof Timestamp || v instanceof Instant
-                || v instanceof LocalDateTime || v instanceof LocalDate) return "T";
+                || v instanceof LocalDateTime || v instanceof LocalDate) return "D";
         return "S";
     }
 
     private static String encodeValue(String tag, Object v) {
         if (v == null) return "";
         return switch (tag) {
-            case "T" -> Long.toString(epochMillis(v));
+            case "D" -> localDateTime(v).toString();
             default -> v.toString();
         };
     }
@@ -110,16 +112,23 @@ public record Cursor(String column, boolean descending, Object value, UUID id) {
             case "L" -> Long.valueOf(raw);
             // Bind dates back as a Timestamp so the comparison matches the column's SQL type rather
             // than relying on driver-specific coercion of an Instant/String.
+            case "D" -> Timestamp.valueOf(LocalDateTime.parse(raw));
+            // Legacy (pre-precision) tokens: epoch millis.
             case "T" -> new Timestamp(Long.parseLong(raw));
             default -> raw;
         };
     }
 
-    private static long epochMillis(Object v) {
-        if (v instanceof Timestamp ts) return ts.getTime();
-        if (v instanceof Instant i) return i.toEpochMilli();
-        if (v instanceof LocalDateTime ldt) return ldt.toInstant(ZoneOffset.UTC).toEpochMilli();
-        if (v instanceof LocalDate ld) return ld.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
+    /**
+     * The value as the wall-clock date-time a {@link Timestamp} bind compares against, nanoseconds
+     * kept. {@link Timestamp} and {@link Instant} go through the JVM zone exactly as the JDBC
+     * driver binds a {@link Timestamp}, so the decoded cursor equals the row it was minted from.
+     */
+    private static LocalDateTime localDateTime(Object v) {
+        if (v instanceof Timestamp ts) return ts.toLocalDateTime();
+        if (v instanceof Instant i) return Timestamp.from(i).toLocalDateTime();
+        if (v instanceof LocalDateTime ldt) return ldt;
+        if (v instanceof LocalDate ld) return ld.atStartOfDay();
         throw new IllegalArgumentException("Unsupported temporal type: " + v.getClass());
     }
 

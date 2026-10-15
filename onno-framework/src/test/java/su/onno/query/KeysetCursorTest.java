@@ -45,6 +45,27 @@ class KeysetCursorTest {
     }
 
     @Test
+    void keepsSubMillisecondPrecisionOfDates() {
+        UUID id = UUID.randomUUID();
+        // A document date defaults to LocalDateTime.now(): microseconds must survive the token.
+        Timestamp ts = Timestamp.valueOf(java.time.LocalDateTime.of(2026, 3, 1, 12, 0, 0, 123_456_789));
+        assertThat(Cursor.decode(Cursor.from("_date", true, row("_date", ts, id)).encode()).value())
+                .isEqualTo(ts);
+        java.time.LocalDateTime ldt = java.time.LocalDateTime.of(2026, 3, 1, 12, 0, 0, 123_456_000);
+        assertThat(Cursor.decode(Cursor.from("_date", true, row("_date", ldt, id)).encode()).value())
+                .isEqualTo(Timestamp.valueOf(ldt));
+    }
+
+    @Test
+    void decodesALegacyEpochMillisToken() {
+        UUID id = UUID.randomUUID();
+        String raw = "v1\u001f_date\u001fd\u001fT\u001f1700000000000\u001f" + id;
+        String legacy = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertThat(Cursor.decode(legacy).value()).isEqualTo(new Timestamp(1_700_000_000_000L));
+    }
+
+    @Test
     void roundTripsANullValue() {
         UUID id = UUID.randomUUID();
         Cursor back = Cursor.decode(Cursor.from("note", false, row("note", null, id)).encode());
