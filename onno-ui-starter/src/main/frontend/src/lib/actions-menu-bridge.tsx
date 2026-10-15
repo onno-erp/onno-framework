@@ -1,4 +1,4 @@
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
 import { toast } from "@/components/ui/toast";
@@ -121,6 +121,13 @@ function fire(url: string) {
   window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
 }
 
+// "Open in list" (onno://{kind}/{name}?focus={id}, #410) moves the workspace focus to the list's
+// pane. Returning focus to the ⋯ trigger after the menu closes would be a focusin inside the
+// record's pane and hand the focus straight back to it, so the menu skips that restore.
+export function leavesPane(url: string): boolean {
+  return /^onno:\/\/(catalogs|documents)\/[^/?]+\?(.*&)?focus=/.test(url);
+}
+
 // Actions the cluster runs itself (with a loading state) rather than routing through onno:action:
 // document posting and custom server actions. Everything else (edit/duplicate/delete) is navigation
 // or needs the confirm modal, so it routes as before.
@@ -160,6 +167,7 @@ async function runAsync(url: string, inputs?: ActionFormValues): Promise<void> {
 export function ActionsCluster({ items }: { items: ActionItem[] }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Set<string>>(new Set());
+  const skipReturnFocus = useRef(false);
   // A form-declaring action waiting for its dialog input; submit runs it with the values.
   const [formFor, setFormFor] = useState<ActionItem | null>(null);
 
@@ -239,7 +247,15 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
               <Ellipsis className="size-4" aria-hidden="true" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-48 p-1">
+          <PopoverContent
+            align="end"
+            className="w-48 p-1"
+            onCloseAutoFocus={(event) => {
+              if (!skipReturnFocus.current) return;
+              skipReturnFocus.current = false;
+              event.preventDefault();
+            }}
+          >
             {menu.map((it) => {
               const busy = pending.has(it.url);
               return (
@@ -251,6 +267,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
                     if (isAsync(it.url)) {
                       run(it); // keep the menu open so the spinner is visible
                     } else {
+                      skipReturnFocus.current = leavesPane(it.url);
                       setOpen(false);
                       fire(it.url);
                     }

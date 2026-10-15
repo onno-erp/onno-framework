@@ -490,6 +490,14 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   that have a view in the active profile and that the viewer can read, derived from the views rather
   than the navigation so link-only entities are included. The client routes
   `onno://{kind}/{name}/{id}` for those entities like an explicit `onno://main/...` action.
+  The record header's **Open in list** (`onno://{kind}/{name}?focus={id}`, #410) behaves like a
+  navigation click on that list: on the islands layout it re-points the pane that already shows
+  the list (no duplicate tab), else opens in the first, main pane, and the record's own island
+  stays open beside it; single-pane layouts navigate in place. `GET /api/divkit/{catalogs|documents}/{name}?focus=<id>`
+  passes the id to the list island (`focus` in the descriptor), which requests the feed's focus
+  window, opens flat in the table view (ignoring a default group-by), scrolls to and highlights
+  the row, and loads the rows above with `?before=<prevCursor>` as it scrolls up. A record the
+  feed cannot show leaves the list at the top with a notice (`list.focusMissing`).
 
 Server-side rendering uses **DivKit**: the controllers emit DivKit card JSON resolved for the
 caller's persona, roles, theme, and viewport. The same contract drives the bundled React/Vite SPA

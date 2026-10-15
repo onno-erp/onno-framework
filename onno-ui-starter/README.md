@@ -450,7 +450,11 @@ the menu, or hide it, from the entity's `fields(...)`. `f.action("post").hidden(
 built-in Post button. The built-in **Open in list** (`openInList`, icon `list`, overflow menu by
 default) needs only read access, so read-only viewers get it too; it opens the entity's list at
 `?focus=<id>` (the feed returns the window containing the record) and is omitted when an authored
-`Page` overrides the list route:
+`Page` overrides the list route. The list opens flat in the table view, scrolls to the record and
+highlights it (until another row is opened or the query changes), and loads earlier rows as you
+scroll up; a record the current filters exclude leaves the list at the top with a notice. On the
+desktop islands layout it acts like a navigation click: the pane already showing that list is
+re-pointed (else the main pane), and the record stays open beside it:
 
 ```java
 public void fields(EntityConfigBuilder f) {

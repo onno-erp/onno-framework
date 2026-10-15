@@ -833,6 +833,7 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
+                                           @RequestParam(required = false) String focus,
                                            @RequestParam(required = false) String profile,
                                            @RequestParam(required = false) String viewport,
                                            @RequestParam(required = false) String theme,
@@ -856,7 +857,8 @@ public class DivKitController implements DisposableBean {
                 SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "catalogs", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
-                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
+                        focusId(focus)));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -939,6 +941,7 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentList(@PathVariable String name,
+                                            @RequestParam(required = false) String focus,
                                             @RequestParam(required = false) String profile,
                                             @RequestParam(required = false) String viewport,
                                             @RequestParam(required = false) String theme,
@@ -961,7 +964,8 @@ public class DivKitController implements DisposableBean {
                 SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "documents", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
-                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
+                        focusId(focus)));
     }
 
     @GetMapping("/documents/{name}/{id}")
@@ -1233,6 +1237,21 @@ public class DivKitController implements DisposableBean {
                 "primary".equals(place) ? "accent" : "normal",
                 "onno://" + kind + "/" + name + "?focus=" + id, place,
                 List.of(), Map.of(), false, false));
+    }
+
+    /**
+     * The list route's {@code ?focus=<id>} ("Open in list", #410), or {@code null} when absent or
+     * malformed. Only forwarded to the island: the list feed decides whether the record is visible.
+     */
+    private static UUID focusId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Enforce the allowlist on a surface: no view for this profile → 404. */

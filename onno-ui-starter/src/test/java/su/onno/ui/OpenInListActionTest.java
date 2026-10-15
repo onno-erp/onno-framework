@@ -134,6 +134,19 @@ class OpenInListActionTest {
     }
 
     @Test
+    void theListRouteHandsTheFocusToTheListIsland() throws Exception {
+        String focused = mvc.perform(get("/api/divkit/catalogs/OlNotes").param("focus", note.toString())
+                .principal(READER)).andReturn().getResponse().getContentAsString();
+        assertThat(focused).contains("\"focus\":\"" + note + "\"");
+
+        for (String ignored : List.of("not-a-uuid", "")) {
+            String plain = mvc.perform(get("/api/divkit/documents/OlEvents").param("focus", ignored)
+                    .principal(READER)).andReturn().getResponse().getContentAsString();
+            assertThat(plain).contains("onno-list").doesNotContain("\"focus\"");
+        }
+    }
+
+    @Test
     void aUserWhoCannotReadTheEntityGetsNoRecordSurfaceAtAll() throws Exception {
         int status = mvc.perform(get("/api/divkit/catalogs/OlNotes/" + note).principal(OUTSIDER))
                 .andReturn().getResponse().getStatus();

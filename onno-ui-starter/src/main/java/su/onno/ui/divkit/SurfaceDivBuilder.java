@@ -40,8 +40,24 @@ public final class SurfaceDivBuilder {
                                                   List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs,
                                                   boolean dynamicActions) {
+        return listSurface(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions, null);
+    }
+
+    /**
+     * As {@link #listSurface(ResolvedListView, String, String, String, boolean, List, List, boolean)},
+     * opened on {@code focus} ("Open in list", #410): the island requests the keyset window that
+     * contains that record, scrolls to it and highlights it. {@code null} opens at the top.
+     */
+    public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
+                                                  String newUrl, boolean canWrite,
+                                                  List<Map<String, Object>> actions,
+                                                  List<Map<String, Object>> inputs,
+                                                  boolean dynamicActions, java.util.UUID focus) {
         Map<String, Object> descriptor =
                 listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions);
+        if (focus != null) {
+            descriptor.put("focus", focus.toString());
+        }
         Map<String, Object> custom = Div.custom("onno-list", Map.of("list", descriptor));
         Div.matchWidth(custom);
         Map<String, Object> root = Div.vertical(List.of(custom));

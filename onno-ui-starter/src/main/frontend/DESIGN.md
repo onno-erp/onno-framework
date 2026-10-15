@@ -237,6 +237,12 @@ selection fills do not muddy their appearance. Pointer events stay on the checkb
 
 Widgets can anchor a shared `PopoverContent` to an existing field using SDK `PopoverAnchor` with `asChild`. Use this for input-driven suggestion popovers without adding a separate trigger button; preserve input focus via the popover autofocus callbacks. CRM controls use SDK buttons, labels, inputs, selects, and popovers.
 
+List rows (`[data-onno-row]`) share one tint family in `index.css`: hover and selection are a
+low-alpha `--primary` wash, and the "Open in list" focused row (`data-onno-focused`, #410) is a
+slightly stronger wash plus an inset 3px `--primary` leading bar, with a single outline pulse
+on arrival (`--ease-smooth-out`; none under reduced motion). Do not add other row highlight
+colours; reuse these attributes.
+
 Use `DatePicker` for date-only values and `DateTimePicker` for local date plus 24-hour time.
 Both share `DateInput` and the calendar; the legacy `DatePicker includeTime` prop remains supported.
 

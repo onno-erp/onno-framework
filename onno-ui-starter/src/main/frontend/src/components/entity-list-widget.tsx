@@ -281,6 +281,25 @@ export type ListDescriptor = {
   // has no such route, so its descriptor points the island at /api/list/registers/{name}/movements
   // (or /balance). When unset, the default {kind}/{name} feed is used.
   feed?: string;
+  /**
+   * "Open in list" (#410): the record id the list route was opened on (`?focus=<id>`). The first
+   * window is requested around that record (the feed's `focus` param), the list scrolls to it and
+   * highlights it, opening flat and in the table view. A record the feed cannot show (filtered out,
+   * out of scope, deleted) leaves the list at the top with a notice.
+   */
+  focus?: string;
+};
+
+/** The keyset feed envelope: a window plus its cursors in both directions. */
+type FeedWindow = {
+  rows: EntityRecord[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  prevCursor?: string | null;
+  hasPrevious?: boolean;
+  /** Present when the window was anchored on the requested `focus` record. */
+  focus?: string;
+  total?: number;
 };
 
 export const ROW_H = 40;
@@ -1426,6 +1445,19 @@ export function EntityListWidget({
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   const [loadMoreFailed, setLoadMoreFailed] = useState(false);
+  // "Open in list" (#410). A window opened on a record does not start at the top of the list: the
+  // feed's prevCursor loads the rows above it as the body scrolls up (prepended, scroll position
+  // kept). `pendingFocus` is consumed by the first full load only; `focusedId` is the highlighted row.
+  const pendingFocusRef = useRef<string | null>(list.focus ?? null);
+  const messagesRef = useRef(t);
+  messagesRef.current = t;
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const scrollToIdRef = useRef<string | null>(null);
+  const prevCursorRef = useRef<string | null>(null);
+  const [hasPrevious, setHasPrevious] = useState(false);
+  const loadingPrevRef = useRef(false);
+  // Rows prepended above the first loaded window, so row keys stay stable while the list grows upward.
+  const [headOffset, setHeadOffset] = useState(0);
   // The island can be squeezed narrow (e.g. a master-detail split) while the viewport stays wide,
   // so the toolbar layout is driven by the measured container width, not a media query.
   const [toolbarWidth, setToolbarWidth] = useState<number | null>(null);
@@ -1468,7 +1500,8 @@ export function EntityListWidget({
   const groupable = useMemo(() => list.groupable ?? [], [list.groupable]);
   const aggregates = useMemo(() => list.aggregates ?? [], [list.aggregates]);
   // Opens on the descriptor's default group-by (PageBuilder.list default view), else flat ("").
-  const [groupBy, setGroupBy] = useState(list.defaultGroupBy ?? "");
+  // A list opened on a record ("Open in list") starts flat: a focus window is a flat keyset window.
+  const [groupBy, setGroupBy] = useState(list.focus ? "" : list.defaultGroupBy ?? "");
   const [granularity, setGranularity] = useState<"day" | "month" | "year">(
     list.defaultGroupByDateGranularity ?? "month"
   );
@@ -1498,6 +1531,8 @@ export function EntityListWidget({
   // fetches its own rows, so the grid's search/filters/sort are hidden while it's shown; a custom
   // renderer shares the grid's feed, so the toolbar stays live.
   const [view, setView] = useState<"table" | "map" | "custom">(() => {
+    // "Open in list" lands on a highlighted table row, whatever the default view.
+    if (list.focus) return "table";
     if (urlSynced && (list.map || list.custom)) {
       const v = initialParams.get("view");
       if (v === "map" && list.map) return "map";
@@ -1796,9 +1831,31 @@ export function EntityListWidget({
       setLoadMoreFailed(false);
       if (!soft) {
         cursorRef.current = null;
+        prevCursorRef.current = null;
+        setHasPrevious(false);
+        setFocusedId(null);
         setPageRows(null);
       }
       const params = buildParams();
+      // "Open in list": the first hard load asks for the window containing the record. A soft
+      // refresh of a window that does not start at the top re-anchors on the first visible row, so
+      // a live change neither yanks the list back to the top nor shifts what the user is reading.
+      const requestedFocus = !soft ? pendingFocusRef.current : null;
+      if (!soft) pendingFocusRef.current = null;
+      let keep: { id: string; offset: number } | null = null;
+      if (requestedFocus) {
+        params.set("focus", requestedFocus);
+      } else if (soft && prevCursorRef.current) {
+        const el = scrollRef.current;
+        const top = el?.scrollTop ?? 0;
+        const idx = Math.min(Math.floor(top / ROW_H), (rowsRef.current?.length ?? 1) - 1);
+        const anchorRow = idx >= 0 ? rowsRef.current?.[idx] : undefined;
+        const anchorId = anchorRow ? entityRowId(anchorRow) : null;
+        if (anchorId) {
+          params.set("focus", anchorId);
+          keep = { id: anchorId, offset: top - idx * ROW_H };
+        }
+      }
       const bootstrap = bootstrapPage.current;
       bootstrapPage.current = undefined;
       const canonical = (value: URLSearchParams) => { value.sort(); return value.toString(); };
@@ -1818,13 +1875,27 @@ export function EntityListWidget({
       params.set("count", "exact"); // real total for the header — an estimate drifts (and is absent on H2)
       fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-        .then((data: { rows: EntityRecord[]; nextCursor: string | null; hasMore: boolean; total?: number }) => {
+        .then((data: FeedWindow) => {
           if (myGen !== gen.current) return;
           setTotal(typeof data.total === "number" ? data.total : null);
           cursorRef.current = data.nextCursor ?? null;
           setHasMore(!!data.hasMore);
+          prevCursorRef.current = data.prevCursor ?? null;
+          setHasPrevious(!!data.hasPrevious);
+          setHeadOffset(0);
           setPageRows(data.rows ?? []);
-          if (!soft && scrollRef.current) scrollRef.current.scrollTop = 0;
+          if (requestedFocus) {
+            if (data.focus) {
+              setFocusedId(data.focus);
+              scrollPlanRef.current = { id: data.focus, mode: "center", offset: 0 };
+            } else {
+              // Filtered out, outside the record scope or deleted: the feed answers with the top.
+              toast.info(messagesRef.current("list.focusMissing"));
+            }
+          } else if (keep && data.focus) {
+            scrollPlanRef.current = { id: keep.id, mode: "keep", offset: keep.offset };
+          }
+          if (!soft && !data.focus && scrollRef.current) scrollRef.current.scrollTop = 0;
         })
         .catch(() => {
           if (myGen === gen.current && !soft) setPageRows([]);
@@ -1833,6 +1904,58 @@ export function EntityListWidget({
     },
     [feedBase, pageSize, buildParams, finishWindow]
   );
+
+  // Where to scroll once the rows just loaded have rendered: centre the focused record, or keep an
+  // anchor row at the offset it had before a soft refresh re-fetched the window around it.
+  const scrollPlanRef = useRef<{ id: string; mode: "center" | "keep"; offset: number } | null>(null);
+  useLayoutEffect(() => {
+    const plan = scrollPlanRef.current;
+    const el = scrollRef.current;
+    if (!plan || !el || !pageRows) return;
+    scrollPlanRef.current = null;
+    const idx = pageRows.findIndex((row) => entityRowId(row) === plan.id);
+    if (idx < 0) return;
+    el.scrollTop = plan.mode === "center"
+      ? Math.max(0, idx * ROW_H - Math.max(0, el.clientHeight - ROW_H) / 2)
+      : idx * ROW_H + plan.offset;
+    setScrollTop(el.scrollTop);
+  }, [pageRows]);
+
+  // Prepend the window above the first loaded row (a focused window's prevCursor), keeping the
+  // rows on screen where they are: the scroll offset grows by the height of the inserted rows.
+  const loadPrevious = useCallback(() => {
+    if (loadingPrevRef.current || !prevCursorRef.current) return;
+    loadingPrevRef.current = true;
+    const myGen = gen.current;
+    const params = buildParams();
+    params.set("limit", String(pageSize));
+    params.set("before", prevCursorRef.current);
+    fetch(`${feedBase}?${params.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: FeedWindow) => {
+        if (myGen !== gen.current) return;
+        prevCursorRef.current = data.prevCursor ?? null;
+        setHasPrevious(!!data.hasPrevious);
+        const current = rowsRef.current ?? [];
+        const seen = new Set(current.map(entityRowId).filter(Boolean));
+        const above = (data.rows ?? []).filter((row) => {
+          const id = entityRowId(row);
+          return !id || !seen.has(id);
+        });
+        if (!above.length) return;
+        const el = scrollRef.current;
+        if (el) {
+          el.scrollTop += above.length * ROW_H;
+          setScrollTop(el.scrollTop);
+        }
+        setHeadOffset((offset) => offset + above.length);
+        setPageRows([...above, ...current]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        loadingPrevRef.current = false;
+      });
+  }, [feedBase, pageSize, buildParams]);
 
   // Append the next window, seeking from the current cursor. Guarded so only one
   // load-more runs at a time and a window from a superseded query is dropped.
@@ -2013,7 +2136,10 @@ export function EntityListWidget({
     ) {
       loadMore();
     }
-  }, [hasMore, loadMore]);
+    if (hasPrevious && !loadingPrevRef.current && el.scrollTop <= ROW_H * OVERSCAN) {
+      loadPrevious();
+    }
+  }, [hasMore, loadMore, hasPrevious, loadPrevious]);
 
   // Re-fetch the loaded rows in place (after a server action or a live event) — a soft refresh that
   // keeps the visible rows until the new data lands, so it never flashes the skeleton.
@@ -3157,9 +3283,11 @@ export function EntityListWidget({
                     // ghost/duplicate rows. The loaded list is append-only per query, so the absolute
                     // index is a stable, correct key here.
                     <div
-                      key={absIdx}
+                      key={absIdx - headOffset}
                       data-onno-row={url}
                       data-onno-selected={isSelected ? "true" : undefined}
+                      // "Open in list" (#410): the record the list was opened on.
+                      data-onno-focused={recordId != null && recordId === focusedId ? "true" : undefined}
                       // "0" tells the shell's fallback row menu / shortcuts to hide write actions;
                       // omitted when writable so rows from older servers keep the full menu.
                       data-onno-row-writable={canWrite ? undefined : "0"}
@@ -3197,6 +3325,7 @@ export function EntityListWidget({
                           clearSelection();
                           return;
                         }
+                        setFocusedId(null);
                         if (url) dispatchAction(url);
                       }}
                       onContextMenu={(e) => {
