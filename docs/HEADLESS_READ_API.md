@@ -122,8 +122,13 @@ the feedback object itself:
 ```
 
 Catalog and document collections are available only through the keyset list feed. It returns
-`{rows, nextCursor, hasMore}`; start without a cursor and replay each opaque `nextCursor` until
-`hasMore` is false. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
+`{rows, nextCursor, hasMore, prevCursor, hasPrevious}`; start without a cursor and replay each
+opaque `nextCursor` until `hasMore` is false. `?focus=<id>` returns the window that contains that
+record instead of the first one (up to half of `limit` rows before it, the record, the rows after
+it) and echoes `focus` in the envelope; replay `prevCursor` as `?before=` to load the rows above a
+window until `hasPrevious` is false. A focus the caller's query cannot see (outside the search,
+filters or document date range, out of record scope, deleted, unknown or malformed) returns the
+ordinary first window without `focus`. `cursor` wins over `before`, which wins over `focus`. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
 context-aware search input. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 

@@ -82,6 +82,43 @@ public final class Keyset {
         return new Plan(orderBy, predicate, true);
     }
 
+    /**
+     * The backward counterpart of {@link #plan}: the rows strictly <em>before</em> {@code cursor} in
+     * the order {@code plan(sortColumn, descending, nullable, …)} renders, returned nearest-first
+     * (the {@code ORDER BY} is that order reversed). A caller reverses the fetched rows to get them
+     * back in list order. Used to load the window above a row — the rows preceding a focused record
+     * or the page before a window's first row. {@code cursor} is required.
+     */
+    public static Plan planBefore(String sortColumn, boolean descending, boolean nullable, Cursor cursor) {
+        if (cursor == null) {
+            throw new IllegalArgumentException("planBefore needs a cursor");
+        }
+        String revDir = descending ? "ASC" : "DESC";
+        String revCmp = descending ? ">" : "<";
+        if (!nullable) {
+            String orderBy = sortColumn + " " + revDir + ", _id " + revDir;
+            String predicate = " AND (" + sortColumn + " " + revCmp + " :" + VALUE_BIND
+                    + " OR (" + sortColumn + " = :" + VALUE_BIND + " AND _id " + revCmp + " :" + ID_BIND + "))";
+            return new Plan(orderBy, predicate, true);
+        }
+        // Forward order is NULLS LAST (rank 0 before rank 1), so walking back visits the null tail
+        // first and then the non-null rows.
+        String nullRank = "(CASE WHEN " + sortColumn + " IS NULL THEN 1 ELSE 0 END)";
+        String orderBy = nullRank + " DESC, " + sortColumn + " " + revDir + ", _id " + revDir;
+        if (cursor.value() == null) {
+            // The cursor sat in the null tail: every non-null row precedes it, plus the nulls
+            // earlier in the id order.
+            String predicate = " AND (" + sortColumn + " IS NOT NULL"
+                    + " OR (" + sortColumn + " IS NULL AND _id " + revCmp + " :" + ID_BIND + "))";
+            return new Plan(orderBy, predicate, false);
+        }
+        // The cursor sat among the non-null rows: no null precedes it.
+        String predicate = " AND (" + sortColumn + " IS NOT NULL AND (" + sortColumn + " " + revCmp
+                + " :" + VALUE_BIND + " OR (" + sortColumn + " = :" + VALUE_BIND
+                + " AND _id " + revCmp + " :" + ID_BIND + ")))";
+        return new Plan(orderBy, predicate, true);
+    }
+
     private static Plan nullSafePlan(String sortColumn, String dir, String cmp, Cursor cursor) {
         // Force NULLS LAST in both directions via a leading 0/1 rank, so the contract is stable
         // regardless of dialect defaults (PG: ASC→LAST, DESC→FIRST; H2 differs).

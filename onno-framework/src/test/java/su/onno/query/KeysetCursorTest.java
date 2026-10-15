@@ -106,6 +106,37 @@ class KeysetCursorTest {
     }
 
     @Test
+    void backwardSeekReversesTheOrderAndTheComparison() {
+        Cursor c = Cursor.from("_code", false, row("_code", "C-1", UUID.randomUUID()));
+        Keyset.Plan p = Keyset.planBefore("_code", false, false, c);
+        assertThat(p.orderBy()).isEqualTo("_code DESC, _id DESC");
+        assertThat(p.bindsValue()).isTrue();
+        assertThat(p.predicate())
+                .contains("_code < :" + Keyset.VALUE_BIND)
+                .contains("_id < :" + Keyset.ID_BIND);
+
+        Keyset.Plan desc = Keyset.planBefore("_code", true, false, c);
+        assertThat(desc.orderBy()).isEqualTo("_code ASC, _id ASC");
+        assertThat(desc.predicate()).contains("_code > :" + Keyset.VALUE_BIND);
+    }
+
+    @Test
+    void nullSafeBackwardSeekWalksTheNullTailBeforeTheValues() {
+        UUID id = UUID.randomUUID();
+        // cursor among the values → no null precedes it
+        Keyset.Plan amongValues = Keyset.planBefore("note", false, true, Cursor.from("note", false, row("note", "a", id)));
+        assertThat(amongValues.bindsValue()).isTrue();
+        assertThat(amongValues.predicate()).startsWith(" AND (note IS NOT NULL AND");
+        assertThat(amongValues.orderBy()).startsWith("(CASE WHEN note IS NULL THEN 1 ELSE 0 END) DESC");
+
+        // cursor in the null tail → every value precedes it, plus earlier nulls by id
+        Keyset.Plan inTail = Keyset.planBefore("note", false, true, Cursor.from("note", false, row("note", null, id)));
+        assertThat(inTail.bindsValue()).isFalse();
+        assertThat(inTail.predicate())
+                .isEqualTo(" AND (note IS NOT NULL OR (note IS NULL AND _id < :" + Keyset.ID_BIND + "))");
+    }
+
+    @Test
     void clampLimitDefaultsAndCaps() {
         assertThat(Keyset.clampLimit(0)).isEqualTo(Keyset.DEFAULT_LIMIT);
         assertThat(Keyset.clampLimit(-5)).isEqualTo(Keyset.DEFAULT_LIMIT);

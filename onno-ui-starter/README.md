@@ -227,7 +227,7 @@ at any depth, and immune to the skip/duplicate that offset paging suffers when r
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. Envelope: `{ rows, nextCursor, hasMore }`. |
+| GET | `/api/list/catalogs/{name}?cursor=&limit=&sort=&dir=&q=&{filters}` | One keyset window. Omit `cursor` for the first window; echo back the `nextCursor` from the previous response for the next. `focus=<id>` returns the window containing that record; `before=<prevCursor>` returns the window above one. Envelope: `{ rows, nextCursor, hasMore, prevCursor, hasPrevious, focus? }`. |
 | GET | `/api/list/documents/{name}?cursor=&limit=&sort=&dir=&q=&from=&to=&{filters}` | Same, plus the optional `from`/`to` date range. Default order is newest-first (`date`; `_date` is also accepted). |
 | GET | `/api/list/{kind}/{name}/groups?groupBy=&granularity=&{q,filters}&agg=fn,col` | Backend **grouping**: one header per `GROUP BY groupBy` value (or, for a date column, per `granularity` — `day`/`month`/`year` — bucket), over the same WHERE as the flat list. Envelope: `{ groups: [{ label, color?, count, values[], expand[] }], capped }`. Each header's `expand` is the filter params to replay on the flat feed to load that group's rows (an `eq`, or a `ge`/`le` range for a date bucket). Headers cap at 200 (`capped: true`). |
 | GET | `/api/list/{kind}/{name}/aggregate?metric=&field=&groupBy=&groupByDate=&seriesBy=&filter=&dateField=&from=&to=` | The **widget aggregate** read behind `chart`/`stat`/`sparkline`/`gauge` (#199): a server-side `GROUP BY groupBy[, seriesBy]` (`groupByDate` = `minute`…`month` buckets a timestamp via `DATE_TRUNC`; `dateField`+`from`/`to` window the rows) returning `{ buckets: [{ key, label?, series?, seriesLabel?, value, value2? }], truncated, span? }` — O(buckets) instead of the whole table. Blank `groupBy` → one grand-total bucket; `metric2`/`field2` add a combo chart's second measure; enum/`Ref` buckets carry a resolved `label`; buckets cap at 1000 (`truncated: true`). Date-bucketed axes always **zero-fill empty periods** over the window (or between first/last data, unbounded) with `{ key, value: 0 }` fillers (#246); the filled spine honors the same 1000 cap. |
@@ -244,6 +244,11 @@ or counts.
   `(sortValue, _id)`; a cursor replayed against a different sort is ignored (paging restarts) rather
   than seeking to a wrong position. It is a position, not a credential — every value is bound, never
   inlined.
+- **Focus window.** `?focus=<id>` ("open in list") seeks to the record and returns up to half of
+  `limit` rows before it, the record and the rows after it (more rows above when the tail is
+  short), with `prevCursor`/`nextCursor` to page either way; `?before=<prevCursor>` loads the window
+  above. A record the query cannot see — filtered out, outside the date range or record scope,
+  deleted, unknown — yields the plain first window without `focus`, so the feed never reveals it.
 - **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
   and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
   `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
