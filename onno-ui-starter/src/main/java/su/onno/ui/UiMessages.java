@@ -295,6 +295,7 @@ public final class UiMessages {
         d.put("action.repost", "Re-post");
         d.put("action.unpost", "Unpost");
         d.put("action.duplicate", "Duplicate");
+        d.put("action.openInList", "Open in list");
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");

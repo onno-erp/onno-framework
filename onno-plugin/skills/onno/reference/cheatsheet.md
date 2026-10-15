@@ -448,7 +448,7 @@ because they are not Java field references.
     same-named top-level field; a **register's** resource columns format the same way via an
     `EntityView` whose `entity()` is the register class (no served surface, just the hints);
     `action(name)` → `ActionHintBuilder` places a **record-header** action (`unpost`/`duplicate`/
-    `delete` or a custom one) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
+    `delete`/`openInList` or a custom one; `openInList` needs only read access, #410) as `.primary()` / `.inMenu()` (overflow ⋯) / `.hidden()` (stays
     on REST), #185 — the record surface is the editable form itself (no separate detail/edit
     pages), so `post` is the form's built-in Post button (`.hidden()` hides it) and there is no
     `edit` action anymore; `relatedList(name, sourceEntity)` → `RelatedListBuilder` renders an inline

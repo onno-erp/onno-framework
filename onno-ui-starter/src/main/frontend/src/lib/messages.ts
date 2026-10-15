@@ -270,6 +270,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.repost": "Re-post",
   "action.unpost": "Unpost",
   "action.duplicate": "Duplicate",
+  "action.openInList": "Open in list",
   "action.delete": "Delete",
   "action.open": "Open",
   "action.copyLink": "Copy link",
