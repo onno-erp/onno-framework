@@ -48,9 +48,11 @@ public class FieldHintBuilder<O, T> {
 
     /**
      * Set the field width hint. {@code "half"}, {@code "1/2"}, and {@code "50%"} place form
-     * fields side by side; other values span the full form row. On list tables, only a positive
-     * whole-pixel value such as {@code "240"} or {@code "240px"} fixes the column width. Form
-     * layout tokens are deliberately ignored by list sizing.
+     * fields side by side; other values span the full form row. This is a form-layout hint: on
+     * list tables it is only a fallback, used when it is a positive whole-pixel value such as
+     * {@code "240"} or {@code "240px"}; form layout tokens are deliberately ignored by list
+     * sizing. Size a list column independently with {@link ListSpec#width(String, int)}, which
+     * wins over this hint.
      */
     public FieldHintBuilder<O, T> width(String width) {
         this.width = width;

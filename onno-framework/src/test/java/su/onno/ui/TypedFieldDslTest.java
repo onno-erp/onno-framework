@@ -40,6 +40,14 @@ class TypedFieldDslTest {
     }
 
     @Test
+    void typedListWidthsResolveFieldNames() {
+        ListSpec<Order> list = new ListSpec<>();
+        list.width(Order::getStatus, 105).width(Order::getTotal, "75px");
+        assertThat(list.widths()).containsOnly(
+                java.util.Map.entry("status", 105), java.util.Map.entry("total", 75));
+    }
+
+    @Test
     void actionRowsAcceptTypedFields() {
         ActionRow row = new ActionRow(java.util.Map.of(
                 "status", EnumerationPersistence.resolveId(Status.class, Status.APPROVED),

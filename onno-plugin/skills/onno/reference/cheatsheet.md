@@ -348,7 +348,9 @@ because they are not Java field references.
   - `ListSpec` (every builder method returns `ListSpec<E>`, so string and compiler-checked
     getter-reference calls chain in any order): `title`, `searchable/noSearch`,
     `sortBy(field, desc)`, `columns(...)`,
-    `column(field,label)`, `label(field,label)`, `hide(...)`, `pageSize(n)` (rows per keyset window;
+    `column(field,label)`, `label(field,label)`, `width(field, px)` / `width(field, "<n>px")`
+    (list-only column width; wins over a pixel field hint; non-pixel values fail fast),
+    `hide(...)`, `pageSize(n)` (rows per keyset window;
     else `onno.ui.list.page-size`; lists are always cursor/keyset-scrolled),
     `groupable(field…)` (columns for a backend "Group by ▾" picker — a date field buckets by
     day/month/year, a group's rows expand lazily) + `aggregate(field, Agg.SUM|AVG|MIN|MAX[, label])`
@@ -457,8 +459,8 @@ because they are not Java field references.
     row, required), `.columns(fields…)`, `.label(text)`, `.hideInDetail()`.
   - `FieldHintBuilder`: `order(int)`, `group(String)` (fields sharing a group render as their own
     card with that heading on the edit form), `width(String)` (`half`/`1/2`/`50%` = half a row on
-    wide screens; else full; a list column uses only a positive whole-pixel value such as `240` or
-    `240px`, and ignores form-layout tokens), `widget(String)` (`switch`,
+    wide screens; else full — a form-layout hint; a list column falls back to it only when it is a
+    positive whole-pixel value such as `240` or `240px`; size list columns with `ListSpec.width`), `widget(String)` (`switch`,
     `textarea`; `color` (visual picker + `#RRGGBB` input); media:
     `image`/`avatar`/`images`/`gallery`/`file` — streamed to
     `POST /api/media`, the attribute stores the returned URL; `geojson`), `placeholder`, `format`

@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
 class ListSpecTest {
@@ -269,5 +270,35 @@ class ListSpecTest {
         assertThat(spec.searchable()).isFalse();
         assertThat(spec.sortField()).isEqualTo("name");
         assertThat(spec.sortDescending()).isTrue();
+    }
+
+    @Test
+    void listWidthAcceptsPixels() {
+        ListSpec<Object> spec = new ListSpec<>()
+                .width("status", 105)
+                .width("format", "75px")
+                .width("channel", " 90 ")
+                .width("date", "95PX");
+
+        assertThat(spec.widths()).containsOnly(
+                Map.entry("status", 105), Map.entry("format", 75),
+                Map.entry("channel", 90), Map.entry("date", 95));
+    }
+
+    @Test
+    void listWidthRejectsNonPixelValues() {
+        ListSpec<Object> spec = new ListSpec<>();
+        for (String bad : new String[] {"1/2", "half", "50%", "0", "-5", "0px", "abc", "12.5", "", "  ",
+                "1px-not-really", "99999999999"}) {
+            assertThatThrownBy(() -> spec.width("status", bad))
+                    .as(bad).isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("status");
+        }
+        assertThatThrownBy(() -> spec.width("status", (String) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> spec.width("status", 0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> spec.width("status", -1)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> spec.width(" ", 10)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(spec.widths()).isEmpty();
     }
 }
