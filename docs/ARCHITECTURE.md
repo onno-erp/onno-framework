@@ -627,6 +627,10 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
 
 ## Events & outbox
 
+The starter's repository entity-change publisher defers events until `TransactionSynchronization.afterCommit`
+when a Spring transaction is active. Rollback discards these events; without a transaction they are
+published immediately. Event data is captured when the write completes.
+
 Every write — through the generic controllers **and** through `repository.save(...)` — publishes a
 Spring `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`
 (`onno-framework/src/main/java/su/onno/events/EntityChangedEvent.java`). It drives the `/api/events`

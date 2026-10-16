@@ -22,11 +22,12 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
 import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 import org.springframework.data.relational.core.mapping.NamingStrategy;
-import org.springframework.data.repository.config.BootstrapMode;
+import org.springframework.lang.NonNull;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import javax.sql.DataSource;
 import java.util.*;
@@ -88,6 +89,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Override
+    @NonNull
     protected java.util.List<?> userConverters() {
         java.util.List<String> packages;
         if (onnoProperties != null && onnoProperties.getScanPackages() != null && !onnoProperties.getScanPackages().isEmpty()) {
@@ -113,9 +115,10 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
     }
 
     @Override
-    public JdbcMappingContext jdbcMappingContext(java.util.Optional<NamingStrategy> namingStrategy,
-                                                 org.springframework.data.jdbc.core.convert.JdbcCustomConversions customConversions,
-                                                 org.springframework.data.relational.RelationalManagedTypes jdbcManagedTypes) {
+    @NonNull
+    public JdbcMappingContext jdbcMappingContext(@NonNull java.util.Optional<NamingStrategy> namingStrategy,
+                                                 @NonNull org.springframework.data.jdbc.core.convert.JdbcCustomConversions customConversions,
+                                                 @NonNull org.springframework.data.relational.RelationalManagedTypes jdbcManagedTypes) {
         OnnoMappingContext context = new OnnoMappingContext(namingStrategy.orElseGet(OnnoNamingStrategy::new));
         context.setSimpleTypeHolder(customConversions.getSimpleTypeHolder());
         return context;
@@ -128,12 +131,13 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
      * {@link AbstractJdbcConfiguration#jdbcConverter} so all other behaviour is unchanged.
      */
     @Override
+    @NonNull
     public org.springframework.data.jdbc.core.convert.JdbcConverter jdbcConverter(
-            JdbcMappingContext mappingContext,
-            org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations operations,
-            @org.springframework.context.annotation.Lazy org.springframework.data.jdbc.core.convert.RelationResolver relationResolver,
-            org.springframework.data.jdbc.core.convert.JdbcCustomConversions conversions,
-            org.springframework.data.relational.core.dialect.Dialect dialect) {
+            @NonNull JdbcMappingContext mappingContext,
+            @NonNull org.springframework.jdbc.core.namedparam.NamedParameterJdbcOperations operations,
+            @NonNull @org.springframework.context.annotation.Lazy org.springframework.data.jdbc.core.convert.RelationResolver relationResolver,
+            @NonNull org.springframework.data.jdbc.core.convert.JdbcCustomConversions conversions,
+            @NonNull org.springframework.data.relational.core.dialect.Dialect dialect) {
         org.springframework.data.jdbc.core.convert.JdbcArrayColumns arrayColumns =
                 dialect instanceof org.springframework.data.jdbc.core.dialect.JdbcDialect jdbcDialect
                         ? jdbcDialect.getArraySupport()
@@ -189,12 +193,26 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
      * {@link org.springframework.context.ApplicationEventPublisher}, so a {@code repository.save}/
      * {@code delete} publishes an {@link su.onno.events.EntityChangedEvent} that application code can
      * {@code @EventListener} — the same event the generic controllers emit, so both write paths are
-     * observable through one hook (issues #28, #29).
+     * observable through one hook (issues #28, #29). Publication waits for an active Spring
+     * transaction to commit; rollback discards the event. Without a transaction it is immediate.
      */
     @Bean
     public su.onno.events.EntityChangePublisher entityChangePublisher(
             org.springframework.context.ApplicationEventPublisher applicationEventPublisher) {
-        return applicationEventPublisher::publishEvent;
+        return event -> {
+            if (TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(
+                        new TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                applicationEventPublisher.publishEvent(event);
+                            }
+                        });
+            } else {
+                applicationEventPublisher.publishEvent(event);
+            }
+        };
     }
 
     /** Bridges durable process mutations onto Spring after their database transaction commits. */
