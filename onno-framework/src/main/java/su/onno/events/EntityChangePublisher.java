@@ -6,8 +6,8 @@ package su.onno.events;
  *
  * <p>The core module deliberately does not depend on {@code spring-context}, so it cannot reference
  * {@code ApplicationEventPublisher} directly (the same pattern as {@code PostEventPublisher}).
- * {@code onno-framework-starter} provides the bridge implementation — a lambda over
- * {@code ApplicationEventPublisher::publishEvent} — so application code can simply
+ * {@code onno-framework-starter} provides the bridge implementation, publishing after commit of an
+ * active Spring transaction (never on rollback), or immediately without a transaction. Application code can simply
  * {@code @EventListener} for {@link EntityChangedEvent}.
  */
 @FunctionalInterface
