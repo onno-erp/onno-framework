@@ -10,6 +10,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UiLayoutBuilderTest {
     @Test
+    void homeNavigationDefaultsToVisibleAndCanBeDisabled() {
+        assertThat(ShellConfig.defaults().homeInNavigation()).isTrue();
+        assertThat(new ShellConfig(null, null).homeInNavigation()).isTrue();
+        assertThat(new ShellConfig(null, null, java.util.Map.of()).homeInNavigation()).isTrue();
+        assertThat(new LayoutSpec().homeInNavigation(false).shellConfig().homeInNavigation()).isFalse();
+        UiLayoutBuilder builder = new UiLayoutBuilder();
+        builder.shell().homeInNavigation(false);
+        assertThat(builder.buildShell().homeInNavigation()).isFalse();
+    }
+
+    @Test
     void mobilePresentationDoesNotCreateNavigationOrChangeDesktopLabels() {
         var layout = new UiLayoutBuilder();
         layout.link("/inbox", "Unified inbox", "inbox");
@@ -37,8 +48,8 @@ class UiLayoutBuilderTest {
             assertThat(section.pageRefs()).hasSize(1);
             assertThat(section.entityRefs()).isEmpty();
         });
-        assertThat(sections.get(0).pageRefs().getFirst().route()).isEqualTo("/inbox");
-        assertThat(sections.get(0).icon()).isEqualTo("inbox");
+        assertThat(sections.getFirst().pageRefs().getFirst().route()).isEqualTo("/inbox");
+        assertThat(sections.getFirst().icon()).isEqualTo("inbox");
         assertThat(sections.get(1).pageRefs().getFirst().label()).isEqualTo("Conversations");
     }
 
@@ -62,7 +73,7 @@ class UiLayoutBuilderTest {
         List<UiLayout.Section> sections = layout.build();
         assertThat(sections).hasSize(1);
 
-        UiLayoutBuilder.EntityRef ref = sections.get(0).entityRefs().get(0);
+        UiLayoutBuilder.EntityRef ref = sections.getFirst().entityRefs().getFirst();
         assertThat(ref.type()).isEqualTo("catalog");
         assertThat(ref.javaClass()).isEqualTo(TestProduct.class);
         assertThat(ref.fieldHints()).isEmpty();
@@ -75,7 +86,7 @@ class UiLayoutBuilderTest {
                 .field("name").order(0).widget("textarea").hideInForm()
                 .field("code").order(1).group("identity").width("1/4"));
 
-        UiLayoutBuilder.EntityRef ref = layout.build().get(0).entityRefs().get(0);
+        UiLayoutBuilder.EntityRef ref = layout.build().getFirst().entityRefs().getFirst();
         assertThat(ref.fieldHints()).containsOnlyKeys("name", "code");
 
         FieldHint name = ref.fieldHints().get("name");
@@ -101,10 +112,10 @@ class UiLayoutBuilderTest {
                 .document(TestProduct.class, d -> d.field("total").hideInList())
                 .register(TestProduct.class, r -> r.field("quantity").order(5));
 
-        List<UiLayoutBuilder.EntityRef> refs = layout.build().get(0).entityRefs();
+        List<UiLayoutBuilder.EntityRef> refs = layout.build().getFirst().entityRefs();
         assertThat(refs).extracting(UiLayoutBuilder.EntityRef::type)
                 .containsExactly("document", "register");
-        assertThat(refs.get(0).fieldHints().get("total").visibleInList()).isFalse();
+        assertThat(refs.getFirst().fieldHints().get("total").visibleInList()).isFalse();
         assertThat(refs.get(1).fieldHints().get("quantity").order()).isEqualTo(5);
     }
 
@@ -115,7 +126,7 @@ class UiLayoutBuilderTest {
                 .field("name").hint("The product's display name.")
                 .field("code"));
 
-        UiLayoutBuilder.EntityRef ref = layout.build().get(0).entityRefs().get(0);
+        UiLayoutBuilder.EntityRef ref = layout.build().getFirst().entityRefs().getFirst();
         assertThat(ref.fieldHints().get("name").hint()).isEqualTo("The product's display name.");
         // Unset hint stays null so it falls through to the descriptor's blank default.
         assertThat(ref.fieldHints().get("code").hint()).isNull();
@@ -130,7 +141,7 @@ class UiLayoutBuilderTest {
         List<UiLayoutBuilder.WidgetConfig> widgets = layout.buildWidgets();
         assertThat(widgets).extracting(UiLayoutBuilder.WidgetConfig::title)
                 .containsExactly("Revenue", "Clients");
-        assertThat(widgets.get(0).hint()).isEqualTo("Sum of gross on all bills.");
+        assertThat(widgets.getFirst().hint()).isEqualTo("Sum of gross on all bills.");
         // A widget with no hint defaults to a blank string, never null.
         assertThat(widgets.get(1).hint()).isEmpty();
     }

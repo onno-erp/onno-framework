@@ -451,6 +451,12 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   the portable DivKit nav/account cards for non-web clients and other nav styles. Entity and page entries
   share one authored sequence, so a mixed chain such as `.page(...).catalog(...).page(...)` renders
   in exactly that order.
+  The default layout can call `spec.homeInNavigation(false)` (or
+  `spec.shell().homeInNavigation(false)`) to hide the automatic home entry. The default is `true`.
+  An explicit visible `.page("/", "Home", "house")` link replaces the automatic entry, preserving
+  its section, label, and icon. Hidden sections do not suppress the automatic entry. A home page
+  remains the logo/mark target (`shell.home = "/"`) even when absent from navigation; apps without
+  a home page or dashboard widgets continue to land on their first visible navigation item.
 - **`Page`** — a route you compose (`compose(PageBuilder)`): `title`, `widget(...)` (count, metric,
   chart, calendar, list, kanban, or app-registered custom), `text`, `list`, `actions`, `custom`,
   and `bare()`/`header(false)` to drop the title row. A page is served at **any** route — the home

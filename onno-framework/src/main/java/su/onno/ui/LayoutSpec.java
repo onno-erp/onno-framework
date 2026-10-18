@@ -41,6 +41,16 @@ public final class LayoutSpec {
     }
 
     /**
+     * Show the automatic home navigation entry (default true). Set false to hide it while
+     * retaining the home page as the logo target. Explicit section links to {@code "/"} remain.
+     * Configure on the default layout, like other shared shell settings.
+     */
+    public LayoutSpec homeInNavigation(boolean visible) {
+        builder.shell().homeInNavigation(visible);
+        return this;
+    }
+
+    /**
      * Link login accounts to a directory record by matching a field. Use only from
      * the default layout; startup rejects identity links on named persona layouts.
      * See {@link UiIdentityLink}.
