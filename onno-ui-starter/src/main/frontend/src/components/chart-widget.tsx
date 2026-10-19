@@ -15,7 +15,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ComposedChart,
   Legend,
   LabelList,
@@ -60,7 +59,6 @@ import { useTimeRange } from "@/providers/time-range-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { HintIcon } from "@/components/ui/hint-icon";
 import { TimeRangeFacet } from "@/components/date-range-facet";
-import { cn } from "@/lib/utils";
 import { useMessages } from "@/providers/messages-provider";
 import { logicalEntityKey } from "@/lib/entity-keys";
 
@@ -483,8 +481,13 @@ const stripDisplay = (column: string) => column.replace(/(?:_display|Display)$/,
 /** Epoch millis → the ISO local-datetime the aggregate endpoint's window expects ("2026-01-01T00:00:00"). */
 const toLocalIso = (ms: number) => format(new Date(ms), "yyyy-MM-dd'T'HH:mm:ss");
 
+/** Elapsed days for automatic buckets; empty/zero-length spans retain the one-day fallback. */
+export function chartSpanDays(min: number, max: number): number {
+  return max > min ? (max - min) / 86_400_000 : 1;
+}
+
 /** The span (in days) covered by a chart's rows on its date field — for sizing "all"-range buckets. */
-function dataSpanDays(rows: EntityRecord[], dateField: string): number {
+export function dataSpanDays(rows: EntityRecord[], dateField: string): number {
   let min = Infinity;
   let max = -Infinity;
   for (const r of rows) {
@@ -495,7 +498,7 @@ function dataSpanDays(rows: EntityRecord[], dateField: string): number {
     if (t < min) min = t;
     if (t > max) max = t;
   }
-  return max > min ? (max - min) / 86_400_000 + 1 : 1;
+  return chartSpanDays(min, max);
 }
 
 export function ChartWidget({ widget }: ChartWidgetProps) {
@@ -618,7 +621,7 @@ export function ChartWidget({ widget }: ChartWidgetProps) {
   const spanDays = useMemo(() => {
     if (isRegister) return dataSpanDays(ranged, windowField);
     const span = bucketResp?.span;
-    return span ? (Date.parse(span.max) - Date.parse(span.min)) / 86_400_000 + 1 : 1;
+    return span ? chartSpanDays(Date.parse(span.min), Date.parse(span.max)) : 1;
   }, [isRegister, ranged, windowField, bucketResp]);
   const autoGran = useMemo(() => autoGranularityForSpan(spanDays), [spanDays]);
   useEffect(() => {
@@ -864,8 +867,8 @@ function renderChart(
   const multi = seriesKeys.length > 1 || seriesKeys[0] !== SINGLE_SERIES;
   const axis = { stroke: "hsl(var(--muted-foreground))", fontSize: 12, tickLine: false, axisLine: false } as const;
   const stacked = config.stacked;
-  const y = config.axes.left;
-  const domain: [number | "auto", number | "auto"] = [y.min ?? "auto", y.max ?? "auto"];
+  const leftAxis = config.axes.left;
+  const domain: [number | "auto", number | "auto"] = [leftAxis.min ?? "auto", leftAxis.max ?? "auto"];
   const showLabels = config.dataLabels === "all" ||
     (config.dataLabels === "auto" && data.rows.length <= 12 && seriesKeys.length === 1);
   const thresholdLines = config.thresholds.filter((threshold) => threshold.axis === "left").map((threshold, i) => (
@@ -902,9 +905,11 @@ function renderChart(
 
   if (kind === "donut" || kind === "pie") {
     // A hidden slice keeps its legend entry but contributes 0 to the ring.
-    const pieRows = data.rows.map((r) =>
-      hidden.has(String(r.label)) ? { ...r, [SINGLE_SERIES]: 0 } : r
-    );
+    const pieRows = data.rows.map((r, i) => ({
+      ...r,
+      [SINGLE_SERIES]: hidden.has(String(r.label)) ? 0 : r[SINGLE_SERIES],
+      fill: colors[i % colors.length],
+    }));
     // Slice tooltips summarize value + share of the visible ring (hidden slices excluded).
     const pieTotal = pieRows.reduce((s, r) => s + (toNumber(r[SINGLE_SERIES]) ?? 0), 0);
     const pieValue = (value: unknown) => {
@@ -941,11 +946,7 @@ function renderChart(
           // can drop every sector and never restore them. The slices matter more than the flourish.
           isAnimationActive={false}
           label={showLabels ? ({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${Math.round((percent ?? 0) * 100)}%` : false}
-        >
-          {pieRows.map((_, i) => (
-            <Cell key={i} fill={colors[i % colors.length]} />
-          ))}
-        </Pie>
+        />
       </PieChart>
     );
   }
@@ -967,8 +968,8 @@ function renderChart(
         )}
         {config.grid && <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.6} strokeDasharray="3 3" />}
         <XAxis dataKey="label" {...axis} />
-        {y.visible && <YAxis {...axis} width={40} tickFormatter={fmtAxis} domain={domain} scale={y.scale}
-          label={y.label ? { value: y.label, angle: -90, position: "insideLeft" } : undefined} />}
+        {leftAxis.visible && <YAxis {...axis} width={40} tickFormatter={fmtAxis} domain={domain} scale={leftAxis.scale}
+          label={leftAxis.label ? { value: leftAxis.label, angle: -90, position: "insideLeft" } : undefined} />}
         <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ stroke: "hsl(var(--border))" }} content={<ChartTooltipContent format={tooltipValue} fallbackName={seriesName} />} />
         {seriesLegend}
         {thresholdLines}
@@ -1017,8 +1018,8 @@ function renderChart(
       {refArea && <ReferenceArea x1={refArea.x1} x2={refArea.x2} strokeOpacity={0} fill="hsl(var(--primary))" fillOpacity={0.12} />}
       {config.grid && <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="3 3" vertical={false} />}
       <XAxis dataKey="label" {...axis} />
-      {y.visible && <YAxis {...axis} width={52} tickFormatter={fmtAxis} domain={domain} scale={y.scale}
-        label={y.label ? { value: y.label, angle: -90, position: "insideLeft" } : undefined} />}
+      {leftAxis.visible && <YAxis {...axis} width={52} tickFormatter={fmtAxis} domain={domain} scale={leftAxis.scale}
+        label={leftAxis.label ? { value: leftAxis.label, angle: -90, position: "insideLeft" } : undefined} />}
       <Tooltip wrapperStyle={TOOLTIP_WRAPPER} cursor={{ fill: "hsl(var(--accent) / 0.4)" }} content={<ChartTooltipContent format={tooltipValue} fallbackName={seriesName} />} />
       {seriesLegend}
       {thresholdLines}
