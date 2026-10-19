@@ -312,6 +312,10 @@ public class MetadataScanner {
                 );
                 validatePreviousNames(attr.previousNames(), naming::column);
                 Class<?> javaType = field.getType();
+                if (attr.searchIndex() && (javaType != String.class || attr.secret())) {
+                    throw new IllegalStateException(clazz.getName() + "." + fieldName
+                            + ": @Attribute(searchIndex = true) requires a non-secret String attribute");
+                }
                 boolean isRef = Ref.class.isAssignableFrom(javaType)
                         || PolyRef.class.isAssignableFrom(javaType);
                 List<ReferenceTargetDescriptor> refTargets = scanRefTargets(field, javaType);
@@ -339,7 +343,8 @@ public class MetadataScanner {
                         new AttributeDescriptor.Constraints(
                                 attr.min(), attr.max(), attr.minLength(), attr.pattern(), attr.email()),
                         attr.secret(),
-                        List.of(attr.previousNames())
+                        List.of(attr.previousNames()),
+                        attr.searchIndex()
                 ));
             }
             current = current.getSuperclass();

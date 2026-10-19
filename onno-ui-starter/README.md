@@ -246,7 +246,10 @@ or counts.
   inlined.
 - **Indexes.** The schema engine auto-emits composite `(_code, _id)` / `(_description, _id)` (catalogs)
   and `(_date, _id)` (documents) so the seek is an index-only range scan; on PostgreSQL it also adds
-  `pg_trgm` GIN indexes so the `q=` substring search is indexed instead of a full scan.
+  `pg_trgm` GIN indexes on `_code`/`_description`/`_number` and on attributes declared
+  `@Attribute(searchIndex = true)`, so the `q=` substring search on them is indexed instead of a
+  full scan (`onno.schema.search-indexes=off` disables them all). Other String attributes are still
+  searched, by `LIKE` scan.
 Lists always use infinite keyset scrolling. Author the window size with `list.pageSize(25)` or set
 the app-wide `onno.ui.list.page-size`. There is no offset mode or numbered-page feed in 2.0.
 

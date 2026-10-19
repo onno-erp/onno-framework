@@ -5,6 +5,7 @@ import su.onno.migration.AppMigration;
 import su.onno.migration.MigrationRunner;
 import su.onno.schema.SchemaMode;
 import su.onno.schema.SchemaUpgrader;
+import su.onno.schema.SearchIndexMode;
 import su.onno.schema.SqlDialect;
 
 import org.jdbi.v3.core.Jdbi;
@@ -31,6 +32,7 @@ public class SchemaInitializer implements InitializingBean {
     private final List<String> scanPackages;
     private final SchemaMode mode;
     private final boolean allowDestructive;
+    private final SearchIndexMode searchIndexes;
     private final List<AppMigration> migrations;
 
     public SchemaInitializer(DataSource dataSource, List<String> scanPackages) {
@@ -40,10 +42,17 @@ public class SchemaInitializer implements InitializingBean {
     public SchemaInitializer(DataSource dataSource, List<String> scanPackages,
                              SchemaMode mode, boolean allowDestructive,
                              List<AppMigration> migrations) {
+        this(dataSource, scanPackages, mode, allowDestructive, SearchIndexMode.AUTO, migrations);
+    }
+
+    public SchemaInitializer(DataSource dataSource, List<String> scanPackages,
+                             SchemaMode mode, boolean allowDestructive,
+                             SearchIndexMode searchIndexes, List<AppMigration> migrations) {
         this.dataSource = dataSource;
         this.scanPackages = scanPackages;
         this.mode = mode;
         this.allowDestructive = allowDestructive;
+        this.searchIndexes = searchIndexes;
         this.migrations = migrations;
     }
 
@@ -95,7 +104,7 @@ public class SchemaInitializer implements InitializingBean {
             // The lock gates by session, not by which pooled connection runs the DDL. H2 is single-node
             // and skips this; PLAN/VALIDATE only read, so they need no lock.
             jdbi.useHandle(lock -> {
-                lock.execute("SELECT pg_advisory_lock(?)", SCHEMA_LOCK_KEY);
+                acquireSchemaLock(lock);
                 try {
                     applySchema(jdbi, registry);
                 } finally {
@@ -107,8 +116,27 @@ public class SchemaInitializer implements InitializingBean {
         }
     }
 
+    /**
+     * Poll {@code pg_try_advisory_lock} rather than block in {@code pg_advisory_lock}: a session
+     * parked inside one long-running statement holds a snapshot, and a background
+     * {@code CREATE INDEX CONCURRENTLY} (search index reconciliation on another node) waits for every
+     * older snapshot to finish — while the lock holder may in turn wait on that index build. Short
+     * try-statements hold no snapshot between attempts, so that cycle cannot form.
+     */
+    private static void acquireSchemaLock(org.jdbi.v3.core.Handle lock) {
+        while (!Boolean.TRUE.equals(lock.createQuery("SELECT pg_try_advisory_lock(:key)")
+                .bind("key", SCHEMA_LOCK_KEY).mapTo(Boolean.class).one())) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted waiting for the schema advisory lock", e);
+            }
+        }
+    }
+
     private void applySchema(Jdbi jdbi, MetadataRegistry registry) {
-        new SchemaUpgrader(registry, mode, allowDestructive).run(jdbi);
+        new SchemaUpgrader(registry, mode, allowDestructive, searchIndexes).run(jdbi);
 
         MigrationRunner runner = new MigrationRunner(registry);
         switch (mode) {

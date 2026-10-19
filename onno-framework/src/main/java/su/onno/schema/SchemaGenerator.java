@@ -21,8 +21,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -168,35 +170,35 @@ public class SchemaGenerator {
 
     /**
      * PostgreSQL trigram (GIN) indexes that turn the list/search {@code LOWER(CAST(col AS VARCHAR))
-     * LIKE '%term%'} scan into an index lookup — the single biggest win for substring search on a
-     * large table. The indexed expression is byte-for-byte the one the query services emit, so the
-     * planner actually uses it. Empty on any non-PostgreSQL dialect (H2 has no pg_trgm; it falls back
-     * to the LIKE scan), and applied best-effort by {@link #applySearchIndexes} since {@code CREATE
-     * EXTENSION} may require privileges the app role lacks.
+     * LIKE '%term%'} scan into an index lookup. The indexed expression is byte-for-byte the one the
+     * query services emit, so the planner actually uses it. Empty on any non-PostgreSQL dialect (H2
+     * has no pg_trgm; it falls back to the LIKE scan), and applied best-effort by
+     * {@link #applySearchIndexes} since {@code CREATE EXTENSION} may require privileges the app role
+     * lacks. Covers the {@link SearchIndexMode#AUTO} set: system text columns plus attributes opted in
+     * with {@code @Attribute(searchIndex = true)}.
      */
     public List<String> generateSearchIndexDDL(SqlDialect dialect) {
-        if (dialect != SqlDialect.POSTGRESQL) {
+        return generateSearchIndexDDL(dialect, SearchIndexMode.AUTO);
+    }
+
+    public List<String> generateSearchIndexDDL(SqlDialect dialect, SearchIndexMode mode) {
+        List<SearchIndex> indexes = searchIndexes(mode);
+        if (dialect != SqlDialect.POSTGRESQL || indexes.isEmpty()) {
             return List.of();
         }
         List<String> statements = new ArrayList<>();
         statements.add("CREATE EXTENSION IF NOT EXISTS pg_trgm");
-        for (CatalogDescriptor catalog : registry.allCatalogs()) {
-            for (String column : textSearchColumns(catalog.attributes(), "_code", "_description")) {
-                statements.add(trigramIndex(catalog.tableName(), column));
-            }
-        }
-        for (DocumentDescriptor document : registry.allDocuments()) {
-            for (String column : textSearchColumns(document.attributes(), "_number")) {
-                statements.add(trigramIndex(document.tableName(), column));
-            }
+        for (SearchIndex index : indexes) {
+            statements.add(index.ddl(false));
         }
         return statements;
     }
 
     /**
-     * Apply the trigram search indexes best-effort: a missing {@code pg_trgm} extension (or a role
-     * without rights to create it) logs a warning and the app keeps running on LIKE scans rather than
-     * failing to boot. A no-op on non-PostgreSQL dialects.
+     * Apply the trigram search indexes best-effort on a fresh database: a missing {@code pg_trgm}
+     * extension (or a role without rights to create it) logs a warning and the app keeps running on
+     * LIKE scans rather than failing to boot. A no-op on non-PostgreSQL dialects. Existing databases
+     * are converged by {@link SearchIndexReconciler} instead.
      */
     public void applySearchIndexes(Jdbi jdbi, SqlDialect dialect) {
         List<String> statements = generateSearchIndexDDL(dialect);
@@ -216,18 +218,67 @@ public class SchemaGenerator {
         }
     }
 
-    /** The system text columns plus every non-secret String attribute — what list/ref search covers. */
-    private static List<String> textSearchColumns(List<AttributeDescriptor> attributes, String... systemColumns) {
+    /**
+     * The declared trigram search indexes for {@code mode}: none for {@link SearchIndexMode#OFF};
+     * otherwise the system text columns ({@code _code}/{@code _description}, {@code _number}) plus
+     * every attribute declared {@code @Attribute(searchIndex = true)}.
+     */
+    public List<SearchIndex> searchIndexes(SearchIndexMode mode) {
+        if (mode == SearchIndexMode.OFF) {
+            return List.of();
+        }
+        List<SearchIndex> indexes = new ArrayList<>();
+        for (CatalogDescriptor catalog : registry.allCatalogs()) {
+            for (String column : searchIndexColumns(catalog.attributes(), "_code", "_description")) {
+                indexes.add(SearchIndex.of(catalog.tableName(), column));
+            }
+        }
+        for (DocumentDescriptor document : registry.allDocuments()) {
+            for (String column : searchIndexColumns(document.attributes(), "_number")) {
+                indexes.add(SearchIndex.of(document.tableName(), column));
+            }
+        }
+        return indexes;
+    }
+
+    /** Tables whose framework-owned trigram indexes the {@link SearchIndexReconciler} manages. */
+    public Set<String> searchableTables() {
+        Set<String> tables = new HashSet<>();
+        registry.allCatalogs().forEach(c -> tables.add(c.tableName()));
+        registry.allDocuments().forEach(d -> tables.add(d.tableName()));
+        return tables;
+    }
+
+    private static List<String> searchIndexColumns(List<AttributeDescriptor> attributes, String... systemColumns) {
         List<String> columns = new ArrayList<>(List.of(systemColumns));
         attributes.stream()
-                .filter(a -> a.javaType() == String.class && !a.secret())
+                .filter(a -> a.searchIndex() && a.javaType() == String.class && !a.secret())
                 .forEach(a -> columns.add(a.columnName()));
         return columns;
     }
 
-    private static String trigramIndex(String table, String column) {
-        return "CREATE INDEX IF NOT EXISTS " + indexName("trgm_" + table, column)
-                + " ON " + table + " USING gin (LOWER(CAST(" + column + " AS VARCHAR)) gin_trgm_ops)";
+    /** One trigram search index on {@code table.column}. */
+    public record SearchIndex(String table, String column, String name) {
+
+        static SearchIndex of(String table, String column) {
+            return new SearchIndex(table, column, indexName("trgm_" + table, column));
+        }
+
+        String ddl(boolean concurrently) {
+            return "CREATE INDEX " + (concurrently ? "CONCURRENTLY " : "") + "IF NOT EXISTS " + name
+                    + " ON " + table + " USING gin (LOWER(CAST(" + column + " AS VARCHAR)) gin_trgm_ops)";
+        }
+    }
+
+    /** The index name of a {@code CREATE INDEX IF NOT EXISTS <name> ON ...} statement. */
+    static String indexNameOf(String createIndexSql) {
+        int at = createIndexSql.indexOf("IF NOT EXISTS ");
+        if (at < 0) {
+            return null;
+        }
+        String rest = createIndexSql.substring(at + "IF NOT EXISTS ".length());
+        int end = rest.indexOf(' ');
+        return end < 0 ? rest : rest.substring(0, end);
     }
 
     // PostgreSQL truncates identifiers beyond 63 characters, which would make two long

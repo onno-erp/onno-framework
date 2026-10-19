@@ -29,12 +29,19 @@ public class SchemaUpgrader {
     private final MetadataRegistry registry;
     private final SchemaMode mode;
     private final boolean allowDestructive;
+    private final SearchIndexMode searchIndexes;
     private final SchemaHistoryRepository history = new SchemaHistoryRepository();
 
     public SchemaUpgrader(MetadataRegistry registry, SchemaMode mode, boolean allowDestructive) {
+        this(registry, mode, allowDestructive, SearchIndexMode.AUTO);
+    }
+
+    public SchemaUpgrader(MetadataRegistry registry, SchemaMode mode, boolean allowDestructive,
+                          SearchIndexMode searchIndexes) {
         this.registry = registry;
         this.mode = mode;
         this.allowDestructive = allowDestructive;
+        this.searchIndexes = searchIndexes;
     }
 
     public MigrationPlan run(Jdbi jdbi) {
@@ -100,16 +107,29 @@ public class SchemaUpgrader {
         });
         ProcessSchemaBackfill.run(jdbi);
 
-        // Indexes are an idempotent overlay (CREATE INDEX IF NOT EXISTS) rather than part of
+        // Btree indexes are an idempotent overlay (CREATE INDEX IF NOT EXISTS) rather than part of
         // the diffed plan: they carry no data, so re-asserting them after the plan ran is
         // safe and converges existing databases on the same index set as fresh ones.
+        // On PostgreSQL, statements for indexes that already exist are skipped up front: even with
+        // IF NOT EXISTS, CREATE INDEX takes a write-blocking SHARE lock on the table before it
+        // checks the name, which would stall writes on every boot and queue behind a concurrent
+        // search-index build.
         SchemaGenerator generator = new SchemaGenerator(registry);
         jdbi.useHandle(handle -> {
+            java.util.Set<String> existing = dialect == SqlDialect.POSTGRESQL
+                    ? new java.util.HashSet<>(handle.createQuery(
+                            "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()")
+                            .mapTo(String.class).list())
+                    : java.util.Set.of();
             for (String sql : generator.generateIndexDDL()) {
-                handle.execute(sql);
+                if (!existing.contains(SchemaGenerator.indexNameOf(sql))) {
+                    handle.execute(sql);
+                }
             }
         });
-        generator.applySearchIndexes(jdbi, dialect);
+        // Trigram search indexes can be large and slow to build, so they are reconciled (stale ones
+        // dropped, missing ones built CONCURRENTLY) on a background thread, off the startup path.
+        new SearchIndexReconciler(generator, searchIndexes).reconcileAsync(jdbi, dialect);
 
         if (!applied.isEmpty()) {
             log.info("Applied {} schema change(s):\n{}",

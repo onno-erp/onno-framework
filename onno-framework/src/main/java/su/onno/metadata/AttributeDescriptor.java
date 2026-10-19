@@ -23,8 +23,22 @@ public record AttributeDescriptor(
         String widget,
         Constraints constraints,
         boolean secret,
-        List<String> previousNames
+        List<String> previousNames,
+        boolean searchIndex
 ) {
+
+    /** Backward-compatible constructor for callers predating {@code searchIndex}. */
+    public AttributeDescriptor(
+            String fieldName, String displayName, String columnName, Class<?> javaType,
+            int length, boolean required, boolean isRef, String refTarget,
+            List<ReferenceTargetDescriptor> refTargets, int precision, int scale,
+            boolean visibleInList, boolean visibleInForm, boolean visibleInDetail, int order,
+            String group, String widthHint, String widget, Constraints constraints,
+            boolean secret, List<String> previousNames) {
+        this(fieldName, displayName, columnName, javaType, length, required, isRef, refTarget,
+                refTargets, precision, scale, visibleInList, visibleInForm, visibleInDetail, order,
+                group, widthHint, widget, constraints, secret, previousNames, false);
+    }
 
     /** Backward-compatible full constructor for callers predating polymorphic references. */
     public AttributeDescriptor(

@@ -115,4 +115,52 @@ class IndexDdlTest {
                         + " ON document_test_invoices USING gin"
                         + " (LOWER(CAST(_number AS VARCHAR)) gin_trgm_ops)");
     }
+
+    @su.onno.annotations.Catalog(name = "SearchNotes")
+    static class SearchNote extends su.onno.model.CatalogObject {
+        @su.onno.annotations.Attribute(searchIndex = true)
+        private String title;
+
+        @su.onno.annotations.Attribute(length = 100_000)
+        private String body;
+    }
+
+    @su.onno.annotations.Catalog(name = "BadSearchNotes")
+    static class BadSearchNote extends su.onno.model.CatalogObject {
+        @su.onno.annotations.Attribute(searchIndex = true)
+        private java.math.BigDecimal amount;
+    }
+
+    @Test
+    void trigramSearchIndexesAreOptInPerAttribute() {
+        MetadataRegistry registry = registry();
+        registry.registerCatalog(new MetadataScanner(new DefaultNamingStrategy()).scan(SearchNote.class));
+        SchemaGenerator generator = new SchemaGenerator(registry);
+
+        List<String> columns = generator.searchIndexes(SearchIndexMode.AUTO).stream()
+                .map(i -> i.table() + "." + i.column()).toList();
+        // System columns plus the opted-in attribute — never the un-annotated String attributes.
+        assertThat(columns).contains("catalog_search_notes._code", "catalog_search_notes._description",
+                "catalog_search_notes.title", "catalog_test_customers._description");
+        assertThat(columns).doesNotContain("catalog_search_notes.body", "catalog_test_customers.email");
+
+        assertThat(generator.searchIndexes(SearchIndexMode.OFF)).isEmpty();
+        assertThat(generator.generateSearchIndexDDL(SqlDialect.POSTGRESQL, SearchIndexMode.OFF)).isEmpty();
+    }
+
+    @Test
+    void searchIndexOnNonStringAttributeIsRejected() {
+        MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> scanner.scan(BadSearchNote.class))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("searchIndex = true");
+    }
+
+    @Test
+    void searchIndexModeParses() {
+        assertThat(SearchIndexMode.fromString(null)).isEqualTo(SearchIndexMode.AUTO);
+        assertThat(SearchIndexMode.fromString(" Off ")).isEqualTo(SearchIndexMode.OFF);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> SearchIndexMode.fromString("all"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

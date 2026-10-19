@@ -41,6 +41,7 @@ reuse across documents/sections. Share implementation through a base row class.
 | `pattern` | String | `""` | Regex validation. |
 | `email` | boolean | `false` | Email-format validator. |
 | `secret` | boolean | `false` | Encrypted at rest (needs `onno.security.secret-key`), masked as `__SECRET_SET__` on read. |
+| `searchIndex` | boolean | `false` | PostgreSQL trigram index for substring search on this String attribute. Opt in only for fields users search by on large tables. |
 
 **Supported attribute field types:** `String`, `int`/`Integer`, `long`/`Long`, `boolean`/`Boolean`,
 `double`/`Double`, `float`/`Float`, `BigDecimal`, `UUID`, `LocalDate`, `LocalDateTime`, Java `enum`s
