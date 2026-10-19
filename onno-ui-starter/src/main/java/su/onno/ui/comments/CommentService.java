@@ -6,6 +6,7 @@ import su.onno.ui.SqlBind;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -94,7 +95,9 @@ public class CommentService {
     public Comment add(String entityType, String entityName, UUID entityId,
                        String authorId, String authorName, String body, UUID parentId) {
         UUID id = UUID.randomUUID();
-        Instant now = Instant.now();
+        // TIMESTAMP keeps microseconds and rounds finer values, so truncate first: the returned
+        // createdAt then equals what a read-back sees (Linux clocks tick in nanoseconds).
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         UUID authorUuid = authorId == null ? null : UUID.fromString(authorId);
         jdbi.useHandle(h -> {
             var update = h.createUpdate("INSERT INTO " + TABLE +
@@ -160,7 +163,7 @@ public class CommentService {
                     .bind("commentId", commentId)
                     .bind("userKey", userKey)
                     .bind("emoji", emoji)
-                    .bind("createdAt", Timestamp.from(Instant.now()))
+                    .bind("createdAt", Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
                     .execute();
             return true;
         });
