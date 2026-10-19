@@ -206,6 +206,12 @@ public class Product extends CatalogObject {
 }
 ```
 
+On PostgreSQL, list/ref-picker substring search (`q=`) is backed by a trigram index on the system
+columns (`code`/`description`, document `number`). Other String attributes are searched by scan
+unless they opt in with `@Attribute(searchIndex = true)` — do that only for fields users actually
+search by on large tables; each trigram index costs disk and write throughput in proportion to the
+column's text. `onno.schema.search-indexes=off` disables them all.
+
 Use hierarchical catalogs when users organize entities into folders or parent-child trees:
 
 ```java

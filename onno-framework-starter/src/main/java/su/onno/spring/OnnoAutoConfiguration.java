@@ -155,6 +155,7 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
         return new SchemaInitializer(dataSource, resolvePackages(properties, context),
                 su.onno.schema.SchemaMode.fromString(properties.getSchema().getMode()),
                 properties.getSchema().isAllowDestructive(),
+                su.onno.schema.SearchIndexMode.fromString(properties.getSchema().getSearchIndexes()),
                 migrations.orderedStream().toList());
     }
 

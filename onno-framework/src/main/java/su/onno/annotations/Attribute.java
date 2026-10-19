@@ -55,4 +55,16 @@ public @interface Attribute {
      * requires {@code onno.security.secret-key} to be configured.
      */
     boolean secret() default false;
+
+    /**
+     * Opt this String attribute into a PostgreSQL trigram ({@code pg_trgm} GIN) index, so the
+     * list/ref-picker substring search ({@code q=}) on it is an index lookup instead of a scan.
+     * Off by default: a trigram index costs disk and slows every insert/update in proportion to
+     * the column's text volume, so index only the attributes users actually search by on large
+     * tables. The system columns ({@code code}/{@code description}, {@code number}) are indexed
+     * regardless (subject to {@code onno.schema.search-indexes}). Search itself covers every
+     * String attribute either way; this only decides whether it is index-backed. Only valid on
+     * non-secret {@code String} attributes; ignored on databases other than PostgreSQL.
+     */
+    boolean searchIndex() default false;
 }

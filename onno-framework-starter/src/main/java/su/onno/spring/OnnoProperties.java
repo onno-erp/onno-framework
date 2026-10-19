@@ -81,6 +81,16 @@ public class OnnoProperties {
          */
         private boolean allowDestructive = false;
 
+        /**
+         * Which PostgreSQL trigram ({@code pg_trgm}) indexes back the list/ref-picker substring
+         * search: {@code auto} (default — the system code/description/number columns plus every
+         * attribute declared {@code @Attribute(searchIndex = true)}) or {@code off} (none). Indexes
+         * the framework owns but no longer declares are dropped, and missing ones are built with
+         * {@code CREATE INDEX CONCURRENTLY} on a background thread after startup. Search still
+         * covers every String attribute; this only decides which columns are index-backed.
+         */
+        private String searchIndexes = "auto";
+
         public String getMode() {
             return mode;
         }
@@ -95,6 +105,14 @@ public class OnnoProperties {
 
         public void setAllowDestructive(boolean allowDestructive) {
             this.allowDestructive = allowDestructive;
+        }
+
+        public String getSearchIndexes() {
+            return searchIndexes;
+        }
+
+        public void setSearchIndexes(String searchIndexes) {
+            this.searchIndexes = searchIndexes;
         }
     }
 

@@ -280,6 +280,15 @@ files for structural changes. The diff-based engine lives in
 - **Data migrations**: implement `AppMigration` (`version()` compared segment-wise, `migrate(MigrationContext)`)
   as a Spring bean. Each runs exactly once per database, in version order, inside a transaction,
   recorded in `onno_schema_history` (a unique constraint arbitrates concurrent starts).
+- **Search indexes** (PostgreSQL only): btree indexes on framework-queried columns are re-asserted
+  with `IF NOT EXISTS`. Trigram (`pg_trgm` GIN) indexes for the list/ref-picker `q=` substring
+  search are **opt-in per attribute** with `@Attribute(searchIndex = true)`; the system columns
+  (`_code`/`_description`, `_number`) are always indexed unless `onno.schema.search-indexes=off`.
+  `SearchIndexReconciler` converges them on a background thread after `apply`: framework-owned
+  trigram indexes (identified by definition — GIN + `gin_trgm_ops` on a catalog/document table — not
+  by name) that are no longer declared, or left invalid by an interrupted build, are dropped; missing
+  ones are built with `CREATE INDEX CONCURRENTLY` under a `pg_try_advisory_lock`. Search covers every
+  String attribute regardless — unindexed ones fall back to a `LIKE` scan.
 
 Every applied change-set plus a fresh metadata snapshot is written to `onno_schema_history`.
 
