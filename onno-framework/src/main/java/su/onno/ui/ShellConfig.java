@@ -8,12 +8,18 @@ package su.onno.ui;
  * on another device. A {@code null} style means "let the renderer pick a sensible
  * default for the viewport". Authored via {@code UiLayoutBuilder.shell()}.
  */
-public record ShellConfig(NavStyle nav, BrandingConfig branding, java.util.Map<String, MobileItem> mobileItems) {
+public record ShellConfig(NavStyle nav, BrandingConfig branding, java.util.Map<String, MobileItem> mobileItems,
+                          boolean homeInNavigation) {
 
     public record MobileItem(String label, int order) {}
 
     public ShellConfig(NavStyle nav, BrandingConfig branding) {
         this(nav, branding, java.util.Map.of());
+    }
+
+    /** Existing constructors retain the automatic home navigation entry. */
+    public ShellConfig(NavStyle nav, BrandingConfig branding, java.util.Map<String, MobileItem> mobileItems) {
+        this(nav, branding, mobileItems, true);
     }
 
     public ShellConfig {

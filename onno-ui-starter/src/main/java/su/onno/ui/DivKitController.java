@@ -5,7 +5,6 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.PageWidgetDescriptor;
 import su.onno.metadata.DocumentDescriptor;
-import su.onno.model.AccumulationType;
 import su.onno.ui.divkit.DashboardDivBuilder;
 import su.onno.ui.divkit.Div;
 import su.onno.ui.divkit.DivCard;
@@ -72,7 +71,6 @@ public class DivKitController implements DisposableBean {
     private final DocumentQueryService documentQuery;
     private final RegisterQueryService registerQuery;
     private final UiActionResolver actionResolver;
-    private final RelatedListReader relatedLists;
     private final UiProperties uiProperties;
     // The resolved chrome strings (English defaults + onno.ui.messages overrides) for the
     // server-rendered DivKit chrome — login aside (that's LoginDivController's payload).
@@ -104,7 +102,7 @@ public class DivKitController implements DisposableBean {
                             DocumentQueryService documentQuery,
                             RegisterQueryService registerQuery,
                             UiActionResolver actionResolver,
-                            RelatedListReader relatedLists,
+                            @SuppressWarnings("unused") RelatedListReader relatedLists,
                             UiProperties uiProperties,
                             UiMessages messages,
                             ObjectProvider<CommentProperties> commentProperties,
@@ -124,7 +122,6 @@ public class DivKitController implements DisposableBean {
         this.documentQuery = documentQuery;
         this.registerQuery = registerQuery;
         this.actionResolver = actionResolver;
-        this.relatedLists = relatedLists;
         this.uiProperties = uiProperties;
         this.messages = messages;
         this.commentProperties = commentProperties;
@@ -197,9 +194,9 @@ public class DivKitController implements DisposableBean {
         // where it's the /account page).
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("navStyle", navStyle.name().toLowerCase());
-        // Where "/" should land: the dashboard if there is one, else the first real nav
-        // item, so a dashboard-less app opens on a real screen instead of a phantom one.
-        out.put("home", landingPath(nav));
+        // Home stays reachable through the logo even when its automatic nav entry is hidden.
+        // Dashboard-less apps still land on their first real nav item.
+        out.put("home", hasDashboard(activeProfile, vp) ? "/" : landingPath(nav));
         // The web desktop shell consumes the same RBAC-filtered structure directly to render its
         // two-tier app rail + collapsible section drawer. Other clients keep consuming the DivKit
         // card below, so this is an additive representation of one navigation source of truth.
@@ -678,7 +675,6 @@ public class DivKitController implements DisposableBean {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, List<String>> resolvedDefaultFilters(
             Map<String, Object> descriptor, Map<String, Object> defaults) {
         Map<String, List<String>> resolved = new LinkedHashMap<>();
@@ -898,7 +894,7 @@ public class DivKitController implements DisposableBean {
                 EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
                 false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
-            content = SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
+            SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
         return DivCard.of("onno-content", content);
     }
@@ -914,7 +910,7 @@ public class DivKitController implements DisposableBean {
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Extra query params
         // overlay onto that seed as initial field values.
-        return entityFormContent("catalogs", name, null, "New " + str(meta.get("name")), "Create",
+        return entityFormContent("catalogs", name, "New " + str(meta.get("name")),
                 meta, EntityJsonRepresentation.catalog(desc,
                         catalogQuery.newDraft(subject(principal), desc, formPrefill(params)),
                         EntityJsonRepresentation.Mode.LOGICAL));
@@ -930,7 +926,7 @@ public class DivKitController implements DisposableBean {
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         Map<String, Object> draft = duplicateDraft(catalogQuery.get(subject(principal), desc, id), desc.attributes());
-        return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
+        return entityFormContent("catalogs", name, id, "Duplicate " + str(meta.get("name")), meta,
                 EntityJsonRepresentation.catalog(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
 
@@ -1009,7 +1005,7 @@ public class DivKitController implements DisposableBean {
                 EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
                 false, !canWrite, actions);
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
-            content = SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
+            SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
         return DivCard.of("onno-content", content);
     }
@@ -1025,7 +1021,7 @@ public class DivKitController implements DisposableBean {
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
         // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
-        return entityFormContent("documents", name, null, "New " + str(meta.get("name")), "Create",
+        return entityFormContent("documents", name, "New " + str(meta.get("name")),
                 meta, EntityJsonRepresentation.document(desc,
                         documentQuery.newDraft(subject(principal), desc, formPrefill(params)),
                         EntityJsonRepresentation.Mode.LOGICAL));
@@ -1048,7 +1044,7 @@ public class DivKitController implements DisposableBean {
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(subject(principal), desc, id), desc.attributes());
-        return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), "Create", meta,
+        return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), meta,
                 EntityJsonRepresentation.document(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
     }
 
@@ -1096,14 +1092,6 @@ public class DivKitController implements DisposableBean {
     private List<ShellLayoutBuilder.NavSection> navFor(Principal principal, UiLayout.Profile active, Viewport vp) {
         String profileId = active.id();
         List<ShellLayoutBuilder.NavSection> nav = new ArrayList<>();
-        // The home/dashboard route leads the nav — but only when there's actually a
-        // dashboard to show (an authored Page for "/", or dashboard widgets in the
-        // layout/profile). With neither, "/" is an empty surface, so we don't advertise
-        // it in the nav rather than leading every app with a blank Dashboard entry.
-        if (hasDashboard(active, vp)) {
-            nav.add(new ShellLayoutBuilder.NavSection(null, null, List.of(
-                    new ShellLayoutBuilder.NavItem(homeNavLabel(active, vp), "onno://", "house", "/"))));
-        }
         for (UiLayout.ResolvedSection section : layoutResolver.resolve(active)) {
             // Nav is opt-in (a Layout bean places what the sidebar shows), but a section can still
             // be authored with HIDDEN placement to register/group its entities without surfacing
@@ -1131,6 +1119,13 @@ public class DivKitController implements DisposableBean {
             if (!items.isEmpty()) {
                 nav.add(new ShellLayoutBuilder.NavSection(section.name(), section.icon(), items));
             }
+        }
+        // Explicit, visible home links own their placement and label; never prepend a duplicate.
+        boolean explicitHome = nav.stream().flatMap(section -> section.items().stream())
+                .anyMatch(item -> "/".equals(item.path()));
+        if (layoutSet.forViewport(vp).shell().homeInNavigation() && !explicitHome && hasDashboard(active, vp)) {
+            nav.addFirst(new ShellLayoutBuilder.NavSection(null, null, List.of(
+                    new ShellLayoutBuilder.NavItem(homeNavLabel(active, vp), "onno://", "house", "/"))));
         }
         // Settings is not special: there is no built-in Settings entry. An app that wants one authors
         // a Page at "/settings" (e.g. a .widget(...).type("setting") input bound to a @Constant) and
@@ -1178,16 +1173,14 @@ public class DivKitController implements DisposableBean {
     }
 
     /**
-     * Where opening the app should land. {@link #navFor} already leads the nav with the
-     * Dashboard ("/") when {@link #hasDashboard}, so the first nav item's path is "/"
-     * for a dashboard app and the first real screen otherwise — letting a dashboard-less
-     * app open on a real surface instead of a phantom "Dashboard". Falls back to "/" (the
-     * neutral, empty landing) only when the user can reach nothing at all.
+     * Fallback landing for a dashboard-less app: its first visible screen, or "/" when
+     * nothing is reachable. A real home page remains the shell's home target independently
+     * of whether it is visible in navigation.
      */
     private static String landingPath(List<ShellLayoutBuilder.NavSection> nav) {
         for (ShellLayoutBuilder.NavSection section : nav) {
             if (!section.items().isEmpty()) {
-                return section.items().get(0).path();
+                return section.items().getFirst().path();
             }
         }
         return "/";
@@ -1222,10 +1215,10 @@ public class DivKitController implements DisposableBean {
      * React web client today, a Flutter client later) renders its own native form from
      * the same contract. {@code row} is null for create.
      */
-    private Map<String, Object> entityFormContent(String kind, String name, UUID id, String title,
-                                                  String submitLabel, Map<String, Object> meta,
+    private Map<String, Object> entityFormContent(String kind, String name, String title,
+                                                  Map<String, Object> meta,
                                                   Map<String, Object> row) {
-        return entityFormContent(kind, name, id, title, submitLabel, meta, row, false);
+        return entityFormContent(kind, name, null, title, meta, row, false);
     }
 
     /**
@@ -1234,10 +1227,10 @@ public class DivKitController implements DisposableBean {
      * record. {@code initial} carries the source's attributes/line items minus its identity.
      */
     private Map<String, Object> entityFormContent(String kind, String name, UUID id, String title,
-                                                  String submitLabel, Map<String, Object> meta,
+                                                  Map<String, Object> meta,
                                                   Map<String, Object> row, boolean duplicate) {
         return DivCard.of("onno-content",
-                entityFormBody(kind, name, id, title, submitLabel, meta, row, duplicate, false, List.of()));
+                entityFormBody(kind, name, id, title, "Create", meta, row, duplicate, false, List.of()));
     }
 
     /**
@@ -1297,14 +1290,6 @@ public class DivKitController implements DisposableBean {
         return o == null ? "" : o.toString();
     }
 
-    /**
-     * The preformatted big-number for a {@code count}/{@code metric} tile. {@code count}
-     * tallies rows; {@code metric} aggregates a field ({@code sum|avg|min|max} via
-     * {@code config("metric", ...)} + {@code config("metricField", ...)}). Both honour an
-     * optional {@code config("filter", ...)} predicate, and registers aggregate a resource
-     * server-side. The value is formatted here — currency- and locale-aware — so every
-     * client renders the same string ("—" if the widget can't be resolved).
-     */
     /** Mirrors {@code Widgets.VALUE_CARD_TYPES}: widget types carrying a server-resolved value. */
     private static final Set<String> VALUE_CARD_TYPES = Set.of("count", "metric");
 
@@ -1334,11 +1319,11 @@ public class DivKitController implements DisposableBean {
         // (→ "—"), so a single failing tile never sinks the whole render.
         Map<String, String> resolved = new ConcurrentHashMap<>();
         if (widgetPool == null || byKey.size() == 1) {
-            byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.get(0), subject)));
+            byKey.forEach((key, ws) -> resolved.put(key, widgetValue(ws.getFirst(), subject)));
         } else {
             List<Future<?>> futures = new ArrayList<>(byKey.size());
             for (Map.Entry<String, List<PageWidgetDescriptor>> e : byKey.entrySet()) {
-                futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().get(0), subject))));
+                futures.add(widgetPool.submit(() -> resolved.put(e.getKey(), widgetValue(e.getValue().getFirst(), subject))));
             }
             for (Future<?> f : futures) {
                 try {
@@ -1370,6 +1355,14 @@ public class DivKitController implements DisposableBean {
                 String.valueOf(cfg.get("metricField")), String.valueOf(cfg.get("filter")));
     }
 
+    /**
+     * The preformatted big-number for a {@code count}/{@code metric} tile. {@code count}
+     * tallies rows; {@code metric} aggregates a field ({@code sum|avg|min|max} via
+     * {@code config("metric", ...)} + {@code config("metricField", ...)}). Both honour an
+     * optional {@code config("filter", ...)} predicate, and registers aggregate a resource
+     * server-side. The value is formatted here — currency- and locale-aware — so every
+     * client renders the same string ("—" if the widget can't be resolved).
+     */
     private String widgetValue(PageWidgetDescriptor w, su.onno.access.AccessSubject subject) {
         Map<String, String> cfg = w.extraConfig() == null ? Map.of() : w.extraConfig();
         String metric = cfg.getOrDefault("metric", "count");

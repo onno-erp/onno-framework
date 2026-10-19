@@ -4,6 +4,7 @@ import su.onno.fields.Field;
 import su.onno.fields.Fields;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +107,7 @@ public class UiLayoutBuilder {
         for (SectionBuilder sb : sections.values()) {
             result.add(sb.build());
         }
-        result.sort((a, b) -> Integer.compare(a.order(), b.order()));
+        result.sort(Comparator.comparingInt(UiLayout.Section::order));
         return result;
     }
 
@@ -115,14 +116,16 @@ public class UiLayoutBuilder {
         for (WidgetBuilder<?> wb : widgets) {
             result.add(wb.build());
         }
-        result.sort((a, b) -> Integer.compare(a.order(), b.order()));
+        result.sort(Comparator.comparingInt(WidgetConfig::order));
         return result;
     }
 
+    @SuppressWarnings("unused") // Public API consumed by host applications.
     public boolean hasWidgets() {
         return !widgets.isEmpty();
     }
 
+    @SuppressWarnings("rawtypes") // Retain the existing public DSL signatures for external callers.
     public static class SectionBuilder {
         private final String name;
         private int order = 999;
@@ -227,7 +230,7 @@ public class UiLayoutBuilder {
 
     public static class WidgetBuilder<E> {
         private final UiLayoutBuilder parent;
-        private String title;
+        private final String title;
         private String type = "count";
         private int order = 0;
         private String width = "1/3";
@@ -371,6 +374,7 @@ public class UiLayoutBuilder {
          * their declared width). No effect on the single-column (mobile) layout, which stacks
          * everything anyway.
          */
+        @SuppressWarnings("UnusedReturnValue") // Fluent API also supports standalone calls.
         public WidgetBuilder<E> rowBreak() {
             this.rowBreak = true;
             return this;
@@ -443,6 +447,14 @@ public class UiLayoutBuilder {
      */
     public static class ShellBuilder {
         private NavStyle nav;
+        private boolean homeInNavigation = true;
+
+        /** Show the automatic home entry (default true); explicit page links and the logo still work. */
+        @SuppressWarnings("UnusedReturnValue") // Fluent API also supports standalone calls.
+        public ShellBuilder homeInNavigation(boolean visible) {
+            this.homeInNavigation = visible;
+            return this;
+        }
         private final Map<String, ShellConfig.MobileItem> mobileItems = new java.util.LinkedHashMap<>();
 
         /** Short label and priority for an existing bottom-bar destination; does not grant access or add routes. */
@@ -512,18 +524,21 @@ public class UiLayoutBuilder {
         }
 
         /** Fixed logo width in dp; unset keeps the intrinsic aspect ratio (wrap_content). */
+        @SuppressWarnings("unused") // Public API consumed by host applications.
         public ShellBuilder logoWidth(int width) {
             this.logoWidth = width;
             return this;
         }
 
         /** Fixed logo height in dp; unset keeps each surface's default (sidebar 28, mobile menu 32). */
+        @SuppressWarnings("unused") // Public API consumed by host applications.
         public ShellBuilder logoHeight(int height) {
             this.logoHeight = height;
             return this;
         }
 
         /** Fixed logo box in dp. With {@code scale: fit} the mark stays uncropped within it. */
+        @SuppressWarnings("unused") // Public API consumed by host applications.
         public ShellBuilder logoSize(int width, int height) {
             this.logoWidth = width;
             this.logoHeight = height;
@@ -552,7 +567,7 @@ public class UiLayoutBuilder {
             BrandingConfig branding = new BrandingConfig(
                     appName, logoUrl, logoUrlDark, logoWidth, logoHeight, faviconUrl,
                     light.build(), dark.build(), markUrl, markUrlDark, markFramed);
-            return new ShellConfig(nav, branding, mobileItems);
+            return new ShellConfig(nav, branding, mobileItems, homeInNavigation);
         }
     }
 
@@ -621,16 +636,19 @@ public class UiLayoutBuilder {
         }
 
         /** Convenience constructor for callers that don't provide field hints. */
+        @SuppressWarnings("unused") // Compatibility constructor for external callers.
         public EntityRef(String type, Class<?> javaClass) {
             this(type, javaClass, Map.of(), "", Integer.MAX_VALUE);
         }
 
         /** Convenience constructor for callers that provide hints but no explicit icon. */
+        @SuppressWarnings("unused") // Compatibility constructor for external callers.
         public EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints) {
             this(type, javaClass, fieldHints, "", Integer.MAX_VALUE);
         }
 
         /** Back-compatible constructor for callers that do not participate in mixed nav ordering. */
+        @SuppressWarnings("unused") // Compatibility constructor for external callers.
         public EntityRef(String type, Class<?> javaClass, Map<String, FieldHint> fieldHints, String icon) {
             this(type, javaClass, fieldHints, icon, Integer.MAX_VALUE);
         }
