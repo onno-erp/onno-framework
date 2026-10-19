@@ -140,8 +140,10 @@ public record ResolvedListView(String title, List<Column> columns,
     }
 
     /**
-     * A resolved column: the header label, the data column it reads, an optional width hint
-     * (e.g. {@code "260"} px, from {@code .field(...).width(...)}; blank = size to content), and
+     * A resolved column: the header label, the data column it reads, an optional width in whole
+     * pixels (e.g. {@code "260"}: a {@code ListSpec.width(...)} override, else a pixel
+     * {@code .field(...).width(...)} hint; blank = size to content — form-layout hints such as
+     * {@code "half"} never appear here), and
      * the display hints carried over from the attribute — {@code widget} (so a list cell can
      * render an image thumbnail) and {@code format} (a date pattern or number spec applied to the
      * cell value). Both default to blank.

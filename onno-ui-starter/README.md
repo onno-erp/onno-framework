@@ -709,9 +709,24 @@ The generic edit form honors the `FieldHintBuilder` layout hints:
   card. Long forms read as sections instead of one endless column.
 - `.width("half")` (or `"1/2"`) — the field takes half a row on wide screens, so short fields
   (dates, amounts, refs) sit side by side. Anything else spans the full row.
-- The same hint can size a list column only when it is a positive whole-pixel width such as
-  `.width("240")` or `.width("240px")`. Form tokens (`half`, `1/2`, `50%`) are deliberately ignored
-  by list sizing, so a two-column form cannot collapse its table into narrow tracks.
+- `FieldHintBuilder.width` is a **form-layout** hint. It also sizes a list column only as a
+  fallback, when it is a positive whole-pixel width such as `.width("240")` or `.width("240px")`.
+  Form tokens (`half`, `1/2`, `50%`) are never list widths, so a two-column form cannot collapse
+  its table into narrow tracks — those columns size automatically.
+- To size a list column independently of the form, use the list-only `ListSpec.width(...)`
+  override — it wins over any pixel field hint, and accepts only an `int` or a `"<n>px"` string
+  (anything else, e.g. `"half"`, `"1/2"`, `0`, fails fast when the view is configured):
+
+  ```java
+  @Override public void fields(EntityConfigBuilder<Order> f) {
+      f.field(Order::getStatus).width("half");          // pairs status on the form
+  }
+  @Override public void list(ListSpec<Order> list) {
+      list.columns(Order::getNumber, Order::getStatus, Order::getFormat)
+          .width(Order::getStatus, 105)                 // board column, px
+          .width("format", "75px");
+  }
+  ```
 - `.widget("textarea")` — a multi-line control. A `String` attribute with `length` > 1000 (or
   unbounded) gets a textarea automatically even without the hint.
 - `.widget("color")` — a React color popover plus a text input that stores canonical

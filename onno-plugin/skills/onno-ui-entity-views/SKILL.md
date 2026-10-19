@@ -34,9 +34,13 @@ Treat every `list.columns(...)` entry as requiring an explicit human-facing
 `list.label(getter, "...")`. Keep the first descriptive column readable and limit operational lists
 to the columns that fit the viewport; move secondary data to detail views.
 
-Field widths cross form and list metadata but use distinct syntax. `half`/`1/2`/`50%` makes a
-half-row form field and is ignored for list sizing. Only a positive whole-pixel value such as `240`
-or `240px` fixes a list column. Do not parse or reinterpret fractional form tokens as table pixels.
+Form layout and list column size are separate. `FieldHintBuilder.width` is the form-layout hint:
+`half`/`1/2`/`50%` makes a half-row form field and is ignored for list sizing; a positive
+whole-pixel value such as `240`/`240px` there is also used as the list column's fallback width.
+`ListSpec.width(field, px)` (or `width(field, "75px")`, or the getter-reference overloads) is the
+list-only column width and wins over the field hint — so `.width("half")` on the form and
+`list.width(Order::getStatus, 105)` on the board coexist. `ListSpec.width` rejects non-pixel values
+at configuration time. Do not parse or reinterpret fractional form tokens as table pixels.
 
 For a server row action with `label(row -> ...)`, also set a human-facing `label(String)`. Batch
 selection has no single `ActionRow`, so its menu and progress messages use the static label and

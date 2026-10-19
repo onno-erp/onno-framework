@@ -27,6 +27,7 @@ public final class ListSpec<E> {
     private final List<String> include = new ArrayList<>();
     private final Set<String> hidden = new LinkedHashSet<>();
     private final Map<String, String> labels = new LinkedHashMap<>();
+    private final Map<String, Integer> widths = new LinkedHashMap<>();
     private boolean searchable = true;
     private boolean selectionCheckboxes;
     private String selectionWidget;
@@ -139,6 +140,78 @@ public final class ListSpec<E> {
     /** Override a compiler-checked column's label. */
     public <V> ListSpec<E> label(Field<E, V> field, String label) {
         return label(Fields.name(field), label);
+    }
+
+    /**
+     * Fix a column's width on this list, in pixels — list-only, independent of the form layout.
+     *
+     * <p>{@code FieldHintBuilder.width(...)} is a form-layout hint ({@code "half"}, {@code "1/2"},
+     * {@code "50%"}); only an explicit pixel value there also sizes the list column. Use this
+     * override to size the column without touching the form, e.g. a field laid out
+     * {@code width("half")} on the form and fixed at 105px on a dense board:
+     *
+     * <pre>{@code
+     * list.columns("number", "status", "format")
+     *     .width("status", 105)
+     *     .width("format", "75px");
+     * }</pre>
+     *
+     * It wins over any pixel {@code FieldHint} width; an unset column with no pixel hint sizes
+     * itself automatically.
+     *
+     * @throws IllegalArgumentException when {@code pixels} is not positive
+     */
+    public ListSpec<E> width(String field, int pixels) {
+        if (field == null || field.isBlank()) {
+            throw new IllegalArgumentException("ListSpec.width: field must not be blank");
+        }
+        if (pixels <= 0) {
+            throw new IllegalArgumentException("ListSpec.width(\"" + field + "\", " + pixels
+                    + "): list column width must be a positive number of pixels");
+        }
+        widths.put(field, pixels);
+        return this;
+    }
+
+    /**
+     * As {@link #width(String, int)}, from a pixel string: {@code "105"} or {@code "105px"}.
+     * Form-layout values such as {@code "half"}, {@code "1/2"} or {@code "50%"} are rejected —
+     * they are not list column sizes.
+     *
+     * @throws IllegalArgumentException when {@code pixels} is not a positive pixel value
+     */
+    public ListSpec<E> width(String field, String pixels) {
+        return width(field, parsePixels(field, pixels));
+    }
+
+    /** Compiler-checked {@link #width(String, int)}. */
+    public <V> ListSpec<E> width(Field<E, V> field, int pixels) {
+        return width(Fields.name(field), pixels);
+    }
+
+    /** Compiler-checked {@link #width(String, String)}. */
+    public <V> ListSpec<E> width(Field<E, V> field, String pixels) {
+        return width(Fields.name(field), pixels);
+    }
+
+    private static int parsePixels(String field, String pixels) {
+        String raw = pixels == null ? "" : pixels.trim();
+        String digits = raw.regionMatches(true, Math.max(0, raw.length() - 2), "px", 0, 2)
+                ? raw.substring(0, raw.length() - 2).trim()
+                : raw;
+        if (!digits.isEmpty() && digits.chars().allMatch(c -> c >= '0' && c <= '9')) {
+            try {
+                int value = Integer.parseInt(digits);
+                if (value > 0) {
+                    return value;
+                }
+            } catch (NumberFormatException ignored) {
+                // falls through to the error below
+            }
+        }
+        throw new IllegalArgumentException("ListSpec.width(\"" + field + "\", \"" + pixels
+                + "\"): list column width must be a positive pixel value such as \"105\" or \"105px\""
+                + " (form-layout values like \"half\" or \"1/2\" belong on FieldHintBuilder.width)");
     }
 
     /** Hide fields from the default column set (ignored when {@link #columns} is used). */
@@ -412,6 +485,9 @@ public final class ListSpec<E> {
     public Set<String> hidden() { return Set.copyOf(hidden); }
 
     public Map<String, String> labels() { return Map.copyOf(labels); }
+
+    /** List-only column widths in pixels, by field name ({@link #width(String, int)}). */
+    public Map<String, Integer> widths() { return Map.copyOf(widths); }
 
     public boolean explicit() { return !include.isEmpty(); }
 

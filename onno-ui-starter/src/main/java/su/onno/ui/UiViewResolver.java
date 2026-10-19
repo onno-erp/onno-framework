@@ -169,7 +169,8 @@ public class UiViewResolver {
                     continue;
                 }
                 columns.add(new ResolvedListView.Column(
-                        spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.fieldName(), cm.width(),
+                        spec.labels().getOrDefault(field, cm.label()), cm.columnName(), cm.fieldName(),
+                        listWidth(spec, field, cm),
                         cm.widget(), cm.format(), cm.hint(),
                         spec.cellMenus().getOrDefault(field, "")));
             }
@@ -181,7 +182,7 @@ public class UiViewResolver {
                     .sorted(Comparator.comparingInt(e -> e.getValue().order()))
                     .forEach(e -> columns.add(new ResolvedListView.Column(
                             spec.labels().getOrDefault(e.getKey(), e.getValue().label()),
-                            e.getValue().columnName(), e.getValue().fieldName(), e.getValue().width(),
+                            e.getValue().columnName(), e.getValue().fieldName(), listWidth(spec, e.getKey(), e.getValue()),
                             e.getValue().widget(), e.getValue().format(), e.getValue().hint(),
                             spec.cellMenus().getOrDefault(e.getKey(), ""))));
         }
@@ -350,6 +351,32 @@ public class UiViewResolver {
                     : new ResolvedListView.Option(
                             str(match.get("id")), o.label(), str(match.get("color")), "");
         }).toList();
+    }
+
+    /**
+     * A list column's width in whole pixels ({@code "105"}), or blank to size automatically: the
+     * {@link ListSpec#width(String, int)} override wins, then the field hint's width only when it
+     * is an explicit pixel value. Form-layout hints ({@code "half"}, {@code "1/2"}, {@code "50%"})
+     * never reach the list as a width.
+     */
+    static String listWidth(ListSpec<?> spec, String field, ColumnMeta cm) {
+        Integer override = spec.widths().get(field);
+        if (override != null) {
+            return Integer.toString(override);
+        }
+        String hint = cm.width() == null ? "" : cm.width().trim();
+        if (hint.regionMatches(true, Math.max(0, hint.length() - 2), "px", 0, 2)) {
+            hint = hint.substring(0, hint.length() - 2).trim();
+        }
+        if (hint.isEmpty() || !hint.chars().allMatch(c -> c >= '0' && c <= '9')) {
+            return "";
+        }
+        try {
+            int px = Integer.parseInt(hint);
+            return px > 0 ? Integer.toString(px) : "";
+        } catch (NumberFormatException overflow) {
+            return "";
+        }
     }
 
     private record ColumnMeta(String label, String columnName, String fieldName,

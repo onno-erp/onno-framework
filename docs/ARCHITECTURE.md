@@ -476,7 +476,9 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   hints, and record-aware custom widgets through `detail(DetailSpec)`
   hints (`order`, `group`, `width`, `widget`, `format`, `hint`, `label`, `hideInList/Form/Detail`,
   related lists, actions; `label` localizes a field's form/detail/list label, including the built-in
-  system columns code/description/number/date/posted). A ref field's picker can show a secondary
+  system columns code/description/number/date/posted; `width` is a form-layout hint and only a
+  pixel value doubles as the list column width — `ListSpec.width(field, px)` sizes a list column
+  independently and wins). A ref field's picker can show a secondary
   line (`refSecondary`) and **cascade** (`refFilter`): `f.field("lines.book").refFilter("supplier =
   ${supplier}")` narrows the picker server-side to records matching the form's current values —
   while a referenced field is empty the picker is unfiltered, and changing it clears the dependent
