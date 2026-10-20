@@ -121,6 +121,12 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.import.max-rows` | `Integer` | `10000` | Maximum data rows processed by one import request. |
 | `onno.import.preview-rows` | `Integer` | `20` | Maximum data rows returned from preview. |
 
+## Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onno.print.enabled` | `Boolean` | `true` | Master switch for print forms. When false, no PrintService, print endpoints or record "Print" actions are registered, even if PrintForm beans exist. |
+
 ## Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)
 
 | Property | Type | Default | Meaning |

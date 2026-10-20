@@ -89,6 +89,8 @@ public class DivKitController implements DisposableBean {
     // on widgetPool threads, which carry no request/security context — so the subject is resolved
     // here, on the request thread, and handed to each task explicitly.
     private AccessSubjectResolver subjects;
+    // Extension modules' read-only record header actions (e.g. print forms); set by the auto-configuration.
+    private List<RecordActionContributor> recordActionContributors = List.of();
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -137,6 +139,11 @@ public class DivKitController implements DisposableBean {
     /** Wire the subject resolver (set by the auto-configuration). */
     public void setAccessSubjectResolver(AccessSubjectResolver subjects) {
         this.subjects = subjects;
+    }
+
+    /** Wire the extension record header actions (set by the auto-configuration). */
+    public void setRecordActionContributors(List<RecordActionContributor> contributors) {
+        this.recordActionContributors = List.copyOf(contributors);
     }
 
     private su.onno.access.AccessSubject subject(Principal principal) {
@@ -880,6 +887,7 @@ public class DivKitController implements DisposableBean {
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         // Read-only: offered to every viewer of the record, independent of canWrite (#410).
         addOpenInList(actions, "catalogs", name, id, profileId, viewport, placement);
+        addContributed(actions, "catalogs", name, desc.javaClass(), id, subject, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://catalogs/" + name + "/" + id + "/duplicate", placement.getOrDefault("duplicate", "menu"),
@@ -994,6 +1002,7 @@ public class DivKitController implements DisposableBean {
         }
         // Read-only: offered to every viewer of the record, independent of canWrite (#410).
         addOpenInList(actions, "documents", name, id, profileId, viewport, placement);
+        addContributed(actions, "documents", name, desc.javaClass(), id, subject, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://documents/" + name + "/" + id + "/duplicate",
@@ -1230,6 +1239,26 @@ public class DivKitController implements DisposableBean {
                 "primary".equals(place) ? "accent" : "normal",
                 "onno://" + kind + "/" + name + "?focus=" + id, place,
                 List.of(), Map.of(), false, false));
+    }
+
+    /**
+     * Read-only header actions contributed by extension modules ({@link RecordActionContributor},
+     * e.g. print forms). Like "Open in list" they need only the read access the detail surface has
+     * already enforced, so they are offered regardless of write access or read-only mode; each
+     * contributor filters by the viewer itself. Placement follows {@code f.action(key)}.
+     */
+    private void addContributed(List<SurfaceDivBuilder.HeaderAction> actions, String kind, String name,
+                                Class<?> type, UUID id, su.onno.access.AccessSubject subject,
+                                Map<String, String> placement) {
+        var request = new RecordActionContributor.RecordActionRequest(kind, name, type, id, subject);
+        for (RecordActionContributor contributor : recordActionContributors) {
+            for (RecordActionContributor.RecordAction action : contributor.actions(request)) {
+                String place = placement.getOrDefault(action.key(), "menu");
+                actions.add(new SurfaceDivBuilder.HeaderAction(action.icon(), action.label(),
+                        "primary".equals(place) ? "accent" : "normal", action.url(), place,
+                        List.of(), Map.of(), false, false));
+            }
+        }
     }
 
     /**

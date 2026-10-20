@@ -465,6 +465,14 @@ The CRM Inbox presents one row per contact and a chronological timeline across i
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
+### Print form downloads (optional `onno-print-starter`)
+
+`GET /api/print/{kind}/{name}/{id}` lists the print forms the caller may use for a record as
+`[{key, label, format, url}]` (`format` is `docx` or `xlsx`). `GET {url}` returns the filled file
+with `Content-Disposition: attachment`. Both apply the same entity read access and record scope as
+`GET /api/{kind}/{name}/{id}` (a record outside scope is `404`), plus the form's optional roles
+(`403`). The response is a binary file, not JSON.
+
 ### Record tag API
 
 `GET /api/tags/{kind}/{name}` lists selectable tag definitions. `POST /api/tags/{kind}/{name}`

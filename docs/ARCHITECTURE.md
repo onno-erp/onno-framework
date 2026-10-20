@@ -40,6 +40,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
+| `onno-print-starter` | `su.onno` | Print forms: `PrintForm<T>` beans fill Word (`.docx`) / Excel (`.xlsx`) templates via Apache POI; record-menu actions + `GET /api/print/**` downloads. |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
@@ -642,6 +643,13 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   command services as the UI (so validation, numbering, posting, events all apply); modes
   `CREATE_ONLY` / `UPSERT_BY_CODE` (catalogs) / `UPSERT_BY_NUMBER` (documents), dotted mapping keys
   for tabular sections, optional `groupBy` + `postAfterImport` for documents.
+- **Print** (`onno-print-starter`) — `PrintForm<T>` beans (one per catalog/document form) bind typed
+  values into a `.docx`/`.xlsx` template's `{{key}}` placeholders; a row with `{{table.column}}`
+  repeats per item (Excel ranges ending on it stretch, formulas recalculate). Each form the viewer
+  may use appears in the record ⋯ menu through the UI starter's `RecordActionContributor` SPI and
+  downloads from `GET /api/print/{kind}/{name}/{id}/{form}`; `GET /api/print/{kind}/{name}/{id}`
+  lists the available forms. Both enforce entity read access, record scope (out of scope = 404) and
+  the form's optional roles. Replaces the removed Thymeleaf `@PrintTemplate` starter.
 - **Kafka** (`onno-kafka-starter`) — drains the `onno_outbox` to a Kafka topic as CloudEvents via
   `OutboxRelay.relayPending()` (call it from your own `@Scheduled`); optional de-duplicating inbox
   dispatches to `EventHandler` beans; `RemoteRefClient` resolves references against other services.

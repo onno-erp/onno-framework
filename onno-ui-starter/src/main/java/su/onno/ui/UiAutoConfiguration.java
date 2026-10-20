@@ -536,12 +536,14 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
                                              UiMessages uiMessages,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.comments.CommentProperties> commentProperties,
                                              org.springframework.beans.factory.ObjectProvider<su.onno.ui.notifications.NotificationProperties> notificationProperties,
-                                             AccessSubjectResolver accessSubjectResolver) {
+                                             AccessSubjectResolver accessSubjectResolver,
+                                             org.springframework.beans.factory.ObjectProvider<RecordActionContributor> recordActionContributors) {
         DivKitController controller = new DivKitController(layoutSet, layoutResolver, profileResolver, access,
                 currentUserResolver, resolvedMetadata, uiViewResolver, pageResolver, catalogQueryService,
                 documentQueryService, registerQueryService, uiActionResolver, relatedListReader, uiProperties,
                 uiMessages, commentProperties, notificationProperties);
         controller.setAccessSubjectResolver(accessSubjectResolver);
+        controller.setRecordActionContributors(recordActionContributors.orderedStream().toList());
         return controller;
     }
 

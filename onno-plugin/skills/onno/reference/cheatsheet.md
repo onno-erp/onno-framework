@@ -484,6 +484,21 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 #69). Media widgets stream the file to `MediaStorage` and persist the returned URL (see
 `docs/MEDIA_UPLOADS.md`).
 
+## Print forms (onno-print-starter, package `su.onno.print`; `onno.print.enabled`)
+
+- `@Component class X extends PrintForm<Order>`: `super("invoice", Order.class)` (key `[a-z0-9-]`,
+  unique per type); `configure(PrintFormSpec)` → `label`, `template("classpath:/print/x.docx")`
+  (default `classpath:/print/{key}.docx|.xlsx`), `icon`, `roles(...)`, `locale`;
+  `fill(T, TemplateModel)`; optional `fileName(T)`.
+- `TemplateModel`: `text(key, Object)` (Ref → record name, enum → `@EnumLabel`), `number(key, n[, pattern])`,
+  `date(key, t[, pattern])`, `table(key, items, (row, item) -> row.text(...)…)`. Patterns apply in
+  Word only; Excel cells keep their own format.
+- Template syntax `{{key}}`, table rows `{{items.col}}` (row repeats per item). Unknown keys stay
+  visible. Excel `SUM` ranges ending on the template row stretch over inserted rows.
+- UI: record ⋯ menu entry per permitted form, action key `print-{key}` (`f.action("print-invoice").primary()`).
+- REST: `GET /api/print/{kind}/{name}/{id}` (list), `GET /api/print/{kind}/{name}/{id}/{form}` (file).
+- Generic SPI behind the menu: `su.onno.ui.RecordActionContributor` (read-only record actions).
+
 ## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
 
 - Per-user timeline behind the shell's bell + `/api/notifications` (sidebar trigger on desktop, a
