@@ -295,6 +295,7 @@ public final class UiMessages {
         d.put("action.repost", "Re-post");
         d.put("action.unpost", "Unpost");
         d.put("action.duplicate", "Duplicate");
+        d.put("action.openInList", "Open in list");
         d.put("action.delete", "Delete");
         d.put("action.open", "Open");
         d.put("action.copyLink", "Copy link");
@@ -420,6 +421,7 @@ public final class UiMessages {
 
         // List grid: toolbar count, search, sort, view toggle, and keyset loading.
         d.put("list.count", "{count} rows");
+        d.put("list.focusMissing", "This record isn't in the list with the current filters");
         d.put("list.search", "Search…");
         d.put("list.searchLabel", "Search");
         d.put("list.all", "All");

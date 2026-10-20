@@ -23,9 +23,13 @@ import java.util.UUID;
  * client passes an opaque {@code cursor} (the {@code nextCursor} from the previous window) plus a
  * {@code limit}, and the server seeks straight to the next window with an indexed comparison — so
  * page 1 and page 10 000 cost the same, and rows are never skipped/duplicated when data shifts mid
- * scroll. The envelope is {@code {rows, nextCursor, hasMore}}; a COUNT runs only when the client
- * opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner figure), since the
- * scroller needs {@code hasMore}, not a live total, to keep loading.
+ * scroll. The envelope is {@code {rows, nextCursor, hasMore, prevCursor, hasPrevious}}; a COUNT runs
+ * only when the client opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner
+ * figure), since the scroller needs {@code hasMore}, not a live total, to keep loading.
+ *
+ * {@code ?focus=<id>} returns the window that contains that record instead of the first one (the
+ * "open in list" jump), and {@code ?before=<prevCursor>} returns the window just above a window
+ * (see {@link KeysetPage}).
  *
  * Sort, case-insensitive search, and column filters are applied server-side; the descriptor
  * (columns, labels, sort, actions) comes from the DivKit list surface.
@@ -82,11 +86,11 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"), limit, sort,
+        KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"),
+                request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
                 descending(dir), q, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
-        kp = new KeysetPage(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation),
-                kp.nextCursor(), kp.hasMore());
+        kp = kp.withRows(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation));
         boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
                 () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, filter),
@@ -124,11 +128,11 @@ public class ListDataController {
         List<String> prefix = multi(request, "prefix");
         List<String> ge = multi(request, "ge");
         List<String> le = multi(request, "le");
-        KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"), limit, sort,
+        KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"),
+                request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
                 descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
         decorateRowActions(desc.javaClass(), kp.rows());
-        kp = new KeysetPage(EntityJsonRepresentation.documents(desc, kp.rows(), representation),
-                kp.nextCursor(), kp.hasMore());
+        kp = kp.withRows(EntityJsonRepresentation.documents(desc, kp.rows(), representation));
         boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
                 () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, filter),
@@ -314,16 +318,36 @@ public class ListDataController {
         return out;
     }
 
+    /** The {@code focus} record id, or {@code null} when absent or malformed (a bad id is no focus, never a 400). */
+    private static UUID parseId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     /**
      * The keyset envelope: rows + the opaque {@code nextCursor} to fetch the next window and a
-     * {@code hasMore} flag. {@code total} is included only when the client opted into a count
-     * ({@code ?count=exact|estimate}); the default omits it, which is what makes the fast path fast.
+     * {@code hasMore} flag, plus {@code prevCursor}/{@code hasPrevious} for the rows above a window
+     * that does not start at the top (a focused or backward window). {@code focus} is present only
+     * when the window was anchored on the requested record. {@code total} is included only when the
+     * client opted into a count ({@code ?count=exact|estimate}); the default omits it, which is what
+     * makes the fast path fast.
      */
     private static Map<String, Object> keysetEnvelope(KeysetPage kp, Long total) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("rows", kp.rows());
         out.put("nextCursor", kp.nextCursor());
         out.put("hasMore", kp.hasMore());
+        out.put("prevCursor", kp.prevCursor());
+        out.put("hasPrevious", kp.hasPrevious());
+        if (kp.focus() != null) {
+            out.put("focus", kp.focus().toString());
+        }
         if (total != null) {
             out.put("total", total);
         }

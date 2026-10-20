@@ -829,6 +829,7 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/catalogs/{name}")
     public Map<String, Object> catalogList(@PathVariable String name,
+                                           @RequestParam(required = false) String focus,
                                            @RequestParam(required = false) String profile,
                                            @RequestParam(required = false) String viewport,
                                            @RequestParam(required = false) String theme,
@@ -852,12 +853,14 @@ public class DivKitController implements DisposableBean {
                 SurfaceDivBuilder.listSurface(view, "catalogs", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "catalogs", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
-                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
+                        focusId(focus)));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
     public Map<String, Object> catalogDetail(@PathVariable String name, @PathVariable UUID id,
                                              @RequestParam(required = false) String profile,
+                                             @RequestParam(required = false) String viewport,
                                              Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
@@ -872,17 +875,19 @@ public class DivKitController implements DisposableBean {
         // A record the viewer can read but not change (outside its write scope) renders read-only.
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
                 && catalogQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
+        // Built-in and custom DETAIL actions all honor f.action(key).primary()/inMenu()/hidden() (#183).
+        Map<String, String> placement = resolvedMetadata.actionOverrides(desc.javaClass(), profileId);
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
+        // Read-only: offered to every viewer of the record, independent of canWrite (#410).
+        addOpenInList(actions, "catalogs", name, id, profileId, viewport, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
-                    "onno://catalogs/" + name + "/" + id + "/duplicate", "menu",
+                    "onno://catalogs/" + name + "/" + id + "/duplicate", placement.getOrDefault("duplicate", "menu"),
                     List.of(), Map.of(), false, false));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
-                    "onno://delete/catalogs/" + name + "/" + id, "menu",
+                    "onno://delete/catalogs/" + name + "/" + id, placement.getOrDefault("delete", "menu"),
                     List.of(), Map.of(), false, false));
-            // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183).
-            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass(), profileId), row));
+            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id, placement, row));
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -932,6 +937,7 @@ public class DivKitController implements DisposableBean {
 
     @GetMapping("/documents/{name}")
     public Map<String, Object> documentList(@PathVariable String name,
+                                            @RequestParam(required = false) String focus,
                                             @RequestParam(required = false) String profile,
                                             @RequestParam(required = false) String viewport,
                                             @RequestParam(required = false) String theme,
@@ -954,12 +960,14 @@ public class DivKitController implements DisposableBean {
                 SurfaceDivBuilder.listSurface(view, "documents", name, newUrl, canWrite,
                         listActions(desc.javaClass(), "documents", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
-                        canWrite && actionResolver.hasDynamicActions(desc.javaClass())));
+                        canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
+                        focusId(focus)));
     }
 
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
                                               @RequestParam(required = false) String profile,
+                                              @RequestParam(required = false) String viewport,
                                               Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
@@ -973,29 +981,31 @@ public class DivKitController implements DisposableBean {
                 && documentQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
         boolean postable = Boolean.TRUE.equals(meta.get("postable"));
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
-        @SuppressWarnings("unchecked")
-        Map<String, Object> placement = (Map<String, Object>) meta.getOrDefault("actions", Map.of());
+        // The view's placement overrides (f.action(key).primary()/inMenu()/hidden(), #183), read
+        // straight from the view so every built-in key is honored, not only the keys the form
+        // metadata's "actions" map carries (it has no "duplicate").
+        Map<String, String> placement = resolvedMetadata.actionOverrides(desc.javaClass(), profileId);
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         if (canWrite && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
-                    "onno://unpost/" + name + "/" + id, str(placement.getOrDefault("unpost", "menu")),
+                    "onno://unpost/" + name + "/" + id, placement.getOrDefault("unpost", "menu"),
                     List.of(), Map.of(), false, false));
         }
+        // Read-only: offered to every viewer of the record, independent of canWrite (#410).
+        addOpenInList(actions, "documents", name, id, profileId, viewport, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://documents/" + name + "/" + id + "/duplicate",
-                    str(placement.getOrDefault("duplicate", "menu")),
+                    placement.getOrDefault("duplicate", "menu"),
                     List.of(), Map.of(), false, false));
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/documents/" + name + "/" + id,
-                    str(placement.getOrDefault("delete", "menu")),
+                    placement.getOrDefault("delete", "menu"),
                     List.of(), Map.of(), false, false));
-            // Custom DETAIL actions honor f.action(key).primary()/inMenu()/hidden() placement (#183),
-            // the same override map the built-in unpost/duplicate/delete actions read above. Their
-            // per-record functions evaluate against the loaded row (#255).
-            actions.addAll(detailActions(desc.javaClass(), "documents", name, id,
-                    resolvedMetadata.actionOverrides(desc.javaClass(), profileId), row));
+            // Custom DETAIL actions read the same override map; their per-record functions
+            // evaluate against the loaded row (#255).
+            actions.addAll(detailActions(desc.javaClass(), "documents", name, id, placement, row));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -1199,6 +1209,42 @@ public class DivKitController implements DisposableBean {
             return pageResolver.resolve(item.href(), profileId, viewport) != null;
         }
         return viewResolver.hasView(item.javaClass(), profileId);
+    }
+
+    /**
+     * The "Open in list" header action (#410): opens the entity's list surface focused on this
+     * record ({@code onno://{kind}/{name}?focus={id}}; the list feed returns the keyset window that
+     * contains it). It needs only read access, which the detail surface has already enforced together
+     * with the profile's view, so it is offered regardless of write access or read-only mode. It is
+     * omitted when an authored {@link Page} overrides the list route for this profile and viewport:
+     * that page is not the default list, so it could not focus the record. Placement follows
+     * {@code f.action("openInList")}, defaulting to the overflow menu.
+     */
+    private void addOpenInList(List<SurfaceDivBuilder.HeaderAction> actions, String kind, String name, UUID id,
+                               String profileId, String viewport, Map<String, String> placement) {
+        if (pageResolver.resolve("/" + kind + "/" + name, profileId, Viewport.parse(viewport)) != null) {
+            return;
+        }
+        String place = placement.getOrDefault("openInList", "menu");
+        actions.add(new SurfaceDivBuilder.HeaderAction("list", messages.get("action.openInList"),
+                "primary".equals(place) ? "accent" : "normal",
+                "onno://" + kind + "/" + name + "?focus=" + id, place,
+                List.of(), Map.of(), false, false));
+    }
+
+    /**
+     * The list route's {@code ?focus=<id>} ("Open in list", #410), or {@code null} when absent or
+     * malformed. Only forwarded to the island: the list feed decides whether the record is visible.
+     */
+    private static UUID focusId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw.trim());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Enforce the allowlist on a surface: no view for this profile → 404. */

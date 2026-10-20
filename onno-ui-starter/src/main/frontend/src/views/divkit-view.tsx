@@ -122,15 +122,15 @@ type ShellData = {
   mainRecordRoutes?: string[];
 };
 
-type WorkspaceTab = { path: string; title: string };
+export type WorkspaceTab = { path: string; title: string };
 
 // An island: an ordered set of open tabs plus the one currently shown. Several live
 // side by side, each sized by a flex weight in {@link Workspace.sizes}.
-type Pane = { id: string; tabs: WorkspaceTab[]; activePath: string };
+export type Pane = { id: string; tabs: WorkspaceTab[]; activePath: string };
 
 // The desktop content area: islands left-to-right, their flex weights, and which one
 // has focus (the island the URL/navigation drives).
-type Workspace = { panes: Pane[]; sizes: number[]; focused: string | null };
+export type Workspace = { panes: Pane[]; sizes: number[]; focused: string | null };
 
 export type WorkspaceTabState = "command-target" | "pane-active" | "open";
 
@@ -250,6 +250,32 @@ function isRecordDetail(pathname: string): boolean {
 
 function recordBasePath(pathname: string): string | null {
   return isRecordDetail(pathname) ? stripQuery(pathname) : null;
+}
+
+// A catalog/document list route opened on a record: "/{kind}/{name}?focus={id}" (#410).
+export function isFocusedListPath(path: string): boolean {
+  const [pathname, search = ""] = path.split("?");
+  const seg = pathname.split("/").filter(Boolean);
+  return seg.length === 2 && (seg[0] === "catalogs" || seg[0] === "documents")
+    && new URLSearchParams(search).has("focus");
+}
+
+// Where "Open in list" lands: the pane already showing that list (its tab is re-pointed at the
+// focused route instead of opening a duplicate), else the first, main pane — the pane a navigation
+// click opens into. The record's own pane stays as it is, so the record remains open beside its list.
+export function workspaceWithFocusedList(ws: Workspace, path: string): Workspace {
+  const base = stripQuery(path);
+  const sameList = (tab: WorkspaceTab) => stripQuery(tab.path) === base;
+  const target = ws.panes.find((p) => p.tabs.some(sameList)) ?? ws.panes[0];
+  if (!target) return ws;
+  const panes = ws.panes.map((p) => {
+    if (p.id !== target.id) return p;
+    const tabs = p.tabs.some(sameList)
+      ? p.tabs.map((tab) => (sameList(tab) ? tabForPath(path) : tab))
+      : [...p.tabs, tabForPath(path)];
+    return { ...p, tabs, activePath: path };
+  });
+  return { ...ws, panes, focused: target.id };
 }
 
 function sameRecordTab(a: string, b: string): boolean {
@@ -760,6 +786,15 @@ export function DivKitView() {
     [location.pathname, navigate]
   );
 
+  // "Open in list" (#410): behaves like a navigation click on the list — see workspaceWithFocusedList.
+  const openFocusedList = useCallback(
+    (path: string) => {
+      setWorkspace((ws) => workspaceWithFocusedList(ws, path));
+      navigate(path);
+    },
+    [navigate]
+  );
+
   // Close a tab by its path wherever it lives. Repoints focus to what remains in that island and
   // follows it with the URL.
   const closePath = useCallback(
@@ -905,6 +940,11 @@ export function DivKitView() {
         op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
         return;
       }
+      if (isFocusedListPath("/" + rest)) {
+        // "Open in list" (#410) from a record header: {kind}/{name}?focus={id}.
+        openFocusedList("/" + rest);
+        return;
+      }
       // "main/{kind}/{name}/{id}" — open the record in the focused pane rather than the detail
       // island beside it. A surface that is itself a workspace (an event page, a project page)
       // sends its records here: they replace the workspace instead of stacking next to it.
@@ -929,6 +969,7 @@ export function DivKitView() {
       resolvedTheme,
       openPath,
       openDetailRight,
+      openFocusedList,
       closePath,
       shell?.home,
       shell?.navStyle,

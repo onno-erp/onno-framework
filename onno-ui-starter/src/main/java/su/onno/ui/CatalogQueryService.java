@@ -3,8 +3,6 @@ package su.onno.ui;
 import su.onno.access.AccessSubject;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.MetadataRegistry;
-import su.onno.query.Cursor;
-import su.onno.query.Keyset;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.http.HttpStatus;
@@ -189,50 +187,51 @@ public class CatalogQueryService {
                                  List<String> eq, List<String> in, List<String> like,
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String widgetFilter) {
+        return keysetPage(subject, desc, cursorToken, null, null, limit, sortColumn, descending, search,
+                eq, in, like, prefix, ge, le, widgetFilter);
+    }
+
+    /**
+     * As {@link #keysetPage(AccessSubject, CatalogDescriptor, String, int, String, boolean, String,
+     * List, List, List, List, List, List, String)}, at a chosen position: {@code beforeToken} (a
+     * window's {@code prevCursor}) returns the rows just above that window, and {@code focus} returns
+     * the window containing that record — up to half the limit of rows before it, the record, and
+     * the rows after it, with {@code prevCursor}/{@code nextCursor} to page further either way. A
+     * focused record the subject's query cannot see (filtered out, out of scope, deleted, unknown)
+     * yields the ordinary first window with no focus. {@code cursorToken} wins over
+     * {@code beforeToken}, which wins over {@code focus}.
+     */
+    public KeysetPage keysetPage(AccessSubject subject, CatalogDescriptor desc, String cursorToken,
+                                 String beforeToken, UUID focus, int limit,
+                                 String sortColumn, boolean descending, String search,
+                                 List<String> eq, List<String> in, List<String> like,
+                                 List<String> prefix, List<String> ge, List<String> le,
+                                 String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         String fingerprint = scopes.policies().fingerprint(subject);
         String col = surface.safeSort(sortColumn);
-        Cursor cursor = Cursor.decodeFor(EntityQuerySupport.openCursor(cursorToken, fingerprint), col, descending);
-        Keyset.Plan plan = Keyset.plan(col, descending, !surface.isNonNullableSort(col), cursor);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and()
-                + filterClause(filter) + filterClause(wf) + scope.and() + plan.predicate();
-        int lim = Keyset.clampLimit(limit);
+                + filterClause(filter) + filterClause(wf) + scope.and();
 
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var q = h.createQuery("SELECT * FROM " + desc.tableName() +
-                            " WHERE " + where +
-                            " ORDER BY " + plan.orderBy() +
-                            " LIMIT :limit")
-                    .bind("limit", lim + 1); // one extra row tells us whether another window exists
-            EntityQuerySupport.bindSearch(q, search);
-            searchClause.bind(q);
-            filter.bindings().forEach(q::bind);
-            wf.bindings().forEach(q::bind);
-            scope.bind(q);
-            if (plan.hasCursor()) {
-                q.bind(Keyset.ID_BIND, cursor.id());
-                if (plan.bindsValue()) q.bind(Keyset.VALUE_BIND, cursor.value());
-            }
-            return q.mapToMap().list();
-        });
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where, q -> {
+                    EntityQuerySupport.bindSearch(q, search);
+                    searchClause.bind(q);
+                    filter.bindings().forEach(q::bind);
+                    wf.bindings().forEach(q::bind);
+                    scope.bind(q);
+                }, col, descending, !surface.isNonNullableSort(col),
+                new KeysetWindow.Position(cursorToken, beforeToken, focus), limit, fingerprint);
 
-        boolean hasMore = rows.size() > lim;
-        if (hasMore) {
-            rows = rows.subList(0, lim);
-        }
-        // Mint the cursor from the raw last row before ref-resolution/redaction reshape the map.
-        String nextCursor = (hasMore && !rows.isEmpty())
-                ? EntityQuerySupport.sealCursor(Cursor.from(col, descending, rows.get(rows.size() - 1)).encode(),
-                        fingerprint)
-                : null;
+        // Cursors were minted from the raw rows; ref-resolution/redaction reshape the maps after.
+        List<Map<String, Object>> rows = window.rows();
         if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), rows, scope);
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
-        return new KeysetPage(rows, nextCursor, hasMore);
+        return window.decorated();
     }
 
     /**

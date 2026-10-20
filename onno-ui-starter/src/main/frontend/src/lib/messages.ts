@@ -270,6 +270,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "action.repost": "Re-post",
   "action.unpost": "Unpost",
   "action.duplicate": "Duplicate",
+  "action.openInList": "Open in list",
   "action.delete": "Delete",
   "action.open": "Open",
   "action.copyLink": "Copy link",
@@ -394,6 +395,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
 
   // List grid: toolbar count, search, sort, view toggle, and keyset loading.
   "list.count": "{count} rows",
+  "list.focusMissing": "This record isn't in the list with the current filters",
   "list.search": "Search…",
   "list.searchLabel": "Search",
   "list.all": "All",

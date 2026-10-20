@@ -949,6 +949,33 @@ onno-icon {
 .dark [data-onno-row][data-onno-selected="true"]:hover {
   background-color: hsl(var(--primary) / 0.18) !important;
 }
+/* "Open in list" (#410): the record the list was opened on keeps a primary wash and an inset
+   leading bar until the user opens a row or changes the query; an outline pulses once on arrival
+   so the eye finds it after the scroll. */
+[data-onno-row][data-onno-focused="true"] {
+  background-color: hsl(var(--primary) / 0.14) !important;
+  box-shadow: inset 3px 0 0 hsl(var(--primary));
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  animation: onno-row-focus-pulse 1.6s var(--ease-smooth-out) 1;
+}
+.dark [data-onno-row][data-onno-focused="true"] {
+  background-color: hsl(var(--primary) / 0.24) !important;
+}
+@keyframes onno-row-focus-pulse {
+  0%,
+  35% {
+    outline-color: hsl(var(--primary) / 0.7);
+  }
+  100% {
+    outline-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-onno-row][data-onno-focused="true"] {
+    animation: none;
+  }
+}
 
 /* ---- MapLibre: theme the popup + keep attribution to a small ⓘ -------------------------- */
 /* MapLibre's popup is hardcoded white; re-skin it with the theme tokens so a popup title

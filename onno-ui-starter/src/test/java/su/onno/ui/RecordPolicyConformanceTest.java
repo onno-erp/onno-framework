@@ -320,6 +320,16 @@ class RecordPolicyConformanceTest {
         ok(get("/api/list/catalogs/LkTenants").param("ids", tenantA.toString(), tenantB.toString()));
         assertThat(ids(jsonMap(ok(get("/api/list/catalogs/LkTenants")
                 .param("ids", tenantB.toString()))).get("rows"))).isEmpty();
+        // "Open in list": focusing an in-scope record anchors the window on it; an out-of-scope one
+        // (or garbage) answers exactly like no focus, so the feed is no existence oracle.
+        Map<String, Object> focused = jsonMap(ok(get("/api/list/catalogs/LkTenants").param("focus", tenantA.toString())));
+        assertThat(focused).containsEntry("focus", tenantA.toString()).containsKeys("prevCursor", "hasPrevious");
+        assertThat(ids(focused.get("rows"))).contains(tenantA.toString());
+        Map<String, Object> plain = jsonMap(ok(get("/api/list/catalogs/LkTenants")));
+        for (String hidden : List.of(tenantB.toString(), "not-a-uuid")) {
+            Map<String, Object> refused = jsonMap(ok(get("/api/list/catalogs/LkTenants").param("focus", hidden)));
+            assertThat(refused).doesNotContainKey("focus").isEqualTo(plain);
+        }
 
         Map<String, Object> groups = jsonMap(ok(get("/api/list/catalogs/LkTenants/groups").param("groupBy", "owner")));
         assertThat((List<?>) groups.get("groups")).hasSize(1);
