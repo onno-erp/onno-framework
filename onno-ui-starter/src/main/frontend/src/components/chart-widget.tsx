@@ -31,6 +31,7 @@ import {
   type MouseHandlerDataParam,
 } from "recharts";
 import { format } from "date-fns";
+import { useLocation } from "react-router";
 import { formatCompact, formatNumber, toNumber } from "@/lib/format";
 import { resolveColors } from "@/lib/chart-colors";
 import { Segmented } from "@/components/ui/segmented";
@@ -1146,7 +1147,8 @@ function renderCombo(
  * title row on desktop (see PageDivBuilder), so it renders right-aligned beside the title; on
  * mobile it keeps its own full-width row. Authors tune it per dashboard:
  * {@code config("presets", "15m,1h,24h,7d,30d")} (a comma-separated list of duration ids — any
- * `<n><unit>`, plus `all`) and {@code config("default", "30d")}.
+ * `<n><unit>`, plus `all`) and {@code config("default", "30d")}. The viewer's choice is saved per
+ * {@code config("id", "ops")}, defaulting to the page route — give two pages the same id to share it.
  */
 export function TimeRangeWidget({ widget }: ChartWidgetProps) {
   const t = useMessages();
@@ -1162,9 +1164,11 @@ export function TimeRangeWidget({ widget }: ChartWidgetProps) {
   } = useTimeRange();
   const presetsCsv = widget.extraConfig?.presets;
   const defaultId = widget.extraConfig?.default;
+  const { pathname } = useLocation();
+  const scope = widget.extraConfig?.id || pathname;
   useEffect(() => {
-    configure({ presets: presetsFromConfig(presetsCsv), defaultRangeId: defaultId });
-  }, [configure, presetsCsv, defaultId]);
+    configure({ presets: presetsFromConfig(presetsCsv), defaultRangeId: defaultId, scope });
+  }, [configure, presetsCsv, defaultId, scope]);
   return (
     <div className="flex items-center justify-end">
       <TimeRangeFacet
