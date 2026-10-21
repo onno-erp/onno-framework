@@ -50,6 +50,25 @@ describe("buildSeries — single series", () => {
 });
 
 describe("buildSeries — multi series", () => {
+  it("uses register dimension display labels for groups and series, with raw-value fallback", () => {
+    const rows: EntityRecord[] = [
+      { payment: "enum-card-uuid", payment_display: "Карта", method: "ref-transfer-uuid", method_display: "Банковский перевод", amount: 10 },
+      { payment: "enum-card-uuid", payment_display: "Карта", method: "raw-method-uuid", amount: 4 },
+    ];
+
+    const out = buildSeries(rows, {
+      groupBy: "payment",
+      seriesBy: "method",
+      metric: "sum",
+      metricField: "amount",
+    });
+
+    expect(out.seriesKeys).toEqual(["Банковский перевод", "raw-method-uuid"]);
+    expect(out.rows).toEqual([
+      { label: "Карта", __iso: "", "Банковский перевод": 10, "raw-method-uuid": 4 },
+    ]);
+  });
+
   it("splits buckets by seriesBy and ranks series by total descending", () => {
     const rows: EntityRecord[] = [
       { _date: "2024-01-01T00:00:00", prop: "A", amt: 5 },
