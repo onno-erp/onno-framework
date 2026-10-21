@@ -92,12 +92,27 @@ public class DocumentQueryService {
      */
     public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
                                             int limit, String filter) {
+        return search(subject, desc, query, limit, filter, null);
+    }
+
+    /**
+     * As {@link #search(AccessSubject, DocumentDescriptor, String, int, String)}, additionally restricted to
+     * the given ids when {@code ids} is non-null — the ref picker's "recent" section re-reads its
+     * remembered picks through here, so they pass the same deletion mark, record scope and
+     * {@code refFilter} as ordinary options. An empty id list yields no rows.
+     */
+    public List<Map<String, Object>> search(AccessSubject subject, DocumentDescriptor desc, String query,
+                                            int limit, String filter, java.util.Collection<UUID> ids) {
+        if (ids != null && ids.isEmpty()) {
+            return new ArrayList<>();
+        }
         EntitySurfaceDescriptor surface = surface(desc);
         WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
                 + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")")
+                + (ids == null ? "" : " AND _id IN (<ids>)")
                 + search.and() + scope.and();
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
@@ -105,6 +120,9 @@ public class DocumentQueryService {
                             " ORDER BY _date DESC LIMIT :limit")
                     .bind("limit", limit);
             wf.bindings().forEach(q::bind);
+            if (ids != null) {
+                q.bindList("ids", List.copyOf(ids));
+            }
             EntityQuerySupport.bindSearch(q, query);
             search.bind(q);
             scope.bind(q);

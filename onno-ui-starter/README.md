@@ -701,6 +701,16 @@ f.refField(Order::getCustomer).refSecondary(Customer::getPhone);
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
 
+**Recent picks (#409).** The server remembers which records each user picked per target entity
+(`POST /api/ref-options/recent`, body `{targetKind, targetName, id}`, `204`; the framework-owned
+`onno_ref_recent` table keeps the 20 newest per user and target). With an empty query
+`POST /api/ref-options/search` returns up to five of them first, flagged `_recent: true`, followed by
+the ordinary options without duplicates and still capped by `limit` (`"recent": false` in the body
+turns the section off). Remembered ids are only hints: they are re-read through the same search,
+so a record that was deleted, left the caller's record scope or no longer matches the field's
+`refFilter` is not offered. A pick of a record the caller cannot see is silently not remembered,
+and the endpoint answers `204` either way.
+
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
 attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list

@@ -24,6 +24,7 @@ GET /api/documents/{name}/{id}           one document, with tabular sections inl
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 POST /api/ref-options/search                  bounded contextual reference options
+POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -129,7 +130,11 @@ it) and echoes `focus` in the envelope; replay `prevCursor` as `?before=` to loa
 window until `hasPrevious` is false. A focus the caller's query cannot see (outside the search,
 filters or document date range, out of record scope, deleted, unknown or malformed) returns the
 ordinary first window without `focus`. `cursor` wins over `before`, which wins over `focus`. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
-context-aware search input. There is no unbounded collection or offset-paging endpoint. See
+context-aware search input. With an empty `query` it leads with up to five of the caller's recent
+picks, each flagged `_recent: true`, then the ordinary options without duplicates, still within
+`limit`; send `"recent": false` to omit them. Picks are remembered with `POST /api/ref-options/recent`
+(`{targetKind, targetName, id}`); a recent pick is re-read through the same search, so it obeys the
+deletion mark, record scope and the request's `filter` like any other option. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
 Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,

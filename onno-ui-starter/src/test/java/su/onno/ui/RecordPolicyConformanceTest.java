@@ -121,7 +121,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/list/catalogs/{name}/aggregate", "GET /api/list/documents/{name}/aggregate",
                 "GET /api/list/registers/{name}/movements", "GET /api/list/registers/{name}/balance",
                 // Pickers, mentions, comments, tags, presence, actions, form validation
-                "POST /api/ref-options/search", "GET /api/mentions", "GET /api/mentions/resolve",
+                "POST /api/ref-options/search", "POST /api/ref-options/recent", "GET /api/mentions", "GET /api/mentions/resolve",
                 "GET /api/comments/{kind}/{name}/{id}", "POST /api/comments/{kind}/{name}/{id}",
                 "POST /api/comments/{commentId}/reactions", "DELETE /api/comments/{commentId}",
                 "GET /api/tags/{kind}/{name}", "GET /api/tags/{kind}/{name}/{id}",
@@ -358,6 +358,20 @@ class RecordPolicyConformanceTest {
                 .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"query\":\"\"}"));
         ok(post("/api/ref-options/search").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"targetKind\":\"document\",\"targetName\":\"LkBuildJobs\",\"query\":\"\"}"));
+
+        // Remembering a pick answers 204 whether or not the record is in scope (no oracle), and an
+        // out-of-scope pick never surfaces in the recent section.
+        status(post("/api/ref-options/recent").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"id\":\"" + tenantB + "\"}"), 204);
+        status(post("/api/ref-options/recent").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"id\":\"" + tenantA + "\"}"), 204);
+        List<Map<String, Object>> options = jsonList(ok(post("/api/ref-options/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"query\":\"\"}")));
+        assertThat(ids(options)).first().isEqualTo(tenantA.toString());
+        assertThat(ids(options)).doesNotContain(tenantB.toString());
+        assertThat(options.get(0)).containsEntry("_recent", true);
+        assertThat(options.stream().filter(o -> Boolean.TRUE.equals(o.get("_recent")))).hasSize(1);
     }
 
     private void restrictedRefsAndSearchAreNoOracle() throws Exception {
