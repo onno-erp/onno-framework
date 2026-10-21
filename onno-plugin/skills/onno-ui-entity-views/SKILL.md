@@ -3,7 +3,8 @@ name: onno-ui-entity-views
 description: >-
   Author onno-framework EntityView beans. Use when configuring entity list columns, field labels,
   system column labels, list filters, grouping, aggregation, conditional row styles, form layout,
-  field widgets, formatting, placeholders, hints, refSecondary, refFilter cascading pickers
+  field widgets, formatting, placeholders, hints, refSecondary, refFilter cascading pickers,
+  ref picker open/clear buttons and recent picks
   (dependent ref fields filtered by another field's value), related lists, comments, toolbar row
   and detail actions, action forms, dynamic action labels/icons/visibility, built-in post/unpost
   placement, or map list views.
@@ -29,6 +30,13 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
 Use `EntityView<E>` and getter references. Prefer `field/refField/rowField/rowRefField` typed
 overloads; raw types and string Java-field names are only dynamic escape hatches. Expression text
 such as `refFilter("customer = ${customer}")` intentionally remains a string.
+
+A Ref picker offers the user's recent picks for its target first on an empty query (server-side,
+re-checked against `refFilter`, record scope and deletion; nothing to configure). It shows an
+"open" button for the selected record and a clear button; hide them per field with
+`f.refField(Order::getCustomer).openButton(false)` / `.clearButton(false)`, or for a row column with
+`f.rowRefField(Order::getLines, OrderLine::getBook).openButton(false)`. A required ref never shows
+the clear button, even with `clearButton(true)`.
 
 Treat every `list.columns(...)` entry as requiring an explicit human-facing
 `list.label(getter, "...")`. Keep the first descriptive column readable and limit operational lists

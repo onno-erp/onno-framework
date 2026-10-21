@@ -100,7 +100,7 @@ public class CatalogQueryService {
 
     /**
      * As {@link #search(AccessSubject, CatalogDescriptor, String, int, String)}, additionally restricted to
-     * the given ids when {@code ids} is non-null — the ref picker's "recent" section re-reads its
+     * the given ids when {@code ids} is non-null: the ref picker's "recent" section re-reads its
      * remembered picks through here, so they pass the same deletion mark, record scope and
      * {@code refFilter} as ordinary options. An empty id list yields no rows.
      */

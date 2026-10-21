@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Recently picked ref values (#409): remembered per user and target, offered first on an empty
- * query, and always re-read through the target's search — so a remembered record the user can no
+ * query, and always re-read through the target's search, so a remembered record the user can no
  * longer see (record policy, deletion mark, the field's {@code refFilter}) is never offered.
  */
 class RefRecentOptionsTest {

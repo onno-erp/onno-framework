@@ -13,7 +13,7 @@ import java.util.UUID;
 /**
  * Persistence for {@code onno_ref_recent}: which records a user recently picked in a reference
  * field, per target entity, so the ref picker can offer them first (#409). Like
- * {@link su.onno.ui.notifications.NotificationStore}'s table it is infrastructure — created with a
+ * {@link su.onno.ui.notifications.NotificationStore}'s table it is infrastructure, created with a
  * plain {@code CREATE TABLE IF NOT EXISTS} at startup, never modelled or served by the generic API.
  *
  * <p>The store holds bare ids only. It is a hint, not an authority: every read goes back through
@@ -99,7 +99,7 @@ public class RefRecentStore {
 
     /**
      * The current time at microsecond precision (what both H2 and PostgreSQL {@code TIMESTAMP}
-     * keep), nudged past the pair's newest pick when the clock has not advanced — two picks in the
+     * keep), nudged past the pair's newest pick when the clock has not advanced: two picks in the
      * same tick must still order as picked.
      */
     private static Timestamp nextUsedAt(Handle h, String owner, String kind, String name) {
