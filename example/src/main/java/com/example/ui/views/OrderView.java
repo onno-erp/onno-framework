@@ -113,7 +113,10 @@ public class OrderView implements EntityView<Order> {
 
         // Line-item column hints, addressed with the "<section>.<field>" key (the section is "items").
         // Money columns render as currency in the order's line table, like the Total above.
-        f.rowField(Order::getItems, OrderLine::getBook).label("Book");
+        // Ref pickers (#409): an empty search lists the user's recent picks first, and a filled field
+        // shows an "open" button (Customer, Assigned to) plus a clear button when optional (Assigned
+        // to; never on the required Customer). Line rows stay compact without the open button.
+        f.rowRefField(Order::getItems, OrderLine::getBook).label("Book").openButton(false);
         f.rowField(Order::getItems, OrderLine::getQuantity).label("Qty");
         f.rowField(Order::getItems, OrderLine::getUnitPrice)
                 .label("Unit price").format("currency:USD");

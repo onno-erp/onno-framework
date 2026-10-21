@@ -529,6 +529,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify(request),
     }),
+  /** Remember a ref pick so the next empty-query search offers it first (#409). Answers 204. */
+  rememberRefPick: (pick: { targetKind: "catalog" | "document"; targetName: string; id: string }) =>
+    // Silent: remembering is a background courtesy; a failure must not toast over the pick.
+    fetchJson<void>(`${BASE}/ref-options/recent`, {
+      method: "POST",
+      body: JSON.stringify(pick),
+    }, { silent: true }),
   getCatalogItem: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}`),
   createCatalogItem: (name: string, data: EntityRecord) =>

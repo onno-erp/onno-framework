@@ -711,6 +711,21 @@ so a record that was deleted, left the caller's record scope or no longer matche
 `refFilter` is not offered. A pick of a record the caller cannot see is silently not remembered,
 and the endpoint answers `204` either way.
 
+In the UI the recent picks sit under a **Recent** label at the top of the options; picking a record
+(or creating one through "+ New") remembers it. A filled picker on an entity form also shows two
+inline buttons, in the header and in tabular-section rows alike: **open** the selected record
+(dispatches `onno://{kind}/{name}/{id}` through `onno:action`, like "+ New") and **clear** the value.
+Both are on by default; turn them off per field:
+
+```java
+f.refField(Order::getCustomer).openButton(false);
+f.rowRefField(Order::getItems, OrderLine::getBook).clearButton(false);
+```
+
+A required ref never shows the clear button, even with `clearButton(true)`. The metadata carries the
+resolved `refOpenButton`/`refClearButton` booleans. Pickers in action dialogs and related-list panels
+show recent picks too but no open button, so a click there never leaves the dialog.
+
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
 attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list
