@@ -1452,7 +1452,6 @@ export function EntityListWidget({
   const messagesRef = useRef(t);
   messagesRef.current = t;
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const scrollToIdRef = useRef<string | null>(null);
   const prevCursorRef = useRef<string | null>(null);
   const [hasPrevious, setHasPrevious] = useState(false);
   const loadingPrevRef = useRef(false);
@@ -1879,7 +1878,7 @@ export function EntityListWidget({
           if (myGen !== gen.current) return;
           setTotal(typeof data.total === "number" ? data.total : null);
           cursorRef.current = data.nextCursor ?? null;
-          setHasMore(!!data.hasMore);
+          setHasMore(data.hasMore);
           prevCursorRef.current = data.prevCursor ?? null;
           setHasPrevious(!!data.hasPrevious);
           setHeadOffset(0);
@@ -1980,7 +1979,7 @@ export function EntityListWidget({
       .then((data: { rows: EntityRecord[]; nextCursor: string | null; hasMore: boolean }) => {
         if (myGen !== gen.current) return; // a newer query superseded this window
         cursorRef.current = data.nextCursor ?? null;
-        setHasMore(!!data.hasMore);
+        setHasMore(data.hasMore);
         setPageRows((cur) => {
           const seen = new Set((cur ?? []).map(entityRowId).filter(Boolean));
           const appended = (data.rows ?? []).filter(row => {
@@ -2289,7 +2288,7 @@ export function EntityListWidget({
         if (r.feedback) {
           toast.dismiss(toastId);
           if (propagateFeedback && r.feedbackRejected) {
-            throw new ApiError(r.feedback.message || r.feedback.title || "Action rejected", 422, undefined, r.feedback);
+            return Promise.reject(new ApiError(r.feedback.message || r.feedback.title || "Action rejected", 422, undefined, r.feedback));
           }
           presentActionFeedback(r.feedback);
         } else {
@@ -3170,7 +3169,9 @@ export function EntityListWidget({
           openable={openable}
           canWrite={canWrite}
           surfaceMode={surfaceMode}
+          fill={list.fill === true}
           scrollCap={maxBodyH}
+          scrollRef={scrollRef}
           selected={selected}
           setSelected={setSelected}
           clearSelection={clearSelection}
