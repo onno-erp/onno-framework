@@ -370,6 +370,16 @@ If you consume `/api/events` with a browser `EventSource`, note the stream sends
 candidate assignments are not sent to the browser. `EventSource.onmessage` fires for nothing; you
 must `addEventListener("updated", …)` (etc.) per event name you care about.
 
+## MCP register movements
+
+For authenticated MCP clients, `register_movements` reads active accumulation-register movements
+with optional `limit` (1–1000, default 1000), `offset` (default 0), `sort` (storage column, default
+`_period`), `descending` (default true), and `filters` (dimension field name to equality value;
+reference and enumeration values use UUID strings). These combine with the inclusive `from`/`to`
+period range and the caller's record scope. The response remains a list: increase `offset` by
+`limit` until a short or empty page is returned. Unlike the former bounded read, more than 1000
+matches do not produce an error. Unknown dimensions and invalid page bounds return an MCP error.
+
 ## Notes for a public read view
 
 There is no separate "public projection" endpoint yet; the generic read API is the contract above and
