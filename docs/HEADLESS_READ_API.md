@@ -282,10 +282,12 @@ the target record is outside the viewer's record scope (see
 [Record access policies](RECORD_ACCESS_POLICIES.md)), the ref is *restricted*:
 
 ```json
+{
 "tenant": null,
 "tenantDisplay": "—",
 "tenantRestricted": true,
 "tenantRef": { "type": "Tenants", "display": "—", "restricted": true }
+}
 ```
 
 The target's id and label are withheld, so a list never reveals the name — or the existence — of a
@@ -373,7 +375,8 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 There is no separate "public projection" endpoint yet; the generic read API is the contract above and
 is auth-gated. To expose a curated, anonymous read surface, front it with your own controller that
 maps the logical entity to your DTOs, and (if it also accepts writes) add its path to
-`onno.auth.public-paths` and `onno.auth.csrf-ignored-paths`.
+`onno.auth.additional-public-paths` and `onno.auth.csrf-ignored-paths`. Mandatory framework
+bootstrap paths remain public; legacy `onno.auth.public-paths` entries are still honoured.
 
 ### CRM workspace and contacts (optional CRM starter)
 

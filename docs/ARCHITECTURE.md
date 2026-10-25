@@ -564,6 +564,10 @@ New and Duplicate forms do not render them because they have no saved record ide
 
 `onno-auth-starter` contributes the `SecurityFilterChain` and picks a mode from `onno.auth.mode`:
 
+In every mode, framework bootstrap paths (including `/api/config` and `/api/auth/login`) remain
+public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
+entries are combined with them and can no longer remove mandatory framework paths.
+
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
