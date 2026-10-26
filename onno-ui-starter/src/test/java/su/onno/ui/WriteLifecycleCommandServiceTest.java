@@ -34,7 +34,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 
-import java.security.Principal;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -61,6 +60,7 @@ class WriteLifecycleCommandServiceTest {
 
     @Document(name = "LifecycleOrders", numberPrefix = "LO-")
     @AccessControl(readRoles = "ADMIN")
+    @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleOrder extends DocumentObject
             implements OnFillingHandler, BeforeWriteHandler, AfterWriteHandler, Validated {
         static final AtomicInteger AFTER_WRITES = new AtomicInteger();
@@ -99,24 +99,29 @@ class WriteLifecycleCommandServiceTest {
         }
     }
 
+    @SuppressWarnings("unused") // Attribute values are populated through reflection.
     public static class LifecycleOrderLine extends TabularSectionRow {
-        @Attribute(precision = 15, scale = 2) private BigDecimal quantity;
-        @Attribute(precision = 15, scale = 2) private BigDecimal price;
-        @Attribute(precision = 15, scale = 2) private BigDecimal amount;
+        @Attribute private BigDecimal quantity;
+        @Attribute private BigDecimal price;
+        @Attribute private BigDecimal amount;
         @Attribute private LocalDateTime happensAt;
     }
 
     @Catalog(name = "LifecycleWidgets", codePrefix = "LW-")
     @AccessControl(readRoles = "ADMIN")
+    @SuppressWarnings({"unused", "FieldMayBeFinal", "FieldCanBeLocal", "MismatchedQueryAndUpdateOfCollection"}) // Reflective model fixture.
     public static class LifecycleWidget extends CatalogObject
             implements BeforeWriteHandler, AfterWriteHandler, Validated {
         static final AtomicInteger AFTER_WRITES = new AtomicInteger();
         @Attribute(length = 60) private String label;
         @Attribute(length = 60) private String slug; // derived from label
         @Attribute private LocalDateTime observedAt;
+        @TabularSection(name = "lines") private List<CatalogLine> lines = new ArrayList<>();
+        @Attribute private int lineCount;
 
         @Override public void beforeWrite() {
             this.slug = label == null ? null : label.toLowerCase(Locale.ROOT);
+            this.lineCount = lines.size();
         }
 
         @Override public void afterWrite() {
@@ -129,6 +134,20 @@ class WriteLifecycleCommandServiceTest {
                     () -> label != null && !label.isBlank()));
         }
     }
+
+    @SuppressWarnings("unused") // Attribute values are populated through reflection.
+    public static class CatalogLine extends TabularSectionRow {
+        private static boolean failConstruction;
+
+        private CatalogLine() {
+            if (failConstruction) throw new IllegalStateException("Cannot construct catalog line");
+        }
+
+        @Attribute(required = true, length = 20) private String property;
+        @Attribute private LocalDateTime happensAt;
+    }
+
+    private Jdbi database;
 
     private final AccessSubject admin = AccessSubject.user("admin", java.util.Set.of("ADMIN"));
     private DocumentDescriptor orderDesc;
@@ -143,9 +162,11 @@ class WriteLifecycleCommandServiceTest {
     void setUp() {
         LifecycleOrder.AFTER_WRITES.set(0);
         LifecycleWidget.AFTER_WRITES.set(0);
+        CatalogLine.failConstruction = false;
         JdbcDataSource ds = new JdbcDataSource();
         ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
         Jdbi jdbi = Jdbi.create(ds);
+        database = jdbi;
 
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         MetadataRegistry registry = new MetadataRegistry();
@@ -171,6 +192,101 @@ class WriteLifecycleCommandServiceTest {
                 posting, documentQuery, access, events, cipher);
         catalogCommands = new CatalogCommandService(registry, jdbi, props, numbers,
                 catalogQuery, access, events, cipher);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void catalogLines_saveReplaceClearAndKeepOnPartialUpdate() {
+        var created = catalogCommands.create(widgetDesc, Map.of("label", "Profile", "lines",
+                List.of(Map.of("property", "event", "happens_at", "2026-10-26T12:00:00"), Map.of("property", "duration"))), admin);
+        UUID id = UUID.fromString(created.get("_id").toString());
+        assertThat(created.get("line_count")).isEqualTo(2);
+        var lines = (List<Map<String, Object>>) created.get("lines");
+        assertThat(lines).extracting(r -> r.get("property")).containsExactly("event", "duration");
+        assertThat(lines).extracting(r -> r.get("_line_number")).containsExactly(1, 2);
+        var logical = EntityJsonRepresentation.catalog(widgetDesc, created, EntityJsonRepresentation.Mode.LOGICAL);
+        assertThat(((List<Map<String, Object>>) logical.get("lines")).getFirst())
+                .containsKeys("id", "parentId", "lineNumber", "property")
+                .containsEntry("happensAt", "2026-10-26T12:00");
+
+        var partial = catalogCommands.update(widgetDesc, id, Map.of("label", "Renamed"), admin);
+        assertThat(partial.get("line_count")).isEqualTo(2);
+        assertThat((List<?>) partial.get("lines")).hasSize(2);
+        var replaced = catalogCommands.update(widgetDesc, id,
+                Map.of("lines", List.of(Map.of("property", "changed"))), admin);
+        assertThat(replaced.get("line_count")).isEqualTo(1);
+        assertThat((List<?>) replaced.get("lines")).hasSize(1);
+        var cleared = catalogCommands.update(widgetDesc, id, Map.of("lines", List.of()), admin);
+        assertThat((List<?>) cleared.get("lines")).isEmpty();
+        assertThat(cleared.get("line_count")).isEqualTo(0);
+    }
+
+    @Test
+    void catalogLines_constructorFailureRejectsSaveInsteadOfDroppingRows() {
+        CatalogLine.failConstruction = true;
+        assertThatThrownBy(() -> catalogCommands.create(widgetDesc,
+                Map.of("label", "Profile", "lines", List.of(Map.of("property", "event"))), admin))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("lines");
+        assertThat(database.withHandle(h -> h.createQuery("SELECT COUNT(*) FROM " + widgetDesc.tableName())
+                .mapTo(Integer.class).one()).intValue()).isZero();
+        assertThat(LifecycleWidget.AFTER_WRITES.get()).isZero();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void catalogLines_validateWithoutSavingAndRejectMalformedInput() {
+        var report = catalogCommands.validate(widgetDesc, null,
+                Map.of("label", "Profile", "lines", List.of(Map.of())), admin);
+        assertThat(report.get("valid")).isEqualTo(false);
+        assertThat((Map<String, ?>) report.get("fieldErrors")).containsKey("lines[0].property");
+        assertThat(LifecycleWidget.AFTER_WRITES.get()).isZero();
+        for (Object invalid : List.of("not a list", List.of("not a row"), List.of(Map.of()))) {
+            assertThatThrownBy(() -> catalogCommands.create(widgetDesc,
+                    Map.of("label", "Profile", "lines", invalid), admin))
+                    .isInstanceOf(ValidationException.class);
+        }
+        assertThat(database.withHandle(h -> h.createQuery("SELECT COUNT(*) FROM " + widgetDesc.tableName())
+                .mapTo(Integer.class).one()).intValue()).isZero();
+    }
+
+    @Test
+    void catalogLines_staleVersionCannotReplaceRows() {
+        var created = catalogCommands.create(widgetDesc, Map.of("label", "Original", "lines",
+                List.of(Map.of("property", "kept"))), admin);
+        UUID id = UUID.fromString(created.get("_id").toString());
+        catalogCommands.update(widgetDesc, id, Map.of("label", "Updated"), admin);
+        assertThatThrownBy(() -> catalogCommands.update(widgetDesc, id,
+                Map.of("version", created.get("_version"), "lines", List.of()), admin))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .satisfies(error -> assertThat(((org.springframework.web.server.ResponseStatusException) error)
+                        .getStatusCode().value()).isEqualTo(409));
+        assertThat((List<?>) catalogQuery.get(admin, widgetDesc, id).get("lines")).hasSize(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void catalogLines_databaseFailureRollsBackHeaderAndAllLines() {
+        var created = catalogCommands.create(widgetDesc, Map.of("label", "Original", "lines",
+                List.of(Map.of("property", "kept"))), admin);
+        UUID id = UUID.fromString(created.get("_id").toString());
+        database.useHandle(h -> h.execute("ALTER TABLE " + widgetDesc.tabularSections().getFirst().tableName()
+                + " ADD CONSTRAINT reject_bad CHECK (property <> 'bad')"));
+        int hooksBefore = LifecycleWidget.AFTER_WRITES.get();
+        assertThatThrownBy(() -> catalogCommands.update(widgetDesc, id,
+                Map.of("label", "Changed", "lines", List.of(Map.of("property", "ok"), Map.of("property", "bad"))), admin))
+                .isInstanceOf(RuntimeException.class);
+        var unchanged = catalogQuery.get(admin, widgetDesc, id);
+        assertThat(unchanged.get("label")).isEqualTo("Original");
+        assertThat(unchanged.get("_version")).isEqualTo(created.get("_version"));
+        assertThat((List<Map<String, Object>>) unchanged.get("lines"))
+                .extracting(r -> r.get("property")).containsExactly("kept");
+        assertThat(LifecycleWidget.AFTER_WRITES.get()).isEqualTo(hooksBefore);
+        assertThatThrownBy(() -> catalogCommands.create(widgetDesc,
+                Map.of("label", "Failed", "lines", List.of(Map.of("property", "bad"))), admin))
+                .isInstanceOf(RuntimeException.class);
+        assertThat(database.withHandle(h -> h.createQuery("SELECT COUNT(*) FROM " + widgetDesc.tableName())
+                .mapTo(Integer.class).one()).intValue()).isEqualTo(1);
     }
 
     @Test
@@ -423,26 +539,4 @@ class WriteLifecycleCommandServiceTest {
         }
     }
 
-    /** Minimal authority-bearing principal; {@link UiAccessService} reads roles reflectively. */
-    public static final class Authority {
-        private final String role;
-
-        public Authority(String role) {
-            this.role = role;
-        }
-
-        public String getAuthority() {
-            return role;
-        }
-    }
-
-    public static final class AdminPrincipal implements Principal {
-        @Override public String getName() {
-            return "admin";
-        }
-
-        public List<Authority> getAuthorities() {
-            return List.of(new Authority("ADMIN"));
-        }
-    }
 }

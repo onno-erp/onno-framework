@@ -57,6 +57,7 @@ public class ResolvedMetadataService {
         map.put("writeRoles", d.writeRoles());
         Map<String, FieldHint> hints = fieldHints.forEntity(d.javaClass(), profileId);
         map.put("attributes", describeAttributes(d.attributes(), hints));
+        map.put("tabularSections", describeSections(d.tabularSections(), hints));
         map.put("systemColumns", List.of(
                 systemColumn("code", "Code", "_code", hints),
                 systemColumn("description", "Description", "_description", hints)));
@@ -121,7 +122,7 @@ public class ResolvedMetadataService {
             // the panel can never collapse to blank rows. Prepend when absent (matching the
             // default, name-first layout); the builder already dedups, so this won't duplicate.
             if (columns.stream().noneMatch(a -> a.fieldName().equals(display.fieldName()))) {
-                columns.add(0, display);
+                columns.addFirst(display);
             }
 
             boolean targetIsDocument = registry.allDocuments().stream()
@@ -191,22 +192,7 @@ public class ResolvedMetadataService {
                 systemColumn("number", "Number", "_number", hints),
                 systemColumn("date", "Date", "_date", hints),
                 systemColumn("posted", "Status", "_posted", hints)));
-        map.put("tabularSections", d.tabularSections().stream().map(ts -> {
-            Map<String, Object> tsMap = new LinkedHashMap<>();
-            tsMap.put("name", ts.name());
-            tsMap.put("tableName", ts.tableName());
-            // f.field("items").label("Lines") titles the section's grid; absent → client humanizes the name.
-            FieldHint sectionHint = hints.get(ts.name());
-            if (sectionHint != null && sectionHint.label() != null && !sectionHint.label().isBlank()) {
-                tsMap.put("label", sectionHint.label());
-            }
-            // Tabular-section column hints are addressed with a section-scoped key on the document's
-            // own EntityView — e.g. f.field("items.unitPrice").format("currency:USD"). The prefix is
-            // the section name; it keeps a line-field hint from colliding with a same-named top-level
-            // field, and a document with no such keys behaves exactly as before (empty hint map).
-            tsMap.put("attributes", describeAttributes(ts.attributes(), sectionHints(ts.name(), hints)));
-            return tsMap;
-        }).toList());
+        map.put("tabularSections", describeSections(d.tabularSections(), hints));
         // Documents surface related-list panels too (1C parity): a booking can show its guests —
         // the reverse side of a Booking↔Client junction — read-only on the detail and editable in
         // the form, exactly like a catalog. See #110.
@@ -214,6 +200,28 @@ public class ResolvedMetadataService {
         map.put("formValidations", describeFormValidations(d.javaClass(), profileId));
         map.put("detailWidgets", describeDetailWidgets(d.javaClass(), "document", d.logicalName(), profileId));
         return map;
+    }
+
+    private List<Map<String, Object>> describeSections(
+            List<su.onno.metadata.TabularSectionDescriptor> sections, Map<String, FieldHint> hints) {
+        return sections.stream().map(ts -> {
+            Map<String, Object> tsMap = new LinkedHashMap<>();
+            tsMap.put("name", ts.name());
+            tsMap.put("tableName", ts.tableName());
+            // f.field("items").label("Lines") titles the section's grid; absent → client humanizes the name.
+            FieldHint sectionHint = hints.getOrDefault(ts.fieldName(), hints.get(ts.name()));
+            if (sectionHint != null && sectionHint.label() != null && !sectionHint.label().isBlank()) {
+                tsMap.put("label", sectionHint.label());
+            }
+            // Tabular-section column hints are addressed with a section-scoped key on the owner's
+            // own EntityView — e.g. f.field("items.unitPrice").format("currency:USD"). The prefix is
+            // the section name; it keeps a line-field hint from colliding with a same-named top-level
+            // field, and an entity with no such keys behaves exactly as before (empty hint map).
+            Map<String, FieldHint> rowHints = new LinkedHashMap<>(sectionHints(ts.name(), hints));
+            rowHints.putAll(sectionHints(ts.fieldName(), hints));
+            tsMap.put("attributes", describeAttributes(ts.attributes(), rowHints));
+            return tsMap;
+        }).toList();
     }
 
     private List<Map<String, Object>> describeDetailWidgets(Class<?> entity, String entityType,
@@ -314,7 +322,7 @@ public class ResolvedMetadataService {
 
     /**
      * The subset of a document's field hints that target a tabular section, re-keyed to the bare row
-     * field name. A hint authored as {@code field("items.unitPrice")} on the document's view is keyed
+     * field name. A hint authored as {@code field("items.unitPrice")} on the owner's view is keyed
      * {@code "items.unitPrice"}; for section {@code "items"} this returns it under {@code "unitPrice"}
      * so {@link #describeAttributes} matches it to the row attribute. Returns an empty map when no
      * hint targets the section, preserving the prior (hint-less) behaviour.
@@ -453,13 +461,6 @@ public class ResolvedMetadataService {
     }
 
     /**
-     * Resolve a ref picker's secondary field (named against the target entity) to the target's
-     * logical response field, so the client reads the preferred entity representation. Matches by
-     * field name or column name;
-     * an unrecognized name falls through unchanged (best effort — a typo shows nothing rather than
-     * breaking the picker).
-     */
-    /**
      * Rewrite a {@code refFilter} template's clause left-hand sides from the target entity's field
      * names to its column names, leaving
      * operators, values, and {@code ${...}} placeholders untouched — e.g.
@@ -475,6 +476,13 @@ public class ResolvedMetadataService {
                 .collect(java.util.stream.Collectors.joining(" AND "));
     }
 
+    /**
+     * Resolve a ref picker's secondary field (named against the target entity) to the target's
+     * logical response field, so the client reads the preferred entity representation. Matches by
+     * field name or column name;
+     * an unrecognized name falls through unchanged (best effort — a typo shows nothing rather than
+     * breaking the picker).
+     */
     private String refSecondaryField(String refTarget, String fieldName) {
         return targetAttributes(refTarget).stream()
                 .filter(a -> a.fieldName().equals(fieldName) || a.columnName().equals(fieldName))

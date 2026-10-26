@@ -85,6 +85,20 @@ class MetadataToolFactoryTest {
     }
 
     @Test
+    void describeMetadataIncludesCatalogSections() {
+        var profile = new CatalogDescriptor("Profiles", "Profiles", "catalog_profiles", Object.class,
+                9, false, true, "", "", List.of("RENTALS"), List.of("RENTALS"),
+                List.of(), List.of(), List.of(new su.onno.metadata.TabularSectionDescriptor(
+                "filters", "filters", "catalog_profiles_filters", Object.class, clients.attributes())));
+        registry.registerCatalog(profile);
+        var describe = byName(factory(new OnnoMcpProperties()).build(), "describe_metadata");
+        var result = describe.callHandler().apply(exchange(),
+                new CallToolRequest("describe_metadata", Map.of("kind", "catalog")));
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(result.content().toString()).contains("Profiles", "tabularSections", "filters");
+    }
+
+    @Test
     void exposesFullToolSetByDefault() {
         Set<String> names = names(factory(new OnnoMcpProperties()).build());
         assertThat(names).contains(

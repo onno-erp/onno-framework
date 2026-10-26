@@ -44,7 +44,8 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     }
 
     @Override
-    public Object onBeforeConvert(Object aggregate) {
+    @org.springframework.lang.NonNull
+    public Object onBeforeConvert(@org.springframework.lang.NonNull Object aggregate) {
         return time(operationName("before-convert", aggregate), aggregate, () -> beforeConvert(aggregate));
     }
 
@@ -64,6 +65,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
                             desc.tableName(), desc.codePrefix(), desc.codeLength()));
                 }
             }
+            assignTabularRowIds(catalog, registry.getCatalogDescriptor(catalog.getClass()).tabularSections());
         } else if (aggregate instanceof DocumentObject document) {
             if (document.getId() == null) {
                 document.setId(UUID.randomUUID());
@@ -80,7 +82,7 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
             }
             // Tabular-section rows are aggregate children with a non-generated UUID @Id; Spring
             // Data JDBC won't assign one, so populate any missing ids before the insert.
-            assignTabularRowIds(document, desc);
+            assignTabularRowIds(document, desc.tabularSections());
         } else if (aggregate instanceof AccumulationRecord record) {
             if (record.getId() == null) {
                 record.setId(UUID.randomUUID());
@@ -113,8 +115,8 @@ public class OnnoBeforeConvertCallback implements BeforeConvertCallback<Object> 
     }
 
     @SuppressWarnings("unchecked")
-    private void assignTabularRowIds(DocumentObject document, DocumentDescriptor desc) {
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+    private void assignTabularRowIds(Object document, List<TabularSectionDescriptor> sections) {
+        for (TabularSectionDescriptor ts : sections) {
             try {
                 Field field = findField(document.getClass(), ts.fieldName());
                 field.setAccessible(true);

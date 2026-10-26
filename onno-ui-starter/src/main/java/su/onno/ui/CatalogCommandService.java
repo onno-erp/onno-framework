@@ -66,6 +66,7 @@ public class CatalogCommandService {
         Map<String, Object> body = EntityWriteAliases.catalog(desc, requestBody);
         guard.applyDefaults(desc.javaClass(), body, subject);
         guard.requireReadableRefs(desc.attributes(), body, subject);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
         requireReadableParent(desc, body, subject);
 
         UUID id = UUID.randomUUID();
@@ -76,6 +77,7 @@ public class CatalogCommandService {
         // then fold any field a hook derived back into the body so the INSERT captures it. (#158)
         ValidationErrors errors = new ValidationErrors();
         attributeValidator.validate(body, desc.attributes(), errors);
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
         CatalogObject entity = instantiate(desc.javaClass());
         if (entity != null) {
             entity.setId(id);
@@ -84,15 +86,19 @@ public class CatalogCommandService {
             entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
             entity.setParent(parseUuid(body.get("parent")));
             lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
             Map<String, Object> before = lifecycle.snapshot(entity, desc.attributes());
             if (EntityWriteSupport.bake(lifecycle, entity, true, errors)) {
                 lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
+                TabularSectionWriteSupport.writeBack(entity, desc.tabularSections(), lifecycle, body);
                 body.put("code", entity.getCode());
                 body.put("description", entity.getDescription());
                 body.put("folder", entity.isFolder());
                 body.put("parent", entity.getParent());
             }
         }
+        if (errors.isEmpty()) TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
         errors.throwIfAny();
 
         List<String> columns = new ArrayList<>(List.of(
@@ -124,6 +130,7 @@ public class CatalogCommandService {
                 EntityWriteSupport.bindAttribute(update, attr, body.get(attr.fieldName()), secretCipher);
             }
             update.execute();
+            TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
             guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
         });
         lifecycle.runAfterWrite(entity);
@@ -143,6 +150,7 @@ public class CatalogCommandService {
         guard.preserveRestrictedRefs(desc.tableName(), desc.attributes(), id, body, subject,
                 desc.hierarchical() ? desc.javaClass() : null);
         guard.requireReadableRefs(desc.attributes(), body, subject);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
         requireReadableParent(desc, body, subject);
 
         // Reconstruct the stored item, overlay the submitted changes, and run the write lifecycle
@@ -151,6 +159,7 @@ public class CatalogCommandService {
         // partial-update semantics intact. (#158)
         ValidationErrors errors = new ValidationErrors();
         attributeValidator.validatePartial(body, desc.attributes(), errors);
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
         CatalogObject entity = loadCatalogObject(desc, id);
         if (entity != null) {
             if (body.containsKey("code")) entity.setCode(asString(body.get("code")));
@@ -158,6 +167,7 @@ public class CatalogCommandService {
             if (body.containsKey("folder")) entity.setFolder(Boolean.TRUE.equals(body.get("folder")));
             if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
             lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
             Map<String, Object> before = lifecycle.snapshot(entity, desc.attributes());
             String codeBefore = entity.getCode();
             String descriptionBefore = entity.getDescription();
@@ -165,12 +175,15 @@ public class CatalogCommandService {
             UUID parentBefore = entity.getParent();
             if (EntityWriteSupport.bake(lifecycle, entity, false, errors)) {
                 lifecycle.writeBackDerived(entity, desc.attributes(), before, body);
+                TabularSectionWriteSupport.writeBack(entity, desc.tabularSections(), lifecycle, body);
                 if (!Objects.equals(entity.getCode(), codeBefore)) body.put("code", entity.getCode());
                 if (!Objects.equals(entity.getDescription(), descriptionBefore)) body.put("description", entity.getDescription());
                 if (entity.isFolder() != folderBefore) body.put("folder", entity.isFolder());
                 if (!Objects.equals(entity.getParent(), parentBefore)) body.put("parent", entity.getParent());
             }
         }
+        if (errors.isEmpty()) TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
+        TabularSectionWriteSupport.requireReadableRefs(desc.tabularSections(), body, guard, subject);
         errors.throwIfAny();
 
         List<String> setClauses = new ArrayList<>();
@@ -186,7 +199,8 @@ public class CatalogCommandService {
             }
         }
 
-        if (setClauses.isEmpty()) {
+        boolean hasSections = desc.tabularSections().stream().anyMatch(ts -> body.containsKey(ts.name()));
+        if (setClauses.isEmpty() && !hasSections) {
             return query.get(subject, desc, id);
         }
 
@@ -214,7 +228,10 @@ public class CatalogCommandService {
                 }
             }
             int n = update.execute();
-            if (n > 0) guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            if (n > 0) {
+                TabularSectionWriteSupport.replace(h, desc.tabularSections(), id, body, secretCipher);
+                guard.requirePostImage(h, desc.javaClass(), desc.tableName(), id, subject);
+            }
             return n;
         });
         if (updated == 0 && hasExpectedVersion) {
@@ -267,8 +284,10 @@ public class CatalogCommandService {
                 if (body.containsKey("parent")) entity.setParent(parseUuid(body.get("parent")));
             }
             lifecycle.applyBody(entity, desc.attributes(), body, errors);
+            TabularSectionWriteSupport.overlay(entity, desc.tabularSections(), lifecycle, body, errors);
             EntityWriteSupport.dryRunRules(lifecycle, entity, isNew, errors);
         }
+        TabularSectionWriteSupport.validate(desc.tabularSections(), body, errors);
         return EntityWriteSupport.validationReport(errors);
     }
 
@@ -298,8 +317,7 @@ public class CatalogCommandService {
                 h.createQuery("SELECT _code FROM " + desc.tableName() + " WHERE _id = :id")
                         .bind("id", id)
                         .mapTo(String.class)
-                        .findOne()
-                        .orElse(null));
+                        .findOne()).orElse(null);
         jdbi.useHandle(h ->
                 h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
                         .bind("id", id)
@@ -332,8 +350,7 @@ public class CatalogCommandService {
                 h.createQuery("SELECT * FROM " + desc.tableName() + " WHERE _id = :id")
                         .bind("id", id)
                         .mapToMap()
-                        .findOne()
-                        .orElse(null));
+                        .findOne()).orElse(null);
         if (raw == null) {
             return null;
         }
@@ -354,6 +371,7 @@ public class CatalogCommandService {
         for (AttributeDescriptor attr : desc.attributes()) {
             lifecycle.setFromStored(entity, attr, raw.get(attr.columnName()));
         }
+        jdbi.useHandle(h -> TabularSectionWriteSupport.load(entity, desc.tabularSections(), h, id, lifecycle));
         return entity;
     }
 

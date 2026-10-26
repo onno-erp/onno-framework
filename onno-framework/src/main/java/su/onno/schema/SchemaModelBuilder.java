@@ -32,11 +32,14 @@ public class SchemaModelBuilder {
         tables.add(processTransitionsTable());
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
             tables.add(catalogTable(catalog));
+            for (TabularSectionDescriptor section : catalog.tabularSections()) {
+                tables.add(tabularSectionTable(catalog.tableName(), catalog.previousNames(), section, true));
+            }
         }
         for (DocumentDescriptor document : registry.allDocuments()) {
             tables.add(documentTable(document));
             for (TabularSectionDescriptor section : document.tabularSections()) {
-                tables.add(tabularSectionTable(document, section));
+                tables.add(tabularSectionTable(document.tableName(), document.previousNames(), section, false));
             }
         }
         for (AccumulationRegisterDescriptor register : registry.allRegisters()) {
@@ -229,19 +232,21 @@ public class SchemaModelBuilder {
         return new TableModel(document.tableName(), columns, List.of(), previousTables);
     }
 
-    private TableModel tabularSectionTable(DocumentDescriptor document, TabularSectionDescriptor section) {
+    private TableModel tabularSectionTable(String ownerTable, List<String> previousNames,
+                                           TabularSectionDescriptor section, boolean catalog) {
         List<ColumnModel> columns = new ArrayList<>();
         columns.add(ColumnModel.primaryKey("_id", "UUID"));
         columns.add(new ColumnModel("_parent_id", "UUID", false, false, null,
-                document.tableName() + "(_id)", List.of()));
+                ownerTable + "(_id)", List.of()));
         columns.add(ColumnModel.of("_line_number", "INTEGER"));
         for (AttributeDescriptor attr : section.attributes()) {
             columns.add(attributeColumn(attr, attr.required()));
         }
-        // A renamed document drags its tabular-section tables along.
+        // Renaming the owner also renames its tabular-section tables.
         List<String> previousTables = new ArrayList<>();
-        for (String previous : document.previousNames()) {
-            previousTables.add(naming.tabularSectionTable(previous, section.name()));
+        for (String previous : previousNames) {
+            previousTables.add(catalog ? naming.catalogTabularSectionTable(previous, section.name())
+                    : naming.tabularSectionTable(previous, section.name()));
         }
         return new TableModel(section.tableName(), columns, List.of(), previousTables);
     }

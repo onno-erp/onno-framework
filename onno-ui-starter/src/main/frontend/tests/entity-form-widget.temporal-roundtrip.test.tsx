@@ -73,6 +73,31 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
     );
   });
 
+  it("edits catalog rows and sends them in the same save payload", async () => {
+    updateCatalogItem.mockResolvedValue({ id: "profile-1" });
+    validateRecord.mockResolvedValue({ fieldErrors: {}, formErrors: [] });
+    const form: FormDescriptor = {
+      kind: "catalogs", name: "Profiles", id: "profile-1", title: "Profile", submitLabel: "Save",
+      meta: { name: "Profiles", attributes: [], tabularSections: [{
+        name: "filters", tableName: "catalog_profiles_filters", label: "Event filters",
+        attributes: [{ fieldName: "property", columnName: "property", displayName: "Property",
+          javaType: "String", visibleInForm: true } as never],
+      }] },
+      initial: { id: "profile-1", filters: [{ property: "event" }] },
+    };
+    render(<EntityFormWidget form={form} />);
+    expect(screen.getByRole("table", { name: "Event filters" })).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("event"), { target: { value: "duration" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    const inputs = screen.getAllByRole("textbox");
+    fireEvent.change(inputs[inputs.length - 1], { target: { value: "level" } });
+    expect(updateCatalogItem).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateCatalogItem).toHaveBeenCalledWith(
+      "Profiles", "profile-1", expect.objectContaining({ filters: [{ property: "duration" }, { property: "level" }] })
+    ));
+  });
+
   it("normalizes document header and tabular-section LocalDateTimes before save", async () => {
     updateDocument.mockResolvedValue({ id: "event-1" });
     validateRecord.mockResolvedValue({ fieldErrors: {}, formErrors: [] });

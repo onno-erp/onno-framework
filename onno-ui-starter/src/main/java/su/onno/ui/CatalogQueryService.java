@@ -50,6 +50,7 @@ public class CatalogQueryService {
     }
 
     /** The ref resolver bound to this service's policies. */
+    @SuppressWarnings("unused") // Public API available to consumer applications.
     public RefResolver refResolver() {
         return refResolver;
     }
@@ -123,6 +124,7 @@ public class CatalogQueryService {
      * the same column-keyed, ref-resolved shape {@link #get} returns for an existing record, so the
      * New form pre-fills declared defaults instead of opening blank (issue #181).
      */
+    @SuppressWarnings("unused") // Public API available to consumer applications.
     public Map<String, Object> newDraft(AccessSubject subject, CatalogDescriptor desc) {
         return newDraft(subject, desc, Map.of());
     }
@@ -234,12 +236,6 @@ public class CatalogQueryService {
         return window.decorated();
     }
 
-    /**
-     * Whether {@code column} is safe for the fast (index-only) keyset seek — i.e. the framework keeps
-     * it populated, so the seek never has to reason about NULLs. True for {@code _code} (always
-     * generated) and any {@code required} attribute; {@code _description} and optional attributes use
-     * the NULL-safe seek instead.
-     */
     /**
      * A cheap live-row estimate for the scroll-height hint, or {@code null} when none is available.
      * Uses PostgreSQL planner statistics ({@code pg_class.reltuples}) so it never scans the table;
@@ -376,6 +372,7 @@ public class CatalogQueryService {
     }
 
     /** Column names that may be sorted on: the system columns + every attribute column. */
+    @SuppressWarnings("unused") // Public API available to consumer applications.
     public Set<String> sortableColumns(CatalogDescriptor desc) {
         return surface(desc).sortableColumns();
     }
@@ -488,6 +485,14 @@ public class CatalogQueryService {
         );
         if (desc.hierarchical()) EntityQuerySupport.maskParents(jdbi, desc.tableName(), List.of(row), scope);
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), List.of(row), subject);
+        for (var section : desc.tabularSections()) {
+            List<Map<String, Object>> lines = jdbi.withHandle(h -> h.createQuery(
+                            "SELECT * FROM " + section.tableName()
+                                    + " WHERE _parent_id = :id ORDER BY _line_number")
+                    .bind("id", id).mapToMap().list());
+            EntityQuerySupport.decorateRows(refResolver, section.attributes(), lines, subject);
+            row.put(section.name(), lines);
+        }
         return row;
     }
 

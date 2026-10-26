@@ -52,8 +52,6 @@ public class MetadataScanner {
             throw new IllegalArgumentException(clazz.getName() + " must extend CatalogObject");
         }
 
-        rejectTabularSections(clazz, CatalogObject.class, "@Catalog");
-
         String logicalName = catalog.name();
         String displayTitle = catalog.title().isEmpty() ? logicalName : catalog.title();
         String storageKey = catalog.tableName().isEmpty() ? logicalName : catalog.tableName();
@@ -66,7 +64,7 @@ public class MetadataScanner {
         return new CatalogDescriptor(logicalName, displayTitle, tableName, clazz, codeLength,
                 catalog.hierarchical(), catalog.autoNumber(), catalog.codePrefix(),
                 catalog.context(), readRoles(clazz), writeRoles(clazz), attributes,
-                List.of(catalog.previousNames()));
+                List.of(catalog.previousNames()), scanTabularSections(clazz, storageKey));
     }
 
     public DocumentDescriptor scanDocument(Class<?> clazz) {
@@ -353,34 +351,11 @@ public class MetadataScanner {
         return result;
     }
 
-    /**
-     * Rejects {@code @TabularSection} fields on a kind of entity that has no tabular-section storage.
-     * Only documents generate child tables and round-trip their line items; a tabular section on a
-     * catalog (or any other entity) is scanned but never persisted, so the first write would fail at
-     * runtime with a bad-SQL-grammar insert against a table that was never created (issue #27). Fail
-     * fast at scan time with an actionable message instead.
-     */
-    private void rejectTabularSections(Class<?> clazz, Class<?> stopClass, String entityKind) {
-        Class<?> current = clazz;
-        while (current != null && current != stopClass && current != Object.class) {
-            for (Field field : current.getDeclaredFields()) {
-                if (field.isAnnotationPresent(TabularSection.class)) {
-                    throw new IllegalArgumentException(
-                            "@TabularSection is only supported on @Document, but field '"
-                                    + field.getName() + "' on " + entityKind + " " + clazz.getName()
-                                    + " declares one. Move the line items to a @Document, or model them"
-                                    + " as a separate @Catalog referenced by Ref<>.");
-                }
-            }
-            current = current.getSuperclass();
-        }
-    }
-
     private List<TabularSectionDescriptor> scanTabularSections(Class<?> clazz, String documentName) {
         List<TabularSectionDescriptor> result = new ArrayList<>();
         Class<?> current = clazz;
 
-        while (current != null && current != DocumentObject.class && current != Object.class) {
+        while (current != null && current != DocumentObject.class && current != CatalogObject.class && current != Object.class) {
             for (Field field : current.getDeclaredFields()) {
                 TabularSection ts = field.getAnnotation(TabularSection.class);
                 if (ts == null) {
@@ -399,7 +374,9 @@ public class MetadataScanner {
                 }
 
                 String sectionName = ts.name().isEmpty() ? field.getName() : ts.name();
-                String tableName = naming.tabularSectionTable(documentName, sectionName);
+                String tableName = CatalogObject.class.isAssignableFrom(clazz)
+                        ? naming.catalogTabularSectionTable(documentName, sectionName)
+                        : naming.tabularSectionTable(documentName, sectionName);
                 List<AttributeDescriptor> rowAttributes = scanAttributes(rowClass, TabularSectionRow.class);
 
                 result.add(new TabularSectionDescriptor(

@@ -46,6 +46,7 @@ public class SchemaGenerator {
         this.registry = registry;
     }
 
+    @SuppressWarnings("unused") // Public API used by external consumers.
     public static String generateSequenceTableDDL() {
         return DdlRenderer.createTable(SchemaModelBuilder.sequencesTable());
     }
@@ -120,6 +121,12 @@ public class SchemaGenerator {
             // comparison — as an index-only range scan in either direction.
             statements.add(index(catalog.tableName(), "_code", "_id"));
             statements.add(index(catalog.tableName(), "_description", "_id"));
+            for (TabularSectionDescriptor section : catalog.tabularSections()) {
+                statements.add(index(section.tableName(), "_parent_id"));
+                for (AttributeDescriptor attr : section.attributes()) {
+                    if (attr.isRef()) statements.add(index(section.tableName(), attr.columnName()));
+                }
+            }
             if (catalog.hierarchical()) {
                 statements.add(index(catalog.tableName(), "_parent"));
             }
@@ -331,6 +338,7 @@ public class SchemaGenerator {
         return sqlType(attr.javaType(), attr.length(), attr.precision(), attr.scale(), attr.columnName());
     }
 
+    @SuppressWarnings("unused") // Compatibility overload for external consumers.
     public static String sqlType(Class<?> javaType, int length, int precision, int scale) {
         return sqlType(javaType, length, precision, scale, null);
     }

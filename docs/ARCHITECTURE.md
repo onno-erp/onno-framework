@@ -87,7 +87,9 @@ In brief:
 - **`@Document`** — business events (Sales Order, Invoice). `numberPrefix`, `numberLength`,
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).
-- **`@TabularSection`** — line-item collections on a document; rows extend `TabularSectionRow`.
+- **`@TabularSection`** — owned line-item collections on a catalog or document; rows extend `TabularSectionRow`. Catalog child tables use
+  `catalog_<owner>_<section>`. Repositories, REST/MCP and the common form grid (including `rowField`
+  hints) support both owners; generic catalog writes save the header and rows atomically.
   Each section owns one distinct concrete row class because Spring Data JDBC maps that class to one
   child table; startup rejects reuse across documents or sections before scan order can select the
   wrong table. Common fields/behavior belong in a shared base row class.

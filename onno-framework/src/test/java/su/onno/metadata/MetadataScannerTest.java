@@ -17,6 +17,7 @@ class MetadataScannerTest {
 
     @su.onno.annotations.Catalog(name = "UnsafeAttributeCatalog")
     static class UnsafeAttributeName extends su.onno.model.CatalogObject {
+        @SuppressWarnings("unused") // Read by MetadataScanner through reflection.
         @su.onno.annotations.Attribute(name = "unsafe-column")
         private String value;
     }
@@ -91,14 +92,13 @@ class MetadataScannerTest {
     }
 
     @Test
-    void scan_catalogWithTabularSection_throws() {
-        // A @TabularSection on a @Catalog used to scan cleanly and only fail on the first write
-        // (no child table is generated). It must be rejected at scan time with a clear message.
-        assertThatThrownBy(() -> scanner.scan(
-                su.onno.fixtures.TestCatalogWithTabularSection.class))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("@TabularSection is only supported on @Document")
-                .hasMessageContaining("lines");
+    void scan_catalogWithTabularSection_findsOwnedLines() {
+        var descriptor = scanner.scan(su.onno.fixtures.TestCatalogWithTabularSection.class);
+        assertThat(descriptor.tabularSections()).hasSize(1);
+        var section = descriptor.tabularSections().getFirst();
+        assertThat(section.name()).isEqualTo("lines");
+        assertThat(section.tableName()).isEqualTo("catalog_test_catalog_with_lines_lines");
+        assertThat(section.rowClass()).isEqualTo(su.onno.fixtures.TestCatalogWithTabularSection.CatalogLine.class);
     }
 
     @Test

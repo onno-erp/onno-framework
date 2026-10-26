@@ -57,6 +57,9 @@ class TabularSectionRepositoryIT {
     private TestStarterInvoiceRepository repository;
 
     @Autowired
+    private su.onno.spring.fixtures.TestStarterProfileRepository profiles;
+
+    @Autowired
     private RefResolver refResolver;
 
     @Autowired
@@ -112,10 +115,34 @@ class TabularSectionRepositoryIT {
                 .containsExactly("Widget", "Gadget");
     }
 
+    @Test
+    void catalogWithLines_roundTripsReplacesAndClearsThroughRepository() {
+        var profile = new su.onno.spring.fixtures.TestStarterProfile();
+        profile.setCode("PROFILE-1");
+        var filter = new su.onno.spring.fixtures.TestStarterProfile.Filter();
+        filter.setProperty("event");
+        profile.getFilters().add(filter);
+        var saved = profiles.save(profile);
+        UUID profileId = java.util.Objects.requireNonNull(saved.getId());
+        assertThat(filter.getId()).isNotNull();
+        var loaded = profiles.findById(profileId).orElseThrow();
+        assertThat(loaded.getFilters()).hasSize(1);
+        assertThat(loaded.getFilters().getFirst().getProperty()).isEqualTo("event");
+        assertThat(loaded.getFilters().getFirst().getLineNumber()).isEqualTo(1);
+        loaded.getFilters().getFirst().setProperty("duration");
+        profiles.save(loaded);
+        var viaRef = refResolver.resolveOrThrow(Ref.of(su.onno.spring.fixtures.TestStarterProfile.class, profileId));
+        assertThat(viaRef.getFilters().getFirst().getProperty()).isEqualTo("duration");
+        viaRef.getFilters().clear();
+        profiles.save(viaRef);
+        assertThat(profiles.findById(profileId).orElseThrow().getFilters()).isEmpty();
+    }
+
     private static MetadataRegistry buildRegistry() {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerDocument(scanner.scanDocument(TestStarterInvoice.class));
+        registry.registerCatalog(scanner.scan(su.onno.spring.fixtures.TestStarterProfile.class));
         return registry;
     }
 
@@ -153,13 +180,17 @@ class TabularSectionRepositoryIT {
                     tabularTables.put(ts.rowClass(), ts.tableName());
                 }
             }
+            for (var catalog : registry.allCatalogs()) {
+                for (var section : catalog.tabularSections()) tabularTables.put(section.rowClass(), section.tableName());
+            }
             return new OnnoNamingStrategy(tabularTables);
         }
 
         @Override
+        @org.springframework.lang.NonNull
         public JdbcMappingContext jdbcMappingContext(Optional<NamingStrategy> namingStrategy,
-                                                     JdbcCustomConversions customConversions,
-                                                     RelationalManagedTypes jdbcManagedTypes) {
+                                                     @org.springframework.lang.NonNull JdbcCustomConversions customConversions,
+                                                     @org.springframework.lang.NonNull RelationalManagedTypes jdbcManagedTypes) {
             OnnoMappingContext context = new OnnoMappingContext(namingStrategy.orElseGet(OnnoNamingStrategy::new));
             context.setSimpleTypeHolder(customConversions.getSimpleTypeHolder());
             return context;
