@@ -540,6 +540,9 @@ public final class UiMessages {
         d.put("form.reload", "Reload");
         d.put("form.tabularEmptyHint", "Add the first row to start filling this section.");
         d.put("ref.new", "New {name}");
+        d.put("ref.recent", "Recent");
+        d.put("ref.open", "Open record");
+        d.put("ref.clearValue", "Clear value");
         d.put("relatedList.saveFirstManage", "Save this record first to manage {name}.");
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");
 

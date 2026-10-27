@@ -57,6 +57,16 @@ export interface AttributeMeta {
   refOptionDecorator?: string;
   /** Disable values selected in sibling rows of this tabular section. */
   uniqueWithinSection?: boolean;
+  /**
+   * Show the picker's "open selected record" button (resolved server-side from
+   * f.refField(...).openButton(bool); on by default; set only when isRef). #409
+   */
+  refOpenButton?: boolean;
+  /**
+   * Show the picker's clear button (resolved server-side from .clearButton(bool); never true for
+   * a required ref; set only when isRef). #409
+   */
+  refClearButton?: boolean;
   isEnum: boolean;
   /** Display title of the enumeration type (from @Enumeration.title). */
   enumTitle?: string;

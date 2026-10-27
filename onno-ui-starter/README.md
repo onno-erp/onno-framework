@@ -701,6 +701,31 @@ f.refField(Order::getCustomer).refSecondary(Customer::getPhone);
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
 
+**Recent picks (#409).** The server remembers which records each user picked per target entity
+(`POST /api/ref-options/recent`, body `{targetKind, targetName, id}`, `204`; the framework-owned
+`onno_ref_recent` table keeps the 20 newest per user and target). With an empty query
+`POST /api/ref-options/search` returns up to five of them first, flagged `_recent: true`, followed by
+the ordinary options without duplicates and still capped by `limit` (`"recent": false` in the body
+turns the section off). Remembered ids are only hints: they are re-read through the same search,
+so a record that was deleted, left the caller's record scope or no longer matches the field's
+`refFilter` is not offered. A pick of a record the caller cannot see is silently not remembered,
+and the endpoint answers `204` either way.
+
+In the UI the recent picks sit under a **Recent** label at the top of the options; picking a record
+(or creating one through "+ New") remembers it. A filled picker on an entity form also shows two
+inline buttons, in the header and in tabular-section rows alike: **open** the selected record
+(dispatches `onno://{kind}/{name}/{id}` through `onno:action`, like "+ New") and **clear** the value.
+Both are on by default; turn them off per field:
+
+```java
+f.refField(Order::getCustomer).openButton(false);
+f.rowRefField(Order::getItems, OrderLine::getBook).clearButton(false);
+```
+
+A required ref never shows the clear button, even with `clearButton(true)`. The metadata carries the
+resolved `refOpenButton`/`refClearButton` booleans. Pickers in action dialogs and related-list panels
+show recent picks too but no open button, so a click there never leaves the dialog.
+
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
 attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list
@@ -1060,7 +1085,7 @@ still shows its single value.
 | `currencyField` | list, calendar | Per-row column holding a currency code (overridden by `currency`). |
 | `kind` | chart | `bar`/`line`/`area`/`donut`/`pie`. Unknown kinds warn and fall back to `bar`. For `stat`/`sparkline` it picks the sparkline shape (`area` default, or `line`). |
 | `groupBy`, `groupByDate`, `bucketMode` | chart, stat, sparkline | Bucket field, `minute`/`hour`/`day`/`week`/`month`, and `auto` (default) versus `fixed`. Date buckets are chronological and empty periods zero-fill, capped at 1000; pies/donuts drop zero periods. Typed `.time(field, TimeBucket.WEEK)` selects fixed while `.time(field)` selects auto. |
-| `presets`, `default` | timeRange | The shared picker's quick-picks and starting window. `presets` is a comma list of duration ids (`<n><unit>` where `s`/`m`/`h`/`d`/`w`/`M`/`y` are second…year — note `m`=minute, `M`=month — plus `all`), e.g. `15m,1h,24h,7d,30d,90d,1y,all`. `default` names one of them (e.g. `30d`). Omit both for the built-in ladder defaulting to the last 30 days; a user's saved selection always wins over `default`. The picker footer also shows the automatic chart interval (`Auto (1 min)`, etc.) and lets the viewer override it globally for auto-bucketed charts; charts authored with `bucketMode=fixed` remain fixed. |
+| `presets`, `default`, `id` | timeRange | The shared picker's quick-picks, starting window, and persistence scope. `presets` is a comma list of duration ids (`<n><unit>` where `s`/`m`/`h`/`d`/`w`/`M`/`y` are second…year — note `m`=minute, `M`=month — plus `all`), e.g. `15m,1h,24h,7d,30d,90d,1y,all`. `default` names one of them (e.g. `30d`). Omit both for the built-in ladder defaulting to the last 30 days. The viewer's selection is saved per picker: under `id` when set, else the page route, so each dashboard remembers its own window and a `1h` picked on a logs board never lands on a `30d,90d,1y` one; give two pages the same `id` to share a selection. A saved selection wins over `default` while this picker's `presets` still offer it (an absolute window always wins). The picker footer also shows the automatic chart interval (`Auto (1 min)`, etc.) and lets the viewer override it globally for auto-bucketed charts; charts authored with `bucketMode=fixed` remain fixed. |
 | `seriesBy` | chart | Field that splits the chart into one colored series per distinct value (multi-series `bar`/`line`/`area`). Ignored by `pie`/`donut`. Series rank by total; the tail beyond the palette folds into "Other". |
 | `stacked` | chart | `true` to stack a multi-series `bar`/`area`. |
 | `colors` | chart, stat, sparkline, gauge | Override series colors: a comma list of aliases (`primary`/`success`/`warning`/`destructive`/`muted`), palette slots (`chart-1`..`chart-8`), or raw CSS colors (`#8b5cf6`, `hsl(...)`). Applied slot-by-slot; unset slots fall back to the theme palette (`--chart-N`). |

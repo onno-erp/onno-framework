@@ -386,7 +386,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Area | Endpoints (served by) |
 | --- | --- |
 | Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
-| Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
+| Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; an empty query leads with up to 5 of the caller's recent picks (`_recent: true`, opt out with `recent: false`), re-read through the same search so deletion mark, record scope and `refFilter` still apply; `POST /api/ref-options/recent` - remember a pick `{targetKind, targetName, id}` per user and target in the framework-owned `onno_ref_recent` table (20 newest kept; `204` whether or not the record is visible, so it is no existence oracle; #409); `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
 | Documents | `GET /api/documents/{name}/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
 | List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — the only catalog/document collection read: pass `?cursor=&limit=` and read `{rows, nextCursor, hasMore, prevCursor, hasPrevious}` (keyset pagination, constant-time at any depth, no skip/dup on shifting data); `?focus=<id>` returns the window containing that record (echoed as `focus`; a record the query cannot see falls back to the first window) and `?before=<prevCursor>` the window above one; `?count=exact\|estimate` adds a total. `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — register data for the virtualized register surface, same cursor envelope and declarative filter params (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's columns); movement rows carry a localized `_movement_type_display` + `_movement_type_color` (ui-starter) |
@@ -490,7 +490,11 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   ${supplier}")` narrows the picker server-side to records matching the form's current values —
   while a referenced field is empty the picker is unfiltered, and changing it clears the dependent
   field. `refOptions(Decorator.class)` adds live context-aware badges, disabled reasons, and filtering;
-  `uniqueWithinSection()` prevents sibling duplicate picks. `EntityConfigBuilder.validation(...)`
+  `uniqueWithinSection()` prevents sibling duplicate picks. `openButton(bool)` / `clearButton(bool)`
+  show or hide the picker's "open selected record" and clear buttons (both on by default; the
+  metadata carries the resolved `refOpenButton`/`refClearButton`, and a required ref is never
+  clearable); on an empty query the picker leads with the user's recent picks (#409).
+  `EntityConfigBuilder.validation(...)`
   registers a Spring `FormValidator` with explicit dependency paths and debounce for advisory
   field/form errors, warnings, and info; save/post invariants remain authoritative business rules.
   **An entity surface is only *served* if it has an `EntityView` for the active profile —
@@ -565,6 +569,10 @@ New and Duplicate forms do not render them because they have no saved record ide
 
 `onno-auth-starter` contributes the `SecurityFilterChain` and picks a mode from `onno.auth.mode`:
 
+In every mode, framework bootstrap paths (including `/api/config` and `/api/auth/login`) remain
+public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
+entries are combined with them and can no longer remove mandatory framework paths.
+
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
@@ -635,9 +643,13 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   `post_document`/`unpost_document` (gated by `onno.mcp.posting-enabled`). Applications add
   authenticated, role-scoped tools with `@McpTool` methods; `McpToolProvider` is the lower-level
   SDK extension point. Custom tools compose with generated tools and duplicate names fail startup.
-  Catalog/document lists are keyset-paged. Register reads retain bounded one-call results
-  (`register_movements`: 1,000; `register_balance`: 5,000) and return an MCP error when more rows
-  match, so an agent cannot mistake a capped slice for the complete register.
+  Catalog/document lists are keyset-paged. `register_movements` returns a list window through the
+  shared `RegisterQueryService.movementsWindow`: optional `limit` (1–1,000; default 1,000), `offset`
+  (default 0), `sort` (movement column; default `_period`), `descending` (default true), and
+  `filters` (dimension field name → value), alongside the existing inclusive `from`/`to` range.
+  Advance offset by limit until a short or empty page is returned. Existing calls retain their
+  list response and newest-first defaults; matches beyond 1,000 no longer cause an overflow error.
+  `register_balance` still returns an MCP error when more than 5,000 rows match.
   This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes

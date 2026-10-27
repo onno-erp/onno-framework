@@ -1,5 +1,5 @@
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { cn, enumPillStyle, rowStyleClass } from "@/lib/utils";
 import { applyFormat } from "@/lib/cell-format";
@@ -57,7 +57,9 @@ export function GroupedList({
   openable,
   canWrite,
   surfaceMode,
+  fill,
   scrollCap,
+  scrollRef,
   selected,
   setSelected,
   clearSelection,
@@ -81,7 +83,9 @@ export function GroupedList({
   /** Viewer's RBAC write access — stamped onto rows so the shell's fallback row menu hides write actions. */
   canWrite: boolean;
   surfaceMode: boolean;
+  fill: boolean;
   scrollCap: number;
+  scrollRef: Ref<HTMLDivElement>;
   /** Batch selection, shared with the island so the toolbar chip / batch menu / ⌘-shortcuts see it. */
   selectionCheckboxes?: boolean;
   selected: Set<string>;
@@ -113,7 +117,7 @@ export function GroupedList({
       .then((data: { groups: GroupHeader[]; capped: boolean }) => {
         if (!alive) return;
         setGroups(data.groups ?? []);
-        setCapped(!!data.capped);
+        setCapped(data.capped);
         // ListSpec.groupsExpanded: these headers are a fresh set, so the bands are due to be
         // opened once. The effect below owns that (it needs loadGroupRows, declared later), and
         // the flag keeps a live refresh from re-opening a band the viewer has since collapsed.
@@ -176,7 +180,7 @@ export function GroupedList({
               [index]: {
                 rows: cursor ? [...cur.rows, ...(data.rows ?? [])] : data.rows ?? [],
                 cursor: data.nextCursor ?? null,
-                hasMore: !!data.hasMore,
+                hasMore: data.hasMore,
                 loading: false,
               },
             };
@@ -233,7 +237,7 @@ export function GroupedList({
         }
         const next: Record<number, GroupRows> = {};
         setGroups(fresh);
-        setCapped(!!data.capped);
+        setCapped(data.capped);
         fresh.forEach((g, i) => {
           if (!oldRowsByLabel.has(g.label) || g.expand.length === 0) return;
           next[i] = { rows: oldRowsByLabel.get(g.label)!, cursor: null, hasMore: true, loading: true };
@@ -291,15 +295,18 @@ export function GroupedList({
       className={cn(
         // On a route surface the card sizes to its groups and only shrinks (min-h-0, no grow)
         // when they overflow — a short list ends at its last row, not the window bottom.
+        // Explicit fill lists instead grow to consume the remaining surface height.
         // The card chrome sits here, not on the scroller below: a classic, space-occupying
         // scrollbar is painted in the scroller's own gutter and `border-radius` on that same
         // element does not clip it, so the bar squares off the corners it runs past. Clipping
         // takes an ancestor, hence rounded + overflow-hidden here and a plain scroller inside.
         "flex flex-col overflow-hidden rounded-card border border-border bg-card",
-        surfaceMode && "min-h-0"
+        surfaceMode && "min-h-0",
+        fill && "flex-1"
       )}
     >
       <div
+        ref={scrollRef}
         className={cn(
           "overflow-auto overscroll-contain",
           surfaceMode && "min-h-0 flex-1"

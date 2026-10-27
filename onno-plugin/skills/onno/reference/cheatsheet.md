@@ -469,7 +469,9 @@ because they are not Java field references.
     `hint(String)`, `label(String)`, `refSecondary(targetField)` (shows a second attribute under each
     Ref-picker option to disambiguate same-named records, #185), `refOptions(Decorator.class)`
     (live form/row/id badges, colors, disable reasons, and `filteredOut()` filtering),
-    `uniqueWithinSection()` (sibling-row uniqueness), `hideInList/Form/Detail()`,
+    `uniqueWithinSection()` (sibling-row uniqueness), `openButton(bool)` / `clearButton(bool)`
+    (Ref picker's open-record and clear buttons, both on by default; a required ref is never
+    clearable; #409), `hideInList/Form/Detail()`,
     `visibleInList/Form/Detail(bool)`, chain `.field(next)`. `label(String)` localizes a field's
     form/detail/list label — including the built-in system columns (`code`/`description`,
     `number`/`date`/`posted`) that have no other DSL label path (#154), e.g. `.field("posted").label("Статус")`.

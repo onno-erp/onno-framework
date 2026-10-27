@@ -14,6 +14,7 @@ import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentCommandService;
 import su.onno.ui.DocumentQueryService;
 import su.onno.ui.KeysetPage;
+import su.onno.ui.ListFilter;
 import su.onno.ui.RegisterQueryService;
 import su.onno.ui.UiAccessService;
 import su.onno.ui.UiProperties;
@@ -63,7 +64,7 @@ public class MetadataToolFactory implements McpToolProvider {
                                DocumentCommandService documentCommands, OnnoMcpProperties properties,
                                McpJsonMapper json) {
         this(registry, null, access, catalogQuery, documentQuery, registerQuery,
-                catalogCommands, documentCommands, properties, new UiProperties(), json);
+                catalogCommands, documentCommands, properties, json);
     }
 
     public MetadataToolFactory(
@@ -148,7 +149,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    return ok(catalogQuery.get(subject(exchange), desc, requireUuid(args, "id")));
+                    return ok(catalogQuery.get(subject(exchange), desc, requireId(args)));
                 }));
 
         tools.add(readTool("list_documents",
@@ -181,7 +182,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 (exchange, args) -> {
                     DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    return ok(documentQuery.get(subject(exchange), desc, requireUuid(args, "id")));
+                    return ok(documentQuery.get(subject(exchange), desc, requireId(args)));
                 }));
 
         tools.add(readTool("register_balance",
@@ -206,23 +207,42 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_movements",
                 "Get accumulation register movements",
-                "Returns up to 1000 active movements (postings) for an accumulation register, optionally "
-                        + "filtered by an inclusive period range (ISO-8601), newest first. If more rows "
-                        + "match, the call fails instead of returning an incomplete result; narrow from/to.",
+                "Returns one page of active register movements, optionally filtered by an inclusive "
+                        + "period range (ISO-8601) and dimension values. Defaults to 1000 rows, newest first. "
+                        + "Increase offset by limit to read the next page; an undersized page ends the result.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
                         + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start period (ISO-8601).\"},"
-                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"}}}",
+                        + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000,\"description\":\"Page size (default 1000).\"},"
+                        + "\"offset\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Rows to skip (default 0).\"},"
+                        + "\"sort\":{\"type\":\"string\",\"description\":\"Movement column to sort by (default _period).\"},"
+                        + "\"descending\":{\"type\":\"boolean\",\"description\":\"Descending order (default true).\"},"
+                        + "\"filters\":{\"type\":\"object\",\"description\":\"Dimension fieldName -> value; references/enums use id strings.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    RegisterQueryService.BoundedRows result = registerQuery.movementsBounded(subject(exchange),
-                            desc, optString(args, "from"), optString(args, "to"));
-                    if (result.truncated()) {
-                        return error("Register movements exceed the 1000-row safety limit; "
-                                + "narrow the from/to period and retry.");
+                    Integer limit = optInt(args, "limit");
+                    Integer offset = optInt(args, "offset");
+                    if (limit != null && (limit < 1 || limit > 1000)) {
+                        throw new IllegalArgumentException("limit must be between 1 and 1000");
                     }
-                    return ok(result.rows());
+                    if (offset != null && offset < 0) {
+                        throw new IllegalArgumentException("offset must be non-negative");
+                    }
+                    List<String> equality = new ArrayList<>();
+                    stringMap(args.get("filters")).forEach((field, value) -> {
+                        AttributeDescriptor dimension = desc.dimensions().stream()
+                                .filter(d -> d.fieldName().equals(field)).findFirst()
+                                .orElseThrow(() -> new IllegalArgumentException("Unknown dimension: " + field));
+                        equality.add(dimension.columnName() + "," + value);
+                    });
+                    ListFilter.Result filters = ListFilter.parse(equality, List.of(), List.of(),
+                            registerQuery.movementFilterColumns(desc));
+                    return ok(registerQuery.movementsWindow(subject(exchange), desc,
+                            optString(args, "from"), optString(args, "to"), filters,
+                            optString(args, "sort"), !Boolean.FALSE.equals(args.get("descending")),
+                            offset == null ? 0 : offset, limit == null ? 1000 : limit));
                 }));
 
         if (properties.isWritesEnabled() && !uiProperties.isReadOnly()) {
@@ -243,7 +263,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Catalog logical name (see describe_metadata).", true),
                     (exchange, args) -> {
                         CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                        return ok(catalogCommands.update(desc, requireUuid(args, "id"), values(args), subject(exchange)));
+                        return ok(catalogCommands.update(desc, requireId(args), values(args), subject(exchange)));
                     }));
 
             tools.add(destructiveTool("delete_catalog",
@@ -252,7 +272,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Catalog logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         CatalogDescriptor desc = catalogQuery.require(requireString(args, "name"));
-                        UUID id = requireUuid(args, "id");
+                        UUID id = requireId(args);
                         catalogCommands.delete(desc, id, subject(exchange));
                         return ok(Map.of("deleted", true, "entityType", "catalog",
                                 "name", desc.logicalName(), "id", id.toString()));
@@ -276,7 +296,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     valuesSchema("Document logical name (see describe_metadata).", true),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.update(desc, requireUuid(args, "id"), values(args), subject(exchange)));
+                        return ok(documentCommands.update(desc, requireId(args), values(args), subject(exchange)));
                     }));
 
             tools.add(destructiveTool("delete_document",
@@ -286,7 +306,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        UUID id = requireUuid(args, "id");
+                        UUID id = requireId(args);
                         documentCommands.delete(desc, id, subject(exchange));
                         return ok(Map.of("deleted", true, "entityType", "document",
                                 "name", desc.logicalName(), "id", id.toString()));
@@ -301,7 +321,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.postingPreview(desc, requireUuid(args, "id"), subject(exchange)));
+                        return ok(documentCommands.postingPreview(desc, requireId(args), subject(exchange)));
                     }));
 
         }
@@ -314,7 +334,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.post(desc, requireUuid(args, "id"), subject(exchange)));
+                        return ok(documentCommands.post(desc, requireId(args), subject(exchange)));
                     }));
 
             tools.add(writeTool("unpost_document",
@@ -323,7 +343,7 @@ public class MetadataToolFactory implements McpToolProvider {
                     idSchema("Document logical name (see describe_metadata)."),
                     (exchange, args) -> {
                         DocumentDescriptor desc = documentQuery.require(requireString(args, "name"));
-                        return ok(documentCommands.unpost(desc, requireUuid(args, "id"), subject(exchange)));
+                        return ok(documentCommands.unpost(desc, requireId(args), subject(exchange)));
                     }));
         }
 
@@ -548,12 +568,12 @@ public class MetadataToolFactory implements McpToolProvider {
         return Integer.parseInt(v.toString());
     }
 
-    private static UUID requireUuid(Map<String, Object> args, String key) {
-        String v = requireString(args, key);
+    private static UUID requireId(Map<String, Object> args) {
+        String v = requireString(args, "id");
         try {
             return UUID.fromString(v);
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Argument '" + key + "' must be a UUID: " + v);
+            throw new IllegalArgumentException("Argument 'id' must be a UUID: " + v);
         }
     }
 
@@ -570,7 +590,6 @@ public class MetadataToolFactory implements McpToolProvider {
         return out;
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, String> stringMap(Object value) {
         Map<String, String> out = new LinkedHashMap<>();
         if (value instanceof Map<?, ?> m) {

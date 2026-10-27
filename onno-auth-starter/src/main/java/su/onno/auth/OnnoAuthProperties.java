@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "onno.auth")
@@ -46,15 +47,19 @@ public class OnnoAuthProperties {
      * Public API/config endpoints permitted without authentication so the login screen can
      * render and authenticate. The SPA shell itself (everything outside {@code /api/**}) is
      * public by default; only {@code /api/**} requires a session.
-     *
-     * NOTE: setting {@code onno.auth.public-paths} REPLACES this list — it does not append to it. If you
-     * set your own value to expose one extra path, repeat every default or you will silently drop
-     * {@code /api/config}, {@code /api/auth/login}, {@code /api/auth/me}, … and the login screen 401s.
+     * <p>
+     * Legacy configuration: custom values are combined with the mandatory framework paths.
+     * Prefer {@code onno.auth.additional-public-paths} for new configurations.
      * The defaults are: {@code /error}, {@code /api/theme}, {@code /api/config}, {@code /api/branding},
      * {@code /api/auth/login}, {@code /api/auth/me}, {@code /api/auth/csrf}, {@code /api/divkit/login},
      * {@code /api/desktop/ready}, {@code /api/desktop/manifest}.
      */
-    private List<String> publicPaths = new ArrayList<>(List.of(
+    private List<String> publicPaths = new ArrayList<>(FRAMEWORK_PUBLIC_PATHS);
+
+    /** Additional public Ant path patterns, combined with the mandatory framework paths and legacy public-paths. */
+    private List<String> additionalPublicPaths = new ArrayList<>();
+
+    private static final List<String> FRAMEWORK_PUBLIC_PATHS = List.of(
             "/error",
             "/api/theme",
             "/api/config",
@@ -76,7 +81,7 @@ public class OnnoAuthProperties {
             // before any user can log in, so they must be reachable unauthenticated;
             // both are non-sensitive (readiness probe + window geometry/title).
             "/api/desktop/ready",
-            "/api/desktop/manifest"));
+            "/api/desktop/manifest");
 
     /**
      * Request paths exempted from CSRF protection in the cookie-based modes
@@ -147,6 +152,22 @@ public class OnnoAuthProperties {
 
     public void setPublicPaths(List<String> publicPaths) {
         this.publicPaths = publicPaths;
+    }
+
+    public List<String> getAdditionalPublicPaths() {
+        return additionalPublicPaths;
+    }
+
+    public void setAdditionalPublicPaths(List<String> additionalPublicPaths) {
+        this.additionalPublicPaths = additionalPublicPaths;
+    }
+
+    /** Public paths used by every authentication mode; framework bootstrap paths cannot be removed. */
+    public List<String> effectivePublicPaths() {
+        var paths = new LinkedHashSet<>(FRAMEWORK_PUBLIC_PATHS);
+        paths.addAll(publicPaths);
+        paths.addAll(additionalPublicPaths);
+        return List.copyOf(paths);
     }
 
     public List<String> getCsrfIgnoredPaths() {
@@ -628,6 +649,7 @@ public class OnnoAuthProperties {
         /** The shape of the claim's value. */
         private Shape shape = Shape.ARRAY;
 
+        @SuppressWarnings("unused") // Used reflectively by Spring Boot configuration binding.
         public RoleSource() {
         }
 

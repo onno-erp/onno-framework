@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronsUpDown, Plus, Search, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronsUpDown, ExternalLink, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
 import { logicalEntityKey } from "@/lib/entity-keys";
@@ -29,8 +29,18 @@ interface RefSelectProps {
    */
   filter?: string;
   value?: string;
-  /** Whether an existing value may be reset to null. Required fields leave this false. */
+  /**
+   * Whether an existing value may be reset to null: an inline clear button in the field plus the
+   * "Clear selection" row in the options. Required fields leave this false; entity forms pass the
+   * resolved `refClearButton` metadata (#409).
+   */
   clearable?: boolean;
+  /**
+   * Show an inline button that opens the selected record (`onno://{kind}/{name}/{id}`). Entity
+   * forms pass the resolved `refOpenButton` metadata (#409); other hosts (action dialogs, related
+   * lists) leave it off so a click never navigates away from them.
+   */
+  openButton?: boolean;
   /** Application resolver class emitted by .refOptions(...). */
   optionDecorator?: string;
   /** Live form/row context sent only when optionDecorator is configured. */
@@ -76,6 +86,7 @@ export function RefSelect({
   filter,
   value,
   clearable = false,
+  openButton = false,
   optionDecorator,
   optionContext,
   excludedIds = [],
@@ -107,12 +118,15 @@ export function RefSelect({
       const id = claimQuickCreated(kind, name, requestTokenRef.current, !cur.value);
       // Claims are idempotent (the slot lives until its TTL so a remounted picker can re-claim
       // a value the remount wiped) — only fire onChange when it actually changes the field.
-      if (id && id !== cur.value) cur.onChange(id);
+      if (id && id !== cur.value) {
+        cur.onChange(id);
+        rememberPick(isDocument, targetName, id);
+      }
     };
     claim(); // remount case: the result may already be waiting
     window.addEventListener(QUICK_CREATED_EVENT, claim);
     return () => window.removeEventListener(QUICK_CREATED_EVENT, claim);
-  }, [kind, name]);
+  }, [kind, name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Resolve the current value's label (it may not be in the result page).
   useEffect(() => {
@@ -166,6 +180,7 @@ export function RefSelect({
     setSelected(item);
     onChange(optionId(item));
     setOpen(false);
+    rememberPick(isDocument, targetName, optionId(item));
   };
 
   const addNew = () => {
@@ -184,20 +199,63 @@ export function RefSelect({
     setOpen(false);
   };
 
+  // Same hand-off the "+ New" row uses: the host routes onno:// links (a side pane in the islands
+  // layout, the record route elsewhere).
+  const openSelected = () => {
+    if (!value) return;
+    window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/${value}` }));
+  };
+
+  const showOpen = openButton && !!value;
+  const showClear = clearable && !!value;
+  const inlineButtons = (showOpen ? 1 : 0) + (showClear ? 1 : 0);
+
   const trigger = (
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className={cn(selectTriggerClassName, "min-w-0 gap-2 overflow-hidden transition-colors hover:bg-accent")}
+      // text-left: a button centers text by default, and the selected row stretches full width.
+      className={cn(selectTriggerClassName, "min-w-0 gap-2 overflow-hidden text-left transition-colors hover:bg-accent")}
     >
       {selected ? (
         <RefRow item={selected} />
       ) : (
         <span className="min-w-0 truncate text-muted-foreground">{t("form.select", { name: targetName })}</span>
       )}
+      {/* Keeps the label clear of the inline buttons overlaid just left of the chevron. */}
+      {inlineButtons > 0 ? (
+        <span data-onno-inline-gap="" aria-hidden="true" className={cn("shrink-0", inlineButtons === 1 ? "w-6" : "w-[50px]")} />
+      ) : null}
       <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
     </button>
   );
+
+  // Open / clear sit beside the trigger rather than inside it (a button may not contain buttons),
+  // overlaid just left of the chevron so the field keeps one control's footprint. The trigger
+  // spans the whole field, so the popover still anchors to (and sizes from) the full width.
+  const overlay = inlineButtons === 0 ? null : (
+    <span className="absolute inset-y-0 right-8 flex items-center gap-0.5">
+      {showOpen ? (
+        <InlineButton label={t("ref.open")} onClick={openSelected}>
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </InlineButton>
+      ) : null}
+      {showClear ? (
+        <InlineButton label={t("ref.clearValue")} onClick={clear}>
+          <X className="size-3.5" aria-hidden="true" />
+        </InlineButton>
+      ) : null}
+    </span>
+  );
+  const withOverlay = (control: ReactNode) =>
+    overlay ? (
+      <div className="relative min-w-0">
+        {control}
+        {overlay}
+      </div>
+    ) : (
+      control
+    );
 
   const content = (
     <RefSelectOptions
@@ -218,7 +276,7 @@ export function RefSelect({
   if (touchLayout) {
     return (
       <>
-        {trigger}
+        {withOverlay(trigger)}
         <FacetSheet open={open} label={t("form.select", { name: targetName })} onClose={() => setOpen(false)}>
           {content}
         </FacetSheet>
@@ -228,9 +286,7 @@ export function RefSelect({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        {trigger}
-      </PopoverTrigger>
+      {withOverlay(<PopoverTrigger asChild>{trigger}</PopoverTrigger>)}
       <PopoverContent
         align="start"
         // z-[70] clears the action-form modal (z-[60]) so the picker floats above it, not behind;
@@ -297,8 +353,13 @@ function RefSelectOptions({
             {loading ? t("loading.searching") : t("empty.noMatches")}
           </div>
         ) : (
-          items.map((item) => {
+          items.map((item, index) => {
             const id = optionId(item);
+            // The server leads an empty-query search with the user's recent picks (#409): head
+            // them with a "Recent" label and rule them off from the ordinary options.
+            const recent = item._recent === true;
+            const firstRecent = recent && index === 0;
+            const firstAfterRecent = !recent && index > 0 && items[index - 1]._recent === true;
             const excluded = excludedIds.includes(id);
             const disabled = excluded || item._optionDisabled === true;
             const reason = excluded
@@ -308,9 +369,15 @@ function RefSelectOptions({
               ? t("ref.alreadySelected")
               : String(item._optionBadge ?? "");
             return (
+              <div key={id} className={cn(firstAfterRecent && "mt-1 border-t pt-1")}>
+              {firstRecent ? (
+                <div className="px-3 pb-1 pt-1.5 text-xs font-medium text-muted-foreground">
+                  {t("ref.recent")}
+                </div>
+              ) : null}
               <button
-                key={id}
                 type="button"
+                data-onno-recent={recent ? "" : undefined}
                 disabled={disabled}
                 title={disabled && reason ? reason : undefined}
                 onClick={() => onPick(item)}
@@ -329,12 +396,44 @@ function RefSelectOptions({
                   reason={reason}
                 />
               </button>
+              </div>
             );
           })
         )}
       </div>
     </>
   );
+}
+
+/** A small icon button overlaid on the picker field (open the record, clear the value). */
+function InlineButton({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className="flex size-6 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Tell the server this record was just picked so it leads the next empty-query search (#409).
+ * Fire-and-forget: a failed remember must never disturb the pick itself.
+ */
+function rememberPick(isDocument: boolean, targetName: string, id: string) {
+  if (!id) return;
+  try {
+    api.rememberRefPick({ targetKind: isDocument ? "document" : "catalog", targetName, id }).catch(() => {});
+  } catch {
+    // A synchronous failure (e.g. an API client stub without this call) is ignored the same way.
+  }
 }
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {

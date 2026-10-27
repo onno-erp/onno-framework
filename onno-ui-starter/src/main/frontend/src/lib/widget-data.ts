@@ -330,6 +330,13 @@ export function applyScale(data: SeriesData, mode: ScaleMode): SeriesData {
 /** The single-series sentinel key used when `seriesBy` is unset. */
 export const SINGLE_SERIES = "value";
 
+// Register turnover rows keep the stored dimension value alongside its resolved label. Prefer
+// that label for categorical buckets/series, while retaining the raw value as a fallback.
+function dimensionDisplayValue(row: EntityRecord, field: string): unknown {
+  const display = row[`${field}_display`];
+  return display == null || display === "" ? row[field] : display;
+}
+
 // One accumulating x bucket: its sort/display identity plus a per-series running sum.
 type BucketAcc = { sortKey: string; label: string; iso: string; series: Map<string, number> };
 
@@ -395,13 +402,14 @@ export function buildSeries(rows: EntityRecord[], spec: SeriesSpec): SeriesData 
   let total = 0;
 
   for (const row of rows) {
-    const { key, label, iso } = bucketKey(row[spec.groupBy], spec.groupByDate);
+    const groupValue = spec.groupByDate ? row[spec.groupBy] : dimensionDisplayValue(row, spec.groupBy);
+    const { key, label, iso } = bucketKey(groupValue, spec.groupByDate);
     let bucket = buckets.get(key);
     if (!bucket) {
       bucket = { sortKey: key, label, iso, series: new Map() };
       buckets.set(key, bucket);
     }
-    const seriesKey = spec.seriesBy ? bucketLabel(row[spec.seriesBy]) : SINGLE_SERIES;
+    const seriesKey = spec.seriesBy ? bucketLabel(dimensionDisplayValue(row, spec.seriesBy)) : SINGLE_SERIES;
     const inc =
       spec.metric === "count" ? 1 : spec.metricField ? toNumber(row[spec.metricField]) ?? 0 : 0;
     bucket.series.set(seriesKey, (bucket.series.get(seriesKey) ?? 0) + inc);

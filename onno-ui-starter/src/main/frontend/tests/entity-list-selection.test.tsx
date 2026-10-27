@@ -7,7 +7,7 @@ import { EntityListWidget, type ListDescriptor } from "@/components/entity-list-
 vi.mock("@/lib/presence-store", () => ({ useViewersById: () => new Map() }));
 vi.mock("@/components/list-map-view", () => ({ ListMapView: () => null }));
 vi.mock("maplibre-gl", () => ({ default: {} }));
-class ResizeObserverMock { observe() {} unobserve() {} disconnect() {} }
+class ResizeObserverMock { observe = vi.fn(); unobserve() {} disconnect() {} }
 const rows = [{ id: "one", description: "First" }, { id: "two", description: "Second" }];
 const response = (body: unknown) => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
 function list(extra: Partial<ListDescriptor> = {}): ListDescriptor {
@@ -29,6 +29,32 @@ describe("optional list selection checkboxes", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+  it("fills the grouped card only for fill lists and uses its scroller", async () => {
+    const observe = vi.fn();
+    vi.stubGlobal("ResizeObserver", class extends ResizeObserverMock { observe = observe; });
+    const grouped = {
+      groupable: [{ columnName: "status", label: "Status", date: false }],
+      defaultGroupBy: "status",
+    };
+    const { container, rerender } = render(<EntityListWidget list={list({ ...grouped, fill: true })} />);
+    await screen.findByRole("button", { name: /Pending/ });
+    const scroller = container.querySelector(".overflow-auto")!;
+    expect(scroller).toHaveClass("flex-1", "min-h-0");
+    expect(scroller.parentElement).toHaveClass("flex-1", "min-h-0");
+    expect(observe).toHaveBeenCalledWith(scroller);
+
+    rerender(<EntityListWidget list={list(grouped)} />);
+    await screen.findByRole("button", { name: /Pending/ });
+    const ordinaryScroller = container.querySelector(".overflow-auto")!;
+    expect(ordinaryScroller).not.toHaveClass("flex-1", "min-h-0");
+    expect(ordinaryScroller.parentElement).not.toHaveClass("flex-1");
+
+    rerender(<EntityListWidget list={list({ ...grouped, embedded: false })} />);
+    await screen.findByRole("button", { name: /Pending/ });
+    const routeScroller = container.querySelector(".overflow-auto")!;
+    expect(routeScroller.parentElement).toHaveClass("min-h-0");
+    expect(routeScroller.parentElement).not.toHaveClass("flex-1");
+  });
   it("reloads composed workspace constraints when the channel changes", async () => {
     const descriptor = list();
     const { rerender } = render(<EntityListWidget list={descriptor} queryParams={{eq:["channel,EMAIL", "inbox,first"]}} />);
