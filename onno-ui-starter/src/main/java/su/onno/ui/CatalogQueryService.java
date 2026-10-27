@@ -110,7 +110,7 @@ public class CatalogQueryService {
             return new ArrayList<>();
         }
         EntitySurfaceDescriptor surface = surface(desc);
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, filter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
@@ -230,7 +230,7 @@ public class CatalogQueryService {
         String col = surface.safeSort(sortColumn);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and()
@@ -293,7 +293,7 @@ public class CatalogQueryService {
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -330,7 +330,7 @@ public class CatalogQueryService {
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -416,6 +416,23 @@ public class CatalogQueryService {
 
     private static EntitySurfaceDescriptor surface(CatalogDescriptor desc) {
         return EntitySurfaceDescriptor.catalog(desc);
+    }
+
+    /**
+     * A catalog's {@link WidgetFilter} over its attribute columns and, for a hierarchical catalog,
+     * {@code _parent} (bound as a uuid), so a picker dialog can list one folder's children with
+     * {@code _parent = <uuid>} or the roots with {@code _parent = null} (#411).
+     */
+    private static WidgetFilter.Result widgetFilter(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
+                                                    String filter) {
+        if (!desc.hierarchical()) {
+            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        }
+        Set<String> columns = new java.util.HashSet<>(surface.columnNames());
+        columns.add("_parent");
+        Set<String> uuids = new java.util.HashSet<>(surface.uuidColumns());
+        uuids.add("_parent");
+        return WidgetFilter.parse(filter, columns, uuids);
     }
 
     /**

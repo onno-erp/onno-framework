@@ -15,6 +15,8 @@ import type {
   ActionInputs,
   BatchResult,
   RefOptionSearch,
+  RefOptionDecorateRequest,
+  RefOptionDecorations,
   ActionFeedback,
   ProcessSnapshot,
   ProcessWorkItem,
@@ -529,6 +531,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(request),
     }),
+  /**
+   * The target's list descriptor for the "Show all…" picker dialog (#411): its EntityView columns
+   * and filters for the active profile (default columns without a view), no write affordances.
+   */
+  getPickerList: <T>(kind: "catalogs" | "documents", name: string, profile?: string | null) => {
+    const qs = profile ? `?profile=${encodeURIComponent(profile)}` : "";
+    return fetchJson<T>(`${BASE}/divkit/pickers/${kind}/${encodeURIComponent(name)}${qs}`);
+  },
+  /** Which rows of a picker dialog window the dropdown would offer, and their decorations (#411). */
+  decorateRefOptions: (request: RefOptionDecorateRequest) =>
+    fetchJson<RefOptionDecorations>(`${BASE}/ref-options/decorate`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    }, { silent: true }),
   /** Remember a ref pick so the next empty-query search offers it first (#409). Answers 204. */
   rememberRefPick: (pick: { targetKind: "catalog" | "document"; targetName: string; id: string }) =>
     // Silent: remembering is a background courtesy; a failure must not toast over the pick.
