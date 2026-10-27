@@ -12,9 +12,11 @@ import lombok.Setter;
  * A shelf/genre a {@link Book} belongs to (Fiction, Children's, Science, …). The simplest possible
  * {@code @Catalog}: the inherited {@code code} ({@code CAT-…}) and {@code description} hold its
  * identity, while {@code color} demonstrates a user-editable visual attribute. Runtime-editable
- * master data: staff add a category without a code change.
+ * master data: staff add a category without a code change. Hierarchical: genres sit in shelf
+ * folders (Fiction &amp; Fantasy, Non-fiction), which the reference picker's "Show all…" dialog
+ * browses as a folder tree (#411).
  */
-@Catalog(name = "Categories", title = "Category", codePrefix = "CAT-", context = "Catalog")
+@Catalog(name = "Categories", title = "Category", codePrefix = "CAT-", context = "Catalog", hierarchical = true)
 @AccessControl(readRoles = {"MANAGER"}, writeRoles = {"MANAGER"})
 @Getter
 @Setter

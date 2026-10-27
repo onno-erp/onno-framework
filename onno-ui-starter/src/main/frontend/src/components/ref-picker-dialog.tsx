@@ -230,6 +230,9 @@ function PickerBody({
   // ---- navigation ----
   const openFolder = useCallback((crumbs: Crumb[]) => {
     setPath(crumbs);
+    // The highlight belonged to the folder just left (or entered): nothing is selected anew.
+    setHighlightedId(null);
+    setHighlighted(null);
     setFocusId(null);
     setQuery("");
     setDebouncedQuery("");

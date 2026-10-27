@@ -118,6 +118,8 @@ describe("reference picker dialog (#411)", () => {
     fireEvent.doubleClick(pickRow("Tools")); // a folder opens, it is not picked
     await waitFor(() => expect(pickRow("Hammer")).toBeTruthy());
     expect(onPick).not.toHaveBeenCalled();
+    // the folder's own highlight does not survive the navigation
+    expect(screen.getByRole("button", { name: "Select" })).toBeDisabled();
     const crumbs = screen.getByRole("navigation", { name: "Folders" });
     expect(within(crumbs).getByText("Tools")).toHaveAttribute("aria-current", "location");
 

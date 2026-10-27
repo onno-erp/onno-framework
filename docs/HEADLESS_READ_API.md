@@ -25,6 +25,8 @@ GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collecti
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 POST /api/ref-options/search                  bounded contextual reference options
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
+POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
+GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -134,7 +136,11 @@ context-aware search input. With an empty `query` it leads with up to five of th
 picks, each flagged `_recent: true`, then the ordinary options without duplicates, still within
 `limit`; send `"recent": false` to omit them. Picks are remembered with `POST /api/ref-options/recent`
 (`{targetKind, targetName, id}`); a recent pick is re-read through the same search, so it obeys the
-deletion mark, record scope and the request's `filter` like any other option. There is no unbounded collection or offset-paging endpoint. See
+deletion mark, record scope and the request's `filter` like any other option. The "Show all..." picker
+dialog pages the ordinary list feed with the field's `filter` (plus `_parent = <uuid>` / `_parent =
+null` for folder navigation on a hierarchical catalog) and checks each window with
+`POST /api/ref-options/decorate` (`ids` plus the `/search` context), which answers `offered` ids and
+their `decorations`. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
 Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,
