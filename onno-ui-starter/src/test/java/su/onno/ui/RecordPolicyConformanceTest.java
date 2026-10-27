@@ -121,7 +121,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/list/catalogs/{name}/aggregate", "GET /api/list/documents/{name}/aggregate",
                 "GET /api/list/registers/{name}/movements", "GET /api/list/registers/{name}/balance",
                 // Pickers, mentions, comments, tags, presence, actions, form validation
-                "POST /api/ref-options/search", "POST /api/ref-options/recent", "GET /api/mentions", "GET /api/mentions/resolve",
+                "POST /api/ref-options/search", "POST /api/ref-options/recent", "POST /api/ref-options/decorate", "GET /api/mentions", "GET /api/mentions/resolve",
                 "GET /api/comments/{kind}/{name}/{id}", "POST /api/comments/{kind}/{name}/{id}",
                 "POST /api/comments/{commentId}/reactions", "DELETE /api/comments/{commentId}",
                 "GET /api/tags/{kind}/{name}", "GET /api/tags/{kind}/{name}/{id}",
@@ -139,7 +139,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/divkit/catalogs/{name}/new", "GET /api/divkit/catalogs/{name}/{id}/duplicate",
                 "GET /api/divkit/documents/{name}", "GET /api/divkit/documents/{name}/{id}",
                 "GET /api/divkit/documents/{name}/new", "GET /api/divkit/documents/{name}/{id}/duplicate",
-                "GET /api/divkit/registers/{name}",
+                "GET /api/divkit/registers/{name}", "GET /api/divkit/pickers/{kind}/{name}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
             ROUTES.put(r, Route.SCOPED);
@@ -372,6 +372,16 @@ class RecordPolicyConformanceTest {
         assertThat(ids(options)).doesNotContain(tenantB.toString());
         assertThat(options.get(0)).containsEntry("_recent", true);
         assertThat(options.stream().filter(o -> Boolean.TRUE.equals(o.get("_recent")))).hasSize(1);
+
+        // The picker dialog (#411): an out-of-scope id is left out exactly like an unknown one, so
+        // the window never offers it and the answer never names it.
+        Map<String, Object> decorations = jsonMap(ok(post("/api/ref-options/decorate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"ids\":[\""
+                        + tenantA + "\",\"" + tenantB + "\",\"" + UUID.randomUUID() + "\"]}")));
+        assertThat(decorations.get("offered")).isEqualTo(List.of(tenantA.toString()));
+        ok(get("/api/divkit/pickers/catalogs/LkTenants"));
+        ok(get("/api/divkit/pickers/documents/LkBuildJobs"));
     }
 
     private void restrictedRefsAndSearchAreNoOracle() throws Exception {

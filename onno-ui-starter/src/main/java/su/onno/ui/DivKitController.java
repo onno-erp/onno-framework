@@ -964,6 +964,47 @@ public class DivKitController implements DisposableBean {
                         focusId(focus)));
     }
 
+    /**
+     * The {@code onno-list} descriptor a reference field's "Show all…" picker dialog (#411) opens:
+     * the target's list columns, sort, search and filters from its {@code EntityView} for the
+     * active profile. Unlike the list surface it is never replaced by an authored {@code Page} and
+     * does not require a view: the dropdown works without one, so a view-less target falls back to
+     * the default columns. Picking is read-only, so the descriptor carries no actions, inputs,
+     * New url, batch selection or alternate (map/custom) views. {@code hierarchical} tells the
+     * dialog to show the folder tree and breadcrumbs.
+     */
+    @GetMapping("/pickers/{kind}/{name}")
+    public Map<String, Object> pickerList(@PathVariable String kind, @PathVariable String name,
+                                          @RequestParam(required = false) String profile,
+                                          Principal principal) {
+        String profileId = activeProfile(principal, profile).id();
+        ResolvedListView view;
+        boolean hierarchical = false;
+        String surfaceKind;
+        if ("documents".equals(kind) || "document".equals(kind)) {
+            DocumentDescriptor desc = documentQuery.require(name);
+            access.requireRead(principal, desc);
+            view = viewResolver.documentList(desc, profileId);
+            surfaceKind = "documents";
+        } else if ("catalogs".equals(kind) || "catalog".equals(kind)) {
+            CatalogDescriptor desc = catalogQuery.require(name);
+            access.requireRead(principal, desc);
+            view = viewResolver.catalogList(desc, profileId);
+            hierarchical = desc.hierarchical();
+            surfaceKind = "catalogs";
+        } else {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown picker kind: " + kind);
+        }
+        Map<String, Object> descriptor = SurfaceDivBuilder.listDescriptor(
+                view, surfaceKind, name, null, false, List.of(), List.of());
+        descriptor.put("selectionCheckboxes", false);
+        descriptor.remove("selectionWidget");
+        descriptor.remove("map");
+        descriptor.remove("custom");
+        descriptor.put("hierarchical", hierarchical);
+        return descriptor;
+    }
+
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
                                               @RequestParam(required = false) String profile,
