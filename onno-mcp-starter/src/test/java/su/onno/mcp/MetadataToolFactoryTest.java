@@ -1,6 +1,5 @@
 package su.onno.mcp;
 
-import su.onno.access.AccessSubject;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import su.onno.metadata.AccumulationRegisterDescriptor;
 import su.onno.metadata.AttributeDescriptor;
@@ -25,12 +24,15 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 
 import org.junit.jupiter.api.Test;
+import org.h2.jdbcx.JdbcDataSource;
+import org.jdbi.v3.core.Jdbi;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,7 +59,7 @@ class MetadataToolFactoryTest {
     private final AccumulationRegisterDescriptor cash = new AccumulationRegisterDescriptor(
             "Cash", "Cash", "reg_cash", "reg_cash_totals", Object.class,
             AccumulationType.BALANCE, false, PostingOrder.INDEPENDENT, "Finance",
-            List.of("RENTALS"), List.of("RENTALS"), List.of(), List.of());
+            List.of("RENTALS"), List.of("RENTALS"), clients.attributes(), List.of());
 
     MetadataToolFactoryTest() {
         registry.registerCatalog(clients);
@@ -126,7 +128,7 @@ class MetadataToolFactoryTest {
         properties.setWritesEnabled(false);
         SyncToolSpecification describe = byName(factory(properties).build(), "describe_metadata");
 
-        CallToolResult result = describe.callHandler().apply(exchange("maria", "RENTALS"),
+        CallToolResult result = describe.callHandler().apply(exchange(),
                 new CallToolRequest("describe_metadata", Map.of("kind", "catalog")));
 
         assertThat(result.content().toString())
@@ -159,17 +161,74 @@ class MetadataToolFactoryTest {
     }
 
     @Test
-    void registerMovementsFailsLoudlyWhenTheBoundedQueryTruncates() {
-        when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.movementsBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.isNull()))
-                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
-        SyncToolSpecification movements = byName(factory(new OnnoMcpProperties()).build(), "register_movements");
+    void registerMovementsReadsBeyondOneThousandRowsWithoutChangingTheResponseShape() {
+        SyncToolSpecification movements = movementTool();
+        CallToolResult first = callMovements(movements, Map.of("name", "Cash"));
+        assertThat(first.isError()).isNotEqualTo(true);
+        assertThat(movementRows(first)).hasSize(1000);
+        assertThat(movementRows(first).getFirst()).containsEntry("sequence", 1002);
 
-        CallToolResult result = movements.callHandler().apply(exchange("maria", "RENTALS"),
-                new CallToolRequest("register_movements", Map.of("name", "Cash")));
+        CallToolResult next = callMovements(movements, Map.of("name", "Cash", "offset", 1000));
+        assertThat(movementRows(next)).hasSize(2);
+        assertThat(movementRows(next).getFirst()).containsEntry("sequence", 2);
+        assertThat(movementRows(callMovements(movements, Map.of("name", "Cash", "offset", 1002))))
+                .isEmpty();
+    }
 
-        assertThat(result.isError()).isTrue();
-        assertThat(result.content().toString()).contains("1000", "from", "to");
+    @Test
+    void registerMovementsCombinesDimensionPeriodPaginationAndSortFilters() {
+        var movements = movementTool();
+        var result = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Alpha"),
+                "from", "2026-01-01T00:00:10", "to", "2026-01-01T00:00:20",
+                "limit", 2, "offset", 1, "sort", "_period", "descending", false));
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(movementRows(result)).hasSize(2);
+        assertThat(movementRows(result).getFirst()).containsEntry("sequence", 11).containsEntry("name", "Alpha");
+        assertThat(movementRows(result).getLast()).containsEntry("sequence", 12);
+
+        var beta = callMovements(movements, Map.of("name", "Cash", "filters", Map.of("name", "Beta")));
+        assertThat(movementRows(beta)).hasSize(1);
+        assertThat(movementRows(beta).getFirst()).containsEntry("sequence", 1002);
+    }
+
+    @Test
+    void registerMovementsRejectsInvalidPagingAndUnknownDimensions() {
+        var movements = movementTool();
+        for (var arguments : List.of(Map.of("limit", 0), Map.of("limit", 1001), Map.of("offset", -1),
+                Map.of("filters", Map.of("unknown", "value")))) {
+            Map<String, Object> args = new java.util.LinkedHashMap<>(arguments);
+            args.put("name", "Cash");
+            assertThat(callMovements(movements, args).isError()).isTrue();
+        }
+        var injected = callMovements(movements,
+                Map.of("name", "Cash", "filters", Map.of("name", "Alpha' OR 1=1 --")));
+        assertThat(movementRows(injected)).isEmpty();
+    }
+
+    private SyncToolSpecification movementTool() {
+        var dataSource = new JdbcDataSource();
+        dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
+        var jdbi = Jdbi.create(dataSource);
+        jdbi.useHandle(h -> {
+            h.execute("CREATE TABLE reg_cash (_period TIMESTAMP, _active BOOLEAN, name VARCHAR, sequence INT)");
+            h.execute("INSERT INTO reg_cash SELECT DATEADD('SECOND', X, TIMESTAMP '2026-01-01 00:00:00'), "
+                    + "true, CASE WHEN X = 1002 THEN 'Beta' ELSE 'Alpha' END, X FROM SYSTEM_RANGE(1, 1002)");
+            h.execute("INSERT INTO reg_cash VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
+        });
+        var factory = new MetadataToolFactory(registry, new UiAccessService(registry), catalogQuery,
+                documentQuery, new RegisterQueryService(registry, jdbi), catalogCommands, documentCommands,
+                new OnnoMcpProperties(), json);
+        return byName(factory.build(), "register_movements");
+    }
+
+    private static CallToolResult callMovements(SyncToolSpecification tool, Map<String, Object> args) {
+        return tool.callHandler().apply(exchange(), new CallToolRequest("register_movements", args));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> movementRows(CallToolResult result) {
+        assertThat(result.isError()).as(result.content().toString()).isNotEqualTo(true);
+        return (List<Map<String, Object>>) ((Map<?, ?>) result.structuredContent()).get("result");
     }
 
     @Test
@@ -179,16 +238,16 @@ class MetadataToolFactoryTest {
                 .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
 
-        CallToolResult result = balance.callHandler().apply(exchange("maria", "RENTALS"),
+        CallToolResult result = balance.callHandler().apply(exchange(),
                 new CallToolRequest("register_balance", Map.of("name", "Cash")));
 
         assertThat(result.isError()).isTrue();
         assertThat(result.content().toString()).contains("5000", "filters");
     }
 
-    private static McpSyncServerExchange exchange(String username, String role) {
+    private static McpSyncServerExchange exchange() {
         var authentication = UsernamePasswordAuthenticationToken.authenticated(
-                username, "n/a", List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+                "maria", "n/a", List.of(new SimpleGrantedAuthority("ROLE_RENTALS")));
         McpTransportContext transport = McpTransportContext.create(
                 Map.of(McpPrincipalContext.PRINCIPAL_KEY, authentication));
         McpSyncServerExchange exchange = mock(McpSyncServerExchange.class);

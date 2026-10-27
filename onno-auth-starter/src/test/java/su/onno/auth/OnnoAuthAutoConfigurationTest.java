@@ -91,6 +91,72 @@ class OnnoAuthAutoConfigurationTest {
     }
 
     @Test
+    void defaultPublicPathsRemainAccessible() {
+        runner.run(context -> {
+            var properties = context.getBean(OnnoAuthProperties.class);
+            assertThat(properties.getAdditionalPublicPaths()).isEmpty();
+            assertThat(properties.effectivePublicPaths()).containsExactly(
+                    "/error", "/api/theme", "/api/config", "/api/branding", "/api/auth/login",
+                    "/api/auth/me", "/api/auth/csrf", "/api/divkit/login",
+                    "/api/desktop/ready", "/api/desktop/manifest");
+            assertPublicPaths(context.getBean(SecurityFilterChain.class), properties.effectivePublicPaths());
+        });
+    }
+
+    @Test
+    void additionalAndLegacyPublicPathsPreserveBootstrapInEveryMode() {
+        for (String mode : List.of("in-memory", "oidc", "resource-server")) {
+            for (String property : List.of("additional-public-paths", "public-paths")) {
+                runner.withUserConfiguration(ClientRegistrationConfig.class, JwtDecoderConfig.class)
+                        .withPropertyValues("onno.auth.mode=" + mode,
+                                "onno.auth." + property + "[0]=/api/public/**")
+                        .run(context -> {
+                            assertThat(context).hasNotFailed();
+                            var chain = context.getBean(SecurityFilterChain.class);
+                            assertPublicPaths(chain, List.of("/api/public/example", "/api/config", "/api/auth/login"));
+                            var request = new MockHttpServletRequest("GET", "/api/private");
+                            request.setServletPath("/api/private");
+                            var response = new MockHttpServletResponse();
+                            new FilterChainProxy(List.of(chain)).doFilter(request, response, new MockFilterChain());
+                            assertThat(response.getStatus()).isEqualTo(401);
+                        });
+            }
+        }
+    }
+
+    @Test
+    void emptyLegacyPublicPathsCannotRemoveFrameworkPaths() {
+        runner.withPropertyValues("onno.auth.public-paths=").run(context -> {
+            var properties = context.getBean(OnnoAuthProperties.class);
+            assertThat(properties.getPublicPaths()).isEmpty();
+            assertPublicPaths(context.getBean(SecurityFilterChain.class), properties.effectivePublicPaths());
+        });
+    }
+
+    @Test
+    void effectivePublicPathsCombineBothPropertiesAndRemoveDuplicates() {
+        runner.withPropertyValues("onno.auth.public-paths[0]=/api/legacy",
+                        "onno.auth.additional-public-paths[0]=/api/extra",
+                        "onno.auth.additional-public-paths[1]=/api/config")
+                .run(context -> {
+                    var paths = context.getBean(OnnoAuthProperties.class).effectivePublicPaths();
+                    assertThat(paths).contains("/api/legacy", "/api/extra", "/api/config").doesNotHaveDuplicates();
+                    assertPublicPaths(context.getBean(SecurityFilterChain.class), paths);
+                });
+    }
+
+    private static void assertPublicPaths(SecurityFilterChain chain, List<String> paths) throws Exception {
+        for (String path : paths) {
+            var request = new MockHttpServletRequest(path.equals("/api/auth/login") ? "POST" : "GET", path);
+            request.setServletPath(path);
+            var response = new MockHttpServletResponse();
+            var downstream = new MockFilterChain();
+            new FilterChainProxy(List.of(chain)).doFilter(request, response, downstream);
+            assertThat(downstream.getRequest()).as("Anonymous request to %s", path).isNotNull();
+        }
+    }
+
+    @Test
     void csrfIgnoredPathsDefaultToLoginOnly() {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
@@ -154,7 +220,9 @@ class OnnoAuthAutoConfigurationTest {
                     new FilterChainProxy(List.of(context.getBean(SecurityFilterChain.class)))
                             .doFilter(request, response, new MockFilterChain());
 
-                    SecurityContext saved = (SecurityContext) request.getSession(false).getAttribute(
+                    var session = request.getSession(false);
+                    assertThat(session).isNotNull();
+                    SecurityContext saved = (SecurityContext) session.getAttribute(
                             HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
                     assertThat(saved.getAuthentication().getName()).isEqualTo("manager@example.test");
                     assertThat(saved.getAuthentication().getAuthorities())

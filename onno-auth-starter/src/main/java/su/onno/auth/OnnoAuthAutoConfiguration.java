@@ -20,6 +20,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.DeferredSecurityContext;
@@ -128,7 +130,7 @@ public class OnnoAuthAutoConfiguration {
     }
 
     private static void applyApiAuthorization(HttpSecurity http, OnnoAuthProperties properties) throws Exception {
-        String[] publicPaths = properties.getPublicPaths().toArray(String[]::new);
+        String[] publicPaths = properties.effectivePublicPaths().toArray(String[]::new);
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers(publicPaths).permitAll()
                 .requestMatchers("/api/**").authenticated()
@@ -148,7 +150,7 @@ public class OnnoAuthAutoConfiguration {
         }
         String directive = "frame-ancestors " + String.join(" ", sources);
         http.headers(headers -> headers
-                .frameOptions(frameOptions -> frameOptions.disable())
+                .frameOptions(HeadersConfigurer.FrameOptionsConfig::disable)
                 .contentSecurityPolicy(csp -> csp.policyDirectives(directive)));
     }
 
@@ -185,7 +187,7 @@ public class OnnoAuthAutoConfiguration {
                         }
                         String[] roles = u.getRoles() == null ? new String[0]
                                 : u.getRoles().toArray(String[]::new);
-                        return (UserDetails) User.withUsername(u.getUsername())
+                        return User.withUsername(u.getUsername())
                                 .password(passwordEncoder.encode(u.getPassword()))
                                 .roles(roles)
                                 .build();
@@ -286,9 +288,9 @@ public class OnnoAuthAutoConfiguration {
                             .ignoringRequestMatchers(properties.getCsrfIgnoredPaths().toArray(String[]::new)))
                     .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                     .exceptionHandling(ex -> ex.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
-                    .formLogin(form -> form.disable())
-                    .httpBasic(basic -> basic.disable())
-                    .logout(logout -> logout.disable())
+                    .formLogin(AbstractHttpConfigurer::disable)
+                    .httpBasic(AbstractHttpConfigurer::disable)
+                    .logout(AbstractHttpConfigurer::disable)
                     .build();
         }
 
@@ -457,15 +459,15 @@ public class OnnoAuthAutoConfiguration {
                     // that protects the cookie-based modes is just overhead here.
                     .sessionManagement(session -> session
                             .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                    .csrf(csrf -> csrf.disable())
+                    .csrf(AbstractHttpConfigurer::disable)
                     .oauth2ResourceServer(oauth -> oauth
                             .jwt(jwt -> jwt.jwtAuthenticationConverter(
                                     jwtAuthenticationConverter(
                                             properties.getOidc().resolvedForResourceServer()))))
                     .exceptionHandling(ex -> ex.authenticationEntryPoint(new JsonAuthenticationEntryPoint()))
-                    .formLogin(form -> form.disable())
-                    .httpBasic(basic -> basic.disable())
-                    .logout(logout -> logout.disable())
+                    .formLogin(AbstractHttpConfigurer::disable)
+                    .httpBasic(AbstractHttpConfigurer::disable)
+                    .logout(AbstractHttpConfigurer::disable)
                     .build();
         }
 

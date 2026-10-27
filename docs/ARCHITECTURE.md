@@ -568,6 +568,10 @@ New and Duplicate forms do not render them because they have no saved record ide
 
 `onno-auth-starter` contributes the `SecurityFilterChain` and picks a mode from `onno.auth.mode`:
 
+In every mode, framework bootstrap paths (including `/api/config` and `/api/auth/login`) remain
+public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
+entries are combined with them and can no longer remove mandatory framework paths.
+
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
@@ -638,9 +642,13 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   `post_document`/`unpost_document` (gated by `onno.mcp.posting-enabled`). Applications add
   authenticated, role-scoped tools with `@McpTool` methods; `McpToolProvider` is the lower-level
   SDK extension point. Custom tools compose with generated tools and duplicate names fail startup.
-  Catalog/document lists are keyset-paged. Register reads retain bounded one-call results
-  (`register_movements`: 1,000; `register_balance`: 5,000) and return an MCP error when more rows
-  match, so an agent cannot mistake a capped slice for the complete register.
+  Catalog/document lists are keyset-paged. `register_movements` returns a list window through the
+  shared `RegisterQueryService.movementsWindow`: optional `limit` (1–1,000; default 1,000), `offset`
+  (default 0), `sort` (movement column; default `_period`), `descending` (default true), and
+  `filters` (dimension field name → value), alongside the existing inclusive `from`/`to` range.
+  Advance offset by limit until a short or empty page is returned. Existing calls retain their
+  list response and newest-first defaults; matches beyond 1,000 no longer cause an overflow error.
+  `register_balance` still returns an MCP error when more than 5,000 rows match.
   This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes
