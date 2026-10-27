@@ -1362,7 +1362,8 @@ function AttrControl({
         optionContext={optionContext}
         excludedIds={excludedIds}
         value={value as string | undefined}
-        clearable={!attr.required}
+        clearable={attr.refClearButton ?? !attr.required}
+        openButton={attr.refOpenButton ?? true}
         onChange={onChange}
       />
     );

@@ -512,6 +512,9 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "form.reload": "Reload",
   "form.tabularEmptyHint": "Add the first row to start filling this section.",
   "ref.new": "New {name}",
+  "ref.recent": "Recent",
+  "ref.open": "Open record",
+  "ref.clearValue": "Clear value",
   "relatedList.saveFirstManage": "Save this record first to manage {name}.",
   "relatedList.saveFirstView": "Save this record first to see {name}.",
 
