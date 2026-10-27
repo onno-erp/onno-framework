@@ -223,6 +223,63 @@ export type ListRendererProps = {
  * {@code registerListRenderer(type, C, { ownsLoadingMore: true })}) because it draws that feedback itself.
  */
 export type ListRendererComponent = ComponentType<ListRendererProps> & { ownsLoadingMore?: boolean };
+
+/** How the reference picker dialog (#411) presents one row: hidden, or disabled with a reason/badge. */
+export type PickRowState = {
+  hidden?: boolean;
+  disabled?: boolean;
+  reason?: string;
+  badge?: string;
+  tone?: string;
+  /** Explicit badge colour (a decorator's `color`), overriding the tone. */
+  color?: string;
+};
+
+/** Badge tones of a picker row; the same palette the dropdown's option badges use. */
+const PICK_TONE_CLASS: Record<string, string> = {
+  neutral: "bg-muted text-muted-foreground",
+  success: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  warning: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  danger: "bg-red-500/15 text-red-700 dark:text-red-400",
+  accent: "bg-primary/15 text-primary",
+};
+
+/** A picker row's decorator badge, pinned to the row's trailing edge. */
+export function PickRowBadge({ pick }: { pick: PickRowState | undefined }) {
+  if (!pick?.badge) return null;
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-control px-2 py-0.5 text-[11px] font-medium",
+        !pick.color && (PICK_TONE_CLASS[pick.tone ?? "neutral"] ?? PICK_TONE_CLASS.neutral)
+      )}
+      style={pick.color ? { backgroundColor: pick.color, color: "#fff" } : undefined}
+    >
+      {pick.badge}
+    </span>
+  );
+}
+
+/**
+ * Select mode (#411): the list as a reference picker. A click highlights one row, a double click
+ * or Enter activates it (↑/↓ move the highlight while focus is inside the list or the enclosing
+ * `[data-onno-picker]` element, e.g. the dialog's own search box), and the record-opening,
+ * context-menu, batch-selection and clipboard behaviour is off. Rows stamp
+ * `data-onno-pick-row` instead of `data-onno-row`, so the shell's row menu and shortcuts skip them.
+ */
+export type ListSelectMode = {
+  /** The highlighted row id (controlled by the host). */
+  highlightedId: string | null;
+  onHighlight: (row: EntityRecord) => void;
+  /** Double click / Enter on a row that is not disabled. */
+  onActivate: (row: EntityRecord) => void;
+  /** Per-row presentation; a hidden row is not drawn at all. */
+  rowState?: (row: EntityRecord) => PickRowState | undefined;
+  /** Every newly loaded batch of rows (flat windows and expanded groups alike). */
+  onRowsLoaded?: (rows: EntityRecord[]) => void;
+  /** The search query, when the host owns the search box (it then hides the toolbar's own). */
+  query?: string;
+};
 /** A column the list can be grouped by; `date` columns bucket by a chosen day/month/year granularity. */
 export type GroupableColumn = { columnName: string; label: string; date: boolean };
 /** A per-group subtotal: an aggregate `fn` over `columnName`, shown with `format` and headed `label`. */
@@ -1339,8 +1396,11 @@ export function EntityListWidget({
   renderer,
   refreshKey,
   initialPage,
+  selectMode,
 }: {
   list: ListDescriptor;
+  /** Reference-picker mode (#411); absent for every ordinary list. */
+  selectMode?: ListSelectMode;
   renderer?: ComponentType<ListRendererProps>;
   refreshKey?: number;
   /** One-use bootstrap response. Query excludes cursor/limit/count; must match the active feed and filters. */
@@ -1569,6 +1629,10 @@ export function EntityListWidget({
   // RBAC write access (see ListDescriptor.canWrite): gates the row menu's Duplicate/Delete
   // and batch delete. Absent flag (old server) stays permissive; REST enforces regardless.
   const canWrite = list.canWrite !== false;
+  // Select mode (#411): the list picks a row for a reference field instead of opening records.
+  const picking = selectMode != null;
+  const selectModeRef = useRef(selectMode);
+  selectModeRef.current = selectMode;
   // Where windows are fetched from: a register points the island at its own feed; others use the
   // standard /api/list/{kind}/{name} route.
   const feedBase = list.feed ?? `/api/list/${kind}/${name}`;
@@ -2396,9 +2460,68 @@ export function EntityListWidget({
   }, [kind, name, openable, reload, patchRow]);
 
   // Rows currently loaded, and — the header count — the exact total when known, else the loaded
-  // count.
-  const loadedRows = pageRows ?? [];
+  // count. In select mode a row the picker would not offer (PickRowState.hidden) is never drawn.
+  const pickRowState = selectMode?.rowState;
+  const loadedRows = useMemo(
+    () => (pageRows == null ? [] : pickRowState ? pageRows.filter((row) => !pickRowState(row)?.hidden) : pageRows),
+    [pageRows, pickRowState]
+  );
   const countValue = total ?? (pageRows == null ? null : loadedRows.length);
+
+  // Select mode: a host-owned search box drives the list query.
+  const hostQuery = selectMode?.query;
+  useEffect(() => {
+    if (hostQuery !== undefined) setQuery(hostQuery);
+  }, [hostQuery]);
+
+  // Select mode: report each newly loaded batch, so the picker can resolve how to present it.
+  const reportedRowsRef = useRef<EntityRecord[] | null>(null);
+  useEffect(() => {
+    if (!picking || pageRows == null || reportedRowsRef.current === pageRows) return;
+    reportedRowsRef.current = pageRows;
+    selectModeRef.current?.onRowsLoaded?.(pageRows);
+  }, [picking, pageRows]);
+
+  // Select mode keyboard: ↑/↓ move the highlight over the drawn rows and Enter activates it, while
+  // focus is inside this list (its search box included). The highlighted row is scrolled into view.
+  useEffect(() => {
+    if (!picking) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.metaKey || e.ctrlKey) return;
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Enter") return;
+      const root = rootRef.current;
+      const scope = root?.closest("[data-onno-picker]") ?? root;
+      if (!scope || !scope.contains(document.activeElement)) return;
+      const mode = selectModeRef.current;
+      if (!mode || grouped) return;
+      const ids = loadedRows.map((r) => entityRowId(r));
+      const current = mode.highlightedId == null ? -1 : ids.indexOf(mode.highlightedId);
+      if (e.key === "Enter") {
+        const row = current >= 0 ? loadedRows[current] : undefined;
+        if (!row) return;
+        e.preventDefault();
+        if (!mode.rowState?.(row)?.disabled) mode.onActivate(row);
+        return;
+      }
+      if (!loadedRows.length) return;
+      e.preventDefault();
+      const next = e.key === "ArrowDown"
+        ? Math.min(loadedRows.length - 1, current + 1)
+        : Math.max(0, current < 0 ? 0 : current - 1);
+      mode.onHighlight(loadedRows[next]);
+      const scroller = scrollRef.current;
+      if (scroller) {
+        const top = next * ROW_H;
+        if (top < scroller.scrollTop) scroller.scrollTop = top;
+        else if (top + ROW_H > scroller.scrollTop + scroller.clientHeight) {
+          scroller.scrollTop = top + ROW_H - scroller.clientHeight;
+        }
+      }
+      if (next >= loadedRows.length - 3 && hasMore) loadMore();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picking, grouped, loadedRows, hasMore, loadMore]);
 
   // Virtual window: render only rows overlapping the viewport (± overscan), padding the scroller
   // above/below with the height of rows not drawn.
@@ -2450,7 +2573,7 @@ export function EntityListWidget({
       return !!sel && !sel.isCollapsed && !!sel.toString().trim();
     };
     const onCopy = (e: ClipboardEvent) => {
-      if (e.defaultPrevented || !e.clipboardData || !openable) return;
+      if (e.defaultPrevented || !e.clipboardData || !openable || picking) return;
       if (isEditingTarget() || textSelected()) return;
       // The selection, else the hovered row — and only a row of THIS list.
       let rows: EntityRecord[];
@@ -2478,7 +2601,7 @@ export function EntityListWidget({
       toast.success(t("clipboard.copied", { count: rows.length }));
     };
     const onPaste = (e: ClipboardEvent) => {
-      if (e.defaultPrevented || !e.clipboardData || !openable) return;
+      if (e.defaultPrevented || !e.clipboardData || !openable || picking) return;
       if (isEditingTarget()) return;
       const raw = e.clipboardData.getData("application/x-onno-rows");
       if (!raw) return;
@@ -2526,7 +2649,7 @@ export function EntityListWidget({
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("paste", onPaste);
     };
-  }, [kind, name, openable, selected, loadedRows, columns, list.newUrl, reload, t]);
+  }, [kind, name, openable, picking, selected, loadedRows, columns, list.newUrl, reload, t]);
 
   // Keyboard selection: ⌘A selects every loaded row; ⇧⌘↓ / ⇧⌘↑ extend the selection from the
   // anchor to the bottom / top of the loaded set (an infinite feed selects what's loaded — ids of
@@ -2534,7 +2657,7 @@ export function EntityListWidget({
   // or the cursor is over one of its rows — so a page-level ⌘A isn't hijacked when no list is
   // being worked with, and two mounted lists can't both grab it (defaultPrevented wins).
   useEffect(() => {
-    if (!openable) return;
+    if (!openable || picking) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isEditingTarget()) return;
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -2593,7 +2716,7 @@ export function EntityListWidget({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openable, kind, name, selected, loadedRows, total, t]);
+  }, [openable, picking, kind, name, selected, loadedRows, total, t]);
 
   // The row right-click menu: built-ins (Open/Duplicate/Copy link/Delete) plus the entity's
   // custom row actions — flat ones as top-level items, .menu("…")-grouped ones as submenus. With a
@@ -3177,6 +3300,7 @@ export function EntityListWidget({
           clearSelection={clearSelection}
           selectionCheckboxes={showSelectionCheckboxes}
           openRowMenu={openRowMenu}
+          selectMode={selectMode}
         />
       ) : (
       /* table card — one scroller for both axes; the header sticks to the top (so it scrolls
@@ -3278,6 +3402,41 @@ export function EntityListWidget({
                   const url = recordId ? `onno://${kind}/${name}/${recordId}` : undefined;
                   const rowViewers = recordId ? viewersById.get(recordId) : undefined;
                   const isSelected = recordId != null && selected.has(recordId);
+                  if (selectMode) {
+                    // Select mode (#411): click highlights, double click activates; no record
+                    // opening, row menu or batch selection, and no data-onno-row for the shell.
+                    const pick = selectMode.rowState?.(row);
+                    const highlighted = recordId != null && recordId === selectMode.highlightedId;
+                    const tinted = rowStyleClass(entityRowTone(row));
+                    return (
+                      <div
+                        key={absIdx - headOffset}
+                        role="option"
+                        aria-selected={highlighted}
+                        aria-disabled={pick?.disabled || undefined}
+                        data-onno-pick-row={recordId ?? ""}
+                        data-onno-selected={highlighted ? "true" : undefined}
+                        data-onno-focused={recordId != null && recordId === focusedId && !highlighted ? "true" : undefined}
+                        title={pick?.reason || undefined}
+                        onClick={() => selectMode.onHighlight(row)}
+                        onDoubleClick={() => {
+                          if (!pick?.disabled) selectMode.onActivate(row);
+                        }}
+                        onContextMenu={(e) => e.preventDefault()}
+                        className={cn(
+                          "relative grid cursor-pointer select-none items-center gap-3 border-b border-border/50 text-sm",
+                          leftPad,
+                          !highlighted && tinted,
+                          absIdx % 2 === 1 && !highlighted && !tinted && "bg-muted/20",
+                          pick?.disabled && "cursor-not-allowed opacity-55"
+                        )}
+                        style={{ minHeight: ROW_H, gridTemplateColumns: template }}
+                      >
+                        {columns.map((c) => <ListCell key={c.columnName} row={row} col={c} />)}
+                        <PickRowBadge pick={pick} />
+                      </div>
+                    );
+                  }
                   return (
                     // Key by absolute row index: register (balance) rows have no _id, so an id-based
                     // key collides to the same value for every row and React mis-reconciles into
