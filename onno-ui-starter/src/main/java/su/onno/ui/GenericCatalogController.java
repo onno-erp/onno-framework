@@ -3,9 +3,11 @@ package su.onno.ui;
 import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.TabularSectionDescriptor;
 
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -97,7 +99,7 @@ public class GenericCatalogController {
     }
 
     /**
-     * Create a copy of record {@code id}: same description/attributes/parent, fresh identity (new
+     * Create a copy of record {@code id}: same description/attributes/parent and line items, fresh identity (new
      * id, next code). Secret attributes are not copied — reads are redacted, so a copy would store
      * the sentinel; the clone starts with them unset. Runs through the normal create path
      * (lifecycle hooks, validation, write access). Powers the list's clipboard paste (⌘C/⌘V).
@@ -127,6 +129,22 @@ public class GenericCatalogController {
             if (v != null) {
                 body.put(attr.fieldName(), v);
             }
+        }
+        // Match document duplication: copy declared row attributes, never row identities or secrets.
+        for (TabularSectionDescriptor section : desc.tabularSections()) {
+            if (!(row.get(section.name()) instanceof List<?> rows)) continue;
+            List<Map<String, Object>> copies = new ArrayList<>();
+            for (Object value : rows) {
+                if (!(value instanceof Map<?, ?> source)) continue;
+                Map<String, Object> copy = new LinkedHashMap<>();
+                for (AttributeDescriptor attr : section.attributes()) {
+                    if (!attr.secret() && source.get(attr.columnName()) != null) {
+                        copy.put(attr.fieldName(), source.get(attr.columnName()));
+                    }
+                }
+                copies.add(copy);
+            }
+            body.put(section.name(), copies);
         }
         return EntityJsonRepresentation.catalog(desc, commands.create(desc, body, subject),
                 mode);

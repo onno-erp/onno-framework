@@ -386,7 +386,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 
 | Area | Endpoints (served by) |
 | --- | --- |
-| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
+| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}` (duplicate includes tabular rows with fresh IDs and omits secrets); `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
 | Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
 | Documents | `GET /api/documents/{name}/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |

@@ -607,3 +607,6 @@ CRM audio attachments keep the existing `contentType`, `url`, `filename`, `size`
 Catalog `@TabularSection` fields follow the same row contract as documents in REST and MCP.
 Create/update accepts section-name arrays; omitted sections are preserved and `[]` clears them.
 Catalog header and section replacements share one transaction, including the version check.
+
+`POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
+The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.

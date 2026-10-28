@@ -144,6 +144,7 @@ class WriteLifecycleCommandServiceTest {
         }
 
         @Attribute(required = true, length = 20) private String property;
+        @Attribute(secret = true) private String secret;
         @Attribute private LocalDateTime happensAt;
     }
 
@@ -155,6 +156,7 @@ class WriteLifecycleCommandServiceTest {
     private EnumerationDescriptor statusEnum;
     private DocumentCommandService documentCommands;
     private CatalogCommandService catalogCommands;
+    private GenericCatalogController catalogController;
     private DocumentQueryService documentQuery;
     private CatalogQueryService catalogQuery;
 
@@ -192,6 +194,9 @@ class WriteLifecycleCommandServiceTest {
                 posting, documentQuery, access, events, cipher);
         catalogCommands = new CatalogCommandService(registry, jdbi, props, numbers,
                 catalogQuery, access, events, cipher);
+        // duplicate() only needs the catalog services and messages.
+        catalogController = new GenericCatalogController(catalogQuery, access, catalogCommands,
+                null, new UiMessages(Map.of()), null);
     }
 
     @Test
@@ -219,6 +224,39 @@ class WriteLifecycleCommandServiceTest {
         var cleared = catalogCommands.update(widgetDesc, id, Map.of("lines", List.of()), admin);
         assertThat((List<?>) cleared.get("lines")).isEmpty();
         assertThat(cleared.get("line_count")).isEqualTo(0);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void catalogDuplicate_copiesOrderedLinesWithFreshIdsAndWithoutSecrets() {
+        var source = catalogCommands.create(widgetDesc, Map.of("label", "Profile", "lines", List.of(
+                Map.of("property", "event", "happensAt", "2026-10-28T12:00"),
+                Map.of("property", "duration"))), admin);
+        UUID sourceId = (UUID) source.get("_id");
+        var sourceLines = (List<Map<String, Object>>) source.get("lines");
+        String table = widgetDesc.tabularSections().getFirst().tableName();
+        database.useHandle(h -> h.createUpdate("UPDATE " + table + " SET secret = :secret WHERE _parent_id = :id")
+                .bind("secret", "source secret").bind("id", sourceId).execute());
+
+        var copy = catalogController.duplicate(widgetDesc.logicalName(), sourceId, "logical", admin);
+        UUID copyId = UUID.fromString(copy.get("id").toString());
+        var copiedLines = (List<Map<String, Object>>) copy.get("lines");
+        assertThat(copyId).isNotEqualTo(sourceId);
+        assertThat(copy.get("code")).isNotEqualTo(source.get("_code"));
+        assertThat(copy.get("label")).isEqualTo("Profile");
+        assertThat(copiedLines).extracting(row -> row.get("property")).containsExactly("event", "duration");
+        assertThat(copiedLines).extracting(row -> row.get("lineNumber")).containsExactly(1, 2);
+        assertThat(copiedLines.getFirst()).containsEntry("happensAt", "2026-10-28T12:00");
+        for (int i = 0; i < copiedLines.size(); i++) {
+            assertThat(copiedLines.get(i).get("id")).isNotEqualTo(sourceLines.get(i).get("_id"));
+            assertThat(copiedLines.get(i).get("parentId")).isEqualTo(copyId);
+        }
+        assertThat(database.withHandle(h -> h.createQuery("SELECT COUNT(*) FROM " + table
+                        + " WHERE _parent_id = :id AND secret IS NOT NULL")
+                .bind("id", copyId).mapTo(Integer.class).one()).intValue()).isZero();
+
+        catalogCommands.update(widgetDesc, copyId, Map.of("lines", List.of()), admin);
+        assertThat((List<?>) catalogQuery.get(admin, widgetDesc, sourceId).get("lines")).hasSize(2);
     }
 
     @Test
