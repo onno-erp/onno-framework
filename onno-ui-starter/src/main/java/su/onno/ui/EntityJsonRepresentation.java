@@ -3,6 +3,7 @@ package su.onno.ui;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
+import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
 
 import org.springframework.http.HttpStatus;
@@ -118,6 +119,15 @@ final class EntityJsonRepresentation {
             logical.add(logicalDocument(descriptor, row));
         }
         return logical;
+    }
+
+    static List<Map<String, Object>> informationRegisters(InformationRegisterDescriptor descriptor,
+                                                          List<Map<String, Object>> rows) {
+        List<AttributeDescriptor> fields = new ArrayList<>(descriptor.dimensions());
+        fields.addAll(descriptor.resources());
+        fields.addAll(descriptor.attributes());
+        return rows.stream().map(row -> logicalRow(row, Map.of("_id", "id", "_period", "period"), fields))
+                .toList();
     }
 
     private static Map<String, Object> logicalCatalog(CatalogDescriptor descriptor,

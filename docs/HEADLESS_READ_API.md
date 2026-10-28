@@ -27,6 +27,7 @@ POST /api/ref-options/search                  bounded contextual reference optio
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/information-registers/{name}/records?from=&to=&limit=&offset=
 GET /api/process-definitions                 latest versions plus typed graph descriptors
 GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
@@ -41,6 +42,25 @@ GET /api/tasks/{workItemId}/history       ordered task audit trail
 POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
+
+Information-register records return a JSON array of stored rows, including periodic history.
+Use `from` / `to` as optional inclusive ISO local date-times (for example
+`2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
+Pass dimension Java field names as equality query parameters, for example
+`?customer=<uuid>&region=North`. Reference and enumeration dimensions use their stored UUIDs.
+Only declared non-secret dimensions participate in filtering.
+
+`limit` defaults to 100 (allowed 1..1,000); `offset` defaults to 0 (must be nonnegative).
+Rows are ordered by period descending, then ID descending to break ties; a short/empty page
+ends the result. Offset pages reflect current data and are not a snapshot across concurrent writes.
+Nonperiodic (`NONE`) registers order by ID descending and reject `from` / `to` with `400`.
+Invalid dates, reversed ranges and invalid page bounds also return `400`.
+
+The response uses logical names: `id`, `period` (periodic registers only), dimension/resource/
+attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessControl` gates the route
+(`403` without a read grant); record policies filter rows before pagination, and restricted references
+are masked by the common resolver. Secret attributes carry the common redacted sentinel.
+Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
 
 The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
 
