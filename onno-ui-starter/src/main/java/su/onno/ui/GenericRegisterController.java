@@ -36,7 +36,7 @@ public class GenericRegisterController {
                                              AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return query.balance(subject, desc, filters);
+        return query.balance(subject, desc, filters, filters.get("asOf"));
     }
 
     @GetMapping("/{name}/turnover")

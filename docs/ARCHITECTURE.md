@@ -647,6 +647,11 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   Advance offset by limit until a short or empty page is returned. Existing calls retain their
   list response and newest-first defaults; matches beyond 1,000 no longer cause an overflow error.
   `register_balance` still returns an MCP error when more than 5,000 rows match.
+  Historical register balances: `register_balance` accepts optional `asOf` (ISO-8601, inclusive,
+  like `register_movements.to`). REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
+  With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
+  grouped by dimensions; dimension filters and record access policies apply before aggregation.
+  Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
   This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes

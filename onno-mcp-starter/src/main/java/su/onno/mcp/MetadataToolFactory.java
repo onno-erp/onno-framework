@@ -187,17 +187,18 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_balance",
                 "Get accumulation register balances",
-                "Returns up to 5000 current balances for a BALANCE accumulation register, optionally "
+                "Returns up to 5000 current or as-of balances for a BALANCE accumulation register, optionally "
                         + "filtered by dimension field values. If more rows match, the call fails instead "
                         + "of returning an incomplete result; narrow the dimension filters.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
+                        + "\"asOf\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601), like register_movements to. Omit for current totals.\"},"
                         + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
                     RegisterQueryService.BoundedRows result =
-                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")));
+                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")), optString(args, "asOf"));
                     if (result.truncated()) {
                         return error("Register balance exceeds the 5000-row safety limit; "
                                 + "narrow the dimension filters and retry.");

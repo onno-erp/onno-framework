@@ -50,6 +50,7 @@ class RegisterQueryServicePostgresIT {
         MetadataRegistry registry = new MetadataRegistry();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
         registry.registerAccumulation(scanner.scanRegister(RevenueRegisterFixture.class));
+        registry.registerAccumulation(scanner.scanRegister(RegisterQueryServiceSignedTotalsTest.BalanceRegisterFixture.class));
         new SchemaGenerator(registry).execute(jdbi);
 
         service = new RegisterQueryService(registry, jdbi);
@@ -72,13 +73,30 @@ class RegisterQueryServicePostgresIT {
     }
 
     @Test
+    void historicalBalanceCastsCutoffAndUuidFilterOnPostgres() {
+        var balance = service.require("TestBalance");
+        jdbi.useHandle(h -> {
+            h.execute("DELETE FROM " + balance.tableName());
+            h.execute("INSERT INTO " + balance.tableName()
+                    + " (_id, _period, _active, _document_ref, _movement_type, property, amount)"
+                    + " SELECT _id, _period, _active, _document_ref, _movement_type, property, amount FROM "
+                    + descriptor.tableName());
+        });
+        var rows = service.balance(AccessSubject.system(), balance,
+                Map.of("property", property.toString()), "2024-06-01T10:00:00");
+        assertThat(rows).hasSize(1);
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100");
+        assertThat(service.balance(AccessSubject.system(), balance, Map.of(), "2024-06-01T09:59:59")).isEmpty();
+    }
+
+    @Test
     void turnover_withStringDateBounds_castsAndAggregatesOnPostgres() {
         List<Map<String, Object>> rows = service.turnover(AccessSubject.system(), 
                 descriptor, "1970-01-01T00:00:00", "2999-12-31T23:59:59", Map.of());
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
-        assertThat((BigDecimal) rows.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat(rows.getFirst()).containsEntry("property", property);
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100.00");
     }
 
     @Test
@@ -88,7 +106,7 @@ class RegisterQueryServicePostgresIT {
                 Map.of("property", property.toString()));
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
+        assertThat(rows.getFirst()).containsEntry("property", property);
     }
 
     @Test
@@ -107,7 +125,7 @@ class RegisterQueryServicePostgresIT {
                 descriptor, "2024-01-01T00:00:00", "2024-12-31T23:59:59");
 
         assertThat(rows).hasSize(1);
-        assertThat(rows.get(0)).containsEntry("property", property);
+        assertThat(rows.getFirst()).containsEntry("property", property);
     }
 
     @Test
@@ -122,14 +140,14 @@ class RegisterQueryServicePostgresIT {
         List<Map<String, Object>> first = service.movementsWindow(AccessSubject.system(), 
                 descriptor, null, null, null, null, true, 0, 2);
         assertThat(first).hasSize(2);
-        assertThat((BigDecimal) first.get(0).get("amount")).isEqualByComparingTo("300.00");
+        assertThat((BigDecimal) first.getFirst().get("amount")).isEqualByComparingTo("300.00");
         assertThat((BigDecimal) first.get(1).get("amount")).isEqualByComparingTo("200.00");
 
         // Second window → only the remaining (oldest) row.
         List<Map<String, Object>> second = service.movementsWindow(AccessSubject.system(), 
                 descriptor, null, null, null, null, true, 2, 2);
         assertThat(second).hasSize(1);
-        assertThat((BigDecimal) second.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat((BigDecimal) second.getFirst().get("amount")).isEqualByComparingTo("100.00");
 
         // The count honours the period window (timestamp comparison, not lexical).
         assertThat(service.movementsCount(AccessSubject.system(), descriptor, "2024-07-15T00:00:00", "2999-12-31T00:00:00", null))
@@ -145,13 +163,13 @@ class RegisterQueryServicePostgresIT {
         List<Map<String, Object>> rows = service.movementsWindow(AccessSubject.system(), 
                 descriptor, null, null, null, "amount", false, 0, 10);
         assertThat(rows).hasSize(3);
-        assertThat((BigDecimal) rows.get(0).get("amount")).isEqualByComparingTo("100.00");
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("100.00");
         assertThat((BigDecimal) rows.get(2).get("amount")).isEqualByComparingTo("300.00");
 
         // An unknown sort column falls back to the default (_period DESC) instead of failing.
         List<Map<String, Object>> fallback = service.movementsWindow(AccessSubject.system(), 
                 descriptor, null, null, null, "bogus", true, 0, 10);
-        assertThat((BigDecimal) fallback.get(0).get("amount")).isEqualByComparingTo("300.00");
+        assertThat((BigDecimal) fallback.getFirst().get("amount")).isEqualByComparingTo("300.00");
     }
 
     private void insertMovement(LocalDateTime period, BigDecimal amount) {

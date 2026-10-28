@@ -117,7 +117,7 @@ public class RegisterQueryService {
                                                      ListFilter.Result filters,
                                                      String sortColumn, boolean descending,
                                                      int rowPosition, int windowSize) {
-        String orderBy = safeSort(desc, sortColumn, "_period", movementColumns(desc));
+        String orderBy = safeSort(sortColumn, "_period", movementColumns(desc));
         ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
@@ -198,7 +198,7 @@ public class RegisterQueryService {
         String dimOrder = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
                 .collect(Collectors.joining(", "));
-        String orderBy = safeSort(desc, sortColumn,
+        String orderBy = safeSort(sortColumn,
                 dimOrder.isEmpty() ? "1" : dimOrder, balanceColumns(desc));
         ListFilter.Result scoped = scope(subject, desc, desc.totalsTableName()).andInto(filters);
         StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
@@ -249,7 +249,7 @@ public class RegisterQueryService {
     }
 
     /** Validate a client-supplied sort column against an allow-list, falling back to {@code fallback}. */
-    private static String safeSort(AccumulationRegisterDescriptor desc, String sortColumn,
+    private static String safeSort(String sortColumn,
                                    String fallback, Set<String> allowed) {
         return sortColumn != null && allowed.contains(sortColumn.toLowerCase()) ? sortColumn : fallback;
     }
@@ -259,28 +259,58 @@ public class RegisterQueryService {
         return balanceBounded(subject, desc, filters).rows();
     }
 
+    public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                             Map<String, String> filters, String asOf) {
+        return balanceBounded(subject, desc, filters, asOf).rows();
+    }
+
     /**
      * The same current-balance slice as {@link #balance}, plus an explicit overflow signal for
      * non-UI callers that require complete-result semantics.
      */
     public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                       Map<String, String> filters) {
+        return balanceBounded(subject, desc, filters, null);
+    }
+
+    /** Inclusive ISO-8601 cutoff, like movements' {@code to}; null reads materialized current totals. */
+    public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                      Map<String, String> filters, String asOf) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
 
-        ScopeClause scope = scope(subject, desc, desc.totalsTableName());
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
+        String table = asOf == null ? desc.totalsTableName() : desc.tableName();
+        ScopeClause scope = scope(subject, desc, table);
+        String dimColumns = desc.dimensions().stream()
+                .map(AttributeDescriptor::columnName).collect(Collectors.joining(", "));
+        StringBuilder sql = new StringBuilder("SELECT ");
+        if (asOf == null) {
+            sql.append("*");
+        } else {
+            if (!dimColumns.isEmpty()) sql.append(dimColumns).append(", ");
+            sql.append(desc.resources().stream()
+                    .map(r -> signedSum(r.columnName()) + " AS " + r.columnName())
+                    .collect(Collectors.joining(", ")));
+        }
+        sql.append(" FROM ").append(table);
         List<String> conditions = new ArrayList<>(desc.dimensions().stream()
                 .filter(d -> filters.containsKey(d.fieldName()))
                 .map(d -> d.columnName() + " = :" + d.columnName())
                 .toList());
+        if (asOf != null) {
+            conditions.add("_active = true");
+            conditions.add("_period <= CAST(:asOf AS TIMESTAMP)");
+        }
         if (!scope.isAll()) {
             conditions.add("(" + scope.sql() + ")");
         }
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+        if (asOf != null && !dimColumns.isEmpty()) {
+            sql.append(" GROUP BY ").append(dimColumns);
         }
         String dimOrder = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
@@ -292,6 +322,7 @@ public class RegisterQueryService {
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
+            if (asOf != null) query.bind("asOf", asOf);
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
