@@ -11,11 +11,24 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 
 
 type Row = { id: string; description: string; folder?: boolean; parent?: string | null };
 const TOOLS: Row = { id: "f-tools", description: "Tools", folder: true, parent: null };
+const HAND: Row = { id: "f-hand", description: "Hand", folder: true, parent: "f-tools" };
 const PAINT: Row = { id: "f-paint", description: "Paint", folder: true, parent: null };
 const HAMMER: Row = { id: "i-hammer", description: "Hammer", parent: "f-tools" };
 const SAW: Row = { id: "i-saw", description: "Saw", parent: "f-tools" };
 const LOOSE: Row = { id: "i-loose", description: "Loose", parent: null };
-const ALL = [TOOLS, PAINT, HAMMER, SAW, LOOSE];
+const ALL = [TOOLS, HAND, PAINT, HAMMER, SAW, LOOSE];
+
+/** The server's pruned path tree for `ids` (as `/tree?ids=` answers). */
+function pathTree(ids: string[]) {
+  const keep = new Set<string>();
+  for (const id of ids) {
+    for (let r = ALL.find((x) => x.id === id); r; r = ALL.find((x) => x.id === r!.parent)) keep.add(r.id);
+  }
+  const build = (parent: string | null): unknown[] => ALL
+    .filter((r) => keep.has(r.id) && (r.parent ?? null) === parent)
+    .map((r) => ({ ...r, children: build(r.id) }));
+  return build(null);
+}
 
 function descriptor(hierarchical: boolean) {
   return {
@@ -34,6 +47,14 @@ function server(opts: { hierarchical?: boolean; decorate?: (ids: string[]) => un
       const body = JSON.parse(String(init?.body)) as { ids: string[] };
       return json(opts.decorate ? opts.decorate(body.ids) : { offered: body.ids, decorations: {} });
     }
+    if (url.pathname === "/api/catalogs/Items/children" && url.searchParams.get("folders") === "true") {
+      const parent = url.searchParams.get("parent");
+      return json(ALL.filter((r) => r.folder && (r.parent ?? null) === parent)
+        .map((r) => ({ ...r, hasChildFolders: ALL.some((c) => c.folder && c.parent === r.id) })));
+    }
+    if (url.pathname === "/api/catalogs/Items/tree") {
+      return json(pathTree((url.searchParams.get("ids") ?? "").split(",").filter(Boolean)));
+    }
     if (url.pathname === "/api/list/catalogs/Items") {
       const ids = url.searchParams.get("ids");
       if (ids) return json({ rows: ALL.filter((r) => r.id === ids), hasMore: false, nextCursor: null });
@@ -50,11 +71,10 @@ function server(opts: { hierarchical?: boolean; decorate?: (ids: string[]) => un
   });
 }
 
+const calls = (fetchMock: ReturnType<typeof vi.fn>) =>
+  fetchMock.mock.calls.map((c) => new URL(String(c[0]), "http://localhost"));
 const feedCalls = (fetchMock: ReturnType<typeof vi.fn>) =>
-  fetchMock.mock.calls.map((c) => new URL(String(c[0]), "http://localhost"))
-    .filter((u) => u.pathname === "/api/list/catalogs/Items" && !u.searchParams.get("ids")
-      // the folder tree's own requests are not the grid's
-      && !(u.searchParams.get("filter") ?? "").includes("_is_folder"));
+  calls(fetchMock).filter((u) => u.pathname === "/api/list/catalogs/Items" && !u.searchParams.get("ids"));
 
 function open(props: Partial<RefPickerDialogProps> = {}) {
   const onPick = vi.fn();
@@ -133,6 +153,40 @@ describe("reference picker dialog (#411)", () => {
     expect(searched.searchParams.get("q")).toBe("saw");
   });
 
+  it("draws an expand arrow only on folders that hold sub-folders", async () => {
+    vi.stubGlobal("fetch", server({ hierarchical: true }));
+    open();
+    const tree = await screen.findByRole("tree");
+    await within(tree).findByText("Tools");
+    const node = (name: string) => within(tree).getByText(name).closest("li") as HTMLElement;
+    expect(node("Tools").querySelector("[data-onno-tree-toggle]")).not.toBeNull();
+    expect(node("Paint").querySelector("[data-onno-tree-toggle]")).toBeNull();
+    expect(node("Paint")).not.toHaveAttribute("aria-expanded");
+  });
+
+  it("shows where each hit lives while a search spans every folder", async () => {
+    const fetchMock = server({ hierarchical: true });
+    vi.stubGlobal("fetch", fetchMock);
+    open();
+    await waitFor(() => expect(pickRow("Tools")).toBeTruthy());
+    expect(screen.queryByText("Location")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Search"), { target: { value: "a" } });
+    await waitFor(() => expect(screen.getByText("Location")).toBeInTheDocument());
+    await waitFor(() => expect(within(pickRow("Hammer")).getByText("Tools")).toBeInTheDocument());
+    // one path request for the whole window, not one per row
+    const treeCalls = calls(fetchMock).filter((u) => u.pathname === "/api/catalogs/Items/tree");
+    expect(treeCalls).toHaveLength(1);
+    expect(treeCalls[0].searchParams.get("ids")?.split(",")).toEqual(expect.arrayContaining(["i-hammer", "i-saw"]));
+  });
+
+  it("keeps the list inset like the search box, never flush with the dialog edge", async () => {
+    vi.stubGlobal("fetch", server());
+    open();
+    await waitFor(() => expect(pickRow("Hammer")).toBeTruthy());
+    expect(document.querySelector("[data-onno-picker-list]")).toHaveClass("px-5");
+  });
+
   it("shows a folder tree whose nodes open their folder", async () => {
     vi.stubGlobal("fetch", server({ hierarchical: true }));
     open();
@@ -150,6 +204,9 @@ describe("reference picker dialog (#411)", () => {
     await waitFor(() => expect(pickRow("Saw")).toHaveAttribute("data-onno-selected", "true"));
     expect(feedCalls(fetchMock).at(-1)?.searchParams.get("focus")).toBe("i-saw");
     expect(feedCalls(fetchMock).at(-1)?.searchParams.get("filter")).toBe("_parent = f-tools");
+    // the whole path came from one request, not one lookup per level
+    expect(calls(fetchMock).filter((u) => u.pathname === "/api/catalogs/Items/tree")).toHaveLength(1);
+    expect(calls(fetchMock).some((u) => u.searchParams.get("ids") && u.pathname.startsWith("/api/list/"))).toBe(false);
     expect(screen.getByRole("button", { name: "Select" })).toBeEnabled();
   });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
-import { ChevronDown, ChevronRight, Filter, Folder, FolderOpen, Loader2, Search, X } from "lucide-react";
+import { Filter, Loader2, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { getActiveProfile } from "@/lib/active-profile";
@@ -11,17 +11,23 @@ import { useTouchLayout } from "@/components/ui/facet-sheet";
 import {
   EntityListWidget,
   entityRowId,
+  type ListColumn,
   type ListDescriptor,
   type ListSelectMode,
   type PickRowState,
 } from "@/components/entity-list-widget";
+import {
+  FolderBreadcrumbs,
+  FolderTree,
+  isFolder,
+  loadFolderPaths,
+  rowLabel,
+  type Crumb,
+} from "@/components/folder-browser";
 import { useMessages } from "@/providers/messages-provider";
 
 /** The picker descriptor: an ordinary list descriptor plus whether the target has folders. */
 type PickerDescriptor = ListDescriptor & { hierarchical?: boolean };
-
-/** One step of the folder path: null id is the catalog root. */
-type Crumb = { id: string | null; label: string };
 
 export interface RefPickerDialogProps {
   open: boolean;
@@ -45,34 +51,8 @@ export interface RefPickerDialogProps {
   onPick: (id: string, row: EntityRecord) => void;
 }
 
-const FEED_LIMIT = 200;
-const MAX_DEPTH = 32;
-
-function feedUrl(name: string, params: Record<string, string>): string {
-  return `/api/list/catalogs/${encodeURIComponent(name)}?${new URLSearchParams(params).toString()}`;
-}
-
-async function feedRows(name: string, params: Record<string, string>): Promise<EntityRecord[]> {
-  const res = await fetch(feedUrl(name, params), { credentials: "include" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as { rows?: EntityRecord[] };
-  return data.rows ?? [];
-}
-
-function rowLabel(row: EntityRecord): string {
-  return String(row.description ?? row._description ?? row.number ?? row._number ?? row.code ?? entityRowId(row) ?? "");
-}
-
-function rowParent(row: EntityRecord): string | null {
-  const p = row.parent ?? row._parent;
-  if (p == null || p === "") return null;
-  if (typeof p === "object") return String((p as { id?: unknown }).id ?? "") || null;
-  return String(p);
-}
-
-function isFolder(row: EntityRecord): boolean {
-  return row.folder === true || row._is_folder === true;
-}
+/** The client-computed "Location" column a search across folders adds (#411). */
+const LOCATION_COLUMN = "__location";
 
 /** Combine WidgetFilter clauses with AND, skipping blanks. */
 function andFilter(...clauses: (string | undefined | null)[]): string | undefined {
@@ -157,7 +137,10 @@ function PickerBody({
         if (cancelled) return;
         const root: Crumb = { id: null, label: d.title };
         if (d.hierarchical && kind === "catalogs") {
-          setPath(value ? await pathTo(targetName, value, root, true) : [root]);
+          // One request for the value's whole path; the dialog opens in the value's folder.
+          const paths = value ? await loadFolderPaths(targetName, [value]).catch(() => new Map<string, Crumb[]>()) : null;
+          const own = value ? paths?.get(value) : undefined;
+          setPath([root, ...(own ? own.slice(0, -1) : [])]);
         } else {
           setPath([root]);
         }
@@ -169,6 +152,28 @@ function PickerBody({
 
   const folderId = path && path.length ? path[path.length - 1].id : null;
   const searching = debouncedQuery.trim() !== "";
+  const searchingRef = useRef(false);
+  searchingRef.current = hierarchical && searching;
+
+  // ---- locations: a search spans every folder, so each hit shows where it lives ----
+  const [locations, setLocations] = useState<Record<string, string>>({});
+  const locationsRequested = useRef(new Set<string>());
+  const locate = useCallback((rows: EntityRecord[]) => {
+    const ids = rows.map(entityRowId).filter((id): id is string => !!id && !locationsRequested.current.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => locationsRequested.current.add(id));
+    loadFolderPaths(targetName, ids)
+      .then((paths) => setLocations((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          // The folders above the record; a top-level record lives in the root.
+          const crumbs = paths.get(id)?.slice(0, -1) ?? [];
+          next[id] = crumbs.map((c) => c.label).join(" / ");
+        }
+        return next;
+      }))
+      .catch(() => {});
+  }, [targetName]);
 
   // ---- decorations: which loaded rows the dropdown would offer, and how ----
   const [decorations, setDecorations] = useState<Record<string, { offered: boolean; d?: RefOptionDecorations["decorations"][string] }>>({});
@@ -184,6 +189,7 @@ function PickerBody({
       const row = rows.find((r) => entityRowId(r) === opened);
       if (row) setHighlighted((prev) => prev ?? row);
     }
+    if (searchingRef.current) locate(rows);
     if (!decorator) return;
     const ids = rows.map(entityRowId).filter((id): id is string => !!id && !requested.current.has(id));
     if (!ids.length) return;
@@ -208,7 +214,7 @@ function PickerBody({
         return next;
       });
     });
-  }, [decorator, filter, targetKind, targetName]);
+  }, [decorator, filter, targetKind, targetName, locate]);
 
   const rowState = useCallback((row: EntityRecord): PickRowState | undefined => {
     const id = entityRowId(row);
@@ -251,8 +257,10 @@ function PickerBody({
       const id = entityRowId(row);
       if (!id) return;
       if (searching) {
-        // A folder found by search: its own place in the tree is resolved from its ancestors.
-        void pathTo(targetName, id, path[0], false).then((crumbs) => openFolder(crumbs));
+        // A folder found by search: its own place in the tree comes from the path lookup.
+        void loadFolderPaths(targetName, [id])
+          .then((paths) => openFolder([path[0], ...(paths.get(id) ?? [{ id, label: rowLabel(row) }])]))
+          .catch(() => openFolder([path[0], { id, label: rowLabel(row) }]));
       } else {
         openFolder([...path, { id, label: rowLabel(row) }]);
       }
@@ -271,14 +279,22 @@ function PickerBody({
     rowState,
     onRowsLoaded,
     query: debouncedQuery,
-  }), [highlightedId, activate, rowState, onRowsLoaded, debouncedQuery]);
+    cellText: (row: EntityRecord, col: ListColumn) =>
+      col.columnName === LOCATION_COLUMN ? locations[entityRowId(row) ?? ""] ?? "" : undefined,
+  }), [highlightedId, activate, rowState, onRowsLoaded, debouncedQuery, locations]);
 
   const list = useMemo<ListDescriptor | null>(() => {
     if (!descriptor || !path) return null;
     // The field's refFilter always applies; folder navigation adds the folder, a search spans all.
     const folderClause = hierarchical && !searching ? `_parent = ${folderId ?? "null"}` : undefined;
+    // A search across folders adds a "Location" column (the hit's folder path), so same-named
+    // records in different folders can be told apart.
+    const columns = hierarchical && searching
+      ? [...descriptor.columns, { columnName: LOCATION_COLUMN, label: t("ref.location"), width: "", sortable: false }]
+      : descriptor.columns;
     return {
       ...descriptor,
+      columns,
       embedded: true,
       fill: true,
       newUrl: null,
@@ -288,7 +304,7 @@ function PickerBody({
       defaultGroupBy: undefined,
       focus: focusId ?? undefined,
     };
-  }, [descriptor, path, hierarchical, searching, folderId, filter, focusId]);
+  }, [descriptor, path, hierarchical, searching, folderId, filter, focusId, t]);
 
   const highlightedState = highlighted ? rowState(highlighted) : undefined;
   const canPick = !!highlighted && entityRowId(highlighted) === highlightedId && !highlightedState?.disabled
@@ -326,24 +342,7 @@ function PickerBody({
           />
         </label>
         {hierarchical && path ? (
-          <nav aria-label={t("ref.folders")} className={cn("flex min-w-0 flex-wrap items-center gap-1 text-sm", searching && "opacity-50")}>
-            {path.map((crumb, i) => (
-              <span key={crumb.id ?? "root"} className="flex min-w-0 items-center gap-1">
-                {i > 0 ? <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
-                <button
-                  type="button"
-                  onClick={() => openFolder(path.slice(0, i + 1))}
-                  aria-current={i === path.length - 1 ? "location" : undefined}
-                  className={cn(
-                    "max-w-56 truncate rounded-control px-1.5 py-0.5 hover:bg-accent",
-                    i === path.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {crumb.label}
-                </button>
-              </span>
-            ))}
-          </nav>
+          <FolderBreadcrumbs path={path} onOpen={openFolder} dimmed={searching} />
         ) : null}
         {filter ? (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-onno-picker-filter="">
@@ -356,13 +355,22 @@ function PickerBody({
       <div className="flex min-h-0 flex-1">
         {hierarchical && path && !touch ? (
           <FolderTree
-            targetName={targetName}
+            catalog={targetName}
             root={path[0]}
             path={path}
             onOpen={openFolder}
+            className="w-60 shrink-0 border-r border-border p-2"
           />
         ) : null}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {/* The list sits inset like the search box above it, never flush with the dialog edge or
+            the folder tree (the embedded list widget leaves its gutter to its host). */}
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col pb-4 pt-3",
+            touch ? "px-3" : hierarchical ? "pl-4 pr-5" : "px-5"
+          )}
+          data-onno-picker-list=""
+        >
           {failed ? (
             <p className="p-6 text-sm text-muted-foreground">{t("ref.pickEmpty")}</p>
           ) : list ? (
@@ -387,116 +395,5 @@ function PickerBody({
         </Button>
       </footer>
     </Dialog>
-  );
-}
-
-/**
- * The breadcrumb path from the root to {@code id}: the record's folder when {@code toParent}
- * (the dialog opening on a value), or the folder itself. Walks up through `ids=` lookups, which
- * apply the caller's record scope; an unreadable ancestor ends the walk at the root.
- */
-async function pathTo(name: string, id: string, root: Crumb, toParent: boolean): Promise<Crumb[]> {
-  const chain: Crumb[] = [];
-  let current: string | null = id;
-  let first = true;
-  try {
-    for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
-      const [row] = await feedRows(name, { ids: current });
-      if (!row) break;
-      if (!(first && toParent)) chain.unshift({ id: current, label: rowLabel(row) });
-      first = false;
-      current = rowParent(row);
-    }
-  } catch {
-    return [root];
-  }
-  return [root, ...chain];
-}
-
-/** The folder sidebar: lazily expanded folders only; opening one navigates the list to it. */
-function FolderTree({ targetName, root, path, onOpen }: {
-  targetName: string;
-  root: Crumb;
-  path: Crumb[];
-  onOpen: (crumbs: Crumb[]) => void;
-}) {
-  const t = useMessages();
-  const [children, setChildren] = useState<Record<string, EntityRecord[] | "loading">>({});
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["root"]));
-  const current = path[path.length - 1]?.id ?? null;
-
-  const load = useCallback((parent: string | null) => {
-    const key = parent ?? "root";
-    setChildren((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }));
-    feedRows(targetName, {
-      filter: `_is_folder = true AND _parent = ${parent ?? "null"}`,
-      sort: "description",
-      limit: String(FEED_LIMIT),
-    })
-      .then((rows) => setChildren((prev) => ({ ...prev, [key]: rows })))
-      .catch(() => setChildren((prev) => ({ ...prev, [key]: [] })));
-  }, [targetName]);
-
-  // Every folder on the current path is open, so the tree shows where the list is.
-  useEffect(() => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      for (const c of path) next.add(c.id ?? "root");
-      return next;
-    });
-  }, [path]);
-  useEffect(() => {
-    for (const key of expanded) {
-      if (children[key] === undefined) load(key === "root" ? null : key);
-    }
-  }, [expanded, children, load]);
-
-  const toggle = (key: string) =>
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-
-  const renderNode = (crumbs: Crumb[], depth: number) => {
-    const node = crumbs[crumbs.length - 1];
-    const key = node.id ?? "root";
-    const isOpen = expanded.has(key);
-    const kids = children[key];
-    const active = node.id === current;
-    return (
-      <li key={key} role="treeitem" aria-expanded={isOpen} aria-selected={active}>
-        <div className={cn("flex items-center gap-1 rounded-control pr-2", active ? "bg-primary/10 text-foreground" : "hover:bg-accent")}
-          style={{ paddingLeft: 4 + depth * 14 }}>
-          <button type="button" onClick={() => toggle(key)} aria-label={node.label}
-            className="flex size-5 shrink-0 items-center justify-center text-muted-foreground" tabIndex={-1}>
-            {kids === "loading" ? <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-              : kids && kids.length === 0 ? null
-              : isOpen ? <ChevronDown className="size-3.5" aria-hidden="true" />
-              : <ChevronRight className="size-3.5" aria-hidden="true" />}
-          </button>
-          <button type="button" onClick={() => onOpen(crumbs)}
-            className={cn("flex min-w-0 flex-1 items-center gap-1.5 py-1 text-left text-sm", active && "font-medium")}>
-            {isOpen ? <FolderOpen className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              : <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-            <span className="truncate">{node.label}</span>
-          </button>
-        </div>
-        {isOpen && Array.isArray(kids) && kids.length ? (
-          <ul role="group">
-            {kids.map((row) => {
-              const id = entityRowId(row);
-              return id ? renderNode([...crumbs, { id, label: rowLabel(row) }], depth + 1) : null;
-            })}
-          </ul>
-        ) : null}
-      </li>
-    );
-  };
-
-  return (
-    <aside aria-label={t("ref.folders")} className="w-60 shrink-0 overflow-y-auto border-r border-border p-2" data-onno-picker-tree="">
-      <ul role="tree">{renderNode([root], 0)}</ul>
-    </aside>
   );
 }

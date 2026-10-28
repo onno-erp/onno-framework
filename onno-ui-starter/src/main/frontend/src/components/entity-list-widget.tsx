@@ -80,6 +80,8 @@ export type ListColumn = {
   hint?: string;
   /** A row-action submenu label this cell opens directly on right-click (ListSpec.cellMenu). */
   cellMenu?: string;
+  /** False for a host-computed column the feed cannot sort by: its header is a plain label. */
+  sortable?: boolean;
 };
 
 function responseKey(col: ListColumn): string {
@@ -279,6 +281,8 @@ export type ListSelectMode = {
   onRowsLoaded?: (rows: EntityRecord[]) => void;
   /** The search query, when the host owns the search box (it then hides the toolbar's own). */
   query?: string;
+  /** Host-supplied text for a cell (e.g. a computed column); undefined renders the cell as usual. */
+  cellText?: (row: EntityRecord, col: ListColumn) => string | undefined;
 };
 /** A column the list can be grouped by; `date` columns bucket by a chosen day/month/year granularity. */
 export type GroupableColumn = { columnName: string; label: string; date: boolean };
@@ -3344,6 +3348,14 @@ export function EntityListWidget({
               /> : null}
               {columns.map((c) => {
                 const active = sort.column === c.columnName;
+                if (c.sortable === false) {
+                  return (
+                    <div key={c.columnName} className="flex min-w-0 items-center gap-1">
+                      <span className="truncate text-xs font-medium text-muted-foreground">{c.label}</span>
+                      <HintIcon text={c.hint} size={13} />
+                    </div>
+                  );
+                }
                 // The help "?" sits beside (not inside) the sort button — nesting buttons is
                 // invalid HTML and would make the hint trigger a sort.
                 return (
@@ -3432,7 +3444,12 @@ export function EntityListWidget({
                         )}
                         style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                       >
-                        {columns.map((c) => <ListCell key={c.columnName} row={row} col={c} />)}
+                        {columns.map((c) => {
+                          const text = selectMode.cellText?.(row, c);
+                          return text !== undefined
+                            ? <span key={c.columnName} className="min-w-0 truncate text-muted-foreground">{text}</span>
+                            : <ListCell key={c.columnName} row={row} col={c} />;
+                        })}
                         <PickRowBadge pick={pick} />
                       </div>
                     );

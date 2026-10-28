@@ -404,6 +404,14 @@ class RecordPolicyConformanceTest {
         assertThat(ids(jsonList(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
         assertThat(jsonList(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
                 .allSatisfy(r -> assertThat(r.get("parent")).isNull());
+
+        // Picker folder browsing (#411): folders-only children and the pruned path tree are scoped
+        // the same way; a path to the orphan starts at the orphan, never at B's hidden parent.
+        ok(get("/api/catalogs/LkInstances/children").param("folders", "true"));
+        List<Map<String, Object>> path = jsonList(ok(get("/api/catalogs/LkInstances/tree")
+                .param("ids", instanceUnderB + "," + instanceB)));
+        assertThat(ids(path)).containsExactly(instanceUnderB.toString());
+        assertThat(row(path, instanceUnderB)).containsEntry("parent", null).containsEntry("parentRestricted", true);
     }
 
     private void registersAreScopedByDimension() throws Exception {

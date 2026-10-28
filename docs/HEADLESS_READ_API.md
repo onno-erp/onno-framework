@@ -18,8 +18,8 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
-GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs)
-GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays
+GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs); folders=true: folders only, with hasChildFolders
+GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays; ids=a,b: only the paths to those records
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window

@@ -539,6 +539,22 @@ export const api = {
     const qs = profile ? `?profile=${encodeURIComponent(profile)}` : "";
     return fetchJson<T>(`${BASE}/divkit/pickers/${kind}/${encodeURIComponent(name)}${qs}`);
   },
+  /**
+   * The folders directly under {@code parent} (the roots without it) of a hierarchical catalog, each
+   * flagged {@code hasChildFolders} so a folder tree draws an arrow only where it can expand (#411).
+   */
+  getCatalogChildFolders: (name: string, parent: string | null) => {
+    const qs = new URLSearchParams({ folders: "true" });
+    if (parent) qs.set("parent", parent);
+    return fetchJson<EntityRecord[]>(`${BASE}/catalogs/${encodeURIComponent(name)}/children?${qs.toString()}`);
+  },
+  /**
+   * The catalog tree pruned to the paths from the roots to {@code ids}, nested through `children`;
+   * unreadable records and ancestors are left out (#411).
+   */
+  getCatalogPaths: (name: string, ids: string[]) =>
+    fetchJson<EntityRecord[]>(`${BASE}/catalogs/${encodeURIComponent(name)}/tree?ids=${encodeURIComponent(ids.join(","))}`,
+      undefined, { silent: true }),
   /** Which rows of a picker dialog window the dropdown would offer, and their decorations (#411). */
   decorateRefOptions: (request: RefOptionDecorateRequest) =>
     fetchJson<RefOptionDecorations>(`${BASE}/ref-options/decorate`, {

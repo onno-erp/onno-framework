@@ -190,8 +190,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. |
-| GET | `/{name}/tree` | Full nested tree (hierarchical only). |
+| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
+| GET | `/{name}/tree` | Full nested tree (hierarchical only). `ids=a,b` returns only the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
@@ -750,9 +750,14 @@ replaced by an authored `Page` on the list route and does not require an `Entity
 target gets the default columns); it carries no actions, New url, batch selection or map/custom
 views. For a hierarchical catalog the dialog adds a folder tree beside the list and breadcrumbs above
 it: a folder opens on double click (the **Select** button picks the highlighted folder itself, as the
-dropdown allows), and a search spans every folder. Folder navigation uses the `_parent = <uuid>` /
-`_parent = null` clause the list feed's `filter=` accepts on hierarchical catalogs. Polymorphic
-(`PolyRef`) fields keep the dropdown only.
+dropdown allows), and a search spans every folder, adding a **Location** column with each hit's
+folder path. The grid filters by folder with the `_parent = <uuid>` / `_parent = null` clause the list
+feed's `filter=` accepts on hierarchical catalogs; the tree reads `/children?folders=true` (an arrow
+only where `hasChildFolders`), and the path to the current value or to the search hits comes from one
+`/tree?ids=` call. Polymorphic (`PolyRef`) fields keep the dropdown only.
+
+The folder pieces live in `folder-browser.tsx` for reuse beside any list over a hierarchical
+catalog: `FolderTree` (lazy, folders only), `FolderBreadcrumbs`, and `loadFolderPaths(catalog, ids)`.
 
 The list widget's select mode is reusable: `<EntityListWidget list={...} selectMode={{ highlightedId,
 onHighlight, onActivate, rowState, onRowsLoaded, query }} />` turns any list into a picker (no record

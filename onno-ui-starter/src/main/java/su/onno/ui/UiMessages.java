@@ -420,7 +420,7 @@ public final class UiMessages {
         d.put("register.expense", "Expense");
 
         // List grid: toolbar count, search, sort, view toggle, and keyset loading.
-        d.put("list.count", "{count} rows");
+        d.put("list.count", "Rows: {count}");
         d.put("list.focusMissing", "This record isn't in the list with the current filters");
         d.put("list.search", "Search…");
         d.put("list.searchLabel", "Search");
@@ -549,6 +549,7 @@ public final class UiMessages {
         d.put("ref.pickFiltered", "The list is limited by this field's conditions");
         d.put("ref.folder", "Folder");
         d.put("ref.folders", "Folders");
+        d.put("ref.location", "Location");
         d.put("ref.pickEmpty", "Nothing to select here");
         d.put("relatedList.saveFirstManage", "Save this record first to manage {name}.");
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");

@@ -449,7 +449,12 @@ export function GroupedList({
                           )}
                           style={{ minHeight: ROW_H, gridTemplateColumns: template }}
                         >
-                          {columns.map((c) => <ListCell key={c.columnName} row={row} col={c} />)}
+                          {columns.map((c) => {
+                            const text = selectMode.cellText?.(row, c);
+                            return text !== undefined
+                              ? <span key={c.columnName} className="min-w-0 truncate text-muted-foreground">{text}</span>
+                              : <ListCell key={c.columnName} row={row} col={c} />;
+                          })}
                           <PickRowBadge pick={pick} />
                         </div>
                       );
