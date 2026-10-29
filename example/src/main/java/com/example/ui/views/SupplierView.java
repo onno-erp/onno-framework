@@ -1,6 +1,7 @@
 package com.example.ui.views;
 
 import com.example.domain.catalogs.Supplier;
+import com.example.domain.catalogs.SupplierContact;
 import su.onno.ui.EntityConfigBuilder;
 import su.onno.ui.EntityView;
 import su.onno.ui.ListSpec;
@@ -30,5 +31,9 @@ public class SupplierView implements EntityView<Supplier> {
             .field(Supplier::getEmail).order(1).group("Contact").width("half")
             .field(Supplier::getPhone).order(2).group("Contact").width("half")
             .field(Supplier::getNote).order(3).widget("textarea");
+        f.field(Supplier::getContacts).label("Contact people");
+        f.rowField(Supplier::getContacts, SupplierContact::getName).order(0);
+        f.rowField(Supplier::getContacts, SupplierContact::getEmail).order(1).placeholder("name@example.com");
+        f.rowField(Supplier::getContacts, SupplierContact::getPhone).order(2);
     }
 }

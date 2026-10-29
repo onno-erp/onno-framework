@@ -150,8 +150,7 @@ export interface RefOptionDecorations {
  * a join catalog or an information register. The panel reads the junction rows whose {@link
  * viaField} ref points at the record being edited; a join-catalog junction also adds/removes rows
  * by creating/deleting join records (so a many-to-many edits inline like a document's tabular
- * section, with no mirrored data), while a register-backed junction is read-only. See {@code
- * RelatedList}.
+ * section, with no mirrored data), while a register-backed junction is read-only. See the server-side RelatedList type.
  */
 export interface RelatedListMeta {
   /** Panel id + REST sub-path: GET /api/{catalogs|documents}/{owner}/{id}/related/{name}. */
@@ -186,6 +185,7 @@ export interface CatalogMeta {
   tableName: string;
   codeLength: number;
   attributes: AttributeMeta[];
+  tabularSections?: TabularSectionMeta[];
 }
 
 export interface DocumentMeta {

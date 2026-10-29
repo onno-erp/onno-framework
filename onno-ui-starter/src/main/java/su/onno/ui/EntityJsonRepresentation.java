@@ -124,6 +124,7 @@ final class EntityJsonRepresentation {
     private static Map<String, Object> logicalCatalog(CatalogDescriptor descriptor,
                                                        Map<String, Object> row) {
         Map<String, Object> logical = logicalRow(row, CATALOG_SYSTEM_KEYS, descriptor.attributes());
+        sections(logical, row, descriptor.tabularSections());
         Object children = valueIgnoreCase(row, "children");
         if (children instanceof List<?> rows) {
             logical.put("children", catalogChildren(descriptor, rows));
@@ -144,7 +145,13 @@ final class EntityJsonRepresentation {
     private static Map<String, Object> logicalDocument(DocumentDescriptor descriptor,
                                                         Map<String, Object> row) {
         Map<String, Object> logical = logicalRow(row, DOCUMENT_SYSTEM_KEYS, descriptor.attributes());
-        for (TabularSectionDescriptor section : descriptor.tabularSections()) {
+        sections(logical, row, descriptor.tabularSections());
+        return logical;
+    }
+
+    private static void sections(Map<String, Object> logical, Map<String, Object> row,
+                                 List<TabularSectionDescriptor> sections) {
+        for (TabularSectionDescriptor section : sections) {
             Object sectionValue = valueIgnoreCase(row, section.name());
             if (!(sectionValue instanceof List<?> rows)) {
                 continue;
@@ -158,7 +165,6 @@ final class EntityJsonRepresentation {
             }
             logical.put(section.name(), logicalRows);
         }
-        return logical;
     }
 
     private static Map<String, Object> logicalRow(Map<String, Object> row,

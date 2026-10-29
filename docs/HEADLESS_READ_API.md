@@ -165,7 +165,7 @@ Catalog/document responses use **logical API names by default**. Attributes use 
 | `deletionMark` | catalog, document | soft-delete flag |
 | `folder`, `parent` | hierarchical catalog | folder flag / parent UUID |
 | `version` | catalog, document | optimistic-lock version |
-| `parentId`, `lineNumber` | tabular-section row | back-reference to the document / 1-based ordinal |
+| `parentId`, `lineNumber` | tabular-section row | back-reference to the owning catalog/document / 1-based ordinal |
 | `<fieldName>` | attribute | Java field name; a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
 | `<fieldName>Display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
 | `<fieldName>Ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }`; `type` is the target's logical name, while `kind`/`javaType` are present for polymorphic refs |
@@ -258,7 +258,7 @@ writes use the same field name:
 }
 ```
 
-List-feed rows do **not** inline tabular sections; single-document reads do. A single-record read
+List-feed rows do **not** inline tabular sections; single-catalog and single-document reads do. A single-record read
 returns `404` when the id is unknown.
 
 ## Reference & enum expansion
@@ -614,3 +614,10 @@ from the ordinary shared bot inbox, with reply permissions checked before sends.
 starter README for lifecycle, skipped paused updates, attachment and history limits.
 
 CRM audio attachments keep the existing `contentType`, `url`, `filename`, `size`, and `image` contract. The inbox renders `audio/*` with playback controls; no additional message field is required. Common audio formats served through `/api/media/{key}` use inline disposition.
+
+Catalog `@TabularSection` fields follow the same row contract as documents in REST and MCP.
+Create/update accepts section-name arrays; omitted sections are preserved and `[]` clears them.
+Catalog header and section replacements share one transaction, including the version check.
+
+`POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
+The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.

@@ -1,6 +1,5 @@
 package su.onno.spring;
 
-import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.TabularSectionDescriptor;
 import su.onno.model.AccumulationRecord;
@@ -11,6 +10,7 @@ import su.onno.security.SecretCipher;
 import su.onno.security.SecretFields;
 
 import org.springframework.data.relational.core.mapping.event.AfterConvertCallback;
+import org.springframework.lang.NonNull;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -38,16 +38,20 @@ public class OnnoAfterConvertCallback implements AfterConvertCallback<Object> {
     }
 
     @Override
-    public Object onAfterConvert(Object aggregate) {
-        if (aggregate instanceof CatalogObject catalog) {
-            catalog.setNew(false);
-        } else if (aggregate instanceof DocumentObject document) {
-            document.setNew(false);
-            // lineNumber is @Transient (the list index owns the _line_number key column), so
-            // restore each row's 1-based position after a Spring Data JDBC load.
-            restoreLineNumbers(document);
-        } else if (aggregate instanceof AccumulationRecord record) {
-            record.setNew(false);
+    @NonNull
+    public Object onAfterConvert(@NonNull Object aggregate) {
+        switch (aggregate) {
+            case CatalogObject catalog -> {
+                catalog.setNew(false);
+                restoreLineNumbers(catalog, registry.getCatalogDescriptor(catalog.getClass()).tabularSections());
+            }
+            case DocumentObject document -> {
+                document.setNew(false);
+                // lineNumber is transient; restore the 1-based position after loading the list.
+                restoreLineNumbers(document, registry.getDocumentDescriptor(document.getClass()).tabularSections());
+            }
+            case AccumulationRecord record -> record.setNew(false);
+            default -> { }
         }
         // Decrypt secret attributes so repository-loaded entities expose plaintext to
         // application code. The database row holds ciphertext; decrypt is a no-op on
@@ -57,9 +61,8 @@ public class OnnoAfterConvertCallback implements AfterConvertCallback<Object> {
     }
 
     @SuppressWarnings("unchecked")
-    private void restoreLineNumbers(DocumentObject document) {
-        DocumentDescriptor desc = registry.getDocumentDescriptor(document.getClass());
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
+    private void restoreLineNumbers(Object document, List<TabularSectionDescriptor> sections) {
+        for (TabularSectionDescriptor ts : sections) {
             try {
                 Field field = findField(document.getClass(), ts.fieldName());
                 field.setAccessible(true);

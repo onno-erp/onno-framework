@@ -16,6 +16,10 @@ public class DefaultNamingStrategy {
         return requireSqlIdentifier("document_" + toSnake(documentName) + "_" + toSnake(sectionName));
     }
 
+    public String catalogTabularSectionTable(String catalogName, String sectionName) {
+        return requireSqlIdentifier(catalogTable(catalogName) + "_" + toSnake(sectionName));
+    }
+
     public String registerTable(String registerName) {
         return requireSqlIdentifier("register_" + toSnake(registerName));
     }

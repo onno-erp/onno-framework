@@ -258,7 +258,10 @@ public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Po
 
 ### Tabular Sections
 
-Tabular sections are line-item collections owned by a document.
+Tabular sections are line-item collections owned by a catalog or document.
+Catalog sections use `catalog_<owner>_<section>` tables and the same form editor as documents.
+REST/MCP writes accept section-name arrays; omitted sections stay unchanged, `[]` clears them.
+Catalog headers and submitted sections commit or roll back together.
 
 Examples:
 - Invoice lines
@@ -280,7 +283,7 @@ public class SalesOrderLine extends TabularSectionRow {
 
 Each `@TabularSection` must use its own concrete `TabularSectionRow` class. Spring Data JDBC maps a
 row class to one generated child table, so startup rejects the same concrete row class reused by
-another document or section. Share common fields and behavior through a base row class, then create
+another catalog, document or section. Share common fields and behavior through a base row class, then create
 a distinct concrete subclass for each section.
 
 ### Accumulation Registers

@@ -27,4 +27,8 @@ public class Supplier extends CatalogObject {
 
     @Attribute(displayName = "Note", length = 500)
     private String note;
+    /** Owned contacts are saved and cancelled together with the supplier form. */
+    @su.onno.annotations.TabularSection(name = "contacts")
+    private java.util.List<SupplierContact> contacts = new java.util.ArrayList<>();
+
 }

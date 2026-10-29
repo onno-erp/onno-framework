@@ -30,7 +30,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -106,11 +105,11 @@ public class DocumentCommandService {
             doc.setNumber(number);
             if (parsedDate != null) doc.setDate(parsedDate);
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
-            overlayTabularSections(doc, desc, body, errors);
+            TabularSectionWriteSupport.overlay(doc, desc.tabularSections(), lifecycle, body, errors);
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
             if (EntityWriteSupport.bake(lifecycle, doc, true, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
-                writeBackTabularSections(doc, desc, body);
+                TabularSectionWriteSupport.writeBack(doc, desc.tabularSections(), lifecycle, body);
                 body.put("number", doc.getNumber());
                 if (doc.getDate() != null) body.put("date", doc.getDate().toString());
             }
@@ -180,13 +179,13 @@ public class DocumentCommandService {
             if (body.containsKey("number")) doc.setNumber(asString(body.get("number")));
             if (parsedDate != null) doc.setDate(parsedDate);
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
-            overlayTabularSections(doc, desc, body, errors);
+            TabularSectionWriteSupport.overlay(doc, desc.tabularSections(), lifecycle, body, errors);
             Map<String, Object> before = lifecycle.snapshot(doc, desc.attributes());
             String numberBefore = doc.getNumber();
             LocalDateTime dateBefore = doc.getDate();
             if (EntityWriteSupport.bake(lifecycle, doc, false, errors)) {
                 lifecycle.writeBackDerived(doc, desc.attributes(), before, body);
-                writeBackTabularSections(doc, desc, body);
+                TabularSectionWriteSupport.writeBack(doc, desc.tabularSections(), lifecycle, body);
                 if (!Objects.equals(doc.getNumber(), numberBefore)) body.put("number", doc.getNumber());
                 if (doc.getDate() != null && !Objects.equals(doc.getDate(), dateBefore)) {
                     body.put("date", doc.getDate().toString());
@@ -300,7 +299,7 @@ public class DocumentCommandService {
                 }
             }
             lifecycle.applyBody(doc, desc.attributes(), body, errors);
-            overlayTabularSections(doc, desc, body, errors);
+            TabularSectionWriteSupport.overlay(doc, desc.tabularSections(), lifecycle, body, errors);
             EntityWriteSupport.dryRunRules(lifecycle, doc, isNew, errors);
         }
         return EntityWriteSupport.validationReport(errors);
@@ -373,8 +372,7 @@ public class DocumentCommandService {
                         .bind("id", id)
                         .mapToMap()
                         .findOne()
-                        .orElse(null)
-        );
+        ).orElse(null);
         if (row != null && Boolean.TRUE.equals(row.get("_posted"))) {
             DocumentObject doc = loadDocumentObject(desc, id);
             postingService.unpost(doc);
@@ -384,8 +382,7 @@ public class DocumentCommandService {
                 h.createQuery("SELECT _number FROM " + desc.tableName() + " WHERE _id = :id")
                         .bind("id", id)
                         .mapTo(String.class)
-                        .findOne()
-                        .orElse(null));
+                        .findOne()).orElse(null);
         jdbi.useHandle(h ->
                 h.createUpdate("UPDATE " + desc.tableName() + " SET _deletion_mark = true WHERE _id = :id")
                         .bind("id", id)
@@ -405,79 +402,6 @@ public class DocumentCommandService {
                 if (row instanceof Map<?, ?> m) {
                     guard.requireReadableRefs(ts.attributes(), (Map<String, Object>) m, subject);
                 }
-            }
-        }
-    }
-
-    /**
-     * Build the in-memory tabular-section rows from the submitted body so {@code beforeWrite} sees
-     * the lines that will be written (e.g. a total summed over them). Only sections present in the
-     * body are replaced; otherwise the rows reconstructed from the database are kept. The rows are
-     * not written back from here — {@link #insertTabularSections} persists them from the body.
-     */
-    @SuppressWarnings("unchecked")
-    private void overlayTabularSections(DocumentObject doc, DocumentDescriptor desc,
-                                        Map<String, Object> body, ValidationErrors errors) {
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
-            if (!(body.get(ts.name()) instanceof List<?> rows)) {
-                continue;
-            }
-            List<TabularSectionRow> built = new ArrayList<>();
-            for (Object rawRow : rows) {
-                if (!(rawRow instanceof Map<?, ?> rowMap)) {
-                    continue;
-                }
-                try {
-                    TabularSectionRow rowObj = (TabularSectionRow) ts.rowClass()
-                            .getDeclaredConstructor().newInstance();
-                    lifecycle.applyBody(rowObj, ts.attributes(), (Map<String, Object>) rowMap, errors);
-                    built.add(rowObj);
-                } catch (ReflectiveOperationException skipRow) {
-                    // A row that can't be instantiated is left out of the in-memory view; the
-                    // declarative checks above and the insert below still run against the body.
-                }
-            }
-            Field listField = findField(desc.javaClass(), ts.fieldName());
-            if (listField != null) {
-                listField.setAccessible(true);
-                try {
-                    listField.set(doc, built);
-                } catch (IllegalAccessException unreachable) {
-                    throw new IllegalStateException(unreachable);
-                }
-            }
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private void writeBackTabularSections(DocumentObject doc, DocumentDescriptor desc,
-                                          Map<String, Object> body) {
-        for (TabularSectionDescriptor ts : desc.tabularSections()) {
-            if (!(body.get(ts.name()) instanceof List<?> submitted)) {
-                continue;
-            }
-            Field listField = findField(desc.javaClass(), ts.fieldName());
-            if (listField == null) {
-                continue;
-            }
-            listField.setAccessible(true);
-            try {
-                if (!(listField.get(doc) instanceof List<?> materialized)) {
-                    continue;
-                }
-                List<Map<String, Object>> rewritten = new ArrayList<>();
-                for (int i = 0; i < materialized.size(); i++) {
-                    Object rowObject = materialized.get(i);
-                    Map<String, Object> rowBody = i < submitted.size()
-                            && submitted.get(i) instanceof Map<?, ?> original
-                            ? new LinkedHashMap<>((Map<String, Object>) original)
-                            : new LinkedHashMap<>();
-                    lifecycle.writeBackAll(rowObject, ts.attributes(), rowBody);
-                    rewritten.add(rowBody);
-                }
-                body.put(ts.name(), rewritten);
-            } catch (IllegalAccessException unreachable) {
-                throw new IllegalStateException(unreachable);
             }
         }
     }
@@ -512,7 +436,6 @@ public class DocumentCommandService {
         return value == null ? null : value.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private DocumentObject loadDocumentObject(DocumentDescriptor desc, UUID id) {
         Map<String, Object> raw = jdbi.withHandle(h ->
                 h.createQuery("SELECT * FROM " + desc.tableName() +
@@ -593,7 +516,6 @@ public class DocumentCommandService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private void setFieldValue(Object target, AttributeDescriptor attr, Object value) throws Exception {
         Field field = findField(target.getClass(), attr.fieldName());
         if (field == null || value == null) return;
@@ -632,19 +554,21 @@ public class DocumentCommandService {
             field.set(target, value instanceof UUID u ? u : UUID.fromString(value.toString()));
         } else if (fieldType.isEnum()) {
             UUID enumId = value instanceof UUID u ? u : UUID.fromString(value.toString());
-            var enumDesc = registry.allEnumerations().stream()
+            registry.allEnumerations().stream()
                     .filter(e -> e.javaClass().equals(fieldType))
-                    .findFirst().orElse(null);
-            if (enumDesc != null) {
-                enumDesc.values().stream()
-                        .filter(v -> v.id().equals(enumId))
-                        .findFirst()
-                        .ifPresent(v -> {
-                            try {
-                                field.set(target, Enum.valueOf((Class<Enum>) fieldType, v.name()));
-                            } catch (Exception ignored) {}
-                        });
-            }
+                    .flatMap(enumDesc -> enumDesc.values().stream())
+                    .filter(v -> v.id().equals(enumId))
+                    .findFirst()
+                    .ifPresent(v -> {
+                        try {
+                            for (Object constant : fieldType.getEnumConstants()) {
+                                if (((Enum<?>) constant).name().equals(v.name())) {
+                                    field.set(target, constant);
+                                    break;
+                                }
+                            }
+                        } catch (IllegalAccessException ignored) {}
+                    });
         } else {
             field.set(target, value);
         }

@@ -22,7 +22,7 @@ if something looks off — the code wins, and you should fix this file if it has
 `name` (required), `title=""`, `tableName=""`, `previousNames={}` (covers doc + tabular section
 table renames), `numberLength=11`, `autoNumber=true`, `numberPrefix=""`, `context=""`.
 
-### `@TabularSection` (on a `List<Row>` field of a document; `Row extends TabularSectionRow`)
+### `@TabularSection` (on a `List<Row>` field of a catalog or document; `Row extends TabularSectionRow`)
 `name=""` (child table name; derived from the field name if empty). Each section must use a
 distinct concrete row class because Spring Data maps the class to one child table; startup rejects
 reuse across documents/sections. Share implementation through a base row class.

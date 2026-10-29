@@ -87,7 +87,9 @@ In brief:
 - **`@Document`** — business events (Sales Order, Invoice). `numberPrefix`, `numberLength`,
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).
-- **`@TabularSection`** — line-item collections on a document; rows extend `TabularSectionRow`.
+- **`@TabularSection`** — owned line-item collections on a catalog or document; rows extend `TabularSectionRow`. Catalog child tables use
+  `catalog_<owner>_<section>`. Repositories, REST/MCP and the common form grid (including `rowField`
+  hints) support both owners; generic catalog writes save the header and rows atomically.
   Each section owns one distinct concrete row class because Spring Data JDBC maps that class to one
   child table; startup rejects reuse across documents or sections before scan order can select the
   wrong table. Common fields/behavior belong in a shared base row class.
@@ -384,7 +386,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 
 | Area | Endpoints (served by) |
 | --- | --- |
-| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=` (`folders=true`: folders only with `hasChildFolders`), `/tree` (`ids=`: only the paths to those records, record-scoped), `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
+| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=` (`folders=true`: folders only with `hasChildFolders`), `/tree` (`ids=`: only the paths to those records, record-scoped), `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}` (duplicate includes tabular rows with fresh IDs and omits secrets); `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
 | Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; an empty query leads with up to 5 of the caller's recent picks (`_recent: true`, opt out with `recent: false`), re-read through the same search so deletion mark, record scope and `refFilter` still apply; `POST /api/ref-options/recent` - remember a pick `{targetKind, targetName, id}` per user and target in the framework-owned `onno_ref_recent` table (20 newest kept; `204` whether or not the record is visible, so it is no existence oracle; #409); `POST /api/ref-options/decorate` - the "Show all..." picker dialog's window check: the field context plus `ids`, re-read through the same search and the field's decorator, answering `{offered, decorations}` and never naming an id outside the caller's scope; `GET /api/divkit/pickers/{kind}/{name}` - the dialog's list descriptor (view columns/filters for the active profile, default columns without a view, never replaced by an authored `Page`, no write affordances, `hierarchical`; #411); `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
 | Documents | `GET /api/documents/{name}/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |

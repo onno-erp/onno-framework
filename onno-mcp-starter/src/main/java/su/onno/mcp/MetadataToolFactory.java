@@ -370,6 +370,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 e.put("hierarchical", d.hierarchical());
                 e.put("writable", writesAllowed() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
+                describeSections(e, d.tabularSections());
                 catalogs.add(e);
             }
             out.put("catalogs", catalogs);
@@ -385,14 +386,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 e.put("postingEnabled", properties.isPostingEnabled()
                         && !uiProperties.isReadOnly() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
-                List<Map<String, Object>> sections = new ArrayList<>();
-                for (TabularSectionDescriptor ts : d.tabularSections()) {
-                    Map<String, Object> s = new LinkedHashMap<>();
-                    s.put("name", ts.name());
-                    s.put("fields", fields(ts.attributes()));
-                    sections.add(s);
-                }
-                if (!sections.isEmpty()) e.put("tabularSections", sections);
+                describeSections(e, d.tabularSections());
                 documents.add(e);
             }
             out.put("documents", documents);
@@ -621,4 +615,15 @@ public class MetadataToolFactory implements McpToolProvider {
         required.append("]");
         return "{\"type\":\"object\",\"required\":" + required + ",\"properties\":{" + props + "}}";
     }
+    private void describeSections(Map<String, Object> e, List<TabularSectionDescriptor> descriptors) {
+        List<Map<String, Object>> sections = new ArrayList<>();
+        for (TabularSectionDescriptor ts : descriptors) {
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("name", ts.name());
+            s.put("fields", fields(ts.attributes()));
+            sections.add(s);
+        }
+        if (!sections.isEmpty()) e.put("tabularSections", sections);
+    }
+
 }
