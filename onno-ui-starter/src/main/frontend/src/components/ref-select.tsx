@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronsUpDown, ExternalLink, Plus, Search, X } from "lucide-react";
+import { ChevronsUpDown, ExternalLink, List, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn, toSnakeCase } from "@/lib/utils";
 import { logicalEntityKey } from "@/lib/entity-keys";
@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { selectTriggerClassName } from "@/components/ui/select";
 import { FacetSheet, useTouchLayout } from "@/components/ui/facet-sheet";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { RefPickerDialog } from "@/components/ref-picker-dialog";
 import { useMessages } from "@/providers/messages-provider";
 import {
   cancelQuickCreate,
@@ -47,6 +48,13 @@ interface RefSelectProps {
   optionContext?: Omit<RefOptionSearch, "targetKind" | "targetName" | "decorator" | "query" | "limit" | "filter">;
   /** Sibling-row selections to disable immediately in this picker. */
   excludedIds?: string[];
+  /** The field's label, titling the "Show all…" picker dialog (#411); defaults to the target's title. */
+  fieldLabel?: string;
+  /**
+   * Offer "Show all…" below the options (#411), opening the target's full list in a picker
+   * dialog. On by default; a polymorphic ref turns it off (one dialog cannot span its targets).
+   */
+  showAll?: boolean;
   onChange: (id: string | null) => void;
 }
 
@@ -90,6 +98,8 @@ export function RefSelect({
   optionDecorator,
   optionContext,
   excludedIds = [],
+  fieldLabel,
+  showAll: showAllEnabled = true,
   onChange,
 }: RefSelectProps) {
   const t = useMessages();
@@ -100,6 +110,9 @@ export function RefSelect({
   const [items, setItems] = useState<EntityRecord[]>([]);
   const [selected, setSelected] = useState<EntityRecord | null>(null);
   const [loading, setLoading] = useState(false);
+  // "Show all…" (#411): the full-list picker dialog, opened from the bottom of the options.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
   const touchLayout = useTouchLayout();
   const kind = isDocument ? "documents" : "catalogs";
   const contextKey = JSON.stringify(optionContext ?? {});
@@ -192,6 +205,20 @@ export function RefSelect({
     window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/new` }));
   };
 
+  const showAll = () => {
+    setPickerQuery(query);
+    setOpen(false);
+    setPickerOpen(true);
+  };
+
+  // A dialog pick takes the dropdown's path: the same value, the same "recent" bookkeeping.
+  const pickFromDialog = (id: string, row: EntityRecord) => {
+    cancelQuickCreate(kind, name);
+    setSelected(row);
+    onChange(id);
+    rememberPick(isDocument, targetName, id);
+  };
+
   const clear = () => {
     cancelQuickCreate(kind, name);
     setSelected(null);
@@ -269,7 +296,25 @@ export function RefSelect({
       onPick={pick}
       onAddNew={addNew}
       onClear={clearable && value ? clear : undefined}
+      onShowAll={showAllEnabled ? showAll : undefined}
       excludedIds={excludedIds}
+    />
+  );
+
+  const picker = (
+    <RefPickerDialog
+      open={pickerOpen}
+      onClose={() => setPickerOpen(false)}
+      fieldLabel={fieldLabel ?? ""}
+      targetKind={isDocument ? "document" : "catalog"}
+      targetName={targetName}
+      filter={filter}
+      decorator={optionDecorator}
+      optionContext={optionContext}
+      excludedIds={excludedIds}
+      value={value ?? null}
+      initialQuery={pickerQuery}
+      onPick={pickFromDialog}
     />
   );
 
@@ -280,6 +325,7 @@ export function RefSelect({
         <FacetSheet open={open} label={t("form.select", { name: targetName })} onClose={() => setOpen(false)}>
           {content}
         </FacetSheet>
+        {picker}
       </>
     );
   }
@@ -295,6 +341,7 @@ export function RefSelect({
       >
         {content}
       </PopoverContent>
+      {picker}
     </Popover>
   );
 }
@@ -310,6 +357,7 @@ function RefSelectOptions({
   onPick,
   onAddNew,
   onClear,
+  onShowAll,
   excludedIds,
 }: {
   targetName: string;
@@ -322,6 +370,7 @@ function RefSelectOptions({
   onPick: (item: EntityRecord) => void;
   onAddNew: () => void;
   onClear?: () => void;
+  onShowAll?: () => void;
   excludedIds: string[];
 }) {
   const t = useMessages();
@@ -401,6 +450,18 @@ function RefSelectOptions({
           })
         )}
       </div>
+      {onShowAll ? (
+        // "Show all…" (#411): the full list with columns, filters and folders, in a dialog.
+        <button
+          type="button"
+          onClick={onShowAll}
+          data-onno-ref-show-all=""
+          className="flex w-full items-center gap-2 border-t px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <List className="size-4" aria-hidden="true" />
+          {t("ref.showAll")}
+        </button>
+      ) : null}
     </>
   );
 }

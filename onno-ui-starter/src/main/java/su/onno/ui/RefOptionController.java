@@ -37,6 +37,9 @@ public final class RefOptionController {
     /** Recently picked options offered ahead of the ordinary ones on an empty query. */
     static final int RECENT_LIMIT = 5;
 
+    /** Upper bound of ids one {@code /decorate} call re-reads (a dialog window is far smaller). */
+    static final int MAX_DECORATE_IDS = 500;
+
     private final CatalogQueryService catalogs;
     private final DocumentQueryService documents;
     private final UiAccessService access;
@@ -128,6 +131,75 @@ public final class RefOptionController {
         if (visible) {
             recents.record(user.username(), kind, name, request.id());
         }
+    }
+
+    /**
+     * How the picker dialog (#411) must present a list window's rows so it offers exactly what
+     * the dropdown would. Every requested id is re-read through the same search as the dropdown
+     * (the field's resolved {@code refFilter}, record scope, deletion mark) and then through the
+     * field's {@link RefOptionDecorator}. The answer lists the {@code offered} ids (request order)
+     * and {@code decorations} for those that carry a badge, colour, reason or disabled flag. An id
+     * missing from {@code offered} must not be shown; the answer never names it, so an
+     * out-of-scope id is indistinguishable from an unknown one.
+     */
+    @PostMapping("/decorate")
+    public Map<String, Object> decorate(@RequestBody DecorateRequest request, AccessSubject subject) {
+        List<UUID> ids = request.ids() == null ? List.of()
+                : request.ids().stream().filter(java.util.Objects::nonNull).distinct().limit(MAX_DECORATE_IDS).toList();
+        if (ids.isEmpty()) {
+            return Map.of("offered", List.of(), "decorations", Map.of());
+        }
+        String kind = "document".equalsIgnoreCase(request.targetKind()) ? "document" : "catalog";
+        List<Map<String, Object>> rows;
+        if ("document".equals(kind)) {
+            DocumentDescriptor target = documents.require(request.targetName());
+            access.requireRead(subject, target);
+            rows = documents.search(subject, target, null, ids.size(), request.filter(), ids);
+        } else {
+            CatalogDescriptor target = catalogs.require(request.targetName());
+            access.requireRead(subject, target);
+            rows = catalogs.search(subject, target, null, ids.size(), request.filter(), ids);
+        }
+        Map<UUID, RefOptionDecoration> resolved = options.decorations(request.decorator(),
+                new RefOptionContext(kind, request.targetName(), request.fieldPath(), request.formValues(),
+                        request.section(), request.rowIndex(), request.rowValues(), request.documentId()),
+                rows);
+        Set<UUID> offered = new HashSet<>();
+        for (Map<String, Object> row : rows) {
+            UUID id = rowId(row);
+            if (id != null) {
+                offered.add(id);
+            }
+        }
+        List<String> shown = new ArrayList<>();
+        Map<String, Map<String, Object>> decorations = new java.util.LinkedHashMap<>();
+        for (UUID id : ids) {
+            RefOptionDecoration decoration = resolved.get(id);
+            if (!offered.contains(id) || (decoration != null && decoration.hidden())) {
+                continue;
+            }
+            shown.add(id.toString());
+            if (decoration != null) {
+                Map<String, Object> d = new java.util.LinkedHashMap<>();
+                if (!decoration.badge().isBlank()) {
+                    d.put("badge", decoration.badge());
+                    d.put("tone", decoration.tone().name().toLowerCase());
+                }
+                if (!decoration.color().isBlank()) {
+                    d.put("color", decoration.color());
+                }
+                if (decoration.disabled()) {
+                    d.put("disabled", true);
+                }
+                if (!decoration.reason().isBlank()) {
+                    d.put("reason", decoration.reason());
+                }
+                if (!d.isEmpty()) {
+                    decorations.put(id.toString(), d);
+                }
+            }
+        }
+        return Map.of("offered", shown, "decorations", decorations);
     }
 
     /** Remembered picks worth re-reading for this request: only for a user's empty-query search. */
@@ -229,6 +301,25 @@ public final class RefOptionController {
             this(targetKind, targetName, decorator, query, limit, filter, fieldPath, formValues,
                     section, rowIndex, rowValues, documentId, null);
         }
+    }
+
+    /**
+     * A picker-dialog window to decorate: the field's target, resolved {@code refFilter} and live
+     * form context (as in {@link SearchRequest}) plus the ids of the rows on screen.
+     */
+    public record DecorateRequest(
+            String targetKind,
+            String targetName,
+            String decorator,
+            String filter,
+            String fieldPath,
+            Map<String, Object> formValues,
+            String section,
+            Integer rowIndex,
+            Map<String, Object> rowValues,
+            UUID documentId,
+            List<UUID> ids
+    ) {
     }
 
     /** One pick to remember: the reference field's target and the chosen record. */

@@ -1364,6 +1364,7 @@ function AttrControl({
         value={value as string | undefined}
         clearable={attr.refClearButton ?? !attr.required}
         openButton={attr.refOpenButton ?? true}
+        fieldLabel={attr.displayName}
         onChange={onChange}
       />
     );
@@ -1526,6 +1527,7 @@ function PolymorphicRefInput({
         refKind={target.kind}
         value={encodedType === target.javaType ? encodedId : undefined}
         clearable={!attr.required}
+        showAll={false}
         onChange={(id) => onChange(id ? `${target.javaType}|${id}` : null)}
       />
     </div>

@@ -36,25 +36,53 @@ public class GenericCatalogController {
         this.batch = batch;
     }
 
+    /**
+     * Direct children of {@code parent} (roots without it). {@code folders=true} returns just the
+     * folders, each with {@code hasChildFolders} (#411).
+     */
     @GetMapping("/{name}/children")
     public List<Map<String, Object>> children(@PathVariable String name,
                                               @RequestParam(required = false) UUID parent,
+                                              @RequestParam(defaultValue = "false") boolean folders,
                                               @RequestParam(defaultValue = "logical") String representation,
                                               AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.catalogs(desc, query.children(subject, desc, parent),
+        return EntityJsonRepresentation.catalogs(desc, query.children(subject, desc, parent, folders),
                 EntityJsonRepresentation.parse(representation));
     }
 
+    /**
+     * The full nested tree; with {@code ids} only the paths from the roots to those records (#411).
+     * {@code ids} are comma-separated or repeated; malformed ones are ignored.
+     */
     @GetMapping("/{name}/tree")
     public List<Map<String, Object>> tree(@PathVariable String name,
+                                          @RequestParam(required = false) List<String> ids,
                                           @RequestParam(defaultValue = "logical") String representation,
                                           AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.catalogs(desc, query.tree(subject, desc),
-                EntityJsonRepresentation.parse(representation));
+        List<Map<String, Object>> rows = ids == null
+                ? query.tree(subject, desc)
+                : query.paths(subject, desc, parseIds(ids));
+        return EntityJsonRepresentation.catalogs(desc, rows, EntityJsonRepresentation.parse(representation));
+    }
+
+    private static List<UUID> parseIds(List<String> values) {
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (String value : values) {
+            for (String part : value.split(",")) {
+                try {
+                    if (!part.isBlank()) {
+                        ids.add(UUID.fromString(part.trim()));
+                    }
+                } catch (IllegalArgumentException malformed) {
+                    // an unparseable id names no record: skip it
+                }
+            }
+        }
+        return ids;
     }
 
     @GetMapping("/{name}/{id}")

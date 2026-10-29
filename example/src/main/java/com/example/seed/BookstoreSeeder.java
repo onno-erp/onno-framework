@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeSet;
+import java.util.UUID;
 
 /**
  * First-launch demo data so the app looks like a real, running shop on a fresh database: a dozen
@@ -245,6 +246,12 @@ public class BookstoreSeeder implements ApplicationRunner {
     );
 
     /** Categories: {name, color}. */
+    /** Category folders: {shelf, genres…}. Genres not listed stay top-level (Children's). */
+    private static final String[][] SHELVES = {
+        {"Fiction & Fantasy", "Fiction", "Mystery & Thriller", "Science Fiction", "Fantasy", "Poetry"},
+        {"Non-fiction", "Science", "History", "Biography", "Self-Help", "Business", "Cooking"}
+    };
+
     private static final String[][] CATEGORIES = {
         {"Fiction", "#C2410C"},
         {"Children's", "#DB2777"},
@@ -381,8 +388,12 @@ public class BookstoreSeeder implements ApplicationRunner {
 
         // --- Master data --------------------------------------------------------------------------
         Map<String, Ref<BookCategory>> categoryRefs = new LinkedHashMap<>();
+        Map<String, UUID> shelves = new LinkedHashMap<>();
+        for (String[] shelf : SHELVES) {
+            shelves.put(shelf[0], shelf(shelf[0]));
+        }
         for (String[] category : CATEGORIES) {
-            categoryRefs.put(category[0], category(category[0], category[1]));
+            categoryRefs.put(category[0], category(category[0], category[1], shelfOf(category[0], shelves)));
         }
 
         List<Ref<Supplier>> supplierRefs = new ArrayList<>();
@@ -507,11 +518,32 @@ public class BookstoreSeeder implements ApplicationRunner {
 
     // --- helpers ----------------------------------------------------------------------------------
 
-    private Ref<BookCategory> category(String name, String color) {
+    private Ref<BookCategory> category(String name, String color, UUID shelf) {
         BookCategory c = new BookCategory();
         c.setDescription(name);
         c.setColor(color);
+        c.setParent(shelf);
         return Ref.of(BookCategory.class, categories.save(c).getId());
+    }
+
+    /** A category folder (a shelf) grouping genres in the hierarchical Categories catalog. */
+    private UUID shelf(String name) {
+        BookCategory c = new BookCategory();
+        c.setDescription(name);
+        c.setFolder(true);
+        return categories.save(c).getId();
+    }
+
+    /** The shelf folder a genre sits in, or null for a top-level genre. */
+    private static UUID shelfOf(String category, Map<String, UUID> shelves) {
+        for (String[] shelf : SHELVES) {
+            for (int i = 1; i < shelf.length; i++) {
+                if (shelf[i].equals(category)) {
+                    return shelves.get(shelf[0]);
+                }
+            }
+        }
+        return null;
     }
 
     private Ref<Supplier> supplier(String name, String email) {
