@@ -44,6 +44,7 @@ import {
   type ShellNavSection,
 } from "@/components/desktop-navigation";
 import { DesktopAccountDock, type ShellAccountInfo } from "@/components/desktop-account-dock";
+import { setActiveProfile } from "@/lib/active-profile";
 import "@divkitframework/divkit/dist/client.css";
 
 // The shell nav/account cards render lucide icons, the ambient sidebar presence dots, and the
@@ -424,6 +425,7 @@ export function DivKitView() {
   const branding = useBranding();
   const t = useMessages();
   const [profile, setProfile] = useState<string | null>(null);
+  useEffect(() => setActiveProfile(profile), [profile]);
   const [viewport, setViewport] = useState<Viewport>(() => viewportFor(window.innerWidth));
   const [shell, setShell] = useState<ShellData | null>(null);
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);

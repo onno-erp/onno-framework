@@ -3,7 +3,8 @@ name: onno-ui-entity-views
 description: >-
   Author onno-framework EntityView beans. Use when configuring entity list columns, field labels,
   system column labels, list filters, grouping, aggregation, conditional row styles, form layout,
-  field widgets, formatting, placeholders, hints, refSecondary, refFilter cascading pickers
+  field widgets, formatting, placeholders, hints, refSecondary, refFilter cascading pickers,
+  ref picker open/clear buttons, recent picks and the "Show all..." picker dialog
   (dependent ref fields filtered by another field's value), related lists, comments, toolbar row
   and detail actions, action forms, dynamic action labels/icons/visibility, built-in post/unpost
   placement, or map list views.
@@ -29,6 +30,21 @@ routes and API UI surfaces, but nav still requires a `Layout` section.
 Use `EntityView<E>` and getter references. Prefer `field/refField/rowField/rowRefField` typed
 overloads; raw types and string Java-field names are only dynamic escape hatches. Expression text
 such as `refFilter("customer = ${customer}")` intentionally remains a string.
+
+A Ref picker offers the user's recent picks for its target first on an empty query (server-side,
+re-checked against `refFilter`, record scope and deletion; nothing to configure). It shows an
+"open" button for the selected record and a clear button; hide them per field with
+`f.refField(Order::getCustomer).openButton(false)` / `.clearButton(false)`, or for a row column with
+`f.rowRefField(Order::getLines, OrderLine::getBook).openButton(false)`. A required ref never shows
+the clear button, even with `clearButton(true)`.
+
+Every single-target Ref picker also ends with "Show all...": a dialog over the target's full list
+using the target's own `EntityView` list (columns, filters, grouping) for the active profile, or the
+default columns when the target has no view. Nothing to configure, but the picker field's rules
+carry over: `refFilter` becomes a fixed constraint, `refOptions(...)` and `uniqueWithinSection()`
+hide/disable rows per window, and a hierarchical target (`@Catalog(hierarchical = true)`) gets a
+folder tree and breadcrumbs. So make the target's list readable as a picker too: a descriptive first
+column and a search-friendly column set.
 
 Treat every `list.columns(...)` entry as requiring an explicit human-facing
 `list.label(getter, "...")`. Keep the first descriptive column readable and limit operational lists

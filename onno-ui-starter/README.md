@@ -190,8 +190,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. |
-| GET | `/{name}/tree` | Full nested tree (hierarchical only). |
+| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
+| GET | `/{name}/tree` | Full nested tree (hierarchical only). `ids=a,b` returns only the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
@@ -700,6 +700,68 @@ f.refField(Order::getCustomer).refSecondary(Customer::getPhone);
 
 The named field is on the ref's **target** entity; the value already rides along in the picker
 payload, so this only tells the client which extra line to render.
+
+**Recent picks (#409).** The server remembers which records each user picked per target entity
+(`POST /api/ref-options/recent`, body `{targetKind, targetName, id}`, `204`; the framework-owned
+`onno_ref_recent` table keeps the 20 newest per user and target). With an empty query
+`POST /api/ref-options/search` returns up to five of them first, flagged `_recent: true`, followed by
+the ordinary options without duplicates and still capped by `limit` (`"recent": false` in the body
+turns the section off). Remembered ids are only hints: they are re-read through the same search,
+so a record that was deleted, left the caller's record scope or no longer matches the field's
+`refFilter` is not offered. A pick of a record the caller cannot see is silently not remembered,
+and the endpoint answers `204` either way.
+
+In the UI the recent picks sit under a **Recent** label at the top of the options; picking a record
+(or creating one through "+ New") remembers it. A filled picker on an entity form also shows two
+inline buttons, in the header and in tabular-section rows alike: **open** the selected record
+(dispatches `onno://{kind}/{name}/{id}` through `onno:action`, like "+ New") and **clear** the value.
+Both are on by default; turn them off per field:
+
+```java
+f.refField(Order::getCustomer).openButton(false);
+f.rowRefField(Order::getItems, OrderLine::getBook).clearButton(false);
+```
+
+A required ref never shows the clear button, even with `clearButton(true)`. The metadata carries the
+resolved `refOpenButton`/`refClearButton` booleans. Pickers in action dialogs and related-list panels
+show recent picks too but no open button, so a click there never leaves the dialog.
+
+**"Show all..." picker dialog (#411).** The options end with **Show all...**, which opens the
+target's full list in a modal dialog (a full-screen sheet on touch devices): the target's
+`EntityView` columns, sort, filters and grouping for the active profile, its own search box (focused,
+seeded with the text typed in the dropdown), **Select** and **Cancel**. A click highlights a row, a
+double click or Enter selects it, the arrow keys move the highlight, Esc closes; the dialog opens on
+the field's current value. It works the same in the header and in tabular-section rows, and a
+dialog pick takes the dropdown's path (the same value, remembered as a recent pick).
+
+The dialog never offers what the dropdown would not:
+
+- the field's resolved `refFilter` is a fixed feed constraint the user cannot lift (the dialog says
+  the list is limited by the field's conditions, without showing the values);
+- record scope and the deletion mark apply as in every list feed;
+- with `refOptions(Decorator.class)` each loaded window is re-read through
+  `POST /api/ref-options/decorate` (body: the field context as for `/search` plus `ids`; answer
+  `{offered: [ids], decorations: {id: {badge, tone, color, disabled, reason}}}`): an id missing from
+  `offered` is not drawn, a disabled one is shown greyed with its reason;
+- with `uniqueWithinSection()` the values picked in sibling rows are shown but not selectable.
+
+The list descriptor comes from `GET /api/divkit/pickers/{kind}/{name}?profile=`, which is never
+replaced by an authored `Page` on the list route and does not require an `EntityView` (a view-less
+target gets the default columns); it carries no actions, New url, batch selection or map/custom
+views. For a hierarchical catalog the dialog adds a folder tree beside the list and breadcrumbs above
+it: a folder opens on double click (the **Select** button picks the highlighted folder itself, as the
+dropdown allows), and a search spans every folder, adding a **Location** column with each hit's
+folder path. The grid filters by folder with the `_parent = <uuid>` / `_parent = null` clause the list
+feed's `filter=` accepts on hierarchical catalogs; the tree reads `/children?folders=true` (an arrow
+only where `hasChildFolders`), and the path to the current value or to the search hits comes from one
+`/tree?ids=` call. Polymorphic (`PolyRef`) fields keep the dropdown only.
+
+The folder pieces live in `folder-browser.tsx` for reuse beside any list over a hierarchical
+catalog: `FolderTree` (lazy, folders only), `FolderBreadcrumbs`, and `loadFolderPaths(catalog, ids)`.
+
+The list widget's select mode is reusable: `<EntityListWidget list={...} selectMode={{ highlightedId,
+onHighlight, onActivate, rowState, onRowsLoaded, query }} />` turns any list into a picker (no record
+opening, row menu, batch selection or clipboard; rows stamp `data-onno-pick-row`).
 
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`

@@ -96,12 +96,27 @@ public class CatalogQueryService {
      */
     public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query,
                                             int limit, String filter) {
+        return search(subject, desc, query, limit, filter, null);
+    }
+
+    /**
+     * As {@link #search(AccessSubject, CatalogDescriptor, String, int, String)}, additionally restricted to
+     * the given ids when {@code ids} is non-null: the ref picker's "recent" section re-reads its
+     * remembered picks through here, so they pass the same deletion mark, record scope and
+     * {@code refFilter} as ordinary options. An empty id list yields no rows.
+     */
+    public List<Map<String, Object>> search(AccessSubject subject, CatalogDescriptor desc, String query,
+                                            int limit, String filter, java.util.Collection<UUID> ids) {
+        if (ids != null && ids.isEmpty()) {
+            return new ArrayList<>();
+        }
         EntitySurfaceDescriptor surface = surface(desc);
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, filter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
                 + (wf.isEmpty() ? "" : " AND (" + wf.sql() + ")")
+                + (ids == null ? "" : " AND _id IN (<ids>)")
                 + search.and() + scope.and();
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var q = h.createQuery("SELECT * FROM " + desc.tableName() +
@@ -109,6 +124,9 @@ public class CatalogQueryService {
                             " ORDER BY _description LIMIT :limit")
                     .bind("limit", limit);
             wf.bindings().forEach(q::bind);
+            if (ids != null) {
+                q.bindList("ids", List.copyOf(ids));
+            }
             EntityQuerySupport.bindSearch(q, query);
             search.bind(q);
             scope.bind(q);
@@ -214,7 +232,7 @@ public class CatalogQueryService {
         String col = surface.safeSort(sortColumn);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and()
@@ -271,7 +289,7 @@ public class CatalogQueryService {
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -308,7 +326,7 @@ public class CatalogQueryService {
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
+        WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         String where = "_deletion_mark = false" + searchClause.and() + filterClause(filter) + filterClause(wf)
@@ -398,11 +416,40 @@ public class CatalogQueryService {
     }
 
     /**
+     * A catalog's {@link WidgetFilter} over its attribute columns and, for a hierarchical catalog,
+     * {@code _parent} (bound as a uuid), so a picker dialog can list one folder's children with
+     * {@code _parent = <uuid>} or the roots with {@code _parent = null} (#411).
+     */
+    private static WidgetFilter.Result widgetFilter(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
+                                                    String filter) {
+        if (!desc.hierarchical()) {
+            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        }
+        Set<String> columns = new java.util.HashSet<>(surface.columnNames());
+        columns.add("_parent");
+        Set<String> uuids = new java.util.HashSet<>(surface.uuidColumns());
+        uuids.add("_parent");
+        return WidgetFilter.parse(filter, columns, uuids);
+    }
+
+    /**
      * The live children of {@code parent} ({@code null}: the roots). For a record-scoped subject the
      * scope applies per node, and an in-scope record whose parent is out of scope is returned as a
      * root (with its parent withheld).
      */
     public List<Map<String, Object>> children(AccessSubject subject, CatalogDescriptor desc, UUID parent) {
+        return children(subject, desc, parent, false);
+    }
+
+    /**
+     * As {@link #children(AccessSubject, CatalogDescriptor, UUID)}; with {@code foldersOnly} just the
+     * folders, each flagged {@code _has_child_folders} when it holds a live sub-folder the subject
+     * may read, so a folder tree draws an expand arrow only where there is something to expand
+     * (#411). The flag applies the same record scope as the rows, so it never reveals a hidden
+     * sub-folder.
+     */
+    public List<Map<String, Object>> children(AccessSubject subject, CatalogDescriptor desc, UUID parent,
+                                              boolean foldersOnly) {
         if (!desc.hierarchical()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Catalog is not hierarchical: " + desc.logicalName());
@@ -415,15 +462,24 @@ public class CatalogQueryService {
                 ? table + "._parent IS NULL"
                 : "(" + table + "._parent IS NULL OR NOT EXISTS (SELECT 1 FROM " + table + " _tp WHERE _tp._id = "
                         + table + "._parent" + parentScope.and() + "))";
+        ScopeClause childScope = !foldersOnly || scope.isAll() ? ScopeClause.ALL
+                : scopes.clause(desc.javaClass(), subject, su.onno.access.AccessMode.READ, "_tc");
+        String childFlag = foldersOnly
+                ? ", EXISTS (SELECT 1 FROM " + table + " _tc WHERE _tc._parent = " + table + "._id"
+                        + " AND _tc._is_folder = true AND _tc._deletion_mark = false" + childScope.and()
+                        + ") AS _has_child_folders"
+                : "";
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            String sql = "SELECT * FROM " + table +
+            String sql = "SELECT " + table + ".*" + childFlag + " FROM " + table +
                     " WHERE _deletion_mark = false AND " +
+                    (foldersOnly ? table + "._is_folder = true AND " : "") +
                     (parent == null ? roots : table + "._parent = :parent") + scope.and() +
                     " ORDER BY _is_folder DESC, _description";
             var query = h.createQuery(sql);
             if (parent != null) query.bind("parent", parent);
             scope.bind(query);
             if (parent == null) parentScope.bind(query);
+            childScope.bind(query);
             return query.mapToMap().list();
         });
         EntityQuerySupport.maskParents(jdbi, table, rows, scope);
@@ -445,6 +501,60 @@ public class CatalogQueryService {
                         .list()
         );
         EntityQuerySupport.maskParents(jdbi, desc.tableName(), rows, scope);
+        EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
+        return buildTree(rows, null);
+    }
+
+    /** Upper bound of records one {@link #paths} call resolves, and of the ancestor levels it walks. */
+    static final int MAX_PATH_IDS = 200;
+    static final int MAX_PATH_DEPTH = 64;
+
+    /**
+     * The tree pruned to the paths from the roots to {@code ids} (#411): each requested record the
+     * subject may read, plus its ancestors, nested through {@code children} like {@link #tree}. The
+     * walk goes up through readable, live ancestors only; where the next one is out of scope or
+     * deleted the path starts there (the node becomes a root, its parent withheld as in
+     * {@link #children}). Unknown, deleted or unreadable ids are left out, so the answer names
+     * nothing the subject cannot see. A picker opens on a value or labels search hits with one call.
+     */
+    public List<Map<String, Object>> paths(AccessSubject subject, CatalogDescriptor desc,
+                                           java.util.Collection<UUID> ids) {
+        if (!desc.hierarchical()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Catalog is not hierarchical: " + desc.logicalName());
+        }
+        ScopeClause scope = scope(subject, surface(desc));
+        Map<UUID, Map<String, Object>> found = new LinkedHashMap<>();
+        java.util.Set<UUID> wanted = new java.util.LinkedHashSet<>();
+        ids.stream().filter(Objects::nonNull).limit(MAX_PATH_IDS).forEach(wanted::add);
+        for (int depth = 0; !wanted.isEmpty() && depth <= MAX_PATH_DEPTH; depth++) {
+            List<UUID> batch = List.copyOf(wanted);
+            List<Map<String, Object>> rows = jdbi.withHandle(h -> scope.bind(h.createQuery(
+                            "SELECT * FROM " + desc.tableName()
+                                    + " WHERE _deletion_mark = false AND _id IN (<ids>)" + scope.and()))
+                    .bindList("ids", batch)
+                    .mapToMap().list());
+            wanted.clear();
+            for (Map<String, Object> row : rows) {
+                UUID id = parseUuid(row.get("_id"));
+                if (found.putIfAbsent(id, row) == null) {
+                    UUID parent = parseUuid(row.get("_parent"));
+                    if (parent != null && !found.containsKey(parent)) {
+                        wanted.add(parent);
+                    }
+                }
+            }
+        }
+        List<Map<String, Object>> rows = new ArrayList<>(found.values());
+        // A parent the walk did not reach (out of scope, deleted, or past the depth cap) is withheld,
+        // so its child is presented as a root exactly like children()/tree() present it.
+        for (Map<String, Object> row : rows) {
+            UUID parent = parseUuid(row.get("_parent"));
+            if (parent != null && !found.containsKey(parent)) {
+                row.put("_parent", null);
+                row.put("_parent_restricted", true);
+            }
+        }
         EntityQuerySupport.decorateRows(refResolver, desc.attributes(), rows, subject);
         return buildTree(rows, null);
     }
