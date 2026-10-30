@@ -36,7 +36,6 @@ import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,7 +113,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/documents/{name}/{id}/posting-preview", "POST /api/documents/{name}/{id}/unpost",
                 "DELETE /api/documents/{name}/{id}", "POST /api/documents/{name}/batch-delete",
                 "GET /api/registers/{name}/movements", "GET /api/registers/{name}/balance",
-                "GET /api/registers/{name}/turnover",
+                "GET /api/registers/{name}/turnover", "GET /api/information-registers/{name}/records",
                 // List feeds, groups, widget aggregates
                 "GET /api/list/catalogs/{name}", "GET /api/list/documents/{name}",
                 "GET /api/list/catalogs/{name}/groups", "GET /api/list/documents/{name}/groups",
@@ -192,7 +191,7 @@ class RecordPolicyConformanceTest {
     private MockMvc mvc;
 
     private static boolean seeded;
-    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked, planBasic;
+    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked;
     private static UUID instanceA, instanceB, instanceUnderB, instanceMirror;
     private static UUID jobA, jobB;
     private static final Set<String> B_IDS = new LinkedHashSet<>();
@@ -230,7 +229,7 @@ class RecordPolicyConformanceTest {
                 "email", "a@leak.test"), system));
         ownerB = id(catalogCommands.create(owners, body("code", "LEAK-B-O", "description", "LEAK-B-owner",
                 "email", "b@leak.test"), system));
-        planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
+        UUID planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
         tenantA = id(catalogCommands.create(tenants, body("code", "TA", "description", "Alpha tenant",
                 "owner", ownerA.toString(), "note", "alpha"), system));
         tenantLocked = id(catalogCommands.create(tenants, body("code", "TL", "description", "Locked tenant",
@@ -415,6 +414,7 @@ class RecordPolicyConformanceTest {
     }
 
     private void registersAreScopedByDimension() throws Exception {
+        assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
         List<Map<String, Object>> movements = jsonList(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
         List<Map<String, Object>> balance = jsonList(ok(get("/api/registers/LkUsage/balance")));
@@ -431,7 +431,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> resolved = jsonMap(ok(get("/api/mentions/resolve")
                 .param("kind", "catalogs").param("name", "LkTenants").param("id", tenantB.toString())));
         // the resolve response echoes the requested id; it must be unreadable with no display
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(resolved).containsEntry("readable", false).containsEntry("display", null);
 
         ok(get("/api/comments/catalogs/LkTenants/" + tenantA));
@@ -442,7 +442,7 @@ class RecordPolicyConformanceTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"mine\"}")));
         ok(post("/api/comments/" + mine.get("id") + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"));
-        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).get(0).id();
+        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).getFirst().id();
         status(post("/api/comments/" + bComment + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"), 404);
         status(delete("/api/comments/" + bComment), 404);
@@ -495,13 +495,13 @@ class RecordPolicyConformanceTest {
         ok(post("/api/catalogs/LkTenants/validate").contentType(MediaType.APPLICATION_JSON).content("{}"));
         Map<String, Object> batch = jsonMap(ok(post("/api/catalogs/LkTenants/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + tenantB + "\"]}")));
-        bodies.remove(bodies.size() - 1); // the batch summary echoes failed ids
+        bodies.removeLast(); // the batch summary echoes failed ids
         assertThat(batch).containsEntry("ok", 0);
 
         // create: the policy default stamps the owner, even over an explicit foreign owner
         Map<String, Object> created = jsonMap(ok(post("/api/catalogs/LkTenants").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"New tenant\",\"owner\":\"" + ownerB + "\"}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(created.get("owner")).isEqualTo(ownerA.toString());
         // cannot move a record out of the write scope; cannot reference an unreadable record
         status(put("/api/catalogs/LkTenants/" + tenantA).contentType(MediaType.APPLICATION_JSON)
@@ -529,7 +529,7 @@ class RecordPolicyConformanceTest {
         status(delete("/api/documents/LkBuildJobs/" + jobB), 404);
         Map<String, Object> docBatch = jsonMap(ok(post("/api/documents/LkBuildJobs/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + jobB + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(docBatch).containsEntry("ok", 0);
         // a line referencing B's instance is rejected
         status(post("/api/documents/LkBuildJobs").contentType(MediaType.APPLICATION_JSON)
@@ -559,7 +559,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> batch = jsonMap(ok(post("/api/actions/catalogs/LkTenants/touch/batch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[\"" + tenantA + "\",\"" + tenantB + "\",\"" + tenantLocked + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(batch).containsEntry("ok", 1);
         assertThat(LeakTestApp.TOUCHES.get()).isEqualTo(2);
     }
@@ -609,9 +609,9 @@ class RecordPolicyConformanceTest {
         }
 
         @Override
-        public void send(SseEventBuilder builder) throws IOException {
+        public void send(SseEventBuilder builder) {
             StringBuilder sb = new StringBuilder();
-            builder.build().forEach(part -> sb.append(String.valueOf(part.getData())));
+            builder.build().forEach(part -> sb.append(part.getData()));
             sent.add(sb.toString().replace('=', ':'));
         }
     }
@@ -643,11 +643,7 @@ class RecordPolicyConformanceTest {
     // --------------------------------------------------------------------------- helpers
 
     private String ok(MockHttpServletRequestBuilder request) throws Exception {
-        return ok(request, 200);
-    }
-
-    private String ok(MockHttpServletRequestBuilder request, int expected) throws Exception {
-        return status(request, expected);
+        return status(request, 200);
     }
 
     private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {

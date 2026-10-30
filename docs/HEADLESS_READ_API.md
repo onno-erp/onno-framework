@@ -30,6 +30,7 @@ GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all.
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/information-registers/{name}/records?from=&to=&cursor=&limit=
 GET /api/process-definitions                 latest versions plus typed graph descriptors
 GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
@@ -44,6 +45,28 @@ GET /api/tasks/{workItemId}/history       ordered task audit trail
 POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
+
+Information-register records return one keyset window of stored rows, including periodic
+history, in the same envelope as the catalog/document feeds: `{rows, nextCursor, hasMore}`.
+Use `from` / `to` as optional inclusive ISO local date-times (for example
+`2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
+Pass dimension Java field names as equality query parameters, for example
+`?customer=<uuid>&region=North`. Reference and enumeration dimensions use their stored UUIDs.
+Only declared non-secret dimensions participate in filtering; any other query parameter is
+rejected with `400` instead of being ignored.
+
+`limit` defaults to 100 and is clamped to 1..500. Pass the previous `nextCursor` back as `cursor`
+for the next window; `nextCursor` is `null` (and `hasMore` false) on the last one. The cursor is
+sealed to the caller's record access, so a cursor issued to another user is rejected with `400`.
+Rows are ordered by period descending, then ID descending to break ties; nonperiodic (`NONE`)
+registers order by ID descending and reject `from` / `to` with `400`.
+Invalid dates and reversed ranges also return `400`.
+
+The response uses logical names: `id`, `period` (periodic registers only), dimension/resource/
+attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessControl` gates the route
+(`403` without a read grant); record policies filter rows before pagination, and restricted references
+are masked by the common resolver. Secret attributes carry the common redacted sentinel.
+Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
 
 The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
 
