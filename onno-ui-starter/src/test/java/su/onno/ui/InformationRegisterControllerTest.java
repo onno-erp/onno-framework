@@ -113,26 +113,42 @@ class InformationRegisterControllerTest {
     void filtersInclusivePeriodAndDimensionsBeforePagingAndResolvesReferences() throws Exception {
         var request = get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T11:00:00")
                 .param("region", "North").param("customer", owner.toString()).param("limit", "1");
-        var first = rows(request);
-        assertThat(first).hasSize(1);
-        assertThat(first.getFirst()).containsEntry("amount", 30.0).containsEntry("customerDisplay", "Visible client")
+        var first = page(subject, request);
+        List<Map<String, Object>> rows = rows(first);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst()).containsEntry("amount", 30.0).containsEntry("customerDisplay", "Visible client")
                 .containsEntry("period", "2024-03-01T11:00").containsEntry("reviewedByRestricted", true)
                 .containsEntry("reviewedBy", null);
-        assertThat(first.getFirst()).containsKey("reviewedByDisplay").doesNotContainKeys("_id", "customer_display");
-        assertThat(json.writeValueAsString(first)).doesNotContain("HIDDEN-CLIENT", "secret-value", other.toString());
-        assertThat(rows(request.param("offset", "1")).getFirst()).containsEntry("amount", 10.0);
-        assertThat(rows(get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T11:00:00")
-                .param("region", "North").param("limit", "1").param("offset", "2"))).isEmpty();
+        assertThat(rows.getFirst()).containsKey("reviewedByDisplay").doesNotContainKeys("_id", "customer_display");
+        assertThat(json.writeValueAsString(rows)).doesNotContain("HIDDEN-CLIENT", "secret-value", other.toString());
+        assertThat(first).containsEntry("hasMore", true).containsKey("nextCursor");
+
+        var second = page(subject, get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T11:00:00")
+                .param("region", "North").param("customer", owner.toString()).param("limit", "1")
+                .param("cursor", (String) first.get("nextCursor")));
+        assertThat(rows(second)).singleElement().satisfies(r -> assertThat(r).containsEntry("amount", 10.0));
+        assertThat(second).containsEntry("hasMore", false).containsEntry("nextCursor", null);
     }
 
     @Test
     void tiedPeriodsHaveStablePagesAndForeignDimensionCannotEscapeScope() throws Exception {
-        var request = get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T10:00:00")
+        var window = get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T10:00:00")
                 .param("limit", "1");
-        assertThat(rows(request).getFirst()).containsEntry("amount", 20.0);
-        assertThat(rows(request.param("offset", "1")).getFirst()).containsEntry("amount", 10.0);
-        assertThat(rows(get(URL).param("customer", other.toString()))).isEmpty();
-        assertThat(rows(get(URL).param("region", "North' OR 1=1 --"))).isEmpty();
+        var first = page(subject, window);
+        assertThat(rows(first).getFirst()).containsEntry("amount", 20.0);
+        var second = page(subject, get(URL).param("from", "2024-03-01T10:00:00").param("to", "2024-03-01T10:00:00")
+                .param("limit", "1").param("cursor", (String) first.get("nextCursor")));
+        assertThat(rows(second).getFirst()).containsEntry("amount", 10.0);
+        assertThat(second).containsEntry("hasMore", false);
+        assertThat(rows(page(subject, get(URL).param("customer", other.toString())))).isEmpty();
+        assertThat(rows(page(subject, get(URL).param("region", "North' OR 1=1 --")))).isEmpty();
+    }
+
+    @Test
+    void cursorIsSealedToTheCaller() throws Exception {
+        String cursor = (String) page(subject, get(URL).param("limit", "1")).get("nextCursor");
+        assertThat(cursor).isNotNull();
+        mvc(AccessSubject.system()).perform(get(URL).param("cursor", cursor)).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -142,14 +158,16 @@ class InformationRegisterControllerTest {
     }
 
     @Test
-    void validatesBoundsAndSupportsNonperiodicRegisters() throws Exception {
-        for (var request : List.of(get(URL).param("limit", "0"), get(URL).param("limit", "1001"),
-                get(URL).param("offset", "-1"), get(URL).param("from", "invalid"),
+    void validatesInputClampsLimitAndSupportsNonperiodicRegisters() throws Exception {
+        for (var request : List.of(get(URL).param("offset", "1"), get(URL).param("nope", "x"),
+                get(URL).param("token", "secret-value"), get(URL).param("from", "invalid"),
                 get(URL).param("from", "2024-04-01T00:00:00").param("to", "2024-03-01T00:00:00"),
                 get("/api/information-registers/CurrentPrices/records").param("to", "2024-03-01T00:00:00"))) {
             mvc(subject).perform(request).andExpect(status().isBadRequest());
         }
-        var current = rows(get("/api/information-registers/CurrentPrices/records"));
+        assertThat(rows(page(subject, get(URL).param("limit", "0")))).hasSize(5);
+        assertThat(rows(page(subject, get(URL).param("limit", "1001")))).hasSize(5);
+        var current = rows(page(subject, get("/api/information-registers/CurrentPrices/records")));
         assertThat(current).hasSize(1);
         assertThat(current.getFirst()).containsEntry("amount", 15.0).doesNotContainKey("period");
     }
@@ -159,9 +177,14 @@ class InformationRegisterControllerTest {
                 .setCustomArgumentResolvers(AccessSubjectArgumentResolver.fixed(caller)).build();
     }
 
-    private List<Map<String, Object>> rows(MockHttpServletRequestBuilder request) throws Exception {
-        String body = mvc(subject).perform(request).andExpect(status().isOk())
+    private Map<String, Object> page(AccessSubject caller, MockHttpServletRequestBuilder request) throws Exception {
+        String body = mvc(caller).perform(request).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return json.readValue(body, new TypeReference<>() {});
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> rows(Map<String, Object> page) {
+        return (List<Map<String, Object>>) page.get("rows");
     }
 }

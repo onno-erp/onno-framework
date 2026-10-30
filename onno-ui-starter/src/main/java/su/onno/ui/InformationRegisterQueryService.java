@@ -52,39 +52,48 @@ public class InformationRegisterQueryService {
                         "Information register not found: " + name));
     }
 
-    /** Stored history, newest first; equal periods are ordered by id for stable offset pages. */
-    public List<Map<String, Object>> records(AccessSubject subject, InformationRegisterDescriptor desc,
-                                            LocalDateTime from, LocalDateTime to,
-                                            Map<String, String> filters, int limit, int offset) {
-        if (limit < 1 || limit > 1000 || offset < 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "limit must be 1..1000 and offset nonnegative");
-        }
+    /**
+     * One keyset window of stored records, newest first: by {@code _period} then {@code _id} for a
+     * periodic register, by {@code _id} for a non-periodic one. The cursor is sealed to the caller's
+     * record-access fingerprint like every other feed. {@code filters} must name non-secret
+     * dimensions by field name; anything else is rejected rather than silently widening the read.
+     */
+    public KeysetPage records(AccessSubject subject, InformationRegisterDescriptor desc,
+                              LocalDateTime from, LocalDateTime to, Map<String, String> filters,
+                              String cursor, int limit) {
         boolean periodic = desc.periodicity() != Periodicity.NONE;
         if ((!periodic && (from != null || to != null)) || (from != null && to != null && from.isAfter(to))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid period range for this register");
         }
         var dimensions = desc.dimensions().stream().filter(d -> !d.secret()).toList();
+        var known = dimensions.stream().map(AttributeDescriptor::fieldName)
+                .collect(java.util.stream.Collectors.toSet());
+        var unknown = filters.keySet().stream().filter(k -> !known.contains(k)).sorted().toList();
+        if (!unknown.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Unknown filter " + String.join(", ", unknown) + "; filter by dimension field names: "
+                            + known.stream().sorted().collect(java.util.stream.Collectors.joining(", ")));
+        }
         var equality = dimensions.stream().filter(d -> filters.containsKey(d.fieldName()))
                 .map(d -> d.columnName() + "," + filters.get(d.fieldName())).toList();
         var allowed = dimensions.stream().map(AttributeDescriptor::columnName)
                 .collect(java.util.stream.Collectors.toSet());
         ListFilter.Result scoped = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName())
                 .andInto(ListFilter.parse(equality, null, null, allowed));
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.tableName() + " WHERE 1=1");
-        if (from != null) sql.append(" AND _period >= :from");
-        if (to != null) sql.append(" AND _period <= :to");
-        if (!scoped.isEmpty()) sql.append(" AND (").append(scoped.sql()).append(")");
-        sql.append(" ORDER BY ").append(periodic ? "_period DESC, " : "")
-                .append("_id DESC LIMIT :limit OFFSET :offset");
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString()).bind("limit", limit).bind("offset", offset);
-            if (from != null) query.bind("from", from);
-            if (to != null) query.bind("to", to);
-            scoped.bindings().forEach(query::bind);
-            return query.mapToMap().list();
-        });
-        EntityQuerySupport.decorateRows(refResolver, allFields(desc), rows, subject);
-        return rows;
+        StringBuilder where = new StringBuilder("1=1");
+        if (from != null) where.append(" AND _period >= :from");
+        if (to != null) where.append(" AND _period <= :to");
+        if (!scoped.isEmpty()) where.append(" AND (").append(scoped.sql()).append(")");
+
+        KeysetWindow.Raw window = KeysetWindow.fetch(jdbi, desc.tableName(), where.toString(), q -> {
+                    if (from != null) q.bind("from", from);
+                    if (to != null) q.bind("to", to);
+                    scoped.bindings().forEach(q::bind);
+                }, periodic ? "_period" : "_id", true, false,
+                new KeysetWindow.Position(cursor, null, null), limit,
+                scopes.policies().fingerprint(subject));
+        EntityQuerySupport.decorateRows(refResolver, allFields(desc), window.rows(), subject);
+        return window.decorated();
     }
 
     /**

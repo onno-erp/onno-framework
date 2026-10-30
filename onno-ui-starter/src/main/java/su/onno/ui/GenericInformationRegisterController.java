@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,16 +26,30 @@ public class GenericInformationRegisterController {
         this.access = access;
     }
 
+    /**
+     * One window of stored records, newest first, in the standard feed envelope
+     * {@code {rows, nextCursor, hasMore}}. Pass {@code nextCursor} back as {@code cursor} for the
+     * next window; {@code limit} is clamped to 1..500. Every other query parameter is a dimension
+     * filter by field name.
+     */
     @GetMapping("/{name}/records")
-    public List<Map<String, Object>> records(@PathVariable String name,
+    public Map<String, Object> records(@PathVariable String name,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "100") int limit,
-            @RequestParam(defaultValue = "0") int offset,
-            @RequestParam Map<String, String> filters, AccessSubject subject) {
+            @RequestParam Map<String, String> params, AccessSubject subject) {
         var desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.informationRegisters(desc,
-                query.records(subject, desc, from, to, filters, limit, offset));
+        Map<String, String> filters = new LinkedHashMap<>(params);
+        RESERVED.forEach(filters::remove);
+        KeysetPage page = query.records(subject, desc, from, to, filters, cursor, limit);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", EntityJsonRepresentation.informationRegisters(desc, page.rows()));
+        out.put("nextCursor", page.nextCursor());
+        out.put("hasMore", page.hasMore());
+        return out;
     }
+
+    private static final List<String> RESERVED = List.of("from", "to", "cursor", "limit");
 }

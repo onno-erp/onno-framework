@@ -414,7 +414,7 @@ class RecordPolicyConformanceTest {
     }
 
     private void registersAreScopedByDimension() throws Exception {
-        assertThat(jsonList(ok(get("/api/information-registers/LkTenantFacts/records")))).hasSize(1);
+        assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
         List<Map<String, Object>> movements = jsonList(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
         List<Map<String, Object>> balance = jsonList(ok(get("/api/registers/LkUsage/balance")));

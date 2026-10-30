@@ -13,7 +13,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.lang.NonNull;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -48,12 +47,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
             org.springframework.beans.factory.ObjectProvider<AccessSubjectResolver> accessSubjectResolver) {
         return new org.springframework.beans.factory.config.BeanPostProcessor() {
             @Override
-            public @NonNull Object postProcessAfterInitialization(@NonNull Object bean, @NonNull String beanName) {
+            public Object postProcessAfterInitialization(Object bean, String beanName) {
                 if (bean instanceof org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter adapter
                         && adapter.getArgumentResolvers() != null) {
                     java.util.List<org.springframework.web.method.support.HandlerMethodArgumentResolver> resolvers =
                             new java.util.ArrayList<>(adapter.getArgumentResolvers());
-                    resolvers.addFirst(new AccessSubjectArgumentResolver(accessSubjectResolver));
+                    resolvers.add(0, new AccessSubjectArgumentResolver(accessSubjectResolver));
                     adapter.setArgumentResolvers(resolvers);
                 }
                 return bean;
@@ -62,7 +61,7 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Override
-    public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {
+    public void addResourceHandlers(ResourceHandlerRegistry registry) {
         String base = "/".equals(spaIndexHtml.basePath()) ? "" : spaIndexHtml.basePath();
 
         // Serve compiled widget plugins under {path}/plugins/** before the SPA deep-link handler.
@@ -109,7 +108,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    @SuppressWarnings("ClassEscapesDefinedScope") // Spring bean; the controller is intentionally package-private.
     public SpaIndexController spaIndexController() {
         return new SpaIndexController(spaIndexHtml);
     }
@@ -153,7 +151,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    @SuppressWarnings("rawtypes") // Existing resolver constructors accept List<EntityView>.
     public UiActionResolver uiActionResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
         return new UiActionResolver(entityViews.orderedStream().toList());
@@ -322,7 +319,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    @SuppressWarnings("rawtypes") // Existing resolver constructor accepts List<EntityView>.
     public FieldHintResolver fieldHintResolver(
             org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews) {
         return new FieldHintResolver(entityViews.orderedStream().toList());
@@ -524,7 +520,6 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
-    @SuppressWarnings("rawtypes") // Existing resolver constructors accept List<EntityView>.
     public UiViewResolver uiViewResolver(ResolvedMetadataService resolvedMetadata,
                                          org.springframework.beans.factory.ObjectProvider<su.onno.ui.EntityView> entityViews,
                                          UiProperties properties) {
