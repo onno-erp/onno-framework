@@ -12,6 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -273,20 +276,26 @@ public class RegisterQueryService {
         return balanceBounded(subject, desc, filters, null);
     }
 
-    /** Inclusive ISO-8601 cutoff, like movements' {@code to}; null reads materialized current totals. */
+    /**
+     * Balances at an inclusive ISO-8601 cutoff; null reads materialized current totals. A date-time
+     * ({@code 2026-03-31T18:00}) includes movements up to and at that instant; a bare date
+     * ({@code 2026-03-31}) includes that whole day. Offsets and zones are rejected, because register
+     * periods are local date-times.
+     */
     public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                       Map<String, String> filters, String asOf) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
+        AsOf cutoff = AsOf.parse(asOf);
 
-        String table = asOf == null ? desc.totalsTableName() : desc.tableName();
+        String table = cutoff == null ? desc.totalsTableName() : desc.tableName();
         ScopeClause scope = scope(subject, desc, table);
         String dimColumns = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName).collect(Collectors.joining(", "));
         StringBuilder sql = new StringBuilder("SELECT ");
-        if (asOf == null) {
+        if (cutoff == null) {
             sql.append("*");
         } else {
             if (!dimColumns.isEmpty()) sql.append(dimColumns).append(", ");
@@ -299,9 +308,9 @@ public class RegisterQueryService {
                 .filter(d -> filters.containsKey(d.fieldName()))
                 .map(d -> d.columnName() + " = :" + d.columnName())
                 .toList());
-        if (asOf != null) {
+        if (cutoff != null) {
             conditions.add("_active = true");
-            conditions.add("_period <= CAST(:asOf AS TIMESTAMP)");
+            conditions.add("_period " + cutoff.operator() + " :asOf");
         }
         if (!scope.isAll()) {
             conditions.add("(" + scope.sql() + ")");
@@ -309,7 +318,7 @@ public class RegisterQueryService {
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
         }
-        if (asOf != null && !dimColumns.isEmpty()) {
+        if (cutoff != null && !dimColumns.isEmpty()) {
             sql.append(" GROUP BY ").append(dimColumns);
         }
         String dimOrder = desc.dimensions().stream()
@@ -322,7 +331,7 @@ public class RegisterQueryService {
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
-            if (asOf != null) query.bind("asOf", asOf);
+            if (cutoff != null) query.bind("asOf", cutoff.bound());
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
@@ -333,6 +342,23 @@ public class RegisterQueryService {
             return query.mapToMap().list();
         });
         return bounded(subject, desc, rows, BALANCE_CAP);
+    }
+
+    /** A parsed {@code asOf} cutoff: {@code _period <= instant}, or {@code _period < next day} for a date. */
+    private record AsOf(String operator, LocalDateTime bound) {
+        static AsOf parse(String raw) {
+            if (raw == null || raw.isBlank()) return null;
+            String value = raw.trim();
+            try {
+                return value.contains("T")
+                        ? new AsOf("<=", LocalDateTime.parse(value))
+                        : new AsOf("<", LocalDate.parse(value).plusDays(1).atStartOfDay());
+            } catch (DateTimeParseException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "asOf must be an ISO-8601 local date (2026-03-31) or date-time (2026-03-31T18:00)"
+                                + " without an offset: " + raw);
+            }
+        }
     }
 
     private BoundedRows bounded(AccessSubject subject, AccumulationRegisterDescriptor desc,

@@ -16,8 +16,8 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 
 ## Endpoints
 
-Historical register balances: `register_balance` accepts optional `asOf` (ISO-8601, inclusive,
-like `register_movements.to`). REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
+Historical register balances: `register_balance` accepts optional `asOf`: an inclusive
+ISO-8601 local date-time (`2024-03-31T18:00`) or a date (`2024-03-31`, the whole day); offsets are rejected with `400`. REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
 With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
 grouped by dimensions; dimension filters and record access policies apply before aggregation.
 Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.

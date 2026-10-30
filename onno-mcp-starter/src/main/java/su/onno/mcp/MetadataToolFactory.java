@@ -192,7 +192,7 @@ public class MetadataToolFactory implements McpToolProvider {
                         + "of returning an incomplete result; narrow the dimension filters.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
-                        + "\"asOf\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601), like register_movements to. Omit for current totals.\"},"
+                        + "\"asOf\":{\"type\":\"string\",\"description\":\"Optional inclusive cutoff: ISO-8601 local date-time (2024-03-31T18:00) or date (2024-03-31 = the whole day), no offset. Omit for current totals.\"},"
                         + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));

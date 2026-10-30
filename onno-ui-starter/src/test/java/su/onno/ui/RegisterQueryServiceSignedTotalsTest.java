@@ -16,6 +16,7 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RegisterQueryServiceSignedTotalsTest {
 
@@ -139,6 +141,28 @@ class RegisterQueryServiceSignedTotalsTest {
         assertThat(service.balance(AccessSubject.system(), balanceDescriptor,
                 Map.of("property", property.toString()), cutoff)).hasSize(1);
         assertThat(service.balance(AccessSubject.system(), balanceDescriptor, Map.of(), "2024-01-01T00:00:00")).isEmpty();
+    }
+
+    @Test
+    void historicalBalanceDateCutoffIncludesTheWholeDay() {
+        for (String period : List.of("2024-03-31T00:00:00", "2024-03-31T23:59:59", "2024-04-01T00:00:00")) {
+            insertBalance(property, period, "RECEIPT", "10", true);
+        }
+
+        var rows = service.balance(AccessSubject.system(), balanceDescriptor, Map.of(), "2024-03-31");
+
+        assertThat(rows).hasSize(1);
+        assertThat((BigDecimal) rows.getFirst().get("amount")).isEqualByComparingTo("20");
+        assertThat(service.balance(AccessSubject.system(), balanceDescriptor, Map.of(), " ")).isEmpty();
+    }
+
+    @Test
+    void historicalBalanceRejectsMalformedOrOffsetCutoffs() {
+        for (String bad : List.of("yesterday", "2024-03-31T23:59:59Z", "2024-03-31T23:59:59+03:00", "2024-13-01")) {
+            assertThatThrownBy(() -> service.balance(AccessSubject.system(), balanceDescriptor, Map.of(), bad))
+                    .isInstanceOf(ResponseStatusException.class)
+                    .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode().value()).isEqualTo(400));
+        }
     }
 
     private void insertBalance(UUID dimension, String period, String type, String amount, boolean active) {
