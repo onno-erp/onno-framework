@@ -12,6 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -117,7 +120,7 @@ public class RegisterQueryService {
                                                      ListFilter.Result filters,
                                                      String sortColumn, boolean descending,
                                                      int rowPosition, int windowSize) {
-        String orderBy = safeSort(desc, sortColumn, "_period", movementColumns(desc));
+        String orderBy = safeSort(sortColumn, "_period", movementColumns(desc));
         ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
         StringBuilder sql = new StringBuilder(
                 "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
@@ -198,7 +201,7 @@ public class RegisterQueryService {
         String dimOrder = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
                 .collect(Collectors.joining(", "));
-        String orderBy = safeSort(desc, sortColumn,
+        String orderBy = safeSort(sortColumn,
                 dimOrder.isEmpty() ? "1" : dimOrder, balanceColumns(desc));
         ListFilter.Result scoped = scope(subject, desc, desc.totalsTableName()).andInto(filters);
         StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
@@ -249,7 +252,7 @@ public class RegisterQueryService {
     }
 
     /** Validate a client-supplied sort column against an allow-list, falling back to {@code fallback}. */
-    private static String safeSort(AccumulationRegisterDescriptor desc, String sortColumn,
+    private static String safeSort(String sortColumn,
                                    String fallback, Set<String> allowed) {
         return sortColumn != null && allowed.contains(sortColumn.toLowerCase()) ? sortColumn : fallback;
     }
@@ -259,28 +262,64 @@ public class RegisterQueryService {
         return balanceBounded(subject, desc, filters).rows();
     }
 
+    public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                             Map<String, String> filters, String asOf) {
+        return balanceBounded(subject, desc, filters, asOf).rows();
+    }
+
     /**
      * The same current-balance slice as {@link #balance}, plus an explicit overflow signal for
      * non-UI callers that require complete-result semantics.
      */
     public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                       Map<String, String> filters) {
+        return balanceBounded(subject, desc, filters, null);
+    }
+
+    /**
+     * Balances at an inclusive ISO-8601 cutoff; null reads materialized current totals. A date-time
+     * ({@code 2026-03-31T18:00}) includes movements up to and at that instant; a bare date
+     * ({@code 2026-03-31}) includes that whole day. Offsets and zones are rejected, because register
+     * periods are local date-times.
+     */
+    public BoundedRows balanceBounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
+                                      Map<String, String> filters, String asOf) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Balance is only available for BALANCE registers");
         }
+        AsOf cutoff = AsOf.parse(asOf);
 
-        ScopeClause scope = scope(subject, desc, desc.totalsTableName());
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
+        String table = cutoff == null ? desc.totalsTableName() : desc.tableName();
+        ScopeClause scope = scope(subject, desc, table);
+        String dimColumns = desc.dimensions().stream()
+                .map(AttributeDescriptor::columnName).collect(Collectors.joining(", "));
+        StringBuilder sql = new StringBuilder("SELECT ");
+        if (cutoff == null) {
+            sql.append("*");
+        } else {
+            if (!dimColumns.isEmpty()) sql.append(dimColumns).append(", ");
+            sql.append(desc.resources().stream()
+                    .map(r -> signedSum(r.columnName()) + " AS " + r.columnName())
+                    .collect(Collectors.joining(", ")));
+        }
+        sql.append(" FROM ").append(table);
         List<String> conditions = new ArrayList<>(desc.dimensions().stream()
                 .filter(d -> filters.containsKey(d.fieldName()))
                 .map(d -> d.columnName() + " = :" + d.columnName())
                 .toList());
+        if (cutoff != null) {
+            conditions.add("_active = true");
+            conditions.add("_period " + cutoff.operator() + " :asOf");
+        }
         if (!scope.isAll()) {
             conditions.add("(" + scope.sql() + ")");
         }
         if (!conditions.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", conditions));
+        }
+        if (cutoff != null && !dimColumns.isEmpty()) {
+            sql.append(" GROUP BY ").append(dimColumns);
         }
         String dimOrder = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
@@ -292,6 +331,7 @@ public class RegisterQueryService {
 
         List<Map<String, Object>> rows = jdbi.withHandle(h -> {
             var query = h.createQuery(sql.toString());
+            if (cutoff != null) query.bind("asOf", cutoff.bound());
             for (AttributeDescriptor dim : desc.dimensions()) {
                 if (filters.containsKey(dim.fieldName())) {
                     query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
@@ -302,6 +342,23 @@ public class RegisterQueryService {
             return query.mapToMap().list();
         });
         return bounded(subject, desc, rows, BALANCE_CAP);
+    }
+
+    /** A parsed {@code asOf} cutoff: {@code _period <= instant}, or {@code _period < next day} for a date. */
+    private record AsOf(String operator, LocalDateTime bound) {
+        static AsOf parse(String raw) {
+            if (raw == null || raw.isBlank()) return null;
+            String value = raw.trim();
+            try {
+                return value.contains("T")
+                        ? new AsOf("<=", LocalDateTime.parse(value))
+                        : new AsOf("<", LocalDate.parse(value).plusDays(1).atStartOfDay());
+            } catch (DateTimeParseException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "asOf must be an ISO-8601 local date (2026-03-31) or date-time (2026-03-31T18:00)"
+                                + " without an offset: " + raw);
+            }
+        }
     }
 
     private BoundedRows bounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
