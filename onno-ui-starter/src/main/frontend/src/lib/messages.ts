@@ -394,7 +394,7 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "register.expense": "Expense",
 
   // List grid: toolbar count, search, sort, view toggle, and keyset loading.
-  "list.count": "{count} rows",
+  "list.count": "Rows: {count}",
   "list.focusMissing": "This record isn't in the list with the current filters",
   "list.search": "Search…",
   "list.searchLabel": "Search",
@@ -512,6 +512,17 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "form.reload": "Reload",
   "form.tabularEmptyHint": "Add the first row to start filling this section.",
   "ref.new": "New {name}",
+  "ref.recent": "Recent",
+  "ref.open": "Open record",
+  "ref.clearValue": "Clear value",
+  "ref.showAll": "Show all…",
+  "ref.pickTitle": "Select: {name}",
+  "ref.pick": "Select",
+  "ref.pickFiltered": "The list is limited by this field's conditions",
+  "ref.folder": "Folder",
+  "ref.folders": "Folders",
+  "ref.location": "Location",
+  "ref.pickEmpty": "Nothing to select here",
   "relatedList.saveFirstManage": "Save this record first to manage {name}.",
   "relatedList.saveFirstView": "Save this record first to see {name}.",
 

@@ -34,6 +34,7 @@ final class EntityJsonRepresentation {
             Map.entry("_is_folder", "folder"),
             Map.entry("_parent", "parent"),
             Map.entry("_parent_restricted", "parentRestricted"),
+            Map.entry("_has_child_folders", "hasChildFolders"),
             Map.entry("_version", "version"),
             Map.entry("_actions", "actions"),
             Map.entry("_style", "style")

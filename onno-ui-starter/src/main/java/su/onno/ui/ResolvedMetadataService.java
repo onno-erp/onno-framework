@@ -393,6 +393,13 @@ public class ResolvedMetadataService {
                 if (Boolean.TRUE.equals(hint == null ? null : hint.uniqueWithinSection())) {
                     map.put("uniqueWithinSection", true);
                 }
+                // Picker buttons (#409), resolved here so the client gets the effective value: "open"
+                // defaults on; "clear" defaults on for optional refs and is never offered on a
+                // required one, whatever the hint says.
+                Boolean openButton = hint == null ? null : hint.openButton();
+                Boolean clearButton = hint == null ? null : hint.clearButton();
+                map.put("refOpenButton", !Boolean.FALSE.equals(openButton));
+                map.put("refClearButton", !a.required() && !Boolean.FALSE.equals(clearButton));
             }
             map.put("precision", a.precision());
             map.put("scale", a.scale());
