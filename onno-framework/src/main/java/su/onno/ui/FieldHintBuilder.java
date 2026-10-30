@@ -30,6 +30,8 @@ public class FieldHintBuilder<O, T> {
     private String refFilter;
     private String refOptionDecorator;
     private Boolean uniqueWithinSection;
+    private Boolean openButton;
+    private Boolean clearButton;
 
     FieldHintBuilder(EntityConfigBuilder<O> parent, String fieldName) {
         this.parent = parent;
@@ -246,6 +248,30 @@ public class FieldHintBuilder<O, T> {
         return this;
     }
 
+    /**
+     * For a {@code Ref} field: show the picker's "open" button, which opens the selected record
+     * ({@code onno://{kind}/{name}/{id}}). On by default; {@code openButton(false)} hides it, e.g.
+     * when users must not leave the form or the target has no record surface. Applies to the field
+     * in the form header and, addressed as {@code "section.field"}, in tabular-section rows. No
+     * effect on a non-ref field.
+     */
+    public FieldHintBuilder<O, T> openButton(boolean show) {
+        this.openButton = show;
+        return this;
+    }
+
+    /**
+     * For a {@code Ref} field: show the picker's clear ({@code ×}) button, which resets the value to
+     * empty. On by default for optional fields; {@code clearButton(false)} hides it. A required field
+     * never shows it: {@code clearButton(true)} cannot make a required value clearable. Applies to
+     * the form header and tabular-section rows like {@link #openButton(boolean)}. No effect on a
+     * non-ref field.
+     */
+    public FieldHintBuilder<O, T> clearButton(boolean show) {
+        this.clearButton = show;
+        return this;
+    }
+
     /** Switch to configuring another field on the same entity. */
     public FieldHintBuilder<O, Object> field(String name) {
         return parent.field(name);
@@ -264,6 +290,6 @@ public class FieldHintBuilder<O, T> {
         return new FieldHint(
                 visibleInList, visibleInForm, visibleInDetail,
                 order, group, width, widget, placeholder, format, hint, label, refSecondary, refFilter,
-                refOptionDecorator, uniqueWithinSection);
+                refOptionDecorator, uniqueWithinSection, openButton, clearButton);
     }
 }

@@ -23,9 +23,21 @@ public record FieldHint(
         String refSecondary,
         String refFilter,
         String refOptionDecorator,
-        Boolean uniqueWithinSection
+        Boolean uniqueWithinSection,
+        Boolean openButton,
+        Boolean clearButton
 ) {
+    /** The pre-#409 shape, without the ref picker's open/clear button hints. */
+    public FieldHint(Boolean visibleInList, Boolean visibleInForm, Boolean visibleInDetail, Integer order,
+                     String group, String width, String widget, String placeholder, String format, String hint,
+                     String label, String refSecondary, String refFilter, String refOptionDecorator,
+                     Boolean uniqueWithinSection) {
+        this(visibleInList, visibleInForm, visibleInDetail, order, group, width, widget, placeholder, format,
+                hint, label, refSecondary, refFilter, refOptionDecorator, uniqueWithinSection, null, null);
+    }
+
     public static FieldHint empty() {
-        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        return new FieldHint(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null);
     }
 }

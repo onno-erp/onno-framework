@@ -43,7 +43,9 @@ public class BookView implements EntityView<Book> {
         f.field(Book::getDescription).order(0).label("Title")
             .field(Book::getAuthor).order(1)
             .field(Book::getIsbn).order(2)
-            .field(Book::getCategory).order(3);
+            .field(Book::getCategory).order(3)
+                // Once filed, a book is re-filed rather than left uncategorized: no clear button (#409).
+                .clearButton(false);
         f.refField(Book::getSupplier).refSecondary(Supplier::getEmail).order(4)
             .field(Book::getPrice).order(5).format("currency:USD")
             .field(Book::getCoverUrl).order(6).label("Cover").widget("image")

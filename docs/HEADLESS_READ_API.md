@@ -18,12 +18,15 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
-GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs)
-GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays
+GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs); folders=true: folders only, with hasChildFolders
+GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays; ids=a,b: only the paths to those records
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 POST /api/ref-options/search                  bounded contextual reference options
+POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
+POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
+GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -149,7 +152,15 @@ it) and echoes `focus` in the envelope; replay `prevCursor` as `?before=` to loa
 window until `hasPrevious` is false. A focus the caller's query cannot see (outside the search,
 filters or document date range, out of record scope, deleted, unknown or malformed) returns the
 ordinary first window without `focus`. `cursor` wins over `before`, which wins over `focus`. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
-context-aware search input. There is no unbounded collection or offset-paging endpoint. See
+context-aware search input. With an empty `query` it leads with up to five of the caller's recent
+picks, each flagged `_recent: true`, then the ordinary options without duplicates, still within
+`limit`; send `"recent": false` to omit them. Picks are remembered with `POST /api/ref-options/recent`
+(`{targetKind, targetName, id}`); a recent pick is re-read through the same search, so it obeys the
+deletion mark, record scope and the request's `filter` like any other option. The "Show all..." picker
+dialog pages the ordinary list feed with the field's `filter` (plus `_parent = <uuid>` / `_parent =
+null` for folder navigation on a hierarchical catalog) and checks each window with
+`POST /api/ref-options/decorate` (`ids` plus the `/search` context), which answers `offered` ids and
+their `decorations`. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
 Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,

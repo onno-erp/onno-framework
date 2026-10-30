@@ -949,6 +949,29 @@ onno-icon {
 .dark [data-onno-row][data-onno-selected="true"]:hover {
   background-color: hsl(var(--primary) / 0.18) !important;
 }
+/* Reference picker dialog (#411): its rows are not record links (no [data-onno-row], so the shell's
+   row menu and shortcuts skip them) but hover and highlight like list rows. */
+[data-onno-pick-row] {
+  transition: background-color 0.12s ease;
+}
+[data-onno-pick-row]:hover {
+  background-color: hsl(var(--primary) / 0.08) !important;
+}
+[data-onno-pick-row][data-onno-selected="true"],
+[data-onno-pick-row][data-onno-selected="true"]:hover {
+  background-color: hsl(var(--primary) / 0.16) !important;
+  box-shadow: inset 3px 0 0 hsl(var(--primary));
+}
+.dark [data-onno-pick-row]:hover {
+  background-color: hsl(var(--primary) / 0.14) !important;
+}
+.dark [data-onno-pick-row][data-onno-selected="true"],
+.dark [data-onno-pick-row][data-onno-selected="true"]:hover {
+  background-color: hsl(var(--primary) / 0.26) !important;
+}
+[data-onno-pick-row][data-onno-focused="true"] {
+  box-shadow: inset 3px 0 0 hsl(var(--primary) / 0.5);
+}
 /* "Open in list" (#410): the record the list was opened on keeps a primary wash and an inset
    leading bar until the user opens a row or changes the query; an outline pulses once on arrival
    so the eye finds it after the scroll. */

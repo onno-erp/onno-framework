@@ -397,12 +397,21 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
         return new RefOptionService(decorators.orderedStream().toList());
     }
 
+    /** Per-user recently picked ref values, offered first by the ref picker (#409). */
+    @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
+    public RefRecentStore refRecentStore(Jdbi jdbi) {
+        return new RefRecentStore(jdbi);
+    }
+
     @Bean
     public RefOptionController refOptionController(CatalogQueryService catalogQueryService,
                                                    DocumentQueryService documentQueryService,
                                                    UiAccessService access,
-                                                   RefOptionService refOptionService) {
-        return new RefOptionController(catalogQueryService, documentQueryService, access, refOptionService);
+                                                   RefOptionService refOptionService,
+                                                   RefRecentStore refRecentStore) {
+        return new RefOptionController(catalogQueryService, documentQueryService, access, refOptionService,
+                refRecentStore);
     }
 
     @Bean
