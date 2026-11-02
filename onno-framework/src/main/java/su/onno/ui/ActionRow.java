@@ -2,8 +2,10 @@ package su.onno.ui;
 
 import su.onno.fields.Field;
 import su.onno.fields.Fields;
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.repository.EnumerationPersistence;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -33,9 +35,30 @@ import java.util.UUID;
 public final class ActionRow {
 
     private final Map<String, Object> data;
+    private final List<AttributeDescriptor> attributes;
 
     public ActionRow(Map<String, Object> data) {
+        this(data, List.of());
+    }
+
+    /**
+     * Wrap a storage-keyed row with its entity's attributes. Typed getters resolve Java property
+     * names to the declared storage columns, including custom {@code @Attribute(name = "...")}
+     * names. String getters and {@link #values()} retain their existing column-based contract.
+     */
+    public ActionRow(Map<String, Object> data, List<AttributeDescriptor> attributes) {
         this.data = data == null ? Map.of() : data;
+        this.attributes = List.copyOf(attributes);
+    }
+
+    private String column(Field<?, ?> field) {
+        String name = Fields.name(field);
+        for (AttributeDescriptor attribute : attributes) {
+            if (attribute.fieldName().equals(name)) {
+                return attribute.columnName();
+            }
+        }
+        return name;
     }
 
     /** This row's id ({@code _id}), or {@code null} if absent/unparseable. */
@@ -72,7 +95,7 @@ public final class ActionRow {
 
     /** Read a raw value using a compiler-checked field reference. */
     public <E, V> Object get(Field<E, V> field) {
-        return get(Fields.name(field));
+        return get(column(field));
     }
 
     /**
@@ -97,7 +120,7 @@ public final class ActionRow {
 
     /** Read a boolean using a compiler-checked field reference. */
     public <E> boolean bool(Field<E, Boolean> field) {
-        return bool(Fields.name(field));
+        return bool(column(field));
     }
 
     /**
@@ -112,7 +135,7 @@ public final class ActionRow {
 
     /** Read display text using a compiler-checked field reference. */
     public <E, V> String text(Field<E, V> field) {
-        return text(Fields.name(field));
+        return text(column(field));
     }
 
     /**
@@ -145,7 +168,7 @@ public final class ActionRow {
 
     /** Resolve an enum using a compiler-checked field reference. */
     public <T, E extends Enum<E>> E enumValue(Field<T, E> field, Class<E> enumType) {
-        return enumValue(Fields.name(field), enumType);
+        return enumValue(column(field), enumType);
     }
     /** The underlying row map (resolved values keyed by column) — an escape hatch for ad-hoc reads. */
     public Map<String, Object> values() {

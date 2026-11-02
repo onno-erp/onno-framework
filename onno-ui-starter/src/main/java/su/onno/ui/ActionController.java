@@ -2,6 +2,7 @@ package su.onno.ui;
 
 import su.onno.access.AccessMode;
 import su.onno.access.AccessSubject;
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.ui.ActionSpec.Action;
@@ -112,8 +113,16 @@ public class ActionController {
         }
         Map<String, Object> rowState = id == null
                 ? Map.of()
-                : actions.rowActionState(current, actionRow(subject, kind, name, id));
+                : actions.rowActionState(current, actionRow(subject, kind, name, id), actionAttributes(kind, name));
         return Map.of("actions", out, "rowActions", rowState);
+    }
+
+    private List<AttributeDescriptor> actionAttributes(String kind, String name) {
+        return switch (kind) {
+            case "catalogs" -> catalogQuery.require(name).attributes();
+            case "documents" -> documentQuery.require(name).attributes();
+            default -> List.of();
+        };
     }
 
     private Map<String, Object> actionRow(AccessSubject subject, String kind, String name, UUID id) {
@@ -141,7 +150,7 @@ public class ActionController {
         }
         if (action.enabledFn() != null) {
             Map<String, Object> row = actionRow(subject, kind, name, id);
-            if (!UiActionResolver.recordActionState(action, row).enabled()) {
+            if (!UiActionResolver.recordActionState(action, row, actionAttributes(kind, name)).enabled()) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Action is not available for this record: " + action.key());
             }

@@ -434,6 +434,14 @@ page is served (no extra query — the row is already in hand) and shipped to th
 row's `actions`; the button falls back to the static `icon`/`label` when a function isn't set. A
 static row action (no functions) costs nothing: the list ships its rows untouched.
 
+Typed reads such as `row.get(Order::getAssignedTo)`, `row.text(Order::getAssignedTo)`,
+`row.bool(Order::getNeedsApproval)` and `row.enumValue(Order::getReviewStatus, Status.class)`
+resolve the Java property through the entity's attribute metadata. This works for camelCase
+properties and custom `@Attribute(name = "...")` columns in row actions, detail actions and
+`rowStyle`, including the server-side enabled check. String reads still use storage column names.
+When constructing an `ActionRow` directly from storage data, pass `descriptor.attributes()` as
+the second constructor argument; the original one-argument constructor reads keys as supplied.
+
 The same per-record functions apply to **`DETAIL` actions**, evaluated against the loaded record as
 the record surface renders — so one header button can hide (`visibleWhen`), relabel (`label(fn)`),
 change icon or grey itself (`enabledWhen`) by the record's state, mirroring the row button. A

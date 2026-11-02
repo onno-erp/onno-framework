@@ -1,6 +1,7 @@
 package su.onno.ui;
 
 import su.onno.access.AccessSubject;
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 
@@ -74,7 +75,7 @@ public class ListDataController {
         if (request.getParameterValues("ids") != null) {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(subject, desc, ids);
-            decorateRowActions(desc.javaClass(), picked);
+            decorateRowActions(desc.javaClass(), picked, desc.attributes());
             picked = EntityJsonRepresentation.catalogs(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
@@ -89,7 +90,7 @@ public class ListDataController {
         KeysetPage kp = catalogQuery.keysetPage(subject, desc, request.getParameter("cursor"),
                 request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
                 descending(dir), q, eq, in, like, prefix, ge, le, filter);
-        decorateRowActions(desc.javaClass(), kp.rows());
+        decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
         kp = kp.withRows(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation));
         boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
@@ -117,7 +118,7 @@ public class ListDataController {
         if (request.getParameterValues("ids") != null) {
             List<UUID> ids = parseIds(request);
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(subject, desc, ids);
-            decorateRowActions(desc.javaClass(), picked);
+            decorateRowActions(desc.javaClass(), picked, desc.attributes());
             picked = EntityJsonRepresentation.documents(desc, picked, representation);
             return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
         }
@@ -131,7 +132,7 @@ public class ListDataController {
         KeysetPage kp = documentQuery.keysetPage(subject, desc, request.getParameter("cursor"),
                 request.getParameter("before"), parseId(request.getParameter("focus")), limit, sort,
                 descending(dir), q, from, to, eq, in, like, prefix, ge, le, filter);
-        decorateRowActions(desc.javaClass(), kp.rows());
+        decorateRowActions(desc.javaClass(), kp.rows(), desc.attributes());
         kp = kp.withRows(EntityJsonRepresentation.documents(desc, kp.rows(), representation));
         boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
         Long total = total(request.getParameter("count"), filtered,
@@ -251,7 +252,8 @@ public class ListDataController {
      * {@link su.onno.ui.ListSpec#rowStyle}) under {@code _style}. A no-op (rows untouched) when the
      * entity has neither — the common case — so existing lists pay nothing.
      */
-    private void decorateRowActions(Class<?> entity, List<Map<String, Object>> rows) {
+    private void decorateRowActions(Class<?> entity, List<Map<String, Object>> rows,
+                                    List<AttributeDescriptor> attributes) {
         if (entity == null) {
             return;
         }
@@ -262,13 +264,13 @@ public class ListDataController {
         }
         for (Map<String, Object> row : rows) {
             if (dynamicActions) {
-                Map<String, Object> state = actionResolver.rowActionState(entity, row);
+                Map<String, Object> state = actionResolver.rowActionState(entity, row, attributes);
                 if (!state.isEmpty()) {
                     row.put("_actions", state);
                 }
             }
             if (style != null) {
-                ListSpec.RowStyle tone = rowTone(style, row);
+                ListSpec.RowStyle tone = rowTone(style, row, attributes);
                 if (tone != null) {
                     row.put("_style", tone.name().toLowerCase(java.util.Locale.ROOT));
                 }
@@ -278,9 +280,10 @@ public class ListDataController {
 
     /** One row's tone; a throwing function reads as "no tone" so a bad predicate can't break the list. */
     private static ListSpec.RowStyle rowTone(java.util.function.Function<ActionRow, ListSpec.RowStyle> style,
-                                             Map<String, Object> row) {
+                                             Map<String, Object> row,
+                                             List<AttributeDescriptor> attributes) {
         try {
-            return style.apply(new ActionRow(row));
+            return style.apply(new ActionRow(row, attributes));
         } catch (RuntimeException e) {
             return null;
         }

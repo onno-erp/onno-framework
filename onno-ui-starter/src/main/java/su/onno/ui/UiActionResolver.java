@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.ui.ActionSpec.Action;
 import su.onno.ui.InputSpec.InputField;
 
@@ -111,6 +112,12 @@ public class UiActionResolver {
      * (the descriptor value / visible+enabled) so one bad predicate can't break the list.
      */
     public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row) {
+        return rowActionState(entity, row, List.of());
+    }
+
+    /** Resolve typed row fields using the entity's storage metadata. */
+    public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row,
+                                              List<AttributeDescriptor> attributes) {
         List<Action> current;
         try {
             current = resolvedForEntity(entity);
@@ -119,12 +126,18 @@ public class UiActionResolver {
             // the provider failure, while row decoration safely falls back to static state.
             current = forEntity(entity);
         }
-        return rowActionState(current, row);
+        return rowActionState(current, row, attributes);
     }
 
     /** Resolve per-row state from an already resolved action snapshot (one live-provider evaluation). */
     public Map<String, Object> rowActionState(List<Action> actions, Map<String, Object> row) {
-        ActionRow actionRow = new ActionRow(row);
+        return rowActionState(actions, row, List.of());
+    }
+
+    /** Resolve a live action snapshot against a storage-keyed row with entity metadata. */
+    public Map<String, Object> rowActionState(List<Action> actions, Map<String, Object> row,
+                                              List<AttributeDescriptor> attributes) {
+        ActionRow actionRow = new ActionRow(row, attributes);
         Map<String, Object> out = new LinkedHashMap<>();
         for (Action a : actions) {
             if (a.scope() != ActionScope.ROW || !a.isDynamic()) {
@@ -161,7 +174,13 @@ public class UiActionResolver {
 
     /** Evaluate {@code a}'s per-record functions against a loaded record (see {@link RecordActionState}). */
     public static RecordActionState recordActionState(Action a, Map<String, Object> record) {
-        ActionRow row = new ActionRow(record);
+        return recordActionState(a, record, List.of());
+    }
+
+    /** Evaluate record functions with the attributes used to load that record. */
+    public static RecordActionState recordActionState(Action a, Map<String, Object> record,
+                                                      List<AttributeDescriptor> attributes) {
+        ActionRow row = new ActionRow(record, attributes);
         String label = a.labelFn() != null ? evalString(a.labelFn(), row) : null;
         String icon = a.iconFn() != null ? evalString(a.iconFn(), row) : null;
         return new RecordActionState(
