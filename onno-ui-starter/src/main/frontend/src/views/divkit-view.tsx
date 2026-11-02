@@ -37,6 +37,7 @@ import {
 import { openPanel as openNotificationPanel, setNotificationsNavStyle } from "@/lib/notification-store";
 import { isInteractiveLayerOpen, shortcutLabel, useGlobalKeybindings } from "@/lib/keybindings";
 import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
+import { requestSurfaceRefresh } from "@/lib/surface-refresh";
 import { Button } from "@/components/ui/button";
 import { DialogShell } from "@/components/ui/dialog-shell";
 import {
@@ -915,14 +916,15 @@ export function DivKitView() {
         if (!kind || !name || !key) return;
         // The detail-header button is DivKit-rendered (no React control to spin), so a loading
         // toast gives feedback while a slow/async handler runs.
+        const refreshPath = action.surfacePath
+          ?? wsRef.current.panes.find((pane) => pane.id === wsRef.current.focused)?.activePath
+          ?? routePath;
         const loadingId = toast.loading(t("loading.working"));
         api
           .runAction(kind, name, key, id)
           .then((result) => {
             toast.dismiss(loadingId);
-            applyActionResult(result);
-            // A "refresh" result re-renders via the same SSE data stream the handler's writes
-            // emit; the detail surface reloads itself, so no manual navigation is needed here.
+            applyActionResult(result, { refresh: () => requestSurfaceRefresh(refreshPath) });
           })
           .catch((error) => {
             toast.dismiss(loadingId);
@@ -966,6 +968,7 @@ export function DivKitView() {
     [
       navigate,
       location.pathname,
+      routePath,
       logout,
       setTheme,
       resolvedTheme,

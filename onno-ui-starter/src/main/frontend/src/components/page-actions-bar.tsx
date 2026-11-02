@@ -1,11 +1,12 @@
 import { ExtensionSlot } from "@/lib/ui-extensions";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import type { ActionResult } from "@/lib/types";
 import { actionFeedbackFromError, applyActionResult } from "@/lib/action-feedback";
+import { surfaceRefreshCallback } from "@/lib/surface-refresh";
 import {
   ActionFormDialog,
   type ActionFormDialogConfig,
@@ -35,8 +36,8 @@ function dispatchAction(url: string) {
 
 /**
  * A section of page-level action buttons, bridged from the {@code onno-actions} div-custom block.
- * Each button either runs a server handler (POST /api/divkit/page-action → toast / navigate; any
- * embedded onno-list on the page self-refreshes over SSE from the handler's writes) or routes the
+ * Each button either runs a server handler (POST /api/divkit/page-action → feedback / explicit
+ * source-tab refresh; entity changes also arrive over SSE) or routes the
  * client (navigation-only). This is the first-class "section of buttons" primitive that replaces
  * bolting обработка triggers onto a list toolbar.
  */
@@ -51,6 +52,7 @@ export function PageActionsBar({
   profile?: string;
   buttons: PageActionButton[];
 }) {
+  const sourceRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [formFor, setFormFor] = useState<PageActionButton | null>(null);
 
@@ -63,13 +65,12 @@ export function PageActionsBar({
       setFormFor(b);
       return;
     }
+    const refresh = surfaceRefreshCallback(sourceRef.current, route);
     setPending((s) => ({ ...s, [b.key]: true }));
     return api
       .runPageAction(route, b.key, profile, inputs)
       .then((result: ActionResult) => {
-        applyActionResult(result);
-        // result.refresh needs no work here: the data the handler wrote fans out over SSE,
-        // so any embedded onno-list on this page reloads its own window.
+        applyActionResult(result, { refresh });
       })
       .catch((error) => {
         if (propagateError) throw error;
@@ -84,7 +85,7 @@ export function PageActionsBar({
 
   return (
     // DivKit wraps custom blocks in pointer-events:none spans — re-assert so the buttons work.
-    <div className="pointer-events-auto w-full">
+    <div ref={sourceRef} className="pointer-events-auto w-full">
       {heading ? (
         <h2 className="mb-2 text-sm font-semibold text-foreground">{heading}</h2>
       ) : null}
