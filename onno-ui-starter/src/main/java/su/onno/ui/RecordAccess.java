@@ -12,11 +12,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -118,50 +121,98 @@ public class RecordAccess {
 
     /**
      * Whether a UI route to one record — {@code catalogs|documents/{name}/{id}} (leading slash and
-     * trailing segments allowed) — is readable by a record-scoped {@code subject}. Anything that is
-     * not such a route (a page, a list, a non-UUID id), an unknown entity, or an unscoped subject
-     * yields {@code true}: this narrows by record scope only; entity grants are checked elsewhere.
+     * trailing segments allowed) — is readable by a record-scoped {@code subject}. Any other route
+     * yields {@code true}: a page, a list (also one focused on a record) or a {@code new} draft has no
+     * record id in its third segment. A record route follows {@link #canReadRecord}, with its
+     * percent-encoded entity segment decoded here (a malformed one names no entity). This narrows by
+     * record scope only; entity grants are checked elsewhere.
      */
     public boolean canReadRoute(AccessSubject subject, String route) {
-        if (route == null || compiler.policies().isEmpty()) return true;
+        if (route == null) return true;
         String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
                 .filter(p -> !p.isBlank()).toArray(String[]::new);
         if (parts.length < 3) return true;
-        return canReadRecord(subject, parts[0], parts[1], parts[2]);
+        if (!"catalogs".equals(parts[0]) && !"documents".equals(parts[0])) return true;
+        if (parseUuid(parts[2]) == null) return true;
+        String name;
+        try {
+            name = UriUtils.decode(parts[1], StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException malformed) {
+            name = null;
+        }
+        return canReadRecord(subject, parts[0], name, parts[2]);
     }
 
-    /** As {@link #canReadRoute} for an already split {@code kind}/{@code name}/{@code id}. */
+    /**
+     * Whether {@code subject} may read record {@code id} of the catalog/document {@code kind}/{@code name}
+     * ({@code name} is the decoded logical name; a former {@code previousNames} entry also resolves).
+     * A {@code null} subject throws (as in {@link RecordPolicies#scopeFor}) and an id that is not a
+     * UUID is denied — it addresses no record — whether or not policies are declared. A subject no
+     * policy narrows (superuser, exempt, or not covered) is never narrowed here; for a subject some
+     * policy narrows, an unknown entity is denied, since no policy can be ruled out for it. Entity
+     * grants are not checked here: to authorize access in application code use {@link #can} or
+     * {@link #require}.
+     */
     public boolean canReadRecord(AccessSubject subject, String kind, String name, String id) {
-        if (subject == null || compiler.policies().isEmpty()) return true;
-        UUID uuid;
-        try {
-            uuid = UUID.fromString(id);
-        } catch (IllegalArgumentException | NullPointerException notARecord) {
-            return true;
+        if (subject == null) {
+            throw new IllegalArgumentException("AccessSubject is required; pass AccessSubject.system() for trusted code");
         }
+        UUID uuid = parseUuid(id);
+        if (uuid == null) return false;
+        if (!narrowsReads(subject)) return true;
         Class<?> type = entityClass(kind, name);
-        if (type == null || !compiler.isScoped(type, subject, AccessMode.READ)) return true;
+        if (type == null) return false;
+        if (!compiler.isScoped(type, subject, AccessMode.READ)) return true;
         return !filter(subject, type, List.of(uuid), AccessMode.READ).isEmpty();
     }
 
+    /** Whether some policy narrows what {@code subject} reads (false with no policies or for a superuser). */
+    private boolean narrowsReads(AccessSubject subject) {
+        if (subject.superuser()) return false;
+        for (Class<?> type : compiler.policies().all().keySet()) {
+            if (compiler.isScoped(type, subject, AccessMode.READ)) return true;
+        }
+        return false;
+    }
+
+    private static UUID parseUuid(String value) {
+        if (value == null) return null;
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException notAUuid) {
+            return null;
+        }
+    }
+
+    /** The catalog/document class named {@code name} under {@code kind}, by current then former name. */
     private Class<?> entityClass(String kind, String name) {
-        String normalized = name == null ? "" : java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
-                .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+        if (name == null) return null;
         var registry = compiler.policies().registry();
-        if ("catalogs".equals(kind)) {
-            for (var d : registry.allCatalogs()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT).equals(normalized)) {
-                    return d.javaClass();
-                }
-            }
-        } else if ("documents".equals(kind)) {
-            for (var d : registry.allDocuments()) {
-                if (d.logicalName().replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT).equals(normalized)) {
-                    return d.javaClass();
-                }
+        List<NamedEntity> candidates = switch (kind == null ? "" : kind) {
+            case "catalogs" -> registry.allCatalogs().stream()
+                    .map(d -> new NamedEntity(d.logicalName(), d.previousNames(), d.javaClass())).toList();
+            case "documents" -> registry.allDocuments().stream()
+                    .map(d -> new NamedEntity(d.logicalName(), d.previousNames(), d.javaClass())).toList();
+            default -> List.of();
+        };
+        String key = nameKey(name);
+        for (NamedEntity e : candidates) {
+            if (nameKey(e.logicalName()).equals(key)) return e.type();
+        }
+        // A durable link (a task subject, a notification) may still carry the name before a rename.
+        for (NamedEntity e : candidates) {
+            for (String former : e.previousNames() == null ? List.<String>of() : e.previousNames()) {
+                if (nameKey(former).equals(key)) return e.type();
             }
         }
         return null;
+    }
+
+    private record NamedEntity(String logicalName, List<String> previousNames, Class<?> type) {
+    }
+
+    private static String nameKey(String name) {
+        return name.replace(" ", "").replace("_", "").toLowerCase(Locale.ROOT);
     }
 
     /** Entity-level grant (role + {@link UiEntityAccessPolicy}) for {@code mode}. */

@@ -49,8 +49,7 @@ public class CrmActionController {
         if(!allowed(action,principal))throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         var state=UiActionResolver.recordActionState(action,row(id));
         if(!state.visible() || !state.enabled())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Action unavailable");
-        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body)
-                .withSubject(subject));
+        var result=action.handler().apply(ActionContext.from("catalogs","CrmConversations",id,principal.getName(),body,subject));
         return result==null?ActionResult.ok():result;
     }
 }

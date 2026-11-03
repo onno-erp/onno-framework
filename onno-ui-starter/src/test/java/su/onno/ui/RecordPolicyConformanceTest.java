@@ -458,6 +458,14 @@ class RecordPolicyConformanceTest {
         assertThat((List<?>) snapshot.get("records")).isEmpty();
         status(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"path\":\"/catalogs/LkTenants/" + tenantB + "\",\"action\":\"enter\"}"), 404);
+        // A list or draft route carries no record id: presence on it is not narrowed by record scope.
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants\",\"action\":\"enter\"}"));
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants/new\",\"action\":\"enter\"}"));
+        List<String> presenceIds = ((List<?>) jsonMap(ok(get("/api/presence"))).get("records")).stream()
+                .map(r -> String.valueOf(((Map<?, ?>) r).get("id"))).toList();
+        assertThat(presenceIds).containsExactlyInAnyOrder("/catalogs/LkTenants", "new");
 
         Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
         assertThat((List<?>) feed.get("items")).hasSize(1);

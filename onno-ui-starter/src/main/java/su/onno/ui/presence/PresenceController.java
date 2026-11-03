@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Route-level presence: tracks which signed-in users are currently on each route — a record, an entity
@@ -67,9 +68,22 @@ public class PresenceController {
         this.recordAccess = recordAccess;
     }
 
-    /** Whether a record route is readable by a record-scoped viewer (true for lists/pages/unscoped). */
+    /**
+     * Whether a record route is readable by a record-scoped viewer. A list route (whose id is its path)
+     * or a {@code new} draft carries no record id, so there is no record to check; entity read access is
+     * gated separately.
+     */
     private boolean recordReadable(AccessSubject subject, String kind, String name, String id) {
-        return recordAccess == null || recordAccess.canReadRecord(subject, kind, name, id);
+        return recordAccess == null || !isRecordId(id) || recordAccess.canReadRecord(subject, kind, name, id);
+    }
+
+    private static boolean isRecordId(String id) {
+        try {
+            UUID.fromString(id);
+            return true;
+        } catch (IllegalArgumentException | NullPointerException notARecord) {
+            return false;
+        }
     }
 
     /** The heartbeat body: the pane's route {@code path} and an {@code action} (enter/heartbeat/leave). */
