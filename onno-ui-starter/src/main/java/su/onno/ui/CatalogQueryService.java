@@ -423,13 +423,17 @@ public class CatalogQueryService {
     private static WidgetFilter.Result widgetFilter(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
                                                     String filter) {
         if (!desc.hierarchical()) {
-            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         }
         Set<String> columns = new java.util.HashSet<>(surface.columnNames());
         columns.add("_parent");
         Set<String> uuids = new java.util.HashSet<>(surface.uuidColumns());
         uuids.add("_parent");
-        return WidgetFilter.parse(filter, columns, uuids);
+        return WidgetFilter.parse(filter, columns, uuids, surface::storageColumn);
+    }
+
+    void validateWidgetFilter(CatalogDescriptor desc, String filter) {
+        widgetFilter(desc, surface(desc), filter);
     }
 
     /**

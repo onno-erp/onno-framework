@@ -331,6 +331,10 @@ public class DivKitController implements DisposableBean {
         if (content == null) {
             List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
+                    .map(w -> {
+                        validateWidgetFilter(w);
+                        return w;
+                    })
                     .toList();
             // No authored "/" page and no (readable) widgets means the app has no dashboard.
             // Render a neutral, empty surface rather than a phantom "Dashboard" / "Welcome
@@ -544,7 +548,35 @@ public class DivKitController implements DisposableBean {
         return layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
                 .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
+                .map(w -> {
+                    validateWidgetFilter(w);
+                    return w;
+                })
                 .toList();
+    }
+
+    private void validateWidgetFilter(PageWidgetDescriptor widget) {
+        if (widget.extraConfig() == null) {
+            return;
+        }
+
+        String filter = widget.extraConfig().get("filter");
+        if (filter == null || filter.isBlank()) {
+            return;
+        }
+
+        if ("catalog".equals(widget.entityType())) {
+            catalogQuery.validateWidgetFilter(catalogQuery.require(widget.entityName()), filter);
+            return;
+        }
+
+        if (!"document".equals(widget.entityType())) {
+            return;
+        }
+
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(documentQuery.require(widget.entityName()));
+
+        WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
     }
 
     /** A route segment → a human-facing default page title ("/team-roster" → "Team Roster"). */

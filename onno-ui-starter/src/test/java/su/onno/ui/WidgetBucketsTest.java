@@ -273,6 +273,34 @@ class WidgetBucketsTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void chartFilterAcceptsLogicalAndStorageNames() {
+        insert("new", null, LocalDateTime.of(2026, 1, 5, 9, 0), "10");
+        insert("done", null, null, "20");
+
+        for (String field : List.of("placedAt", col("placedAt"))) {
+            Map<String, Object> out = service.aggregateBuckets(
+                    AccessSubject.system(),
+                    orders,
+                    request(
+                            "count", null, col("status"), null, null,
+                            field + " != null",
+                            null, null, null
+                    )
+            );
+
+            List<Map<String, Object>> buckets =
+                    (List<Map<String, Object>>) out.get("buckets");
+
+            assertThat(buckets).singleElement().satisfies(bucket -> {
+                assertThat(bucket.get("key")).isEqualTo("new");
+                assertThat(((Number) bucket.get("value")).longValue())
+                        .isEqualTo(1L);
+            });
+        }
+    }
+
     // --- helpers ---------------------------------------------------------------
 
     private String col(String field) {

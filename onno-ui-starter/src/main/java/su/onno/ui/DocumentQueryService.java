@@ -107,7 +107,7 @@ public class DocumentQueryService {
             return new ArrayList<>();
         }
         EntitySurfaceDescriptor surface = surface(desc);
-        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause search = searchClause(subject, surface, query);
         String where = "_deletion_mark = false"
@@ -204,7 +204,7 @@ public class DocumentQueryService {
         boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
@@ -263,7 +263,7 @@ public class DocumentQueryService {
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
@@ -308,7 +308,7 @@ public class DocumentQueryService {
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
         ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
-        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns());
+        WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
         StringBuilder where = new StringBuilder("_deletion_mark = false").append(searchClause.and());
