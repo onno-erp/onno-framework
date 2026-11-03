@@ -243,6 +243,33 @@ class RecordAccessTest {
         assertThat(access.canReadRoute(null, "/reports/2026/q1")).isTrue();
     }
 
+    @Test
+    void readableFiltersManyRoutesByTheSameRule() {
+        RecordRoute eu = new RecordRoute("catalogs", "RaTenants", tenantEu);
+        RecordRoute us = new RecordRoute("catalogs", "ra_tenants", tenantUs);
+        RecordRoute former = new RecordRoute("catalogs", "RaLessees", tenantEu);
+        RecordRoute missing = new RecordRoute("catalogs", "RaTenants", UUID.randomUUID());
+        RecordRoute unscopedEntity = new RecordRoute("documents", "RaOrders", UUID.randomUUID());
+        RecordRoute unknown = new RecordRoute("catalogs", "Nope", tenantEu);
+        List<RecordRoute> all = List.of(eu, us, former, missing, unscopedEntity, unknown);
+
+        assertThat(access.readable(CUSTOMER, all)).containsExactlyInAnyOrder(eu, former, unscopedEntity);
+        for (AccessSubject subject : List.of(STAFF, ADMIN, AccessSubject.system())) {
+            assertThat(access.readable(subject, all)).as("%s", subject).containsExactlyInAnyOrderElementsOf(all);
+        }
+        assertThat(access.readable(CUSTOMER, List.of())).isEmpty();
+        assertThatThrownBy(() -> access.readable(null, all)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void narrowsReadsOnlyForSubjectsAPolicyCovers() {
+        assertThat(access.narrowsReads(CUSTOMER)).isTrue();
+        assertThat(access.narrowsReads(STAFF)).isFalse();
+        assertThat(access.narrowsReads(ADMIN)).isFalse();
+        assertThat(access.narrowsReads(AccessSubject.system())).isFalse();
+        assertThat(recordAccess(RecordPolicies.none(registry)).narrowsReads(CUSTOMER)).isFalse();
+    }
+
     private RecordAccess recordAccess(RecordPolicies policies) {
         return new RecordAccess(new RecordScopeCompiler(policies), new UiAccessService(registry), jdbi, false);
     }
