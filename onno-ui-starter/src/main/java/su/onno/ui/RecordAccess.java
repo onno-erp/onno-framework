@@ -118,35 +118,62 @@ public class RecordAccess {
 
     /**
      * Whether a UI route to one record — {@code catalogs|documents/{name}/{id}} (leading slash and
-     * trailing segments allowed) — is readable by a record-scoped {@code subject}. Anything that is
-     * not such a route (a page, a list, a non-UUID id), an unknown entity, or an unscoped subject
-     * yields {@code true}: this narrows by record scope only; entity grants are checked elsewhere.
+     * trailing segments allowed) — is readable by a record-scoped {@code subject}. Any other route
+     * yields {@code true}: a page, a list (also one focused on a record) or a {@code new} draft has no
+     * record id in its third segment. A record route follows {@link #canReadRecord}. This narrows by
+     * record scope only; entity grants are checked elsewhere.
      */
     public boolean canReadRoute(AccessSubject subject, String route) {
         if (route == null || compiler.policies().isEmpty()) return true;
         String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
                 .filter(p -> !p.isBlank()).toArray(String[]::new);
         if (parts.length < 3) return true;
+        if (!"catalogs".equals(parts[0]) && !"documents".equals(parts[0])) return true;
+        if (!isUuid(parts[2])) return true;
         return canReadRecord(subject, parts[0], parts[1], parts[2]);
     }
 
-    /** As {@link #canReadRoute} for an already split {@code kind}/{@code name}/{@code id}. */
+    /**
+     * Whether {@code subject} may read record {@code id} of the catalog/document {@code kind}/{@code name}
+     * (route segments). With no policies declared this is always {@code true}. Otherwise a {@code null}
+     * subject throws (as in {@link RecordPolicies#scopeFor}), and an unknown entity or an id that is
+     * not a UUID (it addresses no record) is denied. Entity grants are not checked here: to authorize
+     * access in application code use {@link #can} or {@link #require}.
+     */
     public boolean canReadRecord(AccessSubject subject, String kind, String name, String id) {
-        if (subject == null || compiler.policies().isEmpty()) return true;
+        if (compiler.policies().isEmpty()) return true;
+        if (subject == null) {
+            throw new IllegalArgumentException("AccessSubject is required; pass AccessSubject.system() for trusted code");
+        }
+        Class<?> type = entityClass(kind, name);
+        if (type == null) return false;
         UUID uuid;
         try {
             uuid = UUID.fromString(id);
         } catch (IllegalArgumentException | NullPointerException notARecord) {
-            return true;
+            return false;
         }
-        Class<?> type = entityClass(kind, name);
-        if (type == null || !compiler.isScoped(type, subject, AccessMode.READ)) return true;
+        if (!compiler.isScoped(type, subject, AccessMode.READ)) return true;
         return !filter(subject, type, List.of(uuid), AccessMode.READ).isEmpty();
     }
 
+    private static boolean isUuid(String value) {
+        try {
+            UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+
     private Class<?> entityClass(String kind, String name) {
-        String normalized = name == null ? "" : java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
-                .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+        String normalized;
+        try {
+            normalized = name == null ? "" : java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
+                                             .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+        } catch (IllegalArgumentException malformed) {
+            return null;
+        }
         var registry = compiler.policies().registry();
         if ("catalogs".equals(kind)) {
             for (var d : registry.allCatalogs()) {

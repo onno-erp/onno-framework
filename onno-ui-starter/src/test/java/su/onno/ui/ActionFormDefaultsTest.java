@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.access.AccessSubject;
 import su.onno.ui.ActionSpec.FormDefaults;
 
 import org.junit.jupiter.api.Test;
@@ -90,7 +91,7 @@ class ActionFormDefaultsTest {
         var action = resolver.find(String.class, "startPrint");
         UUID id = UUID.randomUUID();
         FormDefaults defaults = action.formDefaultsFn()
-                .apply(new ActionContext("documents", "orders", id, "admin", Map.of(), Map.of()));
+                .apply(new ActionContext("documents", "orders", id, "admin", Map.of(), Map.of(), AccessSubject.system()));
         assertThat(defaults.values()).isEmpty();
         assertThat(defaults.rows()).containsKey("prints");
         assertThat(defaults.rows().get("prints"))

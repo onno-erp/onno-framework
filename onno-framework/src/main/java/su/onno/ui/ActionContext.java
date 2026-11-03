@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -23,8 +24,8 @@ import java.util.UUID;
  * @param rows    collected row groups, keyed by group key; each group is a list of {column → value}
  *                rows (never null)
  * @param subject who runs the action — pass it to {@code RecordAccess} when the handler reads or
- *                changes other records on the caller's behalf; {@code null} only when constructed
- *                by code predating record policies. The framework has already checked that the
+ *                changes other records on the caller's behalf; never {@code null} (trusted code
+ *                passes {@link AccessSubject#system()}). The framework has already checked that the
  *                caller may write the target record ({@link #id()}).
  */
 public record ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs,
@@ -33,17 +34,7 @@ public record ActionContext(String kind, String name, UUID id, String user, Map<
     public ActionContext {
         inputs = inputs == null ? Map.of() : inputs;
         rows = rows == null ? Map.of() : rows;
-    }
-
-    /** Constructor predating {@link #subject()}. */
-    public ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs,
-                         Map<String, List<Map<String, String>>> rows) {
-        this(kind, name, id, user, inputs, rows, null);
-    }
-
-    /** Backwards-compatible constructor for a scalar-only action (no row groups). */
-    public ActionContext(String kind, String name, UUID id, String user, Map<String, String> inputs) {
-        this(kind, name, id, user, inputs, Map.of(), null);
+        Objects.requireNonNull(subject, "subject is required; pass AccessSubject.system() for trusted code");
     }
 
     /** A copy bound to {@code subject}. */
@@ -73,9 +64,11 @@ public record ActionContext(String kind, String name, UUID id, String user, Map<
      * Split an action request body ({@code {"inputs": {key: value | rows[]}}}) into scalar inputs and
      * row groups: a value that is a JSON array is a row group (each element a {column → value}
      * object), everything else is a scalar coerced to a string. Shared by the entity-action and
-     * page-action endpoints so both read the same wire shape.
+     * page-action endpoints so both read the same wire shape. {@code subject} is the caller the
+     * handler runs for.
      */
-    public static ActionContext from(String kind, String name, UUID id, String user, Map<String, Object> body) {
+    public static ActionContext from(String kind, String name, UUID id, String user, Map<String, Object> body,
+                                     AccessSubject subject) {
         Map<String, String> scalars = new LinkedHashMap<>();
         Map<String, List<Map<String, String>>> groups = new LinkedHashMap<>();
         if (body != null && body.get("inputs") instanceof Map<?, ?> raw) {
@@ -88,7 +81,7 @@ public record ActionContext(String kind, String name, UUID id, String user, Map<
                 }
             });
         }
-        return new ActionContext(kind, name, id, user, scalars, groups);
+        return new ActionContext(kind, name, id, user, scalars, groups, subject);
     }
 
     /** Coerce a JSON array of row objects into a list of {@code column → string} maps. */

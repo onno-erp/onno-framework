@@ -415,8 +415,7 @@ public class DivKitController implements DisposableBean {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
         }
         // No record to scope: a handler that touches data uses RecordAccess with ctx.subject().
-        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body)
-                .withSubject(subject(principal));
+        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body, subject(principal));
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
