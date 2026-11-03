@@ -270,6 +270,9 @@ class RecordPolicyConformanceTest {
                 .title("LEAK-B-notification").link("catalogs/LkTenants/" + tenantB).build());
         notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
                 .title("alpha notification").link("catalogs/LkTenants/" + tenantA).build());
+        // A link whose entity resolves to nothing (removed): a narrowed recipient cannot be shown it.
+        notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
+                .title("LEAK-B-gone-notification").link("catalogs/LkRemoved/" + tenantA).build());
 
         B_IDS.addAll(List.of(ownerB.toString(), tenantB.toString(), instanceB.toString(), jobB.toString()));
     }
@@ -469,6 +472,8 @@ class RecordPolicyConformanceTest {
 
         Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
         assertThat((List<?>) feed.get("items")).hasSize(1);
+        // The badge counts only what the feed shows.
+        assertThat(feed.get("unreadCount")).isEqualTo(1);
 
         ok(get("/api/tasks"));
     }
@@ -600,12 +605,17 @@ class RecordPolicyConformanceTest {
         publisher.publish("updated", "document", "LkBuildJobs", jobB, "LEAK-B");
         publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkTenants/" + tenantB,
                 "title", "LEAK-B"));
+        // The stream withholds what the feed withholds: a link to an entity that resolves to nothing.
+        publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "LEAK-B-gone"));
+        publisher.publishNotification("staff", Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "gone-for-staff"));
         publisher.publish("changed", "register", "*", jobB, null);
 
         String seenByA = String.join("\n", toA.sent);
         assertThat(seenByA).contains(tenantA.toString()).doesNotContain(tenantB.toString()).doesNotContain("LEAK-B");
         assertThat(toA.sent).anySatisfy(s -> assertThat(s).contains("entityName:*").contains("register"));
-        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString());
+        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString()).contains("gone-for-staff");
     }
 
     /** An emitter that records what would be written to the stream. */

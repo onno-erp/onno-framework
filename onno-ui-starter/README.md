@@ -1496,7 +1496,7 @@ feature is disabled.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. |
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
 | POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
 | POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
 
