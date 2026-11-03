@@ -29,15 +29,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * {@link RecordAccess#canReadRecord} and {@link RecordAccess#canReadRoute} fail closed once any
- * record policy is declared (#462): a missing subject throws, and an unknown entity or a non-UUID id
- * is denied. A list or {@code new} route carries no record id, so {@code canReadRoute} still allows
- * it. With no policies at all both stay permissive, as before.
+ * {@link RecordAccess#canReadRecord} and {@link RecordAccess#canReadRoute} fail closed (#462): a
+ * missing subject throws and a non-UUID id is denied, with or without policies; for a subject some
+ * policy narrows, an unknown entity is denied too. Subjects no policy narrows (ADMIN, system, uncovered
+ * roles) are never narrowed. A list or {@code new} route carries no record id, so {@code canReadRoute}
+ * still allows it.
  */
 class RecordAccessTest {
 
     @AccessControl(readRoles = {"CUSTOMER", "STAFF"})
-    @Catalog(name = "RaTenants")
+    @Catalog(name = "RaTenants", previousNames = "RaLessees")
     static class Tenant extends CatalogObject {
         @Attribute(length = 20)
         private String region;
@@ -82,23 +83,43 @@ class RecordAccessTest {
     }
 
     @Test
-    void aNullSubjectThrowsOncePoliciesExist() {
-        assertThatThrownBy(() -> access.canReadRecord(null, "catalogs", "RaTenants", tenantEu.toString()))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> access.canReadRecord(null, "catalogs", "RaTenants", "new"))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> access.canReadRecord(null, "catalogs", "Nope", tenantEu.toString()))
-                .isInstanceOf(IllegalArgumentException.class);
+    void aNullSubjectAlwaysThrows() {
+        RecordAccess unrestricted = recordAccess(RecordPolicies.none(registry));
+        for (RecordAccess ra : List.of(access, unrestricted)) {
+            assertThatThrownBy(() -> ra.canReadRecord(null, "catalogs", "RaTenants", tenantEu.toString()))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> ra.canReadRecord(null, "catalogs", "RaTenants", "new"))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> ra.canReadRecord(null, "catalogs", "Nope", tenantEu.toString()))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
     }
 
     @Test
-    void anUnknownEntityIsDeniedForEverySubject() {
+    void anUnknownEntityIsDeniedForANarrowedSubject() {
         String id = UUID.randomUUID().toString();
-        for (AccessSubject subject : List.of(CUSTOMER, STAFF, ADMIN, AccessSubject.system())) {
-            assertThat(access.canReadRecord(subject, "catalogs", "Nope", id)).as("%s", subject).isFalse();
-            assertThat(access.canReadRecord(subject, "documents", "Nope", id)).as("%s", subject).isFalse();
-            assertThat(access.canReadRecord(subject, "catalogs", null, id)).as("%s", subject).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "catalogs", "Nope", id)).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "documents", "Nope", id)).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "catalogs", null, id)).isFalse();
+    }
+
+    @Test
+    void anUnknownEntityIsNotNarrowedForASubjectNoPolicyNarrows() {
+        // ADMIN and system are exempt and STAFF is not covered: a link to a removed entity stays theirs.
+        String id = UUID.randomUUID().toString();
+        for (AccessSubject subject : List.of(STAFF, ADMIN, AccessSubject.system())) {
+            assertThat(access.canReadRecord(subject, "catalogs", "Nope", id)).as("%s", subject).isTrue();
+            assertThat(access.canReadRecord(subject, "documents", "Nope", id)).as("%s", subject).isTrue();
         }
+    }
+
+    @Test
+    void aFormerEntityNameStillResolves() {
+        // A task subject or notification stored before a rename carries the previousNames entry.
+        assertThat(access.canReadRecord(CUSTOMER, "catalogs", "RaLessees", tenantEu.toString())).isTrue();
+        assertThat(access.canReadRecord(CUSTOMER, "catalogs", "RaLessees", tenantUs.toString())).isFalse();
+        assertThat(access.canReadRoute(CUSTOMER, "catalogs/RaLessees/" + tenantEu)).isTrue();
+        assertThat(access.canReadRoute(ADMIN, "catalogs/RaLessees/" + tenantUs)).isTrue();
     }
 
     @Test
@@ -110,27 +131,32 @@ class RecordAccessTest {
     @Test
     void anEntityOfAnotherKindIsUnknown() {
         // A catalog name under the documents kind, or a kind that is not a record surface at all.
-        assertThat(access.canReadRecord(STAFF, "documents", "RaTenants", tenantEu.toString())).isFalse();
-        assertThat(access.canReadRecord(STAFF, "registers", "RaTenants", tenantEu.toString())).isFalse();
-        assertThat(access.canReadRecord(STAFF, "page", "RaTenants", tenantEu.toString())).isFalse();
-        assertThat(access.canReadRecord(STAFF, null, "RaTenants", tenantEu.toString())).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "documents", "RaTenants", tenantEu.toString())).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "registers", "RaTenants", tenantEu.toString())).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, "page", "RaTenants", tenantEu.toString())).isFalse();
+        assertThat(access.canReadRecord(CUSTOMER, null, "RaTenants", tenantEu.toString())).isFalse();
     }
 
     @Test
-    void aMalformedPercentEncodedNameIsDeniedWithoutThrowing() {
+    void aNameIsMatchedAsGivenNotDecodedAgain() {
+        // canReadRecord takes the decoded logical name: escapes in it are literal characters.
+        assertThat(access.canReadRecord(CUSTOMER, "catalogs", "Ra%20Tenants", tenantEu.toString())).isFalse();
         assertThat(access.canReadRecord(CUSTOMER, "catalogs", "100%", tenantEu.toString())).isFalse();
-        assertThat(access.canReadRecord(CUSTOMER, "catalogs", "%zz", "new")).isFalse();
     }
 
     @Test
     void aNonUuidIdAddressesNoRecordAndIsDenied() {
-        // A number or code is not a record id: it must not pass as readable for a lookup by it.
-        for (AccessSubject subject : List.of(CUSTOMER, STAFF, ADMIN, AccessSubject.system())) {
-            assertThat(access.canReadRecord(subject, "catalogs", "RaTenants", "SO-001")).as("%s", subject).isFalse();
-            assertThat(access.canReadRecord(subject, "catalogs", "RaTenants", "new")).as("%s", subject).isFalse();
-            assertThat(access.canReadRecord(subject, "catalogs", "RaTenants", "/catalogs/RaTenants"))
-                    .as("%s", subject).isFalse();
-            assertThat(access.canReadRecord(subject, "catalogs", "RaTenants", null)).as("%s", subject).isFalse();
+        // A number or code is not a record id: it must not pass as readable for a lookup by it, and
+        // the answer must not change when the first policy is declared.
+        RecordAccess unrestricted = recordAccess(RecordPolicies.none(registry));
+        for (RecordAccess ra : List.of(access, unrestricted)) {
+            for (AccessSubject subject : List.of(CUSTOMER, STAFF, ADMIN, AccessSubject.system())) {
+                assertThat(ra.canReadRecord(subject, "catalogs", "RaTenants", "SO-001")).as("%s", subject).isFalse();
+                assertThat(ra.canReadRecord(subject, "catalogs", "RaTenants", "new")).as("%s", subject).isFalse();
+                assertThat(ra.canReadRecord(subject, "catalogs", "RaTenants", "/catalogs/RaTenants"))
+                        .as("%s", subject).isFalse();
+                assertThat(ra.canReadRecord(subject, "catalogs", "RaTenants", null)).as("%s", subject).isFalse();
+            }
         }
     }
 
@@ -145,10 +171,13 @@ class RecordAccessTest {
 
     @Test
     void theEntityNameResolvesInEveryRouteSpelling() {
-        for (String name : List.of("RaTenants", "ra_tenants", "ratenants", "Ra%20Tenants")) {
+        for (String name : List.of("RaTenants", "ra_tenants", "ratenants", "Ra Tenants")) {
             assertThat(access.canReadRecord(CUSTOMER, "catalogs", name, tenantEu.toString())).as(name).isTrue();
             assertThat(access.canReadRecord(CUSTOMER, "catalogs", name, tenantUs.toString())).as(name).isFalse();
         }
+        // A route segment is percent-decoded once, by canReadRoute.
+        assertThat(access.canReadRoute(CUSTOMER, "catalogs/Ra%20Tenants/" + tenantEu)).isTrue();
+        assertThat(access.canReadRoute(CUSTOMER, "catalogs/Ra%20Tenants/" + tenantUs)).isFalse();
     }
 
     @Test
@@ -163,16 +192,14 @@ class RecordAccessTest {
     }
 
     @Test
-    void withoutAnyPolicyEveryCaseStaysAllowed() {
+    void withoutAnyPolicyNoRecordIsNarrowed() {
         RecordAccess unrestricted = recordAccess(RecordPolicies.none(registry));
         String id = tenantUs.toString();
 
-        assertThat(unrestricted.canReadRecord(null, "catalogs", "RaTenants", id)).isTrue();
         assertThat(unrestricted.canReadRecord(CUSTOMER, "catalogs", "Nope", id)).isTrue();
         assertThat(unrestricted.canReadRecord(CUSTOMER, "catalogs", "100%", id)).isTrue();
-        assertThat(unrestricted.canReadRecord(CUSTOMER, "catalogs", "RaTenants", "new")).isTrue();
         assertThat(unrestricted.canReadRecord(CUSTOMER, "catalogs", "RaTenants", id)).isTrue();
-        assertThat(unrestricted.canReadRoute(null, "catalogs/Nope/" + id)).isTrue();
+        assertThat(unrestricted.canReadRoute(CUSTOMER, "catalogs/Nope/" + id)).isTrue();
     }
 
     @Test
@@ -198,10 +225,14 @@ class RecordAccessTest {
     }
 
     @Test
-    void aRecordRouteOfAnUnknownEntityIsDenied() {
+    void aRecordRouteOfAnUnknownEntityIsDeniedToANarrowedSubject() {
         assertThat(access.canReadRoute(CUSTOMER, "catalogs/Nope/" + tenantEu)).isFalse();
-        assertThat(access.canReadRoute(ADMIN, "documents/Nope/" + tenantEu)).isFalse();
+        assertThat(access.canReadRoute(CUSTOMER, "documents/Nope/" + tenantEu)).isFalse();
+        // A malformed escape names no entity, and does not throw.
         assertThat(access.canReadRoute(CUSTOMER, "catalogs/100%/" + tenantEu)).isFalse();
+        assertThat(access.canReadRoute(CUSTOMER, "catalogs/%zz/" + tenantEu)).isFalse();
+        assertThat(access.canReadRoute(ADMIN, "documents/Nope/" + tenantEu)).isTrue();
+        assertThat(access.canReadRoute(ADMIN, "catalogs/100%/" + tenantEu)).isTrue();
     }
 
     @Test
