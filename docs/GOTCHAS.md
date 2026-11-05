@@ -45,6 +45,19 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   access on the target if users need to see those names.
 - **Media is not record-bound.** `/api/media/{key}` is served to any signed-in user who has the key.
   Don't store customer-private files as media when external users exist.
+- **Scope indexes are built at startup and block writes while they build.** With policies declared
+  and `onno.schema.mode` at its `apply` default (blank counts as `apply`), the first start that finds
+  a scoped column unindexed runs a plain `CREATE INDEX` on it. On a large PostgreSQL table, pre-create
+  the indexes concurrently — see [Startup validation](RECORD_ACCESS_POLICIES.md#startup-validation).
+
+## Configuration
+
+- **Read `onno.*` settings through their typed properties beans, not `@Value` or
+  `Environment.getProperty`.** A default lives on the `@ConfigurationProperties` field
+  (`OnnoProperties`, `UiProperties`, …), not in the `Environment`, so
+  `environment.getProperty("onno.schema.mode", "update")` returns your fallback, not `apply`, whenever
+  the property is unset. Inject the properties bean instead; interpret the schema mode with
+  `SchemaMode.fromString`, where a blank value means `apply`.
 
 ## UI chrome & localization
 

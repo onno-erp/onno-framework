@@ -635,6 +635,11 @@ RecordAccessPolicy tenantsByOwner() {
   each record event against each distinct subscriber scope), MCP tools and the CRM inbox.
 - **Not scoped:** typed repositories, posting, process internals, jobs, migrations, connectors —
   trusted code. App code serving external users from repositories checks through `RecordAccess`.
+- **Indexes.** `RecordScopeIndexes` (UI starter) indexes every scoped column at startup when
+  `onno.schema.mode` resolves to `apply` (the default; blank counts as `apply`) and
+  `onno.access.records.create-indexes` is on. On PostgreSQL an existing index is skipped without a
+  statement; a missing one is built with a plain `CREATE INDEX` (see
+  [Record access policies](RECORD_ACCESS_POLICIES.md#startup-validation)).
 
 `RecordPolicyConformanceTest` (leak test + route coverage guard) and `RecordScopeArchitectureTest`
 keep new endpoints and data paths honest. See [Record access policies](RECORD_ACCESS_POLICIES.md).

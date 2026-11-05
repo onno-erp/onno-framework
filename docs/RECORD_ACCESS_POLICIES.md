@@ -154,7 +154,15 @@ can never match, a policy without a read scope, and a **dead** policy (none of i
 may read the entity at all).
 
 Every scoped column gets an index (`CREATE INDEX IF NOT EXISTS idx_<table>_<column>`) at startup
-when `onno.schema.mode=apply`; otherwise the statements are logged as a warning.
+when `onno.schema.mode` resolves to `apply` — the default; a blank value counts as `apply`, as it does
+for the schema itself. Any other mode, or `onno.access.records.create-indexes=false`, only logs the
+statements as a warning. On PostgreSQL an index that already exists is skipped without a statement,
+so a restart takes no table lock. A missing index is built with a plain `CREATE INDEX`, which blocks
+writes to that table while it builds. For a large table, start once with
+`onno.access.records.create-indexes=false` to log the statements, create those indexes with
+`CREATE INDEX CONCURRENTLY` under the same names, then re-enable the property. Check that each build
+finished: an interrupted `CREATE INDEX CONCURRENTLY` leaves an INVALID index under that name
+(`pg_index.indisvalid = false`), which startup treats as present, so drop it and build it again.
 `onno.access.records.log-denials=true` logs every scope-based 404 at DEBUG on `su.onno.ui.RecordAccess`.
 
 ## Verifying a policy

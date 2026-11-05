@@ -20,7 +20,9 @@ public class RecordAccessProperties {
     /**
      * Create an index for every column a record policy scopes by (if missing) at startup, so a
      * scoped list never degrades to a full table scan. Skipped when {@code onno.schema.mode} does
-     * not allow DDL; a missing index is then logged as a warning.
+     * not resolve to {@code apply} (blank counts as {@code apply}); the statements are then logged
+     * as a warning. A missing index is built with a plain {@code CREATE INDEX}, which blocks writes
+     * to its table while it builds; on PostgreSQL an existing one is skipped without a statement.
      */
     private boolean createIndexes = true;
 
