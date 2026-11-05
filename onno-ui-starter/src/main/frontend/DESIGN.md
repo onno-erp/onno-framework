@@ -137,7 +137,8 @@ of the row keeps the full context menu. Flat table view only.
 
 Utilities to reach for instead of reinventing: `lib/time-range.ts`, `lib/widget-data.ts` (bucket
 shaping/labels), `lib/chart-colors.ts`, `lib/format.ts` + `lib/cell-format.ts`, `lib/utils.ts`
-(`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR).
+(`cn`), `lib/messages.ts` (chrome strings — mirror of `UiMessages.DEFAULTS`, change both in one PR),
+`lib/notify-error.ts` (`notifyError`: report a caught request failure exactly once).
 
 List selection actions appear inline in the scrolling facet rail, using shared `Button`
 `size="toolbar"` (32px, compact text) and `variant="subtle"`: a solid neutral pill shared with filter triggers.
@@ -212,6 +213,11 @@ exceptions. Keep component tests for every custom picker trigger.
   acknowledgement/dismiss controls use the quiet button. Prefer the server-side
   `ActionResult.toast(ActionToast…)` builder over a bare message when an outcome benefits from a
   title, explanation, or details.
+- One failed request, one toast (#505). `fetchJson` toasts a failure by default and marks the
+  `ApiError` `notified`. A caller with its own wording passes `{ silent: true }`; a catch block that
+  ends a user action reports through `notifyError` instead of calling `toast.error`, so it adds a
+  toast only where none was shown — including what the api layer leaves to its caller (network
+  errors, field errors without an inline form, typed feedback, 401).
 - The shell logo's empty `onno://` action is a semantic home intent. Resolve it through
   `shell.home`; only profiles that actually own a dashboard should land on `/`.
 - Esc closes the topmost layer only (overlay before page).
