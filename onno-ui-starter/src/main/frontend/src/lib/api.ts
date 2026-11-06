@@ -27,6 +27,7 @@ import type {
 import { toSnakeCase } from "./utils";
 // Type-only (erased at build time), so this doesn't create a runtime cycle with widget-data.
 import type { AggregateBuckets } from "./widget-data";
+import type { ActionItem } from "./actions-menu-bridge";
 
 const BASE = "/api";
 const CSRF_COOKIE = "XSRF-TOKEN";
@@ -604,6 +605,13 @@ export const api = {
   },
   getDocument: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`),
+  getRecordRefresh: (kind: "catalogs" | "documents", name: string, id: string,
+    { profile, viewport }: { profile: string; viewport?: string | null }) => {
+    const params = new URLSearchParams({ profile });
+    if (viewport) params.set("viewport", viewport);
+    return fetchJson<{ record: EntityRecord; actions: ActionItem[]; readOnly: boolean }>(
+      `${BASE}/divkit/record-refresh/${kind}/${encodeURIComponent(name)}/${id}?${params}`, undefined, { silent: true });
+  },
   createDocument: (name: string, data: EntityRecord) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}`, {
       method: "POST",

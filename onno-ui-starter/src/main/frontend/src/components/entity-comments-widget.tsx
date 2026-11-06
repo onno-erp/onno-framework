@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
@@ -246,6 +247,7 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
   }, [kind, name, id, composerOnly]);
 
   useEffect(() => load(), [load]);
+  useSurfaceRefresh(load);
   useEffect(() => { onDraftChange?.(body); }, [body, onDraftChange]);
 
   // Live-sync: refetch when the server signals a comment changed on this thread. We reuse the shared

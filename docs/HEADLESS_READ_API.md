@@ -33,6 +33,7 @@ POST /api/ref-options/search                  bounded contextual reference optio
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
 POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
 GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
+GET /api/divkit/record-refresh/{kind}/{name}/{id}  saved record and current header actions for the open form
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -132,6 +133,11 @@ token mappings fail atomically.
   "outcomes": ["APPROVE", "REJECT"]
 }]
 ```
+
+For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` returns
+`{record, actions, readOnly}`. Pass the form's `profile` and `viewport` to preserve action placement.
+The response applies the same access rules as the record surface. `record` uses the logical
+representation and `actions` uses the form descriptor's header action shape.
 
 Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through

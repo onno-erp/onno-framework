@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -422,6 +423,7 @@ function useSourceCalendar(widget: DashboardWidgetMeta, calendar: string, range:
   const [items, setItems] = useState<SourceItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  useSurfaceRefresh(() => setTick((tick) => tick + 1));
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<Set<string>>(() => new Set((remembered(`${calendar}.hidden`) ?? "").split(",").filter(Boolean)));
   const readOnly = String(widget.extraConfig?.readOnly ?? "").toLowerCase() === "true";

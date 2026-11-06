@@ -11,7 +11,6 @@ import { Lock, LogIn, SearchX, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMessages } from "@/providers/messages-provider";
 import { isFormDirty } from "@/lib/dirty-forms";
-import { subscribeSurfaceRefresh } from "@/lib/surface-refresh";
 import {
   DivKitContent,
   type ContentAction,
@@ -205,12 +204,6 @@ export function ContentPane({
         .catch(() => {});
     }
   }, [fullReload]);
-
-  // An explicit action refresh must work even when the handler emits no SSE event. Patch only
-  // the source tab, and keep unsaved form edits just as we do for server-pushed changes.
-  useEffect(() => subscribeSurfaceRefresh(path, () => {
-    if (!isFormDirty(path.split("?")[0])) liveUpdate();
-  }), [path, liveUpdate]);
 
   const onSurfaceAction = useCallback((action: ContentAction) => {
     onAction({ ...action, surfacePath: path });

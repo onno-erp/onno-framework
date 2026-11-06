@@ -1,11 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
 import { MemoryRouter } from "react-router";
 
-const { runAction, runPageAction, applyDelta } = vi.hoisted(() => ({
+const { runAction, runPageAction, applyDelta, refreshed } = vi.hoisted(() => ({
   runAction: vi.fn(),
   runPageAction: vi.fn(),
   applyDelta: vi.fn(() => true),
+  refreshed: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -26,6 +28,7 @@ vi.mock("@/views/divkit-content", async () => {
       onAction: (action: { url: string }) => void;
     }, ref) {
       useImperativeHandle(ref, () => ({ applyDelta }));
+      useEffect(() => subscribeSurfaceRefresh(surfacePath, () => refreshed(surfacePath)), [surfacePath]);
       return <div data-onno-surface-path={surfacePath}>
         <input aria-label={`Draft ${surfacePath}`} defaultValue="Unsaved draft" />
         <button onClick={() => onAction({ url: "onno://action/documents/orders/advance/o1" })}>
@@ -56,6 +59,7 @@ beforeEach(() => {
   runAction.mockReset().mockResolvedValue({ refresh: true });
   runPageAction.mockReset().mockResolvedValue({ refresh: true });
   applyDelta.mockClear().mockReturnValue(true);
+  refreshed.mockClear();
   fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(card), {
     status: 200, headers: { "Content-Type": "application/json" },
   }));
@@ -68,43 +72,31 @@ afterEach(() => {
 });
 
 describe("source-tab refresh without an SSE event (#447)", () => {
-  it("patches only the requested pane and keeps another tab's draft mounted", async () => {
+  it("signals only the requested surface without fetching or patching its DivKit card", async () => {
     render(<>{pane(source)}{pane(other)}</>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const draft = screen.getByLabelText(`Draft ${other}`);
+    const draft = screen.getByLabelText(`Draft ${source}`);
+    const otherDraft = screen.getByLabelText(`Draft ${other}`);
     fireEvent.change(draft, { target: { value: "My unfinished work" } });
 
     act(() => requestSurfaceRefresh(source));
 
-    await waitFor(() => expect(applyDelta).toHaveBeenCalledTimes(1));
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(String(fetchMock.mock.calls[2][0])).toContain(`/api/divkit${source}?`);
-    expect(screen.getByLabelText(`Draft ${other}`)).toBe(draft);
+    expect(refreshed).toHaveBeenCalledExactlyOnceWith(source);
+    expect(applyDelta).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByLabelText(`Draft ${source}`)).toBe(draft);
+    expect(screen.getByLabelText(`Draft ${other}`)).toBe(otherDraft);
     expect(draft).toHaveValue("My unfinished work");
   });
 
-  it("does not overwrite a dirty record form", async () => {
+  it("lets islands refresh even if a sibling form in the surface is dirty", async () => {
     render(pane(source));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     markFormDirty(source);
     act(() => requestSurfaceRefresh(source));
+    expect(refreshed).toHaveBeenCalledExactlyOnceWith(source);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(applyDelta).not.toHaveBeenCalled();
-    expect(screen.getByLabelText(`Draft ${source}`)).toHaveValue("Unsaved draft");
-  });
-
-  it("keeps edits made while the refresh request is in flight", async () => {
-    render(pane(source));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    let finish!: (response: Response) => void;
-    fetchMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-    act(() => requestSurfaceRefresh(source));
-    markFormDirty(source);
-    await act(async () => finish(new Response(JSON.stringify(card), {
-      headers: { "Content-Type": "application/json" },
-    })));
-    expect(applyDelta).not.toHaveBeenCalled();
-    expect(screen.getByLabelText(`Draft ${source}`)).toHaveValue("Unsaved draft");
   });
 
   it("passes the originating path with a DivKit header action", async () => {
@@ -148,10 +140,11 @@ describe("source-tab refresh without an SSE event (#447)", () => {
     if (placement === "menu") fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(await screen.findByRole("button", { name: "Advance" }));
     if (placement === "form") fireEvent.click(screen.getByRole("button", { name: "Submit action form" }));
-    await waitFor(() => expect(applyDelta).toHaveBeenCalledOnce());
+    await waitFor(() => expect(refreshed).toHaveBeenCalledOnce());
+    expect(applyDelta).not.toHaveBeenCalled();
     expect(runAction).toHaveBeenCalledWith("documents", "orders", "advance", "o1",
       placement === "form" ? { note: "Test" } : undefined);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("refreshes a page action's actual tab instead of a different tab of the same route", async () => {
@@ -163,9 +156,10 @@ describe("source-tab refresh without an SSE event (#447)", () => {
     </MemoryRouter>);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByRole("button", { name: "Rebuild" }));
-    await waitFor(() => expect(applyDelta).toHaveBeenCalledOnce());
-    expect(String(fetchMock.mock.calls[2][0])).toContain("period=month");
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(refreshed).toHaveBeenCalledOnce());
+    expect(applyDelta).not.toHaveBeenCalled();
+    expect(refreshed).toHaveBeenCalledWith(path);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not refresh a page action that returns only feedback", async () => {
@@ -178,6 +172,7 @@ describe("source-tab refresh without an SSE event (#447)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Check" })).toBeEnabled());
     expect(runPageAction).toHaveBeenCalledOnce();
     expect(applyDelta).not.toHaveBeenCalled();
+    expect(refreshed).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

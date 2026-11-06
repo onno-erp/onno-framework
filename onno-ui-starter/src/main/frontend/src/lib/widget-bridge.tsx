@@ -1,6 +1,7 @@
 import { EntityTags } from "@/components/entity-tags";
 import { useSyncExternalStore, type ComponentType } from "react";
 import { createPortal } from "react-dom";
+import { SurfaceHost } from "@/lib/surface-refresh";
 import type { DashboardWidgetMeta } from "@/lib/types";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 import { ChartWidget, TimeRangeWidget } from "@/components/chart-widget";
@@ -181,9 +182,11 @@ export function WidgetPortals() {
         return createPortal(
           // A throwing widget (registered renderers are app code) must not unwind the
           // shared React root — degrade to a labelled placeholder instead.
-          <IslandErrorBoundary label={m.widget.title || m.widget.widgetType}>
-            {node}
-          </IslandErrorBoundary>,
+          <SurfaceHost.Provider value={m.el}>
+            <IslandErrorBoundary label={m.widget.title || m.widget.widgetType}>
+              {node}
+            </IslandErrorBoundary>
+          </SurfaceHost.Provider>,
           m.el,
           String(m.id)
         );

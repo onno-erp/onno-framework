@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "@/lib/fill-height";
 import { ExtensionSlot } from "@/lib/ui-extensions";
@@ -2213,6 +2214,7 @@ export function EntityListWidget({
   const reload = useCallback(() => {
     loadInitial(true);
   }, [loadInitial]);
+  useSurfaceRefresh(reload);
 
   // An action-form dialog waiting for input: the clicked form-declaring action plus its target —
   // one row id, a batch of ids, or neither (toolbar). Submitting runs the action with the values.
