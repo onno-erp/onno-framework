@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { format } from "date-fns";
-import { toast } from "@/components/ui/toast";
 import { useNavigate } from "react-router";
 import {
   DragDropContext,
@@ -10,6 +9,7 @@ import {
 } from "@hello-pangea/dnd";
 import { Lock } from "lucide-react";
 import { api } from "@/lib/api";
+import { notifyError } from "@/lib/notify-error";
 import { toSnakeCase, cn } from "@/lib/utils";
 import type { DashboardWidgetMeta, EntityRecord } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,7 +130,8 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
       await target.apply(widget.entityName, row);
       load();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Move failed");
+      // The api layer usually toasted already; notifyError adds one only when it didn't.
+      notifyError(err, { fallback: "Move failed" });
       load();
     }
   };

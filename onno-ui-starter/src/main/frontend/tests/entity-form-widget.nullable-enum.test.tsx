@@ -72,7 +72,8 @@ describe("EntityFormWidget nullable enums (#270)", () => {
       expect(updateCatalogItem).toHaveBeenCalledWith(
         "episodes",
         "episode-1",
-        expect.objectContaining({ status: null })
+        expect.objectContaining({ status: null }),
+        { silent: true }
       )
     );
   });

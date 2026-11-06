@@ -76,7 +76,8 @@ describe("EntityFormWidget color fields", () => {
       expect(updateCatalogItem).toHaveBeenCalledWith(
         "palettes",
         "palette-1",
-        expect.objectContaining({ color: "#aabbcc" })
+        expect.objectContaining({ color: "#aabbcc" }),
+        { silent: true }
       )
     );
   });
