@@ -93,6 +93,22 @@ class EntitySurfaceDescriptorTest {
         }
     }
 
+    @Test
+    void widgetFilterAcceptsUppercaseStorageName() {
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(
+                scanner.scanDocument(EntityJsonRepresentationTest.Order.class));
+
+        WidgetFilter.Result result = WidgetFilter.parse(
+                "_POSTED = true",
+                surface.columnNames(),
+                surface.uuidColumns(),
+                surface::storageColumn
+        );
+
+        assertThat(result.sql()).isEqualTo("_posted = :wf0");
+        assertThat(result.bindings()).containsEntry("wf0", true);
+    }
+
     private static AttributeDescriptor attribute(String name, boolean secret) {
         return new AttributeDescriptor(
                 name, name, name, String.class,
