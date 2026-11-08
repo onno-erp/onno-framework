@@ -45,10 +45,12 @@ for the wire contract, [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit
   access on the target if users need to see those names.
 - **Media is not record-bound.** `/api/media/{key}` is served to any signed-in user who has the key.
   Don't store customer-private files as media when external users exist.
-- **Scope indexes are built at startup and block writes while they build.** With policies declared
-  and `onno.schema.mode` at its `apply` default (blank counts as `apply`), the first start that finds
-  a scoped column unindexed runs a plain `CREATE INDEX` on it. On a large PostgreSQL table, pre-create
-  the indexes concurrently — see [Startup validation](RECORD_ACCESS_POLICIES.md#startup-validation).
+- **On PostgreSQL, scope indexes are built in the background.** With policies declared and
+  `onno.schema.mode` at its `apply` default (blank counts as `apply`), a missing index on a scoped
+  column is built with `CREATE INDEX CONCURRENTLY`. Neither startup nor writes wait for it, but until
+  it finishes, scoped queries on a large table scan it, and a schema change to that table (say, the
+  next deploy's) waits for it while blocking the table's reads and writes. See
+  [Startup validation](RECORD_ACCESS_POLICIES.md#startup-validation).
 
 ## Configuration
 
