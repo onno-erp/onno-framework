@@ -316,8 +316,6 @@ public class DocumentCommandService {
             postingService.post(doc);
         }
         Map<String, Object> result = query.get(subject, desc, id);
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.POSTED, EntityChangedEvent.DOCUMENT,
-                desc.logicalName(), id, naturalKey(result)));
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
                 "*", id, null));
         return result;
@@ -337,8 +335,6 @@ public class DocumentCommandService {
         DocumentObject doc = loadDocumentObject(desc, id);
         postingService.unpost(doc);
         Map<String, Object> result = query.get(subject, desc, id);
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.UNPOSTED, EntityChangedEvent.DOCUMENT,
-                desc.logicalName(), id, naturalKey(result)));
         events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
                 "*", id, null));
         return result;

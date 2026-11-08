@@ -939,6 +939,12 @@ The domain `AfterPostHandler.afterPost()` hook still exists, but it has no Sprin
 event for anything that touches beans. Neither requires the Kafka outbox (that's only for cross-service
 event streaming).
 
+`PostingEngine` also publishes document `EntityChangedEvent` notifications
+(`POSTED` / `UNPOSTED`) after its JDBI transaction commits, including calls made
+directly through `PostingService`. Each successful operation publishes one such
+notification; rolled-back operations publish none. UI commands do not duplicate
+these notifications.
+
 ### Business Rules
 
 Validation is typed Java, not string expressions. Implement `Validated` and return named `BusinessRule`s whose condition is a `BooleanSupplier` over the entity's fields. Rules run before write and before posting; the first failure throws with the rule's message (or `Business rule failed: {name}` if none).
