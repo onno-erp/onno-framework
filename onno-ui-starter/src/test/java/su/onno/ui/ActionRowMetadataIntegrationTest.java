@@ -7,6 +7,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import su.onno.access.AccessMode;
+import su.onno.access.AccessSubject;
 import su.onno.annotations.Attribute;
 import su.onno.annotations.Catalog;
 import su.onno.annotations.Document;
@@ -17,9 +18,11 @@ import su.onno.model.DocumentObject;
 import su.onno.repository.EnumerationPersistence;
 import su.onno.types.Ref;
 
+import java.security.Principal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -112,6 +115,8 @@ class ActionRowMetadataIntegrationTest {
     @CsvSource({"catalogs", "documents"})
     @SuppressWarnings("unchecked")
     void menuAndServerEnabledCheckUseTheSameMetadata(String kind) {
+        AccessSubject subject = AccessSubject.user("alice", Set.of("OPERATOR"));
+        Principal principal = () -> "alice";
         var catalog = scanner.scan(OrderCatalog.class);
         var doc = scanner.scanDocument(OrderDocument.class);
         boolean document = kind.equals("documents");
@@ -119,23 +124,28 @@ class ActionRowMetadataIntegrationTest {
         when(catalogs.require("orders")).thenReturn(catalog);
         when(documents.require("orders")).thenReturn(doc);
         Map<String, Object> row = storageRow(true);
-        when(catalogs.get(null, catalog, ID)).thenReturn(row);
-        when(documents.get(null, doc, ID)).thenReturn(row);
-        when(catalogs.inScope(null, catalog, ID, AccessMode.WRITE)).thenReturn(true);
-        when(documents.inScope(null, doc, ID, AccessMode.WRITE)).thenReturn(true);
+        when(catalogs.get(subject, catalog, ID)).thenReturn(row);
+        when(documents.get(subject, doc, ID)).thenReturn(row);
+        when(catalogs.inScope(subject, catalog, ID, AccessMode.WRITE)).thenReturn(true);
+        when(documents.inScope(subject, doc, ID, AccessMode.WRITE)).thenReturn(true);
         BatchRunner batch = new BatchRunner(1);
         try {
             ActionController controller = new ActionController(catalogs, documents, access,
                     new UiActionResolver(List.of(view(entity))), new UiProperties(), batch);
             Map<String, Object> state = (Map<String, Object>) ((Map<?, ?>) controller
-                    .descriptors(kind, "orders", ID, null, null).get("rowActions")).get("approve");
+                    .descriptors(kind, "orders", ID, principal, subject).get("rowActions")).get("approve");
             assertThat(state).containsEntry("visible", true).containsEntry("enabled", true)
                     .containsEntry("label", "Alice");
-            assertThat(controller.run(kind, "orders", "approve", ID, Map.of(), null, null)).isNotNull();
+            assertThat(controller.run(kind, "orders", "approve", ID, Map.of(), principal, subject)).isNotNull();
             row.put("approval_flag", false);
-            assertThatThrownBy(() -> controller.run(kind, "orders", "approve", ID, Map.of(), null, null))
+            assertThatThrownBy(() -> controller.run(kind, "orders", "approve", ID, Map.of(), principal, subject))
                     .isInstanceOfSatisfying(ResponseStatusException.class,
                             error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+            when(catalogs.inScope(subject, catalog, ID, AccessMode.WRITE)).thenReturn(false);
+            when(documents.inScope(subject, doc, ID, AccessMode.WRITE)).thenReturn(false);
+            assertThatThrownBy(() -> controller.run(kind, "orders", "approve", ID, Map.of(), principal, subject))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
         } finally {
             batch.destroy();
         }
