@@ -407,7 +407,10 @@ because they are not Java field references.
     rejection defaults to an error dialog. `ActionResult.toast(ActionToast…)` is the structured
     transient-feedback path and `ActionResult.dialog(ActionDialog…)` is the successful
     acknowledgement-dialog path; `reload()` and `refresh(ActionToast|ActionDialog)` add refresh
-    intent. Handler results contain only `{refresh,feedback}`; navigation is declared statically on
+    intent. Handler results contain `{refresh,feedback,navigateTo}`; `ActionResult.open(ref)` /
+    `.navigate(route)` choose a post-handler destination, applied after feedback/source refresh.
+    `navigateTo` is optional/null for old results; batch summaries omit per-record navigation.
+    Fixed navigation is declared on
     the action. A form field can be a **reference picker** of another entity via
     `input(key).reference(Target.class)` (`InputType.REFERENCE`; value is the picked record's id),
     and a form can declare a **repeatable row group** `group(key, g→ g.column(col, c→…))` — an

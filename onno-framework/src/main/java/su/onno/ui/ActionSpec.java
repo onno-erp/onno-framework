@@ -15,7 +15,7 @@ import java.util.function.Predicate;
  * record detail. It does one of two things when clicked:</p>
  * <ul>
  *   <li>a <b>server handler</b> — {@code .handler(ctx -> ...)} runs arbitrary backend logic and
- *       returns an {@link ActionResult} (typed feedback and/or refresh); or</li>
+ *       returns an {@link ActionResult} (typed feedback, refresh and/or post-handler navigation); or</li>
  *   <li>a <b>navigation</b> — {@code .navigate("onno://...")} just routes the client (a
  *       {@code {id}} placeholder is filled with the row/record id).</li>
  * </ul>

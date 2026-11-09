@@ -133,10 +133,14 @@ token mappings fail atomically.
 }]
 ```
 
-Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
+Action handlers use the successful response `{refresh, feedback, navigateTo}`.
+`navigateTo` is optional/null and carries an application route for a single successful action. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
-`ActionToast`, `ActionDialog`, or `ActionFeedback`; navigation is static action declaration
-metadata, not a handler response. An expected `ActionRejectedException` is HTTP 422 whose body is
+`ActionToast`, `ActionDialog`, or `ActionFeedback`. `ActionResult.open(ref)` returns the referenced
+catalog/document's route; `ActionResult.navigate(route)` chooses a page or `onno://...` destination.
+Clients apply feedback and source refresh before navigating; the destination's normal access
+checks still apply. Fixed navigation remains available as action declaration metadata. Batch
+responses retain their count/feedback summary without per-record navigation. An expected `ActionRejectedException` is HTTP 422 whose body is
 the feedback object itself:
 
 ```json

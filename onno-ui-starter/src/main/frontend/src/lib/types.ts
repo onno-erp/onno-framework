@@ -450,10 +450,11 @@ export interface ProcessSnapshot {
   version: number;
 }
 
-/** Typed feedback and refresh intent returned by a custom EntityView action handler. */
+/** Typed feedback, refresh intent and optional navigation returned by an action handler. */
 export interface ActionResult {
   refresh?: boolean;
   feedback?: ActionFeedback | null;
+  navigateTo?: string | null;
 }
 
 export type ActionSeverity = "info" | "success" | "warning" | "error";
