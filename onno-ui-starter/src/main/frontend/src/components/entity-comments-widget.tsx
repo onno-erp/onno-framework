@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Send, Trash2, MessageSquare, AtSign, Hash, Reply, X, Plus, SmilePlus } from "lucide-react";
@@ -69,7 +70,7 @@ function absolute(iso: string | null): string | undefined {
 
 // Route to a mentioned record through the same host event other widgets use to open a row/detail.
 function openMention(m: { kind: string; name: string; id: string }) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${m.kind}/${m.name}/${m.id}` }));
+  openRoute(`onno://${m.kind}/${m.name}/${m.id}`);
 }
 
 /** One mention/reference inside a rendered body: a clickable chip when readable, plain text otherwise. */

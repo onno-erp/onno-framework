@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronsUpDown, ExternalLink, List, Plus, Search, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -202,7 +203,7 @@ export function RefSelect({
     // field is available. Register the hand-off first: when that form saves, the new record's
     // id lands straight in this field instead of the user re-finding it in the picker.
     requestTokenRef.current = requestQuickCreate(kind, name);
-    window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/new` }));
+    openRoute(`onno://${kind}/${name}/new`);
   };
 
   const showAll = () => {
@@ -230,7 +231,7 @@ export function RefSelect({
   // layout, the record route elsewhere).
   const openSelected = () => {
     if (!value) return;
-    window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${kind}/${name}/${value}` }));
+    openRoute(`onno://${kind}/${name}/${value}`);
   };
 
   const showOpen = openButton && !!value;

@@ -1,6 +1,6 @@
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router";
 import {
   DragDropContext,
   Droppable,
@@ -40,12 +40,16 @@ interface Column {
   key: string;
   label: string;
   match: (row: EntityRecord) => boolean;
-  apply: (entityName: string, row: EntityRecord) => Promise<EntityRecord | undefined>;
-  optimistic: (row: EntityRecord) => EntityRecord;
+  apply?: (entityName: string, row: EntityRecord) => Promise<EntityRecord | undefined>;
+  optimistic?: (row: EntityRecord) => EntityRecord;
   variant: "default" | "secondary" | "outline" | "success";
 }
 
 function defaultColumns(widget: DashboardWidgetMeta): Column[] {
+  // Catalogs have no posting state. Show their cards without inventing a writable grouping.
+  if (widget.entityType === "catalog" && !widget.extraConfig?.groupBy) {
+    return [{ key: "all", label: "All", match: () => true, variant: "secondary" }];
+  }
   const groupBy = logicalEntityKey(widget.extraConfig?.groupBy ?? "posted");
   if (groupBy === "posted" && widget.entityType === "document") {
     return [
@@ -73,7 +77,6 @@ function defaultColumns(widget: DashboardWidgetMeta): Column[] {
 
 export function KanbanWidget({ widget }: KanbanWidgetProps) {
   const [items, setItems] = useState<EntityRecord[]>([]);
-  const navigate = useNavigate();
 
   const load = useCallback(() => {
     const name = toSnakeCase(widget.entityName);
@@ -90,13 +93,13 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
 
   const titleField = widget.titleField || "number";
   const columns = useMemo(() => defaultColumns(widget), [widget]);
-  const draggable = columns.length > 0;
+  const draggable = columns.some((column) => column.apply != null);
   // RBAC: the server stamps canWrite=false when the viewer may not write the entity — cards
   // stay clickable (open the record) but can't be dragged between columns. REST enforces anyway.
   const canWrite = widget.canWrite !== false;
 
   const onDragEnd = async (result: DropResult) => {
-    if (!canWrite) return;
+    if (!canWrite || !draggable) return;
     const { destination, source, draggableId } = result;
     if (!destination) return;
 
@@ -118,7 +121,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
 
     // Cross-column move: optimistic, then call apply.
     const target = columns.find((c) => c.key === destination.droppableId);
-    if (!target) return;
+    if (!target?.apply || !target.optimistic) return;
 
     const row = items.find((r) => r.id === draggableId);
     if (!row || target.match(row)) return;
@@ -136,7 +139,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
     }
   };
 
-  if (!draggable) {
+  if (!columns.length) {
     return (
       <Card>
         <CardHeader>
@@ -201,7 +204,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                           </div>
                         )}
                         {cards.map((row, index) => {
-                          const id = String(row.id);
+                          const id = String(row.id ?? "");
                           const avatar = pickAvatar(row);
                           const number = String(row[titleField] ?? row.number ?? row.code ?? "");
                           const primaryDisplay = String(
@@ -216,12 +219,12 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                             row.propertyDisplay ?? row.warehouseDisplay ?? ""
                           );
                           const handleOpen = () => {
-                            if (widget.entityType === "document") {
-                              navigate(`/documents/${toSnakeCase(widget.entityName)}/${id}`);
-                            }
+                            if (!id) return;
+                            const kind = widget.entityType === "catalog" ? "catalogs" : "documents";
+                            openRoute(`/${kind}/${toSnakeCase(widget.entityName)}/${id}`);
                           };
                           return (
-                            <Draggable draggableId={id} index={index} key={id} isDragDisabled={!canWrite}>
+                            <Draggable draggableId={id} index={index} key={id} isDragDisabled={!canWrite || !draggable}>
                               {(dragProvided, dragSnapshot) => (
                                 <div
                                   ref={dragProvided.innerRef}
@@ -237,7 +240,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
                                   className={cn(
                                     "group select-none rounded-card border bg-card text-card-foreground p-3 shadow-sm transition-shadow",
                                     "hover:shadow-md hover:border-foreground/20",
-                                    canWrite ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
+                                    canWrite && draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer",
                                     dragSnapshot.isDragging && "shadow-lg ring-1 ring-primary/30"
                                   )}
                                 >
