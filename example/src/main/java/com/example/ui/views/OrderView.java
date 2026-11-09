@@ -128,7 +128,7 @@ public class OrderView implements EntityView<Order> {
     }
 
     @Override
-    public void actions(ActionSpec a) {
+    public void actions(ActionSpec<Order> a) {
         a.action("requestApproval").scope(ActionScope.DETAIL).icon("list-checks")
                 .label("Request approval").roles("MANAGER")
                 .handler(ctx -> requestApproval(ctx.id(), ctx.user()));

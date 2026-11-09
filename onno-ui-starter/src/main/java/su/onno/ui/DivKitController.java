@@ -404,7 +404,7 @@ public class DivKitController implements DisposableBean {
         }
         PageBuilder pb = new PageBuilder();
         page.compose(pb);
-        ActionSpec.Action action = pb.pageAction(key);
+        ActionSpec.Action<?> action = pb.pageAction(key);
         if (action == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
         }
@@ -805,7 +805,7 @@ public class DivKitController implements DisposableBean {
                                                                Map<String, Object> row,
                                                                List<AttributeDescriptor> attributes) {
         List<SurfaceDivBuilder.HeaderAction> out = new ArrayList<>();
-        for (ActionSpec.Action a : actionResolver.forEntity(entity)) {
+        for (ActionSpec.Action<?> a : actionResolver.forEntity(entity)) {
             if (a.scope() != ActionScope.DETAIL) {
                 continue;
             }

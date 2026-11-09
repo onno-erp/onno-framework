@@ -79,8 +79,8 @@ public class ActionController {
      * one of them (#227). Entity write access is already enforced by the caller via
      * {@link #resolveAndAuthorize}; the role list is the finer, per-action gate on top.
      */
-    private Action findRunnable(Class<?> entity, String key, Principal principal) {
-        Action action = actions.find(entity, key);
+    private Action<?> findRunnable(Class<?> entity, String key, Principal principal) {
+        Action<?> action = actions.find(entity, key);
         if (action == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
         }
@@ -104,7 +104,7 @@ public class ActionController {
                                            @RequestParam(required = false) UUID id,
                                            Principal principal, AccessSubject subject) {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
-        List<Action> current = actions.resolvedForEntity(entity);
+        List<Action<?>> current = actions.resolvedForEntity(entity);
         List<Map<String, Object>> out = UiActionResolver.descriptors(current,
                 java.util.EnumSet.of(ActionScope.TOOLBAR, ActionScope.ROW));
         for (Map<String, Object> action : out) {
@@ -138,7 +138,7 @@ public class ActionController {
      * scope (404 otherwise, like a missing record) and the action's {@code enabledWhen} must hold
      * for it (409 otherwise). A no-op for toolbar actions ({@code id == null}).
      */
-    private void requireRunnableOn(AccessSubject subject, String kind, String name, UUID id, Action action) {
+    private void requireRunnableOn(AccessSubject subject, String kind, String name, UUID id, Action<?> action) {
         if (id == null) return;
         boolean inScope = switch (kind) {
             case "catalogs" -> catalogQuery.inScope(subject, catalogQuery.require(name), id, AccessMode.WRITE);
@@ -164,7 +164,7 @@ public class ActionController {
                             AccessSubject subject) {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
-        Action action = findRunnable(entity, key, principal);
+        Action<?> action = findRunnable(entity, key, principal);
         requireRunnableOn(subject, kind, name, id, action);
         ActionContext ctx = ActionContext.from(kind, name, id,
                 principal != null ? principal.getName() : null, body).withSubject(subject);
@@ -188,7 +188,7 @@ public class ActionController {
                                             @RequestParam(required = false) UUID id, Principal principal,
                                             AccessSubject subject) {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
-        Action action = findRunnable(entity, key, principal);
+        Action<?> action = findRunnable(entity, key, principal);
         if (!action.hasDynamicForm()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Action has no dynamic form: " + key);
         }
@@ -228,7 +228,7 @@ public class ActionController {
                                         AccessSubject subject) {
         requireWritable();
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
-        Action action = findRunnable(entity, key, principal);
+        Action<?> action = findRunnable(entity, key, principal);
         List<UUID> ids = idList(body);
         String user = principal != null ? principal.getName() : null;
         // Parse the shared inputs/rows once; each id runs with the same collected values.

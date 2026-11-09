@@ -43,20 +43,20 @@ class ActionRowMetadataIntegrationTest {
                 "review_status", EnumerationPersistence.resolveId(Status.class, Status.APPROVED)));
     }
 
-    private static boolean eligible(ActionRow row) {
+    private static boolean eligible(ActionRow<? extends OrderFields> row) {
         return EMPLOYEE_ID.equals(row.get(OrderFields::getAssignedTo))
                 && row.bool(OrderFields::getNeedsApproval)
                 && row.enumValue(OrderFields::getReviewStatus, Status.class) == Status.APPROVED;
     }
 
-    private static <E> EntityView<E> view(Class<E> entity) {
+    private static <E extends OrderFields> EntityView<E> view(Class<E> entity) {
         return new EntityView<>() {
             @Override
             public Class<E> entity() {
                 return entity;
             }
             @Override
-            public void actions(ActionSpec actions) {
+            public void actions(ActionSpec<E> actions) {
                 actions.action("approve").scope(ActionScope.ROW)
                         .visibleWhen(ActionRowMetadataIntegrationTest::eligible)
                         .enabledWhen(ActionRowMetadataIntegrationTest::eligible)
@@ -80,7 +80,7 @@ class ActionRowMetadataIntegrationTest {
         List<Map<String, Object>> rows = List.of(source);
         var catalog = scanner.scan(OrderCatalog.class);
         var doc = scanner.scanDocument(OrderDocument.class);
-        Class<?> entity = document ? OrderDocument.class : OrderCatalog.class;
+        Class<? extends OrderFields> entity = document ? OrderDocument.class : OrderCatalog.class;
         when(catalogs.require("orders")).thenReturn(catalog);
         when(documents.require("orders")).thenReturn(doc);
         when(catalogs.rowsByIds(null, catalog, List.of(ID))).thenReturn(rows);
@@ -115,7 +115,7 @@ class ActionRowMetadataIntegrationTest {
         var catalog = scanner.scan(OrderCatalog.class);
         var doc = scanner.scanDocument(OrderDocument.class);
         boolean document = kind.equals("documents");
-        Class<?> entity = document ? OrderDocument.class : OrderCatalog.class;
+        Class<? extends OrderFields> entity = document ? OrderDocument.class : OrderCatalog.class;
         when(catalogs.require("orders")).thenReturn(catalog);
         when(documents.require("orders")).thenReturn(doc);
         Map<String, Object> row = storageRow(true);
@@ -143,7 +143,7 @@ class ActionRowMetadataIntegrationTest {
 
     @Test
     void detailStateReadsTypedFieldsAndResolvedLabels() {
-        ActionSpec spec = new ActionSpec();
+        ActionSpec<OrderFields> spec = new ActionSpec<>();
         spec.action("approve").scope(ActionScope.DETAIL)
                 .visibleWhen(ActionRowMetadataIntegrationTest::eligible)
                 .enabledWhen(ActionRowMetadataIntegrationTest::eligible)

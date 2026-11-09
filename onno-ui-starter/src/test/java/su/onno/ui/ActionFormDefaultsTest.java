@@ -18,9 +18,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class ActionFormDefaultsTest {
 
-    static class PrintersView implements EntityView {
-        @Override public Class<?> entity() { return String.class; }
-        @Override public void actions(ActionSpec a) {
+    static class PrintersView implements EntityView<String> {
+        @Override public Class<String> entity() { return String.class; }
+        @Override public void actions(ActionSpec<String> a) {
             // Dynamic: the modal opens seeded with one row per free printer.
             a.action("startPrint").scope(ActionScope.ROW)
                     .form(f -> f.group("prints", g -> g.label("Prints").required()

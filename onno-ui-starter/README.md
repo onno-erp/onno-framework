@@ -395,14 +395,14 @@ a fresh tab opens the app straight on that surface (after login if needed).
 
 ### Custom & state-aware row actions
 
-An `EntityView.actions(ActionSpec)` declares custom buttons on the list (`ActionScope.TOOLBAR` /
+An `EntityView<E>.actions(ActionSpec<E>)` declares custom buttons on the list (`ActionScope.TOOLBAR` /
 `ROW`) or the detail surface (`DETAIL`); each runs a server `handler(ctx -> ActionResult)` or
 `navigate(url)`. A **row** action's icon, label, visibility and enabled state may be **functions of
 the row** instead of fixed, so one control adapts to each record — a `pause` "Suspend" on a running
 row flipping to a `play` "Resume" once stopped, or a button shown only where it applies:
 
 ```java
-public void actions(ActionSpec a) {
+public void actions(ActionSpec<Order> a) {
     a.action("toggle").scope(ActionScope.ROW)
      .label("Change running state")
      .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
@@ -427,7 +427,7 @@ Any action (entity or page) may declare `.roles("ACCOUNTANT", "MANAGER")` — th
 callers holding none of them (`ADMIN` always passes). For an entity action this is a finer gate *on
 top of* the entity's write roles; unset means the entity's write access alone decides.
 
-Each function receives an `ActionRow` — a read-only view of the record's resolved data (`id()`,
+Each function receives an `ActionRow<E>` — a read-only view of the record's resolved data (`id()`,
 `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, `bool(col)`,
 or `get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list
 page is served (no extra query — the row is already in hand) and shipped to the grid under each
@@ -439,6 +439,12 @@ Typed reads such as `row.get(Order::getAssignedTo)`, `row.text(Order::getAssigne
 resolve the Java property through the entity's attribute metadata. This works for camelCase
 properties and custom `@Attribute(name = "...")` columns in row actions, detail actions and
 `rowStyle`, including the server-side enabled check. String reads still use storage column names.
+The entity type flows from `EntityView<E>` through `ActionSpec<E>` (including `dynamic` providers)
+and `ListSpec<E>.rowStyle` into every `ActionRow<E>` callback. An order callback accepts
+`row.bool(Order::getUrgent)` and inherited getters; `row.bool(Customer::getVip)` does not compile.
+When updating an existing view, declare `actions(ActionSpec<Order> actions)` for
+`EntityView<Order>` and use parameterized `ActionSpec`/`ActionRow` types rather than raw types.
+Page actions have no owning entity and use `ActionSpec<Void>`.
 When constructing an `ActionRow` directly from storage data, pass `descriptor.attributes()` as
 the second constructor argument; the original one-argument constructor reads keys as supplied.
 
@@ -612,7 +618,7 @@ When those choices come from an editable catalog rather than a Java enum, declar
 **late-bound** with `ActionSpec.dynamic(...)`:
 
 ```java
-public void actions(ActionSpec actions) {
+public void actions(ActionSpec<Order> actions) {
     actions.dynamic(live -> {
         for (Status status : statuses.all()) {
             live.action("status-" + status.getId()).scope(ActionScope.ROW)

@@ -25,6 +25,9 @@ import java.util.UUID;
  * (typed back to your enum), or {@link #get(String)} (the raw stored value). All lookups are
  * case-insensitive.</p>
  *
+ * <p>{@code E} is the owning entity. Typed reads accept only its getters (including inherited
+ * getters); string reads remain an escape hatch for storage-column names.</p>
+ *
  * <pre>
  * a.action("toggle").scope(ActionScope.ROW)
  *  .icon(row -&gt; row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
@@ -32,7 +35,7 @@ import java.util.UUID;
  *  .handler(ctx -&gt; ...);
  * </pre>
  */
-public final class ActionRow {
+public final class ActionRow<E> {
 
     private final Map<String, Object> data;
     private final List<AttributeDescriptor> attributes;
@@ -94,7 +97,7 @@ public final class ActionRow {
     }
 
     /** Read a raw value using a compiler-checked field reference. */
-    public <E, V> Object get(Field<E, V> field) {
+    public <V> Object get(Field<? super E, V> field) {
         return get(column(field));
     }
 
@@ -119,7 +122,7 @@ public final class ActionRow {
     }
 
     /** Read a boolean using a compiler-checked field reference. */
-    public <E> boolean bool(Field<E, Boolean> field) {
+    public boolean bool(Field<? super E, Boolean> field) {
         return bool(column(field));
     }
 
@@ -134,7 +137,7 @@ public final class ActionRow {
     }
 
     /** Read display text using a compiler-checked field reference. */
-    public <E, V> String text(Field<E, V> field) {
+    public <V> String text(Field<? super E, V> field) {
         return text(column(field));
     }
 
@@ -143,7 +146,7 @@ public final class ActionRow {
      * empty/unmatched. Enum fields are stored as deterministic UUIDs; display labels and legacy
      * constant-name strings are deliberately not accepted as storage identities.
      */
-    public <E extends Enum<E>> E enumValue(String column, Class<E> enumType) {
+    public <V extends Enum<V>> V enumValue(String column, Class<V> enumType) {
         // 1) Raw UUID — how an enum value is actually stored (see EnumerationPersistence).
         Object raw = get(column);
         UUID id = null;
@@ -157,7 +160,7 @@ public final class ActionRow {
             }
         }
         if (id != null) {
-            for (E constant : enumType.getEnumConstants()) {
+            for (V constant : enumType.getEnumConstants()) {
                 if (EnumerationPersistence.resolveId(enumType, constant).equals(id)) {
                     return constant;
                 }
@@ -167,7 +170,7 @@ public final class ActionRow {
     }
 
     /** Resolve an enum using a compiler-checked field reference. */
-    public <T, E extends Enum<E>> E enumValue(Field<T, E> field, Class<E> enumType) {
+    public <V extends Enum<V>> V enumValue(Field<? super E, V> field, Class<V> enumType) {
         return enumValue(column(field), enumType);
     }
     /** The underlying row map (resolved values keyed by column) — an escape hatch for ad-hoc reads. */

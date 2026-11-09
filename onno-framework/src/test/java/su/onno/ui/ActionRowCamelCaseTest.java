@@ -19,8 +19,8 @@ class ActionRowCamelCaseTest {
 
     private static final UUID EMPLOYEE_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    private static ActionRow row(Map<String, Object> values) {
-        return new ActionRow(values, new MetadataScanner(new DefaultNamingStrategy())
+    private static ActionRow<Order> row(Map<String, Object> values) {
+        return new ActionRow<>(values, new MetadataScanner(new DefaultNamingStrategy())
                 .scan(Order.class).attributes());
     }
 
@@ -51,7 +51,7 @@ class ActionRowCamelCaseTest {
 
     @Test
     void respectsExplicitColumnNamesInsteadOfGuessingSnakeCase() {
-        ActionRow row = row(Map.of("approval_flag", true, "custom_flag", false));
+        ActionRow<Order> row = row(Map.of("approval_flag", true, "custom_flag", false));
         assertThat(row.bool(Order::getCustomFlag)).isTrue();
         assertThat(row.bool("custom_flag")).isFalse();
         assertThat(row.bool("approval_flag")).isTrue();
@@ -59,7 +59,7 @@ class ActionRowCamelCaseTest {
 
     @Test
     void metadataLookupRetainsCaseInsensitiveStorageReadsAndDisplayFallback() {
-        ActionRow row = row(Map.of("ASSIGNED_TO", EMPLOYEE_ID, "NEEDS_APPROVAL", "t"));
+        ActionRow<Order> row = row(Map.of("ASSIGNED_TO", EMPLOYEE_ID, "NEEDS_APPROVAL", "t"));
         assertThat(row.get(Order::getAssignedTo)).isEqualTo(EMPLOYEE_ID);
         assertThat(row.text(Order::getAssignedTo)).isEqualTo(EMPLOYEE_ID.toString());
         assertThat(row.bool(Order::getNeedsApproval)).isTrue();
@@ -67,7 +67,7 @@ class ActionRowCamelCaseTest {
 
     @Test
     void absentValuesKeepTheirExistingDefaults() {
-        ActionRow row = row(Map.of());
+        ActionRow<Order> row = row(Map.of());
         assertThat(row.get(Order::getAssignedTo)).isNull();
         assertThat(row.text(Order::getAssignedTo)).isEmpty();
         assertThat(row.bool(Order::getNeedsApproval)).isFalse();
@@ -77,10 +77,10 @@ class ActionRowCamelCaseTest {
     @Test
     void originalConstructorStillAcceptsLogicalKeysWithoutChangingTheMap() {
         Map<String, Object> values = Map.of("assignedTo", EMPLOYEE_ID);
-        ActionRow row = new ActionRow(values);
+        ActionRow<Order> row = new ActionRow<>(values);
         assertThat(row.get(Order::getAssignedTo)).isEqualTo(EMPLOYEE_ID);
         assertThat(row.values()).isSameAs(values);
-        assertThat(new ActionRow(null).values()).isEmpty();
+        assertThat(new ActionRow<>(null).values()).isEmpty();
     }
 
     @Catalog(name = "ActionRowOrders")

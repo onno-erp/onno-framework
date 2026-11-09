@@ -24,7 +24,7 @@ public class CrmActionController {
             CatalogQueryService catalogs,@Value("${onno.ui.read-only:false}") boolean readOnly) {
         this.workspaces=workspaces;this.actions=actions;this.access=access;this.catalogs=catalogs;this.readOnly=readOnly;
     }
-    private boolean allowed(Action action,Principal principal) {
+    private boolean allowed(Action<?> action,Principal principal) {
         return action.isServer() && action.scope()!=ActionScope.TOOLBAR &&
             (action.roles().isEmpty() || access.hasAnyRole(principal,action.roles()));
     }

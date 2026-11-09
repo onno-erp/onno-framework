@@ -21,9 +21,9 @@ class UiActionResolverRecordStateTest {
     enum Status { NEW, DOWNLOADED, DONE }
 
     /** A view declaring a state-aware "advance" DETAIL action plus a static "export" one. */
-    static class OrderView implements EntityView {
-        @Override public Class<?> entity() { return Status.class; } // any class works as the key
-        @Override public void actions(ActionSpec a) {
+    static class OrderView implements EntityView<Status> {
+        @Override public Class<Status> entity() { return Status.class; } // any class works as the key
+        @Override public void actions(ActionSpec<Status> a) {
             a.action("advance").scope(ActionScope.DETAIL)
                     .label("Next status")
                     .label(row -> "→ " + row.enumValue("status", Status.class))
@@ -46,7 +46,7 @@ class UiActionResolverRecordStateTest {
 
     @Test
     void dynamicDetailAction_resolvesPerRecord() {
-        ActionSpec.Action advance = resolver.find(Status.class, "advance");
+        ActionSpec.Action<?> advance = resolver.find(Status.class, "advance");
 
         var onNew = UiActionResolver.recordActionState(advance, row(Status.NEW));
         assertThat(onNew.visible()).isTrue();
@@ -64,7 +64,7 @@ class UiActionResolverRecordStateTest {
 
     @Test
     void staticDetailAction_keepsFixedLabelAndIcon_visibleAndEnabled() {
-        ActionSpec.Action export = resolver.find(Status.class, "export");
+        ActionSpec.Action<?> export = resolver.find(Status.class, "export");
 
         var state = UiActionResolver.recordActionState(export, Map.of("status_display", "DONE"));
         assertThat(state.visible()).isTrue();
@@ -75,9 +75,9 @@ class UiActionResolverRecordStateTest {
 
     @Test
     void throwingFunctions_fallBackToVisibleEnabledAndFixedValues() {
-        EntityView blowsUp = new EntityView() {
-            @Override public Class<?> entity() { return Status.class; }
-            @Override public void actions(ActionSpec a) {
+        EntityView<Status> blowsUp = new EntityView<>() {
+            @Override public Class<Status> entity() { return Status.class; }
+            @Override public void actions(ActionSpec<Status> a) {
                 a.action("boom").label("Boom").icon("zap").scope(ActionScope.DETAIL)
                         .label(row -> { throw new IllegalStateException("kaboom"); })
                         .visibleWhen(row -> { throw new IllegalStateException("kaboom"); })

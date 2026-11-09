@@ -252,13 +252,13 @@ public class ListDataController {
      * {@link su.onno.ui.ListSpec#rowStyle}) under {@code _style}. A no-op (rows untouched) when the
      * entity has neither — the common case — so existing lists pay nothing.
      */
-    private void decorateRowActions(Class<?> entity, List<Map<String, Object>> rows,
+    private <E> void decorateRowActions(Class<E> entity, List<Map<String, Object>> rows,
                                     List<AttributeDescriptor> attributes) {
         if (entity == null) {
             return;
         }
         boolean dynamicActions = actionResolver.hasDynamicRowActions(entity);
-        java.util.function.Function<ActionRow, ListSpec.RowStyle> style = viewResolver.rowStyle(entity);
+        java.util.function.Function<ActionRow<E>, ListSpec.RowStyle> style = viewResolver.rowStyle(entity);
         if (!dynamicActions && style == null) {
             return;
         }
@@ -279,11 +279,11 @@ public class ListDataController {
     }
 
     /** One row's tone; a throwing function reads as "no tone" so a bad predicate can't break the list. */
-    private static ListSpec.RowStyle rowTone(java.util.function.Function<ActionRow, ListSpec.RowStyle> style,
+    private static <E> ListSpec.RowStyle rowTone(java.util.function.Function<ActionRow<E>, ListSpec.RowStyle> style,
                                              Map<String, Object> row,
                                              List<AttributeDescriptor> attributes) {
         try {
-            return style.apply(new ActionRow(row, attributes));
+            return style.apply(new ActionRow<>(row, attributes));
         } catch (RuntimeException e) {
             return null;
         }

@@ -31,7 +31,7 @@ class ActionRowCrmMetadataTest {
                 return Conversation.class;
             }
             @Override
-            public void actions(ActionSpec spec) {
+            public void actions(ActionSpec<Conversation> spec) {
                 spec.action("review").scope(ActionScope.ROW)
                         .label(row -> row.text(Conversation::getLastMessagePreview))
                         .visibleWhen(row -> row.get(Conversation::getLastMessagePreview) != null)

@@ -49,7 +49,7 @@ class TypedFieldDslTest {
 
     @Test
     void actionRowsAcceptTypedFields() {
-        ActionRow row = new ActionRow(java.util.Map.of(
+        ActionRow<Order> row = new ActionRow<>(java.util.Map.of(
                 "status", EnumerationPersistence.resolveId(Status.class, Status.APPROVED),
                 "active", true));
         assertThat(row.enumValue(Order::getStatus, Status.class)).isEqualTo(Status.APPROVED);

@@ -19,9 +19,9 @@ class UiActionResolverRowStateTest {
     enum Status { RUNNING, STOPPED }
 
     /** A view declaring a state-aware "toggle" row action plus a static "ping" row action. */
-    static class InstanceView implements EntityView {
-        @Override public Class<?> entity() { return Status.class; } // any class works as the key
-        @Override public void actions(ActionSpec a) {
+    static class InstanceView implements EntityView<Status> {
+        @Override public Class<Status> entity() { return Status.class; } // any class works as the key
+        @Override public void actions(ActionSpec<Status> a) {
             a.action("toggle").scope(ActionScope.ROW)
                     .icon(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "play" : "pause")
                     .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
@@ -74,9 +74,9 @@ class UiActionResolverRowStateTest {
 
     @Test
     void rowActionState_throwingPredicate_fallsBackToVisibleEnabled() {
-        EntityView blowsUp = new EntityView() {
-            @Override public Class<?> entity() { return Status.class; }
-            @Override public void actions(ActionSpec a) {
+        EntityView<Status> blowsUp = new EntityView<>() {
+            @Override public Class<Status> entity() { return Status.class; }
+            @Override public void actions(ActionSpec<Status> a) {
                 a.action("boom").scope(ActionScope.ROW)
                         .visibleWhen(row -> { throw new IllegalStateException("kaboom"); })
                         .handler(ctx -> ActionResult.ok());
