@@ -27,7 +27,19 @@ public class GmailClient {
             @Value("${onno.crm.channels.gmail.client-file:${user.home}/.config/onno/gmail-client.json}") String clientFile,
             @Value("${onno.crm.channels.gmail.tokens-file:${user.home}/.config/onno/gmail-tokens.json}") String tokensFile,
             @Value("${onno.crm.channels.gmail.redirect-uri:http://127.0.0.1:8090/api/crm/gmail/callback}") String redirectUri) {
-        this.json=json;this.clientFile=Path.of(clientFile);this.tokensFile=Path.of(tokensFile);this.redirectUri=redirectUri;
+        this.json=wholeEmails(json);this.clientFile=Path.of(clientFile);this.tokensFile=Path.of(tokensFile);this.redirectUri=redirectUri;
+    }
+    /** Gmail receives emails up to 50 MB and returns one ({@code format=raw}) as a single base64 string: about 67 million characters. */
+    static final int MAX_EMAIL_CHARACTERS=100_000_000;
+    /**
+     * A mapper that reads a whole email. Jackson's default string limit (20 million characters) rejects
+     * anything over about 15 MB, so the copy raises it; the shared mapper keeps its own limit.
+     */
+    static ObjectMapper wholeEmails(ObjectMapper json) {
+        if(json.getFactory().streamReadConstraints().getMaxStringLength()>=MAX_EMAIL_CHARACTERS)return json;
+        var copy=json.copy();
+        copy.getFactory().setStreamReadConstraints(copy.getFactory().streamReadConstraints().rebuild().maxStringLength(MAX_EMAIL_CHARACTERS).build());
+        return copy;
     }
     private final java.util.concurrent.ConcurrentMap<java.util.UUID,GmailClient> accountClients=new java.util.concurrent.ConcurrentHashMap<>();
     public GmailClient forAccount(java.util.UUID id) {
@@ -99,17 +111,47 @@ public class GmailClient {
         return execute(request.build());
     }
     private JsonNode execute(HttpRequest request) {
-        try {
-            var response=http.send(request,HttpResponse.BodyHandlers.ofString());
-            if(response.statusCode()/100!=2)throw new ApiFailure(response.statusCode());
-            return json.readTree(response.body());
-        } catch(ApiFailure e) {throw e;} catch(InterruptedException e) {Thread.currentThread().interrupt();throw new ApiFailure(0);}
-        catch(Exception e){throw new ApiFailure(0);}
+        HttpResponse<String> response;
+        try { response=http.send(request,HttpResponse.BodyHandlers.ofString()); }
+        catch(InterruptedException e) {Thread.currentThread().interrupt();throw new ApiFailure(0,"interrupted",null,false);}
+        catch(Exception e){throw new ApiFailure(0,e.getClass().getSimpleName(),null,false);}
+        if(response.statusCode()/100!=2) {
+            String reason=reason(response.body());
+            boolean limited=response.statusCode()==429 || response.statusCode()==403 && (reason.equals("rateLimitExceeded") || reason.equals("userRateLimitExceeded"));
+            throw new ApiFailure(response.statusCode(),reason,limited?retryAt(response.headers().firstValue("Retry-After").orElse(null),response.body(),Instant.now()):null,false);
+        }
+        try { return json.readTree(response.body()); }
+        catch(Exception e){throw new ApiFailure(response.statusCode(),e.getClass().getSimpleName(),null,true);}
+    }
+    /** Google's short error reason, such as {@code rateLimitExceeded}; never the response body itself. */
+    private String reason(String body) {
+        try { var error=json.readTree(body).path("error");
+            String reason=error.path("errors").path(0).path("reason").asText(error.path("status").asText());
+            return reason.matches("[A-Za-z_]{1,60}")?reason:"";
+        } catch(Exception e) { return ""; }
+    }
+    private static final java.util.regex.Pattern RETRY_AFTER=java.util.regex.Pattern.compile("Retry after (\\d{4}-\\d\\d-\\d\\dT[0-9:.]+Z)");
+    /** When Gmail allows the next request: its {@code Retry-After} header, the time in its message, or a minute from now. */
+    static Instant retryAt(String header,String body,Instant now) {
+        if(header!=null && header.trim().matches("\\d{1,6}"))return now.plusSeconds(Long.parseLong(header.trim()));
+        var match=RETRY_AFTER.matcher(body==null?"":body);
+        if(match.find())try { var at=Instant.parse(match.group(1));if(at.isAfter(now))return at; } catch(java.time.format.DateTimeParseException ignored) {}
+        return now.plusSeconds(60);
     }
     static String form(Map<String,String> fields) {return fields.entrySet().stream().map(e->encode(e.getKey())+"="+encode(e.getValue())).collect(java.util.stream.Collectors.joining("&"));}
     static String encode(String value) {return URLEncoder.encode(value,StandardCharsets.UTF_8);}
     public static final class ApiFailure extends RuntimeException {
+        /** The HTTP status, or 0 when no response arrived. */
         public final int status;
-        ApiFailure(int status){super("Gmail request failed ("+status+"). Check access and reconnect if needed.");this.status=status;}
+        /** Set when Gmail limits this mailbox's requests: no request should be made before it. */
+        public final Instant retryAt;
+        /** Gmail answered but the response could not be read, so asking again gives the same result. */
+        public final boolean unreadable;
+        ApiFailure(int status){this(status,"",null,false);}
+        ApiFailure(int status,String reason,Instant retryAt,boolean unreadable){
+            super(unreadable?"Gmail response could not be read ("+reason+")"
+                :"Gmail request failed ("+status+(reason.isBlank()?"":" "+reason)+(retryAt==null?"":", retry after "+retryAt)+"). Check access and reconnect if needed.");
+            this.status=status;this.retryAt=retryAt;this.unreadable=unreadable;
+        }
     }
 }

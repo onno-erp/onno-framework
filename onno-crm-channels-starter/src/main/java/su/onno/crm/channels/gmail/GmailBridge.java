@@ -35,6 +35,12 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private final ContactIdentityRepository identities;private final CrmContactService contacts;private final CrmWorkspaceService workspace;
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor(r->{var t=new Thread(r,"crm-gmail");t.setDaemon(true);return t;});
     private volatile boolean ready;private volatile String failure="";
+    /** Mailboxes Gmail is rate-limiting, with the time it allows the next request. */
+    private final ConcurrentMap<String,Instant> limitedUntil=new ConcurrentHashMap<>();
+    /** Failed imports per mailbox and Gmail message id, to stop one bad email from holding up its mailbox. */
+    private final ConcurrentMap<String,Integer> failedImports=new ConcurrentHashMap<>();
+    /** Sync rounds an email may fail for its own reasons before it is skipped. */
+    static final int IMPORT_ATTEMPTS=3;
     private final su.onno.crm.service.CrmConversationStatuses statuses;
     private final su.onno.crm.service.CrmAttachments attachments;
     public su.onno.crm.service.CrmChannelDefinition definition() { return new su.onno.crm.service.CrmChannelDefinition("EMAIL","Email","/crm/channels/gmail.svg"); }
@@ -148,19 +154,40 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         else if(jdbc.update("UPDATE onno_crm_gmail_outbox SET state='QUEUED' WHERE message_id=? AND state='FAILED'",message.getId())!=1)throw new IllegalArgumentException("Reply is already queued or sent");}
     synchronized void tick(){if(!ready)return;for(var a:accounts()) {
         if(!a.active || !client(a).authorized())continue;
-        try {deliver(a);sync(a);backfillFiles(a);backfillHtml(a);if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
-        catch(Exception e){String message="Gmail synchronization failed; check connection or reconnect";if(a.connectionId==null)failure=message;else accountFailures.put(a.connectionId,message);log.warn("Gmail synchronization deferred ({})",e.getClass().getSimpleName());}
+        var limited=limitedUntil.get(a.email);if(limited!=null && Instant.now().isBefore(limited))continue; // asking early only extends Gmail's limit
+        try {deliver(a);sync(a);backfillFiles(a);backfillHtml(a);limitedUntil.remove(a.email);if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
+        catch(Exception e){String message="Gmail synchronization failed; check connection or reconnect";if(a.connectionId==null)failure=message;else accountFailures.put(a.connectionId,message);
+            if(e instanceof GmailClient.ApiFailure f && f.retryAt!=null)limitedUntil.put(a.email,f.retryAt);
+            log.warn("Gmail synchronization deferred for {} ({})",a.email,describe(e));}
     }}
     private void sync(Account a) throws Exception {
         if(a.history==null){String checkpoint=client(a).get("profile").path("historyId").asText();var page=client(a).get("messages?labelIds=INBOX&maxResults=50");
-            for(var item:page.path("messages"))ingest(a,item.path("id").asText());jdbc.update("UPDATE onno_crm_gmail_account SET history_id=? WHERE account=?",checkpoint,a.email);return;}
+            for(var item:page.path("messages"))importMessage(a,item.path("id").asText());jdbc.update("UPDATE onno_crm_gmail_account SET history_id=? WHERE account=?",checkpoint,a.email);return;}
         String next="",checkpoint=a.history;
         do{JsonNode page;try{page=client(a).get("history?historyTypes=messageAdded&startHistoryId="+GmailClient.encode(a.history)+"&maxResults=100"+(next.isBlank()?"":"&pageToken="+GmailClient.encode(next)));}
             catch(GmailClient.ApiFailure e){if(e.status==404){jdbc.update("UPDATE onno_crm_gmail_account SET history_id=NULL WHERE account=?",a.email);return;}throw e;}
-            for(var history:page.path("history"))for(var added:history.path("messagesAdded")){var m=added.path("message");boolean inbox=false;for(var label:m.path("labelIds"))if(label.asText().equals("INBOX") || label.asText().equals("SENT"))inbox=true;if(inbox)ingest(a,m.path("id").asText());}
+            for(var history:page.path("history"))for(var added:history.path("messagesAdded")){var m=added.path("message");boolean inbox=false;for(var label:m.path("labelIds"))if(label.asText().equals("INBOX") || label.asText().equals("SENT"))inbox=true;if(inbox)importMessage(a,m.path("id").asText());}
             checkpoint=page.path("historyId").asText(checkpoint);next=page.path("nextPageToken").asText();
         }while(!next.isBlank());jdbc.update("UPDATE onno_crm_gmail_account SET history_id=? WHERE account=?",checkpoint,a.email);
     }
+    /**
+     * Imports one email. An email that fails for its own reasons (Gmail's answer cannot be read, the MIME
+     * cannot be parsed) would otherwise fail every round and hold up the rest of its mailbox, so after
+     * {@link #IMPORT_ATTEMPTS} rounds it is logged and skipped. Mailbox-wide failures (network, access,
+     * rate limits) are never counted against an email.
+     */
+    private void importMessage(Account a,String id) throws Exception {
+        String key=a.email+"\n"+id;
+        try {ingest(a,id);failedImports.remove(key);}
+        catch(Exception e){
+            if(e instanceof GmailClient.ApiFailure f && !f.unreadable && (f.status==0 || f.status==401 || f.status==403 || f.status==429 || f.status>=500))throw e;
+            int attempts=failedImports.merge(key,1,Integer::sum);if(attempts<IMPORT_ATTEMPTS)throw e;
+            failedImports.remove(key);
+            jdbc.update("INSERT INTO onno_crm_gmail_seen (account,external_id) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM onno_crm_gmail_seen WHERE account=? AND external_id=?)",a.email,id,a.email,id);
+            log.warn("Gmail message {} in {} skipped after {} failed imports ({})",id,a.email,attempts,describe(e));
+        }
+    }
+    private static String describe(Exception e) { return e instanceof GmailClient.ApiFailure?e.getMessage():e.getClass().getSimpleName(); }
     private void ingest(Account a,String id) throws Exception {
         if(jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_seen WHERE account=? AND external_id=?",Integer.class,a.email,id)>0)return;
         JsonNode raw;try{raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");}catch(GmailClient.ApiFailure e){if(e.status==404)return;throw e;}
@@ -207,7 +234,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         var page=client(a).get("messages?labelIds=INBOX&maxResults=50");
         for(var item:page.path("messages")) {
             String id=item.path("id").asText();
-            var raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");
+            JsonNode raw;try{raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");}catch(GmailClient.ApiFailure e){if(e.status==404 || e.unreadable)continue;throw e;}
             var ids=jdbc.query("SELECT conversation_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=?",(rs,n)->rs.getObject(1,UUID.class),a.email,raw.path("threadId").asText());
             if(ids.isEmpty())continue;
             var existing=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,ids.getFirst())).stream()
@@ -234,7 +261,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         var page=client(a).get("messages?labelIds=INBOX&maxResults=50");
         for(var item:page.path("messages")) {
             String id=item.path("id").asText();
-            var raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");
+            JsonNode raw;try{raw=client(a).get("messages/"+GmailClient.encode(id)+"?format=raw");}catch(GmailClient.ApiFailure e){if(e.status==404 || e.unreadable)continue;throw e;}
             var ids=jdbc.query("SELECT conversation_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=?",(rs,n)->rs.getObject(1,UUID.class),a.email,raw.path("threadId").asText());
             if(ids.isEmpty())continue;
             var existing=messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,ids.getFirst())).stream()

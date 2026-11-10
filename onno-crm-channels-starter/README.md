@@ -70,6 +70,13 @@ a manager chooses **Connect Google account**. The flow uses state, PKCE, offline
 It imports the latest 50 inbox messages initially, then follows Gmail history; an expired history
 cursor triggers another bounded initial scan. A sender's Gmail threads share a CRM conversation,
 while each reply retains the original Gmail thread and Message-ID references.
+Emails are read whole, up to Gmail's 50 MB maximum, through a private copy of the JSON mapper (the
+application's shared mapper keeps Jackson's default string limit). An email that keeps failing for its
+own reasons, such as a response that cannot be read or MIME that cannot be parsed, is logged with its
+Gmail id and skipped after three sync rounds, so it cannot hold up the rest of its mailbox; network,
+access and rate-limit failures never count against an email. When Gmail rate-limits a mailbox, polling
+leaves that mailbox alone until the time Gmail gives, because asking earlier only extends the limit.
+Failures are logged with the mailbox, the HTTP status and Google's error reason.
 
 ### Instagram
 

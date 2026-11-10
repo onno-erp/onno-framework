@@ -898,6 +898,10 @@ The local Gmail adapter groups email threads by canonical customer within its ow
 Startup consolidates earlier thread-per-chat imports transactionally: messages and comments move,
 thread routes remain intact, superseded conversations are soft-deleted, and source/target IDs are
 recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when queued.
+Polling reads whole emails (`format=raw`, up to Gmail's 50 MB) through `GmailClient`'s private
+mapper copy with a raised string limit. `GmailBridge` skips, logs and marks seen an email that fails
+for its own reasons three rounds running, and pauses a mailbox until Gmail's retry time on 429 or a
+403 rate-limit reason; network, access and rate-limit failures never count against an email.
 
 Inbox filters accept comma-separated status UUIDs or channel/priority enum names (OR within a field,
 AND between fields); omitted values default to `all`. The inbox reuses the host `OptionsFacet`
