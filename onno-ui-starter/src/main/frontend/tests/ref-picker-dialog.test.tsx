@@ -236,6 +236,30 @@ describe("reference picker dialog (#411)", () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 
+  it("lets a press outside close an open popup first, then the picker", async () => {
+    vi.stubGlobal("fetch", server());
+    const { onClose } = open();
+    await waitFor(() => expect(pickRow("Hammer")).toBeTruthy());
+    const portal = screen.getByRole("dialog").parentElement!.querySelector(":scope > .contents")!;
+    const popup = document.createElement("div");
+    popup.setAttribute("data-state", "open");
+    portal.appendChild(popup);
+    const pressOutside = () => {
+      fireEvent.pointerDown(document.body, { button: 0, pointerType: "mouse" });
+      fireEvent.mouseDown(document.body, { button: 0 });
+      fireEvent.pointerUp(document.body, { button: 0, pointerType: "mouse" });
+      fireEvent.mouseUp(document.body, { button: 0 });
+      fireEvent.click(document.body, { button: 0 });
+    };
+
+    pressOutside();
+    expect(onClose).not.toHaveBeenCalled();
+
+    popup.remove();
+    pressOutside();
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("carries the dropdown's query into its search and closes on Cancel", async () => {
     const fetchMock = server();
     vi.stubGlobal("fetch", fetchMock);

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { getActiveProfile } from "@/lib/active-profile";
 import type { EntityRecord, RefOptionDecorations, RefOptionSearch } from "@/lib/types";
 import { Button } from "@/components/ui/button";
-import { DialogPortalContext } from "@/components/ui/dialog-portal";
+import { DialogPortalContext, useOutsidePressGuard } from "@/components/ui/dialog-portal";
 import { useTouchLayout } from "@/components/ui/facet-sheet";
 import {
   EntityListWidget,
@@ -71,11 +71,13 @@ export function RefPickerDialog(props: RefPickerDialogProps) {
   const { open, onClose } = props;
   const touch = useTouchLayout();
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+  const shouldCloseOnInteractOutside = useOutsidePressGuard(open, portalContainer);
   if (!open) return null;
   return (
     <ModalOverlay
       isOpen
       isDismissable
+      shouldCloseOnInteractOutside={shouldCloseOnInteractOutside}
       onOpenChange={(next) => { if (!next) onClose(); }}
       className={cn(
         "fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-[1px]",
