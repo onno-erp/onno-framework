@@ -44,9 +44,15 @@ public class CrmChannelsProperties {
          * its own mailbox and gets its own inbox.
          */
         private boolean enabled = false;
-        /** Google OAuth client JSON file outside the application artifact. */
+        /**
+         * Google OAuth client JSON file outside the application artifact. Defaults to
+         * {@code .config/onno/gmail-client.json} under the JVM's {@code user.home} directory.
+         */
         private String clientFile = System.getProperty("user.home") + "/.config/onno/gmail-client.json";
-        /** Private writable Google token JSON file. */
+        /**
+         * Private writable Google token JSON file. Defaults to {@code .config/onno/gmail-tokens.json}
+         * under the JVM's {@code user.home} directory.
+         */
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/gmail-tokens.json";
         /** Exact registered Google OAuth callback URI; use HTTPS in deployments. */
         private String redirectUri = "http://127.0.0.1:8090/api/crm/gmail/callback";
@@ -64,7 +70,10 @@ public class CrmChannelsProperties {
     public static class Instagram {
         /** Enable the single-account Instagram polling adapter. */
         private boolean enabled = false;
-        /** Private Instagram token JSON file. */
+        /**
+         * Private Instagram token JSON file. Defaults to {@code .config/onno/instagram-tokens.json}
+         * under the JVM's {@code user.home} directory.
+         */
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/instagram-tokens.json";
 
         public boolean isEnabled() { return enabled; }
@@ -76,7 +85,10 @@ public class CrmChannelsProperties {
     public static class Whatsapp {
         /** Enable the single-number WhatsApp Cloud API adapter. */
         private boolean enabled = false;
-        /** Private WhatsApp token and webhook signing JSON file. */
+        /**
+         * Private WhatsApp token and webhook signing JSON file. Defaults to
+         * {@code .config/onno/whatsapp-tokens.json} under the JVM's {@code user.home} directory.
+         */
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/whatsapp-tokens.json";
 
         public boolean isEnabled() { return enabled; }
