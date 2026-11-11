@@ -66,9 +66,8 @@ public class DashboardPage implements Page {
                 .config("currency", "USD")
                 .config("trend", "false").config("comparison", "true")
                 .config("comparisonLabel", "vs previous period")
-                // System columns carry the `_` prefix in widget configs (cf. `_date` below): the
-                // posted flag is `_posted`, not `posted`.
-                .config("filter", "_posted = true")
+                // Filter by the logical document field name.
+                .config("filter", "posted = true")
                 .hint("Sum of order totals across posted orders.");
 
         // ---- Charts -----------------------------------------------------------------------------
@@ -83,7 +82,7 @@ public class DashboardPage implements Page {
                 .config("kind", "area")
                 .groupBy(Order::getDate).config("groupByDate", "day")
                 .config("metric", "sum").metricField(Order::getTotal)
-                .config("filter", "_posted = true")
+                .config("filter", "posted = true")
                 .hint("Posted-order revenue over time.");
 
         // The typed chart facade keeps the ordinary case short, but exposes per-measure colour,
@@ -98,7 +97,7 @@ public class DashboardPage implements Page {
                         t -> t.color("success").style(ChartBuilder.LineStyle.DASHED))
                 .legend(ChartBuilder.Legend.TOP)
                 .curve(ChartBuilder.Curve.LINEAR)
-                .filter("_posted = true")
+                .filter("posted = true")
                 .hint("Weekly posted revenue (left axis) against order count (right axis).");
 
         // ---- Recent orders ----------------------------------------------------------------------
