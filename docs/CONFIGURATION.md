@@ -178,6 +178,8 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 | --- | --- | --- | --- |
 | `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. |
 | `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the Gmail OAuth adapter. Each connected account (shared or personal) authorizes its own mailbox and gets its own inbox. |
+| `onno.crm.channels.gmail.initial-import-days` | `Integer` | `90` | Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the age limit. A re-scan after Gmail's history expired starts from the mailbox's latest imported email instead. |
+| `onno.crm.channels.gmail.initial-import-limit` | `Integer` | `500` | Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit. |
 | `onno.crm.channels.gmail.redirect-uri` | `String` | `http://127.0.0.1:8090/api/crm/gmail/callback` | Exact registered Google OAuth callback URI; use HTTPS in deployments. |
 | `onno.crm.channels.gmail.tokens-file` | `String` | — | Private writable Google token JSON file. |
 | `onno.crm.channels.instagram.enabled` | `Boolean` | `false` | Enable the single-account Instagram polling adapter. |
