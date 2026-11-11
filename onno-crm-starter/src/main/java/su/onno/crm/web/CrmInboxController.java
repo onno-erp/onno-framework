@@ -82,33 +82,48 @@ public class CrmInboxController {
     ) {
         requireCrmAccess(principal);
         var conversation=workspaces.requireConversation(workspace,id,principal,true);
-        requireVisibleRecipient(conversation,id,request==null?null:request.recipient(),principal);
+        String recipient=request==null?null:request.recipient(), from=request==null?null:request.from();
+        if((recipient!=null && !recipient.isBlank()) || (from!=null && !from.isBlank())) {
+            var offered=withoutHiddenRecipients(conversation,service.delivery(id,principal),principal);
+            requireVisibleRecipient(offered,recipient);
+            requireOfferedSender(offered,from);
+        }
         var user = currentUsers.resolve(principal);
         return view(service.addMessage(id, new ConversationService.Reply(
                 request == null ? null : request.body(),
                 request == null ? java.util.List.of() : request.attachments(),
                 user.displayName(),
-                user.recordId(), request == null ? null : request.subject(), request == null ? null : request.recipient())), user.avatarUrl());
+                user.recordId(), request == null ? null : request.subject(), recipient, from), principal), user.avatarUrl());
     }
 
     /**
      * A chosen recipient must be one this principal can see: an address known only from another
      * user's personal inbox is rejected exactly as if it were unknown.
      */
-    private void requireVisibleRecipient(Conversation conversation, UUID id, String recipient, Principal principal) {
+    private static void requireVisibleRecipient(su.onno.crm.service.CrmMessageTransport.Connection visible, String recipient) {
         if (recipient == null || recipient.isBlank()) return;
-        var visible = withoutHiddenRecipients(conversation, service.delivery(id), principal);
         String chosen = recipient.strip();
         boolean known = chosen.equalsIgnoreCase(visible.recipient())
                 || visible.recipients().stream().anyMatch(address -> address.equalsIgnoreCase(chosen));
         if (!known) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose one of the contact's email addresses");
     }
 
+    /** A chosen sender must be one the connection offers this principal; anything else is a 400. */
+    private static void requireOfferedSender(su.onno.crm.service.CrmMessageTransport.Connection offered, String from) {
+        if (from == null || from.isBlank()) return;
+        if (offered.offeredSender(from) == null)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose one of the mailboxes offered for this conversation");
+    }
+
+    /**
+     * The connection as the composer sees it: {@code senders}/{@code sender} as offered to this
+     * principal, recipients without addresses known only through another user's personal account.
+     */
     @GetMapping("/{id}/delivery")
     public su.onno.crm.service.CrmMessageTransport.Connection delivery(@PathVariable UUID id, @org.springframework.web.bind.annotation.RequestParam(required=false) String workspace, Principal principal) {
         requireCrmAccess(principal);
         var conversation=workspaces.requireConversation(workspace,id,principal,false);
-        return withoutHiddenRecipients(conversation,service.delivery(id),principal);
+        return withoutHiddenRecipients(conversation,service.delivery(id,principal),principal);
     }
 
     /**
@@ -175,11 +190,16 @@ public class CrmInboxController {
         return new ErrorView(error.getMessage());
     }
 
-    /** {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links. */
-    public record SendMessage(String body, List<String> attachments, String subject, String recipient) {
+    /**
+     * {@code attachments} are media URLs from {@code POST /api/media}, never raw bytes or links.
+     * {@code from} is the id of one of the delivery connection's {@code senders}; omit it to send
+     * from the default {@code sender}.
+     */
+    public record SendMessage(String body, List<String> attachments, String subject, String recipient, String from) {
         public SendMessage {
             attachments = attachments == null ? List.of() : List.copyOf(attachments);
         }
+        public SendMessage(String body, List<String> attachments, String subject, String recipient) { this(body,attachments,subject,recipient,null); }
         public SendMessage(String body, List<String> attachments, String subject) { this(body,attachments,subject,null); }
         public SendMessage(String body, List<String> attachments) { this(body, attachments, null); }
         public SendMessage(String body) { this(body, List.of()); }
@@ -217,7 +237,9 @@ public class CrmInboxController {
             /** Recipient address captured when the message was queued; null for inbound and non-email messages. */
             String recipient,
             /** Sanitized email HTML; null when the message is plain text. Render isolated, never inline. */
-            String bodyHtml
+            String bodyHtml,
+            /** The sender account id a reply was queued with (a Gmail mailbox address); null otherwise. */
+            String senderAccount
     ) {}
 
     private MessageView view(ConversationMessage message, String authorAvatarUrl) {
@@ -234,6 +256,7 @@ public class CrmInboxController {
                 attachments.viewsOf(message),
                 message.getSubject(),
                 message.getRecipient(),
-                message.getBodyHtml());
+                message.getBodyHtml(),
+                message.getSenderAccount());
     }
 }

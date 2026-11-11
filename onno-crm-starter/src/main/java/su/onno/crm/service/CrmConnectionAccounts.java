@@ -105,8 +105,12 @@ public class CrmConnectionAccounts {
     }
 
     public Account find(UUID id) {
-        return query("WHERE id=?", id).stream().findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        return lookup(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
+    /** The account with this id, if any, without any access check: for providers, not request paths. */
+    public java.util.Optional<Account> lookup(UUID id) {
+        return id == null ? java.util.Optional.empty() : query("WHERE id=?", id).stream().findFirst();
     }
 
     /**

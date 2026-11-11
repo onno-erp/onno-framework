@@ -55,6 +55,14 @@ public class ConversationMessage extends CatalogObject implements Validated {
     @Attribute(displayName = "Recipient", length = 320)
     private String recipient;
 
+    /**
+     * The account an outbound reply is sent from, as the transport's {@code Connection.Sender} id
+     * (for Gmail, the mailbox address). Captured when queued, so asynchronous delivery and retries
+     * send from the same account. Null for inbound messages and channels that offer no choice.
+     */
+    @Attribute(displayName = "Sent from", length = 320)
+    private String senderAccount;
+
     @Attribute(displayName = "Body", length = 8000)
     private String body;
 
