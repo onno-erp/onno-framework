@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import type { ExtensionContext } from "../../../../../../onno-widget-sdk/src/extensions";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, useId } from "react";
@@ -274,11 +275,7 @@ function cascadesOn(attr: AttributeMeta, field: string): boolean {
   return !!attr.refFilter && attr.refFilter.includes("${" + field + "}");
 }
 
-// Fire an onno:// action / pane-close through the host (divkit-view) — same routing the
-// DivKit surfaces use, so a form opened in an island behaves like any other navigation.
-function dispatchAction(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
+// Close the form through the workspace host after save/cancel.
 function dispatchClose(path: string) {
   window.dispatchEvent(new CustomEvent("onno:closepath", { detail: path }));
 }
@@ -670,7 +667,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       // the picker and closes quietly — the user stays on the form they were filling in.
       // Otherwise open the saved record. Either way close the form pane (lists refresh over SSE).
       const pickedUp = consumeQuickCreate(kind, name, savedId);
-      if (!pickedUp) dispatchAction(`onno://${kind}/${name}/${savedId}`);
+      if (!pickedUp) openRoute(`onno://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
       // A server-side validation error carries per-field messages — map them onto the inputs.
@@ -716,7 +713,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
   const isHalf = (f: Field) =>
     f.kind === "attr" && /^(half|1\/2|50%?)$/i.test((f.attr.widthHint ?? "").trim());
 
-  const extensionContext: ExtensionContext = {surface:"entity-form",kind,name,recordId:isEdit ? id : undefined,record:record ?? undefined,permissions:{canWrite:!readOnly},openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)};
+  const extensionContext: ExtensionContext = {surface:"entity-form",kind,name,recordId:isEdit ? id : undefined,record:record ?? undefined,permissions:{canWrite:!readOnly},openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`)};
   return (
     <div className={cn("mx-auto flex w-full flex-wrap justify-center gap-5", sections.length === 0 && "max-w-5xl")}>
       <div className={cn("w-full min-w-0 flex-1", sections.length === 0 && "max-w-2xl")}>

@@ -990,7 +990,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
 | `calendar` | FullCalendar month/week + agenda | One `document` or `catalog` (`dateField`, optional `endDateField`), or every `CalendarSource` of `.calendar(name)`. Drag-to-reschedule where the viewer may write. See [Calendar widget](#calendar-widget). |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
-| `kanban` | Drag board grouped by a field | |
+| `kanban` | Document Draft/Posted board; catalog cards in one column | Writable documents support drag-to-post/unpost. Catalog cards open records without posting mutations; authored catalog grouping is not supported. |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `latField`+`lngField` for points and/or `geoJsonField` for points, paths, and areas; features link to the record and label from `.titleField(...)`. |
 | `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
@@ -1416,6 +1416,13 @@ Button face — set **one**:
 | `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
 | `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
 | `refresh(ActionToast)` / `refresh(ActionDialog)` | structured feedback + reload the current surface |
+
+Navigation buttons accept both `onno://...` commands and router-relative paths such as
+`/documentation` (including query strings). React islands use the shared
+`openRoute` helper from `@/lib/navigation`, which dispatches through the workspace host rather
+than navigating with React Router directly. Lists, calendars and kanban cards follow the same
+tab reuse and record-pane placement rules as other links. Paths are relative to the router;
+do not prepend the configured UI mount prefix.
 
 Navigation is declaration metadata, not a handler response: use
 `a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return

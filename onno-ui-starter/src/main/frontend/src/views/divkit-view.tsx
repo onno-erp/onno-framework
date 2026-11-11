@@ -1,3 +1,4 @@
+import { isAppRoute } from "@/lib/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { DivKit, type DivKitProps } from "@divkitframework/react";
@@ -823,10 +824,40 @@ export function DivKitView() {
     );
   }, []);
 
+  // All navigation sources use the same pane placement and existing-tab reuse rules.
+  const openSurface = useCallback((path: string, explicitMain = false) => {
+    // "/" is the generic home intent, same as onno:// — dashboard-less personas (e.g. a manager)
+    // have no "/" page and declare their first reachable surface as shell.home.
+    if (path === "/") {
+      openPath(shell?.home ?? "/");
+      return;
+    }
+    if (isFocusedListPath(path)) {
+      // "Open in list" (#410) from a record header: {kind}/{name}?focus={id}.
+      openFocusedList(path);
+      return;
+    }
+    const base = recordBasePath(path);
+    const inMain = explicitMain || (base != null
+      && (shell?.mainRecordRoutes ?? []).includes(base.split("/").slice(0, 3).join("/")));
+    // On the desktop islands layout, a record opens in its own island to the right;
+    // elsewhere (single content pane) it just navigates.
+    if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
+      openDetailRight(path);
+    } else {
+      openPath(path);
+    }
+  }, [openPath, openDetailRight, openFocusedList, shell?.home, shell?.navStyle, shell?.mainRecordRoutes]);
+
   const onCustomAction = useCallback(
     (action: ContentAction) => {
       const url = action?.url;
-      if (!url || !url.startsWith("onno://")) return;
+      if (!url) return;
+      if (isAppRoute(url)) {
+        openSurface(url);
+        return;
+      }
+      if (!url.startsWith("onno://")) return;
       const rest = url.slice("onno://".length); // "logout" | "theme/toggle" | "app?profile=x" | "documents/foo/id"
       if (rest === "logout") {
         shellCache.clear();
@@ -942,26 +973,8 @@ export function DivKitView() {
         op.then(() => toast.success(t(unpost ? "toast.unposted" : "toast.posted"))).catch(() => {});
         return;
       }
-      if (isFocusedListPath("/" + rest)) {
-        // "Open in list" (#410) from a record header: {kind}/{name}?focus={id}.
-        openFocusedList("/" + rest);
-        return;
-      }
-      // "main/{kind}/{name}/{id}" — open the record in the focused pane rather than the detail
-      // island beside it. A surface that is itself a workspace (an event page, a project page)
-      // sends its records here: they replace the workspace instead of stacking next to it.
       const explicitMain = rest.startsWith("main/");
-      const path = "/" + (explicitMain ? rest.slice("main/".length) : rest);
-      const base = recordBasePath(path);
-      const inMain = explicitMain || (base != null
-        && (shell?.mainRecordRoutes ?? []).includes(base.split("/").slice(0, 3).join("/")));
-      // On the desktop islands layout, a record opens in its own island to the right;
-      // elsewhere (single content pane) it just navigates.
-      if (!inMain && shell?.navStyle === "sidebar" && recordBasePath(path)) {
-        openDetailRight(path);
-      } else {
-        openPath(path);
-      }
+      openSurface("/" + (explicitMain ? rest.slice("main/".length) : rest), explicitMain);
     },
     [
       navigate,
@@ -970,12 +983,9 @@ export function DivKitView() {
       setTheme,
       resolvedTheme,
       openPath,
-      openDetailRight,
-      openFocusedList,
+      openSurface,
       closePath,
       shell?.home,
-      shell?.navStyle,
-      shell?.mainRecordRoutes,
       t,
     ]
   );
@@ -1098,7 +1108,7 @@ export function DivKitView() {
   useGlobalKeybindings(rowKeybindings);
 
   // The React form widgets (onno-form) and ref picker live outside DivKit's action flow,
-  // so they reach the host through window events: "onno:action" routes an onno:// url
+  // so they reach the host through window events: "onno:action" routes an onno:// URL or application path
   // through the same handler as a DivKit action (open record, open catalog new-form),
   // and "onno:closepath" closes a form pane after save/cancel.
   useEffect(() => {

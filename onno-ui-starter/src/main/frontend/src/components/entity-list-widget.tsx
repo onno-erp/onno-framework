@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "@/lib/fill-height";
 import { ExtensionSlot } from "@/lib/ui-extensions";
@@ -369,9 +370,6 @@ export const ROW_H = 40;
 // uses this sentinel and is mapped back to "" in state.
 const SELECT_NONE = "__onno_none__";
 
-function dispatchAction(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 // Mirrors divkit-view's url helpers for the row context menu this island owns:
 // open url → delete-action url / route path / absolute shareable link.
@@ -2228,7 +2226,7 @@ export function EntityListWidget({
   const runAction = useCallback(
     (action: ListAction, id?: string, formInputs?: ActionFormValues, propagateError = false): Promise<void> | void => {
       if (!action.server) {
-        if (action.url) dispatchAction(id ? action.url.replace("{id}", id) : action.url);
+        if (action.url) openRoute(id ? action.url.replace("{id}", id) : action.url);
         return;
       }
       if (action.form?.length && !formInputs) {
@@ -2552,7 +2550,7 @@ export function EntityListWidget({
   const rendererOpen = useCallback(
     (row: EntityRecord) => {
       const url = openable && entityRowId(row) ? `onno://${kind}/${name}/${entityRowId(row)}` : null;
-      if (url) dispatchAction(url);
+      if (url) openRoute(url);
     },
     [openable, kind, name]
   );
@@ -2732,7 +2730,7 @@ export function EntityListWidget({
         const batch = (rowMenu.batch || selected.size > 1) && selected.has(rowMenu.id);
         const ids = batch ? [...selected] : [rowMenu.id];
         const openBatch = () => {
-          for (const id of ids) dispatchAction(rowOpenUrl(kind, name, id));
+          for (const id of ids) openRoute(rowOpenUrl(kind, name, id));
         };
         // Navigation actions are single-record by nature — batch mode offers server actions only.
         const eligible = (a: ListAction) => !batch || a.server;
@@ -2798,7 +2796,7 @@ export function EntityListWidget({
             width={216}
             estimatedHeight={itemCount * 38 + 24}
           >
-            {!onlyMenuActions && <ExtensionSlot name="entity.list.context-menu" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown row command");if(batch)await runBatchAction(a,[...selected],input as ActionFormValues,true);else await runAction(a,rowMenu.id,input as ActionFormValues,true);},surface:"entity-list",kind,name,recordId:rowMenu.id,record:rowMenu.row,selectedIds:[...selected],permissions:{canWrite},refresh:reload,closeMenu:close,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
+            {!onlyMenuActions && <ExtensionSlot name="entity.list.context-menu" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown row command");if(batch)await runBatchAction(a,[...selected],input as ActionFormValues,true);else await runAction(a,rowMenu.id,input as ActionFormValues,true);},surface:"entity-list",kind,name,recordId:rowMenu.id,record:rowMenu.row,selectedIds:[...selected],permissions:{canWrite},refresh:reload,closeMenu:close,openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`)}} />}
             {onlyMenuActions ? (
               // Cell-menu mode: the pill's right-click IS the choice list — nothing else.
               onlyMenuActions.map(actionItem)
@@ -2821,7 +2819,7 @@ export function EntityListWidget({
               <>
                 <ContextMenuItem
                   onSelect={() => {
-                    dispatchAction(rowMenu.url);
+                    openRoute(rowMenu.url);
                     close();
                   }}
                 >
@@ -2833,7 +2831,7 @@ export function EntityListWidget({
                   <>
                     <ContextMenuItem
                       onSelect={() => {
-                        dispatchAction(rowMenu.url + "/duplicate");
+                        openRoute(rowMenu.url + "/duplicate");
                         close();
                       }}
                     >
@@ -2899,7 +2897,7 @@ export function EntityListWidget({
                   <ContextMenuItem
                     variant="destructive"
                     onSelect={() => {
-                      dispatchAction(rowDeleteUrl(rowMenu.url));
+                      openRoute(rowDeleteUrl(rowMenu.url));
                       close();
                     }}
                   >
@@ -2928,7 +2926,7 @@ export function EntityListWidget({
         <div className="mr-1 flex min-h-8 min-w-0 items-center gap-2">
           {showControl("title") && toolbarOptions?.title !== false && <h1 className="max-w-40 truncate whitespace-nowrap text-base font-semibold text-foreground">{list.title}</h1>}
           {headerExtra}
-          {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
+          {selected.size > 0 && <ExtensionSlot name="entity.list.selection" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=rowActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown selection command");await runBatchAction(a,[...selected],input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`)}} />}
           {showControl("count") && toolbarOptions?.count !== false && <span className="whitespace-nowrap text-xs tabular-nums text-muted-foreground">
             {countValue == null ? "…" : t("list.count", { count: countValue })}
           </span>}
@@ -2962,7 +2960,7 @@ export function EntityListWidget({
             <div role="group" aria-label={t("list.selectionActions")} className="flex shrink-0 items-center gap-2 border-r border-border pr-2">
               {canWrite && SelectionWidget ? <SelectionWidget ids={[...selected]} complete={() => { clearSelection(); reload(); }} /> : null}
               <Button size="toolbar" variant="subtle" onClick={() => {
-                for (const id of selected) dispatchAction(rowOpenUrl(kind, name, id));
+                for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
               }}><ExternalLink />{t("action.open")}</Button>
               {rowActions.filter(a => a.server).map(a => (
                 <Button key={a.key} size="toolbar" variant="subtle" disabled={pending.has(`batch:${a.key}`)}
@@ -3137,7 +3135,7 @@ export function EntityListWidget({
               ].filter(option => allowedViews.includes(option.value as "table" | "map" | "custom"))}
             />
           ) : null}
-          {showControl("extensions") && <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>dispatchAction(`onno://${kind}/${name}/${id}`)}} />}
+          {showControl("extensions") && <ExtensionSlot name="entity.list.actions" className="flex items-center gap-2" context={{execute:async(key,input)=>{const a=toolbarActions.find(a=>a.key===key&&a.server);if(!a)throw new Error("Unknown list command");await runAction(a,undefined,input as ActionFormValues,true);},surface:"entity-list",kind,name,selectedIds:[...selected],permissions:{canWrite},refresh:reload,openRecord:(kind,name,id)=>openRoute(`onno://${kind}/${name}/${id}`)}} />}
           {toolbarActions.filter(a => showControl("actions") && (!toolbarOptions?.actionKeys || toolbarOptions.actionKeys.includes(a.key))).map((a) => {
             const busy = pending.has(a.key);
             const iconOnly = compact && (!!a.icon || !!a.logo);
@@ -3168,7 +3166,7 @@ export function EntityListWidget({
           {list.newUrl && showControl("create") ? (
             <button
               type="button"
-              onClick={() => dispatchAction(list.newUrl!)}
+              onClick={() => openRoute(list.newUrl!)}
               className={cn(
                 "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90",
                 compact ? "w-8 justify-center px-0" : "px-3"
@@ -3504,7 +3502,7 @@ export function EntityListWidget({
                           return;
                         }
                         setFocusedId(null);
-                        if (url) dispatchAction(url);
+                        if (url) openRoute(url);
                       }}
                       onContextMenu={(e) => {
                         if (!url || !recordId) return; // register rows: keep the browser menu
