@@ -81,6 +81,48 @@ class ConversationServiceTest {
     }
 
     @Test
+    void senderIsCapturedAndRestrictedToTheOfferedMailboxes() {
+        var offered = new CrmMessageTransport.Connection(true, "Gmail", 8000).withSenders("info@studio.test", java.util.List.of(
+                new CrmMessageTransport.Sender("info@studio.test", "Info"), new CrmMessageTransport.Sender("office@studio.test", "Office")));
+        when(transport.connection(conversation)).thenReturn(offered);
+        var byDefault = service.addMessage(conversationId, new ConversationService.Reply("Hi", "Agent"));
+        assertThat(byDefault.getSenderAccount()).isEqualTo("info@studio.test");
+        var chosen = service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, " OFFICE@studio.test"));
+        assertThat(chosen.getSenderAccount()).isEqualTo("office@studio.test");
+        assertThatThrownBy(() -> service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, "bob@studio.test")))
+                .hasMessage("Choose one of the offered sender accounts");
+    }
+
+    @Test
+    void aSenderOfferedOnlyToThePrincipalIsAcceptedForThem() {
+        java.security.Principal alice = () -> "alice";
+        when(transport.connection(conversation)).thenReturn(new CrmMessageTransport.Connection(true, "Gmail", 8000)
+                .withSenders(null, java.util.List.of(new CrmMessageTransport.Sender("info@studio.test", null))));
+        when(transport.connection(conversation, alice)).thenReturn(new CrmMessageTransport.Connection(true, "Gmail", 8000)
+                .withSenders(null, java.util.List.of(new CrmMessageTransport.Sender("info@studio.test", null), new CrmMessageTransport.Sender("alice@studio.test", null))));
+        var reply = new ConversationService.Reply("Hi", java.util.List.of(), "Alice", null, null, null, "alice@studio.test");
+        assertThat(service.addMessage(conversationId, reply, alice).getSenderAccount()).isEqualTo("alice@studio.test");
+        assertThatThrownBy(() -> service.addMessage(conversationId, reply)).hasMessage("Choose one of the offered sender accounts");
+        assertThat(service.delivery(conversationId, alice).sender()).isEqualTo("info@studio.test");
+    }
+
+    @Test
+    void aChannelWithoutSendersRejectsAChosenOneAndStoresNone() {
+        assertThat(service.addMessage(conversationId, new ConversationService.Reply("Hi", "Agent")).getSenderAccount()).isNull();
+        assertThatThrownBy(() -> service.addMessage(conversationId, new ConversationService.Reply("Hi", java.util.List.of(), "Agent", null, null, null, "info@studio.test")))
+                .hasMessage("Choose one of the offered sender accounts");
+    }
+
+    @Test
+    void markingReadTellsTheTransportOnlyWhenSomethingWasUnread() {
+        service.markRead(conversationId);
+        assertThat(conversation.getUnreadCount()).isZero();
+        verify(transport).markedRead(conversation);
+        service.markRead(conversationId);
+        verify(transport, org.mockito.Mockito.times(1)).markedRead(conversation);
+    }
+
+    @Test
     void emailSubjectIsSavedWithQueuedMessage() {
         var saved=service.addMessage(conversationId,new ConversationService.Reply("Hello",java.util.List.of(),"Agent",null,"  Booking proposal  "));
         assertThat(saved.getSubject()).isEqualTo("Booking proposal");

@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { Feature } from "geojson";
@@ -85,6 +86,7 @@ export function ListMapView({
   const [rows, setRows] = useState<EntityRecord[] | null>(null);
   const [total, setTotal] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+  useSurfaceRefresh(() => setReloadKey((key) => key + 1));
 
   const source = useMemo<GeoSource>(() => geoSourceFrom(config), [config]);
   const t = useMessages();

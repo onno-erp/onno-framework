@@ -282,6 +282,8 @@ export interface AuthUser {
 
 export interface UiEvent {
   type: string;
+  /** Local ActionResult.refresh invalidation, scoped to one mounted surface (not sent over SSE). */
+  surfacePath?: string;
   entityType?: string;
   entityName?: string;
   id?: string;

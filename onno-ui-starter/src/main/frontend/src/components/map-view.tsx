@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useEffect, useMemo, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { Feature, FeatureCollection, Point } from "geojson";
@@ -39,9 +40,6 @@ const CLUSTER_IMG = "onno-cluster-";
 // just the small core dot (dedupe in the click handler collapses the double hit).
 const HIT_LAYERS = [FILL, LINE, POINT, POINT_HALO];
 
-function navigate(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 /** Approximate numeric value of MapLibre's abbreviated cluster count ("842", "1.2k", "3m"). */
 function approxCount(label: string): number {
@@ -137,7 +135,7 @@ function popupDom(items: PopupItem[], t: Translate): HTMLElement | null {
       link.textContent = `${t("action.open")} →`;
       link.className =
         "mt-2.5 inline-flex h-7 cursor-pointer items-center rounded-full bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90";
-      link.addEventListener("click", () => navigate(it.href!));
+      link.addEventListener("click", () => openRoute(it.href!));
       wrap.appendChild(link);
     }
     return wrap;
@@ -175,7 +173,7 @@ function popupDom(items: PopupItem[], t: Translate): HTMLElement | null {
       arrow.textContent = "→";
       arrow.className = "shrink-0 text-xs text-muted-foreground group-hover:text-primary";
       row.appendChild(arrow);
-      row.addEventListener("click", () => navigate(it.href!));
+      row.addEventListener("click", () => openRoute(it.href!));
     }
     list.appendChild(row);
   }

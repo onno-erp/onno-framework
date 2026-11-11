@@ -40,7 +40,8 @@ timeline; distinguish the entry types visually without hiding business events ou
 
 1. Can `count`, `chart`, `list`, `timeRange`, `constants`, or embedded `b.list(entity)` do it?
 2. If not, create `src/main/widgets/MyWidget.tsx`.
-3. Use `@onno/widget-sdk` for types, host UI primitives, and read-only data calls.
+3. Use `@onno/widget-sdk` for types, host UI primitives, and read-only data calls. Pick records
+   with `RefSelect` (the form's reference field, with "Show all…"), not a `Select` of fetched rows.
 4. Apply `su.onno.widgets` in the consuming app.
 5. Declare optional browser libraries with
    `onnoWidgets { npmDependencies.put("package", "version") }`, then import them normally from TSX.

@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 /**
  * Folder navigation for the picker dialog (#411): a hierarchical catalog's list feed and search
@@ -78,9 +79,21 @@ class CatalogParentFilterTest {
     }
 
     @Test
-    void aFlatCatalogIgnoresTheParentClause() {
-        assertThat(query.keysetPage(AccessSubject.system(), flat, null, null, null, 50, "_description", false,
-                null, null, null, null, null, null, null, "_parent = null").rows()).hasSize(1);
+    void aFlatCatalogRejectsTheParentClause() {
+        assertThatThrownBy(() ->
+                query.keysetPage(
+                        AccessSubject.system(),
+                        flat,
+                        null, null, null,
+                        50,
+                        "_description",
+                        false,
+                        null, null, null, null, null, null, null,
+                        "_parent = null"
+                )
+        )
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("_parent");
     }
 
     private List<Map<String, Object>> page(String filter) {

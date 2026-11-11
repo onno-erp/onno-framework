@@ -1,6 +1,6 @@
+import { openRoute } from "@/lib/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router";
 import { toSnakeCase } from "@/lib/utils";
 import { useWidgetLiveVersion } from "@/lib/widget-data";
 import {
@@ -28,7 +28,6 @@ const DEFAULT_SECONDARY = ["clientDisplay", "primaryClientDisplay", "propertyDis
 const DEFAULT_AMOUNT = ["total", "totalGross", "amount", "sum"];
 
 export function ListWidget({ widget }: ListWidgetProps) {
-  const navigate = useNavigate();
   const cfg = widget.extraConfig ?? {};
   const [items, setItems] = useState<EntityRecord[]>([]);
   const liveVersion = useWidgetLiveVersion(widget);
@@ -116,7 +115,7 @@ export function ListWidget({ widget }: ListWidgetProps) {
     const id = String(row.id ?? "");
     if (!id) return;
     const name = toSnakeCase(widget.entityName);
-    navigate(`/${widget.entityType}s/${name}/${id}`);
+    openRoute(`/${widget.entityType}s/${name}/${id}`);
   };
 
   return (

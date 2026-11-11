@@ -14,7 +14,7 @@ import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
 import { registerWidget } from "./widget-bridge";
 import { subscribeUiEvents } from "./ui-event-bus";
-import { subscribeWidgetMessages, widgetTranslate } from "./widget-messages";
+import { subscribeWidgetMessages, widgetLocale, widgetTranslate } from "./widget-messages";
 import { registerListRenderer, registerListSelection } from "./widget-registry";
 import type { Translate } from "@/lib/messages";
 import { api } from "./api";
@@ -30,6 +30,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { DatePicker } from "@/components/date-picker";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { ColorPicker } from "@/components/color-picker";
+import { RefSelect } from "@/components/ref-select";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Popover, PopoverAnchor, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
@@ -83,6 +84,11 @@ export interface OnnoUi {
   DatePicker: typeof DatePicker;
   DateTimePicker: typeof DateTimePicker;
   ColorPicker: typeof ColorPicker;
+  /**
+   * The reference-field picker: server-side typeahead, recent picks, "+ New" and "Show all…" (the
+   * target's full list in a picker dialog). Added in host contract v7.
+   */
+  RefSelect: typeof RefSelect;
   Card: typeof Card;
   CardHeader: typeof CardHeader;
   CardTitle: typeof CardTitle;
@@ -127,10 +133,13 @@ export interface OnnoHost {
    * The app's chrome strings, so a widget's own labels localize with the rest of the shell instead
    * of hardcoding English. {@code get()} returns the current translate function and {@code
    * subscribe} fires when the server's `onno.ui.messages` overlay arrives; added in contract v6.
+   * {@code locale()} is {@code onno.ui.locale} for formatting dates and numbers (undefined: the
+   * browser's), announced through the same {@code subscribe}; added in contract v7.
    */
   messages: {
     get(): Translate;
     subscribe(listener: () => void): () => void;
+    locale(): string | undefined;
   };
   /** Host contract version; bump on a breaking change to this shape. */
   chatMessages: typeof chatMessages;
@@ -202,6 +211,7 @@ const ui: OnnoUi = {
   DatePicker,
   DateTimePicker,
   ColorPicker,
+  RefSelect,
   Card,
   CardHeader,
   CardTitle,
@@ -265,11 +275,12 @@ export function installPluginHost(): OnnoHost {
     ui,
     events,
     // v6: widgets can translate their own labels. Additive — existing widgets keep working.
-    messages: Object.freeze({ get: widgetTranslate, subscribe: subscribeWidgetMessages }),
+    // v7: and the configured locale, so widgets format dates like the shell.
+    messages: Object.freeze({ get: widgetTranslate, subscribe: subscribeWidgetMessages, locale: widgetLocale }),
     // v4: added custom chat body renderers. Additive — existing widgets keep working.
     chatMessages,
     extensions,
-    version: 6,
+    version: 7,
   });
   window.onno = host;
   return host;

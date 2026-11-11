@@ -1,3 +1,5 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
 import { toast } from "@/components/ui/toast";
@@ -104,6 +106,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   useEffect(() => {
     void reload();
   }, [reload]);
+  useSurfaceRefresh(() => { void reload(); });
 
   useEffect(() => {
     let current = true;
@@ -293,11 +296,9 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
                                   return;
                                 }
                                 event.preventDefault();
-                                window.dispatchEvent(new CustomEvent("onno:action", {
-                                  detail: `onno://${task.subject!.kind}/${
+                                openRoute(`onno://${task.subject!.kind}/${
                                     toSnakeCase(task.subject!.entityName)
-                                  }/${task.subject!.id}`,
-                                }));
+                                  }/${task.subject!.id}`);
                               }}
                             >
                               Open {subjectLabel}

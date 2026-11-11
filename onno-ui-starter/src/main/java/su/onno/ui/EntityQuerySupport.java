@@ -134,7 +134,7 @@ final class EntityQuerySupport {
                                 String metric, String field, String filter, ScopeClause scope) {
         String agg = WidgetAggregate.expression(metric, surface.storageColumn(field), surface.columnNames());
         WidgetFilter.Result f = scope.andInto(
-                WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns()));
+                WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn));
 
         StringBuilder sql = new StringBuilder("SELECT ").append(agg)
                 .append(" FROM ").append(surface.tableName())
@@ -162,7 +162,7 @@ final class EntityQuerySupport {
                 surface.storageColumn(request.seriesBy()), request.filter(),
                 surface.storageColumn(request.dateField()), request.from(), request.to());
         return WidgetBuckets.run(jdbi, refResolver, surface.attributes(), surface.tableName(), allowed,
-                surface.uuidColumns(), storageRequest, scope, subject);
+                surface.uuidColumns(), storageRequest, scope, subject, surface::storageColumn);
     }
 
     /**

@@ -33,6 +33,7 @@ POST /api/ref-options/search                  bounded contextual reference optio
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
 POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
 GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
+GET /api/divkit/record-refresh/{kind}/{name}/{id}  saved record and current header actions for the open form
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
@@ -132,6 +133,11 @@ token mappings fail atomically.
   "outcomes": ["APPROVE", "REJECT"]
 }]
 ```
+
+For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` returns
+`{record, actions, readOnly}`. Pass the form's `profile` and `viewport` to preserve action placement.
+The response applies the same access rules as the record surface. `record` uses the logical
+representation and `actions` uses the form descriptor's header action shape.
 
 Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
@@ -468,7 +474,24 @@ When `onno.crm.channels.gmail.enabled=true`, `CrmChannelAccess`-protected `POST 
 returns `{ "url": "https://accounts.google.com/…" }`. The session-bound, single-use GET callback at
 `/api/crm/gmail/callback` exchanges the authorization code and returns to the local `returnPath` supplied to the authorize request.
 Credentials are never returned. Existing `/api/crm/channels` includes Gmail health and actions;
-message reading and reply enqueueing retain the standard CRM endpoints and authorization.
+message reading and reply enqueueing retain the standard CRM endpoints and authorization. New
+connections ask for `gmail.readonly`, `gmail.send` and `gmail.modify`; only the first two are required.
+
+The delivery connection (`GET /api/crm/conversations/{id}/delivery`) adds `senders:[{id,label}]` and
+the default `sender` (the conversation's own mailbox address); the reply command accepts an optional
+`from` among those ids (else 400). Gmail offers shared mailboxes and the caller's own personal one.
+
+Mail search and restore, all requiring inbox workspace access (restore: write access) and limited to
+shared mailboxes and the caller's own personal ones (any other `account` is 404):
+
+- `GET /api/crm/gmail/accounts` → `[{address,label,canModify}]`.
+- `GET /api/crm/gmail/search?account=&q=&pageToken=` (`q` required, at most 500 characters) →
+  `{messages:[{id,threadId,from,subject,snippet,date,archived,conversationId}],nextPageToken}`, 20 per
+  page over all mail including archived (spam and trash excluded); `date` is ISO-8601,
+  `conversationId` is null unless the thread is already in the CRM and readable.
+- `POST /api/crm/gmail/restore` `{account,messageId,toInbox}` → `{conversationId,movedToInbox}`;
+  imports the whole thread and, with `toInbox` and the modify grant, moves it back to the Inbox.
+  Idempotent. Gmail failures answer 429, 404, 409 (reconnect) or 502.
 
 ### CRM inbox workspace API
 
@@ -514,7 +537,7 @@ selected-row toolbar. It does not alter generated record reads or grant command 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; a reply also carries the `senderAccount` it was queued with (a Gmail mailbox address), null otherwise. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 

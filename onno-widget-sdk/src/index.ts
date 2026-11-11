@@ -34,6 +34,8 @@ export type {
   OnnoEvents,
   OnnoHost,
   OnnoUi,
+  RefSelectOptionContext,
+  RefSelectProps,
   UiEvent,
   UiEventFilter,
 } from "./types";
@@ -292,6 +294,7 @@ export const {
   DatePicker,
   DateTimePicker,
   ColorPicker,
+  RefSelect,
   Card,
   CardHeader,
   CardTitle,
@@ -365,6 +368,22 @@ export function useTranslate(): Translate {
   const subscribe = useCallback(
     (listener: () => void) => (bridge ? bridge.subscribe(listener) : () => {}), [bridge]);
   const snapshot = useCallback(() => (bridge ? bridge.get() : identityTranslate), [bridge]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/**
+ * The app's configured locale (`onno.ui.locale`, e.g. `en-GB`) for `Intl` date and number formats, so a
+ * widget writes dates the way the shell's lists and calendars do. Undefined before `/api/config` lands,
+ * when none is configured, or on a host older than contract v7: `Intl` then uses the browser's locale.
+ */
+export const locale = (): string | undefined => host.messages?.locale?.();
+
+/** {@link locale}, re-rendering the widget when the configured locale arrives. */
+export function useLocale(): string | undefined {
+  const bridge = host.messages;
+  const subscribe = useCallback(
+    (listener: () => void) => (bridge ? bridge.subscribe(listener) : () => {}), [bridge]);
+  const snapshot = useCallback(() => bridge?.locale?.(), [bridge]);
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 

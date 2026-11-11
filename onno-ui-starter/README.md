@@ -467,6 +467,21 @@ public void fields(EntityConfigBuilder f) {
 }
 ```
 
+### Refresh after a server action
+
+`ActionResult.reload()` and `ActionResult.refresh(...)` explicitly re-read the screen that launched
+the action, including detail-header buttons, the overflow menu, and page action bars. They also work
+when the handler emits no entity-change SSE event, for example after a write through another API.
+The refresh sends a local `onno:dataevent` with `type: "refresh"` and the originating `surfacePath`,
+including its query string. It does not refetch or replace the DivKit card. Data-owning React islands
+on that surface re-read their own data in place, keeping list search/sort, expanded groups and local
+component state. Other workspace tabs remain mounted even if focus moves during the action.
+Record forms read `{record, actions, readOnly}` from
+`GET /api/divkit/record-refresh/{kind}/{name}/{id}` with their profile and viewport. The server
+evaluates action labels, visibility and availability against the same saved row as the fields.
+A dirty form updates its header actions and keeps its draft behind the existing reload banner.
+This also protects edits started while a background request is in flight.
+
 ### Action forms — collect input before the handler runs
 
 A server action may declare a **form**: clicking it opens a modal dialog with the declared fields
@@ -990,7 +1005,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
 | `calendar` | FullCalendar month/week + agenda | One `document` or `catalog` (`dateField`, optional `endDateField`), or every `CalendarSource` of `.calendar(name)`. Drag-to-reschedule where the viewer may write. See [Calendar widget](#calendar-widget). |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
-| `kanban` | Drag board grouped by a field | |
+| `kanban` | Document Draft/Posted board; catalog cards in one column | Writable documents support drag-to-post/unpost. Catalog cards open records without posting mutations; authored catalog grouping is not supported. |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `latField`+`lngField` for points and/or `geoJsonField` for points, paths, and areas; features link to the record and label from `.titleField(...)`. |
 | `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
@@ -1115,7 +1130,7 @@ still shows its single value.
 |-----|-----------|--------|
 | `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
 | `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
-| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Logical field names are preferred and legacy storage names remain accepted. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
+| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. For document/catalog sources, filter identifiers resolve through entity metadata: use logical field names such as `posted`, `date`, and `assignedTo`. Legacy storage-column names such as `_posted`, `_date`, and `assigned_to` remain accepted as deprecated aliases for one compatibility release. Unknown identifiers cause an error; authored page filters are validated during page resolution. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
 | `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
@@ -1263,7 +1278,7 @@ drawers, theming) and carry host-emitted classes:
 
 ```tsx
 import { Segmented, DatePicker, useState } from "@onno/widget-sdk"; // by name, or from the `ui` object
-// also Select, Button, Popover, Badge, Checkbox, Switch, Input, Card, …
+// also Select, RefSelect (record picker), Button, Popover, Badge, Checkbox, Switch, Input, Card, …
 
 function ViewSwitch() {
   const [view, setView] = useState("day");
@@ -1416,6 +1431,13 @@ Button face — set **one**:
 | `dialog(ActionDialog.info(title).message(text).detail(detail))` | successful typed acknowledgement dialog |
 | `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
 | `refresh(ActionToast)` / `refresh(ActionDialog)` | structured feedback + reload the current surface |
+
+Navigation buttons accept both `onno://...` commands and router-relative paths such as
+`/documentation` (including query strings). React islands use the shared
+`openRoute` helper from `@/lib/navigation`, which dispatches through the workspace host rather
+than navigating with React Router directly. Lists, calendars and kanban cards follow the same
+tab reuse and record-pane placement rules as other links. Paths are relative to the router;
+do not prepend the configured UI mount prefix.
 
 Navigation is declaration metadata, not a handler response: use
 `a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
@@ -1775,6 +1797,37 @@ Live list refreshes coalesce while a window is loading, including custom inbox p
 The current response renders before a queued refresh; filter changes still discard stale responses,
 and failed background refreshes preserve the visible rows.
 
+### Reference pickers
+
+Import `RefSelect` to pick a catalog or document record. It is the same control as a generated
+form's reference field: a server-side typeahead (the catalog never loads whole), recent picks first,
+"+ New" opening the target's new-record form, and "Show all…" opening the target's full list —
+columns, filters, folders — in a picker dialog. Requires host contract v7.
+
+```tsx
+import { Label, RefSelect, useState } from "@onno/widget-sdk";
+
+function SupplierField({ eventId }: { eventId: string }) {
+  const [supplier, setSupplier] = useState<string | null>(null);
+  return <>
+    <Label htmlFor="supplier">Supplier</Label>
+    <RefSelect id="supplier" targetName="Contacts" fieldLabel="Supplier" placeholder="Not chosen yet"
+      value={supplier} onChange={setSupplier} clearable allowCreate={false}
+      filter="active = true" optionDecorator="com.example.ui.SupplierOptions"
+      optionContext={{ fieldPath: "vendor", formValues: { wedding: eventId } }} />
+  </>;
+}
+```
+
+`value` is the record id and clearing emits `null`. `filter` is a fixed WidgetFilter predicate
+applied to the dropdown and the dialog alike. `optionDecorator` names a server `RefOptionDecorator`
+bean by class; it receives `optionContext` and can badge, disable or hide options. `allowCreate`,
+`showAll`, `clearable` and `openButton` toggle the "+ New", "Show all…", clear and open-record
+affordances (on, on, off, off by default). `className` merges over the trigger, so a dense row can
+render it as a compact chip; the dropdown keeps a readable minimum width. Pass `valueLabel`
+when the widget already has the picked record's name: it shows at once, and stays for a user who
+may not read the target catalog.
+
 ### Date and time fields
 
 Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
@@ -1851,3 +1904,7 @@ sidecars, including across restarts. Existing files without metadata remain read
 their storage filename and detected type. The media endpoint never serves metadata sidecars.
 
 Common audio media types (Ogg, MP3, MP4, WebM, WAV, AAC and FLAC) are served inline for voice-message playback, retaining `nosniff`. Other file types retain their existing disposition policy.
+
+Authored Page routes may replace `/documents/{name}/new` and `/catalogs/{name}/new` as well as list routes.
+The creation route still requires entity write access and uses the normal active profile; the
+custom page owns its create UI and should save through the generated document API.

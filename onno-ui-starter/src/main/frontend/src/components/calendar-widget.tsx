@@ -1,3 +1,5 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -12,7 +14,6 @@ import type {
   EventDropArg,
 } from "@fullcalendar/core";
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
-import { useNavigate } from "react-router";
 import { format, endOfMonth, startOfMonth, addMonths, subMonths, addYears, subYears, startOfYear, endOfYear, getDaysInMonth, addDays, addWeeks, startOfWeek, differenceInCalendarDays, type Locale } from "date-fns";
 import { ru } from "date-fns/locale";
 import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink, Lock, X } from "lucide-react";
@@ -237,7 +238,6 @@ interface CalendarData {
 // ─── Entity-backed: one catalog or document ───────────────────────────────────
 
 function useEntityCalendar(widget: DashboardWidgetMeta, range: Range): CalendarData {
-  const navigate = useNavigate();
   const t = useMessages();
   const live = useWidgetLiveVersion(widget);
   const [items, setItems] = useState<EntityRecord[]>([]);
@@ -368,7 +368,7 @@ function useEntityCalendar(widget: DashboardWidgetMeta, range: Range): CalendarD
     events,
     editable,
     move,
-    open: (id) => { if (kind) navigate(`/${kind === "catalog" ? "catalogs" : "documents"}/${name}/${id}`); },
+    open: (id) => { if (kind) openRoute(`/${kind === "catalog" ? "catalogs" : "documents"}/${name}/${id}`); },
     empty: t("calendar.emptyThisMonth", { name: widget.entityName.toLowerCase() }),
   };
 }
@@ -422,6 +422,7 @@ function useSourceCalendar(widget: DashboardWidgetMeta, calendar: string, range:
   const [items, setItems] = useState<SourceItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  useSurfaceRefresh(() => setTick((tick) => tick + 1));
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<Set<string>>(() => new Set((remembered(`${calendar}.hidden`) ?? "").split(",").filter(Boolean)));
   const readOnly = String(widget.extraConfig?.readOnly ?? "").toLowerCase() === "true";
@@ -556,7 +557,7 @@ function useSourceCalendar(widget: DashboardWidgetMeta, calendar: string, range:
 
   const open = (id: string) => {
     const link = items.find((item) => item.id === id)?.link;
-    if (link) window.dispatchEvent(new CustomEvent("onno:action", { detail: `onno://${link.replace(/^\//, "")}` }));
+    if (link) openRoute(link.startsWith("/") || link.startsWith("onno://") ? link : "/" + link);
   };
 
   return {

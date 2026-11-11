@@ -91,7 +91,7 @@ export type ContentHandle = {
 };
 
 // An action emitted by a content card (an onno:// url the host routes).
-export type ContentAction = { url?: string };
+export type ContentAction = { url?: string; surfacePath?: string };
 
 /**
  * Renders the per-route content card through DivKit's core instance (the React
@@ -153,10 +153,11 @@ function stretchTables(host: HTMLElement): void {
 
 export const DivKitContent = forwardRef<ContentHandle, {
   surfaceKey: string;
+  surfacePath?: string;
   card: ContentCard;
   theme: "light" | "dark";
   onAction: (action: ContentAction) => void;
-}>(function DivKitContent({ surfaceKey, card, theme, onAction }, ref) {
+}>(function DivKitContent({ surfaceKey, surfacePath, card, theme, onAction }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<Instance | null>(null);
   const varsRef = useRef<VarController | null>(null);
@@ -231,5 +232,5 @@ export const DivKitContent = forwardRef<ContentHandle, {
     };
   }, [surfaceKey, theme, card]);
 
-  return <div ref={hostRef} className="onno-surface" />;
+  return <div ref={hostRef} className="onno-surface" data-onno-surface-path={surfacePath} />;
 });
