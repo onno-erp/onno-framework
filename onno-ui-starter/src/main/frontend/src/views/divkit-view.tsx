@@ -826,6 +826,12 @@ export function DivKitView() {
 
   // All navigation sources use the same pane placement and existing-tab reuse rules.
   const openSurface = useCallback((path: string, explicitMain = false) => {
+    // "/" is the generic home intent, same as onno:// — dashboard-less personas (e.g. a manager)
+    // have no "/" page and declare their first reachable surface as shell.home.
+    if (path === "/") {
+      openPath(shell?.home ?? "/");
+      return;
+    }
     if (isFocusedListPath(path)) {
       // "Open in list" (#410) from a record header: {kind}/{name}?focus={id}.
       openFocusedList(path);
@@ -841,7 +847,7 @@ export function DivKitView() {
     } else {
       openPath(path);
     }
-  }, [openPath, openDetailRight, openFocusedList, shell?.navStyle, shell?.mainRecordRoutes]);
+  }, [openPath, openDetailRight, openFocusedList, shell?.home, shell?.navStyle, shell?.mainRecordRoutes]);
 
   const onCustomAction = useCallback(
     (action: ContentAction) => {
