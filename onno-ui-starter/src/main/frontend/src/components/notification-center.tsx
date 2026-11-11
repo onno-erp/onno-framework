@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useEffect } from "react";
 import { ArrowUpRight, AtSign, Bell, CheckCheck, Inbox, Reply, UserPlus, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -265,7 +266,7 @@ export function NotificationCenter() {
 
   const openNotification = (n: NotificationView) => {
     if (n.unread) void markNotificationRead(n.id);
-    if (n.link) window.dispatchEvent(new CustomEvent("onno:action", { detail: "onno://" + n.link }));
+    if (n.link) openRoute("onno://" + n.link);
     closePanel();
   };
 

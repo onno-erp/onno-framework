@@ -1,3 +1,4 @@
+import { openRoute } from "@/lib/navigation";
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Ellipsis, Loader2 } from "lucide-react";
@@ -118,9 +119,6 @@ export const ACTIONS_MENU_CUSTOM_COMPONENTS = new Map<string, { element: string 
   ["onno-actions-menu", { element: "onno-actions-menu" }],
 ]);
 
-function fire(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 // "Open in list" (onno://{kind}/{name}?focus={id}, #410) moves the workspace focus to the list's
 // pane. Returning focus to the ⋯ trigger after the menu closes would be a focusin inside the
@@ -175,7 +173,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
 
   const run = useCallback((it: ActionItem, inputs?: ActionFormValues): Promise<void> | void => {
     if (!isAsync(it.url)) {
-      fire(it.url);
+      openRoute(it.url);
       return;
     }
     if (it.form?.length && !inputs) {
@@ -271,7 +269,7 @@ export function ActionsCluster({ items }: { items: ActionItem[] }) {
                     } else {
                       skipReturnFocus.current = leavesPane(it.url);
                       setOpen(false);
-                      fire(it.url);
+                      openRoute(it.url);
                     }
                   }}
                   className={cn(
