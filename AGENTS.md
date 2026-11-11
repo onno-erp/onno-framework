@@ -157,7 +157,9 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets.
+  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main and every PR
+  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory blocks a merge rather
+  than a release tag.
 
 ### AI-Friendly Change Style
 

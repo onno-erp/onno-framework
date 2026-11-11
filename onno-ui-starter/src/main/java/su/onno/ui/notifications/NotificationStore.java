@@ -131,6 +131,18 @@ public class NotificationStore {
     }
 
     /**
+     * The links of a recipient's unread notifications ({@code null} for one without a link) — so a
+     * record-scoped viewer's badge can count only the notifications its feed shows.
+     */
+    public List<String> unreadLinks(String recipientId) {
+        return jdbi.withHandle(h -> h.createQuery("SELECT _link FROM " + TABLE +
+                        " WHERE _recipient = :recipient AND _read_at IS NULL")
+                .bind("recipient", recipientId)
+                .mapTo(String.class)
+                .list());
+    }
+
+    /**
      * The distinct notification types this recipient actually has, most-recent-first. Drives the panel's
      * filter tabs: a tab exists for a type only once the user has a notification of it, so the tab set is
      * fully modular — a custom producer's type gets a tab with no config, and a disabled built-in source

@@ -116,7 +116,17 @@ export async function streamUiEvents(
 // no cached response, hence no staleness (a later fetch always hits the network afresh).
 const inFlightGets = new Map<string, Promise<unknown>>();
 
-function fetchJson<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
+/**
+ * Per-call request options. {@code silent} hands the error toast to the caller: the api layer
+ * shows none, and the caller reports the rejection itself (see {@code notifyError}), so one
+ * failure never produces two toasts (#505). Background calls whose failure must not interrupt the
+ * user (live validation, presence) are silent too, and simply never report.
+ */
+export interface FetchOptions {
+  silent?: boolean;
+}
+
+function fetchJson<T>(url: string, init?: RequestInit, opts?: FetchOptions): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   if (method !== "GET") return doFetch<T>(url, init, opts);
   const existing = inFlightGets.get(url);
@@ -126,7 +136,7 @@ function fetchJson<T>(url: string, init?: RequestInit, opts?: { silent?: boolean
   return p;
 }
 
-async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boolean }): Promise<T> {
+async function doFetch<T>(url: string, init?: RequestInit, opts?: FetchOptions): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -162,14 +172,19 @@ async function doFetch<T>(url: string, init?: RequestInit, opts?: { silent?: boo
         feedback = body as ActionFeedback;
       }
     } catch { /* ignore parse errors */ }
+    const error = new ApiError(message, res.status, fieldErrors, feedback);
     // A field-level validation 422 is shown inline by the form, so don't also toast it. Other
     // failures (auth aside) surface as a toast as before. `silent` suppresses the toast for
     // background calls (live validation) where a transient failure must not interrupt the user.
-    if (res.status !== 401 && !fieldErrors && !feedback && !opts?.silent) toast.error(message);
+    // `notified` tells the caller's notifyError the user has seen it already (#505).
+    if (res.status !== 401 && !fieldErrors && !feedback && !opts?.silent) {
+      toast.error(message);
+      error.notified = true;
+    }
     // A 401 here is a lapsed session (the login endpoint's bad-credentials 401 is handled by its
     // own caller and never reaches a logged-in tab). Hand off to the registered recovery handler.
     if (res.status === 401 && !url.endsWith("/auth/login")) onUnauthorized?.();
-    throw new ApiError(message, res.status, fieldErrors, feedback);
+    throw error;
   }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
@@ -419,6 +434,12 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+
+  /**
+   * True once this failure has been shown to the user — by the api layer's toast or by a caller's
+   * {@code notifyError}. Whoever shows it sets the flag, so nobody shows it a second time (#505).
+   */
+  notified = false;
 }
 
 /**
@@ -479,8 +500,8 @@ export const api = {
 
   // App settings (framework @Constant values) — admin only
   getSettings: () => fetchJson<SettingMeta[]>(`${BASE}/settings`),
-  saveSettings: (values: Record<string, unknown>) =>
-    fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }),
+  saveSettings: (values: Record<string, unknown>, opts?: FetchOptions) =>
+    fetchJson<void>(`${BASE}/settings`, { method: "PUT", body: JSON.stringify(values) }, opts),
 
   // Durable business-process work
   listProcessTasks: () => fetchJson<ProcessWorkItem[]>(`${BASE}/tasks`),
@@ -571,25 +592,25 @@ export const api = {
     }, { silent: true }),
   getCatalogItem: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}`),
-  createCatalogItem: (name: string, data: EntityRecord) =>
+  createCatalogItem: (name: string, data: EntityRecord, opts?: FetchOptions) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}`, {
       method: "POST",
       body: JSON.stringify(data),
-    }),
-  updateCatalogItem: (name: string, id: string, data: EntityRecord) =>
+    }, opts),
+  updateCatalogItem: (name: string, id: string, data: EntityRecord, opts?: FetchOptions) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
-    }),
-  deleteCatalogItem: (name: string, id: string) =>
-    fetchJson<void>(`${BASE}/catalogs/${name}/${id}`, { method: "DELETE" }),
+    }, opts),
+  deleteCatalogItem: (name: string, id: string, opts?: FetchOptions) =>
+    fetchJson<void>(`${BASE}/catalogs/${name}/${id}`, { method: "DELETE" }, opts),
   /** Server-side copy of a record: same attributes, fresh id/code. Backs the list's ⌘V paste. */
   duplicateCatalogItem: (name: string, id: string) =>
     fetchJson<EntityRecord>(`${BASE}/catalogs/${name}/${id}/duplicate`, { method: "POST" }),
   // Live rows of a related-list panel: the junction rows tied to record {id} (see RelatedListMeta).
   // The owner can be a catalog or a document, so the endpoint kind travels with the call.
-  getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string) =>
-    fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`),
+  getRelatedList: (kind: "catalogs" | "documents", name: string, id: string, relatedName: string, opts?: FetchOptions) =>
+    fetchJson<EntityRecord[]>(`${BASE}/${kind}/${name}/${id}/related/${relatedName}`, undefined, opts),
 
   // Document CRUD. Date-ranged widgets read one bounded keyset window from the list feed.
   listDocuments: (name: string, from?: string, to?: string, filter?: string) => {
@@ -612,16 +633,16 @@ export const api = {
     return fetchJson<{ record: EntityRecord; actions: ActionItem[]; readOnly: boolean }>(
       `${BASE}/divkit/record-refresh/${kind}/${encodeURIComponent(name)}/${id}?${params}`, undefined, { silent: true });
   },
-  createDocument: (name: string, data: EntityRecord) =>
+  createDocument: (name: string, data: EntityRecord, opts?: FetchOptions) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}`, {
       method: "POST",
       body: JSON.stringify(data),
-    }),
-  updateDocument: (name: string, id: string, data: EntityRecord) =>
+    }, opts),
+  updateDocument: (name: string, id: string, data: EntityRecord, opts?: FetchOptions) =>
     fetchJson<EntityRecord>(`${BASE}/documents/${name}/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
-    }),
+    }, opts),
   deleteDocument: (name: string, id: string) =>
     fetchJson<void>(`${BASE}/documents/${name}/${id}`, { method: "DELETE" }),
   /** Server-side copy of a document (attributes + line items, unposted, dated now). Backs ⌘V paste. */

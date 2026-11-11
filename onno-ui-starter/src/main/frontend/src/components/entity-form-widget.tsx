@@ -6,6 +6,7 @@ import { toast } from "@/components/ui/toast";
 import { Check, CircleCheck, Undo2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { AttributeMeta, DashboardWidgetMeta, EntityRecord, RelatedListMeta, SystemColumnMeta, TabularSectionMeta, UiEvent } from "@/lib/types";
 import { api, ApiError, type FormFeedback } from "@/lib/api";
+import { notifyError } from "@/lib/notify-error";
 import { cn, enumPillStyle } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -652,13 +653,17 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     setSaving(true);
     try {
       const payload = buildPayload();
+      // Silent: the form owns a failed save's feedback — inline field errors, or one
+      // "Couldn't save" toast in the catch below (#505).
       let saved: EntityRecord;
       if (kind === "documents") {
-        saved = isEdit ? await api.updateDocument(name, id!, payload) : await api.createDocument(name, payload);
+        saved = isEdit
+          ? await api.updateDocument(name, id!, payload, { silent: true })
+          : await api.createDocument(name, payload, { silent: true });
       } else {
         saved = isEdit
-          ? await api.updateCatalogItem(name, id!, payload)
-          : await api.createCatalogItem(name, payload);
+          ? await api.updateCatalogItem(name, id!, payload, { silent: true })
+          : await api.createCatalogItem(name, payload, { silent: true });
       }
       const savedId = String(isEdit ? id : saved.id);
       // Post after a successful save when requested. The document is already persisted, so
@@ -689,8 +694,9 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       if (!pickedUp) dispatchAction(`onno://${kind}/${name}/${savedId}`);
       dispatchClose(formPath);
     } catch (e) {
-      // A server-side validation 422 carries per-field messages — map them onto the inputs
-      // (and surface any cross-field/form message as a toast). Anything else is a generic error.
+      // A server-side validation error carries per-field messages — map them onto the inputs.
+      // Anything else gets one "Couldn't save" toast; the save calls are silent, so the form
+      // owns it.
       if (e instanceof ApiError && e.fieldErrors) {
         const mapped: Record<string, string> = {};
         for (const [field, messages] of Object.entries(e.fieldErrors)) {
@@ -698,7 +704,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         }
         setErrors(mapped);
       } else {
-        toast.error(t("form.saveError", { error: e instanceof Error ? e.message : String(e) }));
+        notifyError(e, { format: (error) => t("form.saveError", { error }) });
       }
       setSaving(false);
     }

@@ -271,6 +271,9 @@ class RecordPolicyConformanceTest {
                 .title("LEAK-B-notification").link("catalogs/LkTenants/" + tenantB).build());
         notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
                 .title("alpha notification").link("catalogs/LkTenants/" + tenantA).build());
+        // A link whose entity resolves to nothing (removed): a narrowed recipient cannot be shown it.
+        notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
+                .title("LEAK-B-gone-notification").link("catalogs/LkRemoved/" + tenantA).build());
 
         B_IDS.addAll(List.of(ownerB.toString(), tenantB.toString(), instanceB.toString(), jobB.toString()));
     }
@@ -459,9 +462,19 @@ class RecordPolicyConformanceTest {
         assertThat((List<?>) snapshot.get("records")).isEmpty();
         status(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"path\":\"/catalogs/LkTenants/" + tenantB + "\",\"action\":\"enter\"}"), 404);
+        // A list or draft route carries no record id: presence on it is not narrowed by record scope.
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants\",\"action\":\"enter\"}"));
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants/new\",\"action\":\"enter\"}"));
+        List<String> presenceIds = ((List<?>) jsonMap(ok(get("/api/presence"))).get("records")).stream()
+                .map(r -> String.valueOf(((Map<?, ?>) r).get("id"))).toList();
+        assertThat(presenceIds).containsExactlyInAnyOrder("/catalogs/LkTenants", "new");
 
         Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
         assertThat((List<?>) feed.get("items")).hasSize(1);
+        // The badge counts only what the feed shows.
+        assertThat(feed.get("unreadCount")).isEqualTo(1);
 
         ok(get("/api/tasks"));
     }
@@ -597,12 +610,17 @@ class RecordPolicyConformanceTest {
         publisher.publish("updated", "document", "LkBuildJobs", jobB, "LEAK-B");
         publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkTenants/" + tenantB,
                 "title", "LEAK-B"));
+        // The stream withholds what the feed withholds: a link to an entity that resolves to nothing.
+        publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "LEAK-B-gone"));
+        publisher.publishNotification("staff", Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "gone-for-staff"));
         publisher.publish("changed", "register", "*", jobB, null);
 
         String seenByA = String.join("\n", toA.sent);
         assertThat(seenByA).contains(tenantA.toString()).doesNotContain(tenantB.toString()).doesNotContain("LEAK-B");
         assertThat(toA.sent).anySatisfy(s -> assertThat(s).contains("entityName:*").contains("register"));
-        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString());
+        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString()).contains("gone-for-staff");
     }
 
     /** An emitter that records what would be written to the stream. */

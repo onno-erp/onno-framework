@@ -1,5 +1,6 @@
 package su.onno.crm.service;
 
+import java.security.Principal;
 import java.util.List;
 import java.util.Objects;
 import su.onno.crm.domain.Conversation;
@@ -12,10 +13,38 @@ public interface CrmMessageTransport {
 
     Connection connection(Conversation conversation);
 
+    /**
+     * The connection as {@code principal} would reply on it. Override when a choice depends on who
+     * is replying: Gmail adds the principal's own personal mailbox to {@link Connection#senders()}.
+     * Defaults to {@link #connection(Conversation)}.
+     */
+    default Connection connection(Conversation conversation, Principal principal) {
+        return connection(conversation);
+    }
+
     /** No network I/O here. A worker delivers after commit. Also used for explicit failed-message retry. */
     void enqueue(Conversation conversation, ConversationMessage message);
 
+    /**
+     * The CRM has just marked this conversation read (its unread count dropped to zero). A provider
+     * may mirror that in the remote mailbox. Called inside the caller's transaction: do no network
+     * I/O here; defer it until after commit, and treat it as best-effort. Does nothing by default.
+     */
+    default void markedRead(Conversation conversation) {}
+
     enum ReplyCapability { AVAILABLE, READ_ONLY, WINDOW_CLOSED }
+
+    /**
+     * A mailbox or account a reply may be sent from. {@code id} is what the composer sends back
+     * ({@code from}) and what {@code ConversationMessage.senderAccount} keeps; {@code label} is
+     * what a person reads.
+     */
+    record Sender(String id, String label) {
+        public Sender {
+            Objects.requireNonNull(id, "id");
+            label = label == null || label.isBlank() ? id : label;
+        }
+    }
 
     /**
      * Connectivity and reply capability are independent (a connected channel may be read-only).
@@ -26,17 +55,29 @@ public interface CrmMessageTransport {
      *
      * <p>{@code recipient} is the address a reply goes to by default (may be {@code null}) and
      * {@code recipients} the addresses the composer may choose from; set both with {@link #withRecipients}.
+     *
+     * <p>{@code senders} are the accounts a reply may be sent from (empty means the provider offers
+     * no choice) and {@code sender} the default one's id; set both with {@link #withSenders}.
      */
     record Connection(boolean connected, String label, int maxTextLength,
                       ReplyCapability replyCapability, String replyReason,
                       int maxAttachments, String attachmentReason,
-                      String recipient, List<String> recipients) {
+                      String recipient, List<String> recipients,
+                      List<Sender> senders, String sender) {
         public Connection {
             Objects.requireNonNull(replyCapability);
             replyReason=replyReason==null?"":replyReason;
             attachmentReason=attachmentReason==null?"":attachmentReason;
             maxAttachments=Math.max(0,maxAttachments);
             recipients=recipients==null?List.of():List.copyOf(recipients);
+            senders=senders==null?List.of():List.copyOf(senders);
+            if(sender==null && !senders.isEmpty())sender=senders.getFirst().id();
+        }
+        public Connection(boolean connected, String label, int maxTextLength,
+                          ReplyCapability replyCapability, String replyReason,
+                          int maxAttachments, String attachmentReason,
+                          String recipient, List<String> recipients) {
+            this(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,List.of(),null);
         }
         public Connection(boolean connected, String label, int maxTextLength,
                           ReplyCapability replyCapability, String replyReason,
@@ -52,11 +93,24 @@ public interface CrmMessageTransport {
         }
         /** The same connection, declaring how many files it carries. */
         public Connection withAttachments(int limit, String reason) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason,recipient,recipients);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,limit,reason,recipient,recipients,senders,sender);
         }
         /** The same connection, declaring the default reply address and the addresses to choose from. */
         public Connection withRecipients(String recipient, List<String> recipients) {
-            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients);
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender);
+        }
+        /**
+         * The same connection, declaring the accounts a reply may be sent from and the default one
+         * ({@code current}, an id among {@code options}; the first option when null).
+         */
+        public Connection withSenders(String current, List<Sender> options) {
+            return new Connection(connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,options,current);
+        }
+        /** The offered sender with this id, matched without regard to case; null when none is. */
+        public Sender offeredSender(String id) {
+            if(id==null)return null;
+            String wanted=id.strip();
+            return senders.stream().filter(s->s.id().equalsIgnoreCase(wanted)).findFirst().orElse(null);
         }
         public boolean canSend() { return connected && replyCapability==ReplyCapability.AVAILABLE; }
         public boolean canAttach() { return canSend() && maxAttachments>0; }

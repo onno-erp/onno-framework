@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { linkify } from "@/lib/linkify";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { glassAvatar, tint } from "@/components/presence-avatars";
+import { widgetLocale } from "@/lib/widget-messages";
 
 /** The entity a thread hangs off — the same triple the detail route uses. */
 export type CommentTarget = { kind: "catalogs" | "documents"; name: string; id: string };
@@ -59,7 +60,7 @@ function timeAgo(iso: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString(widgetLocale(), { year: "numeric", month: "short", day: "numeric" });
 }
 
 function absolute(iso: string | null): string | undefined {
@@ -167,7 +168,7 @@ function formatHint(s: MentionSuggestion): string | null {
   if (s.kind === "documents" && /^\d{4}-\d{2}-\d{2}$/.test(s.hint)) {
     const d = new Date(s.hint + "T00:00:00");
     if (!Number.isNaN(d.getTime())) {
-      return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      return d.toLocaleDateString(widgetLocale(), { year: "numeric", month: "short", day: "numeric" });
     }
   }
   return s.hint;

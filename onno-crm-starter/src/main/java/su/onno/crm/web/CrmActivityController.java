@@ -50,9 +50,16 @@ public class CrmActivityController {
                         String direction,String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
                         List<su.onno.crm.service.CrmAttachments.View> attachments,
                         /** Sanitized email HTML; null for plain-text messages and notes. Render isolated. */
-                        String bodyHtml) {
+                        String bodyHtml,
+                        /** The sender account id a reply was queued with (a Gmail mailbox address); null otherwise. */
+                        String senderAccount) {
         public Entry {
             attachments=attachments==null?List.of():List.copyOf(attachments);
+        }
+        public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
+                String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
+                List<su.onno.crm.service.CrmAttachments.View> attachments,String bodyHtml) {
+            this(id,conversationId,subject,channel,kind,direction,authorName,body,at,deliveryStatus,authorAvatarUrl,mine,accountLabel,attachments,bodyHtml,null);
         }
         public Entry(String id,UUID conversationId,String subject,String channel,String kind,String direction,
                 String authorName,String body,LocalDateTime at,String deliveryStatus,String authorAvatarUrl,boolean mine,String accountLabel,
@@ -98,7 +105,7 @@ public class CrmActivityController {
                     message.getSentAt(),message.getDeliveryStatus().name(),
                     message.getAuthorId()==null?null:messageAvatars.get(message.getAuthorId()),
                     message.getAuthorId()!=null&&message.getAuthorId().equals(me.recordId()),accountLabel,
-                    attachments.viewsOf(message),message.getBodyHtml()));
+                    attachments.viewsOf(message),message.getBodyHtml(),message.getSenderAccount()));
             var notes=comments.list("catalogs","crm_conversations",conversation.getId());
             var avatars=authorAvatars.avatarsFor(notes.stream().map(Comment::authorId).filter(Objects::nonNull).toList());
             for(var note:notes)

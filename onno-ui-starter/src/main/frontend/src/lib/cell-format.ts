@@ -1,4 +1,5 @@
 import { format as formatWithPattern, parseISO, isValid } from "date-fns";
+import { widgetLocale } from "@/lib/widget-messages";
 
 /**
  * Client-side display formatting for table cells, driven by a column's `.format(...)` and
@@ -41,7 +42,7 @@ const TIMESTAMP = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2
 
 /**
  * The default rendering for a timestamp value in a column with no authored `.format(...)`: the
- * user's locale, medium date + short time ("Jul 5, 2026, 12:58 AM"). Raw ISO with millis and a
+ * configured locale ({@code onno.ui.locale}, else the browser's), medium date + short time ("Jul 5, 2026, 12:58 AM"). Raw ISO with millis and a
  * zone offset is machine output, not a display value — no list cell should ever show it. Returns
  * null when the value isn't a full date-time, so the caller keeps the raw text.
  */
@@ -49,7 +50,7 @@ export function formatTimestampDefault(raw: string): string | null {
   if (!TIMESTAMP.test(raw)) return null;
   const d = parseISO(raw.includes("T") ? raw : raw.replace(" ", "T"));
   if (!isValid(d)) return null;
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return new Intl.DateTimeFormat(widgetLocale(), { dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
 function isNumberSpec(fmt: string): boolean {

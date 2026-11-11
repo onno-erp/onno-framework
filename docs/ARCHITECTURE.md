@@ -269,16 +269,25 @@ files for structural changes. The diff-based engine lives in
   and skipped unless `onno.schema.allow-destructive=true`), `plan` (log only), `validate` (fail on
   drift / unapplied migrations), `off`.
 - **Diff inputs**: the desired `SchemaModel` (from the registry), the live DB's current schema
-  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`), and the previous `SchemaSnapshot` (stored
-  as JSON in `onno_schema_history`). Same-named tables in other PostgreSQL schemas are ignored. The
-  snapshot is how *type changes* and *removed entities* are detected on later boots.
+  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`, and covers tables, columns and `UNIQUE`
+  constraints), and the previous `SchemaSnapshot` (stored as JSON in `onno_schema_history`).
+  Same-named tables in other PostgreSQL schemas are ignored. The snapshot is how *type changes* and
+  *removed entities* are detected on later boots.
+- **Register keys are reconciled**: an information register's key — `(_period, dimensions…)`, the
+  same tuple its upserts name in `ON CONFLICT` — is diffed against the live `UNIQUE` constraints, so
+  changing `periodicity` or a `@Dimension` on an existing database moves the constraint instead of
+  leaving the old one enforcing a key the code no longer uses. Widening the key (a finer periodicity,
+  an added dimension) is safe by construction and applies by default; narrowing it can meet rows that
+  duplicate under the new key, so it is destructive-gated. A table that declares a key owns every
+  `UNIQUE` constraint on it — use an index, not a constraint, for your own uniqueness on one.
 - **Renames keep data**: declare the former name with `previousNames` on `@Catalog`/`@Document`/
   `@Attribute`; the engine emits a `RENAME_TABLE`/`RENAME_COLUMN` instead of drop+add.
 - **SQL identifiers fail fast**: metadata-derived table/column names and rename aliases must match
   `[A-Za-z_][A-Za-z0-9_]*`; the scanner rejects unsafe identifiers before DDL or query rendering.
 - **Change kinds** (`SchemaChange.Type`): `CREATE_TABLE`, `RENAME_TABLE`, `RENAME_COLUMN`,
-  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `DROP_COLUMN`, `DROP_TABLE`. Drops are only ever proposed for
-  objects present in the previous snapshot (never user-created tables).
+  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `ALTER_COLUMN_NULLABILITY`, `ALTER_UNIQUE_KEY`, `DROP_COLUMN`,
+  `DROP_TABLE`. Drops are only ever proposed for objects present in the previous snapshot (never
+  user-created tables).
 - **Data migrations**: implement `AppMigration` (`version()` compared segment-wise, `migrate(MigrationContext)`)
   as a Spring bean. Each runs exactly once per database, in version order, inside a transaction,
   recorded in `onno_schema_history` (a unique constraint arbitrates concurrent starts).
@@ -400,7 +409,7 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Media | `POST /api/media`, `GET /api/media/{key}` — authenticated uploads; served with `nosniff`, safe raster images inline and other types as attachments ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
-| Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
+| Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}` (for a record-scoped viewer, items about unreadable records are withheld and not counted); `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 
 Catalog/document attributes declared with `@Attribute(secret = true)` are write-only and are excluded
 from list filter, sort, grouping, and aggregate allowlists; list-query shape and counts therefore
@@ -875,6 +884,25 @@ and a single-instance polling worker. It publishes CRM changes via the standard 
 `CrmChannelAccess`-protected `POST /api/crm/gmail/authorize` starts session-bound PKCE authorization;
 `GET /api/crm/gmail/callback` consumes the state and returns to Channels. It is an opt-in development
 connector in `onno-crm-channels-starter`; see that module’s README.
+Replies may be sent from another mailbox (`Connection.senders`/`sender`, request `from`, stored as
+`ConversationMessage.senderAccount`); such a reply starts a thread in that mailbox, routed to the same
+conversation. `CrmMessageTransport.connection(conversation, principal)` gives the per-user view and
+`markedRead(conversation)` lets Gmail clear its `UNREAD` label after commit (grants with
+`gmail.modify` only). `GET /api/crm/gmail/accounts`, `GET /api/crm/gmail/search` and
+`POST /api/crm/gmail/restore` find mail in a mailbox, archived included, and import its thread through
+the sync's own ingest. The worker parses Gmail answers with a private high-limit mapper, retries an
+unreadable message three times before skipping it (`onno_crm_gmail_failed`), and pauses only the
+affected mailbox on 429/rate-limit 403 until Retry-After or an exponential backoff.
+
+`history-import` brings each mailbox's older mail in once, after the first import, a page of
+threads per round. It reads `format=full` (text plus file references) and stores emails through the
+same `save` as live mail in `HISTORY` mode: read, new conversations closed, inside
+`CrmHistoryImport`, a thread-bound mark that `CrmWorkspaceEvents` and application listeners check to
+stay quiet. Files are recorded in `onno_crm_gmail_file` as media keys `gmail/<id>/<name>`;
+`GmailMediaFiles` wraps the application's `MediaStorage` so `GET /api/media/...` fetches such a key
+from Gmail by message part when opened. A new thread joins the sender's conversation through
+`findByCustomerAndDeletionMarkFalse` over the contact and its merge redirects, never a scan of the
+mailbox's conversations.
 
 Inbox workspaces are application-authored `CrmInboxWorkspace` beans, separate from the persisted
 `Inbox` channel-account catalog. Each supplies stable identity, read/write roles, a typed
@@ -945,7 +973,7 @@ provider-approved WhatsApp message templates. Inactive or deleted templates are 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; a reply also carries the `senderAccount` it was queued with (a Gmail mailbox address), null otherwise. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 

@@ -1,5 +1,5 @@
 import { CrmConnections } from "./CrmConnections";
-import { api, text as t, useTranslate } from "@onno/widget-sdk";
+import { api, locale, text as t, useTranslate } from "@onno/widget-sdk";
 import type { ReactNode } from "react";
 import { ContactAvatarImage } from "./ContactAvatarImage";
 import { ExtensionSlot } from "@onno/widget-sdk";
@@ -38,7 +38,7 @@ function Display({ value, format, color }: { value: unknown; format: string; col
   if (format === "badge") return <StageBadge text={text} color={color} />;
   if (format === "boolean") return <>{value === true || text === "true" ? "Yes" : "No"}</>;
   if (format === "number" && Number.isFinite(Number(text))) return <span className="tabular-nums">{Number(text).toLocaleString()}</span>;
-  if (format === "date" && !Number.isNaN(Date.parse(text))) return <span className="tabular-nums">{new Date(text).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</span>;
+  if (format === "date" && !Number.isNaN(Date.parse(text))) return <span className="tabular-nums">{new Date(text).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" })}</span>;
   const href = format === "email" ? `mailto:${text}` : format === "phone" ? `tel:${text}` : format === "url" && /^https?:\/\//.test(text) ? text : null;
   return href ? <a className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary" href={href} target={format === "url" ? "_blank" : undefined} rel="noreferrer">{text}</a> : <LinkedText text={text} className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary" />;
 }

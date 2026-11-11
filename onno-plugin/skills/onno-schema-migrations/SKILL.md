@@ -24,6 +24,11 @@ Structural schema changes are derived from metadata at boot. Data changes are ex
 - Required-column reconciliation runs before `AppMigration`s. Backfill both `NULL` and any neutral
   placeholder the upgrader inserted; finalize constraints explicitly when the type has no safe
   neutral value.
+- Changing an information register's `periodicity` or `@Dimension` set changes its key, and the
+  upgrader moves the `UNIQUE` constraint to match. Widening applies by default; narrowing is
+  destructive-gated, so plan it like any other narrowing change. Never add your own `UNIQUE`
+  constraint to a register table — the upgrader treats it as a leftover key and drops it; use a
+  plain index instead.
 - Keep destructive changes disabled while applying safe renames/additions/backfills. Back up,
   inspect the complete destructive plan, approve exact targets, enable the global gate for one
   controlled run, then disable it and validate/restart on both H2 and PostgreSQL.

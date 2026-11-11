@@ -3,6 +3,7 @@ package su.onno.ui.presence;
 import su.onno.access.AccessSubject;
 import su.onno.cluster.ClusterEvent;
 import su.onno.ui.RecordAccess;
+import su.onno.ui.RecordRoute;
 import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 import su.onno.ui.UiAccessService;
@@ -16,8 +17,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Route-level presence: tracks which signed-in users are currently on each route — a record, an entity
@@ -67,9 +67,20 @@ public class PresenceController {
         this.recordAccess = recordAccess;
     }
 
-    /** Whether a record route is readable by a record-scoped viewer (true for lists/pages/unscoped). */
+    /**
+     * Whether a record route is readable by a record-scoped viewer. A list route (whose id is its path)
+     * or a {@code new} draft carries no record id, so there is no record to check; entity read access is
+     * gated separately.
+     */
     private boolean recordReadable(AccessSubject subject, String kind, String name, String id) {
-        return recordAccess == null || recordAccess.canReadRecord(subject, kind, name, id);
+        RecordRoute route = recordRoute(kind, name, id);
+        return recordAccess == null || route == null || recordAccess.canReadRecord(subject, route);
+    }
+
+    /** The record a presence entry is on, or {@code null} for a list/draft/page entry. */
+    private static RecordRoute recordRoute(String kind, String name, Object id) {
+        UUID uuid = RecordRoute.isRecordKind(kind) ? RecordRoute.uuidOrNull(id) : null;
+        return uuid == null ? null : new RecordRoute(kind, name, uuid);
     }
 
     /** The heartbeat body: the pane's route {@code path} and an {@code action} (enter/heartbeat/leave). */
@@ -123,6 +134,7 @@ public class PresenceController {
         String you = me.recordId() != null ? me.recordId() : me.username();
         Map<String, Boolean> readable = new HashMap<>();
         List<Map<String, Object>> records = new ArrayList<>();
+        Map<Map<String, Object>, RecordRoute> onRecords = new java.util.IdentityHashMap<>();
         for (Map<String, Object> rec : registry.allViewers()) {
             String kind = (String) rec.get("kind");
             String name = (String) rec.get("name");
@@ -140,13 +152,16 @@ public class PresenceController {
                 ok = "page".equals(type) || access.canRead(principal, type, name);
                 readable.put(type + ":" + name, ok);
             }
-            if (ok && !"page".equals(type)
-                    && !recordReadable(subject, kind, name, String.valueOf(rec.get("id")))) {
-                ok = false; // a record outside the viewer's scope: never reveal who is on it
-            }
             if (ok) {
                 records.add(rec);
+                RecordRoute route = recordRoute(kind, name, rec.get("id"));
+                if (route != null) onRecords.put(rec, route);
             }
+        }
+        if (recordAccess != null && !onRecords.isEmpty()) {
+            // A record outside the viewer's scope: never reveal who is on it. One query per entity.
+            Set<RecordRoute> visible = recordAccess.readable(subject, onRecords.values());
+            records.removeIf(rec -> onRecords.containsKey(rec) && !visible.contains(onRecords.get(rec)));
         }
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("you", you == null ? "" : you);
@@ -192,12 +207,7 @@ public class PresenceController {
      * every page 403s with "not allowed to read …: %D1%81…" (issue #245). Malformed input is left as-is.
      */
     private static String decodeSegment(String seg) {
-        if (seg.indexOf('%') < 0) return seg;
-        try {
-            return URLDecoder.decode(seg, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException malformed) {
-            return seg;
-        }
+        return RecordRoute.decodeSegment(seg);
     }
 
     private static String normalizePath(String path) {

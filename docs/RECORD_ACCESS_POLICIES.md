@@ -54,7 +54,8 @@ AccessSubjectContributor regions(RegionDirectory directory) {
 
 A controller method receives the subject by declaring a parameter of type `AccessSubject`; an
 `@McpTool` method may declare one too (or read `McpToolContext.subject()`); an action handler reads
-`ActionContext.subject()`.
+`ActionContext.subject()`, which is never `null`. Code that builds an `ActionContext` itself (a test,
+a custom dispatcher) passes the caller's subject, or `AccessSubject.system()` for trusted code.
 
 ### The scope — a predicate the database evaluates
 
@@ -115,8 +116,9 @@ too, and an explicit body value cannot override them.
 | CSV import upserts | an existing code/number outside the write scope is a row error, not an overwrite |
 | related lists | the parent record must be readable; junction rows are scoped |
 | ref pickers, mentions, comments, tags, presence | target/record scope applied; unreadable records are 404 or not readable |
-| notifications | a notification about a record the recipient can't read is withheld from its feed and stream |
+| notifications | a notification about a record the recipient can't read is withheld from its feed and stream (one rule for both), and the unread badge counts only what the feed shows |
 | task inbox | task visibility stays assignment-based; a subject label of an unreadable record is masked |
+| links to a renamed or removed entity | a former `previousNames` entry still resolves; a name that resolves to nothing is withheld/masked for a subject some policy narrows, never for ADMIN or unnarrowed subjects |
 | SSE `/api/events` | a record event reaches a scoped subscriber only if the record is in its scope (one query per event and distinct scope) |
 | MCP built-in tools | run as the caller's subject through the same services |
 | CRM inbox | the bound customer catalog's policy narrows readable contacts (on top of `readableWhen`) |
@@ -134,6 +136,12 @@ boolean ok = recordAccess.can(subject, Tenant.class, id, AccessMode.WRITE);
 Set<UUID> visible = recordAccess.filter(subject, Tenant.class, ids, AccessMode.READ);
 ScopeClause clause = recordAccess.clause(subject, Tenant.class, AccessMode.READ, "t"); // for own SQL
 ```
+
+Every check takes a non-null subject (`null` throws even before the first policy is declared).
+`canReadRecord`/`canReadRoute` only narrow by record scope, for links stored as strings; they do not
+check entity grants or existence for an unnarrowed subject, so authorize with `can`/`require`. Parse
+such links with `RecordRoute.parse(route)`, and check many at once with
+`recordAccess.readable(subject, routes)` (one query per narrowed entity).
 
 Not covered in this release: field-level masking, and **media** (`/api/media/{key}` is not bound to a
 record — do not store customer-private files as media when external users exist).

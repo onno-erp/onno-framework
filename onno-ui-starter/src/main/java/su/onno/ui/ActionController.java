@@ -157,8 +157,7 @@ public class ActionController {
         Class<?> entity = resolveAndAuthorize(kind, name, principal);
         Action action = findRunnable(entity, key, principal);
         requireRunnableOn(subject, kind, name, id, action);
-        ActionContext ctx = ActionContext.from(kind, name, id,
-                principal != null ? principal.getName() : null, body).withSubject(subject);
+        ActionContext ctx = ActionContext.from(kind, name, id, principal != null ? principal.getName() : null, body, subject);
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -223,7 +222,7 @@ public class ActionController {
         List<UUID> ids = idList(body);
         String user = principal != null ? principal.getName() : null;
         // Parse the shared inputs/rows once; each id runs with the same collected values.
-        ActionContext shared = ActionContext.from(kind, name, null, user, body).withSubject(subject);
+        ActionContext shared = ActionContext.from(kind, name, null, user, body, subject);
         AtomicReference<ActionFeedback> firstFeedback = new AtomicReference<>();
         Map<String, Object> result = batch.run(ids, id -> {
             requireRunnableOn(subject, kind, name, id, action);

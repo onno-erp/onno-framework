@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
+import { notifyError } from "@/lib/notify-error";
 import type {
   DashboardWidgetMeta,
   ProcessWorkItem,
@@ -132,7 +133,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       toast.success("Task claimed");
       await reload();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not claim task");
+      notifyError(failure, { fallback: "Could not claim task" });
       await reload();
     } finally {
       setBusy(null);
@@ -147,7 +148,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       setCompleting(null);
       await reload();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not complete task");
+      notifyError(failure, { fallback: "Could not complete task" });
       setCompleting(null);
       await reload();
     } finally {
@@ -163,7 +164,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
       const events = await api.getProcessTaskHistory(task.id);
       setHistoryEvents(events);
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not load task history");
+      notifyError(failure, { fallback: "Could not load task history" });
       setHistoryTask(null);
     } finally {
       setHistoryLoading(false);
@@ -534,7 +535,7 @@ function DelegateTaskDialog({
       toast.success(`Task delegated to ${target.display}`);
       await onDelegated();
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not delegate task");
+      notifyError(failure, { fallback: "Could not delegate task" });
     } finally {
       setSubmitting(false);
     }
