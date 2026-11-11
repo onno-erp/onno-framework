@@ -139,6 +139,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/divkit/documents/{name}", "GET /api/divkit/documents/{name}/{id}",
                 "GET /api/divkit/documents/{name}/new", "GET /api/divkit/documents/{name}/{id}/duplicate",
                 "GET /api/divkit/registers/{name}", "GET /api/divkit/pickers/{kind}/{name}",
+                "GET /api/divkit/record-refresh/{kind}/{name}/{id}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
             ROUTES.put(r, Route.SCOPED);
@@ -484,6 +485,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/catalogs/LkTenants"));
         ok(get("/api/divkit/catalogs/LkTenants/" + tenantA));
         status(get("/api/divkit/catalogs/LkTenants/" + tenantB), 404);
+        ok(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantA));
+        status(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantB), 404);
         String draft = ok(get("/api/divkit/catalogs/LkTenants/new"));
         assertThat(draft).as("the policy default (the signed-in owner) pre-fills the New form")
                 .contains(ownerA.toString());
@@ -492,6 +495,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/documents/LkBuildJobs"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB), 404);
+        ok(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobA));
+        status(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobB), 404);
         ok(get("/api/divkit/documents/LkBuildJobs/new"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA + "/duplicate"));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB + "/duplicate"), 404);

@@ -5,6 +5,7 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.PageWidgetDescriptor;
 import su.onno.metadata.DocumentDescriptor;
+import su.onno.lifecycle.Postable;
 import su.onno.ui.divkit.DashboardDivBuilder;
 import su.onno.ui.divkit.Div;
 import su.onno.ui.divkit.DivCard;
@@ -861,12 +862,29 @@ public class DivKitController implements DisposableBean {
                                              @RequestParam(required = false) String profile,
                                              @RequestParam(required = false) String viewport,
                                              Principal principal) {
+        return catalogRecord(name, id, profile, viewport, principal, false);
+    }
+
+    @GetMapping("/record-refresh/{kind}/{name}/{id}")
+    public Map<String, Object> recordRefresh(@PathVariable String kind, @PathVariable String name,
+                                             @PathVariable UUID id,
+                                             @RequestParam(required = false) String profile,
+                                             @RequestParam(required = false) String viewport,
+                                             Principal principal) {
+        return switch (kind) {
+            case "catalogs" -> catalogRecord(name, id, profile, viewport, principal, true);
+            case "documents" -> documentRecord(name, id, profile, viewport, principal, true);
+            default -> throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown record kind: " + kind);
+        };
+    }
+
+    private Map<String, Object> catalogRecord(String name, UUID id, String profile, String viewport,
+                                               Principal principal, boolean refreshOnly) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Load the record before building the actions: the custom DETAIL actions' per-record
         // functions (visibleWhen/label/…) evaluate against it (#255). Outside the viewer's record
         // scope this is a 404, like a missing record.
@@ -890,13 +908,17 @@ public class DivKitController implements DisposableBean {
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> record = EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL);
+        if (refreshOnly) {
+            return Map.of("record", record, "actions", SurfaceDivBuilder.actionItems(actions), "readOnly", !canWrite);
+        }
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         String label = str(row.get("_description"));
         if (label.isBlank()) label = str(row.get("_code"));
         if (label.isBlank()) label = str(meta.get("name"));
         Map<String, Object> content = entityFormBody("catalogs", name, id, label,
-                messages.get("action.save"), meta,
-                EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
-                false, !canWrite, actions);
+                messages.get("action.save"), meta, record, false, !canWrite, actions,
+                new RecordRefreshContext(profileId, viewport));
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -1013,17 +1035,21 @@ public class DivKitController implements DisposableBean {
                                               @RequestParam(required = false) String profile,
                                               @RequestParam(required = false) String viewport,
                                               Principal principal) {
+        return documentRecord(name, id, profile, viewport, principal, false);
+    }
+
+    private Map<String, Object> documentRecord(String name, UUID id, String profile, String viewport,
+                                                Principal principal, boolean refreshOnly) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> row = documentQuery.get(subject, desc, id);
         // A document the viewer can read but not change (outside its write scope) renders read-only.
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
                 && documentQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
-        boolean postable = Boolean.TRUE.equals(meta.get("postable"));
+        boolean postable = Postable.class.isAssignableFrom(desc.javaClass());
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         // The view's placement overrides (f.action(key).primary()/inMenu()/hidden(), #183), read
         // straight from the view so every built-in key is honored, not only the keys the form
@@ -1053,11 +1079,15 @@ public class DivKitController implements DisposableBean {
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> record = EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL);
+        if (refreshOnly) {
+            return Map.of("record", record, "actions", SurfaceDivBuilder.actionItems(actions), "readOnly", !canWrite);
+        }
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> content = entityFormBody("documents", name, id,
                 str(meta.get("name")) + " " + str(row.get("_number")),
-                messages.get("action.save"), meta,
-                EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
-                false, !canWrite, actions);
+                messages.get("action.save"), meta, record, false, !canWrite, actions,
+                new RecordRefreshContext(profileId, viewport));
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -1324,8 +1354,10 @@ public class DivKitController implements DisposableBean {
                                                   Map<String, Object> meta,
                                                   Map<String, Object> row, boolean duplicate) {
         return DivCard.of("onno-content",
-                entityFormBody(kind, name, id, title, "Create", meta, row, duplicate, false, List.of()));
+                entityFormBody(kind, name, id, title, "Create", meta, row, duplicate, false, List.of(), null));
     }
+
+    private record RecordRefreshContext(String profile, String viewport) {}
 
     /**
      * The bare {@code onno-form} content (no DivCard wrapper), so a caller can chain
@@ -1337,7 +1369,8 @@ public class DivKitController implements DisposableBean {
     private Map<String, Object> entityFormBody(String kind, String name, UUID id, String title,
                                                String submitLabel, Map<String, Object> meta,
                                                Map<String, Object> row, boolean duplicate,
-                                               boolean readOnly, List<SurfaceDivBuilder.HeaderAction> actions) {
+                                               boolean readOnly, List<SurfaceDivBuilder.HeaderAction> actions,
+                                               RecordRefreshContext refreshContext) {
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("kind", kind);
         descriptor.put("name", name);
@@ -1346,6 +1379,9 @@ public class DivKitController implements DisposableBean {
         descriptor.put("submitLabel", submitLabel);
         descriptor.put("duplicate", duplicate);
         descriptor.put("readOnly", readOnly);
+        if (refreshContext != null) {
+            descriptor.put("refreshContext", refreshContext);
+        }
         if (!actions.isEmpty()) {
             descriptor.put("actions", SurfaceDivBuilder.actionItems(actions));
         }

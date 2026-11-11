@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { SurfaceHost } from "@/lib/surface-refresh";
 import { RegisterSurface, type RegisterDescriptor } from "@/components/register-surface";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
@@ -82,9 +83,11 @@ export function RegisterPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <IslandErrorBoundary label={m.register.views?.[0]?.list?.title || "register"}>
-            <RegisterSurface register={m.register} />
-          </IslandErrorBoundary>,
+          <SurfaceHost.Provider value={m.el}>
+            <IslandErrorBoundary label={m.register.views?.[0]?.list?.title || "register"}>
+              <RegisterSurface register={m.register} />
+            </IslandErrorBoundary>
+          </SurfaceHost.Provider>,
           m.el,
           String(m.id)
         )

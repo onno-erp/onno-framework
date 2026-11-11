@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { ExtensionSlot } from "@/lib/ui-extensions";
 import type { ExtensionContext } from "../../../../../../onno-widget-sdk/src/extensions";
@@ -71,6 +72,8 @@ export type FormDescriptor = {
    * same items the old detail header's onno-actions-menu cluster carried.
    */
   actions?: ActionItem[];
+  /** Profile and viewport of the saved record surface whose actions are refreshed in place. */
+  refreshContext?: { profile: string; viewport?: string | null };
   meta: {
     name: string;
     autoNumber?: boolean;
@@ -281,12 +284,14 @@ function dispatchClose(path: string) {
 }
 
 export function EntityFormWidget({ form }: { form: FormDescriptor }) {
-  const { kind, name, id, meta, initial } = form;
+  const { kind, name, id, meta, initial, refreshContext } = form;
   const t = useMessages();
   // A duplicate carries the source id (for pane routing/close) but still creates a new record.
   const isDuplicate = form.duplicate === true;
   const isEdit = id != null && !isDuplicate;
-  const readOnly = form.readOnly === true;
+  const [refreshedHeader, setRefreshedHeader] = useState<{ actions: ActionItem[]; readOnly: boolean } | null>(null);
+  const readOnly = refreshedHeader?.readOnly ?? (form.readOnly === true);
+  const headerActions = refreshedHeader?.actions ?? form.actions;
   const formPath = `/${kind}/${name}/${isDuplicate ? `${id}/duplicate` : isEdit ? id : "new"}`;
 
   // Build the ordered field list: catalogs lead with code (unless auto-numbered) +
@@ -435,13 +440,18 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
 
   // The dirty flag's lifetime is this instance's: save/cancel clear it explicitly, and unmount
   // clears it too — a remounted island starts from the stored record again, so nothing is at risk.
-  useEffect(() => () => clearFormDirty(formPath), [formPath]);
+  const refreshSeq = useRef(0);
+  useEffect(() => () => {
+    ++refreshSeq.current;
+    clearFormDirty(formPath);
+  }, [formPath]);
 
   // Re-seed the whole form from a freshly loaded record — the live-refresh equivalent of the initial
   // mount seed. Clears any pending errors, the stale banner, and the dirty flag (the on-screen values
   // now equal the stored record). Used both for a silent in-place refresh and the banner's Reload.
   const applyRecord = useCallback(
     (fresh: EntityRecord) => {
+      ++refreshSeq.current;
       setRecord(fresh);
       setData(seedDataFrom(fresh, fields));
       setRowsBySection(seedRowsFrom(fresh, sections));
@@ -456,18 +466,30 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     [fields, sections, formPath]
   );
 
-  // Fetch the current record and re-seed. Read-only failures are swallowed — the form keeps showing
-  // what it had rather than blanking on a transient error.
-  const refetch = useCallback(async () => {
+  // Refresh the header and fields from the same saved row. A dirty form updates its actions
+  // but keeps the draft until the user chooses Reload.
+  const refetch = useCallback(async (preserveEdits = false) => {
     if (!isEdit || !id) return;
+    if (preserveEdits && isFormDirty(formPath)) {
+      setStaleExternal(true);
+      if (!refreshContext) return;
+    }
+    const seq = ++refreshSeq.current;
     try {
-      const fresh =
-        kind === "documents" ? await api.getDocument(name, id) : await api.getCatalogItem(name, id);
-      applyRecord(fresh);
+      const snapshot = refreshContext ? await api.getRecordRefresh(kind, name, id, refreshContext) : null;
+      const fresh = snapshot?.record ??
+        (kind === "documents" ? await api.getDocument(name, id) : await api.getCatalogItem(name, id));
+      if (seq !== refreshSeq.current) return;
+      if (snapshot) setRefreshedHeader({ actions: snapshot.actions, readOnly: snapshot.readOnly });
+      // Typing can start after the request was sent. Background refreshes must not erase it.
+      if (preserveEdits && isFormDirty(formPath)) setStaleExternal(true);
+      else applyRecord(fresh);
     } catch {
       /* leave the current values in place */
     }
-  }, [isEdit, id, kind, name, applyRecord]);
+  }, [isEdit, id, kind, name, formPath, applyRecord, refreshContext]);
+
+  useSurfaceRefresh(() => { void refetch(true); });
 
   // Live refresh (#244): divkit-view fans every SSE row change out as an "onno:dataevent" window
   // event (one shared stream — see entity-list-widget). When *this* open record changes elsewhere,
@@ -479,12 +501,11 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
     const onData = (e: Event) => {
       const event = (e as CustomEvent).detail as UiEvent;
       if (!recordEventMatches(event, kind, name, id)) return;
-      if (isFormDirty(formPath)) setStaleExternal(true);
-      else void refetch();
+      void refetch(true);
     };
     window.addEventListener("onno:dataevent", onData);
     return () => window.removeEventListener("onno:dataevent", onData);
-  }, [isEdit, id, kind, name, formPath, refetch]);
+  }, [isEdit, id, kind, name, refetch]);
 
   // The request body a save (or a dry-run validate) sends: the field state plus each tabular
   // section as rows keyed by fieldName (what insertTabularSections reads server-side). Rows where
@@ -658,7 +679,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
       if (isEdit) {
         // The record route is the form: keep it open and re-seed from the authoritative saved row.
         applyRecord(saved);
-        if (thenPost && kind === "documents") await refetch();
+        if (refreshContext || (thenPost && kind === "documents")) await refetch(true);
         toast.success(t("toast.saved"));
         setSaving(false);
         return;
@@ -734,7 +755,7 @@ export function EntityFormWidget({ form }: { form: FormDescriptor }) {
         </div>
         {/* Record-level actions (unpost / duplicate / delete / custom DETAIL actions) — the same
             cluster the old read-only detail header rendered, now pinned beside the form title. */}
-        {form.actions?.length ? <ActionsCluster items={form.actions} /> : null}
+        {headerActions?.length ? <ActionsCluster items={headerActions} /> : null}
         <ExtensionSlot name="entity.form.actions" context={extensionContext} className="flex items-center gap-2" />
       </div>
       {/* The record changed elsewhere while the user has unsaved edits — offer a non-destructive

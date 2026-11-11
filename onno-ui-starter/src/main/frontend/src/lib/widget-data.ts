@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { useEffect, useState } from "react";
 import { format, parseISO, startOfHour, startOfISOWeek, startOfMonth } from "date-fns";
 import { api } from "@/lib/api";
@@ -38,6 +39,7 @@ function eventMatchesWidget(event: UiEvent, widget: DashboardWidgetMeta): boolea
 
 export function useWidgetLiveVersion(widget: DashboardWidgetMeta): number {
   const [version, setVersion] = useState(0);
+  useSurfaceRefresh(() => setVersion((version) => version + 1));
   useEffect(() => {
     let timer: number | undefined;
     const onData = (e: Event) => {

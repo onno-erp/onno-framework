@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ActionFeedbackHost, applyActionResult, presentActionFeedback } from "@/lib/action-feedback";
 
@@ -39,5 +39,23 @@ describe("typed action feedback (#273)", () => {
     });
 
     expect(await screen.findByRole("alertdialog", { name: "Approval blocked" })).toBeTruthy();
+  });
+});
+
+describe("ActionResult refresh (#447)", () => {
+  it("calls refresh when the server requests it", () => {
+    const refresh = vi.fn();
+
+    applyActionResult({ refresh: true }, { refresh });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh when the server does not request it", () => {
+    const refresh = vi.fn();
+
+    applyActionResult({ refresh: false }, { refresh });
+
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

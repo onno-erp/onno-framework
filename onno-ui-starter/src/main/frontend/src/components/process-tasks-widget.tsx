@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
@@ -105,6 +106,7 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   useEffect(() => {
     void reload();
   }, [reload]);
+  useSurfaceRefresh(() => { void reload(); });
 
   useEffect(() => {
     let current = true;

@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
@@ -248,6 +249,7 @@ export function EntityCommentsWidget({ target, composerOnly = false, onPosted, o
   }, [kind, name, id, composerOnly]);
 
   useEffect(() => load(), [load]);
+  useSurfaceRefresh(load);
   useEffect(() => { onDraftChange?.(body); }, [body, onDraftChange]);
 
   // Live-sync: refetch when the server signals a comment changed on this thread. We reuse the shared

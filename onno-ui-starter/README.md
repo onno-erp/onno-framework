@@ -467,6 +467,21 @@ public void fields(EntityConfigBuilder f) {
 }
 ```
 
+### Refresh after a server action
+
+`ActionResult.reload()` and `ActionResult.refresh(...)` explicitly re-read the screen that launched
+the action, including detail-header buttons, the overflow menu, and page action bars. They also work
+when the handler emits no entity-change SSE event, for example after a write through another API.
+The refresh sends a local `onno:dataevent` with `type: "refresh"` and the originating `surfacePath`,
+including its query string. It does not refetch or replace the DivKit card. Data-owning React islands
+on that surface re-read their own data in place, keeping list search/sort, expanded groups and local
+component state. Other workspace tabs remain mounted even if focus moves during the action.
+Record forms read `{record, actions, readOnly}` from
+`GET /api/divkit/record-refresh/{kind}/{name}/{id}` with their profile and viewport. The server
+evaluates action labels, visibility and availability against the same saved row as the fields.
+A dirty form updates its header actions and keeps its draft behind the existing reload banner.
+This also protects edits started while a background request is in flight.
+
 ### Action forms — collect input before the handler runs
 
 A server action may declare a **form**: clicking it opens a modal dialog with the declared fields
