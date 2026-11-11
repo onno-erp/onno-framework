@@ -1,5 +1,6 @@
 package su.onno.crm.channels;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -129,11 +130,43 @@ public class CrmChannelsProperties {
         private boolean enabled = false;
         /** Private Instagram token JSON file. */
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/instagram-tokens.json";
+        /**
+         * UTC instant (for example {@code 2026-11-12T09:00:00Z}) from which Instagram messages are
+         * imported; messages sent earlier are never imported, even in a conversation that receives a
+         * new message later. Used only to seed the account's persisted cutoff in
+         * {@code onno_crm_ig_sync} when it has none; a persisted cutoff is never changed by this
+         * property, a restart, a reconnect or pause/resume. When unset, the cutoff is the moment
+         * synchronization is first enabled for the account.
+         */
+        private Instant activationCutoff = null;
+        /**
+         * Conversation-list pages (25 conversations each) one poll may read. Polling starts at the most
+         * recently updated conversation and stops at the account's checkpoint; a longer backlog
+         * continues on the next poll, which first rechecks the newest conversations.
+         */
+        private int conversationPagesPerPoll = 4;
+        /**
+         * Conversations whose recent messages one poll may download. Conversations unchanged since
+         * their last download are skipped and do not count.
+         */
+        private int threadsPerPoll = 20;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
         public String getTokensFile() { return tokensFile; }
         public void setTokensFile(String value) { this.tokensFile = value; }
+        public Instant getActivationCutoff() { return activationCutoff; }
+        public void setActivationCutoff(Instant value) { this.activationCutoff = value; }
+        public int getConversationPagesPerPoll() { return conversationPagesPerPoll; }
+        public void setConversationPagesPerPoll(int value) {
+            if (value < 1 || value > 100) throw new IllegalArgumentException("onno.crm.channels.instagram.conversation-pages-per-poll must be between 1 and 100");
+            this.conversationPagesPerPoll = value;
+        }
+        public int getThreadsPerPoll() { return threadsPerPoll; }
+        public void setThreadsPerPoll(int value) {
+            if (value < 1 || value > 500) throw new IllegalArgumentException("onno.crm.channels.instagram.threads-per-poll must be between 1 and 500");
+            this.threadsPerPoll = value;
+        }
     }
 
     public static class Whatsapp {

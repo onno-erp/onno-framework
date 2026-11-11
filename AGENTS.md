@@ -1204,7 +1204,10 @@ recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when q
 The Instagram adapter in `onno-crm-channels-starter` owns the opt-in `onno.crm.channels.instagram.enabled`
 connection, private token-file reads, and additive `onno_crm_ig_*` tables. `Channel.INSTAGRAM` is
 append-only; preserve existing enum constants. Provider-visible polling messages deduplicate by
-account/message ID and route by account/peer, preserving contact canonicalization. Outbound sends
+account/message ID and route by account/peer, preserving contact canonicalization. Polling imports
+only messages at or after the account's persisted UTC activation cutoff (`onno_crm_ig_sync`), never
+history; never reset or overwrite that cutoff in code. Polling is head-first and bounded per poll, and
+per-thread watermarks/cursors/checkpoint advance only after message inserts commit. Outbound sends
 are queued transactionally and enforce a 24-hour reply window; uncertain sends require explicit
 retry. This adapter does not configure public webhooks or publish the Meta app.
 

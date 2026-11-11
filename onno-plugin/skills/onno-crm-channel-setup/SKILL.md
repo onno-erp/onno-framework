@@ -30,6 +30,9 @@ private server-owned files and use `onno.crm.channels.<provider>.*` configuratio
   does not grant API access. Verify `/me`; a token can be valid while test-mode APIs expose no chats.
   If an embedded browser cannot open the authorization popup, use a browser that can, preserving
   the OAuth flow. Do not repeatedly tell the user to log in when the missing step is consent.
+  Instagram imports new messages only: before enabling sync on a live account, keep it paused and
+  persist an explicit UTC cutoff (`onno.crm.channels.instagram.activation-cutoff` or a row in
+  `onno_crm_ig_sync`), then Resume. Without one, the cutoff is the moment sync is first enabled.
 - **WhatsApp:** choose a test or authorized business number; store `access_token`, `phone_number_id`,
   `business_account_id`, `app_secret`, `verify_token` in the private token JSON. Configure the exact
   `/api/crm/whatsapp/webhook` HTTPS callback and subscribe the app to WABA messages. Confirm both

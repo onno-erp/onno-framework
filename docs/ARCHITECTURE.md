@@ -940,9 +940,15 @@ and pagination. This cursor is an offset, not a stable snapshot under concurrent
 The channels starter also provides an opt-in Instagram Login adapter (`onno.crm.channels.instagram.enabled`).
 It uses `Channel.INSTAGRAM`, verifies its account from a private token file, polls provider-visible
 messages into Support, and routes text replies through a durable outbox. Account/peer identity and
-provider-message deduplication are owned by `onno_crm_ig_*` adapter tables. The worker commits each
-message before advancing a conversation-list cursor; uncertain sends require explicit retry and
-replies outside the 24-hour window are rejected. It does not configure public webhooks or waive
+provider-message deduplication are owned by `onno_crm_ig_*` adapter tables. Only messages sent at or
+after the account's persisted UTC activation cutoff (`onno_crm_ig_sync`, seeded once from
+`onno.crm.channels.instagram.activation-cutoff` or the moment sync is first enabled, never reset) are
+imported, filtered per message. Polling is incremental and head-first: it stops at the checkpoint
+minus an overlap, downloads only conversations whose `updated_time` moved (`onno_crm_ig_thread`),
+bounds pages and downloads per poll, and resumes a backlog from a saved cursor after rechecking the
+newest conversations. Watermarks, cursors and the checkpoint advance only after the messages they
+cover commit; rate limits back off. Uncertain sends require explicit retry and replies outside the
+24-hour window are rejected. It does not configure public webhooks or waive
 Meta test-mode restrictions. Tokens and provider response bodies are never returned by CRM APIs.
 
 ### CRM channel distribution

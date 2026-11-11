@@ -33,6 +33,12 @@ subscription. Unsigned requests must fail. Check that the reverse proxy exposes 
 route and that auth permits that exact path. Temporary tunnels stop with their process and change
 hostname on recreation. Instagram's polling adapter does not configure webhooks.
 
+Instagram missing or unexpected messages: check `onno_crm_ig_sync` (`activation_cutoff` — messages
+before it are never imported, by design — plus `checkpoint` and an in-progress `pass_head`/`pass_cursor`
+backlog) and `onno_crm_ig_thread` watermarks. Do not reset the cutoff to "fix" missing history; that is
+an explicit operator decision made while the account is paused. Rate limits show as a deferred
+channel with Graph codes 4/17/32/613 in the logs.
+
 Never print bearer tokens, raw OAuth callback URLs, credential-bearing request URLs or message
 bodies for routine diagnostics. Record status codes, counts, sanitized errors and correlation IDs.
 Do not report success solely because a token verifies or a build exits zero: confirm the actual

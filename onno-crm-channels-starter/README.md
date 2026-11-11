@@ -37,7 +37,7 @@ separate deployments for separate tenants. No provider credentials or example sa
 | --- | --- | --- | --- |
 | Telegram | `onno.crm.channels.telegram.enabled` | `onno.crm.channels.telegram.token` in external config | Ordinary bot chats (optional, `regular-chats-enabled`) and scoped business connections, long polling, replies, incoming and outgoing files |
 | Gmail | `onno.crm.channels.gmail.enabled` | `client-file`, `tokens-file` under the Gmail prefix | Google OAuth, bounded first import then history polling, incoming attachments, threaded replies with files sent from a chosen mailbox, import of replies sent from Gmail on known threads, read state and archived-mail restore |
-| Instagram | `onno.crm.channels.instagram.enabled` | `tokens-file` under the Instagram prefix | Instagram Login professional account, provider-visible polling, text replies |
+| Instagram | `onno.crm.channels.instagram.enabled` | `tokens-file` under the Instagram prefix | Instagram Login professional account, incremental polling of new messages only (persisted UTC activation cutoff), text replies |
 | WhatsApp | `onno.crm.channels.whatsapp.enabled` | `tokens-file` under the WhatsApp prefix | Cloud API, signed incoming webhooks, text replies, delivery/read receipts |
 
 File defaults are `~/.config/onno/gmail-client.json`, `gmail-tokens.json`,
@@ -109,10 +109,74 @@ each mailbox imports its older mail once, after its first import set the history
 Create a Meta app with Instagram messaging, add a professional account/tester, accept the tester
 invitation, and generate an Instagram Login token. Signing into Instagram alone does not grant
 app permissions. Store the token privately and enable the adapter. The account is verified before
-creating its inbox. The worker polls every 15 seconds, following provider cursors even on empty
-pages; development-mode restrictions can return no visible conversations despite valid credentials.
-Replace expired tokens externally, then choose **Check connection**. Instagram public webhook
-hosting and app review are not automated by this version.
+creating its inbox. Development-mode restrictions can return no visible conversations despite valid
+credentials. Replace expired tokens externally, then choose **Check connection**. Instagram public
+webhook hosting and app review are not automated by this version.
+
+**New messages only — the activation cutoff.** The adapter never backfills history. Each account
+has one persisted activation cutoff, an ISO-8601 UTC instant in
+`onno_crm_ig_sync.activation_cutoff`. A message is imported only when its Instagram `created_time` is
+at or after the cutoff (a message exactly at the cutoff is imported). The filter applies to each
+message, so a new DM in a years-old conversation imports that DM, never the conversation's earlier
+messages. The cutoff is written once and is never reset by a restart, reconnect, **Check connection**,
+pause/resume or a changed property. It is seeded, in this order, by:
+
+1. `onno.crm.channels.instagram.activation-cutoff` at startup, when the account has no cutoff yet
+   (even while the account is paused), or at its first connection;
+2. otherwise the moment synchronization is first enabled — **Resume**, the first connection, or the
+   first poll of an already-active account after upgrading.
+
+Messages received while an account is paused but after its cutoff are imported on resume.
+
+**Operator procedure — persist an explicit cutoff before enabling sync.** Keep the account paused
+(the channel card shows **Paused**; `onno_crm_ig_account.active = FALSE`) while deploying, then
+either:
+
+- *Property (preferred):* set the cutoff and restart the application. Startup persists it while the
+  account stays paused:
+
+  ```yaml
+  onno:
+    crm:
+      channels:
+        instagram:
+          enabled: true
+          activation-cutoff: 2026-11-12T09:00:00Z   # UTC; earlier messages are never imported
+  ```
+
+  Verify with `SELECT account_id, activation_cutoff FROM onno_crm_ig_sync;`.
+
+- *SQL:* after the new version has started once (it creates `onno_crm_ig_sync`), insert the row
+  yourself, with the cutoff as ISO-8601 UTC text ending in `Z`:
+
+  ```sql
+  INSERT INTO onno_crm_ig_sync (account_id, activation_cutoff)
+  SELECT account_id, '2026-11-12T09:00:00Z' FROM onno_crm_ig_account
+  WHERE NOT EXISTS (SELECT 1 FROM onno_crm_ig_sync s WHERE s.account_id = onno_crm_ig_account.account_id);
+  ```
+
+Then choose **Resume** on the Instagram channel card. Resume never replaces an existing cutoff.
+To move a cutoff deliberately (rarely needed), update `activation_cutoff` while the account is
+paused; an unparsable value stops synchronization with an error instead of importing anything.
+
+**How polling works.** Every 15 seconds the worker reads the conversation list head-first: the
+Graph API returns the most recently updated conversations first and offers no `since` filter, so
+the worker stops paging at the first conversation updated before the account's checkpoint minus a
+two-minute overlap (never earlier than the cutoff). It downloads messages only for conversations
+whose `updated_time` changed since their last download (per-conversation watermark in
+`onno_crm_ig_thread`); Instagram details only a conversation's 20 most recent messages, which is all
+the adapter requests. Each poll reads at most `conversation-pages-per-poll` pages (25 conversations
+each, default 4) and downloads at most `threads-per-poll` conversations (default 20). A longer backlog
+(for example after a long pause) resumes from a saved cursor on the next poll, which always rechecks
+the newest conversations first, so history cannot delay a fresh DM. Each message commits in its own
+transaction before the conversation watermark, page cursor or checkpoint advances; a failure mid-poll
+is retried from the last committed position and provider message IDs (`onno_crm_ig_seen`) prevent
+duplicates. HTTP 429 and Graph throttling codes (4, 17, 32, 613, 80002, 80006) back off for at least
+five minutes, doubling up to an hour, or longer when the provider says so (`Retry-After`,
+`estimated_time_to_regain_access`); other failures back off from one minute up to fifteen. Logs carry
+only status codes, Graph error codes and exception types — never tokens, request URLs with
+credentials or message text. The earlier whole-history cursor column `onno_crm_ig_account.cursor` is
+no longer used and is left in place.
 
 ### WhatsApp and local testing
 
