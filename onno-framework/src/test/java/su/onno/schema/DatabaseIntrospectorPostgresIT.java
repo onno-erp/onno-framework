@@ -52,4 +52,25 @@ class DatabaseIntrospectorPostgresIT {
         assertThat(state.referencedTables("child_table")).containsExactly("PARENT_TABLE");
         assertThat(state.referencedTables("parent_table")).isEmpty();
     }
+
+    @Test
+    void readsUniqueConstraintsAndLeavesPrimaryKeysOut() {
+        Jdbi jdbi = Jdbi.create(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        jdbi.useHandle(handle -> handle.execute("""
+                CREATE TABLE keyed_table (
+                    _id UUID PRIMARY KEY,
+                    _period TIMESTAMP,
+                    task UUID,
+                    UNIQUE (_period, task)
+                )
+                """));
+
+        DatabaseIntrospector.DbState state = jdbi.withHandle(DatabaseIntrospector::read);
+
+        assertThat(state.uniqueConstraints("keyed_table"))
+                .singleElement()
+                .satisfies(constraint -> assertThat(constraint.columns())
+                        .containsExactlyInAnyOrder("_PERIOD", "TASK"));
+    }
 }

@@ -177,10 +177,20 @@ opens a full-screen viewer (arrow keys or swipe to step, Escape to close).
 `enqueue(conversation, message)` runs in the same transaction as the outgoing message. Connectors
 write a durable outbox and deliver after commit. `CrmMessageRouter` rejects multiple providers
 claiming one conversation. Retries apply only to failed outbound replies in that conversation.
+`connection(conversation, principal)` (default: `connection(conversation)`) is the connection as
+the replying user sees it; the delivery endpoint and the send command use it, so a provider can
+offer a choice to one user only. `markedRead(conversation)` (default: nothing) is called inside the
+transaction when `POST …/read` drops a conversation's unread count to zero; a provider mirrors it
+after commit, best-effort (Gmail clears its `UNREAD` label).
 
 ### Attachments
 
-Email replies expose separate From, To, and Subject rows. Transports opt into recipient selection with `Connection.withRecipients(defaultAddress, allowedAddresses)`. Gmail offers the contact’s linked email identities and defaults to the current thread’s reply address. The optional `recipient` command field is validated against those choices and saved on the outgoing message, including the default, so retries retain the destination. Choosing a different address starts a new email thread within the same CRM conversation. A single address is shown without a dropdown. Email replies expose an editable Subject row separately from the sender account picker. The optional `subject` command field is saved on the outgoing message for delivery and retries; omit it to keep the existing reply subject. Gmail sends a changed subject as a new email thread and associates it with the same CRM conversation. Subjects must be a single line of at most 998 characters. Non-email channels reject subject overrides.
+Email replies expose separate From, To, and Subject rows. Transports opt into sender selection with
+`Connection.withSenders(defaultId, List<Sender(id,label)>)`: the optional `from` command field must be
+one of the offered ids (anything else is a 400), and the chosen or default id is saved on the
+outgoing message as `senderAccount`, so delivery and retries use the same account. Gmail offers the
+conversation's own mailbox (the default), the shared mailboxes and the replying user's own personal
+mailbox, never another person's. Transports opt into recipient selection with `Connection.withRecipients(defaultAddress, allowedAddresses)`. Gmail offers the contact’s linked email identities and defaults to the current thread’s reply address. The optional `recipient` command field is validated against those choices and saved on the outgoing message, including the default, so retries retain the destination. Choosing a different address starts a new email thread within the same CRM conversation. A single address is shown without a dropdown. Email replies expose an editable Subject row separately from the sender account picker. The optional `subject` command field is saved on the outgoing message for delivery and retries; omit it to keep the existing reply subject. Gmail sends a changed subject as a new email thread and associates it with the same CRM conversation. Subjects must be a single line of at most 998 characters. Non-email channels reject subject overrides.
 
 Files can be selected with the paperclip or dropped anywhere in the active conversation pane. The drop target respects reply permissions, channel attachment support, file count and upload size limits. Drops add files to the draft tray; they never send the reply automatically. Internal-note mode does not accept attachment drops.
 
@@ -235,12 +245,12 @@ authorization precedes it. `canAccess` remains for single-conversation checks.
 | `GET /inbox-workspaces/{key}` | Authorized rows with filters, cursor/limit, totals, config and permissions |
 | `GET /inbox-workspaces/{key}/conversation/{id}` | Authorized conversations for the same customer |
 | `GET/POST /inbox-workspaces/{key}/conversations/{id}/comments` | Internal notes |
-| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient` (null when not set), so history shows overrides |
-| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection). Addresses known only through another user's personal account are left out |
+| `GET/POST /conversations/{id}/messages` | History / enqueue `{body,attachments,subject?,recipient?,from?}`; each message returns `attachments:[{url,filename,contentType,size,image}]` and the stored `subject`/`recipient`/`senderAccount` (null when not set), so history shows overrides. A `from` the delivery connection does not offer is `400` |
+| `GET /conversations/{id}/delivery` | `{connected,label,maxTextLength,replyCapability,replyReason,maxAttachments,attachmentReason,recipient,recipients,senders,sender}`; `recipient` is the default address and `recipients` the choices (null/empty when the transport offers no selection); `senders` (`[{id,label}]`) are the accounts the reply may come from and `sender` the default id (empty/null when there is no choice), as offered to the caller. Addresses known only through another user's personal account are left out |
 | `POST /conversations/{id}/status` | `{status}` (a configured status id) → the updated conversation state; a missing body or `status` is `400` |
 | `POST /conversations/{id}/messages/{messageId}/retry` | Retry a failed reply |
 | `POST /conversations/{id}/read` | Acknowledge unread messages |
-| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape |
+| `GET/POST /contacts/{id}/activity` | Scoped timeline / record an internal activity; message entries carry the same `attachments` shape and `senderAccount` |
 | `GET/POST /chat-groups?workspace=...` | Personal grouping, only when enabled |
 | `GET /channels`, `POST /channels/{key}` | Credential-free status / authorized connector command |
 
@@ -434,6 +444,45 @@ The inbox uses its allocated pane width, including split views, to choose its la
 The composer occupies normal layout space below the independently scrolling history, so it cannot cover messages. Contact details use a third column in wide panes (1100px and above) and an overlay in smaller panes, with focus moved to its close button and restored on dismissal. Conversation actions are available from the header's overflow control. Read-only and disconnected channels retain their explanatory status without an empty reply editor.
 
 Mobile list-to-chat navigation uses the same 300ms horizontal slide as folders, reversed on Back. Offscreen panes are inert and hidden from assistive technology. Reduced-motion preferences disable both transitions.
+
+### Composer drafts, large window and sending mailbox
+
+Drafts belong to the conversation (`widgets/composerDrafts.ts`): the reply, an edited subject, the
+pinned recipient, the chosen sending mailbox and reply-or-note mode survive switching chats,
+contacts, inbox modes and tabs. The text parts are kept in `localStorage` under
+`onno.crm.draft.v1|<workspace>|<conversation>`, best effort (guarded access, 64 000 characters per
+entry, at most 100 entries, dropped after 30 days); files already uploaded for the next reply stay
+in memory only. A draft is cleared after a successful send or when its author empties it. Clicking
+a contact opens the conversation that holds its unsent draft, and the page asks before unloading
+while text or files written in this session are unsent. `insertDraft` contributions append to the
+open conversation's draft as before.
+
+The inline reply grows with its text up to `min(240px, 40vh)`. **Open in a larger window** edits the
+same draft in a `DialogShell` sized to about 90vw × 85vh, with a toggle that fills the screen; on
+phones (under 640px) it always fills the screen. Closing it returns focus to the inline field.
+
+When the delivery connection lists two or more `senders` (`{id, label}`), the From row becomes a
+mailbox picker defaulting to `sender`, and the send command carries `from: <sender id>`. Switching to
+the contact's other conversations then moves to a Channel row of its own. Without `senders` (or with
+one) the From row stays the conversation switch and no `from` is sent.
+
+### Visible group controls and mailbox search
+
+The conversation list carries a **New group** button (personal chat groups enabled), which creates a
+group exactly as the row menu does — with the open chat in it, because the server starts every group
+with a chat — and **Find in mailbox** when `GET /api/crm/gmail/accounts` lists at least one mailbox.
+Each row has a "⋯" button opening the same menu as right-click: shown on hover or keyboard focus,
+always on touch screens. Labels resolve through `crm.group.*`, `crm.chat.rowMenu` and `crm.mailbox.*`
+messages, so an app can call groups folders.
+
+**Find in mailbox** searches with Gmail syntax (`GET /api/crm/gmail/search?account=&q=&pageToken=`),
+shows sender, subject, date, snippet and an Archived badge per message, pages with Load more, and
+either opens the message's conversation or restores it (`POST /api/crm/gmail/restore` with
+`{account, messageId, toInbox: true}` → `{conversationId, movedToInbox}`). A conversation the loaded
+feed does not hold is opened by narrowing the feed to its contact, like `?conversation=`, with an
+**All chats** button to widen it again. A mailbox with `canModify: false` is said up front to keep
+restored mail archived in Gmail. All mailbox paths live in `widgets/mailboxApi.ts`
+(`MAILBOX_ENDPOINTS`).
 
 ### Inbox toolbar controls
 

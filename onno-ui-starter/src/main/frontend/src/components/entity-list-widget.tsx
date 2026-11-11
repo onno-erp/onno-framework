@@ -58,6 +58,7 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 import { RestrictedRef, isRestrictedRef } from "@/components/restricted-ref";
 import type { Translate } from "@/lib/messages";
+import { widgetLocale } from "@/lib/widget-messages";
 
 /**
  * The {@code onno-list} React island: a virtualized, server-paged data grid. The DivKit list
@@ -1044,7 +1045,7 @@ function SearchChip({
 /** Short, locale-aware day label ("May 9") for a stored ISO date, shown inside the date-range chip. */
 function fmtDay(iso: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
+    return new Intl.DateTimeFormat(widgetLocale(), { month: "short", day: "numeric" }).format(
       new Date(`${iso}T00:00`)
     );
   } catch {

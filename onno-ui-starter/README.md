@@ -1263,7 +1263,7 @@ drawers, theming) and carry host-emitted classes:
 
 ```tsx
 import { Segmented, DatePicker, useState } from "@onno/widget-sdk"; // by name, or from the `ui` object
-// also Select, Button, Popover, Badge, Checkbox, Switch, Input, Card, …
+// also Select, RefSelect (record picker), Button, Popover, Badge, Checkbox, Switch, Input, Card, …
 
 function ViewSwitch() {
   const [view, setView] = useState("day");
@@ -1782,6 +1782,37 @@ Live list refreshes coalesce while a window is loading, including custom inbox p
 The current response renders before a queued refresh; filter changes still discard stale responses,
 and failed background refreshes preserve the visible rows.
 
+### Reference pickers
+
+Import `RefSelect` to pick a catalog or document record. It is the same control as a generated
+form's reference field: a server-side typeahead (the catalog never loads whole), recent picks first,
+"+ New" opening the target's new-record form, and "Show all…" opening the target's full list —
+columns, filters, folders — in a picker dialog. Requires host contract v7.
+
+```tsx
+import { Label, RefSelect, useState } from "@onno/widget-sdk";
+
+function SupplierField({ eventId }: { eventId: string }) {
+  const [supplier, setSupplier] = useState<string | null>(null);
+  return <>
+    <Label htmlFor="supplier">Supplier</Label>
+    <RefSelect id="supplier" targetName="Contacts" fieldLabel="Supplier" placeholder="Not chosen yet"
+      value={supplier} onChange={setSupplier} clearable allowCreate={false}
+      filter="active = true" optionDecorator="com.example.ui.SupplierOptions"
+      optionContext={{ fieldPath: "vendor", formValues: { wedding: eventId } }} />
+  </>;
+}
+```
+
+`value` is the record id and clearing emits `null`. `filter` is a fixed WidgetFilter predicate
+applied to the dropdown and the dialog alike. `optionDecorator` names a server `RefOptionDecorator`
+bean by class; it receives `optionContext` and can badge, disable or hide options. `allowCreate`,
+`showAll`, `clearable` and `openButton` toggle the "+ New", "Show all…", clear and open-record
+affordances (on, on, off, off by default). `className` merges over the trigger, so a dense row can
+render it as a compact chip; the dropdown keeps a readable minimum width. Pass `valueLabel`
+when the widget already has the picked record's name: it shows at once, and stays for a user who
+may not read the target catalog.
+
 ### Date and time fields
 
 Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
@@ -1858,3 +1889,7 @@ sidecars, including across restarts. Existing files without metadata remain read
 their storage filename and detected type. The media endpoint never serves metadata sidecars.
 
 Common audio media types (Ogg, MP3, MP4, WebM, WAV, AAC and FLAC) are served inline for voice-message playback, retaining `nosniff`. Other file types retain their existing disposition policy.
+
+Authored Page routes may replace `/documents/{name}/new` and `/catalogs/{name}/new` as well as list routes.
+The creation route still requires entity write access and uses the normal active profile; the
+custom page owns its create UI and should save through the generated document API.

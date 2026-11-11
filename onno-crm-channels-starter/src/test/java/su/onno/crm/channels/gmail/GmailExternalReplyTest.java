@@ -34,7 +34,7 @@ class GmailExternalReplyTest {
         String raw=Base64.getUrlEncoder().encodeToString("From: owner@example.test\r\nTo: customer@example.test\r\nSubject: Re: Test\r\n\r\nExternal reply".getBytes(StandardCharsets.UTF_8));
         var response=json.createObjectNode().put("raw",raw).put("threadId","thread").put("internalDate","2000000");response.putArray("labelIds").add("SENT");
         when(client.get("messages/external?format=raw")).thenReturn(response);
-        when(client.get("history?historyTypes=messageAdded&startHistoryId=1&maxResults=100")).thenReturn(json.readTree("{\"historyId\":\"2\",\"history\":[{\"messagesAdded\":[{\"message\":{\"id\":\"external\",\"labelIds\":[\"SENT\"]}}]}]}"));
+        when(client.get("history?historyTypes=messageAdded&historyTypes=labelAdded&startHistoryId=1&maxResults=100")).thenReturn(json.readTree("{\"historyId\":\"2\",\"history\":[{\"messagesAdded\":[{\"message\":{\"id\":\"external\",\"labelIds\":[\"SENT\"]}}]}]}"));
         ReflectionTestUtils.invokeMethod(bridge,"sync",account);
         assertThat(c.getUnreadCount()).isEqualTo(1);assertThat(stored).hasSize(3);
         assertThat(stored.getLast().getDirection()).isEqualTo(MessageDirection.OUTBOUND);

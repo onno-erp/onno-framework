@@ -36,7 +36,7 @@ separate deployments for separate tenants. No provider credentials or example sa
 | Provider | Enable property | Private credentials | Delivery |
 | --- | --- | --- | --- |
 | Telegram | `onno.crm.channels.telegram.enabled` | `onno.crm.channels.telegram.token` in external config | Ordinary bot chats (optional, `regular-chats-enabled`) and scoped business connections, long polling, replies, incoming and outgoing files |
-| Gmail | `onno.crm.channels.gmail.enabled` | `client-file`, `tokens-file` under the Gmail prefix | Google OAuth, recent inbox/history polling, incoming attachments, threaded replies with files, import of replies sent from Gmail on known threads |
+| Gmail | `onno.crm.channels.gmail.enabled` | `client-file`, `tokens-file` under the Gmail prefix | Google OAuth, bounded first import then history polling, incoming attachments, threaded replies with files sent from a chosen mailbox, import of replies sent from Gmail on known threads, read state and archived-mail restore |
 | Instagram | `onno.crm.channels.instagram.enabled` | `tokens-file` under the Instagram prefix | Instagram Login professional account, provider-visible polling, text replies |
 | WhatsApp | `onno.crm.channels.whatsapp.enabled` | `tokens-file` under the WhatsApp prefix | Cloud API, signed incoming webhooks, text replies, delivery/read receipts |
 
@@ -65,11 +65,44 @@ reconnect can persist into one existing external `.properties` file specified by
 Enable Gmail API in your Google project, configure the consent screen/test users, and create a Web
 OAuth client. Register the exact `onno.crm.channels.gmail.redirect-uri` (default local example:
 `http://127.0.0.1:8090/api/crm/gmail/callback`; configure your HTTPS deployment URL). In CRM settings,
-a manager chooses **Connect Google account**. The flow uses state, PKCE, offline access and only
-`gmail.readonly` + `gmail.send`. Scope verification and refresh-token persistence happen server-side.
-It imports the latest 50 inbox messages initially, then follows Gmail history; an expired history
-cursor triggers another bounded initial scan. A sender's Gmail threads share a CRM conversation,
-while each reply retains the original Gmail thread and Message-ID references.
+a manager chooses **Connect Google account**. The flow uses state, PKCE and offline access, and asks
+for `gmail.readonly`, `gmail.send` and `gmail.modify`. Only read and send are required: a grant
+without `gmail.modify` (every mailbox connected before it was requested, or a user who unticks it)
+still connects, but cannot mark mail read or move it back to the Inbox in Gmail until it is
+reconnected. Scope verification and refresh-token persistence happen server-side; whether modify was
+granted is read from the scope Google stored with the token.
+
+The first import pages through the Inbox, newest first, up to
+`onno.crm.channels.gmail.initial-import-limit` messages (default 500) no older than
+`initial-import-days` (default 90); 0 lifts either limit. Mail imported this way counts as unread
+only if it is still unread in Gmail. Afterwards the worker follows Gmail history: new Inbox and sent
+mail, and mail that regains the Inbox label (unarchived, or moved out of spam). When the history
+cursor has expired (Gmail keeps about a week), Inbox and sent mail are re-scanned from a day before
+the mailbox's latest imported email, under the same count limit, so the gap is filled. A sender's
+Gmail threads share a CRM conversation in that mailbox's inbox, while each reply retains the
+original Gmail thread and Message-ID references.
+
+The rest of a mailbox can follow as history. With `onno.crm.channels.gmail.history-import.enabled`,
+each mailbox imports its older mail once, after its first import set the history cursor:
+
+- **What:** every thread under `history-import.labels` (default `INBOX`; add `SENT` for archived
+  threads the studio answered), newest first, `threads-per-round` threads (default 20) per 15-second
+  round, so live mail keeps flowing. Drafts, spam, trash and `skip-categories` (default Promotions
+  and Social) are left out; emails already imported are skipped.
+- **Quiet:** the mail arrives read, a conversation it starts is closed, and it runs inside
+  `CrmHistoryImport`, so the inbox reloads once per batch and applications skip notifications and
+  automation for it (`CrmHistoryImport.active()` in their `AFTER_COMMIT` listeners).
+- **Order:** within a thread, received emails are stored before the studio's own, so a thread the
+  studio started is complete once the other side answered.
+- **Files stay in Gmail:** history reads `format=full`, which carries the text and only a reference
+  to each file. A file is recorded as a media key `gmail/<random id>/<name>`
+  (`onno_crm_gmail_file`); `GET /api/media/...` fetches it from Gmail by its message part when
+  someone opens it (`GmailMediaFiles` wraps the application's `MediaStorage`). Importing years of mail
+  therefore costs neither disk nor Gmail's download quota; a file opens only while its mailbox is
+  connected and the email is still in Gmail.
+- **Progress:** one row per mailbox in `onno_crm_gmail_history_import` (label, Gmail page, threads,
+  emails, finished time), shown on the mailbox's connection card. Delete a mailbox's row to import
+  again. A rate limit pauses the mailbox like any other sync failure; other failures retry next round.
 
 ### Instagram
 
@@ -255,7 +288,63 @@ before connecting.
 
 Gmail incremental sync imports SENT replies to known CRM threads, deduplicating CRM sends.
 External replies clear earlier CRM unread messages; newer incoming messages remain unread.
-This does not synchronize provider read labels or import unrelated sent-mail conversations.
+It does not import unrelated sent-mail conversations.
+
+## Gmail: sending from another mailbox
+
+The delivery connection (`GET /api/crm/conversations/{id}/delivery`) lists `senders`
+(`[{id,label}]`, the id being the mailbox address) and the default `sender`, the conversation's own
+mailbox. The other choices are every active, authorised **shared** mailbox (and the deployment's own
+mailbox) plus the replying user's **own** personal mailbox; another person's personal mailbox is
+never offered. The composer sends the choice as `from`; anything not offered is a 400. It is stored
+on the message (`ConversationMessage.senderAccount`), so delivery and retries use the same mailbox.
+
+A reply from another mailbox starts a new Gmail thread from that mailbox to the chosen recipient
+(the conversation's subject, or the edited one) and records it in `onno_crm_gmail_thread` for that
+mailbox and this conversation, so the contact's answer there syncs back into the same conversation.
+Later replies from that mailbox continue its thread while the address and subject are unchanged.
+New threads a contact starts with that mailbox still go to its own inbox, and the startup grouping
+of the deployment mailbox's conversations leaves conversations of other inboxes alone. Tell users
+that answers to a reply sent from their **personal** mailbox on a shared conversation are imported
+into that shared conversation, where the team reads them.
+
+## Gmail: read state
+
+When the CRM marks an email conversation read (`POST /api/crm/conversations/{id}/read` with unread
+mail), the adapter removes Gmail's `UNREAD` label from that conversation's imported emails
+(`messages/batchModify`, at most the latest 1000 per mailbox) after the transaction commits, on a
+background thread, in each mailbox whose grant includes `gmail.modify`. It is best-effort: failures
+are logged and never shown, and nothing changes for mailboxes without the grant. Reading mail in
+Gmail does not mark it read in the CRM.
+
+## Gmail: finding archived mail and restoring it
+
+All routes need inbox workspace access (restoring needs write access) and reach only mailboxes the
+principal may use: shared ones (and the deployment's own) and their own personal ones. Any other
+address, including another person's personal mailbox, is a 404.
+
+| Route | Behaviour |
+| --- | --- |
+| `GET /api/crm/gmail/accounts` | `[{address,label,canModify}]`: active, connected mailboxes; `canModify` is false until a mailbox connected before `gmail.modify` was requested is reconnected |
+| `GET /api/crm/gmail/search?account=&q=&pageToken=` | Gmail search (`q` uses Gmail's syntax, 1–500 characters) over all mail, archived included; spam and trash excluded. `{messages:[{id,threadId,from,subject,snippet,date,archived,conversationId}],nextPageToken}`, 20 per page; `date` is ISO-8601, `archived` means no Inbox label, `conversationId` is set when the thread is already in the CRM and readable |
+| `POST /api/crm/gmail/restore` `{account,messageId,toInbox}` | Imports the message's whole thread (spam, trash and drafts left out) through the sync's own import, wherever it sits in Gmail; returns `{conversationId,movedToInbox}`. With `toInbox` and the modify grant the thread also regains the Inbox label in Gmail. Repeating it changes nothing. A thread with no email from a contact is a 422 |
+
+Gmail failures answer 429 (Gmail asked to slow down), 404 (no such message), 409 (reconnect the
+mailbox) or 502. Logs keep the HTTP status and Google's reason, never mail content.
+
+## Gmail: large emails, failures and rate limits
+
+Gmail answers are parsed with a private copy of the application's `ObjectMapper` whose string limit
+fits Gmail's largest email (Jackson's default stops at about 15 MB); the shared mapper is unchanged.
+A message that still cannot be fetched or imported does not hold up its mailbox: it is logged with
+its Gmail id, HTTP status and exception class, recorded in `onno_crm_gmail_failed`, retried after one
+and then ten minutes, and after three failed attempts recorded as seen and skipped. Revoked access
+(401/403) and rate limits stop the round for that mailbox instead.
+
+On 429, or 403 with a rate or quota reason, only that mailbox pauses: until Gmail's `Retry-After`
+(the header, or the "Retry after" time in Gmail's message), otherwise 1, 2, 4… minutes up to an
+hour. Other mailboxes keep syncing; the connection card says when syncing resumes and stays
+connected. A send Gmail refused this way stays queued rather than failing.
 
 Gmail imports MIME attachments and inline image parts (up to ten files, 20 MB each), decoding filenames.
 On upgrade it restores attachments on already-imported messages among the latest 50 inbox emails of
@@ -279,6 +368,8 @@ replies stay plain text.
 - A disconnected Gmail mailbox or Telegram business user stays bound to the account it was first
   connected to. It cannot be attached to a different account; reconnect the original account instead.
 - One worker instance per deployment polls each provider; there is no leader election.
-- Read state is not synchronized back to providers.
+- Read state reaches Gmail only (CRM to Gmail, for mailboxes granted `gmail.modify`); reading in
+  Gmail does not mark mail read in the CRM, and other providers are not synchronized.
+- A message skipped after three failed imports stays skipped; restoring its thread does not retry it.
 - `TelegramClient.Update.payload()` exposes Telegram's raw update JSON for adapters inside this
   starter; it is not a stable API and its shape follows the Telegram Bot API.

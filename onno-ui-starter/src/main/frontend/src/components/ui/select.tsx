@@ -152,29 +152,37 @@ const SelectContent = React.forwardRef<
     );
   }
   if (overlay === "modal") {
+    // Radix's Select.Portal renders its child asChild, so the backdrop and the content need one
+    // wrapper: two children throw React.Children.only and take down the whole island. The portal
+    // stays mounted while the select is closed, so the backdrop must follow the open state itself
+    // or it would cover the page (or the dialog) and swallow every press.
     return (
       <SelectPrimitive.Portal container={dialogPortal ?? undefined}>
-        <button
-          type="button"
-          aria-label={t("action.close")}
-          className="fixed inset-0 z-50 bg-black/50"
-          onClick={() => setOpen(false)}
-        />
-        <SelectPrimitive.Content
-          ref={ref}
-          className={cn(
-            "fixed left-1/2 top-1/2 z-50 max-h-[82dvh] w-[min(28rem,calc(100vw-3rem))] min-w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none",
-            className
-          )}
-          position="item-aligned"
-          {...props}
-        >
-          <SelectScrollUpButton />
-          <SelectPrimitive.Viewport className="max-h-[calc(82dvh-2rem)] p-2">
-            {children}
-          </SelectPrimitive.Viewport>
-          <SelectScrollDownButton />
-        </SelectPrimitive.Content>
+        <div>
+          {drawerOpen ? (
+            <button
+              type="button"
+              aria-label={t("action.close")}
+              className="fixed inset-0 z-50 bg-black/50"
+              onClick={() => setOpen(false)}
+            />
+          ) : null}
+          <SelectPrimitive.Content
+            ref={ref}
+            className={cn(
+              "fixed left-1/2 top-1/2 z-50 max-h-[82dvh] w-[min(28rem,calc(100vw-3rem))] min-w-0 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border bg-popover text-popover-foreground shadow-md outline-none",
+              className
+            )}
+            position="item-aligned"
+            {...props}
+          >
+            <SelectScrollUpButton />
+            <SelectPrimitive.Viewport className="max-h-[calc(82dvh-2rem)] p-2">
+              {children}
+            </SelectPrimitive.Viewport>
+            <SelectScrollDownButton />
+          </SelectPrimitive.Content>
+        </div>
       </SelectPrimitive.Portal>
     );
   }

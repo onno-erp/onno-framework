@@ -11,11 +11,20 @@ import java.util.*;
  * {@link EmailHtml#sanitize} strips scripts, handlers and unsafe URLs. No attachment content runs.
  */
 final class GmailMail {
-    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html) {
+    /**
+     * A parsed email. {@code files} carry their bytes; {@code remote} files stay in Gmail and are
+     * only described ({@link #readFull}).
+     */
+    record Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html,List<RemoteFile> remote) {
+        Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files,String html) {
+            this(sender,name,replyTo,subject,messageId,text,sentAt,files,html,List.of());
+        }
         Incoming(String sender,String name,String replyTo,String subject,String messageId,String text,Instant sentAt,List<Outgoing> files) {
             this(sender,name,replyTo,subject,messageId,text,sentAt,files,null);
         }
     }
+    /** A file left in Gmail: the message part that holds it, and what it is announced as. */
+    record RemoteFile(String partId,String filename,String contentType,long size,String contentId) {}
     static Incoming read(String raw) throws Exception {
         var message=new MimeMessage(Session.getInstance(new Properties()),new ByteArrayInputStream(Base64.getUrlDecoder().decode(raw)));
         var from=(InternetAddress)message.getFrom()[0];
@@ -24,6 +33,99 @@ final class GmailMail {
         return new Incoming(from.getAddress(),from.getPersonal()==null?from.getAddress():from.getPersonal(),reply.getAddress(),
             Objects.toString(message.getSubject(),"(No subject)"),Objects.toString(message.getMessageID(),""),nonEmptyBody(body(message)),
             message.getSentDate()==null?Instant.now():message.getSentDate().toInstant(),List.copyOf(files),EmailHtml.sanitize(html(message)));
+    }
+    /**
+     * Parses Gmail's {@code format=full} answer the way {@link #read} parses raw MIME, without the
+     * files' bytes: Gmail sends a file as a reference ({@code attachmentId}), so an email with a
+     * 20 MB brochure costs only its text. The files come back as {@link RemoteFile}s.
+     */
+    static Incoming readFull(com.fasterxml.jackson.databind.JsonNode message) throws Exception {
+        var payload=message.path("payload");
+        var from=address(header(payload,"From"));
+        if(from==null)throw new MessagingException("Email has no sender");
+        var reply=address(header(payload,"Reply-To"));
+        if(reply==null)reply=from;
+        var remote=new ArrayList<RemoteFile>();collectRemote(payload,remote);
+        String subject=header(payload,"Subject");
+        return new Incoming(from.getAddress(),from.getPersonal()==null?from.getAddress():from.getPersonal(),reply.getAddress(),
+            subject==null?"(No subject)":MimeUtility.decodeText(subject),Objects.toString(header(payload,"Message-ID"),""),nonEmptyBody(fullBody(payload)),
+            message.hasNonNull("internalDate")?Instant.ofEpochMilli(message.path("internalDate").asLong()):Instant.now(),
+            List.of(),EmailHtml.sanitize(fullHtml(payload)),List.copyOf(remote));
+    }
+    private static String header(com.fasterxml.jackson.databind.JsonNode part,String name) {
+        for(var header:part.path("headers"))if(header.path("name").asText().equalsIgnoreCase(name))return header.path("value").asText();
+        return null;
+    }
+    private static InternetAddress address(String value) {
+        if(value==null||value.isBlank())return null;
+        try{var parsed=InternetAddress.parseHeader(value,false);return parsed.length==0?null:parsed[0];}
+        catch(AddressException e){return null;}
+    }
+    private static String mimeType(com.fasterxml.jackson.databind.JsonNode part) { return part.path("mimeType").asText("").toLowerCase(Locale.ROOT); }
+    private static String disposition(com.fasterxml.jackson.databind.JsonNode part) {
+        String value=header(part,"Content-Disposition");
+        if(value==null)return "";
+        int semi=value.indexOf(';');
+        return (semi<0?value:value.substring(0,semi)).strip().toLowerCase(Locale.ROOT);
+    }
+    private static String filename(com.fasterxml.jackson.databind.JsonNode part) {
+        String name=part.path("filename").asText("");
+        return name.isBlank()?null:name;
+    }
+    /** The same test as {@link #collect}: an attachment, a named part, or an inline non-text part. */
+    private static boolean isFile(com.fasterxml.jackson.databind.JsonNode part) {
+        String type=mimeType(part);
+        return !type.startsWith("multipart/") && (disposition(part).equals("attachment") || filename(part)!=null
+            || disposition(part).equals("inline") && !type.startsWith("text/"));
+    }
+    /**
+     * A text part's content. Gmail converts text to UTF-8 in this format whatever charset the part
+     * declares (a {@code windows-1252} part arrives as UTF-8), so UTF-8 is read first; the declared
+     * charset is used only for bytes that are not valid UTF-8.
+     */
+    private static String decode(com.fasterxml.jackson.databind.JsonNode part) {
+        String data=part.path("body").path("data").asText("");
+        if(data.isEmpty())return part.path("body").hasNonNull("attachmentId")?"[Message content unavailable]":"";
+        byte[] bytes=Base64.getUrlDecoder().decode(data.replace('+','-').replace('/','_').replace("=",""));
+        try {
+            return java.nio.charset.StandardCharsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString();
+        } catch(java.nio.charset.CharacterCodingException notUtf8) {
+            String type=header(part,"Content-Type");
+            try {
+                String declared=type==null?null:new ContentType(type).getParameter("charset");
+                if(declared!=null&&!declared.isBlank())return new String(bytes,java.nio.charset.Charset.forName(MimeUtility.javaCharset(declared.strip())));
+            } catch(Exception unknownCharset) { /* fall through */ }
+            return new String(bytes,java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+    private static String fullBody(com.fasterxml.jackson.databind.JsonNode part) {
+        if(disposition(part).equals("attachment"))return "[Attachment: "+Objects.toString(filename(part),"file")+"]";
+        String type=mimeType(part);
+        if(type.equals("text/plain"))return decode(part);
+        if(type.startsWith("multipart/")) {
+            if(type.equals("multipart/alternative"))
+                for(var child:part.path("parts"))if(mimeType(child).equals("text/plain"))return fullBody(child);
+            var text=new StringBuilder();for(var child:part.path("parts"))text.append(fullBody(child)).append('\n');return text.toString();
+        }
+        if(type.equals("text/html"))return EmailHtml.toText(decode(part));
+        if(disposition(part).equals("inline") || header(part,"Content-ID")!=null)return "";
+        return "[Message content unavailable]";
+    }
+    private static String fullHtml(com.fasterxml.jackson.databind.JsonNode part) {
+        if(disposition(part).equals("attachment"))return null;
+        String type=mimeType(part);
+        if(type.equals("text/html"))return decode(part);
+        if(type.startsWith("multipart/"))for(var child:part.path("parts")){String found=fullHtml(child);if(found!=null)return found;}
+        return null;
+    }
+    private static void collectRemote(com.fasterxml.jackson.databind.JsonNode part,List<RemoteFile> files) {
+        if(mimeType(part).startsWith("multipart/")){for(var child:part.path("parts"))collectRemote(child,files);return;}
+        if(!isFile(part) || files.size()>=10)return;
+        long size=part.path("body").path("size").asLong(0);
+        if(size==0)return;
+        String cid=header(part,"Content-ID");
+        files.add(new RemoteFile(part.path("partId").asText(""),Objects.toString(filename(part),"attachment"),
+            mimeType(part).isBlank()?"application/octet-stream":mimeType(part),size,cid==null?null:cid.strip().replaceAll("^<|>$","")));
     }
     private static void collect(Part part,List<Outgoing> files) throws Exception {
         if(part.isMimeType("multipart/*")) {

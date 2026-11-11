@@ -11,7 +11,11 @@ Check which process, port, database and external configuration actually run befo
 Preserve database files and credentials; stop the actual old listener before starting a replacement.
 
 Missing chat: confirm the provider account/number, then its visibility/permissions, sync cursor,
-deduplication state, and workspace channel predicate. Check the scoped workspace APIs; a 403 from
+deduplication state, and workspace channel predicate. For Gmail, `onno_crm_gmail_failed` lists
+messages that could not be fetched or imported (skipped after three attempts, logged with Gmail id,
+HTTP status and exception class), a "rate limit … paused until" log means that mailbox waits for
+Gmail, and mail older than the first import or archived in Gmail is brought in with
+`POST /api/crm/gmail/restore`, not by resetting cursors. Check the scoped workspace APIs; a 403 from
 generic conversation lists can be intentional workspace isolation. Do not broaden permissions to
 make a diagnostic call succeed. Distinguish provider polling delay from CRM SSE invalidation.
 
