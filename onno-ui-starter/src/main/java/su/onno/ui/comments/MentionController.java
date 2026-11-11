@@ -69,8 +69,8 @@ public class MentionController {
         }
         String query = q == null ? "" : q.trim();
         String lower = query.toLowerCase(Locale.ROOT);
-        int perEntity = Math.max(1, properties.getMentions().getPerEntityLimit());
-        int total = Math.max(1, properties.getMentions().getSuggestionLimit());
+        int perEntity = Math.clamp(properties.getMentions().getPerEntityLimit(), 1, 500);
+        int total = Math.clamp(properties.getMentions().getSuggestionLimit(), 1, 500);
 
         // `people` narrows the catalog sweep to the identity catalog; without an identity link every
         // catalog record is potentially "someone", so degrade to the plain catalogs behaviour.
@@ -169,7 +169,7 @@ public class MentionController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "id must be a UUID");
         }
         MentionRef ref = new MentionRef(kind, name, uuid);
-        Map<String, Object> out = resolver.resolve(List.of(ref), subject).get(0).toJson();
+        Map<String, Object> out = resolver.resolve(List.of(ref), subject).getFirst().toJson();
         out.put("person", "catalogs".equals(kind) && isIdentityRoute(name));
         return out;
     }

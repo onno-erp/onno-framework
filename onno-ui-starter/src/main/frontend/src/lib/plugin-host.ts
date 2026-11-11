@@ -140,8 +140,7 @@ function eventMatchesFilter(event: UiEvent, filter?: UiEventFilter): boolean {
   if (filter.types && !filter.types.includes(event.type)) return false;
   if (filter.entityType !== undefined && event.entityType !== filter.entityType) return false;
   if (filter.entityName !== undefined && event.entityName !== filter.entityName) return false;
-  if (filter.id !== undefined && event.id !== filter.id) return false;
-  return true;
+  return filter.id === undefined || event.id === filter.id;
 }
 
 const events: OnnoHost["events"] = Object.freeze({
@@ -160,8 +159,10 @@ export type OnnoReadApi = Pick<
   typeof api,
   | "getJson"
   | "listCatalog"
+  | "listCatalogPage"
   | "getCatalogItem"
   | "listDocuments"
+  | "listDocumentsPage"
   | "getDocument"
   | "getBalance"
   | "getTurnover"
@@ -236,8 +237,10 @@ function detached<A extends unknown[], R>(read: (...args: A) => Promise<R>): (..
 const readApi: OnnoReadApi = {
   getJson: detached(api.getJson) as OnnoReadApi["getJson"],
   listCatalog: detached(api.listCatalog),
+  listCatalogPage: detached(api.listCatalogPage),
   getCatalogItem: detached(api.getCatalogItem),
   listDocuments: detached(api.listDocuments),
+  listDocumentsPage: detached(api.listDocumentsPage),
   getDocument: detached(api.getDocument),
   getBalance: detached(api.getBalance),
   getTurnover: detached(api.getTurnover),

@@ -22,6 +22,21 @@ public interface ProcessEngine {
 
     List<ProcessWorkItem> inbox(ProcessActor actor);
 
+    /** SQL-bounded collection reads. The legacy List methods return at most 500 rows. */
+    su.onno.query.KeysetWindow.Page<ProcessSnapshot> instances(ProcessActor actor, String cursor, int limit);
+
+    su.onno.query.KeysetWindow.Page<ProcessWorkItem> inbox(ProcessActor actor, String cursor, int limit);
+
+    su.onno.query.KeysetWindow.Page<ProcessTransitionSnapshot> history(UUID instanceId, String cursor, int limit);
+
+    su.onno.query.KeysetWindow.Page<ProcessTokenSnapshot> tokens(UUID instanceId, String cursor, int limit);
+
+    su.onno.query.KeysetWindow.Page<ProcessWorkItemEventSnapshot> workItemHistory(
+            UUID workItemId, ProcessActor actor, String cursor, int limit);
+
+    /** Direct visibility check, independent of the actor's current page of instances. */
+    boolean canAccess(UUID instanceId, ProcessActor actor);
+
     ProcessWorkItem claim(UUID workItemId, ProcessActor actor);
 
     /**

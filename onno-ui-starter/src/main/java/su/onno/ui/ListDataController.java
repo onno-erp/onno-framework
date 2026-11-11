@@ -26,12 +26,10 @@ import java.util.UUID;
  * scroll. The envelope is {@code {rows, nextCursor, hasMore, prevCursor, hasPrevious}}; a COUNT runs
  * only when the client opts in via {@code ?count=exact} (or {@code estimate} for a cheap planner
  * figure), since the scroller needs {@code hasMore}, not a live total, to keep loading.
- *
- * {@code ?focus=<id>} returns the window that contains that record instead of the first one (the
+ * <p>{@code ?focus=<id>} returns the window that contains that record instead of the first one (the
  * "open in list" jump), and {@code ?before=<prevCursor>} returns the window just above a window
  * (see {@link KeysetPage}).
- *
- * Sort, case-insensitive search, and column filters are applied server-side; the descriptor
+ * <p>Sort, case-insensitive search, and column filters are applied server-side; the descriptor
  * (columns, labels, sort, actions) comes from the DivKit list surface.
  */
 @RestController
@@ -76,7 +74,7 @@ public class ListDataController {
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : catalogQuery.rowsByIds(subject, desc, ids);
             decorateRowActions(desc.javaClass(), picked);
             picked = EntityJsonRepresentation.catalogs(desc, picked, representation);
-            return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
+            return keysetEnvelope(new KeysetPage(picked, null, false), request.getParameter("count") == null ? null : (long) picked.size());
         }
         // Read filter params raw: Spring's List<String> binding splits a single value on commas,
         // which would mangle our "column,value" encoding. getParameterValues keeps each verbatim.
@@ -92,7 +90,7 @@ public class ListDataController {
         decorateRowActions(desc.javaClass(), kp.rows());
         kp = kp.withRows(EntityJsonRepresentation.catalogs(desc, kp.rows(), representation));
         boolean filtered = isFiltered(q, eq, in, like, prefix, ge, le, filter);
-        Long total = total(request.getParameter("count"), filtered,
+        Long total = total(request.getParameter("count"),
                 () -> catalogQuery.count(subject, desc, q, eq, in, like, prefix, ge, le, filter),
                 () -> catalogQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
@@ -119,7 +117,7 @@ public class ListDataController {
             List<Map<String, Object>> picked = ids.isEmpty() ? List.of() : documentQuery.rowsByIds(subject, desc, ids);
             decorateRowActions(desc.javaClass(), picked);
             picked = EntityJsonRepresentation.documents(desc, picked, representation);
-            return keysetEnvelope(new KeysetPage(picked, null, false), (long) picked.size());
+            return keysetEnvelope(new KeysetPage(picked, null, false), request.getParameter("count") == null ? null : (long) picked.size());
         }
         // See catalogPage: filter params are read raw to avoid Spring's comma-splitting.
         List<String> eq = multi(request, "eq");
@@ -134,7 +132,7 @@ public class ListDataController {
         decorateRowActions(desc.javaClass(), kp.rows());
         kp = kp.withRows(EntityJsonRepresentation.documents(desc, kp.rows(), representation));
         boolean filtered = from != null || to != null || isFiltered(q, eq, in, like, prefix, ge, le, filter);
-        Long total = total(request.getParameter("count"), filtered,
+        Long total = total(request.getParameter("count"),
                 () -> documentQuery.count(subject, desc, q, from, to, eq, in, like, prefix, ge, le, filter),
                 () -> documentQuery.estimateCount(subject, desc, filtered));
         return keysetEnvelope(kp, total);
@@ -359,7 +357,7 @@ public class ListDataController {
      * cheap planner statistics (PostgreSQL; may be {@code null} → omitted), anything else (the
      * default) skips counting entirely.
      */
-    private static Long total(String countMode, boolean filtered,
+    private static Long total(String countMode,
                               java.util.function.Supplier<Long> exact,
                               java.util.function.Supplier<Long> estimate) {
         if ("exact".equalsIgnoreCase(countMode)) {

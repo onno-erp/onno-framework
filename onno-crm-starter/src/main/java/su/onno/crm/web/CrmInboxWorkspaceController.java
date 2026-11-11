@@ -25,6 +25,7 @@ public class CrmInboxWorkspaceController {
     private final CrmContactService contacts;
     private final org.springframework.beans.factory.ObjectProvider<CrmAgentBinding<?>> agents;
     private final UiAccessService access;
+    @org.springframework.beans.factory.annotation.Autowired private CrmFeedQuery feeds;
     @org.springframework.beans.factory.annotation.Autowired private UiViewResolver listViews;
     @org.springframework.beans.factory.annotation.Autowired private CrmStateConfiguration states;
     @org.springframework.beans.factory.annotation.Autowired private CrmPriorityBinding priorities;
@@ -34,12 +35,12 @@ public class CrmInboxWorkspaceController {
         this.workspaces=workspaces;this.catalogs=catalogs;this.users=users;this.comments=comments;this.avatars=avatars;this.events=events;this.contacts=contacts;this.agents=agents;this.access=access;
     }
     @GetMapping public Object list(Principal principal) {
-        return workspaces.available(principal).stream().map(w->Map.of("key",w.key(),"label",w.label(),"canWrite",workspaces.permitted(w,principal,true))).toList();
+        return workspaces.available(principal).stream().limit(100).map(w->Map.of("key",w.key(),"label",w.label(),"canWrite",workspaces.permitted(w,principal,true))).toList();
     }
     @GetMapping("/{key}/conversation/{id}") public Object conversation(@PathVariable String key,@PathVariable UUID id,
             @RequestParam org.springframework.util.MultiValueMap<String,String> params,Principal principal) {
         workspaces.requireConversation(key,id,principal,false);
-        var scoped=new org.springframework.util.LinkedMultiValueMap<String,String>(params);
+        var scoped=new org.springframework.util.LinkedMultiValueMap<>(params);
         scoped.set("conversation",id.toString());
         return read(key,Objects.toString(params.getFirst("q"),""),0,scoped,principal);
     }
@@ -47,13 +48,14 @@ public class CrmInboxWorkspaceController {
             @RequestParam(defaultValue="0") int offset,
             @RequestParam org.springframework.util.MultiValueMap<String,String> params, Principal principal) {
         var workspace=workspaces.requireWorkspace(key,principal,false);
-        if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"offset must be non-negative");
         int limit=100;
         try {
-            if(params.containsKey("cursor"))offset=Integer.parseInt(params.getFirst("cursor"));
-            if(params.containsKey("limit"))limit=Math.max(1,Math.min(500,Integer.parseInt(params.getFirst("limit"))));
-        } catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page cursor or limit");}
-        if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid page cursor");
+            String requestedLimit = params.getFirst("limit");
+            if (requestedLimit != null) limit=su.onno.query.KeysetWindow.clampLimit(Integer.parseInt(requestedLimit));
+        } catch(NumberFormatException e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid limit");}
+        final int pageLimit=limit;
+        String cursor=params.getFirst("cursor");
         var spec=workspace.listSpec();
         if(states.source().isEmpty())spec.hide(Conversation::getStatus);
         // Facet options are evaluated once per read. A facet with no options right now stays a valid
@@ -64,26 +66,12 @@ public class CrmInboxWorkspaceController {
         var declared=java.util.stream.Stream.concat(spec.filters().stream(),workspace.facets().stream().map(f->f.definition(facetOptions.get(f.key())))).filter(f->!f.field().equals("status") || !states.source().isEmpty()).filter(f->!f.field().equals("priority") || !priorities.choices().source().isEmpty()).toList();
         var filters = CrmInboxFilters.predicate(declared, params);
         String search=q.strip().toLowerCase(Locale.ROOT);
-        var members=workspaces.members(workspace);
-        if(params.containsKey("conversation")) {
-            UUID requested;
-            try {requested=UUID.fromString(params.getFirst("conversation"));}catch(Exception e){throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid conversation");}
-            var target=workspaces.requireConversation(key,requested,principal,false);
-            members=members.stream().filter(c->target.getCustomer()==null?c.getId().equals(target.getId()):target.getCustomer().equals(c.getCustomer())).toList();
-        }
-        // The list host uses ids for live row patches, including read acknowledgements.
-        // Intersect with workspace membership; never expand the authorized scope.
-        if(params.containsKey("ids")) {
-            var requested=new HashSet<UUID>();
-            try {
-                for(String value:params.get("ids"))
-                    for(String id:value.split(",",-1)) requested.add(UUID.fromString(id.strip()));
-            } catch(IllegalArgumentException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid conversation ids");
-            }
-            if(requested.size()>500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Too many conversation ids");
-            members=members.stream().filter(c->requested.contains(c.getId())).toList();
-        }
+        Conversation target=params.containsKey("conversation")
+                ? workspaces.requireConversation(key,uuid(params.getFirst("conversation")),principal,false) : null;
+        var requested=new HashSet<UUID>();
+        for(String value:params.getOrDefault("ids",List.of()))
+            for(String id:value.split(",",-1)) requested.add(uuid(id.strip()));
+        if(requested.size()>500)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Too many conversation ids");
         var descriptor=catalogs.forClass(Conversation.class);
         // Filled in below, once the page is known: decoration reads from it rather than querying.
         final Map<UUID,su.onno.crm.service.CrmContactService.Summary> rowContacts=new HashMap<>();
@@ -124,14 +112,7 @@ public class CrmInboxWorkspaceController {
             } else { row.remove("assignee"); }
             return row;
         };
-        // Authorization still precedes counting, filtering, pagination and decoration — as one pass
-        // over the list rather than a permission check and a contact read per row.
-        var authorized=workspaces.accessible(members,principal,false);
         var facetValues=new LinkedHashMap<String,Map<UUID,List<String>>>();
-        for(var facet:workspace.facets()) {
-            if((facet.showOnRows() && offeredFacets.contains(facet)) || params.getOrDefault("in",List.of()).stream().anyMatch(v->v.startsWith(facet.key()+",")))
-                facetValues.put(facet.key(),facet.resolver().resolve(authorized,principal));
-        }
         // Row chips for facets that opt in: the option's label and colour, in option order.
         var rowFacets=offeredFacets.stream().filter(CrmInboxWorkspace.Facet::showOnRows).toList();
         java.util.function.Function<Map<String,Object>,Map<String,Object>> rowBadges=row->{
@@ -147,53 +128,62 @@ public class CrmInboxWorkspaceController {
         };
         String requestedSort=params.containsKey("sort")?params.getFirst("sort"):spec.sortField();
         boolean pageBeforeDecoration=CrmInboxRows.canPageBeforeDecoration(search,requestedSort,params);
-        var byId=new HashMap<UUID,Conversation>();
-        authorized.forEach(c->byId.put(c.getId(),c));
-        // Contacts are fetched for whatever is about to be decorated, in a few queries for the lot.
-        // Searching and sorting on a decorated field still decorates everything, so it prefetches
-        // everything; the ordinary path prefetches only the page, further down.
+        if(requestedSort==null)requestedSort="lastMessageAt";
+        if(!Set.of("customer","customerDisplay","channel","subject","status","priority","assignee","assigneeDisplay","lastMessageAt","unreadCount").contains(requestedSort))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown inbox sort");
+        final String sortField=requestedSort;
+        boolean descending=params.containsKey("dir") ? "desc".equals(params.getFirst("dir"))
+                : spec.sortField()==null || spec.sortDescending();
+        var accountSamples=new LinkedHashMap<UUID,Conversation>();
         java.util.function.Consumer<java.util.Collection<Conversation>> prefetchContacts = batch -> {
             var customers=batch.stream().map(Conversation::getCustomer).filter(Objects::nonNull)
                 .filter(id->!rowContacts.containsKey(id)).distinct().toList();
-            // Nothing left to decorate means nothing to ask: a page whose contacts are already
-            // resolved — and an empty one — must not touch contacts at all.
             if(!customers.isEmpty()) rowContacts.putAll(contacts.summaries(customers,principal));
         };
-        if(!pageBeforeDecoration) prefetchContacts.accept(authorized);
-        var records=authorized.stream().map(pageBeforeDecoration?CrmInboxRows::raw:decorate)
-            .map(row->{ facetValues.forEach((field,values)->row.put(field,values.getOrDefault((UUID)row.get("id"),List.of()))); return row; })
-            .map(rowBadges)
-            .filter(filters).filter(row->search.isEmpty()||(Objects.toString(row.get("customerDisplay"),"")+" "+Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)).toList();
-        String sort=params.getFirst("sort");
-        if(sort==null)sort=spec.sortField();
-        final String sortField=sort;
-        if(sort!=null) {
-            if(!Set.of("customer","customerDisplay","channel","subject","status","priority","assignee","assigneeDisplay","lastMessageAt","unreadCount").contains(sort))
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Unknown inbox sort");
-            Comparator<Map<String,Object>> comparator=(left,right)-> {
-                Object a=left.get(sortField),b=right.get(sortField);
-                if(a==null)return b==null?0:1;
-                if(b==null)return -1;
-                if(a instanceof Number x && b instanceof Number y)return Double.compare(x.doubleValue(),y.doubleValue());
-                return a.toString().compareToIgnoreCase(b.toString());
-            };
-            if((params.containsKey("dir") ? "desc".equals(params.getFirst("dir")) : spec.sortDescending()))comparator=comparator.reversed();
-            records=records.stream().sorted(comparator.thenComparing(r->r.get("id").toString())).toList();
-        }
+        // Context excludes transport position/size/count but includes every effective filter and identity.
+        var contextParams=new TreeMap<String,List<String>>();
+        params.forEach((name,values)->{if(!Set.of("cursor","offset","limit","count","q","sort","dir").contains(name))contextParams.put(name,List.copyOf(values));});
+        String context="crm-inbox:"+key+":"+principal.getName()+":"+new TreeSet<>(access.roles(principal))
+                +":"+search+":"+sortField+":"+contextParams;
+        var result=feeds.inbox(sortField,descending,cursor,pageLimit,offset,context,
+                "exact".equals(params.getFirst("count")),(handle,sink)->feeds.scan(handle,batch->{
+            var candidates=batch.stream().filter(workspace.selection())
+                .filter(c->target==null || (target.getCustomer()==null ? Objects.equals(c.getId(),target.getId()) : target.getCustomer().equals(c.getCustomer())))
+                .filter(c->!params.containsKey("ids") || requested.contains(c.getId())).toList();
+            var authorized=workspaces.accessible(candidates,principal,false);
+            for(var conversation:authorized)
+                if(conversation.getInbox()!=null && accountSamples.size()<100)
+                    accountSamples.putIfAbsent(conversation.getInbox().id(),conversation);
+            facetValues.clear();
+            for(var facet:workspace.facets()) {
+                if((facet.showOnRows() && offeredFacets.contains(facet)) || params.getOrDefault("in",List.of()).stream().anyMatch(v->v.startsWith(facet.key()+",")))
+                    facetValues.put(facet.key(),facet.resolver().resolve(authorized,principal));
+            }
+            rowContacts.clear();
+            if(!pageBeforeDecoration)prefetchContacts.accept(authorized);
+            for(var conversation:authorized) {
+                var row=pageBeforeDecoration?CrmInboxRows.raw(conversation):decorate.apply(conversation);
+                facetValues.forEach((field,values)->row.put(field,values.getOrDefault(conversation.getId(),List.of())));
+                if(filters.test(row) && (search.isEmpty() || (Objects.toString(row.get("customerDisplay"),"")+" "
+                        +Objects.toString(row.get("subject"),"")+" "+Objects.toString(row.get("lastMessagePreview"),"")).toLowerCase(Locale.ROOT).contains(search)))
+                    sink.add(conversation.getId(),row.get(sortField));
+            }
+        }));
+        var onPage=result.page().rows().stream().map(id->workspaces.requireConversation(key,id,principal,false)).toList();
+        rowContacts.clear();prefetchContacts.accept(onPage);
+        facetValues.clear();
+        for(var facet:workspace.facets()) if((facet.showOnRows() && offeredFacets.contains(facet))
+                || params.getOrDefault("in",List.of()).stream().anyMatch(v->v.startsWith(facet.key()+",")))
+            facetValues.put(facet.key(),facet.resolver().resolve(onPage,principal));
+        var page=onPage.stream().map(conversation->{
+            var row=decorate.apply(conversation);
+            facetValues.forEach((field,values)->row.put(field,values.getOrDefault((UUID)row.get("id"),List.of())));
+            return rowBadges.apply(row);
+        }).toList();
         boolean canWrite=workspaces.permitted(workspace,principal,true);
         var config=workspaces.config(workspace);
         config=config.withActions(config.actions().stream().map(a->new CrmWorkspaceService.Action(a.key(),a.label(),
             a.visible()&&!a.key().equals("history")&&(canWrite||Set.of("reply","note","details").contains(a.key())))).toList());
-        int end=(int)Math.min(records.size(),(long)offset+limit);
-        var page=records.subList(Math.min(offset,records.size()),end);
-        if(pageBeforeDecoration) {
-            var onPage=page.stream().map(row->byId.get((UUID)row.get("id"))).filter(Objects::nonNull).toList();
-            prefetchContacts.accept(onPage);
-            // Decoration builds fresh rows, so carry the resolved facet values and their row chips over.
-            page=page.stream().map(row->decorate.apply(byId.get((UUID)row.get("id"))))
-                .map(row->{ facetValues.forEach((field,values)->row.put(field,values.getOrDefault((UUID)row.get("id"),List.of()))); return row; })
-                .map(rowBadges).toList();
-        }
         var resolved=listViews.catalogList(descriptor,spec);
         Map<String,String> fieldNames=new HashMap<>();
         descriptor.attributes().forEach(a->fieldNames.put(a.columnName(),a.fieldName()));
@@ -219,9 +209,6 @@ public class CrmInboxWorkspaceController {
         // Scope before publishing account choices; filters and pagination must not hide other accounts.
         // One sample per distinct account keeps the choices complete without decorating every
         // authorized conversation, which would defeat the page-before-decoration fast path.
-        var accountSamples=new LinkedHashMap<UUID,Conversation>();
-        for(var conversation:authorized)
-            if(conversation.getInbox()!=null)accountSamples.putIfAbsent(conversation.getInbox().id(),conversation);
         prefetchContacts.accept(accountSamples.values());
         list.put("channelAccounts",accountSamples.values().stream().map(decorate)
             .filter(row->row.get("inbox")!=null)
@@ -229,14 +216,26 @@ public class CrmInboxWorkspaceController {
                 "label",Objects.toString(row.get("inboxDisplay"),row.get("inbox").toString())))
             .distinct().toList());
         var offeredFilters=declared.stream().filter(f->!facetOptions.containsKey(f.field()) || !facetOptions.get(f.field()).isEmpty()).toList();
-        return Map.of("list",list,"key",workspace.key(),"label",workspace.label(),"filters",offeredFilters,"config",config,"canWrite",canWrite,
-            "rows",page,"total",records.size(),"hasMore",end<records.size(),"nextCursor",end<records.size()?Integer.toString(end):"");
+        Map<String,Object> response=new LinkedHashMap<>();
+        response.put("list",list);response.put("key",workspace.key());response.put("label",workspace.label());
+        response.put("filters",offeredFilters);response.put("config",config);response.put("canWrite",canWrite);
+        response.put("rows",page);response.put("nextCursor",result.page().nextCursor());response.put("hasMore",result.page().hasMore());
+        if(result.total()!=null)response.put("total",result.total());
+        return response;
     }
-    @GetMapping("/{key}/conversations/{id}/comments") public Object notes(@PathVariable String key,@PathVariable UUID id,Principal principal) {
+    private static UUID uuid(String value) {
+        try {return UUID.fromString(value);}catch(IllegalArgumentException | NullPointerException e){
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Invalid conversation id");}
+    }
+    @GetMapping("/{key}/conversations/{id}/comments") public Object notes(@PathVariable String key,@PathVariable UUID id,
+            @RequestParam(required=false) String cursor,@RequestParam(defaultValue="100") int limit,Principal principal) {
         workspaces.requireConversation(key,id,principal,false);
         var me=users.resolve(principal);
-        return comments.list("catalogs","crm_conversations",id).stream().map(c->note(c,me)).toList();
+        var page=comments.page("catalogs","crm_conversations",id,cursor,limit,
+                "crm-notes:"+key+":"+principal.getName()+":"+new TreeSet<>(access.roles(principal)));
+        return KeysetWindow.envelope(page.map(c->note(c,me)));
     }
+
     public record NoteRequest(String body){}
     @PostMapping("/{key}/conversations/{id}/comments") public Object note(@PathVariable String key,@PathVariable UUID id,
             @RequestBody NoteRequest request,Principal principal) {

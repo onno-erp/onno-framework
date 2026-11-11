@@ -58,11 +58,13 @@ public class RecordAccess {
         return compiler.policies();
     }
 
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public RecordScopeCompiler compiler() {
         return compiler;
     }
 
     /** The effective scope of {@code type} for {@code subject} ({@link RecordScope#all()} when unscoped). */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public RecordScope scopeFor(AccessSubject subject, Class<?> type, AccessMode mode) {
         return compiler.policies().scopeFor(type, subject, mode);
     }
@@ -122,6 +124,7 @@ public class RecordAccess {
      * not such a route (a page, a list, a non-UUID id), an unknown entity, or an unscoped subject
      * yields {@code true}: this narrows by record scope only; entity grants are checked elsewhere.
      */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public boolean canReadRoute(AccessSubject subject, String route) {
         if (route == null || compiler.policies().isEmpty()) return true;
         String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
@@ -142,6 +145,56 @@ public class RecordAccess {
         Class<?> type = entityClass(kind, name);
         if (type == null || !compiler.isScoped(type, subject, AccessMode.READ)) return true;
         return !filter(subject, type, List.of(uuid), AccessMode.READ).isEmpty();
+    }
+
+    /** Normalized record target of an internal UI route; arbitrary external links have no target. */
+    public record RouteTarget(String kind, String name, UUID id) {}
+
+    public static RouteTarget routeTarget(String route) {
+        if (route == null) return null;
+        String[] parts = java.util.Arrays.stream(route.split("[/?#]"))
+                .filter(p -> !p.isBlank()).toArray(String[]::new);
+        if (parts.length < 3 || !(parts[0].equals("catalogs") || parts[0].equals("documents"))) return null;
+        try {
+            return new RouteTarget(parts[0], normalizeRouteName(parts[1]), UUID.fromString(parts[2]));
+        } catch (IllegalArgumentException invalid) { return null; }
+    }
+
+    private static String normalizeRouteName(String name) {
+        return java.net.URLDecoder.decode(name, java.nio.charset.StandardCharsets.UTF_8)
+                .replace(" ", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /** SQL counterpart of canReadRoute for normalized notification targets, applied before LIMIT. */
+    public ScopeClause notificationScope(AccessSubject subject) {
+        List<String> clauses = new ArrayList<>();
+        Map<String, Object> bindings = new java.util.LinkedHashMap<>();
+        var registry = compiler.policies().registry();
+        List<Class<?>> types = new ArrayList<>();
+        registry.allCatalogs().forEach(d -> types.add(d.javaClass()));
+        registry.allDocuments().forEach(d -> types.add(d.javaClass()));
+        int index = 0;
+        for (Class<?> type : types) {
+            if (!compiler.isScoped(type, subject, AccessMode.READ)) continue;
+            ScopedEntity entity = compiler.policies().entity(type);
+            String suffix = "nt" + index++;
+            String kind = entity.kind() == ScopedEntity.Kind.CATALOG ? "catalogs" : "documents";
+            String alias = "_" + suffix;
+            ScopeClause scope = compiler.clause(type, subject, AccessMode.READ, alias);
+            String sql = scope.sql();
+            for (var entry : scope.bindings().entrySet()) {
+                sql = sql.replace(":" + entry.getKey(), ":" + suffix + entry.getKey());
+                bindings.put(suffix + entry.getKey(), entry.getValue());
+            }
+            bindings.put(suffix + "kind", kind);
+            bindings.put(suffix + "name", normalizeRouteName(entity.logicalName()));
+            String target = "_target_kind = :" + suffix + "kind AND _target_name = :" + suffix + "name";
+            clauses.add("(NOT (COALESCE(" + target + ", false)) OR (_target_id IS NOT NULL AND EXISTS (SELECT 1 FROM "
+                    + entity.tableName() + " " + alias + " WHERE " + alias + "._id = _target_id"
+                    + (sql.isEmpty() ? "" : " AND (" + sql + ")")
+                    + (entityGrant(subject, entity, AccessMode.READ) ? "" : " AND 1 = 0") + ")))" );
+        }
+        return new ScopeClause(String.join(" AND ", clauses), bindings);
     }
 
     private Class<?> entityClass(String kind, String name) {
@@ -178,14 +231,6 @@ public class RecordAccess {
                     subject instanceof AccessSubject.User u ? u.username() : subject, type.getSimpleName(), id, mode);
         }
         return new ResponseStatusException(HttpStatus.NOT_FOUND);
-    }
-
-    /** Log a scope-based 404 decided elsewhere (query/command services), when enabled. */
-    void logDenial(AccessSubject subject, String entity, Object id, AccessMode mode) {
-        if (logDenials && log.isDebugEnabled()) {
-            log.debug("Record access denied: subject={} entity={} id={} mode={}",
-                    subject instanceof AccessSubject.User u ? u.username() : subject, entity, id, mode);
-        }
     }
 
     private ScopedEntity requireEntity(Class<?> type) {

@@ -54,6 +54,12 @@ public class RelatedListReader {
     public List<Map<String, Object>> rows(Class<?> parentClass, String parentLogicalName,
                                            String relatedName, UUID parentId, AccessSubject subject,
                                            EntityJsonRepresentation.Mode representation) {
+        return page(parentClass, parentLogicalName, relatedName, parentId, subject, representation, null, 100).rows();
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> page(Class<?> parentClass, String parentLogicalName,
+            String relatedName, UUID parentId, AccessSubject subject, EntityJsonRepresentation.Mode representation,
+            String cursor, int limit) {
         RelatedList rl = fieldHints.relatedList(parentClass, relatedName);
         if (rl == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -71,10 +77,11 @@ public class RelatedListReader {
         }
         requireRead(subject, junction);
         requireParent(subject, parentClass, parentId);
-        List<Map<String, Object>> rows = read(subject, junction, via.columnName(), parentId);
-        return junction.isRegister()
-                ? rows
-                : EntityJsonRepresentation.catalogs(junction.catalog(), rows, representation);
+        var page = junction.isRegister()
+                ? registerQuery.relatedPage(subject, junction.register(), via.columnName(), parentId, cursor, limit)
+                : catalogQuery.relatedPage(subject, junction.catalog(), via.columnName(), parentId, cursor, limit);
+        return junction.isRegister() ? page : new su.onno.query.KeysetWindow.Page<>(
+                EntityJsonRepresentation.catalogs(junction.catalog(), page.rows(), representation), page.nextCursor(), page.hasMore());
     }
 
     /**
@@ -83,6 +90,7 @@ public class RelatedListReader {
      * that opts out of detail ({@code hideInDetail}), names a junction that vanished, has no
      * {@code via} ref, or the caller may not read is simply skipped, never breaking the surface.
      */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public Map<String, List<Map<String, Object>>> preloadForDetail(Class<?> parentClass, UUID parentId,
                                                                     AccessSubject subject) {
         Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();

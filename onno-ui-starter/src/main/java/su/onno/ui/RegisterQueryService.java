@@ -76,7 +76,9 @@ public class RegisterQueryService {
 
     public List<Map<String, Object>> movements(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                                String from, String to) {
-        return movementsBounded(subject, desc, from, to).rows();
+        var result = movementsBounded(subject, desc, from, to);
+        if (result.truncated()) throw new IllegalStateException("Movements exceed the preview limit; use movementsPage");
+        return result.rows();
     }
 
     /**
@@ -117,25 +119,26 @@ public class RegisterQueryService {
                                                      ListFilter.Result filters,
                                                      String sortColumn, boolean descending,
                                                      int rowPosition, int windowSize) {
-        String orderBy = safeSort(desc, sortColumn, "_period", movementColumns(desc));
-        ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
-        StringBuilder sql = new StringBuilder(
-                "SELECT * FROM " + desc.tableName() + " WHERE _active = true");
-        appendMovementWindow(sql, from, to);
-        appendFilters(sql, scoped);
-        sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC");
-        sql.append(" LIMIT :windowSize OFFSET :rowPosition");
+        return su.onno.query.KeysetWindow.legacyOffset(rowPosition, windowSize,
+                (cursor, size) -> movementsPage(subject, desc, from, to, filters, sortColumn, descending, cursor, size)).rows();
+    }
 
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString());
-            bindMovementWindow(query, from, to);
-            bindFilters(query, scoped);
-            query.bind("windowSize", Math.max(1, windowSize))
-                    .bind("rowPosition", Math.max(0, rowPosition));
-            return query.mapToMap().list();
-        });
-        resolveAll(subject, desc, rows);
-        return rows;
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> movementsPage(AccessSubject subject,
+            AccumulationRegisterDescriptor desc, String from, String to, ListFilter.Result filters,
+            String sortColumn, boolean descending, String cursor, int limit) {
+        String col = safeSort(sortColumn, "_period", movementColumns(desc));
+        ListFilter.Result scoped = scope(subject, desc, desc.tableName()).andInto(filters);
+        StringBuilder where = new StringBuilder("_active = true");
+        appendMovementWindow(where, from, to);
+        appendFilters(where, scoped);
+        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*", where.toString(), q -> {
+            bindMovementWindow(q, from, to);
+            bindFilters(q, scoped);
+        }, List.of(new su.onno.query.KeysetWindow.Order(col, descending),
+                new su.onno.query.KeysetWindow.Order("_id", descending)), cursor, limit,
+                su.onno.query.Cursor.context("movements", desc.tableName(), from, to, scoped.sql(), scoped.bindings(), EntityQuerySupport.cursorSubject(subject)));
+        resolveAll(subject, desc, page.rows());
+        return page;
     }
 
     /** Total active movements matching the window + filters — for the island's virtual scroller. */
@@ -187,33 +190,42 @@ public class RegisterQueryService {
      * ordered by a validated column (default: the dimension tuple) and bounded by a start position
      * and window size. BALANCE registers only.
      */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public List<Map<String, Object>> balanceWindow(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                                    ListFilter.Result filters,
                                                    String sortColumn, boolean descending,
                                                    int rowPosition, int windowSize) {
+        return su.onno.query.KeysetWindow.legacyOffset(rowPosition, windowSize,
+                (cursor, size) -> balancePage(subject, desc, filters, sortColumn, descending, cursor, size)).rows();
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> balancePage(AccessSubject subject,
+            AccumulationRegisterDescriptor desc, ListFilter.Result filters, String sortColumn,
+            boolean descending, String cursor, int limit) {
         if (desc.accumulationType() != AccumulationType.BALANCE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Balance is only available for BALANCE registers");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Balance is only available for BALANCE registers");
         }
-        String dimOrder = desc.dimensions().stream()
-                .map(AttributeDescriptor::columnName)
-                .collect(Collectors.joining(", "));
-        String orderBy = safeSort(desc, sortColumn,
-                dimOrder.isEmpty() ? "1" : dimOrder, balanceColumns(desc));
         ListFilter.Result scoped = scope(subject, desc, desc.totalsTableName()).andInto(filters);
-        StringBuilder sql = new StringBuilder("SELECT * FROM " + desc.totalsTableName());
-        if (scoped != null && !scoped.isEmpty()) sql.append(" WHERE ").append(scoped.sql());
-        sql.append(" ORDER BY ").append(orderBy).append(descending ? " DESC" : " ASC")
-                .append(" LIMIT :windowSize OFFSET :rowPosition");
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString());
-            bindFilters(query, scoped);
-            query.bind("windowSize", Math.max(1, windowSize))
-                    .bind("rowPosition", Math.max(0, rowPosition));
-            return query.mapToMap().list();
-        });
-        resolveAll(subject, desc, rows);
-        return rows;
+        List<su.onno.query.KeysetWindow.Order> order = new ArrayList<>();
+        String sort = safeSort(sortColumn, null, balanceColumns(desc));
+        if (sort != null) order.add(new su.onno.query.KeysetWindow.Order(sort, descending));
+        for (var dim : desc.dimensions()) {
+            if (!dim.columnName().equals(sort)) order.add(new su.onno.query.KeysetWindow.Order(dim.columnName(), descending));
+        }
+        var page = KeysetWindow.collection(jdbi, desc.totalsTableName(), "*",
+                scoped.isEmpty() ? "1 = 1" : scoped.sql(), q -> bindFilters(q, scoped),
+                order, cursor, limit, su.onno.query.Cursor.context("balance", desc.totalsTableName(), scoped.sql(), scoped.bindings(), EntityQuerySupport.cursorSubject(subject)));
+        resolveAll(subject, desc, page.rows());
+        return page;
+    }
+
+    /** Convert legacy dimension-name filters using metadata, never raw request SQL. */
+    public ListFilter.Result dimensionFilters(AccumulationRegisterDescriptor desc, Map<String, String> values) {
+        List<String> eq = new ArrayList<>();
+        for (var dim : desc.dimensions()) {
+            if (values.containsKey(dim.fieldName())) eq.add(dim.columnName() + "," + values.get(dim.fieldName()));
+        }
+        return ListFilter.parse(eq, List.of(), List.of(), movementColumns(desc));
     }
 
     /** Balance rows (distinct dimension combinations) matching the filters — for the scroller. */
@@ -249,14 +261,16 @@ public class RegisterQueryService {
     }
 
     /** Validate a client-supplied sort column against an allow-list, falling back to {@code fallback}. */
-    private static String safeSort(AccumulationRegisterDescriptor desc, String sortColumn,
+    private static String safeSort(String sortColumn,
                                    String fallback, Set<String> allowed) {
         return sortColumn != null && allowed.contains(sortColumn.toLowerCase()) ? sortColumn : fallback;
     }
 
     public List<Map<String, Object>> balance(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                              Map<String, String> filters) {
-        return balanceBounded(subject, desc, filters).rows();
+        var result = balanceBounded(subject, desc, filters);
+        if (result.truncated()) throw new IllegalStateException("Balances exceed the preview limit; use balancePage");
+        return result.rows();
     }
 
     /**
@@ -307,9 +321,8 @@ public class RegisterQueryService {
     private BoundedRows bounded(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                 List<Map<String, Object>> rows, int cap) {
         boolean truncated = rows.size() > cap;
-        List<Map<String, Object>> returned = truncated
-                ? new ArrayList<>(rows.subList(0, cap))
-                : rows;
+        List<Map<String, Object>> returned = new ArrayList<>(rows);
+        if (truncated) returned.removeLast();
         resolveAll(subject, desc, returned);
         return new BoundedRows(returned, truncated);
     }
@@ -317,6 +330,14 @@ public class RegisterQueryService {
     public List<Map<String, Object>> turnover(AccessSubject subject, AccumulationRegisterDescriptor desc,
                                               String from, String to,
                                               Map<String, String> filters) {
+        var page = turnoverPage(subject, desc, from, to, filters, null, 500);
+        if (page.hasMore()) throw new IllegalStateException("Turnover exceeds 500 rows; use turnoverPage and follow nextCursor");
+        return page.rows();
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> turnoverPage(AccessSubject subject,
+            AccumulationRegisterDescriptor desc, String from, String to, Map<String, String> filters,
+            String cursor, int limit) {
         ScopeClause scope = scope(subject, desc, desc.tableName());
         String dimColumns = desc.dimensions().stream()
                 .map(AttributeDescriptor::columnName)
@@ -342,18 +363,19 @@ public class RegisterQueryService {
             sql.append(" GROUP BY ").append(dimColumns);
         }
 
-        List<Map<String, Object>> rows = jdbi.withHandle(h -> {
-            var query = h.createQuery(sql.toString()).bind("from", from).bind("to", to);
-            scope.bind(query);
+        var order = desc.dimensions().stream()
+                .map(d -> new su.onno.query.KeysetWindow.Order(d.columnName(), false)).toList();
+        // An aggregate without dimensions is a single-row collection, ordered by its projected sum.
+        if (order.isEmpty()) order = List.of(new su.onno.query.KeysetWindow.Order(desc.resources().getFirst().columnName(), false));
+        var page = KeysetWindow.collection(jdbi, "(" + sql + ") turnover", "*", "1=1", query -> {
+            query.bind("from", from).bind("to", to); scope.bind(query);
             for (AttributeDescriptor dim : desc.dimensions()) {
-                if (filters.containsKey(dim.fieldName())) {
-                    query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
-                }
+                if (filters.containsKey(dim.fieldName())) query.bind(dim.columnName(), filterValue(dim, filters.get(dim.fieldName())));
             }
-            return query.mapToMap().list();
-        });
-        resolveAll(subject, desc, rows);
-        return rows;
+        }, order, cursor, limit, su.onno.query.Cursor.context("turnover", desc.tableName(), from, to,
+                filters, EntityQuerySupport.cursorSubject(subject), scope.sql(), scope.bindings()));
+        resolveAll(subject, desc, page.rows());
+        return page;
     }
 
     /**

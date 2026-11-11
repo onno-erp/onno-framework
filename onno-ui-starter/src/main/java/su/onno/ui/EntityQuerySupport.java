@@ -23,6 +23,10 @@ final class EntityQuerySupport {
     private EntityQuerySupport() {
     }
 
+    static String cursorSubject(AccessSubject subject) {
+        return su.onno.query.Cursor.subjectContext(subject);
+    }
+
     static String filterClause(ListFilter.Result filter) {
         return filter.isEmpty() ? "" : " AND (" + filter.sql() + ")";
     }
@@ -224,37 +228,6 @@ final class EntityQuerySupport {
         Map<String, String> merged = new java.util.LinkedHashMap<>(prefill == null ? Map.of() : prefill);
         merged.putAll(defaults);
         return merged;
-    }
-
-    // ------------------------------------------------------------- subject-bound keyset cursors
-
-    private static final char CURSOR_SEAL = '~'; // not in the URL-safe Base64 alphabet
-
-    /**
-     * Bind a keyset cursor to the subject that minted it: a restricted subject's cursor carries
-     * its {@link su.onno.access.RecordPolicies#fingerprint fingerprint}; an unrestricted one is
-     * unchanged.
-     */
-    static String sealCursor(String token, String fingerprint) {
-        if (token == null || fingerprint == null || fingerprint.isEmpty()) return token;
-        return token + CURSOR_SEAL + fingerprint;
-    }
-
-    /**
-     * The raw cursor token if it was minted for {@code fingerprint}; a cursor minted for another
-     * subject is rejected with 400 rather than silently re-seeked.
-     */
-    static String openCursor(String token, String fingerprint) {
-        if (token == null || token.isBlank()) return token;
-        int seal = token.lastIndexOf(CURSOR_SEAL);
-        String raw = seal < 0 ? token : token.substring(0, seal);
-        String minted = seal < 0 ? "" : token.substring(seal + 1);
-        String expected = fingerprint == null ? "" : fingerprint;
-        if (!minted.equals(expected)) {
-            throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.BAD_REQUEST, "Cursor was issued for a different user");
-        }
-        return raw;
     }
 
     // ------------------------------------------------------------- hierarchical catalogs

@@ -1,3 +1,4 @@
+import { useRequestScope } from "@/hooks/use-request-scope";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import { Plus, Trash2 } from "lucide-react";
@@ -38,6 +39,7 @@ export function RelatedListPanel({
   readOnly?: boolean;
 }) {
   const t = useMessages();
+  const requests = useRequestScope(JSON.stringify([parentKind, parentName, parentId, meta.name]));
   // Register-backed junctions have no generic write REST yet, so they render read-only — no Add
   // button, no per-row remove (see RelatedList / Junctions on the server).
   const readOnly = forceReadOnly === true || meta.readOnly === true;
@@ -56,20 +58,43 @@ export function RelatedListPanel({
 
   const [rows, setRows] = useState<EntityRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
-    if (!parentId) return;
+    const current = requests.begin();
+    if (!current()) return;
+    setRows([]); setNextCursor(null);
+    if (!parentId) { setLoading(false); return; }
     setLoading(true);
     try {
-      setRows(await api.getRelatedList(parentKind, parentName, parentId, meta.name));
+      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name);
+      if (!current()) return;
+      setRows(page.rows);
+      setNextCursor(page.nextCursor);
     } catch (e) {
-      toast.error(`Couldn't load ${title}: ${e instanceof Error ? e.message : String(e)}`);
+      if (current()) toast.error(`Couldn't load ${title}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, [parentKind, parentName, parentId, meta.name, title]);
+  }, [parentKind, parentName, parentId, meta.name, title, requests]);
+
+  const loadMore = async () => {
+    if (!parentId || !nextCursor || loading) return;
+    const current = requests.capture();
+    setLoading(true);
+    try {
+      const page = await api.getRelatedList(parentKind, parentName, parentId, meta.name, nextCursor);
+      if (!current()) return;
+      setRows(previous => {
+        const have = new Set(previous.map(row => row.id ?? row._id));
+        return [...previous, ...page.rows.filter(row => !have.has(row.id ?? row._id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (failure) { if (current()) toast.error(String(failure)); }
+    finally { if (current()) setLoading(false); }
+  };
 
   useEffect(() => {
     void reload();
@@ -207,6 +232,8 @@ export function RelatedListPanel({
               })}
             </div>
           )}
+          {nextCursor && <button type="button" className={actionBtn} disabled={loading}
+            onClick={() => void loadMore()}>Load more</button>}
         </>
       )}
     </div>

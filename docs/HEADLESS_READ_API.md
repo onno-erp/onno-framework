@@ -19,7 +19,7 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
 GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs); folders=true: folders only, with hasChildFolders
-GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays; ids=a,b: only the paths to those records
+GET /api/catalogs/{name}/tree            paged flat nodes with parent links; ids=a,b: bounded nested paths
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
@@ -90,7 +90,7 @@ token mappings fail atomically.
 
 ```jsonc
 // GET /api/tasks
-[{
+{"rows":[{
   "id": "2d95…",
   "instanceId": "a4f1…",
   "definitionKey": "order-approval",
@@ -101,7 +101,7 @@ token mappings fail atomically.
   "assignee": null,
   "subject": {"kind": "documents", "entityName": "Orders", "id": "f34c…"},
   "outcomes": ["APPROVE", "REJECT"]
-}]
+}], "nextCursor": null, "hasMore": false}
 ```
 
 Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
@@ -124,30 +124,104 @@ the feedback object itself:
 }
 ```
 
-Catalog and document collections are available only through the keyset list feed. It returns
-`{rows, nextCursor, hasMore, prevCursor, hasPrevious}`; start without a cursor and replay each
-opaque `nextCursor` until `hasMore` is false. `?focus=<id>` returns the window that contains that
-record instead of the first one (up to half of `limit` rows before it, the record, the rows after
-it) and echoes `focus` in the envelope; replay `prevCursor` as `?before=` to load the rows above a
-window until `hasPrevious` is false. A focus the caller's query cannot see (outside the search,
-filters or document date range, out of record scope, deleted, unknown or malformed) returns the
-ordinary first window without `focus`. `cursor` wins over `before`, which wins over `focus`. Ref pickers use `POST /api/ref-options/search`, which accepts bounded,
-context-aware search input. With an empty `query` it leads with up to five of the caller's recent
-picks, each flagged `_recent: true`, then the ordinary options without duplicates, still within
-`limit`; send `"recent": false` to omit them. Picks are remembered with `POST /api/ref-options/recent`
-(`{targetKind, targetName, id}`); a recent pick is re-read through the same search, so it obeys the
-deletion mark, record scope and the request's `filter` like any other option. The "Show all..." picker
-dialog pages the ordinary list feed with the field's `filter` (plus `_parent = <uuid>` / `_parent =
-null` for folder navigation on a hierarchical catalog) and checks each window with
-`POST /api/ref-options/decorate` (`ids` plus the `/search` context), which answers `offered` ids and
-their `decorations`. There is no unbounded collection or offset-paging endpoint. See
-[onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
+### Collection pagination
+
+This section is the authoritative collection-read contract for REST and MCP.
+
+**Request.** Omit `cursor` for the first page. `limit` defaults to **100** and is capped at
+**500**; clients should send a positive integer. Replay the previous response's `nextCursor`
+without decoding it. Keep the feed, effective filters, sort and authenticated access context
+unchanged while continuing. HTTP helpers normalize non-positive internal limits to the default;
+MCP's schema validates page-size bounds explicitly.
+
+**Response.** Every collection feed below returns `{rows, nextCursor, hasMore}`. `rows` has at
+most `limit` entries; `nextCursor` is null exactly when `hasMore` is false. Additional metadata
+(such as workspace configuration or notification badge counts) does not replace this envelope.
+No collection total is computed implicitly. Catalog/document feeds support explicit
+`count=exact|estimate`; register list and CRM inbox feeds support `count=exact`. Badge counts
+are a separate feature and apply the same record visibility as the notification rows.
+
+**Cursor.** Only `su.onno.query.Cursor` issues tokens. All feeds now issue context-bound v2
+positions, carrying typed sort values (including SQL DATE and nanosecond timestamps). A valid
+foreign token (another entity/feed, sort, filter or access scope) returns HTTP 400 / an MCP error.
+A syntactically damaged token or a position whose values do not match the projected SQL types
+restarts from the first page, without executing an invalid seek comparison. Pre-v2 tokens cannot
+prove their feed identity and are rejected as foreign; restart without a cursor after deployment.
+The cursor is a position, not an authorization credential or a snapshot: SQL/access checks still
+run on every request, and edits to sort values can move records.
+
+**Implementation.** `su.onno.query.KeysetWindow` is the shared forward SQL helper. The public
+UI `KeysetWindow` adapter retains catalog/document backward/focus navigation and their optimized
+non-null seek predicates, while using the same codec, limits and JDBC type validation. Sort
+identifiers are validated metadata. Order tuples are unique; nullable keys are NULLS LAST in both
+directions. Queries fetch at most `limit + 1`; the extra row detects continuation and is discarded.
+No SQL OFFSET or full-result in-memory slicing is used for pagination. SQL COUNT is separate.
+
+| Feed | Ordering / access |
+| --- | --- |
+| `/api/list/catalogs/{name}`, `/api/list/documents/{name}` | Validated sort + `_id`; search, filters, record scope and document date bounds before seeking |
+| `/api/list/registers/{name}/movements`, `/api/registers/{name}/movements` | Validated sort (default `_period DESC`) + `_id`; active movements, date/filter/record scope |
+| `/api/list/registers/{name}/balance`, `/api/registers/{name}/balance` | Validated sort + remaining dimension primary-key columns; BALANCE registers only |
+| `/api/registers/{name}/turnover` | Grouped dimension tuple; record/dimension/period filters before aggregation and pagination |
+| `/api/notifications` | `_created_at DESC, _id DESC`; recipient and target record scope before LIMIT; `items` alias retained |
+| `/api/comments/{kind}/{name}/{id}` | `_created_at ASC, _id ASC`; parent record read access required |
+| `/api/{catalogs|documents}/{name}/{id}/related/{relatedName}` | Parent access and junction scope; catalog `_code, _id` or information register `_id` |
+| `/api/catalogs/{name}/children`, `/api/catalogs/{name}/tree` | `_is_folder DESC, _description ASC, _id ASC`; paged children or flat nodes with parent links |
+| `/api/crm/inbox-workspaces/{key}` | Validated sort + UUID; workspace, customer and personal-account checks precede SQL page selection |
+| `/api/crm/contacts/{customer}/activity` | SQL UNION of messages/notes; time, source and UUID DESC; only readable conversations; `entries` alias retained |
+| `/api/crm/inbox-workspaces/{key}/conversations/{id}/comments` | Shared comment page after workspace authorization |
+| `/api/processes`, `/api/tasks` | Start/creation time + UUID; instance participation or task assignment applied in SQL |
+| Process history, executions, task history | Requested instance/task authorization; sequence or entry time + UUID |
+
+**Compatibility, one release.** Deprecated numeric `offset` parameters on register movement/list
+and CRM inbox/activity reads remain supported by bounded seek traversal. They are not returned as
+cursors. Deep offsets still cost proportional work, so migrate to `cursor`. Notification `items`
+and CRM activity `entries` are aliases of the exact same `rows`; remove clients' dependency on
+these keys before the following release. Legacy unpaged Java register methods reject overflow
+rather than returning an apparently complete partial accounting result. Register SDK methods
+return `CollectionPage<EntityRecord>` and accept `PageRequest`; widgets must follow the cursor.
+The legacy SDK `listCatalog`/`listDocuments` methods remain explicitly bounded previews (500);
+use `listCatalogPage`/`listDocumentsPage` for continuation. Aggregate widgets consume every turnover
+page before computing totals.
+
+**Backward/focus navigation.** Catalog/document pages additionally expose `prevCursor`,
+`hasPrevious` and optional `focus`. `before=<prevCursor>` requests the preceding window;
+`focus=<id>` requests the surrounding window. A hidden, deleted, filtered-out or unknown focus
+falls back to the first window without revealing whether it exists. `cursor` wins over `before`,
+which wins over `focus`. Forward/backward tokens share the same feed context.
+
+**Bounded exceptions.** Arrays are retained for selector/configuration responses: reference search
+max 200, mentions max 500, settings/process definitions max 500, tag selectors max 500, CRM workspace
+and account choices max 100, notification types max 100. Calendar items reject overflow above 500
+with 422 and ask for a narrower window. Tags/settings likewise reject oversized results rather
+than silently hiding editable definitions. `/tree?ids=` is a bounded nested-path lookup (200 ids,
+at most 65 levels). Embedded detail related-list previews are capped at 100; continue through the
+paged related endpoint. Group/aggregate visualization buckets are bounded and explicitly signal
+truncation. Owned tabular sections and static model/graph metadata are aggregate payloads, not
+independent collection feeds. Trusted business repository reads remain separate from user-facing
+collection transports and must not be silently capped, particularly during posting.
+
+**CRM Java callback compatibility.** Arbitrary host selectors/facets cannot be translated to SQL.
+Their fallback scans conversations in batches of at most 500 and projects eligible sort keys into
+a request-local SQL table. This bounds conversation buffers but still costs a source scan per
+request. A shared Spring transaction makes repositories, JDBC callbacks and the projection use
+one connection, including pools of size 1; temporary tables are dropped on exit. Host callbacks
+must use that datasource/transaction and return per-conversation results independent of batch
+membership. This is not a constant-time indexed workspace query. Schema-backed selection can be
+introduced by hosts without changing the wire contract. Responses from replaced/unmounted UI
+scopes are ignored, so delayed pages cannot be appended to a different record.
+
+Reference pickers remain context-aware bounded searches. Recent picks are read through the same
+record scope and filters. They do not grant visibility or bypass the collection contract.
 
 Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,
 create/update/duplicate, and post/unpost entity responses all accept
 `?representation=logical|storage`. Omitted means `logical`; an unknown value is `400`. Registers
 and aggregate/group responses retain their own storage/aggregation contracts and do not use this
 switch.
+
+Java callers of related-list query adapters select the public
+`EntityJsonRepresentation.Mode.LOGICAL` or `STORAGE` with the same representation semantics.
 
 ## Response shape
 
@@ -311,7 +385,7 @@ label is masked.
 For a user restricted by a record policy every read is scoped: lists, counts (`count=estimate` returns
 the exact scoped count), groups, aggregates, search and trees only contain records in scope, and
 `get` of any other id is `404` — indistinguishable from a missing record. `?ids=` live patches drop
-out-of-scope ids. Keyset cursors are bound to the subject that minted them (a `~fingerprint`
+out-of-scope ids. Keyset cursors are bound to their feed and access context (an opaque context
 suffix); replaying one as another user is a `400`.
 
 ## Secrets
@@ -383,13 +457,12 @@ must `addEventListener("updated", …)` (etc.) per event name you care about.
 
 ## MCP register movements
 
-For authenticated MCP clients, `register_movements` reads active accumulation-register movements
-with optional `limit` (1–1000, default 1000), `offset` (default 0), `sort` (storage column, default
-`_period`), `descending` (default true), and `filters` (dimension field name to equality value;
-reference and enumeration values use UUID strings). These combine with the inclusive `from`/`to`
-period range and the caller's record scope. The response remains a list: increase `offset` by
-`limit` until a short or empty page is returned. Unlike the former bounded read, more than 1000
-matches do not produce an error. Unknown dimensions and invalid page bounds return an MCP error.
+For authenticated MCP clients, `register_movements` and `register_balance` return the same
+`{rows,nextCursor,hasMore}` page in MCP's `result` wrapper. Both accept `cursor`, `limit`
+(default 100, maximum 500) and dimension-name `filters`. Movements additionally accept inclusive
+`from`/`to`, validated `sort`, `descending`, and deprecated `offset` for one release. Filters and
+record scope are applied in SQL before seeking. Unknown dimensions and invalid movement page
+bounds produce an MCP error. See [Collection pagination](#collection-pagination) for the contract.
 
 ## Notes for a public read view
 
@@ -445,11 +518,11 @@ message reading and reply enqueueing retain the standard CRM endpoints and autho
 
 `CrmInboxWorkspace` beans activate scoped inbox mode, separate from persisted channel accounts.
 `GET /api/crm/inbox-workspaces` returns only accessible `{key,label,canWrite}` entries.
-`GET /api/crm/inbox-workspaces/{key}?q=&offset=0` returns `{key,label,config,canWrite,rows,total,hasMore}`;
-rows use widget camel-case fields and `...Display`/`...Color`/`...Ref` sidecars, with at most 100 rows
-per page by default. A negative offset is 400. Workspace rules are evaluated over active conversations before
-reference resolution. Large deployments should supply a future SQL-backed selection layer rather
-than relying on unbounded Java predicate scans.
+`GET /api/crm/inbox-workspaces/{key}?q=&cursor=&limit=100` returns
+`{key,label,config,canWrite,rows,nextCursor,hasMore}` plus list/filter metadata. `total` is optional
+and requires `count=exact`. Rows use camel-case fields and display/color/ref sidecars. Workspace
+selection and access precede page selection; see the scoped inbox pagination details below.
+The workspace choice list and channel-account choices are hard-capped at 100.
 
 Every existing `/api/crm/conversations/{id}/...` command/read requires the
 `workspace` query parameter. Membership and the workspace's read/write roles are independently
@@ -457,7 +530,7 @@ checked; missing scope, an inaccessible workspace, a foreign chat or read-only m
 The CRM workspace feed accepts `ids` (comma-separated or repeated UUIDs, at most 500) for live row refreshes. It intersects these IDs with workspace membership and read authorization before returning rows or counts. Reading a conversation therefore refreshes that conversation without replacing it with the first inbox row.
 
 `GET|POST /api/crm/inbox-workspaces/{key}/conversations/{id}/comments` accesses the existing internal
-notes, with POST body `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
+notes. GET accepts `cursor`/`limit` and returns the common page envelope; POST accepts `{body}` of 1–8000 characters. These routes use normal session CSRF protection.
 
 Business merging and any undo are host commands; see the [CRM composition guide](../onno-crm-starter/README.md).
 
@@ -470,9 +543,20 @@ AND between fields); omitted values default to `all`. The inbox reuses the host 
 multi-select chips through the widget SDK.
 
 The scoped inbox renders the standard `EntityListWidget` header and body-view controls. Its feed
-also accepts host list parameters: repeated `in=field,value`, `sort`, `dir`, `limit` (1–500, default
-100), and an offset cursor returned as `nextCursor`. Membership is checked before filtering, sorting
-and pagination. This cursor is an offset, not a stable snapshot under concurrent inserts.
+accepts repeated `in=field,value`, `sort`, `dir`, `limit` (default 100, maximum 500), and an opaque
+`cursor`. Responses contain `{rows,nextCursor,hasMore}` plus workspace/list metadata; `nextCursor`
+is null at the end. `total` is included only with `count=exact`. The deprecated numeric `offset`
+remains for one release and walks bounded seek windows without SQL OFFSET.
+
+Host workspace selectors and facet resolvers are Java callbacks. `CrmFeedQuery` scans source
+conversations in batches of at most 500, applies workspace/customer/personal-account access and
+filters, and projects eligible keys plus typed sort values into a request-local temporary SQL table.
+The shared `su.onno.query.KeysetWindow` sorts and seeks that projection; `su.onno.query.Cursor`
+issues the context-bound token. Temporary tables are dropped in finally. This bounds Java memory
+and removes full-list slicing, but candidate evaluation still scans the source on each request;
+it is not a constant-time indexed workspace query. Facet resolvers must be batch-independent.
+Cursors are bound to the workspace, principal/roles, effective filters and sort. A valid foreign
+cursor is 400; a malformed token restarts. NULL values sort last, with UUID as unique tiebreaker.
 
 ### Optional WhatsApp webhook
 
@@ -485,7 +569,7 @@ selected-row toolbar. It does not alter generated record reads or grant command 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?cursor=&limit=100` returns `{rows,nextCursor,hasMore}` (newest first, default 100, maximum 500). `entries` remains an alias of `rows` for one release; deprecated numeric `offset` walks bounded seek windows. No total is calculated. Messages and internal notes are combined by SQL UNION ALL, restricted to authorized conversation keys before seeking on `(time DESC, source DESC, UUID DESC)`. Files, HTML, author photos and account labels are resolved only for the selected page. Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 

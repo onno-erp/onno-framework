@@ -30,6 +30,7 @@ public class SchemaModelBuilder {
         tables.add(processWorkItemsTable());
         tables.add(processWorkItemEventsTable());
         tables.add(processTransitionsTable());
+        tables.add(processWorkCandidatesTable());
         for (CatalogDescriptor catalog : registry.allCatalogs()) {
             tables.add(catalogTable(catalog));
             for (TabularSectionDescriptor section : catalog.tabularSections()) {
@@ -136,6 +137,7 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_status", "VARCHAR(32)").asNotNull(),
                 ColumnModel.of("_candidate_users", "TEXT"),
                 ColumnModel.of("_candidate_roles", "TEXT"),
+                ColumnModel.withDefault("_candidates_indexed", "BOOLEAN", "false").asNotNull(),
                 ColumnModel.of("_assignee", "VARCHAR(255)"),
                 ColumnModel.of("_assignee_display", "VARCHAR(255)"),
                 ColumnModel.of("_subject_kind", "VARCHAR(32)"),
@@ -148,6 +150,15 @@ public class SchemaModelBuilder {
                 ColumnModel.of("_outcome", "VARCHAR(255)"),
                 ColumnModel.withDefault("_version", "INTEGER", "0").asNotNull()
         ), List.of(), List.of());
+    }
+
+    static TableModel processWorkCandidatesTable() {
+        return new TableModel("onno_process_work_candidates", List.of(
+                new ColumnModel("_work_item_id", "UUID", false, true, null,
+                        "onno_process_work_items(_id)", List.of()),
+                ColumnModel.of("_kind", "VARCHAR(16)").asNotNull(),
+                ColumnModel.of("_value", "VARCHAR(255)").asNotNull()
+        ), List.of("PRIMARY KEY (_work_item_id, _kind, _value)"), List.of());
     }
 
     static TableModel processTransitionsTable() {

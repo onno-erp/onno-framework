@@ -578,3 +578,10 @@ empty; an item may sit in one region only). Workspace beans still own the author
 declared filters; `CrmInboxViewValidator` fails startup if a `CrmInboxView` bean names an unknown
 workspace and fails on filter keys the workspace bean does not declare (facets with runtime options use `CrmInboxWorkspace.FacetOptions`). `CrmConnectionsView` types the `crmConnections` connections widget (`crmSettings` remains an alias).
 Existing `page.list(...)` and widget config remain valid.
+
+
+Collection reads: use limit/cursor and `{rows,nextCursor,hasMore}` (100 default, 500 max).
+Only su.onno.query.Cursor issues context-bound typed positions; use KeysetWindow for SQL seek.
+SQL DATE values must remain typed. Count only by explicit request; never compute a report from
+a silently capped preview. Register SDK reads return pages. See docs/HEADLESS_READ_API.md,
+Collection pagination, for aliases, offset compatibility, bounded selectors and CRM callback limits.

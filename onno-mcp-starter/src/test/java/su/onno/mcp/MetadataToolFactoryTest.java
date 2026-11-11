@@ -175,11 +175,15 @@ class MetadataToolFactoryTest {
     }
 
     @Test
-    void registerMovementsReadsBeyondOneThousandRowsWithoutChangingTheResponseShape() {
+    void registerMovementsReadsBeyondOneThousandRowsWithCursorAndLegacyOffset() {
         SyncToolSpecification movements = movementTool();
         CallToolResult first = callMovements(movements, Map.of("name", "Cash"));
         assertThat(first.isError()).isNotEqualTo(true);
-        assertThat(movementRows(first)).hasSize(1000);
+        assertThat(movementRows(first)).hasSize(100);
+        Map<?, ?> page = (Map<?, ?>) ((Map<?, ?>) first.structuredContent()).get("result");
+        assertThat(page.get("hasMore")).isEqualTo(true);
+        var continued = callMovements(movements, Map.of("name", "Cash", "cursor", page.get("nextCursor")));
+        assertThat(movementRows(continued).getFirst()).containsEntry("sequence", 902);
         assertThat(movementRows(first).getFirst()).containsEntry("sequence", 1002);
 
         CallToolResult next = callMovements(movements, Map.of("name", "Cash", "offset", 1000));
@@ -224,10 +228,10 @@ class MetadataToolFactoryTest {
         dataSource.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1");
         var jdbi = Jdbi.create(dataSource);
         jdbi.useHandle(h -> {
-            h.execute("CREATE TABLE reg_cash (_period TIMESTAMP, _active BOOLEAN, name VARCHAR, sequence INT)");
-            h.execute("INSERT INTO reg_cash SELECT DATEADD('SECOND', X, TIMESTAMP '2026-01-01 00:00:00'), "
+            h.execute("CREATE TABLE reg_cash (_id UUID DEFAULT RANDOM_UUID() PRIMARY KEY, _period TIMESTAMP, _active BOOLEAN, name VARCHAR, sequence INT)");
+            h.execute("INSERT INTO reg_cash (_period, _active, name, sequence) SELECT DATEADD('SECOND', X, TIMESTAMP '2026-01-01 00:00:00'), "
                     + "true, CASE WHEN X = 1002 THEN 'Beta' ELSE 'Alpha' END, X FROM SYSTEM_RANGE(1, 1002)");
-            h.execute("INSERT INTO reg_cash VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
+            h.execute("INSERT INTO reg_cash (_period, _active, name, sequence) VALUES (TIMESTAMP '2027-01-01 00:00:00', false, 'Alpha', 1003)");
         });
         var factory = new MetadataToolFactory(registry, new UiAccessService(registry), catalogQuery,
                 documentQuery, new RegisterQueryService(registry, jdbi), catalogCommands, documentCommands,
@@ -242,21 +246,21 @@ class MetadataToolFactoryTest {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> movementRows(CallToolResult result) {
         assertThat(result.isError()).as(result.content().toString()).isNotEqualTo(true);
-        return (List<Map<String, Object>>) ((Map<?, ?>) result.structuredContent()).get("result");
+        return (List<Map<String, Object>>) ((Map<?, ?>) ((Map<?, ?>) result.structuredContent()).get("result")).get("rows");
     }
 
     @Test
-    void registerBalanceFailsLoudlyWhenTheBoundedQueryTruncates() {
+    void registerBalanceReturnsTheSamePageEnvelope() {
         when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.eq(Map.of())))
-                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
+        when(registerQuery.balancePage(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(false), org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.eq(100)))
+                .thenReturn(new su.onno.query.KeysetWindow.Page<>(List.of(Map.of("amount", 10)), "next", true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
-
         CallToolResult result = balance.callHandler().apply(exchange(),
                 new CallToolRequest("register_balance", Map.of("name", "Cash")));
-
-        assertThat(result.isError()).isTrue();
-        assertThat(result.content().toString()).contains("5000", "filters");
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(movementRows(result)).containsExactly(Map.of("amount", 10));
     }
 
     private static McpSyncServerExchange exchange() {

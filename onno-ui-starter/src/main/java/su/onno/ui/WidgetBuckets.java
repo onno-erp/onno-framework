@@ -169,7 +169,7 @@ public final class WidgetBuckets {
         if (truncated) {
             log.warn("Widget aggregate over {} produced more than {} buckets; result truncated. "
                     + "Group by a coarser column or date unit.", table, MAX_BUCKETS);
-            rows = rows.subList(0, MAX_BUCKETS);
+            rows.removeLast();
         }
         // Zero-fill a date-bucketed axis (#246): a plain GROUP BY only emits periods that have
         // rows, so empty days/weeks vanish and gaps read as missing rather than 0. Densify here

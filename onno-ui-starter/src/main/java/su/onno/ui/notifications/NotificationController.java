@@ -4,7 +4,6 @@ import su.onno.ui.CurrentUserResolver;
 import su.onno.ui.CurrentUserResolver.CurrentUser;
 
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,8 +25,9 @@ import java.util.UUID;
  * marks their own notifications — the client never asserts whose feed it is.
  *
  * <ul>
- *   <li>{@code GET /api/notifications} — one newest-first timeline window {@code {items, nextCursor,
- *       hasMore, unreadCount}}; {@code ?unread=true} restricts to unread, {@code ?cursor=} resumes.</li>
+ *   <li>{@code GET /api/notifications} — one newest-first timeline window {@code {rows, nextCursor,
+ *       hasMore, unreadCount}}; {@code items} aliases {@code rows} for one release;
+ *       {@code ?unread=true} restricts to unread, {@code ?cursor=} resumes.</li>
  *   <li>{@code POST /api/notifications/{id}/read} — mark one read.</li>
  *   <li>{@code POST /api/notifications/read-all} — mark every unread one read.</li>
  * </ul>
@@ -46,6 +46,7 @@ public class NotificationController {
         this(notifications, currentUser, null);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
     public NotificationController(NotificationService notifications, CurrentUserResolver currentUser,
                                   su.onno.ui.RecordAccess recordAccess) {
         this.notifications = notifications;
@@ -56,10 +57,12 @@ public class NotificationController {
     @GetMapping
     public Map<String, Object> list(@RequestParam(required = false, defaultValue = "false") boolean unread,
                                     @RequestParam(required = false) String cursor,
-                                    Principal principal, su.onno.access.AccessSubject subject) {
+                                    Principal principal, su.onno.access.AccessSubject subject,
+                                    @RequestParam(required = false) Integer limit) {
         String recipient = recipient(principal);
         Map<String, Object> out = new LinkedHashMap<>();
         if (recipient == null) {
+            out.put("rows", List.of());
             out.put("items", List.of());
             out.put("nextCursor", null);
             out.put("hasMore", false);
@@ -67,39 +70,40 @@ public class NotificationController {
             out.put("types", List.of());
             return out;
         }
-        NotificationStore.Page page = notifications.list(recipient, unread, cursor);
+        var visibility = recordAccess == null ? su.onno.ui.ScopeClause.ALL : recordAccess.notificationScope(subject);
+        NotificationStore.Page page = notifications.list(recipient, unread, cursor, limit == null ? notifications.pageSize() : limit, visibility);
         // A notification about a record the viewer can no longer read (outside its record scope) is
         // withheld — its title snapshots the record's label.
-        out.put("items", page.items().stream()
-                .filter(n -> recordAccess == null || recordAccess.canReadRoute(subject, n.link()))
-                .map(NotificationController::toJson).toList());
+        var rows = page.items().stream().map(NotificationController::toJson).toList();
+        out.put("rows", rows);
+        out.put("items", rows); // deprecated alias for one release
         out.put("nextCursor", page.nextCursor());
         out.put("hasMore", page.hasMore());
-        out.put("unreadCount", notifications.unreadCount(recipient));
+        out.put("unreadCount", notifications.unreadCount(recipient, visibility));
         // The distinct types this user has (independent of the unread filter) — the panel renders one
         // filter tab per type, so the tab set is modular with no config (see NotificationStore#distinctTypes).
-        out.put("types", notifications.types(recipient));
+        out.put("types", notifications.types(recipient, visibility));
         return out;
     }
 
     @PostMapping("/{id}/read")
-    public Map<String, Object> markRead(@PathVariable UUID id, Principal principal) {
+    public Map<String, Object> markRead(@PathVariable UUID id, Principal principal, su.onno.access.AccessSubject subject) {
         String recipient = recipient(principal);
         if (recipient == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         notifications.markRead(id, recipient);
-        return Map.of("unreadCount", notifications.unreadCount(recipient));
+        return Map.of("unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.ui.ScopeClause.ALL : recordAccess.notificationScope(subject)));
     }
 
     @PostMapping("/read-all")
-    public Map<String, Object> markAllRead(Principal principal) {
+    public Map<String, Object> markAllRead(Principal principal, su.onno.access.AccessSubject subject) {
         String recipient = recipient(principal);
         if (recipient == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
         }
         int marked = notifications.markAllRead(recipient);
-        return Map.of("marked", marked, "unreadCount", notifications.unreadCount(recipient));
+        return Map.of("marked", marked, "unreadCount", notifications.unreadCount(recipient, recordAccess == null ? su.onno.ui.ScopeClause.ALL : recordAccess.notificationScope(subject)));
     }
 
     /** The caller's notification-routing id: their identity record id, or username when unlinked, or null for a guest. */

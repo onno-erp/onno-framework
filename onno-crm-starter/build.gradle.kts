@@ -21,6 +21,7 @@ dependencies {
     testImplementation(libs.spring.boot.test)
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.h2)
+    testImplementation(libs.jdbi3.spring5)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRequestScope } from "@/hooks/use-request-scope";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock3, Loader2, Search, UserRoundPlus } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
@@ -76,7 +77,14 @@ const historyEventText = (event: ProcessWorkItemEvent) => {
 };
 
 export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) {
+  const requests = useRequestScope("tasks");
+  const activeHistory = useRef<string | null>(null);
+  const historySequence = useRef(0);
+  useEffect(() => () => { activeHistory.current = null; historySequence.current++; }, []);
   const [tasks, setTasks] = useState<ProcessWorkItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +98,49 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   const [people, setPeople] = useState<TaskAssigneeOption[]>([]);
 
   const reload = useCallback(async () => {
-    setError(null);
+    const current = requests.begin();
+    setError(null); setLoadingMore(false);
     try {
-      setTasks(await api.listProcessTasks());
+      const page = await api.listProcessTasks();
+      if (!current()) return;
+      setTasks(page.rows);
+      setNextCursor(page.nextCursor);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure));
+      if (current()) setError(failure instanceof Error ? failure.message : String(failure));
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
-  }, []);
+  }, [requests]);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    const current = requests.capture();
+    setLoadingMore(true);
+    try {
+      const page = await api.listProcessTasks(nextCursor);
+      if (!current()) return;
+      setTasks(previous => {
+        const have = new Set(previous.map(row => row.id));
+        return [...previous, ...page.rows.filter(row => !have.has(row.id))];
+      });
+      setNextCursor(page.nextCursor);
+    } catch (failure) { if (current()) toast.error(String(failure)); }
+    finally { if (current()) setLoadingMore(false); }
+  };
+
+  const loadMoreHistory = async () => {
+    if (!historyTask || !historyCursor || historyLoading) return;
+    const id = historyTask.id, sequence = historySequence.current;
+    const current = () => activeHistory.current === id && historySequence.current === sequence;
+    setHistoryLoading(true);
+    try {
+      const page = await api.getProcessTaskHistory(id, historyCursor);
+      if (!current()) return;
+      setHistoryEvents(previous => [...previous, ...page.rows]);
+      setHistoryCursor(page.nextCursor);
+    } catch (failure) { if (current()) toast.error(String(failure)); }
+    finally { if (current()) setHistoryLoading(false); }
+  };
 
   useEffect(() => {
     void reload();
@@ -154,17 +196,24 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
   };
 
   const openHistory = async (task: ProcessWorkItem) => {
-    setHistoryTask(task);
+    activeHistory.current = task.id;
+    const sequence = ++historySequence.current;
+    const current = () => activeHistory.current === task.id && historySequence.current === sequence;
+    setHistoryTask(task); setHistoryCursor(null);
     setHistoryEvents([]);
     setHistoryLoading(true);
     try {
-      const events = await api.getProcessTaskHistory(task.id);
-      setHistoryEvents(events);
+      const page = await api.getProcessTaskHistory(task.id);
+      if (!current()) return;
+      setHistoryEvents(page.rows);
+      setHistoryCursor(page.nextCursor);
     } catch (failure) {
-      toast.error(failure instanceof Error ? failure.message : "Could not load task history");
-      setHistoryTask(null);
+      if (current()) {
+        toast.error(failure instanceof Error ? failure.message : "Could not load task history");
+        setHistoryTask(null);
+      }
     } finally {
-      setHistoryLoading(false);
+      if (current()) setHistoryLoading(false);
     }
   };
 
@@ -368,6 +417,9 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
           </>
         )}
       </div>
+      {nextCursor && <Button variant="outline" size="sm" disabled={loadingMore}
+        onClick={() => void loadMore()}>Load more tasks</Button>}
+
       {completing ? (
         <ConfirmOutcomeDialog
           task={completing.task}
@@ -381,9 +433,11 @@ export function ProcessTasksWidget({ widget }: { widget: DashboardWidgetMeta }) 
         <TaskHistoryDialog
           task={historyTask}
           events={historyEvents}
+          hasMore={historyCursor !== null}
+          onLoadMore={() => void loadMoreHistory()}
           loading={historyLoading}
           peopleById={peopleById}
-          onClose={() => setHistoryTask(null)}
+          onClose={() => { activeHistory.current = null; historySequence.current++; setHistoryTask(null); }}
         />
       ) : null}
       {delegating ? (
@@ -442,12 +496,16 @@ function ConfirmOutcomeDialog({
 function TaskHistoryDialog({
   task,
   events,
+  hasMore,
+  onLoadMore,
   loading,
   peopleById,
   onClose,
 }: {
   task: ProcessWorkItem;
   events: ProcessWorkItemEvent[];
+  hasMore: boolean;
+  onLoadMore: () => void;
   loading: boolean;
   peopleById: Map<string, TaskAssigneeOption>;
   onClose: () => void;
@@ -458,7 +516,8 @@ function TaskHistoryDialog({
       title="Task history"
       description={task.title}
       onOpenChange={(open) => { if (!open) onClose(); }}
-      footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+      footer={<>{hasMore && <Button variant="outline" disabled={loading} onClick={onLoadMore}>Load more history</Button>}
+        <Button variant="outline" onClick={onClose}>Close</Button></>}
     >
       {loading ? (
         <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">

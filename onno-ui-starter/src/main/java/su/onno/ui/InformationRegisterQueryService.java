@@ -49,15 +49,18 @@ public class InformationRegisterQueryService {
      */
     public List<Map<String, Object>> relatedRows(AccessSubject subject, InformationRegisterDescriptor desc,
                                                   String viaColumn, UUID parentId) {
+        return relatedPage(subject, desc, viaColumn, parentId, null, 100).rows();
+    }
+
+    public su.onno.query.KeysetWindow.Page<Map<String, Object>> relatedPage(AccessSubject subject,
+            InformationRegisterDescriptor desc, String viaColumn, UUID parentId, String cursor, int limit) {
         ScopeClause scope = scopes.clause(desc.javaClass(), subject, AccessMode.READ, desc.tableName());
-        List<Map<String, Object>> rows = jdbi.withHandle(h ->
-                scope.bind(h.createQuery("SELECT * FROM " + desc.tableName() +
-                                " WHERE " + viaColumn + " = :parent" + scope.and() + " ORDER BY _id"))
-                        .bind("parent", parentId)
-                        .mapToMap()
-                        .list());
-        refResolver.resolveAttributes(rows, allFields(desc), subject);
-        return rows;
+        var page = KeysetWindow.collection(jdbi, desc.tableName(), "*", viaColumn + " = :parent" + scope.and(),
+                q -> { scope.bind(q); q.bind("parent", parentId); },
+                List.of(new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "related-info:" + desc.tableName() + ":" + viaColumn + ":" + parentId + ":" + scopes.policies().fingerprint(subject) + ":" + EntityQuerySupport.cursorSubject(subject));
+        refResolver.resolveAttributes(page.rows(), allFields(desc), subject);
+        return page;
     }
 
     private static List<AttributeDescriptor> allFields(InformationRegisterDescriptor desc) {

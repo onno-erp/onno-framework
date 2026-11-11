@@ -36,7 +36,6 @@ import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -192,7 +191,7 @@ class RecordPolicyConformanceTest {
     private MockMvc mvc;
 
     private static boolean seeded;
-    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked, planBasic;
+    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked;
     private static UUID instanceA, instanceB, instanceUnderB, instanceMirror;
     private static UUID jobA, jobB;
     private static final Set<String> B_IDS = new LinkedHashSet<>();
@@ -230,7 +229,7 @@ class RecordPolicyConformanceTest {
                 "email", "a@leak.test"), system));
         ownerB = id(catalogCommands.create(owners, body("code", "LEAK-B-O", "description", "LEAK-B-owner",
                 "email", "b@leak.test"), system));
-        planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
+        UUID planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
         tenantA = id(catalogCommands.create(tenants, body("code", "TA", "description", "Alpha tenant",
                 "owner", ownerA.toString(), "note", "alpha"), system));
         tenantLocked = id(catalogCommands.create(tenants, body("code", "TL", "description", "Locked tenant",
@@ -370,7 +369,7 @@ class RecordPolicyConformanceTest {
                 .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"query\":\"\"}")));
         assertThat(ids(options)).first().isEqualTo(tenantA.toString());
         assertThat(ids(options)).doesNotContain(tenantB.toString());
-        assertThat(options.get(0)).containsEntry("_recent", true);
+        assertThat(options.getFirst()).containsEntry("_recent", true);
         assertThat(options.stream().filter(o -> Boolean.TRUE.equals(o.get("_recent")))).hasSize(1);
 
         // The picker dialog (#411): an out-of-scope id is left out exactly like an unknown one, so
@@ -398,11 +397,11 @@ class RecordPolicyConformanceTest {
     }
 
     private void treesPromoteOrphans() throws Exception {
-        List<Map<String, Object>> tree = jsonList(ok(get("/api/catalogs/LkInstances/tree")));
+        List<Map<String, Object>> tree = pageRows(ok(get("/api/catalogs/LkInstances/tree")));
         assertThat(ids(tree)).contains(instanceUnderB.toString());
         assertThat(row(tree, instanceUnderB)).containsEntry("parent", null).containsEntry("parentRestricted", true);
-        assertThat(ids(jsonList(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
-        assertThat(jsonList(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
+        assertThat(ids(pageRows(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
+        assertThat(pageRows(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
                 .allSatisfy(r -> assertThat(r.get("parent")).isNull());
 
         // Picker folder browsing (#411): folders-only children and the pruned path tree are scoped
@@ -415,14 +414,14 @@ class RecordPolicyConformanceTest {
     }
 
     private void registersAreScopedByDimension() throws Exception {
-        List<Map<String, Object>> movements = jsonList(ok(get("/api/registers/LkUsage/movements")));
+        List<Map<String, Object>> movements = pageRows(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
-        List<Map<String, Object>> balance = jsonList(ok(get("/api/registers/LkUsage/balance")));
+        List<Map<String, Object>> balance = pageRows(ok(get("/api/registers/LkUsage/balance")));
         assertThat(balance).hasSize(1);
         ok(get("/api/registers/LkUsage/turnover").param("from", "2000-01-01T00:00:00").param("to", "2999-01-01T00:00:00"));
-        Map<String, Object> window = jsonMap(ok(get("/api/list/registers/LkUsage/movements")));
+        Map<String, Object> window = jsonMap(ok(get("/api/list/registers/LkUsage/movements").param("count", "exact")));
         assertThat(window.get("total")).isEqualTo(1);
-        assertThat(jsonMap(ok(get("/api/list/registers/LkUsage/balance"))).get("total")).isEqualTo(1);
+        assertThat(jsonMap(ok(get("/api/list/registers/LkUsage/balance").param("count", "exact"))).get("total")).isEqualTo(1);
     }
 
     private void recordSidecarsAreScoped() throws Exception {
@@ -431,7 +430,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> resolved = jsonMap(ok(get("/api/mentions/resolve")
                 .param("kind", "catalogs").param("name", "LkTenants").param("id", tenantB.toString())));
         // the resolve response echoes the requested id; it must be unreadable with no display
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(resolved).containsEntry("readable", false).containsEntry("display", null);
 
         ok(get("/api/comments/catalogs/LkTenants/" + tenantA));
@@ -442,7 +441,7 @@ class RecordPolicyConformanceTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"mine\"}")));
         ok(post("/api/comments/" + mine.get("id") + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"));
-        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).get(0).id();
+        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).getFirst().id();
         status(post("/api/comments/" + bComment + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"), 404);
         status(delete("/api/comments/" + bComment), 404);
@@ -459,8 +458,11 @@ class RecordPolicyConformanceTest {
         status(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"path\":\"/catalogs/LkTenants/" + tenantB + "\",\"action\":\"enter\"}"), 404);
 
-        Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
-        assertThat((List<?>) feed.get("items")).hasSize(1);
+        Map<String, Object> feed = jsonMap(ok(get("/api/notifications").param("limit", "1")));
+        assertThat((List<?>) feed.get("rows")).hasSize(1);
+        assertThat(feed.get("items")).isEqualTo(feed.get("rows"));
+        assertThat(feed.get("hasMore")).isEqualTo(false);
+        assertThat(feed.get("nextCursor")).isNull();
 
         ok(get("/api/tasks"));
     }
@@ -495,13 +497,13 @@ class RecordPolicyConformanceTest {
         ok(post("/api/catalogs/LkTenants/validate").contentType(MediaType.APPLICATION_JSON).content("{}"));
         Map<String, Object> batch = jsonMap(ok(post("/api/catalogs/LkTenants/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + tenantB + "\"]}")));
-        bodies.remove(bodies.size() - 1); // the batch summary echoes failed ids
+        bodies.removeLast(); // the batch summary echoes failed ids
         assertThat(batch).containsEntry("ok", 0);
 
         // create: the policy default stamps the owner, even over an explicit foreign owner
         Map<String, Object> created = jsonMap(ok(post("/api/catalogs/LkTenants").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"New tenant\",\"owner\":\"" + ownerB + "\"}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(created.get("owner")).isEqualTo(ownerA.toString());
         // cannot move a record out of the write scope; cannot reference an unreadable record
         status(put("/api/catalogs/LkTenants/" + tenantA).contentType(MediaType.APPLICATION_JSON)
@@ -529,7 +531,7 @@ class RecordPolicyConformanceTest {
         status(delete("/api/documents/LkBuildJobs/" + jobB), 404);
         Map<String, Object> docBatch = jsonMap(ok(post("/api/documents/LkBuildJobs/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + jobB + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(docBatch).containsEntry("ok", 0);
         // a line referencing B's instance is rejected
         status(post("/api/documents/LkBuildJobs").contentType(MediaType.APPLICATION_JSON)
@@ -559,7 +561,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> batch = jsonMap(ok(post("/api/actions/catalogs/LkTenants/touch/batch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[\"" + tenantA + "\",\"" + tenantB + "\",\"" + tenantLocked + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(batch).containsEntry("ok", 1);
         assertThat(LeakTestApp.TOUCHES.get()).isEqualTo(2);
     }
@@ -567,7 +569,7 @@ class RecordPolicyConformanceTest {
     private void cursorsAreBoundToTheirSubject() throws Exception {
         Map<String, Object> first = jsonMap(ok(get("/api/list/catalogs/LkTenants").param("limit", "1")));
         String cursor = (String) first.get("nextCursor");
-        assertThat(cursor).contains("~");
+        assertThat(cursor).isNotBlank();
         ok(get("/api/list/catalogs/LkTenants").param("limit", "1").param("cursor", cursor));
         int replayed = mvc.perform(get("/api/list/catalogs/LkTenants").principal(STAFF)
                 .param("limit", "1").param("cursor", cursor)).andReturn().getResponse().getStatus();
@@ -609,9 +611,9 @@ class RecordPolicyConformanceTest {
         }
 
         @Override
-        public void send(SseEventBuilder builder) throws IOException {
+        public void send(SseEventBuilder builder) {
             StringBuilder sb = new StringBuilder();
-            builder.build().forEach(part -> sb.append(String.valueOf(part.getData())));
+            builder.build().forEach(part -> sb.append(part.getData()));
             sent.add(sb.toString().replace('=', ':'));
         }
     }
@@ -643,14 +645,10 @@ class RecordPolicyConformanceTest {
     // --------------------------------------------------------------------------- helpers
 
     private String ok(MockHttpServletRequestBuilder request) throws Exception {
-        return ok(request, 200);
+        return status(request, 200);
     }
 
-    private String ok(MockHttpServletRequestBuilder request, int expected) throws Exception {
-        return status(request, expected);
-    }
-
-    private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {
+private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {
         MvcResult result = mvc.perform(request.principal(CUSTOMER_A)).andReturn();
         String body = result.getResponse().getContentAsString();
         assertThat(result.getResponse().getStatus())
@@ -672,6 +670,13 @@ class RecordPolicyConformanceTest {
 
     private Map<String, Object> jsonMap(String body) throws Exception {
         return json.readValue(body, new TypeReference<>() {});
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> pageRows(String body) throws Exception {
+        Map<String, Object> page = jsonMap(body);
+        assertThat(page).containsKeys("rows", "nextCursor", "hasMore");
+        return (List<Map<String, Object>>) page.get("rows");
     }
 
     private List<Map<String, Object>> jsonList(String body) throws Exception {

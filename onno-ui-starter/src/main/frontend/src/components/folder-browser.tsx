@@ -1,3 +1,4 @@
+import { useRequestScope } from "@/hooks/use-request-scope";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderOpen, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -95,16 +96,28 @@ export function FolderTree({ catalog, root, path, onOpen, className }: {
   className?: string;
 }) {
   const t = useMessages();
+  const requests = useRequestScope(catalog);
   const [children, setChildren] = useState<Record<string, EntityRecord[] | "loading">>({});
+  const [nextCursors, setNextCursors] = useState<Record<string, string | null>>({});
+  const [loadingMore, setLoadingMore] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["root"]));
   const current = path[path.length - 1]?.id ?? null;
 
   const load = useCallback((parent: string | null) => {
     const key = parent ?? "root";
+    const current = requests.capture();
     setChildren((prev) => (prev[key] ? prev : { ...prev, [key]: "loading" }));
     api.getCatalogChildFolders(catalog, parent)
-      .then((rows) => setChildren((prev) => ({ ...prev, [key]: rows })))
-      .catch(() => setChildren((prev) => ({ ...prev, [key]: [] })));
+      .then((page) => {
+        if (!current()) return;
+        setChildren((prev) => ({ ...prev, [key]: page.rows }));
+        setNextCursors(prev => ({ ...prev, [key]: page.nextCursor }));
+      })
+      .catch(() => { if (current()) setChildren((prev) => ({ ...prev, [key]: [] })); });
+  }, [catalog, requests]);
+
+  useEffect(() => {
+    setChildren({}); setNextCursors({}); setLoadingMore(null); setExpanded(new Set(["root"]));
   }, [catalog]);
 
   useEffect(() => {
@@ -119,6 +132,25 @@ export function FolderTree({ catalog, root, path, onOpen, className }: {
       if (children[key] === undefined) load(key === "root" ? null : key);
     }
   }, [expanded, children, load]);
+
+  const loadMore = async (key: string) => {
+    const cursor = nextCursors[key];
+    if (!cursor || loadingMore) return;
+    const current = requests.capture();
+    setLoadingMore(key);
+    try {
+      const page = await api.getCatalogChildFolders(catalog, key === "root" ? null : key, cursor);
+      if (!current()) return;
+      setChildren(previous => {
+        const old = previous[key];
+        const rows = Array.isArray(old) ? old : [];
+        const have = new Set(rows.map(entityRowId));
+        return { ...previous, [key]: [...rows, ...page.rows.filter(row => !have.has(entityRowId(row)))] };
+      });
+      setNextCursors(previous => ({ ...previous, [key]: page.nextCursor }));
+    } catch { /* Keep this cursor available for an explicit retry. */ }
+    finally { if (current()) setLoadingMore(null); }
+  };
 
   const toggle = (key: string) =>
     setExpanded((prev) => {
@@ -161,6 +193,8 @@ export function FolderTree({ catalog, root, path, onOpen, className }: {
               const id = entityRowId(row);
               return id ? renderNode([...crumbs, { id, label: rowLabel(row) }], depth + 1, row.hasChildFolders === true) : null;
             })}
+            {nextCursors[key] && <li><button type="button" disabled={loadingMore !== null}
+              onClick={() => void loadMore(key)} className="px-4 py-1 text-sm">Load more</button></li>}
           </ul>
         ) : null}
       </li>

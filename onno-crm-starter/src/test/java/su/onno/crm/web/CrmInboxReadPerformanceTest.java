@@ -4,7 +4,6 @@ import java.security.Principal;
 import java.util.*;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.LinkedMultiValueMap;
@@ -45,7 +44,16 @@ class CrmInboxReadPerformanceTest {
         when(views.catalogList(eq(descriptor),any(ListSpec.class))).thenReturn(view);
         when(view.title()).thenReturn("Inbox");when(view.columns()).thenReturn(List.of());when(view.filters()).thenReturn(List.of());
         controller=new CrmInboxWorkspaceController(workspaces,catalogs,mock(CurrentUserResolver.class),mock(CommentService.class),
-            mock(CommentAuthorAvatars.class),mock(ApplicationEventPublisher.class),contacts,mock(ObjectProvider.class),mock(UiAccessService.class));
+            mock(CommentAuthorAvatars.class),mock(ApplicationEventPublisher.class),contacts,new org.springframework.beans.factory.support.StaticListableBeanFactory().getBeanProvider(org.springframework.core.ResolvableType.forClassWithGenerics(CrmAgentBinding.class, org.springframework.core.ResolvableType.forClass(Object.class))),mock(UiAccessService.class));
+        var dataSource=new org.h2.jdbcx.JdbcDataSource();dataSource.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1");
+        var metadata=new su.onno.metadata.MetadataRegistry();var scanner=new su.onno.metadata.MetadataScanner(new su.onno.metadata.DefaultNamingStrategy());
+        metadata.registerCatalog(scanner.scan(Conversation.class));metadata.registerCatalog(scanner.scan(su.onno.crm.domain.ConversationMessage.class));
+        var feeds=spy(new CrmFeedQuery(org.jdbi.v3.core.Jdbi.create(dataSource),mock(su.onno.crm.repository.ConversationRepository.class),metadata));
+        doAnswer(i->{java.util.function.Consumer<List<Conversation>> consume = i.getArgument(1); consume.accept(members);return null;})
+            .when(feeds).scan(any(),any());
+        ReflectionTestUtils.setField(controller,"feeds",feeds);
+        when(workspaces.requireConversation(eq("support"),any(UUID.class),eq(principal),eq(false)))
+            .thenAnswer(i->members.stream().filter(c->Objects.equals(c.getId(),i.getArgument(1))).findFirst().orElseThrow());
         ReflectionTestUtils.setField(controller,"listViews",views);
         ReflectionTestUtils.setField(controller,"states",CrmStateConfiguration.empty());
         var priorities=mock(CrmPriorityBinding.class);when(priorities.choices()).thenReturn(CrmStateConfiguration.empty());
@@ -68,64 +76,63 @@ class CrmInboxReadPerformanceTest {
         });
     }
     /** Every customer the controller asked about, across however many batches it used. */
-    @SuppressWarnings("unchecked")
     private Set<UUID> resolvedCustomers() {
-        var captor=ArgumentCaptor.forClass(Collection.class);
+        ArgumentCaptor<Collection<UUID>> captor=ArgumentCaptor.captor();
         verify(contacts,atLeastOnce()).summaries(captor.capture(),eq(principal));
         var asked=new LinkedHashSet<UUID>();
-        for(Object batch:captor.getAllValues()) asked.addAll((Collection<UUID>)batch);
+        for(Collection<UUID> batch:captor.getAllValues()) asked.addAll(batch);
         return asked;
     }
 
     @Test void decoratesOnlyTheAuthorizedFilteredSortedPage() {
         when(workspaces.canAccess(members.get(98),principal,false)).thenReturn(false);
-        var params=new LinkedMultiValueMap<String,String>();params.set("limit","2");params.set("cursor","1");
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("limit","2");params.set("count","exact");
         params.set("eq","channel,WILDBERRIES");params.set("sort","unreadCount");params.set("dir","desc");
-        var result=(Map<?,?>)controller.read("support","",0,params,principal);
-        assertThat(result.get("total")).isEqualTo(49);
-        assertThat(result.get("nextCursor")).isEqualTo("3");
-        var rows=(List<Map<String,Object>>)result.get("rows");
-        assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(94).getId(),members.get(92).getId());
+        var result=(Map<?,?>)controller.read("support","",1,params,principal);
+        assertThat(result.get("total")).isEqualTo(49L);
+        assertThat(result.get("nextCursor")).isNotNull().isNotEqualTo("3");
+        var rows=(List<?>)result.get("rows");
+        assertThat(rows).extracting(r->(UUID)((Map<?,?>)r).get("id")).containsExactly(members.get(94).getId(),members.get(92).getId());
         verify(catalogs,times(2)).get(any(),any(),any());
         assertThat(resolvedCustomers())
             .containsExactlyInAnyOrder(members.get(94).getCustomer(),members.get(92).getCustomer())
             .doesNotContain(members.get(98).getCustomer());
     }
     @Test void liveReadPatchReturnsOnlyRequestedAuthorizedConversation() {
-        var params=new LinkedMultiValueMap<String,String>();
-        params.set("ids",members.get(75).getId().toString());
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");
+        params.set("ids",Objects.requireNonNull(members.get(75).getId()).toString());
         var result=(Map<?,?>)controller.read("support","",0,params,principal);
-        var rows=(List<Map<String,Object>>)result.get("rows");
-        assertThat(rows).extracting(r->r.get("id")).containsExactly(members.get(75).getId());
-        assertThat(result.get("total")).isEqualTo(1);
+        var rows=(List<?>)result.get("rows");
+        assertThat(rows).extracting(r->(UUID)((Map<?,?>)r).get("id")).containsExactly(members.get(75).getId());
+        assertThat(result.get("total")).isEqualTo(1L);
         assertThat(resolvedCustomers()).containsExactly(members.get(75).getCustomer());
     }
     @Test void requestedIdsCannotExposeForeignOrUnauthorizedConversations() {
         when(workspaces.canAccess(members.get(75),principal,false)).thenReturn(false);
-        var params=new LinkedMultiValueMap<String,String>();
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");
         params.set("ids",members.get(75).getId()+","+UUID.randomUUID());
         var result=(Map<?,?>)controller.read("support","",0,params,principal);
         assertThat((List<?>)result.get("rows")).isEmpty();
-        assertThat(result.get("total")).isEqualTo(0);
+        assertThat(result.get("total")).isEqualTo(0L);
         verifyNoInteractions(contacts);
     }
     @Test void rejectsMalformedPatchIds() {
-        var params=new LinkedMultiValueMap<String,String>();params.set("ids","invalid");
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("ids","invalid");
         assertThatThrownBy(()->controller.read("support","",0,params,principal))
             .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     }
     @Test void customerNameSearchStillResolvesNamesBeforePaging() {
-        var params=new LinkedMultiValueMap<String,String>();params.set("limit","1");
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("limit","1");
         var result=(Map<?,?>)controller.read("support","customer-99",0,params,principal);
-        assertThat(result.get("total")).isEqualTo(1);
-        var rows=(List<Map<String,Object>>)result.get("rows");
-        assertThat(rows.getFirst().get("id")).isEqualTo(members.get(99).getId());
+        assertThat(result.get("total")).isEqualTo(1L);
+        var rows=(List<?>)result.get("rows");
+        assertThat(((Map<?,?>)rows.getFirst()).get("id")).isEqualTo(members.get(99).getId());
     }
     @Test void emptyPageDoesNotResolveCustomerDetails() {
-        var params=new LinkedMultiValueMap<String,String>();params.set("cursor","100");
-        var result=(Map<?,?>)controller.read("support","",0,params,principal);
+        var params=new LinkedMultiValueMap<String,String>();params.set("count","exact");params.set("count","exact");
+        var result=(Map<?,?>)controller.read("support","",100,params,principal);
         assertThat((List<?>)result.get("rows")).isEmpty();
-        assertThat(result.get("total")).isEqualTo(100);
+        assertThat(result.get("total")).isEqualTo(100L);
         verify(contacts,never()).get(any(),any());verify(catalogs,never()).get(any(),any(),any());
     }
 }

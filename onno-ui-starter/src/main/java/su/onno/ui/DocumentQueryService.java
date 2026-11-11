@@ -48,6 +48,7 @@ public class DocumentQueryService {
     }
 
     /** The ref resolver bound to this service's policies. */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public RefResolver refResolver() {
         return refResolver;
     }
@@ -137,6 +138,7 @@ public class DocumentQueryService {
      * in the same column-keyed, ref-resolved shape {@link #get} returns for an existing record, so
      * the New form pre-fills declared defaults instead of opening blank (issue #181).
      */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public Map<String, Object> newDraft(AccessSubject subject, DocumentDescriptor desc) {
         return newDraft(subject, desc, Map.of());
     }
@@ -198,7 +200,8 @@ public class DocumentQueryService {
                                  List<String> prefix, List<String> ge, List<String> le,
                                  String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        String fingerprint = scopes.policies().fingerprint(subject);
+        String fingerprint = su.onno.query.Cursor.context(EntityQuerySupport.cursorSubject(subject),
+                scopes.policies().fingerprint(subject), search, eq, in, like, prefix, ge, le, widgetFilter, from, to);
         boolean defaultSort = surface.isDefaultSort(sortColumn);
         String col = surface.safeSort(sortColumn);
         boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
@@ -229,12 +232,6 @@ public class DocumentQueryService {
         return window.decorated();
     }
 
-    /**
-     * Whether {@code column} is safe for the fast (index-only) keyset seek — the framework keeps it
-     * populated, so the seek never has to reason about NULLs. True for {@code _date}, {@code _number}
-     * and {@code _posted} (all framework-set) and any {@code required} attribute; optional attributes
-     * use the NULL-safe seek instead.
-     */
     /**
      * A cheap live-row estimate for the scroll-height hint, or {@code null} when none is available
      * (H2, or any active search/date-range/filter). Uses PostgreSQL planner statistics
@@ -349,7 +346,7 @@ public class DocumentQueryService {
         });
         boolean capped = rows.size() > ListGroups.MAX_GROUPS;
         if (capped) {
-            rows = new ArrayList<>(rows.subList(0, ListGroups.MAX_GROUPS));
+            rows.removeLast();
         }
         // The raw value stays the group's expand key; a restricted target only has its label masked.
         refResolver.resolveAttributes(rows, desc.attributes(), subject, false);
@@ -367,6 +364,7 @@ public class DocumentQueryService {
     }
 
     /** Columns that may be sorted on: the system columns + every attribute column. */
+    @SuppressWarnings("unused") // Public API for consuming applications.
     public Set<String> sortableColumns(DocumentDescriptor desc) {
         return surface(desc).sortableColumns();
     }

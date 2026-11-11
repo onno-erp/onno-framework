@@ -99,31 +99,43 @@ public final class JdbcProcessEngine implements ProcessEngine {
 
     @Override
     public List<ProcessSnapshot> instances(ProcessActor actor) {
-        Objects.requireNonNull(actor, "actor");
-        return jdbi.withHandle(handle -> {
-            List<InstanceRow> rows = handle.createQuery("""
-                    select * from onno_process_instances order by _started_at desc, _id
-                    """).map((rs, ctx) -> instanceRow(rs)).list();
-            List<ProcessSnapshot> visible = new ArrayList<>();
-            for (InstanceRow row : rows) {
-                if (canAccess(handle, row, actor)) {
-                    visible.add(snapshot(handle, row));
-                }
-            }
-            return List.copyOf(visible);
+        return instances(actor, null, 500).rows();
+    }
+
+    @Override
+    public su.onno.query.KeysetWindow.Page<ProcessSnapshot> instances(ProcessActor actor, String cursor, int limit) {
+        ensureCandidates();
+        return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_instances i", "i.*",
+                instanceVisibility(actor), q -> bindActor(q, actor),
+                List.of(new su.onno.query.KeysetWindow.Order("i._started_at", true),
+                        new su.onno.query.KeysetWindow.Order("i._id", false)), cursor, limit,
+                actorContext(actor) + ":instances", (rs, ctx) -> instanceRow(rs))
+                .map(row -> snapshot(h, row)));
+    }
+
+    @Override
+    public boolean canAccess(UUID instanceId, ProcessActor actor) {
+        ensureCandidates();
+        return jdbi.withHandle(h -> {
+            var q = h.createQuery("SELECT EXISTS (SELECT 1 FROM onno_process_instances i WHERE i._id = :id AND ("
+                    + instanceVisibility(actor) + "))").bind("id", instanceId);
+            bindActor(q, actor);
+            return q.mapTo(Boolean.class).one();
         });
     }
 
     @Override
     public List<ProcessTransitionSnapshot> history(UUID instanceId) {
-        Objects.requireNonNull(instanceId, "instanceId");
-        return jdbi.withHandle(handle -> handle.createQuery("""
-                        select * from onno_process_transitions
-                         where _instance_id = :instance
-                         order by _sequence
-                        """)
-                .bind("instance", instanceId)
-                .map((rs, ctx) -> new ProcessTransitionSnapshot(
+        return history(instanceId, null, 500).rows();
+    }
+
+    @Override
+    public su.onno.query.KeysetWindow.Page<ProcessTransitionSnapshot> history(UUID instanceId, String cursor, int limit) {
+        return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_transitions", "*",
+                "_instance_id = :instance", q -> q.bind("instance", instanceId),
+                List.of(new su.onno.query.KeysetWindow.Order("_sequence", false),
+                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "process-history:" + instanceId, (rs, ctx) -> new ProcessTransitionSnapshot(
                         rs.getObject("_id", UUID.class),
                         rs.getObject("_instance_id", UUID.class),
                         rs.getObject("_token_id", UUID.class),
@@ -135,41 +147,90 @@ public final class JdbcProcessEngine implements ProcessEngine {
                         actorId(rs.getString("_actor")),
                         rs.getString("_actor_display"),
                         instant(rs, "_occurred_at"),
-                        rs.getInt("_sequence")))
-                .list());
+                        rs.getInt("_sequence"))));
     }
 
     @Override
     public List<ProcessTokenSnapshot> tokens(UUID instanceId) {
-        Objects.requireNonNull(instanceId, "instanceId");
-        return jdbi.withHandle(handle -> tokenRows(handle, instanceId, false).stream()
-                .map(JdbcProcessEngine::toTokenSnapshot)
-                .toList());
+        return tokens(instanceId, null, 500).rows();
+    }
+
+    @Override
+    public su.onno.query.KeysetWindow.Page<ProcessTokenSnapshot> tokens(UUID instanceId, String cursor, int limit) {
+        return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h, "onno_process_tokens", "*",
+                "_instance_id = :instance", q -> q.bind("instance", instanceId),
+                List.of(new su.onno.query.KeysetWindow.Order("_entered_at", false),
+                        new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                "process-tokens:" + instanceId, (rs, ctx) -> toTokenSnapshot(tokenRow(rs))));
     }
 
     @Override
     public List<ProcessWorkItem> inbox(ProcessActor actor) {
-        Objects.requireNonNull(actor, "actor");
-        return jdbi.withHandle(handle -> {
-            List<WorkRow> rows = handle.createQuery("""
-                    select w.*, i._definition_key, i._definition_version
-                      from onno_process_work_items w
-                      join onno_process_instances i on i._id = w._instance_id
-                     where w._status in ('OPEN', 'CLAIMED')
-                     order by w._created_at, w._id
-                    """).map((rs, ctx) -> workRow(rs)).list();
-            List<ProcessWorkItem> visible = new ArrayList<>();
-            for (WorkRow row : rows) {
-                TaskAssignment assignment = assignment(row);
-                boolean allowed = row.status == WorkItemStatus.CLAIMED
-                        ? isAdmin(actor) || actor.id().value().equals(row.assignee)
-                        : assignment.allows(actor);
-                if (allowed) {
-                    visible.add(toWorkItem(row));
+        return inbox(actor, null, 500).rows();
+    }
+
+    @Override
+    public su.onno.query.KeysetWindow.Page<ProcessWorkItem> inbox(ProcessActor actor, String cursor, int limit) {
+        ensureCandidates();
+        return jdbi.withHandle(h -> su.onno.query.KeysetWindow.fetch(h,
+                "onno_process_work_items w JOIN onno_process_instances i ON i._id = w._instance_id",
+                "w.*, i._definition_key, i._definition_version",
+                "w._status IN ('OPEN', 'CLAIMED') AND " + (isAdmin(actor) ? "1 = 1" :
+                        "(w._assignee = :pgActor OR (w._status = 'OPEN' AND " + candidates() + "))"),
+                q -> bindActor(q, actor),
+                List.of(new su.onno.query.KeysetWindow.Order("w._created_at", false),
+                        new su.onno.query.KeysetWindow.Order("w._id", false)), cursor, limit,
+                actorContext(actor) + ":inbox", (rs, ctx) -> toWorkItem(workRow(rs))));
+    }
+
+    private String candidates() {
+        return "EXISTS (SELECT 1 FROM onno_process_work_candidates pc WHERE pc._work_item_id = w._id AND ((pc._kind = 'ACTOR' AND pc._value = :pgActor)"
+                + " OR (pc._kind = 'ROLE' AND pc._value IN (<pgRoles>))))";
+    }
+
+    private String instanceVisibility(ProcessActor actor) {
+        if (isAdmin(actor)) return "1 = 1";
+        return "(i._started_by = :pgActor OR EXISTS (SELECT 1 FROM onno_process_work_items w WHERE"
+                + " w._instance_id = i._id AND (w._assignee = :pgActor OR " + candidates() + "))"
+                + " OR EXISTS (SELECT 1 FROM onno_process_transitions pt WHERE pt._instance_id = i._id"
+                + " AND pt._actor = :pgActor))";
+    }
+
+    private void bindActor(org.jdbi.v3.core.statement.Query query, ProcessActor actor) {
+        if (isAdmin(actor)) return;
+        query.bind("pgActor", actor.id().value());
+        query.bindList("pgRoles", actor.roles().isEmpty() ? List.of("") : actor.roles().stream().sorted().toList());
+    }
+
+    private String actorContext(ProcessActor actor) {
+        return actor.id().value() + ":" + actor.roles().stream().sorted().toList();
+    }
+
+    /** Upgrade existing JSON assignments into queryable rows without loading the work-item table. */
+    private synchronized void ensureCandidates() {
+        while (true) {
+            boolean repaired = jdbi.inTransaction(h -> {
+                var rows = h.createQuery("SELECT _id, _candidate_users, _candidate_roles FROM onno_process_work_items"
+                        + " WHERE _candidates_indexed = false ORDER BY _id LIMIT 500 FOR UPDATE").mapToMap().list();
+                for (var row : rows) {
+                    indexCandidates(h, (UUID) row.get("_id"), readSet((String) row.get("_candidate_users")),
+                            readSet((String) row.get("_candidate_roles")));
                 }
+                return !rows.isEmpty();
+            });
+            if (!repaired) return;
+        }
+    }
+
+    private void indexCandidates(Handle h, UUID id, Set<String> actors, Set<String> roles) {
+        h.createUpdate("DELETE FROM onno_process_work_candidates WHERE _work_item_id = :id").bind("id", id).execute();
+        for (String kind : List.of("ACTOR", "ROLE")) {
+            for (String value : kind.equals("ACTOR") ? actors : roles) {
+                h.createUpdate("INSERT INTO onno_process_work_candidates (_work_item_id, _kind, _value) VALUES (:id, :kind, :value)")
+                        .bind("id", id).bind("kind", kind).bind("value", value).execute();
             }
-            return List.copyOf(visible);
-        });
+        }
+        h.createUpdate("UPDATE onno_process_work_items SET _candidates_indexed = true WHERE _id = :id").bind("id", id).execute();
     }
 
     @Override
@@ -277,6 +338,12 @@ public final class JdbcProcessEngine implements ProcessEngine {
             UUID workItemId,
             ProcessActor actor
     ) {
+        return workItemHistory(workItemId, actor, null, 500).rows();
+    }
+
+    @Override
+    public su.onno.query.KeysetWindow.Page<ProcessWorkItemEventSnapshot> workItemHistory(
+            UUID workItemId, ProcessActor actor, String cursor, int limit) {
         Objects.requireNonNull(workItemId, "workItemId");
         Objects.requireNonNull(actor, "actor");
         return jdbi.withHandle(handle -> {
@@ -299,12 +366,12 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 throw new SecurityException(
                         "Current user cannot access this work item history");
             }
-            return handle.createQuery("""
-                            select * from onno_process_work_item_events
-                             where _work_item_id = :id order by _sequence
-                            """)
-                    .bind("id", workItemId)
-                    .map((rs, ctx) -> new ProcessWorkItemEventSnapshot(
+            return su.onno.query.KeysetWindow.fetch(handle, "onno_process_work_item_events", "*",
+                    "_work_item_id = :id", q -> q.bind("id", workItemId),
+                    List.of(new su.onno.query.KeysetWindow.Order("_sequence", false),
+                            new su.onno.query.KeysetWindow.Order("_id", false)), cursor, limit,
+                    actorContext(actor) + ":work-history:" + workItemId,
+                    (rs, ctx) -> new ProcessWorkItemEventSnapshot(
                             rs.getObject("_id", UUID.class),
                             rs.getObject("_work_item_id", UUID.class),
                             rs.getObject("_instance_id", UUID.class),
@@ -317,8 +384,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                             rs.getString("_to_assignee_display"),
                             rs.getString("_reason"),
                             instant(rs, "_occurred_at"),
-                            rs.getInt("_sequence")))
-                    .list();
+                            rs.getInt("_sequence")));
         });
     }
 
@@ -425,7 +491,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
             Object payload = read(instance.payload, definition.payloadType());
             if (!isAdmin(actor)
                     && !actor.id().value().equals(instance.startedBy)
-                    && !cancellationAllows(definition, payload, actor)) {
+                    && cancellationDenied(definition, payload, actor)) {
                 throw new SecurityException(
                         "Current user cannot cancel process " + instance.definitionKey);
             }
@@ -458,7 +524,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
             Object sourcePayload = read(instance.payload, source.payloadType());
             if (!isAdmin(actor)
                     && !actor.id().value().equals(instance.startedBy)
-                    && !cancellationAllows(source, sourcePayload, actor)) {
+                    && cancellationDenied(source, sourcePayload, actor)) {
                 throw new SecurityException(
                         "Current user cannot migrate process " + instance.definitionKey);
             }
@@ -692,10 +758,10 @@ public final class JdbcProcessEngine implements ProcessEngine {
         switch (target.type()) {
             case HUMAN_TASK -> {
                 setTokenWait(handle, token.id, ProcessTokenStatus.WAITING_HUMAN,
-                        null, null, now);
+                        null, now);
                 state.audience.merge(insertWorkItem(
                         handle, state.instance.id, token.id,
-                        state.definition.version(), (HumanTaskNode) target,
+                        (HumanTaskNode) target,
                         state.payload, now));
             }
             case AUTOMATIC -> {
@@ -703,10 +769,9 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 ProcessExecutionContext execution = new ProcessExecutionContext(
                         state.instance.id, token.id, state.instance.definitionKey,
                         state.definition.version(), token.attempt + 1, now);
-                Object nextPayload = Objects.requireNonNull(
+                state.payload = Objects.requireNonNull(
                         automatic.action().execute(state.payload, execution),
                         "Automatic step " + stepKey(target) + " returned null payload");
-                state.payload = nextPayload;
                 handle.createUpdate("""
                         update onno_process_tokens
                            set _attempt = _attempt + 1, _version = _version + 1,
@@ -720,7 +785,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
             }
             case DECISION -> {
                 DecisionNode decision = (DecisionNode) target;
-                Enum selected = (Enum) Objects.requireNonNull(
+                Enum selected = Objects.requireNonNull(
                         decision.decision().decide(state.payload),
                         "Decision " + stepKey(target) + " returned null");
                 ProcessNode next = decision.target(selected);
@@ -738,12 +803,12 @@ public final class JdbcProcessEngine implements ProcessEngine {
                         timer.timer().dueAt(state.payload, now),
                         "Timer " + stepKey(target) + " returned null due time");
                 setTokenWait(handle, token.id, ProcessTokenStatus.WAITING_TIMER,
-                        dueAt, null, now);
+                        dueAt, now);
             }
             case PARALLEL_FORK -> {
                 ParallelForkNode fork = (ParallelForkNode) target;
                 setTokenWait(handle, token.id, ProcessTokenStatus.WAITING_JOIN,
-                        null, null, now);
+                        null, now);
                 for (Object rawBranch : fork.branchType().getEnumConstants()) {
                     Enum branch = (Enum) rawBranch;
                     ProcessNode branchTarget = fork.target(branch);
@@ -763,7 +828,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                         subprocess.call().payload(state.payload),
                         "Subprocess " + stepKey(target) + " returned null child payload");
                 setTokenWait(handle, token.id, ProcessTokenStatus.WAITING_SUBPROCESS,
-                        null, null, now);
+                        null, now);
                 UUID childId = startInternal(
                         handle, childDefinition, childPayload, state.actor,
                         state.instance.rootInstanceId, state.instance.id, token.id,
@@ -780,13 +845,13 @@ public final class JdbcProcessEngine implements ProcessEngine {
                         .execute();
             }
             case END -> setTokenWait(
-                    handle, token.id, ProcessTokenStatus.COMPLETED, null, null, now);
+                    handle, token.id, ProcessTokenStatus.COMPLETED, null, now);
             case START -> throw new IllegalStateException(
                     "Synthetic process start cannot be entered as a route node");
         }
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
+    @SuppressWarnings("rawtypes")
     private void arriveAtJoin(
             Handle handle,
             RuntimeState state,
@@ -798,7 +863,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                     "Parallel join " + stepKey(join) + " has no coordinating fork token");
         }
         setTokenWait(handle, branchToken.id, ProcessTokenStatus.WAITING_JOIN,
-                null, null, state.now);
+                null, state.now);
         ParallelForkNode fork = join.fork();
         int arrivals = handle.createQuery("""
                 select count(*) from onno_process_tokens
@@ -993,7 +1058,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 definitions.require(instance.definitionKey, instance.definitionVersion);
         for (TokenRow token : tokens) {
             currentSteps.put(token.id,
-                    (Enum<?>) requireNode(currentDefinition, token.stepKey).step());
+                    requireNode(currentDefinition, token.stepKey).step());
         }
         for (ProcessDefinitionMigration raw : path) {
             List<ProcessMigrationToken> migrationTokens = new ArrayList<>();
@@ -1020,7 +1085,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
         Map<UUID, ProcessNode<?, ?>> targets = new LinkedHashMap<>();
         for (Map.Entry<UUID, Enum<?>> entry : currentSteps.entrySet()) {
             ProcessNode<?, ?> target =
-                    currentDefinition.graph().node((Enum) entry.getValue());
+                    currentDefinition.graph().node(entry.getValue());
             if (target == null) {
                 throw new IllegalArgumentException(
                         "Migration target step is not in definition v"
@@ -1093,7 +1158,7 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 state.actor, state.now);
         setTokenWait(
                 handle, coordinator.id, ProcessTokenStatus.WAITING_JOIN,
-                null, null, state.now);
+                null, state.now);
     }
 
     private TokenRow resetTokenForMigration(
@@ -1116,11 +1181,6 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .bind("id", old.id)
                 .execute();
         return requireToken(handle, old.id, false);
-    }
-
-    private InstanceRow exactDefinitionRow(Handle handle, InstanceRow instance) {
-        exactDefinition(handle, instance);
-        return instance;
     }
 
     private ProcessDefinition<?, ?> exactDefinition(
@@ -1148,41 +1208,13 @@ public final class JdbcProcessEngine implements ProcessEngine {
         return definition;
     }
 
-    private boolean canAccess(Handle handle, InstanceRow instance, ProcessActor actor) {
-        if (isAdmin(actor) || actor.id().value().equals(instance.startedBy)) {
-            return true;
-        }
-        List<WorkRow> work = handle.createQuery("""
-                select w.*, i._definition_key, i._definition_version
-                  from onno_process_work_items w
-                  join onno_process_instances i on i._id = w._instance_id
-                 where w._instance_id = :instance
-                """)
-                .bind("instance", instance.id)
-                .map((rs, ctx) -> workRow(rs))
-                .list();
-        for (WorkRow row : work) {
-            if (actor.id().value().equals(row.assignee) || assignment(row).allows(actor)) {
-                return true;
-            }
-        }
-        return handle.createQuery("""
-                select count(*) from onno_process_transitions
-                 where _instance_id = :instance and _actor = :actor
-                """)
-                .bind("instance", instance.id)
-                .bind("actor", actor.id().value())
-                .mapTo(Integer.class)
-                .one() > 0;
-    }
-
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static boolean cancellationAllows(
+    private static boolean cancellationDenied(
             ProcessDefinition definition,
             Object payload,
             ProcessActor actor
     ) {
-        return definition.cancellationAssignment(payload).allows(actor);
+        return !definition.cancellationAssignment(payload).allows(actor);
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -1256,7 +1288,6 @@ public final class JdbcProcessEngine implements ProcessEngine {
             Handle handle,
             UUID instanceId,
             UUID tokenId,
-            int definitionVersion,
             HumanTaskNode task,
             Object payload,
             Instant now
@@ -1291,6 +1322,8 @@ public final class JdbcProcessEngine implements ProcessEngine {
                 .bind("subjectLabel", subject == null ? null : subject.label())
                 .bind("now", now)
                 .execute();
+        indexCandidates(handle, workItemId, assignment.actors().stream().map(ProcessActorId::value)
+                .collect(java.util.stream.Collectors.toSet()), assignment.roles());
         WorkRow row = requireWorkItem(handle, workItemId, false);
         insertWorkItemEvent(
                 handle, row, WorkItemEventType.CREATED,
@@ -1430,19 +1463,16 @@ public final class JdbcProcessEngine implements ProcessEngine {
             UUID tokenId,
             ProcessTokenStatus status,
             Instant dueAt,
-            UUID childInstanceId,
             Instant now
     ) {
         handle.createUpdate("""
                 update onno_process_tokens
                    set _status = :status, _due_at = :dueAt,
-                       _child_instance_id = coalesce(:child, _child_instance_id),
                        _updated_at = :now, _version = _version + 1
                  where _id = :id
                 """)
                 .bind("status", status.name())
                 .bind("dueAt", dueAt)
-                .bind("child", childInstanceId)
                 .bind("now", now)
                 .bind("id", tokenId)
                 .execute();
@@ -1493,18 +1523,6 @@ public final class JdbcProcessEngine implements ProcessEngine {
         return findToken(handle, id, lock)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown process token: " + id));
-    }
-
-    private List<TokenRow> tokenRows(Handle handle, UUID instanceId, boolean lock) {
-        String sql = """
-                select * from onno_process_tokens
-                 where _instance_id = :instance
-                 order by _entered_at, _id
-                """ + (lock ? " for update" : "");
-        return handle.createQuery(sql)
-                .bind("instance", instanceId)
-                .map((rs, ctx) -> tokenRow(rs))
-                .list();
     }
 
     private List<TokenRow> liveTokenRows(
@@ -1911,12 +1929,11 @@ public final class JdbcProcessEngine implements ProcessEngine {
             return this;
         }
 
-        private Audience merge(Audience other) {
+        private void merge(Audience other) {
             if (other != null) {
                 users.addAll(other.users);
                 roles.addAll(other.roles);
             }
-            return this;
         }
 
         private boolean isEmpty() {

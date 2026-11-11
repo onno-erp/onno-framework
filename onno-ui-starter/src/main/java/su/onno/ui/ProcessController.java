@@ -43,6 +43,7 @@ public final class ProcessController {
     private RecordAccess recordAccess;
     private AccessSubjectResolver subjects;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ProcessController(
             ProcessEngine engine,
             ProcessDefinitions definitions,
@@ -71,6 +72,7 @@ public final class ProcessController {
     @GetMapping("/process-definitions")
     public List<DefinitionView> definitions() {
         return definitions.all().stream()
+                .limit(500)
                 .map(definition -> new DefinitionView(
                         definition.key(),
                         definition.title(),
@@ -95,9 +97,15 @@ public final class ProcessController {
         }
     }
 
-    @GetMapping("/processes")
     public List<ProcessSnapshot> instances(Principal principal) {
         return engine.instances(actor(principal));
+    }
+
+    @GetMapping("/processes")
+    public su.onno.query.KeysetWindow.Page<ProcessSnapshot> instancesPage(Principal principal,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        return engine.instances(actor(principal), cursor, limit);
     }
 
     @GetMapping("/processes/{instanceId}")
@@ -105,8 +113,7 @@ public final class ProcessController {
         ProcessSnapshot snapshot = engine.find(instanceId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Unknown process instance: " + instanceId));
-        boolean allowed = engine.instances(actor(principal)).stream()
-                .anyMatch(instance -> instance.id().equals(instanceId));
+        boolean allowed = engine.canAccess(instanceId, actor(principal));
         if (!allowed) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "Current user cannot access process " + instanceId);
@@ -115,6 +122,14 @@ public final class ProcessController {
     }
 
     @GetMapping("/processes/{instanceId}/history")
+    public su.onno.query.KeysetWindow.Page<ProcessTransitionSnapshot> historyPage(@PathVariable UUID instanceId, Principal principal,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        get(instanceId, principal);
+        try { return engine.history(instanceId, cursor, limit); }
+        catch (RuntimeException e) { throw operationFailure(e); }
+    }
+
     public List<ProcessTransitionSnapshot> history(
             @PathVariable UUID instanceId,
             Principal principal
@@ -124,6 +139,14 @@ public final class ProcessController {
     }
 
     @GetMapping("/processes/{instanceId}/executions")
+    public su.onno.query.KeysetWindow.Page<ProcessTokenSnapshot> executionsPage(@PathVariable UUID instanceId, Principal principal,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        get(instanceId, principal);
+        try { return engine.tokens(instanceId, cursor, limit); }
+        catch (RuntimeException e) { throw operationFailure(e); }
+    }
+
     public List<ProcessTokenSnapshot> executions(
             @PathVariable UUID instanceId,
             Principal principal
@@ -185,9 +208,15 @@ public final class ProcessController {
                 item.outcome(), item.outcomes());
     }
 
-    @GetMapping("/tasks")
     public List<ProcessWorkItem> inbox(Principal principal) {
         return engine.inbox(actor(principal)).stream().map(item -> masked(item, principal)).toList();
+    }
+
+    @GetMapping("/tasks")
+    public su.onno.query.KeysetWindow.Page<ProcessWorkItem> inboxPage(Principal principal,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        return engine.inbox(actor(principal), cursor, limit).map(item -> masked(item, principal));
     }
 
     @PostMapping("/tasks/{workItemId}/claim")
@@ -210,6 +239,13 @@ public final class ProcessController {
     }
 
     @GetMapping("/tasks/{workItemId}/history")
+    public su.onno.query.KeysetWindow.Page<ProcessWorkItemEventSnapshot> workItemHistoryPage(@PathVariable UUID workItemId, Principal principal,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String cursor,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        try { return engine.workItemHistory(workItemId, actor(principal), cursor, limit); }
+        catch (RuntimeException e) { throw operationFailure(e); }
+    }
+
     public List<ProcessWorkItemEventSnapshot> workItemHistory(
             @PathVariable UUID workItemId,
             Principal principal

@@ -10,10 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Base64;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,8 +33,6 @@ import java.util.Map;
 @RequestMapping("/api/list/registers")
 public class RegisterListController {
 
-    private static final int MAX_PAGE = 500;
-    private static final String CURSOR_PREFIX = "register:";
 
     /** Movement-type pill colors ({@code _movement_type_color}): receipt green, expense red. */
     private static final String RECEIPT_COLOR = "#16a34a";
@@ -66,12 +61,15 @@ public class RegisterListController {
         access.requireRead(subject, desc);
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.movementFilterColumns(desc));
-        long total = query.movementsCount(subject, desc, from, to, filters);
-        int rowPosition = rowPosition(request);
-        List<Map<String, Object>> rows = query.movementsWindow(subject, desc, from, to, filters,
-                sort, descending(dir), rowPosition, lim);
-        decorateMovementType(rows);
-        return envelope(total, rowPosition, rows);
+        var page = query.movementsPage(subject, desc, from, to, filters, sort, descending(dir),
+                request.getParameter("cursor"), lim);
+        if (request.getParameter("cursor") == null && request.getParameter("offset") != null) {
+            page = legacyMovements(subject, desc, from, to, filters, sort, descending(dir), request, lim);
+        }
+        decorateMovementType(page.rows());
+        Map<String, Object> out = KeysetWindow.envelope(page);
+        if ("exact".equals(request.getParameter("count"))) out.put("total", query.movementsCount(subject, desc, from, to, filters));
+        return out;
     }
 
     @GetMapping("/{name}/balance")
@@ -85,11 +83,15 @@ public class RegisterListController {
         access.requireRead(subject, desc);
         int lim = clamp(limit);
         ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc));
-        long total = query.balanceCount(subject, desc, filters);
-        int rowPosition = rowPosition(request);
-        List<Map<String, Object>> rows = query.balanceWindow(subject, desc, filters,
-                sort, descending(dir), rowPosition, lim);
-        return envelope(total, rowPosition, rows);
+        var page = query.balancePage(subject, desc, filters, sort, descending(dir), request.getParameter("cursor"), lim);
+        if (request.getParameter("cursor") == null && request.getParameter("offset") != null) {
+            int offset = legacyOffset(request);
+            page = su.onno.query.KeysetWindow.legacyOffset(offset, lim,
+                    (c, n) -> query.balancePage(subject, desc, filters, sort, descending(dir), c, n));
+        }
+        Map<String, Object> out = KeysetWindow.envelope(page);
+        if ("exact".equals(request.getParameter("count"))) out.put("total", query.balanceCount(subject, desc, filters));
+        return out;
     }
 
     /**
@@ -107,37 +109,21 @@ public class RegisterListController {
         return values == null ? List.of() : Arrays.asList(values);
     }
 
-    /** The window start encoded by the opaque cursor, or zero for the first window. */
-    private static int rowPosition(HttpServletRequest request) {
-        String cursor = request.getParameter("cursor");
+    private static int legacyOffset(HttpServletRequest request) {
         try {
-            if (cursor != null) {
-                String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
-                if (decoded.startsWith(CURSOR_PREFIX)) {
-                    return Math.max(0, Integer.parseInt(decoded.substring(CURSOR_PREFIX.length())));
-                }
-            }
-        } catch (IllegalArgumentException ignored) {
-            // A stale/foreign cursor restarts from the top rather than erroring the whole list.
-        }
-        return 0;
+            int offset = Integer.parseInt(request.getParameter("offset"));
+            if (offset >= 0) return offset;
+        } catch (NumberFormatException ignored) { }
+        throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "offset must be a non-negative integer");
     }
 
-    /** Keyset-style envelope whose cursor keeps the register's implementation position opaque. */
-    private static Map<String, Object> envelope(long total, int rowPosition, List<Map<String, Object>> rows) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        int nextPosition = rowPosition + rows.size();
-        boolean hasMore = !rows.isEmpty() && nextPosition < total;
-        out.put("rows", rows);
-        out.put("nextCursor", hasMore ? cursorFor(nextPosition) : null);
-        out.put("hasMore", hasMore);
-        out.put("total", total);
-        return out;
-    }
-
-    private static String cursorFor(int rowPosition) {
-        return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString((CURSOR_PREFIX + rowPosition).getBytes(StandardCharsets.UTF_8));
+    private su.onno.query.KeysetWindow.Page<Map<String, Object>> legacyMovements(AccessSubject subject,
+            AccumulationRegisterDescriptor desc, String from, String to, ListFilter.Result filters,
+            String sort, boolean descending, HttpServletRequest request, int limit) {
+        int offset = legacyOffset(request);
+        return su.onno.query.KeysetWindow.legacyOffset(offset, limit,
+                (c, n) -> query.movementsPage(subject, desc, from, to, filters, sort, descending, c, n));
     }
 
     /**
@@ -165,6 +151,6 @@ public class RegisterListController {
     }
 
     private static int clamp(int limit) {
-        return Math.max(1, Math.min(limit, MAX_PAGE));
+        return su.onno.query.KeysetWindow.clampLimit(limit);
     }
 }

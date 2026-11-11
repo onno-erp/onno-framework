@@ -187,34 +187,31 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_balance",
                 "Get accumulation register balances",
-                "Returns up to 5000 current balances for a BALANCE accumulation register, optionally "
-                        + "filtered by dimension field values. If more rows match, the call fails instead "
-                        + "of returning an incomplete result; narrow the dimension filters.",
+                "Returns a keyset window {rows,nextCursor,hasMore}; default limit 100, maximum 500.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
-                        + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
-                        + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
+                        + "\"name\":{\"type\":\"string\"},\"cursor\":{\"type\":\"string\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500},"
+                        + "\"filters\":{\"type\":\"object\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
-                    RegisterQueryService.BoundedRows result =
-                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")));
-                    if (result.truncated()) {
-                        return error("Register balance exceeds the 5000-row safety limit; "
-                                + "narrow the dimension filters and retry.");
-                    }
-                    return ok(result.rows());
+                    Integer limit = optInt(args, "limit");
+                    return ok(su.onno.ui.KeysetWindow.envelope(registerQuery.balancePage(subject(exchange), desc,
+                            registerQuery.dimensionFilters(desc, stringMap(args.get("filters"))), null, false,
+                            optString(args, "cursor"), limit == null ? 100 : limit)));
                 }));
 
         tools.add(readTool("register_movements",
                 "Get accumulation register movements",
                 "Returns one page of active register movements, optionally filtered by an inclusive "
-                        + "period range (ISO-8601) and dimension values. Defaults to 1000 rows, newest first. "
-                        + "Increase offset by limit to read the next page; an undersized page ends the result.",
+                        + "period range (ISO-8601) and dimension values. Returns {rows,nextCursor,hasMore}; "
+                        + "default limit 100, maximum 500, newest first. Replay nextCursor to continue.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
                         + "\"from\":{\"type\":\"string\",\"description\":\"Optional inclusive start period (ISO-8601).\"},"
                         + "\"to\":{\"type\":\"string\",\"description\":\"Optional inclusive end period (ISO-8601).\"},"
-                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":1000,\"description\":\"Page size (default 1000).\"},"
+                        + "\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":500,\"description\":\"Page size (default 100).\"},"
+                        + "\"cursor\":{\"type\":\"string\",\"description\":\"Previous nextCursor.\"},"
                         + "\"offset\":{\"type\":\"integer\",\"minimum\":0,\"description\":\"Rows to skip (default 0).\"},"
                         + "\"sort\":{\"type\":\"string\",\"description\":\"Movement column to sort by (default _period).\"},"
                         + "\"descending\":{\"type\":\"boolean\",\"description\":\"Descending order (default true).\"},"
@@ -224,8 +221,8 @@ public class MetadataToolFactory implements McpToolProvider {
                     access.requireRead(subject(exchange), desc);
                     Integer limit = optInt(args, "limit");
                     Integer offset = optInt(args, "offset");
-                    if (limit != null && (limit < 1 || limit > 1000)) {
-                        throw new IllegalArgumentException("limit must be between 1 and 1000");
+                    if (limit != null && (limit < 1 || limit > 500)) {
+                        throw new IllegalArgumentException("limit must be between 1 and 500");
                     }
                     if (offset != null && offset < 0) {
                         throw new IllegalArgumentException("offset must be non-negative");
@@ -239,10 +236,18 @@ public class MetadataToolFactory implements McpToolProvider {
                     });
                     ListFilter.Result filters = ListFilter.parse(equality, List.of(), List.of(),
                             registerQuery.movementFilterColumns(desc));
-                    return ok(registerQuery.movementsWindow(subject(exchange), desc,
+                    int size = limit == null ? 100 : limit;
+                    String token = optString(args, "cursor");
+                    var page = registerQuery.movementsPage(subject(exchange), desc,
                             optString(args, "from"), optString(args, "to"), filters,
-                            optString(args, "sort"), !Boolean.FALSE.equals(args.get("descending")),
-                            offset == null ? 0 : offset, limit == null ? 1000 : limit));
+                            optString(args, "sort"), !Boolean.FALSE.equals(args.get("descending")), token, size);
+                    if (token == null && offset != null && offset > 0) {
+                        page = su.onno.query.KeysetWindow.legacyOffset(offset, size,
+                                (c, n) -> registerQuery.movementsPage(subject(exchange), desc, optString(args, "from"),
+                                        optString(args, "to"), filters, optString(args, "sort"),
+                                        !Boolean.FALSE.equals(args.get("descending")), c, n));
+                    }
+                    return ok(su.onno.ui.KeysetWindow.envelope(page));
                 }));
 
         if (properties.isWritesEnabled() && !uiProperties.isReadOnly()) {
