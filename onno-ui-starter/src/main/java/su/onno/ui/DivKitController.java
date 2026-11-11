@@ -908,7 +908,11 @@ public class DivKitController implements DisposableBean {
                                           @RequestParam Map<String, String> params, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        String profileId = activeProfile(principal, params.get("profile")).id();
+        UiLayout.Profile active = activeProfile(principal, params.get("profile"));
+        String profileId = active.id();
+        Map<String, Object> override = defaultSurfaceOverride("/catalogs/" + name + "/new", active,
+                Viewport.parse(params.get("viewport")), params.get("theme"), principal);
+        if (override != null) return override;
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
@@ -1065,7 +1069,11 @@ public class DivKitController implements DisposableBean {
                                            @RequestParam Map<String, String> params, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        String profileId = activeProfile(principal, params.get("profile")).id();
+        UiLayout.Profile active = activeProfile(principal, params.get("profile"));
+        String profileId = active.id();
+        Map<String, Object> override = defaultSurfaceOverride("/documents/" + name + "/new", active,
+                Viewport.parse(params.get("viewport")), params.get("theme"), principal);
+        if (override != null) return override;
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
