@@ -50,6 +50,8 @@ final class GmailFixture implements AutoCloseable {
             return c;
         });
         when(conversations.findActiveById(any())).thenAnswer(call -> Optional.ofNullable(conversationStore.get(call.<UUID>getArgument(0))));
+        when(conversations.findByCustomerAndDeletionMarkFalse(any())).thenAnswer(call -> conversationStore.values().stream()
+                .filter(c -> call.getArgument(0).equals(c.getCustomer())).toList());
         when(messages.save(any())).thenAnswer(call -> {
             ConversationMessage m = call.getArgument(0);
             if (m.getId() == null) m.setId(UUID.randomUUID());

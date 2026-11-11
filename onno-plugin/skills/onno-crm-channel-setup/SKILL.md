@@ -22,7 +22,9 @@ private server-owned files and use `onno.crm.channels.<provider>.*` configuratio
   mailbox connected earlier must be reconnected to get it (`GET /api/crm/gmail/accounts` shows
   `canModify`). Initial sync is bounded (`initial-import-limit` 500, `initial-import-days` 90), not a
   full mailbox archive; older or archived mail is found and restored through the Gmail search/restore
-  endpoints. Existing Gmail threads from a sender share one CRM chat.
+  endpoints, or imported once as quiet history with `history-import.enabled` (text only, files
+  fetched from Gmail when opened, progress in `onno_crm_gmail_history_import`). Existing Gmail
+  threads from a sender share one CRM chat.
 - **Instagram:** professional account, app messaging permissions, accepted tester invitation, then
   Generate token and authorize the app. A normal Instagram login or accepted tester invite alone
   does not grant API access. Verify `/me`; a token can be valid while test-mode APIs expose no chats.

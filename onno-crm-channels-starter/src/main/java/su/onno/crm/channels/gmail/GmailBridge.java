@@ -37,6 +37,10 @@ import su.onno.types.Ref;
  * {@value #MAX_ATTEMPTS} times, then recorded as seen and skipped. When Gmail asks us to slow down
  * (429, or 403 with a rate reason) only that mailbox pauses, until Gmail's Retry-After or an
  * exponential backoff.
+ *
+ * <p>With {@code onno.crm.channels.gmail.history-import.enabled} each mailbox then imports its older
+ * mail once, a few threads per round, as quiet history ({@link CrmHistoryImport}): text only, its
+ * files left in Gmail and fetched when someone opens them ({@link GmailMediaFiles}).
  */
 @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(GmailBridge.class)
 @Component
@@ -54,6 +58,14 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
     private final su.onno.crm.service.CrmConversationStatuses statuses;
     private final su.onno.crm.service.CrmAttachments attachments;
     private final CrmChannelsProperties.Gmail settings;
+    /** Reloads open inboxes once per history batch; absent in tests and headless setups. */
+    private volatile su.onno.ui.UiEventPublisher uiEvents;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    void setUiEvents(su.onno.ui.UiEventPublisher events) { this.uiEvents=events; }
+    /** How a message comes in: as it arrived, from a scan of recent mail, or as old history. */
+    enum Mode { LIVE, SCAN, HISTORY }
+    /** Media keys of files kept in Gmail: {@code gmail/<id>/<name>}. */
+    static final String FILE_PREFIX="gmail/";
     /** Fetch/import attempts at one message before it is recorded as seen and skipped. */
     static final int MAX_ATTEMPTS=3;
     private static final Duration MAX_BACKOFF=Duration.ofHours(1);
@@ -92,6 +104,10 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         jdbc.execute("ALTER TABLE onno_crm_gmail_account ADD COLUMN IF NOT EXISTS connection_id UUID UNIQUE");
         // Messages that failed to fetch or import: retried, then recorded as seen and skipped.
         jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_gmail_failed (account VARCHAR(320),external_id VARCHAR(100),attempts INT NOT NULL,last_failure VARCHAR(200),retry_at TIMESTAMP,PRIMARY KEY(account,external_id))");
+        // History import progress per mailbox: the label and Gmail page it continues from.
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_gmail_history_import (account VARCHAR(320) PRIMARY KEY,label VARCHAR(100) NOT NULL,page_token VARCHAR(500),threads INT NOT NULL,messages INT NOT NULL,started_at TIMESTAMP NOT NULL,finished_at TIMESTAMP)");
+        // Files of history mail, left in Gmail: the message part each media key fetches when opened.
+        jdbc.execute("CREATE TABLE IF NOT EXISTS onno_crm_gmail_file (id UUID PRIMARY KEY,account VARCHAR(320) NOT NULL,message_id VARCHAR(100) NOT NULL,part_id VARCHAR(100) NOT NULL,filename VARCHAR(255) NOT NULL,content_type VARCHAR(255) NOT NULL)");
         createBackfillMarkers();
         groupExistingConversations();
         ready=true;worker.scheduleWithFixedDelay(this::tick,2,15,TimeUnit.SECONDS);
@@ -141,6 +157,9 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         if(pause!=null && Instant.now().isBefore(pause.until()))
             text.append(" Gmail asked the CRM to slow down; syncing resumes at ").append(pause.until().truncatedTo(java.time.temporal.ChronoUnit.MINUTES)).append('.');
         if(!client(a).canModify())text.append(" Reconnect to let the CRM mark mail read and move it back to the Inbox in Gmail.");
+        if(settings.getHistoryImport().isEnabled())historyProgress(a).ifPresent(progress->text.append(progress.finishedAt()==null
+            ? " Importing older mail: "+progress.messages()+" emails so far."
+            : " Older mail imported: "+progress.messages()+" emails."));
         return text.toString();
     }
     public synchronized void command(String action,String credential){var a=account();if(a==null)throw new IllegalArgumentException("Connect a Google account first");
@@ -230,7 +249,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         try {
             for(var a:accounts()) {
                 if(!a.active || !client(a).authorized() || paused(a))continue;
-                try {deliver(a);retryFailed(a);sync(a);backfillFiles(a);backfillHtml(a);backoffs.remove(key(a));if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
+                try {deliver(a);retryFailed(a);sync(a);backfillFiles(a);backfillHtml(a);importHistory(a);backoffs.remove(key(a));if(a.connectionId==null)failure="";else accountFailures.remove(a.connectionId);}
                 catch(Exception e){
                     if(e instanceof GmailClient.ApiFailure limited && limited.rateLimited()){pause(a,limited);continue;}
                     String message="Gmail synchronization failed; check connection or reconnect";if(a.connectionId==null)failure=message;else accountFailures.put(a.connectionId,message);
@@ -329,7 +348,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
             if(mailboxFailure(e))throw e;
             failed(a,id,e.describe());return;
         }
-        try{store(a,id,raw,backfill);}
+        try{save(a,id,raw,GmailMail.read(raw.path("raw").asText()),backfill?Mode.SCAN:Mode.LIVE);}
         catch(Exception e){failed(a,id,e.getClass().getSimpleName());}
     }
     /** Retry messages whose earlier attempts failed, once their wait is over. */
@@ -353,14 +372,21 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
         if(skip)log.warn("Gmail message {} in {} skipped after {} failed attempts ({})",id,a.email,attempts,reason);
         else log.warn("Gmail message {} in {} could not be imported; attempt {} of {} ({})",id,a.email,attempts,MAX_ATTEMPTS,reason);
     }
-    private void store(Account a,String id,JsonNode raw,boolean backfill) throws Exception {
-        var mail=GmailMail.read(raw.path("raw").asText());String thread=raw.path("threadId").asText();
-        var receivedAt=LocalDateTime.ofInstant(raw.hasNonNull("internalDate")?Instant.ofEpochMilli(raw.path("internalDate").asLong()):mail.sentAt(),ZoneId.systemDefault());
-        boolean unreadInGmail=labelled(raw,"UNREAD");
-        tx.executeWithoutResult(s->{workspace.lock();if(seen(a,id))return;
-            boolean outbound=labelled(raw,"SENT");
+    /**
+     * Store one parsed email. {@code meta} is Gmail's message ({@code threadId}, {@code labelIds},
+     * {@code internalDate}), from either format. History mail is never unread, a conversation it
+     * starts is closed, and its files stay in Gmail.
+     *
+     * @return whether the email was stored (a sent email on an unknown thread is not)
+     */
+    private boolean save(Account a,String id,JsonNode meta,GmailMail.Incoming mail,Mode mode) {
+        String thread=meta.path("threadId").asText();
+        var receivedAt=LocalDateTime.ofInstant(meta.hasNonNull("internalDate")?Instant.ofEpochMilli(meta.path("internalDate").asLong()):mail.sentAt(),ZoneId.systemDefault());
+        boolean unreadInGmail=labelled(meta,"UNREAD");
+        return Boolean.TRUE.equals(tx.execute(s->{workspace.lock();if(seen(a,id))return false;
+            boolean outbound=labelled(meta,"SENT");
             var ids=jdbc.query("SELECT conversation_id FROM onno_crm_gmail_thread WHERE account=? AND thread_id=?",(rs,n)->rs.getObject(1,UUID.class),a.email,thread);Conversation c;
-            if(outbound && ids.isEmpty())return; // Only import replies to known CRM threads.
+            if(outbound && ids.isEmpty())return false; // Only import replies to known CRM threads.
             if(ids.isEmpty()){
                 UUID customer=contacts.resolveIncoming(new CrmCustomerBinding.IncomingContact(Channel.EMAIL,
                         a.inbox.toString(),mail.sender(),cut(mail.name(),200),mail.sender(),null,null,"Gmail "+a.email));
@@ -373,7 +399,7 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 if(history.stream().noneMatch(m->Objects.equals(m.getExternalMessageId(),"gmail:"+id))) {
                     var reply=new ConversationMessage();reply.setConversation(Ref.of(Conversation.class,c.getId()));reply.setChannel(Channel.EMAIL);
                     reply.setKind(MessageKind.AGENT_REPLY);reply.setDirection(MessageDirection.OUTBOUND);reply.setDeliveryStatus(DeliveryStatus.SENT);
-                    var files=importFiles(mail);
+                    var files=mode==Mode.HISTORY?remoteFiles(a,id,mail):importFiles(mail);
                     reply.setAuthorName(cut(mail.name(),200));reply.setBody(cut(files.withNotes(mail.text()),8000));reply.setBodyHtml(files.html(mail));reply.setDescription(cut(mail.text(),100));
                     reply.setSentAt(receivedAt);reply.setExternalMessageId("gmail:"+id);reply.setAttachments(files.urls());messages.save(reply);
                     su.onno.crm.channels.ExternalReplyReadState.answered(c,reply,history,su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK);
@@ -384,19 +410,25 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
                 var linked=identities.findActiveById(senderIdentity).orElse(null);
                 if(linked==null||contacts.canonical(linked.getCustomer()).equals(canonical))contacts.link(canonical,Channel.EMAIL,a.inbox.toString(),mail.sender().toLowerCase(Locale.ROOT),mail.sender(),false);
                 var message=new ConversationMessage();message.setConversation(Ref.of(Conversation.class,c.getId()));message.setChannel(Channel.EMAIL);message.setKind(MessageKind.CUSTOMER_MESSAGE);message.setDirection(MessageDirection.INBOUND);message.setAuthorName(cut(mail.name(),200));
-                var files=importFiles(mail);
+                var files=mode==Mode.HISTORY?remoteFiles(a,id,mail):importFiles(mail);
                 message.setBody(cut(files.withNotes(mail.text()),8000));message.setBodyHtml(files.html(mail));message.setDescription(cut(mail.text(),100));message.setSentAt(receivedAt);message.setDeliveryStatus(DeliveryStatus.RECEIVED);message.setExternalMessageId(cut("gmail:"+a.email+":"+id,240));message.setAttachments(files.urls());messages.save(message);
                 if(c.getLastMessageAt()==null||!message.getSentAt().isBefore(c.getLastMessageAt())){c.setLastMessageAt(message.getSentAt());c.setLastMessagePreview(cut(mail.text(),180));}
                 jdbc.update("UPDATE onno_crm_gmail_thread SET reply_to=?,subject=?,reference_id=?,last_received=? WHERE account=? AND thread_id=? AND (last_received IS NULL OR last_received<=?)",cut(mail.replyTo(),320),cut(mail.subject(),998),cut(mail.messageId(),998),message.getSentAt(),a.email,thread,message.getSentAt());
-                // A scanned (older) email counts as unread only if it is still unread in Gmail.
-                boolean unread=su.onno.crm.channels.ExternalReplyReadState.unread(message,messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,c.getId())),su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK)
-                    && (!backfill || unreadInGmail);
+                // A scanned (older) email counts as unread only if it is still unread in Gmail; history never does.
+                boolean unread=mode!=Mode.HISTORY && su.onno.crm.channels.ExternalReplyReadState.unread(message,messages.findByConversationAndDeletionMarkFalseOrderBySentAtAsc(Ref.of(Conversation.class,c.getId())),su.onno.crm.channels.ExternalReplyReadState.NO_TIE_BREAK)
+                    && (mode==Mode.LIVE || unreadInGmail);
                 if(unread){c.setUnreadCount(c.getUnreadCount()+1);c.setStatus(statuses.incoming());}
-                else if(c.getStatus()==null)c.setStatus(statuses.incoming());
+                else if(c.getStatus()==null)c.setStatus(mode==Mode.HISTORY?closedStatus():statuses.incoming());
                 conversations.save(c);}
             jdbc.update("INSERT INTO onno_crm_gmail_seen VALUES (?,?)",a.email,id);
             jdbc.update("DELETE FROM onno_crm_gmail_failed WHERE account=? AND external_id=?",a.email,id);
-        });
+            return true;
+        }));
+    }
+    /** The closed status for a conversation that history starts; the incoming one when none is configured. */
+    private UUID closedStatus() {
+        try { var closed=statuses.close();return closed!=null?closed:statuses.incoming(); }
+        catch(RuntimeException noTransitions) { return statuses.incoming(); }
     }
     /** Whether a mailbox-level failure must stop this round (rate limit, revoked access). */
     /**
@@ -470,6 +502,164 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
             }
         }
         jdbc.update("INSERT INTO onno_crm_gmail_html_backfill VALUES (?)",a.email);
+    }
+    record HistoryProgress(String label,String pageToken,int threads,int messages,Instant finishedAt) {}
+    Optional<HistoryProgress> historyProgress(Account a) {
+        return jdbc.query("SELECT label,page_token,threads,messages,finished_at FROM onno_crm_gmail_history_import WHERE account=?",
+            (rs,n)->new HistoryProgress(rs.getString(1),rs.getString(2),rs.getInt(3),rs.getInt(4),rs.getTimestamp(5)==null?null:rs.getTimestamp(5).toInstant()),a.email).stream().findFirst();
+    }
+    /**
+     * One step of a mailbox's history import: the next page of threads under the current label,
+     * each thread's emails stored as history. Runs only once the first import set a checkpoint, so
+     * new mail is never held up behind old. A mailbox failure (rate limit, revoked access, Gmail
+     * unreachable or failing) is thrown like any sync failure and the page is tried again next
+     * round; a thread or email Gmail cannot return or that cannot be read is logged and skipped.
+     */
+    void importHistory(Account a) throws Exception {
+        var options=settings.getHistoryImport();
+        if(!options.isEnabled() || a.history==null)return;
+        var progress=historyProgress(a).orElse(null);
+        if(progress==null) {
+            jdbc.update("INSERT INTO onno_crm_gmail_history_import (account,label,page_token,threads,messages,started_at) VALUES (?,?,NULL,0,0,?)",
+                a.email,options.getLabels().getFirst(),Timestamp.from(Instant.now()));
+            log.info("Gmail history import started for {} ({})",a.email,String.join(", ",options.getLabels()));
+            progress=historyProgress(a).orElseThrow();
+        }
+        if(progress.finishedAt()!=null)return;
+        int threads=0,stored=0;String next;
+        try {
+            JsonNode page;
+            try { page=client(a).get("threads?labelIds="+GmailClient.encode(progress.label())+"&maxResults="+options.getThreadsPerRound()
+                    +(progress.pageToken()==null?"":"&pageToken="+GmailClient.encode(progress.pageToken()))); }
+            catch(GmailClient.ApiFailure e) {
+                if(e.status!=400 || progress.pageToken()==null)throw e;
+                // Gmail no longer knows the page: walk the label again; imported emails are skipped.
+                log.warn("Gmail history import for {} restarts {} ({})",a.email,progress.label(),e.describe());
+                jdbc.update("UPDATE onno_crm_gmail_history_import SET page_token=NULL WHERE account=?",a.email);
+                return;
+            }
+            for(var thread:page.path("threads")){stored+=importThread(a,thread.path("id").asText(),options);threads++;}
+            next=page.path("nextPageToken").asText("");
+        } catch(GmailClient.ApiFailure e) {
+            if(mailboxFailure(e))throw e;
+            log.warn("Gmail history import for {} deferred ({})",a.email,e.describe());return;
+        } finally {
+            if(stored>0 && uiEvents!=null)uiEvents.publish("UPDATED","page","crm-inbox-workspaces",null);
+        }
+        String label=progress.label();Timestamp finished=null;
+        if(next.isBlank()) {
+            int at=options.getLabels().indexOf(label);
+            if(at>=0 && at+1<options.getLabels().size())label=options.getLabels().get(at+1);
+            else finished=Timestamp.from(Instant.now());
+        }
+        jdbc.update("UPDATE onno_crm_gmail_history_import SET label=?,page_token=?,threads=threads+?,messages=messages+?,finished_at=? WHERE account=?",
+            label,next.isBlank()?null:next,threads,stored,finished,a.email);
+        int total=progress.messages()+stored;
+        if(finished!=null)log.info("Gmail history import finished for {}: {} emails in {} threads",a.email,total,progress.threads()+threads);
+        else if(total/500>progress.messages()/500)log.info("Gmail history import for {}: {} emails so far",a.email,total);
+    }
+    /**
+     * Store a thread's emails as history: received ones first, oldest first, so the thread is known
+     * when the studio's own replies (which only join known threads) follow. Drafts, spam, trash and
+     * skipped categories are left out; emails already imported are skipped.
+     */
+    private int importThread(Account a,String threadId,CrmChannelsProperties.HistoryImport options) throws Exception {
+        JsonNode thread;
+        try { thread=client(a).get("threads/"+GmailClient.encode(threadId)+"?format=full"); }
+        catch(GmailClient.ApiFailure e) {
+            // A thread Gmail cannot return (deleted since the page was listed) never holds up the rest.
+            if(mailboxFailure(e))throw e;
+            log.warn("Gmail history import skipped thread {} in {} ({})",threadId,a.email,e.describe());
+            return 0;
+        }
+        var received=new ArrayList<JsonNode>();var sent=new ArrayList<JsonNode>();
+        for(var message:thread.path("messages")) {
+            if(labelled(message,"DRAFT")||labelled(message,"SPAM")||labelled(message,"TRASH"))continue;
+            if(options.getSkipCategories().stream().anyMatch(category->labelled(message,category)))continue;
+            if(seen(a,message.path("id").asText()))continue;
+            (labelled(message,"SENT")?sent:received).add(message);
+        }
+        Comparator<JsonNode> oldestFirst=Comparator.comparingLong(m->m.path("internalDate").asLong());
+        received.sort(oldestFirst);sent.sort(oldestFirst);
+        int stored=0;
+        for(var list:List.of(received,sent))for(var message:list) {
+            String id=message.path("id").asText();
+            try {
+                var mail=GmailMail.readFull(message);
+                boolean[] done={false};
+                CrmHistoryImport.run(()->done[0]=save(a,id,message,mail,Mode.HISTORY));
+                if(done[0])stored++;
+            } catch(Exception e) {
+                log.warn("Gmail history import skipped message {} in {} ({})",id,a.email,e.getClass().getSimpleName());
+            }
+        }
+        return stored;
+    }
+    /** A history email's files as media references that fetch from Gmail when opened; nothing is downloaded now. */
+    private ImportedFiles remoteFiles(Account a,String messageId,GmailMail.Incoming mail) {
+        if(mail.remote().isEmpty())return new ImportedFiles(null,List.of());
+        var urls=new ArrayList<String>();var notes=new ArrayList<String>();var byContentId=new HashMap<String,String>();
+        for(var file:mail.remote()) {
+            UUID id=UUID.randomUUID();
+            String url=attachments.limit()==0?null:attachments.reference(FILE_PREFIX+id+"/"+mediaName(file.filename()));
+            if(url==null){notes.add("[Attachment: "+file.filename()+"]");continue;}
+            jdbc.update("INSERT INTO onno_crm_gmail_file (id,account,message_id,part_id,filename,content_type) VALUES (?,?,?,?,?,?)",
+                id,a.email,messageId,cut(file.partId(),100),cut(file.filename(),255),cut(file.contentType(),255));
+            urls.add(url);
+            if(file.contentId()!=null)byContentId.put(file.contentId(),url);
+        }
+        return new ImportedFiles(urls.isEmpty()?null:attachments.store(urls),List.copyOf(notes),Map.copyOf(byContentId));
+    }
+    /** A file name reduced to what a media key allows; the real name is served from the table. */
+    static String mediaName(String filename) {
+        String name=Objects.toString(filename,"").replaceAll("[^A-Za-z0-9_.-]","_").replaceAll("_{2,}","_").replaceAll("\\.{2,}",".").replaceAll("^\\.+","");
+        if(name.isBlank())name="file";
+        return name.length()<=80?name:name.substring(name.length()-80);
+    }
+    /** A file kept in Gmail, described from the table; its bytes are fetched only when it is read. */
+    Optional<su.onno.ui.media.LoadedMedia> file(String key) {
+        if(!key.startsWith(FILE_PREFIX))return Optional.empty();
+        String rest=key.substring(FILE_PREFIX.length());int slash=rest.indexOf('/');
+        UUID id;try{id=UUID.fromString(slash<0?rest:rest.substring(0,slash));}catch(IllegalArgumentException e){return Optional.empty();}
+        return jdbc.query("SELECT account,message_id,part_id,filename,content_type FROM onno_crm_gmail_file WHERE id=?",(rs,n)->{
+            String account=rs.getString(1),message=rs.getString(2),part=rs.getString(3),filename=rs.getString(4);
+            var resource=new org.springframework.core.io.AbstractResource() {
+                private byte[] bytes;
+                @Override public String getDescription() { return "Gmail file "+filename; }
+                @Override public String getFilename() { return filename; }
+                // Spring asks for the length before it writes any header, so a Gmail failure becomes an
+                // error response rather than a broken 200; the bytes are fetched once and reused.
+                @Override public long contentLength() throws java.io.IOException { return bytes().length; }
+                @Override public java.io.InputStream getInputStream() throws java.io.IOException { return new java.io.ByteArrayInputStream(bytes()); }
+                private synchronized byte[] bytes() throws java.io.IOException {
+                    if(bytes!=null)return bytes;
+                    try { return bytes=fileBytes(account,message,part); }
+                    catch(java.io.IOException e) { throw e; }
+                    catch(Exception e) { throw new java.io.IOException("Gmail file could not be fetched ("+describe(e)+")",e); }
+                }
+            };
+            // The size is unknown until Gmail sends the bytes, so none is announced.
+            return new su.onno.ui.media.LoadedMedia(resource,rs.getString(5),-1,filename);
+        },id).stream().findFirst();
+    }
+    /** Fetch one file of a Gmail message by its part: the part's current attachment id, then its bytes. */
+    byte[] fileBytes(String account,String messageId,String partId) throws Exception {
+        var a=accounts().stream().filter(candidate->candidate.email.equalsIgnoreCase(account)).findFirst()
+            .orElseThrow(()->new java.io.IOException("The mailbox is no longer connected"));
+        requireNotPaused(a);
+        var message=interactive(a,()->client(a).get("messages/"+GmailClient.encode(messageId)+"?format=full"));
+        var part=part(message.path("payload"),partId);
+        if(part==null)throw new java.io.FileNotFoundException("The file is no longer in Gmail");
+        var body=part.path("body");
+        String data=body.hasNonNull("attachmentId")
+            ? interactive(a,()->client(a).get("messages/"+GmailClient.encode(messageId)+"/attachments/"+GmailClient.encode(body.path("attachmentId").asText()))).path("data").asText("")
+            : body.path("data").asText("");
+        return Base64.getUrlDecoder().decode(data.replace('+','-').replace('/','_').replace("=",""));
+    }
+    private static JsonNode part(JsonNode part,String partId) {
+        if(part.path("partId").asText("").equals(partId))return part;
+        for(var child:part.path("parts")){var found=part(child,partId);if(found!=null)return found;}
+        return null;
     }
     /** Stored attachment value (or null) plus placeholder lines for files the media policy refused. */
     record ImportedFiles(String urls, List<String> notes, Map<String, String> urlsByContentId) {
@@ -583,9 +773,13 @@ public class GmailBridge implements CrmMessageTransport,CrmChannelConnection {
      */
     private Conversation conversationForCustomer(Account a,UUID customer) {
         UUID canonical=contacts.canonical(customer);
-        for(UUID id:jdbc.query("SELECT DISTINCT conversation_id FROM onno_crm_gmail_thread WHERE account=?",(rs,n)->rs.getObject(1,UUID.class),a.email)) {
-            var c=conversations.findActiveById(id).orElse(null);
-            if(c!=null&&ownInbox(a,c)&&contacts.canonical(c.getCustomer()).equals(canonical))return c;
+        // The contact's own id and every merged id that redirects to it: a mailbox with thousands of
+        // conversations is never walked whole for one new thread.
+        var redirects=contacts.redirects();
+        var ids=new LinkedHashSet<UUID>();ids.add(canonical);
+        for(UUID source:redirects.keySet())if(canonical.equals(CrmContactService.canonical(source,redirects)))ids.add(source);
+        for(UUID id:ids)for(var c:conversations.findByCustomerAndDeletionMarkFalse(id)) {
+            if(ownInbox(a,c) && jdbc.queryForObject("SELECT COUNT(*) FROM onno_crm_gmail_thread WHERE account=? AND conversation_id=?",Integer.class,a.email,c.getId())>0)return c;
         }
         return null;
     }

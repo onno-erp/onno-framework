@@ -178,6 +178,10 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 | --- | --- | --- | --- |
 | `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. |
 | `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the Gmail OAuth adapter. Each connected account (shared or personal) authorizes its own mailbox and gets its own inbox. |
+| `onno.crm.channels.gmail.history-import.enabled` | `Boolean` | `false` | Import each mailbox's older mail once, as read history with its files left in Gmail. |
+| `onno.crm.channels.gmail.history-import.labels` | `List<String>` | — | Gmail labels whose threads are imported, in this order; `INBOX` by default, add `SENT` for archived threads the studio answered. |
+| `onno.crm.channels.gmail.history-import.skip-categories` | `List<String>` | — | Gmail categories left out; `CATEGORY_PROMOTIONS` and `CATEGORY_SOCIAL` (newsletters, social-network notices) by default. |
+| `onno.crm.channels.gmail.history-import.threads-per-round` | `Integer` | `20` | Threads one mailbox imports per synchronization round (a round runs every 15 seconds). |
 | `onno.crm.channels.gmail.initial-import-days` | `Integer` | `90` | Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the age limit. A re-scan after Gmail's history expired starts from the mailbox's latest imported email instead. |
 | `onno.crm.channels.gmail.initial-import-limit` | `Integer` | `500` | Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit. |
 | `onno.crm.channels.gmail.redirect-uri` | `String` | `http://127.0.0.1:8090/api/crm/gmail/callback` | Exact registered Google OAuth callback URI; use HTTPS in deployments. |
