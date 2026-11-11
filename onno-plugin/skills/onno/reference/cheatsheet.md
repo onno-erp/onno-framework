@@ -309,7 +309,8 @@ because they are not Java field references.
   `{onno.ui.path}/plugins/**`, and auto-loads at boot; no frontend project. Config `onno.ui.plugins.*`.
   - **Host UI primitives** (≥ host contract v2 / framework 1.5.0): `import { Segmented, Select, Button,
     Badge, DatePicker, … } from "@onno/widget-sdk"` (or `ui.Segmented`) — the app's real controls, not
-    lookalikes. Reach for these before hand-rolling.
+    lookalikes. Reach for these before hand-rolling. Record pickers use `RefSelect` (contract v7): the
+    form's reference field with typeahead, "+ New" and "Show all…" — never a `Select` of fetched rows.
   - **Styling** (since 1.5.0): the plugin now runs **Tailwind over `src/main/widgets`** and ships
     a coordinate-specific `*-widgets.css` (utilities-only, preflight off, host tokens), injected at boot *before* the
     host stylesheet (its unscoped utilities tie with the host's on specificity, so loaded last a bare

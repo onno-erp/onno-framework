@@ -12,3 +12,6 @@ const widgetText = (key: string) => DEFAULT_MESSAGES[key] ?? key;
 
 export const text = widgetText;
 export const useTranslate = () => widgetText;
+/** The configured locale: none in tests, so `Intl` formats as it would without `onno.ui.locale`. */
+export const locale = (): string | undefined => undefined;
+export const useLocale = (): string | undefined => undefined;

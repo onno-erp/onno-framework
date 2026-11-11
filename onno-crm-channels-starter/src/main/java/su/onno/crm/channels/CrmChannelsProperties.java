@@ -50,6 +50,17 @@ public class CrmChannelsProperties {
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/gmail-tokens.json";
         /** Exact registered Google OAuth callback URI; use HTTPS in deployments. */
         private String redirectUri = "http://127.0.0.1:8090/api/crm/gmail/callback";
+        /**
+         * Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after
+         * Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit.
+         */
+        private int initialImportLimit = 500;
+        /**
+         * Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the
+         * age limit. A re-scan after Gmail's history expired starts from the mailbox's latest
+         * imported email instead.
+         */
+        private int initialImportDays = 90;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
@@ -59,6 +70,16 @@ public class CrmChannelsProperties {
         public void setTokensFile(String value) { this.tokensFile = value; }
         public String getRedirectUri() { return redirectUri; }
         public void setRedirectUri(String value) { this.redirectUri = value; }
+        public int getInitialImportLimit() { return initialImportLimit; }
+        public void setInitialImportLimit(int value) {
+            if (value < 0) throw new IllegalArgumentException("onno.crm.channels.gmail.initial-import-limit must be 0 or more");
+            this.initialImportLimit = value;
+        }
+        public int getInitialImportDays() { return initialImportDays; }
+        public void setInitialImportDays(int value) {
+            if (value < 0) throw new IllegalArgumentException("onno.crm.channels.gmail.initial-import-days must be 0 or more");
+            this.initialImportDays = value;
+        }
     }
 
     public static class Instagram {

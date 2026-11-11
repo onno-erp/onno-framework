@@ -17,8 +17,12 @@ private server-owned files and use `onno.crm.channels.<provider>.*` configuratio
   Business settings with reply permission. Do not equate business mode with personal CRM visibility.
 - **Gmail:** enable Gmail API; configure test users/consent; use a Web OAuth client with the exact
   `gmail.redirect-uri`. CRM managers use Connect Google account. The callback validates state,
-  PKCE, identity and scopes, then stores refresh credentials. Initial sync is bounded, not a full
-  mailbox archive. Existing Gmail threads from a sender share one CRM chat.
+  PKCE, identity and scopes, then stores refresh credentials. It asks for read, send and modify;
+  read and send are required, modify (mark read and move back to Inbox in Gmail) is optional, so a
+  mailbox connected earlier must be reconnected to get it (`GET /api/crm/gmail/accounts` shows
+  `canModify`). Initial sync is bounded (`initial-import-limit` 500, `initial-import-days` 90), not a
+  full mailbox archive; older or archived mail is found and restored through the Gmail search/restore
+  endpoints. Existing Gmail threads from a sender share one CRM chat.
 - **Instagram:** professional account, app messaging permissions, accepted tester invitation, then
   Generate token and authorize the app. A normal Instagram login or accepted tester invite alone
   does not grant API access. Verify `/me`; a token can be valid while test-mode APIs expose no chats.
