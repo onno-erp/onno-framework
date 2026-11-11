@@ -874,6 +874,15 @@ and a single-instance polling worker. It publishes CRM changes via the standard 
 `CrmChannelAccess`-protected `POST /api/crm/gmail/authorize` starts session-bound PKCE authorization;
 `GET /api/crm/gmail/callback` consumes the state and returns to Channels. It is an opt-in development
 connector in `onno-crm-channels-starter`; see that module’s README.
+Replies may be sent from another mailbox (`Connection.senders`/`sender`, request `from`, stored as
+`ConversationMessage.senderAccount`); such a reply starts a thread in that mailbox, routed to the same
+conversation. `CrmMessageTransport.connection(conversation, principal)` gives the per-user view and
+`markedRead(conversation)` lets Gmail clear its `UNREAD` label after commit (grants with
+`gmail.modify` only). `GET /api/crm/gmail/accounts`, `GET /api/crm/gmail/search` and
+`POST /api/crm/gmail/restore` find mail in a mailbox, archived included, and import its thread through
+the sync's own ingest. The worker parses Gmail answers with a private high-limit mapper, retries an
+unreadable message three times before skipping it (`onno_crm_gmail_failed`), and pauses only the
+affected mailbox on 429/rate-limit 403 until Retry-After or an exponential backoff.
 
 Inbox workspaces are application-authored `CrmInboxWorkspace` beans, separate from the persisted
 `Inbox` channel-account catalog. Each supplies stable identity, read/write roles, a typed
@@ -944,7 +953,7 @@ provider-approved WhatsApp message templates. Inactive or deleted templates are 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; a reply also carries the `senderAccount` it was queued with (a Gmail mailbox address), null otherwise. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
