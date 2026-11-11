@@ -82,6 +82,28 @@ the mailbox's latest imported email, under the same count limit, so the gap is f
 Gmail threads share a CRM conversation in that mailbox's inbox, while each reply retains the
 original Gmail thread and Message-ID references.
 
+The rest of a mailbox can follow as history. With `onno.crm.channels.gmail.history-import.enabled`,
+each mailbox imports its older mail once, after its first import set the history cursor:
+
+- **What:** every thread under `history-import.labels` (default `INBOX`; add `SENT` for archived
+  threads the studio answered), newest first, `threads-per-round` threads (default 20) per 15-second
+  round, so live mail keeps flowing. Drafts, spam, trash and `skip-categories` (default Promotions
+  and Social) are left out; emails already imported are skipped.
+- **Quiet:** the mail arrives read, a conversation it starts is closed, and it runs inside
+  `CrmHistoryImport`, so the inbox reloads once per batch and applications skip notifications and
+  automation for it (`CrmHistoryImport.active()` in their `AFTER_COMMIT` listeners).
+- **Order:** within a thread, received emails are stored before the studio's own, so a thread the
+  studio started is complete once the other side answered.
+- **Files stay in Gmail:** history reads `format=full`, which carries the text and only a reference
+  to each file. A file is recorded as a media key `gmail/<random id>/<name>`
+  (`onno_crm_gmail_file`); `GET /api/media/...` fetches it from Gmail by its message part when
+  someone opens it (`GmailMediaFiles` wraps the application's `MediaStorage`). Importing years of mail
+  therefore costs neither disk nor Gmail's download quota; a file opens only while its mailbox is
+  connected and the email is still in Gmail.
+- **Progress:** one row per mailbox in `onno_crm_gmail_history_import` (label, Gmail page, threads,
+  emails, finished time), shown on the mailbox's connection card. Delete a mailbox's row to import
+  again. A rate limit pauses the mailbox like any other sync failure; other failures retry next round.
+
 ### Instagram
 
 Create a Meta app with Instagram messaging, add a professional account/tester, accept the tester

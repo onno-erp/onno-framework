@@ -884,6 +884,16 @@ the sync's own ingest. The worker parses Gmail answers with a private high-limit
 unreadable message three times before skipping it (`onno_crm_gmail_failed`), and pauses only the
 affected mailbox on 429/rate-limit 403 until Retry-After or an exponential backoff.
 
+`history-import` brings each mailbox's older mail in once, after the first import, a page of
+threads per round. It reads `format=full` (text plus file references) and stores emails through the
+same `save` as live mail in `HISTORY` mode: read, new conversations closed, inside
+`CrmHistoryImport`, a thread-bound mark that `CrmWorkspaceEvents` and application listeners check to
+stay quiet. Files are recorded in `onno_crm_gmail_file` as media keys `gmail/<id>/<name>`;
+`GmailMediaFiles` wraps the application's `MediaStorage` so `GET /api/media/...` fetches such a key
+from Gmail by message part when opened. A new thread joins the sender's conversation through
+`findByCustomerAndDeletionMarkFalse` over the contact and its merge redirects, never a scan of the
+mailbox's conversations.
+
 Inbox workspaces are application-authored `CrmInboxWorkspace` beans, separate from the persisted
 `Inbox` channel-account catalog. Each supplies stable identity, read/write roles, a typed
 `Predicate<Conversation>` and a per-workspace presentation customizer. `CrmInboxWorkspaceService`
