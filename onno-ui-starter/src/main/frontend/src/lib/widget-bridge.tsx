@@ -16,6 +16,7 @@ import { ProcessTasksWidget } from "@/components/process-tasks-widget";
 import { ValueWidget } from "@/components/value-widget";
 import {
   getRegistryVersion,
+  registerBuiltinWidget,
   registerWidget,
   registeredWidgetTypes,
   resolveWidget,
@@ -41,20 +42,20 @@ export { registerWidget, registeredWidgetTypes, resolveWidget, subscribeRegistry
  * forking the framework. The server emits {@code .type("gauge")} as an {@code
  * onno-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
  */
-registerWidget("entityTags", ({ widget }: { widget: DashboardWidgetMeta }) => widget.record ? <EntityTags {...widget.record} /> : null);
-registerWidget("count", ValueWidget);
-registerWidget("metric", ValueWidget);
-registerWidget("chart", ChartWidget);
-registerWidget("timeRange", TimeRangeWidget);
-registerWidget("calendar", CalendarWidget);
-registerWidget("kanban", KanbanWidget);
-registerWidget("list", ListWidget);
-registerWidget("stat", StatWidget);
-registerWidget("sparkline", SparklineWidget);
-registerWidget("gauge", GaugeWidget);
-registerWidget("map", MapWidget);
-registerWidget("setting", SettingWidget);
-registerWidget("tasks", ProcessTasksWidget);
+registerBuiltinWidget("entityTags", ({ widget }: { widget: DashboardWidgetMeta }) => widget.record ? <EntityTags {...widget.record} /> : null);
+registerBuiltinWidget("count", ValueWidget);
+registerBuiltinWidget("metric", ValueWidget);
+registerBuiltinWidget("chart", ChartWidget);
+registerBuiltinWidget("timeRange", TimeRangeWidget);
+registerBuiltinWidget("calendar", CalendarWidget);
+registerBuiltinWidget("kanban", KanbanWidget);
+registerBuiltinWidget("list", ListWidget);
+registerBuiltinWidget("stat", StatWidget);
+registerBuiltinWidget("sparkline", SparklineWidget);
+registerBuiltinWidget("gauge", GaugeWidget);
+registerBuiltinWidget("map", MapWidget);
+registerBuiltinWidget("setting", SettingWidget);
+registerBuiltinWidget("tasks", ProcessTasksWidget);
 
 /**
  * Register (or override) the renderer for a widget type. Call once at startup, before

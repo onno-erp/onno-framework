@@ -45,7 +45,12 @@ import {
   ContextMenuSub,
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
-import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-bridge";
+import {
+  getRegistryVersion,
+  resolveListRenderer,
+  resolveListSelection,
+  subscribeRegistry,
+} from "@/lib/widget-registry";
 import { api, ApiError } from "@/lib/api";
 import { actionFeedbackFromError, applyActionResult, presentActionFeedback } from "@/lib/action-feedback";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
@@ -193,7 +198,7 @@ export type ListFilterControl = {
 export type ListCustomConfig = { type: string; label?: string; defaultView?: boolean };
 /**
  * The props a custom list-body renderer receives (registered via {@code registerListRenderer} from
- * {@code @onno/widget-sdk}, or {@code registerWidget} host-side). The framework keeps the toolbar
+ * {@code @onno/widget-sdk} or the host registry). The framework keeps the toolbar
  * (search, filters, sort, group-by) and the keyset feed/live refresh — the renderer only
  * draws the rows it's handed and opens a record through the callback.
  */
@@ -220,9 +225,8 @@ export type ListRendererProps = {
   openUrl: (row: EntityRecord) => string | null;
 };
 /**
- * A custom list renderer. The host shows a "Loading more…" indicator below it while a next window
- * loads, unless the component carries {@code ownsLoadingMore} (set by the SDK's
- * {@code registerListRenderer(type, C, { ownsLoadingMore: true })}) because it draws that feedback itself.
+ * A directly supplied list renderer can set {@code ownsLoadingMore} to show its own loading feedback.
+ * Registered renderers set this option through {@code registerListRenderer} instead.
  */
 export type ListRendererComponent = ComponentType<ListRendererProps> & { ownsLoadingMore?: boolean };
 
@@ -1606,19 +1610,17 @@ export function EntityListWidget({
     return list.map?.defaultView ? "map" : "table";
   });
 
-  // The custom body renderer, resolved live from the widget registry: a plugin registering after
-  // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
-  // list degrades to the default grid rather than failing (no toggle, no blank body).
-  const registryVersion = useSyncExternalStore(subscribeRegistry, getRegistryVersion);
-  const SelectionWidget = useMemo(() => list.selectionWidget
-    ? resolveWidget(list.selectionWidget) as ComponentType<{ ids: string[]; complete: () => void }> | undefined
-    : undefined, [list.selectionWidget, registryVersion]);
-  const customType = list.custom?.type ?? "";
-  const CustomRenderer = useMemo(
-    () => renderer ?? (customType ? (resolveWidget(customType) as ComponentType<ListRendererProps> | undefined) : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customType, registryVersion, renderer]
-  );
+  // Re-resolve list components when a plugin registers after mount.
+  useSyncExternalStore(subscribeRegistry, getRegistryVersion);
+  const SelectionWidget = list.selectionWidget
+    ? resolveListSelection(list.selectionWidget)
+    : undefined;
+  const customType = list.custom?.type;
+  const registeredRenderer = customType ? resolveListRenderer(customType) : undefined;
+  const CustomRenderer = renderer ?? registeredRenderer?.component;
+  const ownsLoadingMore = renderer
+    ? Boolean((renderer as ListRendererComponent).ownsLoadingMore)
+    : registeredRenderer?.ownsLoadingMore ?? false;
   const availableViews = (["table", ...(list.map ? ["map"] : []), ...(CustomRenderer ? ["custom"] : [])] as Array<"table" | "map" | "custom">);
   const configuredViews = toolbarOptions?.views?.filter(value => availableViews.includes(value));
   const allowedViews = configuredViews?.length ? configuredViews : availableViews;
@@ -3267,8 +3269,7 @@ export function EntityListWidget({
               <CustomRenderer loading={pageRows == null} toolbar={relocateToolbar ? presentedToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
-            {/* Renderers registered with { ownsLoadingMore: true } draw this feedback inside their own pane. */}
-            {loadingMore && !(CustomRenderer as ListRendererComponent).ownsLoadingMore ? (
+            {loadingMore && !ownsLoadingMore ? (
               <div role="status" className={cn("flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground", surfaceMode && "pointer-events-none absolute bottom-0 inset-x-0")}>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}

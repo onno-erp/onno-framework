@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { registerWidget } from "@/lib/widget-registry";
+import { registerListSelection } from "@/lib/widget-registry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { EntityListWidget, type ListDescriptor } from "@/components/entity-list-widget";
@@ -109,7 +109,7 @@ describe("optional list selection checkboxes", () => {
     function Selection({ ids, complete }: { ids: string[]; complete: () => void }) {
       return <button disabled={ids.length !== 2} onClick={() => { received(ids); complete(); }}>Merge selected</button>;
     }
-    registerWidget("test-selection", Selection as unknown as Parameters<typeof registerWidget>[1]);
+    registerListSelection("test-selection", Selection);
     render(<EntityListWidget list={list({ selectionCheckboxes: true, selectionWidget: "test-selection" })} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select First" }));
     expect(screen.getByRole("button", { name: "Merge selected" })).toBeDisabled();
@@ -119,7 +119,7 @@ describe("optional list selection checkboxes", () => {
     expect(screen.queryByRole("button", { name: "Merge selected" })).not.toBeInTheDocument();
   });
   it("does not mount selection commands without write access", async () => {
-    registerWidget("read-only-selection", (() => <button>Forbidden merge</button>) as ComponentType<any>);
+    registerListSelection("read-only-selection", () => <button>Forbidden merge</button>);
     render(<EntityListWidget list={list({ selectionCheckboxes: true, selectionWidget: "read-only-selection", canWrite: false })} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select First" }));
     expect(screen.queryByRole("button", { name: "Forbidden merge" })).not.toBeInTheDocument();
