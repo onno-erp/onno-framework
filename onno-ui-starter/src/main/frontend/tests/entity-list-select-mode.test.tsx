@@ -131,7 +131,8 @@ describe("list select mode (#411)", () => {
   });
 
   it("lets a host-owned search box drive the feed query", async () => {
-    const fetchMock = vi.fn(async () => response({ rows: rows(2), hasMore: false, nextCursor: null }));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      response({ rows: rows(2), hasMore: false, nextCursor: null }));
     vi.stubGlobal("fetch", fetchMock);
     render(<Picker onActivate={vi.fn()} query="Row" />);
     await waitFor(() => expect(fetchMock.mock.calls.some((c) =>

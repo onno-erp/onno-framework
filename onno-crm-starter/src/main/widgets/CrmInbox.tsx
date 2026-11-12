@@ -1347,7 +1347,7 @@ function CrmInbox({ toolbar, chrome, loading, rows: channelRows, total, open, sc
               ]} />
           </header>
           {actionsOpen && <div id={actionsId} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-2">
-            {action(config, "edit") && selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
+            {action(config, "edit") && !!selected.customerRef && <Button size="toolbar" variant="subtle" onClick={() => {
               const ref = selected.customerRef as {type:string;id:string};
               window.dispatchEvent(new CustomEvent("onno:action", {detail:`onno://catalogs/${encodeURIComponent(ref.type)}/${encodeURIComponent(ref.id)}`}));
             }}>{t("crm.contact.open")}</Button>}
@@ -1630,13 +1630,13 @@ function InboxWorkspaces({widget}: {widget: DashboardWidgetMeta}) {
       {channels.map(item => <Button key={item.value} size="toolbar" variant={channel === item.value ? "secondary" : "ghost"} aria-pressed={channel === item.value} onClick={() => {setChannel(item.value); setAccount("");}}><ChannelLogo channel={item.value} className="size-4" />{item.label}</Button>)}
     </div>
     <div className="crm-channel-select min-w-0 flex-1">
-      <Select value={channel || "all"} onValueChange={value => { setChannel(value === "all" ? "" : value); setAccount(""); }}>
+      <Select value={channel || "all"} onValueChange={(value: string) => { setChannel(value === "all" ? "" : value); setAccount(""); }}>
         <SelectTrigger aria-label={t("crm.chat.channel")} className="w-full min-w-0"><SelectValue>{channel ? channels.find(item => item.value === channel)?.label || channel : t("crm.inbox.allChannels")}</SelectValue></SelectTrigger>
         <SelectContent><SelectItem value="all">{t("crm.inbox.allChannels")}</SelectItem>{channels.map(item => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
       </Select>
     </div>
     </> }
-    {showAccountFilter && <Select value={account || "all"} onValueChange={value => setAccount(value === "all" ? "" : value)}>
+    {showAccountFilter && <Select value={account || "all"} onValueChange={(value: string) => setAccount(value === "all" ? "" : value)}>
       <SelectTrigger aria-label={t("crm.inbox.account")} className="crm-account-select ml-auto w-52 min-w-0"><SelectValue>{account ? accountLabels.find(item => item.value === account)?.label || accounts.find(item => item.id === account)?.label || account : t("crm.inbox.allAccounts")}</SelectValue></SelectTrigger>
       <SelectContent><SelectItem value="all">{t("crm.inbox.allAccounts")}</SelectItem>{accounts.filter(item => !channel || item.channel === channel).map(item => <SelectItem key={item.id} value={item.id}>{accountLabels.find(option => option.value === item.id)?.label || item.label}</SelectItem>)}</SelectContent>
     </Select>}

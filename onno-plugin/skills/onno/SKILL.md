@@ -409,6 +409,7 @@ Standing rules — follow them without being re-told:
 ./gradlew clean check                         # compile + test everything incl. example + frontend
 ./gradlew publishToMavenLocal                 # verify consumable artifacts (sources/javadoc/POM)
 ./gradlew :onno-framework:test                # narrow iteration
+./gradlew :onno-ui-starter:testFrontend       # frontend-only: typecheckFrontend, then Vitest
 ./gradlew :onno-ui-starter:buildFrontend      # frontend-only changes
 ```
 
