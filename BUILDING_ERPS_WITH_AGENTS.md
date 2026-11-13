@@ -74,11 +74,11 @@ implementation("su.onno:onno-desktop-starter:$onnoVersion") // native desktop
 
 Commercial vertical connectors ship from the separately licensed
 [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repository under the
-`su.onno.enterprise` group (Guesty, SES.HOSPEDAJES, Tochka), versioned independently of the core:
+`su.onno.enterprise` group (Tochka, YooKassa, Ozon, Wildberries, …), versioned independently of the core:
 
 ```kotlin
-implementation("su.onno.enterprise:onno-guesty-starter:<enterprise-version>")
-implementation("su.onno.enterprise:onno-hospedajes-starter:<enterprise-version>")
+implementation("su.onno.enterprise:onno-tochka-starter:<enterprise-version>")
+implementation("su.onno.enterprise:onno-yookassa-starter:<enterprise-version>")
 ```
 
 ## Minimal Application Config
