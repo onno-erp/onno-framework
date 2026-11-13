@@ -79,8 +79,9 @@ record-level presence markers (live "who else is viewing this record" avatars, c
 
 ## Auth Direction
 
-Current auth ships in `onno-auth-starter` with three modes selected by `onno.auth.mode`:
+Current auth ships in `onno-auth-starter` with four modes selected by `onno.auth.mode`:
 - `in-memory` (default): JSON `POST /api/auth/login` and `/api/auth/logout`, session-backed (`JSESSIONID`), CSRF via `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header, optional remember-me. In-memory users from `onno.auth.users[*]`; the example seeds admin/rentals/finance/cleaner from `application.yaml`.
+- `database`: the in-memory mode's login/session/CSRF, against runtime-managed accounts in the app database — `ADMIN` user administration API, password reset and opt-in one-time login codes through a pluggable `AuthCodeSender`.
 - `oidc`: server-side OpenID Connect SSO (Keycloak/Zitadel/custom) with realm/client role mapping and RP-initiated logout.
 - `resource-server`: stateless JWT bearer validation for API-only clients.
 - 401 JSON entry point for unauthenticated API calls; SPA login screen wired to it.

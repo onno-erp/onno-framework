@@ -25,6 +25,10 @@ public class OnnoAuthProperties {
      * <ul>
      *   <li>{@link Mode#IN_MEMORY} (default) — username/password against {@code onno.auth.users},
      *       session cookie, JSON {@code /api/auth/login}. Zero external dependencies.</li>
+     *   <li>{@link Mode#DATABASE} — the same username/password + session-cookie login, but against
+     *       accounts stored in the application database and managed at runtime: an administrator
+     *       creates/disables users and sets roles, users reset passwords and can sign in with a
+     *       one-time code. See {@code onno.auth.database.*}.</li>
      *   <li>{@link Mode#OIDC} — server-side OpenID Connect authorization-code login against any
      *       standard provider (Keycloak, Zitadel, …). Keeps the session-cookie model; "login"
      *       becomes a redirect to {@code /oauth2/authorization/{registrationId}}. Configure the
@@ -96,9 +100,19 @@ public class OnnoAuthProperties {
     /**
      * In-memory user accounts. Empty by default — the consuming app supplies them via
      * {@code onno.auth.users[*]}. Production deployments should disable in-memory users
-     * and configure their own UserDetailsService. Only used in {@link Mode#IN_MEMORY}.
+     * and configure their own UserDetailsService. In {@link Mode#IN_MEMORY} these are the only
+     * accounts; in {@link Mode#DATABASE} they are seed accounts, each created once when no account
+     * with that login exists yet (how the first administrator is bootstrapped) and never
+     * overwritten afterwards.
      */
     private List<User> users = new ArrayList<>();
+
+    /**
+     * Settings of {@link Mode#DATABASE}: password policy, password reset and one-time login codes.
+     * Ignored in every other mode.
+     */
+    @NestedConfigurationProperty
+    private Database database = new Database();
 
     /**
      * Session longevity and persistence for the cookie-based modes ({@link Mode#IN_MEMORY} and
@@ -165,6 +179,12 @@ public class OnnoAuthProperties {
     /** Public paths used by every authentication mode; framework bootstrap paths cannot be removed. */
     public List<String> effectivePublicPaths() {
         var paths = new LinkedHashSet<>(FRAMEWORK_PUBLIC_PATHS);
+        if (mode == Mode.DATABASE) {
+            // Anonymous by nature: a user who cannot sign in asks for a reset token or a login code.
+            // Both answer identically for known and unknown logins.
+            paths.add("/api/auth/password-reset/**");
+            paths.add("/api/auth/code/**");
+        }
         paths.addAll(publicPaths);
         paths.addAll(additionalPublicPaths);
         return List.copyOf(paths);
@@ -184,6 +204,14 @@ public class OnnoAuthProperties {
 
     public void setUsers(List<User> users) {
         this.users = users;
+    }
+
+    public Database getDatabase() {
+        return database;
+    }
+
+    public void setDatabase(Database database) {
+        this.database = database;
     }
 
     public Session getSession() {
@@ -213,6 +241,8 @@ public class OnnoAuthProperties {
     public enum Mode {
         /** Username/password against {@code onno.auth.users}. */
         IN_MEMORY,
+        /** Username/password against runtime-managed accounts in the application database. */
+        DATABASE,
         /** Server-side OpenID Connect authorization-code login (session cookie). */
         OIDC,
         /** Stateless JWT bearer-token validation. */
@@ -246,6 +276,165 @@ public class OnnoAuthProperties {
 
         public void setRoles(List<String> roles) {
             this.roles = roles;
+        }
+    }
+
+    /**
+     * Settings of {@link Mode#DATABASE}. Accounts live in the framework-managed {@code onno_auth_users}
+     * table; one-time secrets (hashed) in {@code onno_auth_codes}.
+     */
+    public static class Database {
+
+        /**
+         * Shortest password accepted when a password is set, changed or reset.
+         */
+        private int passwordMinLength = 8;
+
+        /**
+         * How long a signed-in session may go before the account is re-checked against the database.
+         * A user disabled by an administrator loses live sessions within this interval (immediately
+         * on the node that made the change). Lower it for faster revocation at the cost of more lookups.
+         */
+        private Duration accountRecheckInterval = Duration.ofSeconds(30);
+
+        /**
+         * Whether the anonymous password-reset endpoints ({@code /api/auth/password-reset/request}
+         * and {@code /confirm}) are served. Useful only with an {@code AuthCodeSender} bean that
+         * delivers the token; when off they answer {@code 404}.
+         */
+        private boolean passwordResetEnabled = true;
+
+        /**
+         * How long a password-reset token stays valid.
+         */
+        private Duration passwordResetValidity = Duration.ofMinutes(30);
+
+        /**
+         * Whether users may sign in with a one-time code ({@code /api/auth/code/request} and
+         * {@code /login}). Off by default: enable it once an {@code AuthCodeSender} bean delivers the
+         * codes over a channel you trust as a login factor.
+         */
+        private boolean codeLoginEnabled = false;
+
+        /**
+         * How long a one-time login code stays valid.
+         */
+        private Duration codeLoginValidity = Duration.ofMinutes(10);
+
+        /**
+         * Number of digits in a one-time login code.
+         */
+        private int codeLength = 6;
+
+        /**
+         * Redemption attempts one token or code tolerates; after that it is dead and a new one must be
+         * requested. Bounds guessing of the short login code.
+         */
+        private int codeMaxAttempts = 5;
+
+        /**
+         * How many tokens or codes one login may request, per purpose, within {@code code-request-window}.
+         * Further requests are silently ignored (the response is unchanged, so this reveals nothing).
+         */
+        private int codeMaxRequests = 3;
+
+        /**
+         * The rate-limit window for {@code code-max-requests}.
+         */
+        private Duration codeRequestWindow = Duration.ofMinutes(15);
+
+        /**
+         * Development only: make the default (no-op) sender print issued tokens and codes to the log.
+         * Never enable where logs are shared — anyone who reads them can take over an account.
+         */
+        private boolean logCodes = false;
+
+        public int getPasswordMinLength() {
+            return passwordMinLength;
+        }
+
+        public void setPasswordMinLength(int passwordMinLength) {
+            this.passwordMinLength = passwordMinLength;
+        }
+
+        public Duration getAccountRecheckInterval() {
+            return accountRecheckInterval;
+        }
+
+        public void setAccountRecheckInterval(Duration accountRecheckInterval) {
+            this.accountRecheckInterval = accountRecheckInterval;
+        }
+
+        public boolean isPasswordResetEnabled() {
+            return passwordResetEnabled;
+        }
+
+        public void setPasswordResetEnabled(boolean passwordResetEnabled) {
+            this.passwordResetEnabled = passwordResetEnabled;
+        }
+
+        public Duration getPasswordResetValidity() {
+            return passwordResetValidity;
+        }
+
+        public void setPasswordResetValidity(Duration passwordResetValidity) {
+            this.passwordResetValidity = passwordResetValidity;
+        }
+
+        public boolean isCodeLoginEnabled() {
+            return codeLoginEnabled;
+        }
+
+        public void setCodeLoginEnabled(boolean codeLoginEnabled) {
+            this.codeLoginEnabled = codeLoginEnabled;
+        }
+
+        public Duration getCodeLoginValidity() {
+            return codeLoginValidity;
+        }
+
+        public void setCodeLoginValidity(Duration codeLoginValidity) {
+            this.codeLoginValidity = codeLoginValidity;
+        }
+
+        public int getCodeLength() {
+            return codeLength;
+        }
+
+        public void setCodeLength(int codeLength) {
+            this.codeLength = codeLength;
+        }
+
+        public int getCodeMaxAttempts() {
+            return codeMaxAttempts;
+        }
+
+        public void setCodeMaxAttempts(int codeMaxAttempts) {
+            this.codeMaxAttempts = codeMaxAttempts;
+        }
+
+        public int getCodeMaxRequests() {
+            return codeMaxRequests;
+        }
+
+        public void setCodeMaxRequests(int codeMaxRequests) {
+            this.codeMaxRequests = codeMaxRequests;
+        }
+
+        public Duration getCodeRequestWindow() {
+            return codeRequestWindow;
+        }
+
+        public void setCodeRequestWindow(Duration codeRequestWindow) {
+            this.codeRequestWindow = codeRequestWindow;
+        }
+
+        public boolean isLogCodes() {
+            return logCodes;
+        }
+
+        public void setLogCodes(boolean logCodes) {
+            this.logCodes = logCodes;
         }
     }
 

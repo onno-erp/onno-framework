@@ -30,6 +30,7 @@ class OnnoAuthMethodsProvider implements AuthMethodsProvider {
     public AuthMethods authMethods() {
         return switch (properties.getMode()) {
             case IN_MEMORY -> new AuthMethods(true, List.of(), null, "in-memory");
+            case DATABASE -> new AuthMethods(true, List.of(), null, "database");
             case RESOURCE_SERVER -> new AuthMethods(false, List.of(), null, "resource-server");
             case OIDC -> {
                 OnnoAuthProperties.ResolvedOidc oidc = properties.getOidc().resolved();

@@ -2,7 +2,7 @@
 
 Spring Boot (Spring Security) starter that secures a onno application's HTTP API. It contributes a
 `SecurityFilterChain`, a small JSON auth API (`/api/auth/*`), and — depending on the selected mode —
-an in-memory user store, server-side Keycloak (OIDC) login, or stateless JWT validation.
+an in-memory user store, database-backed users, server-side Keycloak (OIDC) login, or stateless JWT validation.
 
 The model is deliberately SPA-friendly: **everything outside `/api/**` is public** (so the SPA shell
 and login screen can load), **`/api/**` requires an authenticated session**, and a handful of
@@ -17,6 +17,7 @@ others stay dormant.
 | Mode | Value | How you log in | Session | Extra deps active |
 |------|-------|----------------|---------|-------------------|
 | In-memory (default) | `in-memory` | `POST /api/auth/login` against `onno.auth.users` | Cookie (`JSESSIONID`) | none |
+| Database | `database` | `POST /api/auth/login` against runtime-managed accounts in the app database; password reset and one-time codes. See [Database users](#database-users) | Cookie (`JSESSIONID`) | none (needs the `Jdbi` bean from `onno-framework-starter`) |
 | Keycloak OIDC login | `oidc` | Full-page redirect to Keycloak (authorization-code) | Cookie (`JSESSIONID`) | `spring-boot-starter-oauth2-client` |
 | Resource server | `resource-server` | Client gets a token from Keycloak, sends `Authorization: Bearer …` | Stateless | `spring-boot-starter-oauth2-resource-server` |
 
@@ -51,7 +52,7 @@ to contribute nothing and wire your own security.
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `onno.auth.enabled` | `true` | Master switch. When `false`, no `SecurityFilterChain` is contributed and the app wires its own. |
-| `onno.auth.mode` | `in-memory` | Backend: `in-memory`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
+| `onno.auth.mode` | `in-memory` | Backend: `in-memory`, `database`, `oidc`, or `resource-server`. See [modes](#authentication-modes). |
 | `onno.auth.public-paths` | see below | Ant patterns permitted without authentication, on top of the implicit "everything outside `/api/**`". **Setting this REPLACES the defaults — it does not append.** Repeat every default below (plus your additions) or the login screen 401s (dropped `/api/config`, `/api/auth/login`, …). |
 | `onno.auth.users[*].username` | — | In-memory account username. |
 | `onno.auth.users[*].password` | — | Plaintext password; BCrypt-encoded at startup. Missing username **or** password fails startup. |
@@ -182,7 +183,7 @@ appears as `ROLE_USER`).
 Every `AuthUser` response also carries three routing hints the SPA uses to render the right
 affordance without knowing the server's config:
 
-- `mode` — `"in-memory"`, `"oidc"`, or `"resource-server"`.
+- `mode` — `"in-memory"`, `"database"`, `"oidc"`, or `"resource-server"`.
 - `loginUrl` — where to send the browser to sign in. Non-null **only in OIDC mode**
   (`/oauth2/authorization/{registrationId}`); the server-driven login screen renders an SSO button
   per provider instead of the password form.
@@ -223,6 +224,141 @@ curl -s -b "$JAR" \
 # 5) Log out (also a mutation, so it needs the CSRF header).
 curl -s -b "$JAR" -X POST -H "X-XSRF-TOKEN: $XSRF" "$BASE/api/auth/logout"
 ```
+
+## Database users
+
+`onno.auth.mode=database` keeps the in-memory mode's wire behaviour — the same `SecurityFilterChain`,
+JSON `POST /api/auth/login`, `JSESSIONID` session, CSRF cookie/header and remember-me — and changes
+only where users come from: accounts are rows in the application database, managed while the app
+runs. An administrator creates and disables users and sets their roles; users reset their own
+password and can sign in with a one-time code.
+
+```yaml
+onno:
+  auth:
+    mode: database
+    users:                       # seed accounts — see "Bootstrap" below
+      - username: admin@clinic.example
+        password: ${ADMIN_INITIAL_PASSWORD}
+        roles: [ADMIN]
+    session:
+      remember-me:
+        key: ${REMEMBER_ME_KEY}
+```
+
+### Where accounts live (and why not in your `Employee` catalog)
+
+Credentials are stored in two framework-managed infrastructure tables, created with
+`CREATE TABLE IF NOT EXISTS` at startup (like `onno_notifications`): `onno_auth_users` (login,
+password hash, enabled flag, roles) and `onno_auth_codes` (salted hashes of one-time secrets). They
+are **not** attributes of a business catalog, deliberately: a password hash on `Employee` would ride
+every generic read, list export, MCP tool, import and record-history path, and each of those would
+need its own redaction.
+
+The link to the person is the one every auth mode already uses: `Layout.identity(Employee.class,
+"email")` matches the account's **login** against that catalog attribute. So create the account with
+the employee's e-mail as its login, and `Subject.recordId()`, task assignment and
+`RecordAccessPolicy` resolve to the `Employee` record as usual. Business data stays in the catalog;
+credentials stay out of it. To keep accounts somewhere else entirely, register your own
+`UserAccountStore` bean.
+
+Logins are case-insensitive. Passwords are hashed with the context's `PasswordEncoder` — BCrypt by
+default; declare your own bean (e.g. `Argon2PasswordEncoder`, or a `DelegatingPasswordEncoder` to
+migrate between algorithms) to change it.
+
+### Bootstrap
+
+In this mode `onno.auth.users[*]` are **seed accounts**: at startup each entry is created if no
+account with that login exists, and is never touched again. That is how the first `ADMIN` comes to
+exist; a password changed at runtime survives restarts. Remove the entry (or rotate the secret) once
+the administrator has changed their password.
+
+### Endpoints (`DatabaseAuthController`, base path `/api/auth`)
+
+All of these are CSRF-protected like the rest of the API (only `/api/auth/login` is exempt): send the
+`XSRF-TOKEN` cookie value — or the token from `GET /api/auth/csrf` — in `X-XSRF-TOKEN`.
+
+| Method | Path | Auth | Body | Response |
+|--------|------|------|------|----------|
+| `POST` | `/api/auth/password-reset/request` | public | `{"username":"..."}` | Always `202`, whether or not the login exists |
+| `POST` | `/api/auth/password-reset/confirm` | public | `{"username":"...","code":"<token>","password":"<new>"}` | `204`; `400 invalid_code` for any failure (unknown login, wrong/expired/used token); `400 invalid_password` if the new password breaks the policy |
+| `POST` | `/api/auth/code/request` | public | `{"username":"..."}` | Always `202`. `404` unless `code-login-enabled` |
+| `POST` | `/api/auth/code/login` | public | `{"username":"...","code":"123456","remember":true}` | `200` + the same `AuthUser` as `/login`, session established; `401` for any failure |
+| `POST` | `/api/auth/password` | authenticated | `{"currentPassword":"...","newPassword":"..."}` | `204`; `403 wrong_password`; `400 invalid_password` |
+| `GET` | `/api/auth/users` | `ADMIN` | — | `[{"id","username","enabled","roles","hasPassword","createdAt"}]` — never the hash |
+| `POST` | `/api/auth/users` | `ADMIN` | `{"username":"...","password":"...","roles":["VET"]}` (`password` optional) | `201` + the user; `409 duplicate_login`; `400 invalid_request` |
+| `PUT` | `/api/auth/users/{id}` | `ADMIN` | any of `{"enabled":false,"roles":[...],"password":"..."}` | `200` + the user; `409 self_lockout` if an admin disables or demotes themselves |
+| `POST` | `/api/auth/users/{id}/password-reset` | `ADMIN` | — | `202`; sends that user a reset token (use it as an invite for an account created without a password) |
+
+Role names are bare (`ADMIN`, not `ROLE_ADMIN`). A role change applies at the user's next sign-in.
+Disabling a user blocks sign-in at once, voids their outstanding codes and remember-me cookie, and
+ends their live sessions within `onno.auth.database.account-recheck-interval` (default 30 s;
+immediately on the node that made the change). Changing a password invalidates the user's remember-me
+cookies and outstanding codes.
+
+The same operations are available in Java through the `DatabaseUsers` bean — e.g. to create the
+account when an `Employee` is hired:
+
+```java
+@Component
+class EmployeeAccounts {
+    private final DatabaseUsers users;
+    EmployeeAccounts(DatabaseUsers users) { this.users = users; }
+
+    void onHired(Employee employee) {
+        users.create(employee.getEmail(), null, List.of("VET"));          // no password yet
+        users.requestCode(employee.getEmail(), AuthCodePurpose.PASSWORD_RESET);  // invite
+    }
+}
+```
+
+### Delivering tokens and codes — `AuthCodeSender`
+
+The framework generates, stores, rate-limits and verifies one-time secrets. **Delivering** them is the
+application's job: register one `AuthCodeSender` bean that mails, texts or messages the secret.
+
+```java
+@Component
+class MailCodeSender implements AuthCodeSender {
+    private final JavaMailSender mail;
+    MailCodeSender(JavaMailSender mail) { this.mail = mail; }
+
+    @Override
+    public void send(AuthCodeMessage message) {
+        String text = switch (message.purpose()) {
+            case PASSWORD_RESET -> "Set a new password: https://erp.clinic.example/reset?u="
+                    + URLEncoder.encode(message.login(), UTF_8) + "&t=" + message.code();
+            case LOGIN -> "Your sign-in code: " + message.code();
+        };
+        // message.login() is the address here; otherwise look the person up by it.
+        mail.send(compose(message.login(), text));
+    }
+}
+```
+
+A `PASSWORD_RESET` secret is a 256-bit URL-safe token (put it in a link together with the login); a
+`LOGIN` secret is a short numeric code. The sender runs off the request thread and only for an
+existing, enabled account. Without a bean, the default sender delivers nothing and logs a warning;
+`onno.auth.database.log-codes=true` makes it print the secret, for development only.
+
+The bundled SPA does not yet ship "forgot password" / "sign in with a code" / user-administration
+screens — until it does, call the endpoints above from your own page or client.
+
+### Guarantees
+
+- **No user enumeration.** Request endpoints always answer `202`; redemption failures are one
+  generic error; password login reports a disabled or unknown account exactly like a wrong password.
+- **Single use.** A secret is consumed atomically in the database; requesting a new one voids the
+  previous one of the same purpose.
+- **Expiry.** `password-reset-validity` (30 min) and `code-login-validity` (10 min).
+- **Attempt budget.** A secret dies after `code-max-attempts` (5) redemption attempts, right or wrong,
+  counted in the database — so a 6-digit code cannot be brute-forced, on any number of nodes.
+- **Request rate limit.** At most `code-max-requests` (3) per login and purpose per
+  `code-request-window` (15 min); excess requests are silently dropped. Per-IP throttling of the
+  anonymous endpoints (and of password login) belongs at your reverse proxy.
+- **Hashed at rest.** Only a salted SHA-256 of each secret is stored.
+
+Every `onno.auth.database.*` key is listed in [CONFIGURATION.md](../docs/CONFIGURATION.md).
 
 ## OIDC (Keycloak, Zitadel, …)
 

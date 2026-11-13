@@ -24,7 +24,12 @@ change.
 - In in-memory mode, when remember-me is enabled, a blank
   `onno.auth.session.remember-me.key` fails startup; dev opt-out is
   `allow-ephemeral-key: true`. Never ship prod without a real key.
-- In-memory and OIDC modes use sessions and CSRF.
+- In-memory, database and OIDC modes use sessions and CSRF.
+- For runtime-managed staff accounts use `onno.auth.mode=database` (admin API `/api/auth/users`,
+  `DatabaseUsers` bean, password reset, opt-in one-time codes) instead of hand-building a user table.
+  Create each account with the login that `Layout.identity(...)` matches; register an
+  `AuthCodeSender` bean to deliver reset tokens/codes; `onno.auth.users[*]` only seed accounts there.
+  Its anonymous endpoints stay CSRF-protected. See `onno-auth-starter/README.md` → "Database users".
 - Resource-server mode uses bearer JWT and no CSRF.
 - The starter protects `/api/**` and permits other same-port routes. Treat exposed Actuator or custom
   non-API endpoints as a separate security decision; use a management port/chain when needed.

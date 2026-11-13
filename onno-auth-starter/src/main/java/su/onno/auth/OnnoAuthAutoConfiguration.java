@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import su.onno.auth.spi.AuthMethodsProvider;
+import su.onno.auth.users.DatabaseUsers;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,7 +18,9 @@ import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -73,6 +77,7 @@ import java.util.Set;
 @AutoConfiguration(before = {SecurityAutoConfiguration.class, UserDetailsServiceAutoConfiguration.class})
 @EnableConfigurationProperties(OnnoAuthProperties.class)
 @ConditionalOnProperty(prefix = "onno.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
+@Import(DatabaseAuthConfiguration.class)
 public class OnnoAuthAutoConfiguration {
 
     private static final org.slf4j.Logger log =
@@ -83,7 +88,7 @@ public class OnnoAuthAutoConfiguration {
 
     /**
      * The {@code /api/auth/me} + login/logout controller, wired in every mode. Password login is
-     * only honoured when an {@link AuthenticationManager} is present (in-memory mode); in OIDC and
+     * only honoured when an {@link AuthenticationManager} is present (in-memory and database modes); in OIDC and
      * resource-server modes that endpoint reports back that interactive password login is disabled.
      */
     @Bean
@@ -163,11 +168,29 @@ public class OnnoAuthAutoConfiguration {
     }
 
     // ----------------------------------------------------------------------------------------
-    // Mode: in-memory (default) — username/password against onno.auth.users, session cookie.
+    // Modes: in-memory (default) and database — username/password, session cookie. They differ
+    // only in where users come from (onno.auth.users vs. DatabaseAuthConfiguration); the filter
+    // chain, CSRF, remember-me and login endpoint below are shared, so they behave identically.
     // ----------------------------------------------------------------------------------------
 
+    /** Matches the two username/password session modes: {@code in-memory} (the default) and {@code database}. */
+    static class PasswordSessionModeCondition extends AnyNestedCondition {
+
+        PasswordSessionModeCondition() {
+            super(ConfigurationPhase.PARSE_CONFIGURATION);
+        }
+
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
+        static class InMemory {
+        }
+
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "database")
+        static class Database {
+        }
+    }
+
     @Configuration(proxyBeanMethods = false)
-    @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
+    @Conditional(PasswordSessionModeCondition.class)
     static class InMemoryAuthConfiguration {
 
         @Bean
@@ -178,6 +201,7 @@ public class OnnoAuthAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
         UserDetailsService onnoUserDetailsService(OnnoAuthProperties properties, PasswordEncoder passwordEncoder) {
             List<UserDetails> users = properties.getUsers().stream()
                     .map(u -> {
@@ -249,7 +273,8 @@ public class OnnoAuthAutoConfiguration {
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoSecurityFilterChain(HttpSecurity http, OnnoAuthProperties properties,
                                                     ObjectProvider<TokenBasedRememberMeServices> rememberMe,
-                                                    UserDetailsService userDetailsService)
+                                                    UserDetailsService userDetailsService,
+                                                    ObjectProvider<DatabaseUsers> databaseUsers)
                 throws Exception {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
@@ -275,6 +300,11 @@ public class OnnoAuthAutoConfiguration {
             if (demoUsername != null && !demoUsername.isBlank()) {
                 http.addFilterBefore(new DemoAutoLoginFilter(demoUsername.trim(), userDetailsService,
                         contextRepository), AnonymousAuthenticationFilter.class);
+            }
+            // Database mode only: end the session of an account disabled after it signed in.
+            DatabaseUsers users = databaseUsers.getIfAvailable();
+            if (users != null) {
+                http.addFilterBefore(new DatabaseAccountStatusFilter(users), AnonymousAuthenticationFilter.class);
             }
             applyEmbeddingPolicy(http, properties);
 

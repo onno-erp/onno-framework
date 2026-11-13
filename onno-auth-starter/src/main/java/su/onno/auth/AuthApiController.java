@@ -147,6 +147,7 @@ class AuthApiController {
     private static String modeName(OnnoAuthProperties.Mode mode) {
         return switch (mode) {
             case IN_MEMORY -> "in-memory";
+            case DATABASE -> "database";
             case OIDC -> "oidc";
             case RESOURCE_SERVER -> "resource-server";
         };
@@ -176,7 +177,8 @@ class AuthApiController {
      * @param authenticated whether a session/principal is established
      * @param username      the authenticated principal name (empty when anonymous)
      * @param roles         granted authorities
-     * @param mode          active auth backend: {@code in-memory}, {@code oidc}, or {@code resource-server}
+     * @param mode          active auth backend: {@code in-memory}, {@code database}, {@code oidc}, or
+     *                      {@code resource-server}
      * @param loginUrl      where the SPA should send the user to log in; non-null only in OIDC mode
      * @param logoutUrl     full-page RP-initiated-logout endpoint; non-null only in OIDC mode
      */

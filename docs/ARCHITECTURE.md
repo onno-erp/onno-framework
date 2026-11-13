@@ -37,7 +37,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the UI starter but disabled by default. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities and widgets. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
-| `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
+| `onno-auth-starter` | `su.onno` | Spring Security: in-memory, database-backed users, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
@@ -591,6 +591,14 @@ entries are combined with them and can no longer remove mandatory framework path
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
+- **`database`** — the same chain, login endpoint, session, CSRF and remember-me as `in-memory`, but
+  against runtime-managed accounts in the framework tables `onno_auth_users` / `onno_auth_codes`
+  (credentials are deliberately not catalog attributes; the account's login is matched to the person
+  by `Layout.identity(...)` as in every mode). `ADMIN` manages accounts under `/api/auth/users`;
+  anonymous `/api/auth/password-reset/**` and opt-in `/api/auth/code/**` issue single-use, expiring,
+  attempt-limited, rate-limited secrets that never reveal whether a login exists, delivered through
+  the host's `AuthCodeSender` bean (default: not delivered). `onno.auth.users[*]` seed accounts once.
+  The `DatabaseUsers` bean exposes the same operations to Java.
 - **`oidc`** — server-side OpenID Connect (Keycloak/Zitadel/custom); realm/client role mapping from
   the token via `onno.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.

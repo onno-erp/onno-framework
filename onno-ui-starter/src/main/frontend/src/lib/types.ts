@@ -270,7 +270,7 @@ export interface AuthUser {
   authenticated: boolean;
   username: string;
   roles: string[];
-  // Active auth backend: "in-memory", "oidc", or "resource-server".
+  // Active auth backend: "in-memory", "database", "oidc", or "resource-server".
   mode?: string;
   // Where to send the user to sign in. Non-null only in OIDC mode, where login is a
   // full-page redirect to Keycloak rather than a password POST.
