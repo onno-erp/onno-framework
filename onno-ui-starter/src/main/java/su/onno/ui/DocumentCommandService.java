@@ -316,10 +316,7 @@ public class DocumentCommandService {
         } else {
             postingService.post(doc);
         }
-        Map<String, Object> result = query.get(subject, desc, id);
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
-                "*", id, null));
-        return result;
+        return query.get(subject, desc, id);
     }
 
     public PostingPreview postingPreview(DocumentDescriptor desc, UUID id, AccessSubject subject) {
@@ -335,10 +332,7 @@ public class DocumentCommandService {
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         DocumentObject doc = loadDocumentObject(desc, id);
         postingService.unpost(doc);
-        Map<String, Object> result = query.get(subject, desc, id);
-        events.publishEvent(new EntityChangedEvent(EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER,
-                "*", id, null));
-        return result;
+        return query.get(subject, desc, id);
     }
 
     /**

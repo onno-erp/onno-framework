@@ -339,7 +339,9 @@ negative `BALANCE` results on dimension tuples touched by that post unless the r
 is rejected before any movement is persisted, so retries cannot double-count registers. Inside that
 same transaction it appends `@DomainEvent` outbox rows; after commit it calls `afterPost` and
 publishes a Spring
-`DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost).
+`DocumentPostedEvent` (`DocumentUnpostedEvent` for unpost). These post-commit callbacks are isolated:
+a throwing `afterPost` or listener is logged at ERROR and neither fails the committed post nor skips
+the remaining callbacks.
 
 `PostingService.repost(...)` is the explicit recalculation operation for a posted document: it
 reverses the old movements and writes the recalculated movements atomically, so a failed recalculation
@@ -751,9 +753,11 @@ published immediately. Event data is captured when the write completes.
 Posting notifications are published by `PostingEngine` after its own JDBI
 transaction commits. Successful `post` and `repost` operations publish a document
 `EntityChangedEvent.POSTED`; successful `unpost` operations publish
-`EntityChangedEvent.UNPOSTED`. This applies to direct Java calls and UI, REST,
+`EntityChangedEvent.UNPOSTED`. Each also publishes a wildcard register
+`EntityChangedEvent(CHANGED, REGISTER, "*", documentId, null)` so open register views refresh.
+This applies to direct Java calls and UI, REST,
 and MCP entry points. Rolled-back operations publish neither notification.
-`DocumentCommandService` does not publish duplicate document posting notifications.
+`DocumentCommandService` does not publish duplicate posting notifications.
 
 Every write — through the generic controllers **and** through `repository.save(...)` — publishes a
 Spring `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`
