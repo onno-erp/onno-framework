@@ -90,4 +90,18 @@ describe("widget registry lookups", () => {
     expect(resolveListRenderer("default-loading")?.ownsLoadingMore).toBe(false);
     expect(Renderer).not.toHaveProperty("ownsLoadingMore");
   });
+
+  it("still resolves list renderers and selection widgets registered by outdated bundles", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const Legacy = Object.assign(() => null, { ownsLoadingMore: true });
+    const LegacySelection = () => null;
+    registerWidget("legacy-renderer", Legacy as never);
+    registerWidget("legacy-selection", LegacySelection as never);
+
+    expect(resolveListRenderer("legacy-renderer")).toEqual({ component: Legacy, ownsLoadingMore: true });
+    expect(resolveListSelection("legacy-selection")).toBe(LegacySelection);
+    expect(resolveListRenderer("gauge")).toBeUndefined(); // built-ins never leak into list lookups
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });

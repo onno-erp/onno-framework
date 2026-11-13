@@ -32,6 +32,8 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   receives `ListRendererProps`, including `rows`, the `list` descriptor, and
   `open(row)` / `openUrl(row)` for opening records. If no renderer is registered,
   the list falls back to the default grid.
+  A bundle built with an older SDK that registered list renderers or selection
+  widgets through `registerWidget` still resolves, with a console warning; rebuild it.
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
 - `useWidgetUpdates(widget, refresh, options?)` — refetch when the widget's bound entity changes,
