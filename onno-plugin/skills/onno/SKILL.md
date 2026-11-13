@@ -360,11 +360,16 @@ spring:
   datasource: { url: "jdbc:h2:file:./data/app", driver-class-name: org.h2.Driver, username: sa }
 onno:
   auth:
-    users: [{ username: admin, password: admin, roles: [ADMIN] }]
+    mode: database   # accounts in the application DB, managed at runtime
+    users: [{ username: admin, password: change-me-on-first-login, roles: [ADMIN] }]  # first-boot seed only
 ```
 
-`onno.auth.mode` picks the auth model: **`IN_MEMORY`** (default — the `users` list above, session
-cookie, JSON `/api/auth/login`), **`OIDC`** (server-side OpenID Connect auth-code login; provider
+`onno.auth.mode` picks the auth model: **`DATABASE`** (recommended — accounts in the table
+`onno_auth_user`, managed at runtime through `UserAccounts`, `/api/auth/users` and the
+`type("users")` / `type("changePassword")` widgets; the `users` list only seeds an empty store once,
+and seeded accounts must change their password at first sign-in), **`IN_MEMORY`** (default — the
+`users` list is the account set for as long as the config file says so; development and demos only),
+**`OIDC`** (server-side OpenID Connect auth-code login; provider
 preset `onno.auth.oidc.provider` = `KEYCLOAK` / `ZITADEL` / `CUSTOM`, with token-claim → role mapping
 under `onno.auth.oidc.roles.*`), or **`RESOURCE_SERVER`** (stateless bearer-token validation). The
 SPA's `/api/auth/me` advertises the available login methods, so the login screen renders the right

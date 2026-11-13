@@ -15,6 +15,7 @@ import { MapWidget } from "@/components/map-widget";
 import { SettingWidget } from "@/components/setting-widget";
 import { ProcessTasksWidget } from "@/components/process-tasks-widget";
 import { ValueWidget } from "@/components/value-widget";
+import { ChangePasswordWidget, UserAccountsWidget } from "@/components/user-accounts-widget";
 import {
   getRegistryVersion,
   registerWidget,
@@ -56,6 +57,8 @@ registerWidget("gauge", GaugeWidget);
 registerWidget("map", MapWidget);
 registerWidget("setting", SettingWidget);
 registerWidget("tasks", ProcessTasksWidget);
+registerWidget("users", UserAccountsWidget);
+registerWidget("changePassword", ChangePasswordWidget);
 
 /**
  * Register (or override) the renderer for a widget type. Call once at startup, before

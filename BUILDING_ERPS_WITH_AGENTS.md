@@ -97,8 +97,9 @@ onno:
   scan-packages:
     - com.acme.erp
   auth:
+    mode: database   # accounts in the DB, managed at runtime; the list below only seeds an empty store
     users:
-      - { username: admin, password: admin, roles: [ADMIN] }
+      - { username: admin, password: change-me-on-first-login, roles: [ADMIN] }
 ```
 
 `onno.scan-packages` (there is no `onno.base-packages` alias) points at the package where catalogs,

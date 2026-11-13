@@ -1669,17 +1669,24 @@ A browser SPA gets this for free: the cookie is sent automatically and the clien
 
 ### Providing users
 
-In-memory users come from `onno-auth-starter`. Add at least one (the `ADMIN` role makes it a
-superuser for the UI):
+Users come from `onno-auth-starter`. Prefer `mode: database` — accounts live in the application
+database and are managed at runtime; the `users` list only seeds the first account (the `ADMIN` role
+makes it a superuser for the UI), which must set a new password at first sign-in:
 
 ```yaml
 onno:
   auth:
+    mode: database
     users:
       - username: admin
-        password: secret
+        password: change-me-on-first-login
         roles: [ADMIN]
 ```
+
+Two built-in widgets serve database mode: `b.widget("Users").type("users")` (ADMIN account list:
+create with a one-time password, roles, disable/enable, reset password, sign out everywhere) and
+`b.widget("Password").type("changePassword")` (the signed-in holder's own password). A session holding
+a one-time password renders only a change-password screen until it is replaced.
 
 ## SPA routing, the base path, and the index fallback
 
