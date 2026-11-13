@@ -40,6 +40,13 @@ is never returned by `/api/config` or sent to the browser. See
 > `src/main/frontend/dist` to `static/ui/`). `static/ui/` is not committed; build the module to
 > produce it.
 
+> **Type checks.** `buildFrontend` type-checks only `src/` (`tsconfig.app.json`). The Vitest suite
+> has its own `tsconfig.test.json` covering `tests/`, `vite.config.ts` and the widget sources the
+> tests import (`onno-crm-starter`, `onno-crm-channels-starter`, `onno-widget-sdk`), with the Vitest
+> globals and the jsdom environment's `jsdom` global (`vitest/globals`, `vitest/jsdom`);
+> `npm run typecheck` (`tsc -b`) checks both projects. Gradle runs it as `typecheckFrontend`, which
+> `testFrontend` depends on, so a type error in a test fails `check`.
+
 > **Static assets.** Bundled UI assets are served from `classpath:/static/ui/`; application assets
 > may use Spring Boot's standard `META-INF/resources`, `resources`, `static`, or `public` locations.
 > Missing files return `404` instead of the SPA shell. `{onno.ui.path}/plugins/**` keeps precedence

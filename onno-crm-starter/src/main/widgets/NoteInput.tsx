@@ -1,6 +1,6 @@
 import { text as t, useTranslate } from "@onno/widget-sdk";
 import { Button, Popover, PopoverAnchor, PopoverContent, Textarea, useEffect, useRef, useState } from "@onno/widget-sdk";
-import type { ClipboardEvent, KeyboardEvent } from "react";
+import type { ClipboardEvent, KeyboardEvent, MouseEvent } from "react";
 import { useAutoGrow } from "./useAutoGrow";
 
 type Reference = {kind: "catalogs" | "documents"; name: string; id: string; display: string; entity: string; avatarUrl?: string};
@@ -125,7 +125,7 @@ export function NoteInput({value, disabled, onChange, onSubmit, draftKey, autoGr
       {loading || error || !options.length ? <p role="status" className="px-2 py-2 text-xs text-muted-foreground">{loading ? "Searching…" : error ? t("crm.note.referencesError") : t("crm.note.noMatches")}</p> :
         <div role="listbox" aria-label={t("crm.note.references")} className="max-h-48 overflow-y-auto">
           {options.map((option, index) => <Button variant="ghost" type="button" role="option" aria-selected={index === active}
-            key={`${option.kind}/${option.name}/${option.id}`} onMouseDown={event => {event.preventDefault(); choose(option);}}
+            key={`${option.kind}/${option.name}/${option.id}`} onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {event.preventDefault(); choose(option);}}
             onMouseEnter={() => setActive(index)}
             className={`h-auto whitespace-normal font-normal flex w-full items-center gap-2 rounded-field px-2 py-2 text-left text-xs ${index === active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"}`}>
             {option.avatarUrl && <img src={option.avatarUrl} alt="" className="size-6 rounded-full object-cover" />}

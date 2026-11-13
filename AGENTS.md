@@ -111,6 +111,8 @@ For targeted iteration:
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
 ./gradlew :onno-ui-starter:buildFrontend
+# tsc over src/, tests/, vite.config.ts and the widget sources the tests import
+./gradlew :onno-ui-starter:typecheckFrontend
 ./gradlew :onno-ui-starter:compileJava
 ```
 
@@ -1127,6 +1129,7 @@ For changes that affect public artifacts, starter wiring, frontend packaging, or
 For UI frontend-only changes, at minimum run:
 
 ```bash
+./gradlew :onno-ui-starter:testFrontend   # typecheckFrontend first, then Vitest
 ./gradlew :onno-ui-starter:buildFrontend
 ./gradlew :onno-ui-starter:processResources
 ```

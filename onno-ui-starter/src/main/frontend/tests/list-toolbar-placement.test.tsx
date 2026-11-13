@@ -39,7 +39,7 @@ it("uses a persistent mobile search and a filter sheet without losing query stat
 it("uses compact controls in narrow panes on a desktop viewport", async()=>{
   vi.stubGlobal("matchMedia",()=>({matches:false,addEventListener(){},removeEventListener(){}}));
   vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
-  const rect = vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(){
+  const rect = vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(this:HTMLElement){
     return {width:this.hasAttribute("data-toolbar-container") ? 300 : 1200,height:600,top:0,left:0,right:1200,bottom:600,x:0,y:0,toJSON(){}};
   });
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
@@ -53,12 +53,12 @@ it("uses compact controls in narrow panes on a desktop viewport", async()=>{
     expect(await screen.findByRole("dialog", {name:"Filters"})).toBeVisible();
     expect(screen.getByText("Channel options")).toBeVisible();
     expect(document.querySelector("[data-vaul-drawer]")).toBeNull();
-    fireEvent.click(screen.getByRole("button", {name:"Open", exact:true}));
-    expect(screen.getByRole("button", {name:"Open", exact:true})).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", {name:"Open"}));
+    expect(screen.getByRole("button", {name:"Open"})).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([url])=>decodeURIComponent(String(url)).includes("status,open"))).toBe(true));
-    fireEvent.click(screen.getByRole("button", {name:"All", exact:true}));
-    expect(screen.getByRole("button", {name:"Open", exact:true})).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", {name:"All"}));
+    expect(screen.getByRole("button", {name:"Open"})).toHaveAttribute("aria-pressed", "false");
   } finally {rect.mockRestore();}
 });
 
@@ -67,7 +67,7 @@ it("shows workspace navigation by default and preserves selections in the mobile
   let width = 1400;
   const observers = new Set<() => void>();
   vi.stubGlobal("ResizeObserver",class { constructor(private callback:()=>void) { observers.add(callback); } observe(){} unobserve(){} disconnect(){observers.delete(this.callback);} });
-  const rect=vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(){
+  const rect=vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(this:HTMLElement){
     return {width:this.hasAttribute("data-toolbar-container")?300:width,height:600,top:0,left:0,right:width,bottom:600,x:0,y:0,toJSON(){}};
   });
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
@@ -80,9 +80,9 @@ it("shows workspace navigation by default and preserves selections in the mobile
     expect(within(panel).queryByRole("button",{name:"Close"})).toBeNull();
     expect(panel.compareDocumentPosition(screen.getByTestId("inbox-body")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(within(panel).getByRole("button",{name:"Open",exact:true}));
-    fireEvent.click(within(panel).getByRole("button",{name:"Closed",exact:true}));
-    expect(within(panel).getByRole("button",{name:"Open",exact:true})).toHaveAttribute("aria-pressed","true");
+    fireEvent.click(within(panel).getByRole("button",{name:"Open"}));
+    fireEvent.click(within(panel).getByRole("button",{name:"Closed"}));
+    expect(within(panel).getByRole("button",{name:"Open"})).toHaveAttribute("aria-pressed","true");
     fireEvent.click(screen.getByRole("button",{name:"Hide filters"}));
     expect(screen.queryByRole("navigation",{name:"Orders"})).toBeNull();
     expect(panel.parentElement).toHaveAttribute("inert");
@@ -91,13 +91,13 @@ it("shows workspace navigation by default and preserves selections in the mobile
     expect(reopen).toHaveAttribute("aria-controls",panel.parentElement!.id);
     fireEvent.click(reopen);
     expect(screen.getByRole("navigation",{name:"Orders"})).toBe(panel);
-    expect(within(panel).getByRole("button",{name:"Open",exact:true})).toHaveAttribute("aria-pressed","true");
+    expect(within(panel).getByRole("button",{name:"Open"})).toHaveAttribute("aria-pressed","true");
     await act(async()=>{width=700;observers.forEach(callback=>callback());});
     expect(screen.queryByRole("navigation",{name:"Orders"})).toBeNull();
     fireEvent.click(screen.getByRole("button",{name:"Filters"}));
     expect(await screen.findByRole("dialog")).toBeVisible();
-    expect(screen.getByRole("button",{name:"Open",exact:true})).toHaveAttribute("aria-pressed","true");
-    expect(screen.getByRole("button",{name:"Closed",exact:true})).toHaveAttribute("aria-pressed","true");
+    expect(screen.getByRole("button",{name:"Open"})).toHaveAttribute("aria-pressed","true");
+    expect(screen.getByRole("button",{name:"Closed"})).toHaveAttribute("aria-pressed","true");
     fireEvent.click(screen.getByRole("button",{name:"Done"}));
     await waitFor(()=>expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByRole("button",{name:"Filters"})).toHaveAttribute("aria-expanded","false");
@@ -107,7 +107,7 @@ it("shows workspace navigation by default and preserves selections in the mobile
 it("can disable the sidebar while retaining filters and workspace actions",async()=>{
   vi.stubGlobal("matchMedia",()=>({matches:false,addEventListener(){},removeEventListener(){}}));
   vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
-  const rect=vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(){return {width:this.hasAttribute("data-toolbar-container")?300:1400,height:600,top:0,left:0,right:1400,bottom:600,x:0,y:0,toJSON(){}};});
+  const rect=vi.spyOn(HTMLElement.prototype,"getBoundingClientRect").mockImplementation(function(this:HTMLElement){return {width:this.hasAttribute("data-toolbar-container")?300:1400,height:600,top:0,left:0,right:1400,bottom:600,x:0,y:0,toJSON(){}};});
   vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify({rows:[],hasMore:false,total:0}))));
   const list:ListDescriptor={kind:"catalogs",name:"optional-sidebar",title:"Inbox",columns:[],searchable:true,sort:{column:null,descending:false},newUrl:null,canWrite:false,pageSize:20,embedded:true,custom:{type:"workspace",label:"Workspace",defaultView:true}};
   const Renderer=(props:ListRendererProps)=><section>{props.toolbar}</section>;
@@ -134,5 +134,5 @@ it("renders configured facet colors and respects the configured filter order",as
   expect(await screen.findByText("Pipeline stage")).toBeVisible();
   const groups=[...document.querySelectorAll("fieldset legend")].map(e=>e.textContent);
   expect(groups).toEqual(["Pipeline stage","Conversation status"]);
-  expect(screen.getByRole("button",{name:"Won",exact:true}).querySelector('[aria-hidden="true"]')).toHaveStyle({backgroundColor:"#10B981"});
+  expect(screen.getByRole("button",{name:"Won"}).querySelector('[aria-hidden="true"]')).toHaveStyle({backgroundColor:"#10B981"});
 });
