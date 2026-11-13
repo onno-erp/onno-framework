@@ -347,6 +347,13 @@ data-bearing surfaces.
 | `GET /registers/{name}` | Register surface: a virtualized movement log (a Balance/Movements tab pair for BALANCE registers), each fed page-by-page from `/api/list/registers/{name}/…`. An authored `Page` at `/registers/{name}` overrides it with a curated report (register-backed widgets; `b.list(...)` embeds catalog/document lists, not a register's log). |
 | `GET /{*route}` | Catch-all page endpoint: any other route with a registered `Page` bean (a custom dashboard/report at `/ops`, `/reports`, …); `404` when no page is registered. |
 
+`{name}` in these routes is the snake_case route name, not the logical name REST uses: spaces are
+dropped, and every uppercase letter after the first gets a `_` before it and is lowercased.
+`@Document(name = "SalesOrders")` is `/documents/sales_orders` in the UI and
+`/api/documents/SalesOrders` in REST. Links and `onno://` actions must use the route name. A link
+with the REST spelling (`onno://documents/SalesOrders/{id}`) still renders, but live updates and the
+localized tab title don't apply to it (#247).
+
 > The DivKit surfaces are an **allowlist**: a catalog or document is only visible if an `EntityView`
 > bean declares it for the active profile. A surface with no matching view returns `404`, even when
 > the underlying REST endpoint would serve it.
