@@ -11,6 +11,9 @@ import java.util.function.Predicate;
 /**
  * Declares custom action buttons for an entity, from {@link EntityView#actions(ActionSpec)}.
  *
+ * <p>{@code E} is the entity declared by the owning {@code EntityView<E>}; it is retained in
+ * every per-record callback, including late-bound actions.</p>
+ *
  * <p>Each action is a labelled, icon'd button placed on the list (toolbar or per-row) or the
  * record detail. It does one of two things when clicked:</p>
  * <ul>
@@ -21,7 +24,7 @@ import java.util.function.Predicate;
  * </ul>
  *
  * <pre>
- * public void actions(ActionSpec a) {
+ * public void actions(ActionSpec&lt;Order&gt; a) {
  *     a.action("archive").label("Archive").icon("archive").scope(ActionScope.ROW)
  *      .handler(ctx -> { repo.archive(ctx.id()); return ActionResult.refresh(ActionToast.success("Archived")); });
  *     a.action("report").label("Open report").icon("file-text").scope(ActionScope.TOOLBAR)
@@ -69,16 +72,16 @@ import java.util.function.Predicate;
  *                    return ActionResult.refresh(ActionToast.success("Cancelled")); });
  * </pre>
  */
-public final class ActionSpec {
+public final class ActionSpec<E> {
 
-    private final List<ActionBuilder> builders = new ArrayList<>();
-    private final List<Declaration> declarations = new ArrayList<>();
+    private final List<ActionBuilder<E>> builders = new ArrayList<>();
+    private final List<Declaration<E>> declarations = new ArrayList<>();
 
     /** Start declaring an action with the given unique key. */
-    public ActionBuilder action(String key) {
-        ActionBuilder b = new ActionBuilder(key);
+    public ActionBuilder<E> action(String key) {
+        ActionBuilder<E> b = new ActionBuilder<>(key);
         builders.add(b);
-        declarations.add(new StaticDeclaration(b));
+        declarations.add(new StaticDeclaration<>(b));
         return b;
     }
 
@@ -107,14 +110,14 @@ public final class ActionSpec {
      * order is preserved, and the first declaration of a duplicate key still wins when static and
      * dynamic actions from all views are merged.</p>
      */
-    public ActionSpec dynamic(Consumer<ActionSpec> provider) {
-        declarations.add(new DynamicDeclaration(Objects.requireNonNull(provider, "provider")));
+    public ActionSpec<E> dynamic(Consumer<ActionSpec<E>> provider) {
+        declarations.add(new DynamicDeclaration<>(Objects.requireNonNull(provider, "provider")));
         return this;
     }
 
     /** Static declarations only. Dynamic providers are deliberately not evaluated here. */
-    public List<Action> actions() {
-        return builders.stream().map(ActionBuilder::build).toList();
+    public List<Action<E>> actions() {
+        return builders.stream().map(ActionBuilder<E>::build).toList();
     }
 
     /** Whether this spec contains at least one late-bound action provider. */
@@ -126,25 +129,33 @@ public final class ActionSpec {
      * Resolve static and late-bound declarations in authored order. Framework runtime code calls
      * this per menu-open/action execution only when {@link #hasDynamicActions()} is true.
      */
-    public List<Action> resolveActions() {
-        List<Action> out = new ArrayList<>();
-        for (Declaration declaration : declarations) {
-            if (declaration instanceof StaticDeclaration fixed) {
-                out.add(fixed.builder().build());
-            } else if (declaration instanceof DynamicDeclaration dynamic) {
-                ActionSpec live = new ActionSpec();
-                dynamic.provider().accept(live);
-                out.addAll(live.resolveActions());
-            }
+    public List<Action<E>> resolveActions() {
+        List<Action<E>> out = new ArrayList<>();
+        for (Declaration<E> declaration : declarations) {
+            out.addAll(declaration.resolve());
         }
         return List.copyOf(out);
     }
 
-    private sealed interface Declaration permits StaticDeclaration, DynamicDeclaration {}
+    private sealed interface Declaration<E> permits StaticDeclaration, DynamicDeclaration {
+        List<Action<E>> resolve();
+    }
 
-    private record StaticDeclaration(ActionBuilder builder) implements Declaration {}
+    private record StaticDeclaration<E>(ActionBuilder<E> builder) implements Declaration<E> {
+        @Override
+        public List<Action<E>> resolve() {
+            return List.of(builder.build());
+        }
+    }
 
-    private record DynamicDeclaration(Consumer<ActionSpec> provider) implements Declaration {}
+    private record DynamicDeclaration<E>(Consumer<ActionSpec<E>> provider) implements Declaration<E> {
+        @Override
+        public List<Action<E>> resolve() {
+            ActionSpec<E> live = new ActionSpec<>();
+            provider.accept(live);
+            return live.resolveActions();
+        }
+    }
 
     /**
      * Values an action form opens with, computed server-side at open time by the
@@ -183,11 +194,11 @@ public final class ActionSpec {
      * non-null are evaluated against the {@link ActionRow} (a list row, or the loaded detail
      * record) as the surface renders.</p>
      */
-    public record Action(String key, String label, String icon, String logo, String color, ActionScope scope,
+    public record Action<E>(String key, String label, String icon, String logo, String color, ActionScope scope,
                          String menu,
                          String navigateUrl, Function<ActionContext, ActionResult> handler,
-                         Function<ActionRow, String> iconFn, Function<ActionRow, String> labelFn,
-                         Predicate<ActionRow> visibleFn, Predicate<ActionRow> enabledFn,
+                         Function<ActionRow<E>, String> iconFn, Function<ActionRow<E>, String> labelFn,
+                         Predicate<ActionRow<E>> visibleFn, Predicate<ActionRow<E>> enabledFn,
                          List<InputSpec.InputField> form, List<InputSpec.InputGroup> formGroups,
                          InputSpec.ActionFormDialog formDialog,
                          Function<ActionContext, FormDefaults> formDefaultsFn,
@@ -214,7 +225,7 @@ public final class ActionSpec {
     }
 
     /** Fluent builder for one action; setters may be called in any order. */
-    public static final class ActionBuilder {
+    public static final class ActionBuilder<E> {
         private final String key;
         private String label;
         private String icon = "";
@@ -224,10 +235,10 @@ public final class ActionSpec {
         private ActionScope scope = ActionScope.ROW;
         private String navigateUrl;
         private Function<ActionContext, ActionResult> handler;
-        private Function<ActionRow, String> iconFn;
-        private Function<ActionRow, String> labelFn;
-        private Predicate<ActionRow> visibleFn;
-        private Predicate<ActionRow> enabledFn;
+        private Function<ActionRow<E>, String> iconFn;
+        private Function<ActionRow<E>, String> labelFn;
+        private Predicate<ActionRow<E>> visibleFn;
+        private Predicate<ActionRow<E>> enabledFn;
         private List<InputSpec.InputField> form = List.of();
         private List<InputSpec.InputGroup> formGroups = List.of();
         private InputSpec.ActionFormDialog formDialog;
@@ -243,13 +254,13 @@ public final class ActionSpec {
          * menu and batch progress messages, use this value; it is also the fallback for a dynamic
          * {@link #label(Function)}. If omitted, the fixed label defaults to the action key.
          */
-        public ActionBuilder label(String label) {
+        public ActionBuilder<E> label(String label) {
             this.label = label;
             return this;
         }
 
         /** A kebab-case lucide icon name (e.g. {@code "archive"}, {@code "download"}). */
-        public ActionBuilder icon(String icon) {
+        public ActionBuilder<E> icon(String icon) {
             this.icon = icon;
             return this;
         }
@@ -258,18 +269,18 @@ public final class ActionSpec {
          * An image URL or app-static path shown instead of the lucide {@link #icon(String)} — e.g. a
          * brand logo for a "Connect with X" button ({@code .logo("https://cdn/github.svg")}).
          */
-        public ActionBuilder logo(String logo) {
+        public ActionBuilder<E> logo(String logo) {
             this.logo = logo;
             return this;
         }
 
         /** Optional CSS color hint for compact action renderers, especially row-menu status swatches. */
-        public ActionBuilder color(String color) {
+        public ActionBuilder<E> color(String color) {
             this.color = color;
             return this;
         }
 
-        public ActionBuilder scope(ActionScope scope) {
+        public ActionBuilder<E> scope(ActionScope scope) {
             this.scope = scope;
             return this;
         }
@@ -282,13 +293,13 @@ public final class ActionSpec {
          * ({@code label(row -> …)}, {@code visibleWhen}, {@code enabledWhen}) still apply to the
          * menu entries. Ignored on non-ROW scopes.
          */
-        public ActionBuilder menu(String submenuLabel) {
+        public ActionBuilder<E> menu(String submenuLabel) {
             this.menu = submenuLabel;
             return this;
         }
 
         /** Run arbitrary server logic when clicked. */
-        public ActionBuilder handler(Function<ActionContext, ActionResult> handler) {
+        public ActionBuilder<E> handler(Function<ActionContext, ActionResult> handler) {
             this.handler = handler;
             return this;
         }
@@ -302,7 +313,7 @@ public final class ActionSpec {
          * read back via {@link ActionContext#inputRows(String)}. Server actions only —
          * a navigation action has no handler to hand the values to.
          */
-        public ActionBuilder form(Consumer<InputSpec> form) {
+        public ActionBuilder<E> form(Consumer<InputSpec> form) {
             InputSpec spec = new InputSpec();
             form.accept(spec);
             this.form = spec.inputs();
@@ -330,7 +341,7 @@ public final class ActionSpec {
          *  .handler(this::startPrint);
          * </pre>
          */
-        public ActionBuilder formDefaults(Function<ActionContext, FormDefaults> defaults) {
+        public ActionBuilder<E> formDefaults(Function<ActionContext, FormDefaults> defaults) {
             this.formDefaultsFn = defaults;
             return this;
         }
@@ -342,13 +353,13 @@ public final class ActionSpec {
          * page. Unset (the default) means any caller the surface already admits — for an entity
          * action that's the entity's write roles; for a page action, any authenticated user.
          */
-        public ActionBuilder roles(String... roles) {
+        public ActionBuilder<E> roles(String... roles) {
             this.roles = List.of(roles);
             return this;
         }
 
         /** Route the client to {@code url} when clicked ({@code {id}} is filled with the record id). */
-        public ActionBuilder navigate(String url) {
+        public ActionBuilder<E> navigate(String url) {
             this.navigateUrl = url;
             return this;
         }
@@ -358,7 +369,7 @@ public final class ActionSpec {
          * e.g. {@code play} vs {@code pause} by the record's state. Overrides the fixed
          * {@link #icon(String)} on records it resolves.
          */
-        public ActionBuilder icon(Function<ActionRow, String> icon) {
+        public ActionBuilder<E> icon(Function<ActionRow<E>, String> icon) {
             this.iconFn = icon;
             return this;
         }
@@ -369,7 +380,7 @@ public final class ActionSpec {
          * selection, also set a fixed human-facing label because batch surfaces have no single
          * record context.
          */
-        public ActionBuilder label(Function<ActionRow, String> label) {
+        public ActionBuilder<E> label(Function<ActionRow<E>, String> label) {
             this.labelFn = label;
             return this;
         }
@@ -378,7 +389,7 @@ public final class ActionSpec {
          * Show this action only on records where the predicate holds
          * ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
          */
-        public ActionBuilder visibleWhen(Predicate<ActionRow> visible) {
+        public ActionBuilder<E> visibleWhen(Predicate<ActionRow<E>> visible) {
             this.visibleFn = visible;
             return this;
         }
@@ -387,13 +398,13 @@ public final class ActionSpec {
          * Enable this action only on records where the predicate holds — disabled (greyed)
          * elsewhere ({@link ActionScope#ROW}/{@link ActionScope#DETAIL} actions).
          */
-        public ActionBuilder enabledWhen(Predicate<ActionRow> enabled) {
+        public ActionBuilder<E> enabledWhen(Predicate<ActionRow<E>> enabled) {
             this.enabledFn = enabled;
             return this;
         }
 
-        Action build() {
-            return new Action(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
+        Action<E> build() {
+            return new Action<>(key, label != null ? label : key, icon, logo, color, scope, menu, navigateUrl, handler,
                     iconFn, labelFn, visibleFn, enabledFn, form, formGroups, formDialog, formDefaultsFn, roles);
         }
     }

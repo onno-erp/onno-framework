@@ -2,7 +2,9 @@ package su.onno.ui;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +48,42 @@ class ListFilterTest {
         assertThat(r.bindings())
                 .containsEntry("lf0", "100")
                 .containsEntry("lf1", "2024-12-31T18:30:00");
+    }
+
+    @Test
+    void numberRangeBoundOnANumericColumnBindsAsANumber() {
+        // Postgres has no numeric >= varchar operator, so a bound on a known numeric column must
+        // bind typed; either end may be open and both are inclusive.
+        ListFilter.Result r = ListFilter.parse(null, null, null, null,
+                List.of("amount,100"), List.of("amount,250.50"), COLUMNS, Set.of("amount"));
+        assertThat(r.sql()).isEqualTo("amount >= :lf0 AND amount <= :lf1");
+        assertThat(r.bindings())
+                .containsEntry("lf0", new BigDecimal("100"))
+                .containsEntry("lf1", new BigDecimal("250.50"));
+
+        ListFilter.Result open = ListFilter.parse(null, null, null, null,
+                null, List.of("amount,-5"), COLUMNS, Set.of("amount"));
+        assertThat(open.sql()).isEqualTo("amount <= :lf0");
+        assertThat(open.bindings()).containsEntry("lf0", new BigDecimal("-5"));
+    }
+
+    @Test
+    void nonNumericBoundOnANumericColumnIsSkipped() {
+        ListFilter.Result r = ListFilter.parse(null, null, null, null,
+                List.of("amount,abc", "amount,1e9", "amount,1; DROP TABLE x"), List.of("amount,7"),
+                COLUMNS, Set.of("amount"));
+        assertThat(r.sql()).isEqualTo("amount <= :lf0");
+        assertThat(r.bindings()).containsOnly(Map.entry("lf0", new BigDecimal("7")));
+    }
+
+    @Test
+    void numericTypesCoverBoxedAndPrimitiveNumbers() {
+        assertThat(ListFilter.isNumeric(BigDecimal.class)).isTrue();
+        assertThat(ListFilter.isNumeric(Integer.class)).isTrue();
+        assertThat(ListFilter.isNumeric(long.class)).isTrue();
+        assertThat(ListFilter.isNumeric(double.class)).isTrue();
+        assertThat(ListFilter.isNumeric(boolean.class)).isFalse();
+        assertThat(ListFilter.isNumeric(String.class)).isFalse();
     }
 
     @Test

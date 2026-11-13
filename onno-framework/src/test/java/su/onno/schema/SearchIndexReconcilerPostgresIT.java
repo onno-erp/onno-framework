@@ -7,6 +7,8 @@ import su.onno.metadata.MetadataRegistry;
 import su.onno.metadata.MetadataScanner;
 import su.onno.model.CatalogObject;
 
+import org.jdbi.v3.core.ConnectionFactory;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,14 +16,20 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.sql.Connection;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * The trigram search index reconciler against a real PostgreSQL: undeclared framework-owned
  * indexes are dropped (by definition, not name), declared ones are built concurrently, and a
- * same-named non-trigram index is left alone. Skipped when Docker is unavailable.
+ * same-named non-trigram index is left alone. Another node's search reconciliation is skipped for,
+ * another index reconciliation is waited for without holding a connection, and both advisory locks
+ * are released. Skipped when Docker is unavailable.
  */
 @Testcontainers(disabledWithoutDocker = true)
 class SearchIndexReconcilerPostgresIT {
@@ -101,5 +109,138 @@ class SearchIndexReconcilerPostgresIT {
 
         assertThat(trigramIndexes()).isEmpty();
         assertThat(allIndexes()).contains("idx_trgm_catalog_reconcile_notes_tag");
+    }
+
+    @Test
+    void skipsWhileAnotherNodeReconcilesSearchIndexes() {
+        List<String> before = trigramIndexes();
+        Handle otherNode = jdbi.open();
+        try {
+            assertThat(tryLock(otherNode, SearchIndexReconciler.LOCK_KEY)).isTrue();
+
+            assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
+                    new SearchIndexReconciler(generator, SearchIndexMode.AUTO).reconcile(jdbi, SqlDialect.POSTGRESQL));
+
+            assertThat(trigramIndexes()).isEqualTo(before);
+        } finally {
+            unlock(otherNode, SearchIndexReconciler.LOCK_KEY);
+            otherNode.close();
+        }
+    }
+
+    @Test
+    void waitsForAnotherIndexReconciliationInsteadOfSkipping() {
+        List<String> before = trigramIndexes();
+        Jdbi waiting = tagged("onno-search-wait");
+        Handle otherReconciliation = jdbi.open();
+        CompletableFuture<Void> search;
+        try {
+            assertThat(tryLock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY)).isTrue();
+
+            search = CompletableFuture.runAsync(() ->
+                    new SearchIndexReconciler(generator, SearchIndexMode.AUTO).reconcile(waiting, SqlDialect.POSTGRESQL));
+            pause(2_000);
+            assertThat(search).as("waits rather than build alongside or skip").isNotDone();
+            assertThat(trigramIndexes()).isEqualTo(before);
+            assertThat(heldSessions("onno-search-wait")).as("connections held while waiting").isZero();
+        } finally {
+            unlock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY);
+            otherReconciliation.close();
+        }
+        assertThat(search).succeedsWithin(Duration.ofSeconds(30));
+        assertThat(trigramIndexes()).containsExactly(
+                "idx_trgm_catalog_reconcile_notes__code",
+                "idx_trgm_catalog_reconcile_notes__description",
+                "idx_trgm_catalog_reconcile_notes_title");
+    }
+
+    @Test
+    void leavesTheIndexesForTheNextStartWhenTheBuildLockStaysHeld() {
+        List<String> before = trigramIndexes();
+        Handle otherReconciliation = jdbi.open();
+        try {
+            assertThat(tryLock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY)).isTrue();
+
+            assertTimeoutPreemptively(Duration.ofSeconds(15), () ->
+                    new SearchIndexReconciler(generator, SearchIndexMode.AUTO, Duration.ofSeconds(2))
+                            .reconcile(jdbi, SqlDialect.POSTGRESQL));
+
+            assertThat(trigramIndexes()).isEqualTo(before);
+        } finally {
+            unlock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY);
+            otherReconciliation.close();
+        }
+        assertThat(lockFree(SearchIndexReconciler.LOCK_KEY)).isTrue();
+    }
+
+    @Test
+    void releasesBothLocksWhenTheConnectionStaysOpen() throws Exception {
+        // A pool keeps the session, and with it any advisory lock left unreleased.
+        Handle pooled = jdbi.open();
+        try {
+            Connection connection = pooled.getConnection();
+            Jdbi onPooled = Jdbi.create(new ConnectionFactory() {
+                @Override
+                public Connection openConnection() {
+                    return connection;
+                }
+
+                @Override
+                public void closeConnection(Connection ignored) {
+                    // Returned to the "pool": the session, and its advisory locks, live on.
+                }
+            });
+            new SearchIndexReconciler(generator, SearchIndexMode.AUTO).reconcile(onPooled, SqlDialect.POSTGRESQL);
+
+            assertThat(pooled.getConnection().isClosed()).isFalse();
+
+            assertThat(trigramIndexes()).hasSize(3);
+            assertThat(lockFree(SearchIndexReconciler.LOCK_KEY)).isTrue();
+            assertThat(lockFree(SearchIndexReconciler.BUILD_LOCK_KEY)).isTrue();
+        } finally {
+            pooled.close();
+        }
+    }
+
+    /** A Jdbi whose sessions carry {@code applicationName}, so they can be found in pg_stat_activity. */
+    private static Jdbi tagged(String applicationName) {
+        String url = POSTGRES.getJdbcUrl();
+        return Jdbi.create(url + (url.contains("?") ? "&" : "?") + "ApplicationName=" + applicationName,
+                POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    /** Sessions tagged {@code applicationName} that have stayed open for over a second. */
+    private long heldSessions(String applicationName) {
+        return jdbi.withHandle(h -> h.createQuery("""
+                        SELECT count(*) FROM pg_stat_activity
+                        WHERE application_name = :app AND backend_start < now() - interval '1 second'
+                        """)
+                .bind("app", applicationName).mapTo(Long.class).one());
+    }
+
+    private static boolean tryLock(Handle handle, long key) {
+        return handle.createQuery("SELECT pg_try_advisory_lock(:key)").bind("key", key).mapTo(Boolean.class).one();
+    }
+
+    private static void unlock(Handle handle, long key) {
+        handle.createQuery("SELECT pg_advisory_unlock(:key)").bind("key", key).mapTo(Boolean.class).one();
+    }
+
+    /** Whether advisory lock {@code key} is free: takes it from a fresh session and gives it back. */
+    private boolean lockFree(long key) {
+        try (Handle handle = jdbi.open()) {
+            boolean locked = tryLock(handle, key);
+            if (locked) unlock(handle, key);
+            return locked;
+        }
+    }
+
+    private static void pause(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+        }
     }
 }

@@ -167,6 +167,15 @@ public class RegisterQueryService {
         return balanceColumns(desc);
     }
 
+    /** The numeric dimension/resource columns — a range bound on one binds as a number. */
+    public Set<String> numericFilterColumns(AccumulationRegisterDescriptor desc) {
+        Set<String> cols = new java.util.LinkedHashSet<>();
+        java.util.stream.Stream.concat(desc.dimensions().stream(), desc.resources().stream())
+                .filter(a -> ListFilter.isNumeric(a.javaType()))
+                .forEach(a -> cols.add(a.columnName().toLowerCase()));
+        return cols;
+    }
+
     private static void appendMovementWindow(StringBuilder sql, String from, String to) {
         if (from != null) sql.append(" AND _period >= CAST(:from AS TIMESTAMP)");
         if (to != null) sql.append(" AND _period <= CAST(:to AS TIMESTAMP)");

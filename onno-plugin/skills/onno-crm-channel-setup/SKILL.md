@@ -17,13 +17,22 @@ private server-owned files and use `onno.crm.channels.<provider>.*` configuratio
   Business settings with reply permission. Do not equate business mode with personal CRM visibility.
 - **Gmail:** enable Gmail API; configure test users/consent; use a Web OAuth client with the exact
   `gmail.redirect-uri`. CRM managers use Connect Google account. The callback validates state,
-  PKCE, identity and scopes, then stores refresh credentials. Initial sync is bounded, not a full
-  mailbox archive. Existing Gmail threads from a sender share one CRM chat.
+  PKCE, identity and scopes, then stores refresh credentials. It asks for read, send and modify;
+  read and send are required, modify (mark read and move back to Inbox in Gmail) is optional, so a
+  mailbox connected earlier must be reconnected to get it (`GET /api/crm/gmail/accounts` shows
+  `canModify`). Initial sync is bounded (`initial-import-limit` 500, `initial-import-days` 90), not a
+  full mailbox archive; older or archived mail is found and restored through the Gmail search/restore
+  endpoints, or imported once as quiet history with `history-import.enabled` (text only, files
+  fetched from Gmail when opened, progress in `onno_crm_gmail_history_import`). Existing Gmail
+  threads from a sender share one CRM chat.
 - **Instagram:** professional account, app messaging permissions, accepted tester invitation, then
   Generate token and authorize the app. A normal Instagram login or accepted tester invite alone
   does not grant API access. Verify `/me`; a token can be valid while test-mode APIs expose no chats.
   If an embedded browser cannot open the authorization popup, use a browser that can, preserving
   the OAuth flow. Do not repeatedly tell the user to log in when the missing step is consent.
+  Instagram imports new messages only: before enabling sync on a live account, keep it paused and
+  persist an explicit UTC cutoff (`onno.crm.channels.instagram.activation-cutoff` or a row in
+  `onno_crm_ig_sync`), then Resume. Without one, the cutoff is the moment sync is first enabled.
 - **WhatsApp:** choose a test or authorized business number; store `access_token`, `phone_number_id`,
   `business_account_id`, `app_secret`, `verify_token` in the private token JSON. Configure the exact
   `/api/crm/whatsapp/webhook` HTTPS callback and subscribe the app to WABA messages. Confirm both

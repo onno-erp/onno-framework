@@ -56,6 +56,40 @@ class CrmMessageRouterTest {
         assertThatThrownBy(()->router.enqueue(conversation,new ConversationMessage())).hasMessageContaining("incoming messages only");
         verify(provider,never()).enqueue(any(),any());
     }
+    @Test void asksForThePrincipalsViewWhenThereIsOne() {
+        var conversation = new Conversation();
+        var gmail = mock(CrmMessageTransport.class);
+        java.security.Principal alice = () -> "alice";
+        when(gmail.supports(conversation)).thenReturn(true);
+        when(gmail.connection(conversation)).thenReturn(new CrmMessageTransport.Connection(true, "Gmail", 8000));
+        when(gmail.connection(conversation, alice)).thenReturn(new CrmMessageTransport.Connection(true, "Gmail", 8000)
+            .withSenders("alice@example.com", List.of(new CrmMessageTransport.Sender("alice@example.com", "Alice"))));
+        var router = new CrmMessageRouter(List.of(gmail));
+        assertThat(router.connection(conversation, alice).sender()).isEqualTo("alice@example.com");
+        assertThat(router.connection(conversation).senders()).isEmpty();
+    }
+    @Test void readStateReachesEveryProviderOfTheConversation() {
+        var conversation = new Conversation();
+        var gmail = mock(CrmMessageTransport.class);
+        var other = mock(CrmMessageTransport.class);
+        when(gmail.supports(conversation)).thenReturn(true);
+        new CrmMessageRouter(List.of(gmail, other)).markedRead(conversation);
+        verify(gmail).markedRead(conversation);
+        verify(other, never()).markedRead(any());
+    }
+    @Test void connectionsKeepSendersThroughEveryWither() throws Exception {
+        var connection = new CrmMessageTransport.Connection(true, "Gmail", 8000)
+            .withSenders(null, List.of(new CrmMessageTransport.Sender("a@example.com", null), new CrmMessageTransport.Sender("b@example.com", "B")))
+            .withAttachments(3, "").withRecipients("c@example.com", List.of("c@example.com"));
+        assertThat(connection.sender()).isEqualTo("a@example.com");
+        assertThat(connection.senders()).extracting(CrmMessageTransport.Sender::label).containsExactly("a@example.com", "B");
+        assertThat(connection.offeredSender("B@EXAMPLE.COM").id()).isEqualTo("b@example.com");
+        // The inbox widget reads this JSON from GET /api/crm/conversations/{id}/delivery.
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(connection));
+        assertThat(json.path("sender").asText()).isEqualTo("a@example.com");
+        assertThat(json.path("senders").toString()).isEqualTo("[{\"id\":\"a@example.com\",\"label\":\"a@example.com\"},{\"id\":\"b@example.com\",\"label\":\"B\"}]");
+        assertThat(json.path("recipient").asText()).isEqualTo("c@example.com");
+    }
     @Test void noProviderCannotSend() {
         assertThatThrownBy(() -> new CrmMessageRouter(List.of()).enqueue(new Conversation(), new ConversationMessage()))
             .isInstanceOf(IllegalArgumentException.class);

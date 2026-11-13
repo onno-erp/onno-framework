@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { ResponsiveActionPanel } from "./ui/responsive-action-panel";
 import { nearestScrollAncestor, trailingPaddingTo } from "@/lib/fill-height";
@@ -5,7 +6,7 @@ import { ExtensionSlot } from "@/lib/ui-extensions";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, CalendarDays, Check, ChevronsUpDown, Copy, ExternalLink, LayoutGrid, Link2, ListFilter, Loader2, Map as MapIcon, PanelLeftClose, PanelLeftOpen, Plus, Rows3, Search, Table2, Trash2, X } from "lucide-react";
 import { CalendarDate, getLocalTimeZone, parseDate, startOfMonth, startOfYear, today } from "@internationalized/date";
 import { toast } from "@/components/ui/toast";
 import { ListMapView, type ListMapConfig } from "@/components/list-map-view";
@@ -16,7 +17,7 @@ import {
   type ActionFormValues,
 } from "@/components/action-form-dialog";
 import { GroupedList } from "@/components/entity-list-grouped";
-import { initialFilterState, type FilterState } from "@/components/list-defaults";
+import { initialFilterState, normalizeNumberBound, numberRangeLabel, type FilterState } from "@/components/list-defaults";
 import { listColumnPixelWidth } from "@/components/list-column-width";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { useViewersById } from "@/lib/presence-store";
@@ -46,8 +47,13 @@ import {
   ContextMenuSub,
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
-import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-bridge";
-import { api, ApiError } from "@/lib/api";
+import {
+  getRegistryVersion,
+  resolveListRenderer,
+  resolveListSelection,
+  subscribeRegistry,
+} from "@/lib/widget-registry";
+import { api, ApiError, downloadSelection } from "@/lib/api";
 import { actionFeedbackFromError, applyActionResult, presentActionFeedback } from "@/lib/action-feedback";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
@@ -58,6 +64,7 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 import { RestrictedRef, isRestrictedRef } from "@/components/restricted-ref";
 import type { Translate } from "@/lib/messages";
+import { widgetLocale } from "@/lib/widget-messages";
 
 /**
  * The {@code onno-list} React island: a virtualized, server-paged data grid. The DivKit list
@@ -144,6 +151,9 @@ export type ListAction = {
  * to hide/grey it on rows it doesn't apply to. Any field absent falls back to the static descriptor
  * (icon/label) or the default (visible/enabled = true).
  */
+/** A read-only selection download (e.g. batch print): POST {ids} to {@code url}, save the attachment. */
+export type SelectionDownload = { key: string; icon?: string; label: string; url: string };
+
 export type RowActionState = {
   visible?: boolean;
   enabled?: boolean;
@@ -171,7 +181,8 @@ export type ListInput = {
  * "multiOptions" renders a multi-select matched as {@code column IN (…)}; "contains"/"startsWith"
  * render a debounced typeahead matched case-insensitively (LIKE %v% / v%) — the high-cardinality
  * answer where enumerating every value is unusable; "dateRange" renders from/to date pickers driving
- * a {@code column >= from AND column <= to} range. The current value is sent to /api/list as
+ * a {@code column >= from AND column <= to} range; "numberRange" renders from/to number inputs
+ * driving the same inclusive range over a numeric column, either bound optional. The current value is sent to /api/list as
  * eq/in/like/prefix/ge/le params, and several filters narrow the list jointly (AND).
  */
 /** One choice of a (multi-)options filter: {@code value} is matched on the column, {@code label} is
@@ -182,7 +193,7 @@ export type ListFilterControl = {
   key: string;
   label: string;
   column: string;
-  type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange";
+  type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange" | "numberRange";
   options: FilterOption[];
 };
 /**
@@ -194,7 +205,7 @@ export type ListFilterControl = {
 export type ListCustomConfig = { type: string; label?: string; defaultView?: boolean };
 /**
  * The props a custom list-body renderer receives (registered via {@code registerListRenderer} from
- * {@code @onno/widget-sdk}, or {@code registerWidget} host-side). The framework keeps the toolbar
+ * {@code @onno/widget-sdk} or the host registry). The framework keeps the toolbar
  * (search, filters, sort, group-by) and the keyset feed/live refresh — the renderer only
  * draws the rows it's handed and opens a record through the callback.
  */
@@ -221,9 +232,8 @@ export type ListRendererProps = {
   openUrl: (row: EntityRecord) => string | null;
 };
 /**
- * A custom list renderer. The host shows a "Loading more…" indicator below it while a next window
- * loads, unless the component carries {@code ownsLoadingMore} (set by the SDK's
- * {@code registerListRenderer(type, C, { ownsLoadingMore: true })}) because it draws that feedback itself.
+ * A directly supplied list renderer can set {@code ownsLoadingMore} to show its own loading feedback.
+ * Registered renderers set this option through {@code registerListRenderer} instead.
  */
 export type ListRendererComponent = ComponentType<ListRendererProps> & { ownsLoadingMore?: boolean };
 
@@ -332,6 +342,11 @@ export type ListDescriptor = {
   groupsExpanded?: boolean;
   selectionCheckboxes?: boolean;
   selectionWidget?: string;
+  /**
+   * Read-only file downloads over the selected rows (e.g. batch print), contributed server-side by a
+   * SelectionDownloadContributor. Offered to every reader: the endpoint enforces access itself.
+   */
+  selectionDownloads?: SelectionDownload[];
   pageSize: number;
   // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
@@ -1044,7 +1059,7 @@ function SearchChip({
 /** Short, locale-aware day label ("May 9") for a stored ISO date, shown inside the date-range chip. */
 function fmtDay(iso: string): string {
   try {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(
+    return new Intl.DateTimeFormat(widgetLocale(), { month: "short", day: "numeric" }).format(
       new Date(`${iso}T00:00`)
     );
   } catch {
@@ -1054,6 +1069,141 @@ function fmtDay(iso: string): string {
 
 // (FacetSheet, SheetClearButton, SheetDoneButton, useTouchLayout live in ui/facet-sheet — the
 // dashboard's TimeRangeFacet shares the same touch shell.)
+
+/**
+ * A number-range facet: one chip that opens two number inputs (from / to) over a numeric column.
+ * Either bound may stay empty ("above 1000", "below 5"); both are inclusive. State is the same
+ * {from,to} pair the date range uses, bound to {@code ge}/{@code le} — here plain decimals,
+ * normalized (decimal comma → dot, spaces dropped) before they are committed. Typing commits after
+ * a short pause so the list doesn't refetch per keystroke; Enter commits at once and closes.
+ */
+function NumberRangeFacet({
+  label,
+  from,
+  to,
+  onChange,
+}: {
+  label: string;
+  from: string;
+  to: string;
+  onChange: (next: { from: string; to: string }) => void;
+}) {
+  const t = useMessages();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState({ from, to });
+  // Keep the inputs in sync if the committed value is reset externally (e.g. a clear-all) — but
+  // leave text that already means the committed value alone, so a half-typed "12," isn't rewritten.
+  useEffect(
+    () =>
+      setDraft((d) =>
+        normalizeNumberBound(d.from) === from && normalizeNumberBound(d.to) === to ? d : { from, to }
+      ),
+    [from, to]
+  );
+  const commit = (next: { from: string; to: string }) => {
+    const clean = { from: normalizeNumberBound(next.from), to: normalizeNumberBound(next.to) };
+    if (clean.from !== from || clean.to !== to) onChange(clean);
+  };
+  useEffect(() => {
+    const id = window.setTimeout(() => commit(draft), 400);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.from, draft.to]);
+  const active = !!from || !!to;
+  const touch = useTouchLayout();
+  const clear = () => {
+    setDraft({ from: "", to: "" });
+    onChange({ from: "", to: "" });
+    setOpen(false);
+  };
+
+  const trigger = (
+    <button type="button" className={facetTriggerCls(active)} onClick={touch ? () => setOpen(true) : undefined}>
+      <ArrowLeftRight className="size-3.5 shrink-0 opacity-60" />
+      <span className="whitespace-nowrap">{label}</span>
+      {active ? (
+        <>
+          <FacetDivider />
+          <FacetValueBadge>{numberRangeLabel(from, to)}</FacetValueBadge>
+        </>
+      ) : null}
+    </button>
+  );
+  const input = (bound: "from" | "to", cls: string, autoFocus = false) => (
+    <Input
+      autoFocus={autoFocus}
+      inputMode="decimal"
+      aria-label={`${label}: ${t(bound === "from" ? "list.rangeFrom" : "list.rangeTo")}`}
+      placeholder={t(bound === "from" ? "list.rangeFrom" : "list.rangeTo")}
+      value={draft[bound]}
+      onChange={(e) => setDraft((d) => ({ ...d, [bound]: e.target.value }))}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commit(draft);
+          setOpen(false);
+        }
+      }}
+      className={cls}
+    />
+  );
+
+  if (touch) {
+    return (
+      <>
+        {trigger}
+        <FacetSheet open={open}
+          label={label}
+          onClose={() => setOpen(false)}
+          footer={
+            <>
+              <SheetClearButton onClick={clear}>{t("list.clear")}</SheetClearButton>
+              <SheetDoneButton
+                onClick={() => {
+                  commit(draft);
+                  setOpen(false);
+                }}
+              >
+                {t("list.done")}
+              </SheetDoneButton>
+            </>
+          }
+        >
+          <div className="flex items-center gap-2 px-4 py-3">
+            {input("from", "h-11 rounded-field text-[15px]", true)}
+            <span aria-hidden="true" className="text-muted-foreground">–</span>
+            {input("to", "h-11 rounded-field text-[15px]")}
+          </div>
+        </FacetSheet>
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <FacetTip hint={t("list.filterHint", { label })}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      </FacetTip>
+      <PopoverContent align="start" className="w-auto p-2">
+        <div className="flex items-center gap-2">
+          {input("from", "h-8 w-28 text-xs", true)}
+          <span aria-hidden="true" className="text-muted-foreground">–</span>
+          {input("to", "h-8 w-28 text-xs")}
+        </div>
+        {active ? (
+          <div className="mt-2 flex justify-end border-t pt-2">
+            <button
+              type="button"
+              onClick={clear}
+              className="rounded-field px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              {t("list.clear")}
+            </button>
+          </div>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * A date-range facet: one chip that opens a popover with quick presets (Today, Last 7 days, This
@@ -1604,19 +1754,17 @@ export function EntityListWidget({
     return list.map?.defaultView ? "map" : "table";
   });
 
-  // The custom body renderer, resolved live from the widget registry: a plugin registering after
-  // mount re-resolves (the version store bumps), and an unregistered type stays undefined — the
-  // list degrades to the default grid rather than failing (no toggle, no blank body).
-  const registryVersion = useSyncExternalStore(subscribeRegistry, getRegistryVersion);
-  const SelectionWidget = useMemo(() => list.selectionWidget
-    ? resolveWidget(list.selectionWidget) as ComponentType<{ ids: string[]; complete: () => void }> | undefined
-    : undefined, [list.selectionWidget, registryVersion]);
-  const customType = list.custom?.type ?? "";
-  const CustomRenderer = useMemo(
-    () => renderer ?? (customType ? (resolveWidget(customType) as ComponentType<ListRendererProps> | undefined) : undefined),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [customType, registryVersion, renderer]
-  );
+  // Re-resolve list components when a plugin registers after mount.
+  useSyncExternalStore(subscribeRegistry, getRegistryVersion);
+  const SelectionWidget = list.selectionWidget
+    ? resolveListSelection(list.selectionWidget)
+    : undefined;
+  const customType = list.custom?.type;
+  const registeredRenderer = customType ? resolveListRenderer(customType) : undefined;
+  const CustomRenderer = renderer ?? registeredRenderer?.component;
+  const ownsLoadingMore = renderer
+    ? Boolean((renderer as ListRendererComponent).ownsLoadingMore)
+    : registeredRenderer?.ownsLoadingMore ?? false;
   const availableViews = (["table", ...(list.map ? ["map"] : []), ...(CustomRenderer ? ["custom"] : [])] as Array<"table" | "map" | "custom">);
   const configuredViews = toolbarOptions?.views?.filter(value => availableViews.includes(value));
   const allowedViews = configuredViews?.length ? configuredViews : availableViews;
@@ -1682,9 +1830,10 @@ export function EntityListWidget({
       Object.fromEntries(
         filters.map((f) => {
           const p = `f.${f.key}`;
-          if (f.type === "dateRange") {
-            const from = params.get(`${p}.from`) ?? "";
-            const to = params.get(`${p}.to`) ?? "";
+          if (f.type === "dateRange" || f.type === "numberRange") {
+            const raw = (bound: string) => params.get(`${p}.${bound}`) ?? "";
+            const from = f.type === "numberRange" ? normalizeNumberBound(raw("from")) : raw("from");
+            const to = f.type === "numberRange" ? normalizeNumberBound(raw("to")) : raw("to");
             return [f.key, from || to ? { from, to } : {}];
           }
           if (f.type === "multiOptions") {
@@ -1736,7 +1885,7 @@ export function EntityListWidget({
       const st = filterStateRef.current[f.key];
       if (!st) continue;
       const p = `f.${f.key}`;
-      if (f.type === "dateRange") {
+      if (f.type === "dateRange" || f.type === "numberRange") {
         if (st.from) params.set(`${p}.from`, st.from);
         if (st.to) params.set(`${p}.to`, st.to);
       } else if (f.type === "multiOptions") {
@@ -1764,7 +1913,7 @@ export function EntityListWidget({
       filters.reduce((n, f) => {
         const st = filterState[f.key];
         if (!st) return n;
-        if (f.type === "dateRange") return n + (st.from || st.to ? 1 : 0);
+        if (f.type === "dateRange" || f.type === "numberRange") return n + (st.from || st.to ? 1 : 0);
         if (f.type === "multiOptions") return n + ((st.in?.length ?? 0) > 0 ? 1 : 0);
         if (f.type === "contains" || f.type === "startsWith") return n + (st.text?.trim() ? 1 : 0);
         return n + (st.eq ? 1 : 0);
@@ -1856,7 +2005,7 @@ export function EntityListWidget({
     for (const f of filters) {
       const st = filterStateRef.current[f.key];
       if (!st) continue;
-      if (f.type === "dateRange") {
+      if (f.type === "dateRange" || f.type === "numberRange") {
         if (st.from) params.append("ge", `${f.column},${st.from}`);
         if (st.to) params.append("le", `${f.column},${st.to}`);
       } else if (f.type === "multiOptions") {
@@ -2211,6 +2360,7 @@ export function EntityListWidget({
   const reload = useCallback(() => {
     loadInitial(true);
   }, [loadInitial]);
+  useSurfaceRefresh(reload);
 
   // An action-form dialog waiting for input: the clicked form-declaring action plus its target —
   // one row id, a batch of ids, or neither (toolbar). Submitting runs the action with the values.
@@ -2329,6 +2479,26 @@ export function EntityListWidget({
   // first queued update), so "did I just add the key?" can't be derived from setPending. The
   // pending key still drives the disabled state of the menu items.
   const batchBusyRef = useRef(false);
+
+  // Download a file built from the selected rows (batch print and similar read-only exports).
+  const runSelectionDownload = useCallback(async (download: SelectionDownload, ids: string[]) => {
+    const k = `download:${download.key}`;
+    setPending((s) => new Set(s).add(k));
+    const toastId = toast.loading(t("list.download.running", { label: download.label, n: ids.length }));
+    try {
+      await downloadSelection(download.url, ids, `${download.key}.zip`);
+      toast.dismiss(toastId);
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.label }),
+        { id: toastId });
+    } finally {
+      setPending((s) => {
+        const n = new Set(s);
+        n.delete(k);
+        return n;
+      });
+    }
+  }, [t]);
 
   // Run a custom server action over every selected row. The API client chunks selections above the
   // server's 500-id request ceiling and folds them into one {ok, failed, total}, so the island still
@@ -2961,6 +3131,13 @@ export function EntityListWidget({
               <Button size="toolbar" variant="subtle" onClick={() => {
                 for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
               }}><ExternalLink />{t("action.open")}</Button>
+              {(list.selectionDownloads ?? []).map(d => (
+                <Button key={d.key} size="toolbar" variant="subtle" disabled={pending.has(`download:${d.key}`)}
+                  onClick={() => void runSelectionDownload(d, [...selected])}>
+                  {pending.has(`download:${d.key}`) ? <Loader2 className="animate-spin" /> : <DynamicLucide name={d.icon || "download"} size={16} />}
+                  {d.label}
+                </Button>
+              ))}
               {rowActions.filter(a => a.server).map(a => (
                 <Button key={a.key} size="toolbar" variant="subtle" disabled={pending.has(`batch:${a.key}`)}
                   onClick={() => { setArmedDelete(false); void runBatchAction(a, [...selected]); }}>
@@ -2997,6 +3174,17 @@ export function EntityListWidget({
             if (f.type === "dateRange") {
               return (
                 <DateRangeFacet
+                  key={f.key}
+                  label={f.label}
+                  from={filterState[f.key]?.from ?? ""}
+                  to={filterState[f.key]?.to ?? ""}
+                  onChange={(next) => setFilterState((s) => ({ ...s, [f.key]: next }))}
+                />
+              );
+            }
+            if (f.type === "numberRange") {
+              return (
+                <NumberRangeFacet
                   key={f.key}
                   label={f.label}
                   from={filterState[f.key]?.from ?? ""}
@@ -3265,8 +3453,7 @@ export function EntityListWidget({
               <CustomRenderer loading={pageRows == null} toolbar={relocateToolbar ? presentedToolbar : undefined} rows={loadedRows} total={total} list={rendererList} open={rendererOpen} openUrl={rendererOpenUrl}
                 hasMore={hasMore} loadingMore={loadingMore} loadMoreFailed={loadMoreFailed} loadMore={loadMore} />
             )}
-            {/* Renderers registered with { ownsLoadingMore: true } draw this feedback inside their own pane. */}
-            {loadingMore && !(CustomRenderer as ListRendererComponent).ownsLoadingMore ? (
+            {loadingMore && !ownsLoadingMore ? (
               <div role="status" className={cn("flex items-center justify-center gap-2 py-3 text-xs text-muted-foreground", surfaceMode && "pointer-events-none absolute bottom-0 inset-x-0")}>
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                 {t("list.loadingMore")}

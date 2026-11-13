@@ -1,5 +1,6 @@
 package su.onno.ui;
 
+import su.onno.metadata.AttributeDescriptor;
 import su.onno.ui.ActionSpec.Action;
 import su.onno.ui.InputSpec.InputField;
 
@@ -17,46 +18,50 @@ import java.util.Set;
  */
 public class UiActionResolver {
 
-    private final Map<Class<?>, List<Action>> byEntity = new LinkedHashMap<>();
-    private final Map<Class<?>, List<ActionSpec>> specsByEntity = new LinkedHashMap<>();
+    private final Map<Class<?>, List<Action<?>>> byEntity = new LinkedHashMap<>();
+    private final Map<Class<?>, List<ActionSpec<?>>> specsByEntity = new LinkedHashMap<>();
     private final Map<Class<?>, List<InputField>> inputsByEntity = new LinkedHashMap<>();
 
     public UiActionResolver(List<EntityView> views) {
-        for (EntityView view : views) {
-            if (view.entity() == null) {
-                continue;
-            }
-            ActionSpec spec = new ActionSpec();
-            view.actions(spec);
-            List<Action> declared = spec.actions();
-            if (!declared.isEmpty() || spec.hasDynamicActions()) {
-                specsByEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>()).add(spec);
-            }
-            if (!declared.isEmpty()) {
-                List<Action> bucket = byEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>());
-                // First view to declare a key wins (a profile-specific view can't clobber another's).
-                for (Action a : declared) {
-                    if (bucket.stream().noneMatch(e -> e.key().equals(a.key()))) {
-                        bucket.add(a);
-                    }
+        for (EntityView<?> view : views) {
+            collect(view);
+        }
+    }
+
+    private <E> void collect(EntityView<E> view) {
+        if (view.entity() == null) {
+            return;
+        }
+        ActionSpec<E> spec = new ActionSpec<>();
+        view.actions(spec);
+        List<Action<?>> declared = new ArrayList<>(spec.actions());
+        if (!declared.isEmpty() || spec.hasDynamicActions()) {
+            specsByEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>()).add(spec);
+        }
+        if (!declared.isEmpty()) {
+            List<Action<?>> bucket = byEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>());
+            // First view to declare a key wins (a profile-specific view can't clobber another's).
+            for (Action<?> a : declared) {
+                if (bucket.stream().noneMatch(e -> e.key().equals(a.key()))) {
+                    bucket.add(a);
                 }
             }
+        }
 
-            InputSpec inputSpec = new InputSpec();
-            view.inputs(inputSpec);
-            List<InputField> declaredInputs = inputSpec.inputs();
-            if (!declaredInputs.isEmpty()) {
-                List<InputField> bucket = inputsByEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>());
-                for (InputField in : declaredInputs) {
-                    if (bucket.stream().noneMatch(e -> e.key().equals(in.key()))) {
-                        bucket.add(in);
-                    }
+        InputSpec inputSpec = new InputSpec();
+        view.inputs(inputSpec);
+        List<InputField> declaredInputs = inputSpec.inputs();
+        if (!declaredInputs.isEmpty()) {
+            List<InputField> bucket = inputsByEntity.computeIfAbsent(view.entity(), k -> new ArrayList<>());
+            for (InputField in : declaredInputs) {
+                if (bucket.stream().noneMatch(e -> e.key().equals(in.key()))) {
+                    bucket.add(in);
                 }
             }
         }
     }
 
-    public List<Action> forEntity(Class<?> entity) {
+    public List<Action<?>> forEntity(Class<?> entity) {
         return byEntity.getOrDefault(entity, List.of());
     }
 
@@ -65,13 +70,13 @@ public class UiActionResolver {
      * startup declarations. Static-only entities return the cached list without re-running view
      * code or allocating a new collection.
      */
-    public List<Action> resolvedForEntity(Class<?> entity) {
+    public List<Action<?>> resolvedForEntity(Class<?> entity) {
         if (!hasDynamicActions(entity)) {
             return forEntity(entity);
         }
-        Map<String, Action> merged = new LinkedHashMap<>();
-        for (ActionSpec spec : specsByEntity.getOrDefault(entity, List.of())) {
-            for (Action action : spec.resolveActions()) {
+        Map<String, Action<?>> merged = new LinkedHashMap<>();
+        for (ActionSpec<?> spec : specsByEntity.getOrDefault(entity, List.of())) {
+            for (Action<?> action : spec.resolveActions()) {
                 merged.putIfAbsent(action.key(), action);
             }
         }
@@ -85,7 +90,7 @@ public class UiActionResolver {
     }
 
     /** The action whose key matches, or {@code null}. */
-    public Action find(Class<?> entity, String key) {
+    public Action<?> find(Class<?> entity, String key) {
         return resolvedForEntity(entity).stream()
                 .filter(a -> a.key().equals(key))
                 .findFirst()
@@ -111,7 +116,13 @@ public class UiActionResolver {
      * (the descriptor value / visible+enabled) so one bad predicate can't break the list.
      */
     public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row) {
-        List<Action> current;
+        return rowActionState(entity, row, List.of());
+    }
+
+    /** Resolve typed row fields using the entity's storage metadata. */
+    public Map<String, Object> rowActionState(Class<?> entity, Map<String, Object> row,
+                                              List<AttributeDescriptor> attributes) {
+        List<Action<?>> current;
         try {
             current = resolvedForEntity(entity);
         } catch (RuntimeException e) {
@@ -119,35 +130,45 @@ public class UiActionResolver {
             // the provider failure, while row decoration safely falls back to static state.
             current = forEntity(entity);
         }
-        return rowActionState(current, row);
+        return rowActionState(current, row, attributes);
     }
 
     /** Resolve per-row state from an already resolved action snapshot (one live-provider evaluation). */
-    public Map<String, Object> rowActionState(List<Action> actions, Map<String, Object> row) {
-        ActionRow actionRow = new ActionRow(row);
+    public Map<String, Object> rowActionState(List<? extends Action<?>> actions, Map<String, Object> row) {
+        return rowActionState(actions, row, List.of());
+    }
+
+    /** Resolve a live action snapshot against a storage-keyed row with entity metadata. */
+    public Map<String, Object> rowActionState(List<? extends Action<?>> actions, Map<String, Object> row,
+                                              List<AttributeDescriptor> attributes) {
         Map<String, Object> out = new LinkedHashMap<>();
-        for (Action a : actions) {
-            if (a.scope() != ActionScope.ROW || !a.isDynamic()) {
-                continue;
+        for (Action<?> a : actions) {
+            if (a.scope() == ActionScope.ROW && a.isDynamic()) {
+                out.put(a.key(), rowActionState(a, row, attributes));
             }
-            Map<String, Object> state = new LinkedHashMap<>();
-            state.put("visible", eval(a.visibleFn(), actionRow, true));
-            state.put("enabled", eval(a.enabledFn(), actionRow, true));
-            if (a.iconFn() != null) {
-                String icon = evalString(a.iconFn(), actionRow);
-                if (icon != null) {
-                    state.put("icon", icon);
-                }
-            }
-            if (a.labelFn() != null) {
-                String label = evalString(a.labelFn(), actionRow);
-                if (label != null) {
-                    state.put("label", label);
-                }
-            }
-            out.put(a.key(), state);
         }
         return out;
+    }
+
+    private static <E> Map<String, Object> rowActionState(Action<E> a, Map<String, Object> row,
+                                                         List<AttributeDescriptor> attributes) {
+        ActionRow<E> actionRow = new ActionRow<>(row, attributes);
+        Map<String, Object> state = new LinkedHashMap<>();
+        state.put("visible", eval(a.visibleFn(), actionRow, true));
+        state.put("enabled", eval(a.enabledFn(), actionRow, true));
+        if (a.iconFn() != null) {
+            String icon = evalString(a.iconFn(), actionRow);
+            if (icon != null) {
+                state.put("icon", icon);
+            }
+        }
+        if (a.labelFn() != null) {
+            String label = evalString(a.labelFn(), actionRow);
+            if (label != null) {
+                state.put("label", label);
+            }
+        }
+        return state;
     }
 
     /**
@@ -160,8 +181,14 @@ public class UiActionResolver {
     public record RecordActionState(boolean visible, boolean enabled, String label, String icon) {}
 
     /** Evaluate {@code a}'s per-record functions against a loaded record (see {@link RecordActionState}). */
-    public static RecordActionState recordActionState(Action a, Map<String, Object> record) {
-        ActionRow row = new ActionRow(record);
+    public static RecordActionState recordActionState(Action<?> a, Map<String, Object> record) {
+        return recordActionState(a, record, List.of());
+    }
+
+    /** Evaluate record functions with the attributes used to load that record. */
+    public static <E> RecordActionState recordActionState(Action<E> a, Map<String, Object> record,
+                                                      List<AttributeDescriptor> attributes) {
+        ActionRow<E> row = new ActionRow<>(record, attributes);
         String label = a.labelFn() != null ? evalString(a.labelFn(), row) : null;
         String icon = a.iconFn() != null ? evalString(a.iconFn(), row) : null;
         return new RecordActionState(
@@ -171,7 +198,7 @@ public class UiActionResolver {
                 icon != null ? icon : a.icon());
     }
 
-    private static boolean eval(java.util.function.Predicate<ActionRow> p, ActionRow row, boolean fallback) {
+    private static <E> boolean eval(java.util.function.Predicate<ActionRow<E>> p, ActionRow<E> row, boolean fallback) {
         if (p == null) {
             return fallback;
         }
@@ -182,7 +209,7 @@ public class UiActionResolver {
         }
     }
 
-    private static String evalString(java.util.function.Function<ActionRow, String> f, ActionRow row) {
+    private static <E> String evalString(java.util.function.Function<ActionRow<E>, String> f, ActionRow<E> row) {
         try {
             return f.apply(row);
         } catch (RuntimeException e) {
@@ -226,7 +253,7 @@ public class UiActionResolver {
      * Scalar fields come first (tagged {@code kind: "field"}), then the repeatable row groups
      * ({@code kind: "group"}, carrying their {@code columns}); the client renders each accordingly.
      */
-    public static List<Map<String, Object>> formDescriptors(Action a) {
+    public static List<Map<String, Object>> formDescriptors(Action<?> a) {
         if (!a.hasForm()) {
             return List.of();
         }
@@ -243,7 +270,7 @@ public class UiActionResolver {
     }
 
     /** Optional presentation metadata for an action form's canonical dialog shell. */
-    public static Map<String, Object> formDialogDescriptor(Action a) {
+    public static Map<String, Object> formDialogDescriptor(Action<?> a) {
         InputSpec.ActionFormDialog d = a.formDialog();
         if (d == null) {
             return Map.of();
@@ -284,9 +311,9 @@ public class UiActionResolver {
     }
 
     /** Descriptor maps for an already resolved action snapshot. */
-    public static List<Map<String, Object>> descriptors(List<Action> actions, Set<ActionScope> scopes) {
+    public static List<Map<String, Object>> descriptors(List<? extends Action<?>> actions, Set<ActionScope> scopes) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Action a : actions) {
+        for (Action<?> a : actions) {
             if (!scopes.contains(a.scope())) {
                 continue;
             }

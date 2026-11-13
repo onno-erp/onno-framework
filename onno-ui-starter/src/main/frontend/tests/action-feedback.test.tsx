@@ -87,3 +87,21 @@ describe("typed action feedback (#273)", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 });
+
+describe("ActionResult refresh (#447)", () => {
+  it("calls refresh when the server requests it", () => {
+    const refresh = vi.fn();
+
+    applyActionResult({ refresh: true }, { refresh });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh when the server does not request it", () => {
+    const refresh = vi.fn();
+
+    applyActionResult({ refresh: false }, { refresh });
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
+});

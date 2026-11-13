@@ -1,5 +1,6 @@
 import { openRoute } from "@/lib/navigation";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { format } from "date-fns";
 import {
   DragDropContext,
@@ -90,6 +91,7 @@ export function KanbanWidget({ widget }: KanbanWidgetProps) {
   useEffect(() => {
     load();
   }, [load]);
+  useSurfaceRefresh(load);
 
   const titleField = widget.titleField || "number";
   const columns = useMemo(() => defaultColumns(widget), [widget]);

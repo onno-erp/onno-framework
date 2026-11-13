@@ -11,6 +11,7 @@ import su.onno.ui.comments.CommentService;
 import su.onno.ui.conformance.LeakTestApp;
 import su.onno.ui.conformance.model.LkTenant;
 import su.onno.ui.conformance.model.LkTenantFacts;
+import su.onno.ui.conformance.model.LkUsage;
 import su.onno.ui.notifications.NotificationRequest;
 import su.onno.ui.notifications.NotificationService;
 import su.onno.ui.presence.PresenceRegistry;
@@ -139,6 +140,7 @@ class RecordPolicyConformanceTest {
                 "GET /api/divkit/documents/{name}", "GET /api/divkit/documents/{name}/{id}",
                 "GET /api/divkit/documents/{name}/new", "GET /api/divkit/documents/{name}/{id}/duplicate",
                 "GET /api/divkit/registers/{name}", "GET /api/divkit/pickers/{kind}/{name}",
+                "GET /api/divkit/record-refresh/{kind}/{name}/{id}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
             ROUTES.put(r, Route.SCOPED);
@@ -285,6 +287,20 @@ class RecordPolicyConformanceTest {
     }
 
     // ------------------------------------------------------------------------------- the suite
+
+    /**
+     * The fixture leaves {@code onno.schema.mode} unset, so its {@code apply} default must let the
+     * record-scope indexes be created (#460). A balance totals table gets no index from the schema,
+     * so this one exists only if {@link RecordScopeIndexes} ran.
+     */
+    @Test
+    void scopeIndexesAreCreatedUnderTheDefaultSchemaMode() {
+        String index = RecordScopeIndexes.indexName(registry.getRegisterDescriptor(LkUsage.class).totalsTableName(), "tenant");
+        int found = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES WHERE UPPER(INDEX_NAME) = UPPER(:name)")
+                .bind("name", index).mapTo(Integer.class).one());
+        assertThat(found).as("record-scope index %s", index).isEqualTo(1);
+    }
 
     @Test
     void noEndpointLeaksAnotherOwnersRecords() throws Exception {
@@ -484,6 +500,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/catalogs/LkTenants"));
         ok(get("/api/divkit/catalogs/LkTenants/" + tenantA));
         status(get("/api/divkit/catalogs/LkTenants/" + tenantB), 404);
+        ok(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantA));
+        status(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantB), 404);
         String draft = ok(get("/api/divkit/catalogs/LkTenants/new"));
         assertThat(draft).as("the policy default (the signed-in owner) pre-fills the New form")
                 .contains(ownerA.toString());
@@ -492,6 +510,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/documents/LkBuildJobs"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB), 404);
+        ok(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobA));
+        status(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobB), 404);
         ok(get("/api/divkit/documents/LkBuildJobs/new"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA + "/duplicate"));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB + "/duplicate"), 404);

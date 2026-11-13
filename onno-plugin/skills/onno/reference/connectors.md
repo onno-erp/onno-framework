@@ -2,9 +2,9 @@
 
 The commercial vertical connectors live in the separate, commercially licensed
 [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo (Maven group
-`su.onno.enterprise`, onno Commercial License). Today: `onno-guesty-starter` (Guesty short-term
-rental PMS), `onno-hospedajes-starter` (Spanish SES.HOSPEDAJES guest-registration authority, SOAP),
-`onno-tochka-starter` (Tochka Bank API). Use this when adding or editing a connector.
+`su.onno.enterprise`, onno Commercial License). Today: `onno-tochka-starter` (Tochka Bank API),
+`onno-yookassa-starter`, `onno-digitalkassa-starter`, `onno-telegram-starter`, `onno-amocrm-starter`,
+`onno-metrica-starter`, `onno-wb-starter`, `onno-ozon-starter` and `onno-indexnow-starter`. Use this when adding or editing a connector.
 
 > Building an **open-source / community** integration instead (any external system, not the
 > commercial verticals)? The public, contributor-facing guide is
@@ -19,7 +19,7 @@ catalogs, documents, registers, posting, and UI live in the **consuming applicat
 rentals ERP). A connector is a Spring Boot **auto-configuration starter that exposes a typed client +
 sync service for one external system**; the host app wires it into its domain.
 
-## The starter shape (all three follow it)
+## The starter shape (every connector follows it)
 
 ```
 onno-<name>-starter/
@@ -43,14 +43,14 @@ Credentialed community connectors default `enabled=false`. Add
 `@ConditionalOnMissingBean` to replaceable singleton client/token/service beans—not additive host UI,
 tool, or contributor beans. If a bean injects `RestClient.Builder`, also condition on that bean.
 
-## Robust external-HTTP-client template (Guesty/Tochka)
+## Robust external-HTTP-client template (e.g. Tochka)
 
 `Default*Client.execute()`: attach the bearer token, map non-2xx to a typed
 `*ApiException`, **refresh the token once on 401 then retry** (the refresh does not consume a retry
 attempt), and **exponential backoff on 429/5xx**. Use `ParameterizedTypeReference` for generic
 response envelopes (Tochka wraps everything in `{Data, Links, Meta}`; the client unwraps it to plain
 records). Token managers cache the token **in memory and on disk** when the provider rate-limits
-token issuance (Guesty caps at 5/24h) or **rotates the refresh token** on every renewal (Tochka — so
+token issuance (some APIs cap issuance per day) or **rotates the refresh token** on every renewal (Tochka — so
 persist the latest refresh token, not the seed).
 
 Bound attempts, honor `Retry-After`, add jitter, and automatically retry only idempotent GET/pull
@@ -63,40 +63,40 @@ handling.
 
 ## Async external workflows are poll-based
 
-Neither Guesty nor Tochka nor SES.HOSPEDAJES pushes webhooks here. SES.HOSPEDAJES `registrar()`
-returns a `numeroLote`; outcomes are polled later via `consultaLote`. Tochka `statement(...)` polls
+Many provider workflows are submit-then-poll: a submission returns a batch/operation id and the
+outcome is polled later. Tochka `statement(...)` polls
 every 2s up to 60s until `status == Ready`. Model these as a submit-then-reconcile pair, with a
 scheduled reconcile job on the host side.
 
 ## Stateful connectors own their own table
 
-`onno-hospedajes-starter` keeps an audit ledger (`HospedajesCommunicationLog`, JDBI, table
-`onno_hospedajes_comunicacion`) tracking SUBMITTED → REGISTERED|REJECTED → CANCELLED keyed by
-`(numeroLote, orden)` with the caller's `referencia` for **idempotency**. Its auto-config orders
+A connector that submits to an external authority keeps an audit ledger (JDBI, an
+`onno_<name>_*` table) tracking SUBMITTED → ACCEPTED|REJECTED → CANCELLED keyed by the provider's
+batch id with the caller's reference for **idempotency**. Its auto-config orders
 itself `@AutoConfiguration(after = DataSourceAutoConfiguration.class)` and makes the ledger
 `@ConditionalOnBean(DataSource.class)`, then creates its schema with raw JDBI DDL (`onno_`-prefixed
 table, `_`-prefixed columns). The service takes the log as an `ObjectProvider` so it degrades
 gracefully with no DataSource.
 
-## Host-side integration idioms (the `reference/` examples)
+## Host-side integration idioms
 
-These show how the *consuming app* wires a connector to its domain (illustrative source, not built):
+The consuming app wires a connector to its domain:
 
-- **React to a domain state change → call the external authority.** A Spring Data
-  `AfterSaveCallback<Booking>` (or, in framework terms, an `@EventListener` on `DocumentPostedEvent`)
-  fires when a `Booking` reaches `CHECKED_IN`, maps it to a *parte*, and submits it. Guard with the
-  ledger for idempotency (`ledger.hasActiveSubmission(referencia)`), and **log external failures
-  without blocking the save**.
+- **React to a domain state change → call the external system.** Use an `@EventListener` on
+  `DocumentPostedEvent` (or an `AfterWriteHandler`), map the record to the external payload and
+  submit it. Guard with a ledger for idempotency, and **log external failures without blocking the
+  save**.
 - **Map `Ref<T>` to the external schema with `RefResolver`.** `refResolver.resolve(ref).orElse(null)`
-  dereferences `Ref<Property>`/`Ref<Client>`/`Ref<Country>` into catalog entities; enums map to
-  external code systems via `switch`. `Ref<T>` + `RefResolver` are the canonical seam between app
-  domain and connector code.
-- **Validate before submit.** Run cross-field business rules the external XSD can't express, record
+  dereferences catalog references; enums map to external code systems via `switch`. `Ref<T>` +
+  `RefResolver` are the canonical seam between app domain and connector code.
+- **Validate before submit.** Run cross-field rules the external schema can't express, record
   invalid records as locally REJECTED (still retryable), and submit only the valid subset — turning
   opaque async rejections into precise local ones.
 - **One switch gates both sides.** The host integration `@Configuration` reuses the same
   `@ConditionalOnProperty(prefix = "onno.<name>", name = "enabled")` as the starter, so one flag
   turns on the connector and its host wiring together.
+
+`reference/example-oauth-connect/` in onno-enterprise shows the interactive "Connect with X" flow.
 
 ## When editing onno-enterprise, keep its docs in sync too
 

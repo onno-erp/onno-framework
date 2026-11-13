@@ -1,3 +1,4 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
 import { openRoute } from "@/lib/navigation";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
@@ -151,6 +152,7 @@ export function GroupedList({
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   const [liveTick, setLiveTick] = useState(0);
+  useSurfaceRefresh(() => setLiveTick((tick) => tick + 1));
   useEffect(() => {
     let timer: number | undefined;
     const onData = (e: Event) => {

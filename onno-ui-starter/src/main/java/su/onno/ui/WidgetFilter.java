@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,8 +20,8 @@ import java.util.regex.Pattern;
  * <p>Injection safety rests on two rules: the left-hand side must be a known column
  * (validated against the entity's columns plus a small system allowlist) matching a
  * strict identifier pattern, and the right-hand value is <em>always</em> a bound
- * parameter. An unrecognised column is skipped with a warning rather than failing the
- * whole card, so a typo degrades to "no filter" instead of an error surface.</p>
+ * parameter. Unknown field identifiers cause an IllegalArgumentException instead
+ * of silently dropping the filter clause.
  */
 public final class WidgetFilter {
 
@@ -54,6 +55,9 @@ public final class WidgetFilter {
         return parse(filter, allowedColumns, Set.of());
     }
 
+    public static Result parse(String filter, Set<String> allowedColumns, Set<String> uuidColumns) {
+        return parse(filter, allowedColumns, uuidColumns, field -> field.toLowerCase());
+    }
     /**
      * Like {@link #parse(String, Set)}, but values compared against a column in {@code uuidColumns}
      * (ref / enum columns, whose SQL type is {@code UUID}) are bound as typed {@code java.util.UUID}s.
@@ -62,7 +66,7 @@ public final class WidgetFilter {
      * passes the ref/enum column set here. A malformed uuid value degrades to a varchar bind (the
      * clause then matches nothing on H2 and errors on PG only for a hand-crafted request).
      */
-    public static Result parse(String filter, Set<String> allowedColumns, Set<String> uuidColumns) {
+    public static Result parse(String filter, Set<String> allowedColumns, Set<String> uuidColumns, Function<String, String> columnResolver) {
         Map<String, Object> bindings = new LinkedHashMap<>();
         if (filter == null || filter.isBlank()) {
             return new Result("", bindings);
@@ -75,11 +79,10 @@ public final class WidgetFilter {
                 log.warn("Ignoring unparseable widget filter clause: {}", clause);
                 continue;
             }
-            String column = m.group(1).toLowerCase();
+            String column = columnResolver.apply(m.group(1)).toLowerCase(java.util.Locale.ROOT);;
             if (!IDENTIFIER.matcher(column).matches()
                     || !(allowedColumns.contains(column) || SYSTEM_COLUMNS.contains(column))) {
-                log.warn("Ignoring widget filter on unknown column: {}", column);
-                continue;
+                throw new IllegalArgumentException("Unknown widget filter field: " + m.group(1));
             }
             String op = m.group(2).equals("!=") ? "<>" : m.group(2);
             Object value = literal(m.group(3));

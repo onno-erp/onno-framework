@@ -2,7 +2,7 @@
 name: onno-auth-rbac
 description: >-
   Configure onno-auth-starter and onno-framework authorization. Use when setting onno.auth.mode,
-  in-memory users, OIDC/SSO, resource-server JWT, public paths, CSRF ignored paths, remember-me,
+  database accounts (UserAccounts, user admin, password reset/change), in-memory users, OIDC/SSO, resource-server JWT, public paths, CSRF ignored paths, remember-me,
   session timeout, AuthMethodsProvider/AuthMethodsContributor, @AccessControl readRoles/writeRoles,
   ADMIN behavior, UI profile roles, MCP/web authorization, record-level access policies
   (RecordAccessPolicy, RecordScope, AccessSubject, RecordAccess, external users / customer portals),
@@ -21,15 +21,24 @@ change.
   custom anonymous `/api/**` SSO callback paths to both `public-paths` and `csrf-ignored-paths` in
   cookie modes. Spring's normal `/login/oauth2/code/{registrationId}` callback is outside `/api/**`.
   The full default list is in [references/gotchas.md](references/gotchas.md).
-- In in-memory mode, when remember-me is enabled, a blank
+- Prefer `onno.auth.mode: database` for any real app: accounts live in `onno_auth_user` and are
+  managed at runtime (`UserAccounts`, `/api/auth/users`, `type("users")` and `type("changePassword")`
+  widgets). `onno.auth.users` then only seeds an empty store once, and seeded accounts must change
+  their password at first sign-in. Never ship `admin`/`admin` in an `in-memory` config — it stays
+  valid forever. Disabling, resetting, role changes and "sign out everywhere" end live sessions.
+- In the password modes (`in-memory`, `database`), when remember-me is enabled, a blank
   `onno.auth.session.remember-me.key` fails startup; dev opt-out is
   `allow-ephemeral-key: true`. Never ship prod without a real key.
-- In-memory and OIDC modes use sessions and CSRF.
+- In-memory, database and OIDC modes use sessions and CSRF.
 - Resource-server mode uses bearer JWT and no CSRF.
 - The starter protects `/api/**` and permits other same-port routes. Treat exposed Actuator or custom
   non-API endpoints as a separate security decision; use a management port/chain when needed.
 - `@AccessControl` is deny-by-default. `ADMIN` always passes.
 - `writeRoles` falls back to `readRoles` when empty.
+- On documents, `postRoles` / `unpostRoles` separate posting from editing: the caller needs write
+  access *and* one of the roles (empty = every writer). `@AccessControl(readRoles = {"RECEPTION",
+  "MANAGER"}, unpostRoles = "MANAGER")` lets reception create and post invoices but only a manager
+  unpost (or delete a posted) one. REST/MCP answer `403`; the UI hides the Post/Unpost actions.
 - Record-level access (external users seeing only their own records) is a `RecordAccessPolicy`
   bean: `RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
   .read(RecordScope.eq("owner", Subject.recordId()))`; `via("tenant")` scopes through a ref;
