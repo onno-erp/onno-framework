@@ -303,8 +303,12 @@ files for structural changes. The diff-based engine lives in
   `SearchIndexReconciler` converges them on a background thread after `apply`: framework-owned
   trigram indexes (identified by definition — GIN + `gin_trgm_ops` on a catalog/document table — not
   by name) that are no longer declared, or left invalid by an interrupted build, are dropped; missing
-  ones are built with `CREATE INDEX CONCURRENTLY` under a `pg_try_advisory_lock`. Search covers every
-  String attribute regardless — unindexed ones fall back to a `LIKE` scan.
+  ones are built with `CREATE INDEX CONCURRENTLY` under a `pg_try_advisory_lock`. Before building it
+  also waits, holding no connection, for the advisory lock it shares with the record-scope index
+  reconciliation (see [Record-level access policies](#record-level-access-policies)), so the two
+  never build at once: two concurrent builds on one table deadlock. After 30 minutes of waiting it
+  leaves the search indexes for the next start. Search covers every String
+  attribute regardless — unindexed ones fall back to a `LIKE` scan.
 
 Every applied change-set plus a fresh metadata snapshot is written to `onno_schema_history`.
 
@@ -673,6 +677,19 @@ RecordAccessPolicy tenantsByOwner() {
   each record event against each distinct subscriber scope), MCP tools and the CRM inbox.
 - **Not scoped:** typed repositories, posting, process internals, jobs, migrations, connectors —
   trusted code. App code serving external users from repositories checks through `RecordAccess`.
+- **Indexes.** `RecordScopeIndexes` (UI starter) indexes every scoped column when
+  `onno.schema.mode` resolves to `apply` (the default; blank counts as `apply`) and
+  `onno.access.records.create-indexes` is on. On PostgreSQL it reconciles them on a background
+  thread, off the startup path, as `SearchIndexReconciler` does for search indexes: missing ones
+  are built with `CREATE INDEX CONCURRENTLY`, ones left invalid by an interrupted build are dropped
+  and rebuilt, one node at a time under a `pg_try_advisory_lock`. Two concurrent builds on one table
+  deadlock, so it takes turns with the search-index reconciliation under a shared advisory lock,
+  each waiting for the other, without holding a connection, rather than skipping, and before it
+  builds or repairs an index it waits while another session holds that table's
+  `SHARE UPDATE EXCLUSIVE` lock (not for autovacuum, which the build cancels). A schema change to
+  that table waits for a running build and blocks the table meanwhile. Other databases run the
+  plain statements at startup (see
+  [Record access policies](RECORD_ACCESS_POLICIES.md#startup-validation)).
 
 `RecordPolicyConformanceTest` (leak test + route coverage guard) and `RecordScopeArchitectureTest`
 keep new endpoints and data paths honest. See [Record access policies](RECORD_ACCESS_POLICIES.md).

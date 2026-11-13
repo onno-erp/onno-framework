@@ -11,6 +11,7 @@ import su.onno.ui.comments.CommentService;
 import su.onno.ui.conformance.LeakTestApp;
 import su.onno.ui.conformance.model.LkTenant;
 import su.onno.ui.conformance.model.LkTenantFacts;
+import su.onno.ui.conformance.model.LkUsage;
 import su.onno.ui.notifications.NotificationRequest;
 import su.onno.ui.notifications.NotificationService;
 import su.onno.ui.presence.PresenceRegistry;
@@ -286,6 +287,20 @@ class RecordPolicyConformanceTest {
     }
 
     // ------------------------------------------------------------------------------- the suite
+
+    /**
+     * The fixture leaves {@code onno.schema.mode} unset, so its {@code apply} default must let the
+     * record-scope indexes be created (#460). A balance totals table gets no index from the schema,
+     * so this one exists only if {@link RecordScopeIndexes} ran.
+     */
+    @Test
+    void scopeIndexesAreCreatedUnderTheDefaultSchemaMode() {
+        String index = RecordScopeIndexes.indexName(registry.getRegisterDescriptor(LkUsage.class).totalsTableName(), "tenant");
+        int found = jdbi.withHandle(h -> h.createQuery(
+                        "SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES WHERE UPPER(INDEX_NAME) = UPPER(:name)")
+                .bind("name", index).mapTo(Integer.class).one());
+        assertThat(found).as("record-scope index %s", index).isEqualTo(1);
+    }
 
     @Test
     void noEndpointLeaksAnotherOwnersRecords() throws Exception {
