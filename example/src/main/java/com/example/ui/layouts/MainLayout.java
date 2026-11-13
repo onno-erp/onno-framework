@@ -121,7 +121,9 @@ public class MainLayout implements Layout {
             layout.section("System")
                     .order(6)
                     .icon("settings")
-                    .page("/settings", "Settings", "settings");
+                    .page("/settings", "Settings", "settings")
+                    // Built-in period-close administration page (onno-ui-starter).
+                    .page(su.onno.ui.period.PeriodClosePage.ROUTE, "Period close", "lock");
         }
 
     }

@@ -220,6 +220,23 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
 | DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted — which requires the unpost right, see `/unpost`). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
 
+Writes, post/unpost and `posting-preview` on a document inside a closed period return `409`
+`{error: "period-closed", message, scope, closedThrough, operation}`.
+
+### Period close — `/api/period-close`
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/` | `{locks: [{scope, closedThrough, updatedAt, updatedBy}], canManage}` — any signed-in user. |
+| GET | `/audit?limit=100` | Close / reopen / override audit trail. Manage roles. |
+| POST | `/close` | `{scope, closedThrough, reason?}`. Manage roles. |
+| POST | `/reopen` | `{scope, closedThrough?, reason}` — no `closedThrough` fully reopens; `reason` required. Manage roles. |
+
+`scope` is `global`, `context:<name>` or `register:<name>`. Manage roles are `ADMIN` plus
+`onno.period-close.manage-roles`. The built-in admin page is served at `/period-close`
+(`PeriodClosePage.ROUTE`); link it from a `Layout` section. See
+[docs/PERIOD_CLOSE.md](../docs/PERIOD_CLOSE.md).
+
 ### Registers — `/api/registers`
 
 | Method | Path | Notes |

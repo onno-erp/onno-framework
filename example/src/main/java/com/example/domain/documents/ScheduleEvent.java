@@ -6,6 +6,7 @@ import su.onno.annotations.Document;
 import su.onno.annotations.TabularSection;
 import su.onno.lifecycle.OnFillingHandler;
 import su.onno.model.DocumentObject;
+import su.onno.period.PeriodCloseExempt;
 import su.onno.rules.BusinessRule;
 import su.onno.rules.Validated;
 
@@ -24,6 +25,8 @@ import java.util.List;
  * early; {@link #rules()} still enforces the invariant on every write, including imports and direct
  * API clients.
  */
+// A calendar entry, not an accounting event: closing a period must not freeze the schedule.
+@PeriodCloseExempt
 @Document(name = "Schedule Events", title = "Team event", numberPrefix = "EV-", context = "People")
 @AccessControl(readRoles = {"MANAGER", "ADMIN"}, writeRoles = {"MANAGER", "ADMIN"})
 @Getter

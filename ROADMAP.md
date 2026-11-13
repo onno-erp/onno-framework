@@ -41,6 +41,7 @@ Implemented:
 - Diff-based schema migration: `onno_schema_history` with metadata snapshots, renames via `previousNames`, modes (`apply`/`plan`/`validate`/`off`), destructive-change gating, and versioned `AppMigration` data migrations
 - Hierarchical catalog children/tree APIs
 - Dry-run posting previews
+- Period close (`PeriodCloseService`): global / per-context / per-register change-prohibition dates enforced in core posting (including chronological restoration), repository saves and the generic command path; audited close, reopen and role override; `/api/period-close` and a built-in `/period-close` admin page. See `docs/PERIOD_CLOSE.md`.
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
 - Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)

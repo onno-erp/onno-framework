@@ -20,6 +20,9 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `onno.period-close.enabled` | `Boolean` | `true` | Enables period close: documents dated on or before a closed date cannot be created, changed, deleted, posted, reposted or unposted. With no period closed nothing is rejected. Set to `false` to remove the service and every check. |
+| `onno.period-close.manage-roles` | `List<String>` | — | Roles allowed to close and reopen periods through the UI page and `/api/period-close`. `ADMIN` is always allowed. |
+| `onno.period-close.override-roles` | `List<String>` | — | Roles whose signed-in holders may change documents inside a closed period without reopening it. Each bypassed operation is written to the audit trail. Empty by default: nobody is exempt, not even `ADMIN` — list `ADMIN` here to exempt administrators. |
 | `onno.repository.deletion-check` | `String` | `warn` | Boot-time check that flags catalog/document repository finders which may return soft-deleted (`deletionMark = true`) rows into business logic: `warn` (default — log a warning), `strict` (fail startup), or `off`. A finder is exempt when it is deletion-scoped (a `...AndDeletionMarkFalse` derived query, a `@Query` filtering `deletion_mark`, or a delegate to `findAllActive()` / `findActiveBy*`) or annotated `@su.onno.repository.IncludesDeleted`. |
 | `onno.scan-packages` | `List<String>` | — | Packages scanned for `@Catalog`, `@Document`, `@AccumulationRegister`, `@InformationRegister`, `@Enumeration`, and `@Constant` types. Leave unset to scan from your `@SpringBootApplication` package. This is the core scan property; there is no `onno.base-packages` alias. |
 | `onno.schema.allow-destructive` | `Boolean` | `false` | Allow `apply` to execute data-losing changes (dropped tables/columns, narrowing type changes). Off by default: such changes are logged and skipped. |

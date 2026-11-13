@@ -215,6 +215,23 @@ validation exception/payload.
   simulating chronological restoration, so it is not a guarantee that post succeeds. Save and
   commit before posting.
 
+## Period close (package `su.onno.period`)
+
+- `PeriodCloseService` bean (off with `onno.period-close.enabled=false`):
+  `close(scope, closedThrough, actor, reason)`, `reopen(scope, closedThroughOrNull, actor, reason)`
+  (reason required), `locks()`, `closedThrough(scope)`, `audit(limit)`,
+  `override(new PeriodOverride(actor, reason), action)`.
+- `PeriodScope.global()` / `.context("Finance")` / `.register("Cash")`; text form `global`,
+  `context:<name>`, `register:<name>`. Close date is inclusive; latest applicable scope wins.
+- Rejects create/update/delete/post/repost/unpost of documents dated on or before the close date
+  with `PeriodClosedException` (HTTP 409 `period-closed`) — in `PostingEngine` (incl. later
+  documents of a `CHRONOLOGICAL` restoration), repository saves, and the generic command path.
+- `@PeriodCloseExempt` on a `@Document` class opts a non-accounting document out.
+- Roles: `onno.period-close.manage-roles` (+`ADMIN`) close/reopen; `onno.period-close.override-roles`
+  bypass (empty by default; `ADMIN` only when listed). All audited in `onno_period_close_audit`.
+- UI: `GET /api/period-close`, `GET /audit`, `POST /close`, `POST /reopen`; built-in page
+  `PeriodClosePage.ROUTE` (`/period-close`) — link it via `section(...).page(...)`.
+
 ## Runtime query paths
 
 There is no universal query DSL. Use `CatalogRepository` / `DocumentRepository` for typed business
