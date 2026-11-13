@@ -181,4 +181,25 @@ class PrintControllerTest {
                 mock(UiAccessService.class), refs, List.of("ROLE_MANAGER"), 10);
         assertThat(managers.templates(manager).forms()).hasSize(1);
     }
+
+    @Test
+    void readOnlyModeRejectsTemplateChangesButStillPrints() {
+        PrintController readOnly = new PrintController(service, mock(CatalogQueryService.class), documents,
+                mock(UiAccessService.class), refs, List.of("ADMIN"), 10, true);
+        AccessSubject admin = AccessSubject.user("root", Set.of("ADMIN"));
+        org.springframework.mock.web.MockMultipartFile file =
+                new org.springframework.mock.web.MockMultipartFile("file", "invoice.docx", null, new byte[] {1});
+
+        assertThatThrownBy(() -> readOnly.upload("documents", "Invoices", "invoice", file, admin))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThatThrownBy(() -> readOnly.reset("documents", "Invoices", "invoice", admin))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        assertThat(readOnly.templates(admin).uploadsEnabled()).isFalse();
+
+        when(documents.inScope(manager, desc, id, AccessMode.READ)).thenReturn(true);
+        assertThat(readOnly.render("documents", "Invoices", id, "invoice", null, manager).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
 }

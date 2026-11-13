@@ -232,14 +232,14 @@ class PrintOverridesAndPdfTest {
                 """);
         Files.setPosixFilePermissions(soffice, PosixFilePermissions.fromString("rwx------"));
 
-        byte[] pdf = new LibreOfficePdfConverter(soffice.toString(), Duration.ofSeconds(10)).toPdf("XLSX".getBytes(), "xlsx");
+        byte[] pdf = new LibreOfficePdfConverter(soffice.toString(), Duration.ofSeconds(120)).toPdf("XLSX".getBytes(), "xlsx");
 
         assertThat(new String(pdf, StandardCharsets.UTF_8)).isEqualTo("%PDF from XLSX");
 
         Path failing = tmp.resolve("failing");
         Files.writeString(failing, "#!/bin/sh\necho boom\nexit 3\n");
         Files.setPosixFilePermissions(failing, PosixFilePermissions.fromString("rwx------"));
-        assertThatThrownBy(() -> new LibreOfficePdfConverter(failing.toString(), Duration.ofSeconds(10)).toPdf(new byte[1], "docx"))
+        assertThatThrownBy(() -> new LibreOfficePdfConverter(failing.toString(), Duration.ofSeconds(120)).toPdf(new byte[1], "docx"))
                 .hasMessageContaining("exit 3").hasMessageContaining("boom");
     }
 

@@ -6,6 +6,7 @@ import su.onno.ui.CatalogQueryService;
 import su.onno.ui.DocumentQueryService;
 import su.onno.ui.UiAccessService;
 import su.onno.ui.UiAutoConfiguration;
+import su.onno.ui.UiProperties;
 
 import org.jdbi.v3.core.Jdbi;
 import org.springframework.beans.factory.ObjectProvider;
@@ -85,9 +86,11 @@ public class OnnoPrintAutoConfiguration {
     @Bean
     public PrintController printController(PrintService print, CatalogQueryService catalogs,
                                            DocumentQueryService documents, UiAccessService access,
-                                           RefResolver refs, OnnoPrintProperties properties) {
+                                           RefResolver refs, OnnoPrintProperties properties,
+                                           UiProperties uiProperties) {
         return new PrintController(print, catalogs, documents, access, refs,
-                properties.getTemplates().getManageRoles(), properties.getBatch().getMaxRecords());
+                properties.getTemplates().getManageRoles(), properties.getBatch().getMaxRecords(),
+                uiProperties.isReadOnly());
     }
 
     private static String route(String logicalName) {

@@ -101,7 +101,13 @@ default output. An unsupported format, or `pdf` with no converter configured, is
 `kind` is `catalogs` or `documents`, and `name` is the entity's route name (for example `Orders`).
 Both endpoints require read access to the entity and to the record under any `RecordAccessPolicy`:
 a record outside the caller's scope is a `404`. A form with `roles(...)` returns `403` to other
-callers. Printing is a read, so it works in `onno.ui.read-only` mode too.
+callers. Printing is a read, so it works in `onno.ui.read-only` mode too; template upload and reset
+are rejected with `403` in that mode.
+
+The endpoints authorize the *printed record*. What `fill(...)` reads beyond it is application code:
+`Ref` values bound with `text(...)` print the referenced record's display name (as the UI shows it),
+and typed repositories are unscoped — if a form loads other records for a non-admin caller, keep it
+to data that reader of the record is meant to see.
 
 On the record surface, each permitted form adds an entry with the key `print-{key}` to the ⋯ menu.
 The entry links to `onno://download/api/print/...`. Its placement follows the usual override, for

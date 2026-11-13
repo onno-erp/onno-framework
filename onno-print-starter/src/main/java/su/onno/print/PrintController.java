@@ -43,7 +43,8 @@ import java.util.UUID;
  * Print form downloads and template management. Record endpoints require read access to the entity
  * and the record (a record outside the caller's scope is a 404, like a missing one); a form's
  * {@code roles} gate it further. Template endpoints require one of
- * {@code onno.print.templates.manage-roles}.
+ * {@code onno.print.templates.manage-roles}; upload and reset are rejected in
+ * {@code onno.ui.read-only} mode.
  *
  * <pre>
  * GET    /api/print/{kind}/{name}/{id}                 forms available for the record
@@ -66,6 +67,7 @@ public class PrintController {
     private final RefResolver refs;
     private final Set<String> manageRoles;
     private final int maxBatch;
+    private final boolean readOnly;
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
                            UiAccessService access, RefResolver refs) {
@@ -74,6 +76,18 @@ public class PrintController {
 
     public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
                            UiAccessService access, RefResolver refs, List<String> manageRoles, int maxBatch) {
+        this(print, catalogs, documents, access, refs, manageRoles, maxBatch, false);
+    }
+
+    /**
+     * @param manageRoles roles allowed to manage templates ({@code ADMIN} always passes)
+     * @param maxBatch    most records one batch request may include
+     * @param readOnly    {@code onno.ui.read-only}: template upload/reset are rejected, printing still works
+     */
+    public PrintController(PrintService print, CatalogQueryService catalogs, DocumentQueryService documents,
+                           UiAccessService access, RefResolver refs, List<String> manageRoles, int maxBatch,
+                           boolean readOnly) {
+        this.readOnly = readOnly;
         this.print = print;
         this.catalogs = catalogs;
         this.documents = documents;
@@ -159,7 +173,7 @@ public class PrintController {
                     stored != null ? stored.uploadedBy() : null, stored != null ? stored.uploadedAt() : null,
                     "/api/print/templates/" + scope + "/" + form.key());
         }).toList();
-        return new TemplateList(print.templateUploadsEnabled(), forms);
+        return new TemplateList(print.templateUploadsEnabled() && !readOnly, forms);
     }
 
     @GetMapping("/templates/{kind}/{name}/{form}")
@@ -178,6 +192,7 @@ public class PrintController {
     public TemplateInfo upload(@PathVariable String kind, @PathVariable String name, @PathVariable String form,
                                @RequestPart("file") MultipartFile file, AccessSubject subject) {
         requireManager(subject);
+        requireWritable();
         PrintForm<?> printForm = requireManagedForm(kind, name, form);
         if (!print.templateUploadsEnabled()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Uploaded print templates are disabled");
@@ -200,6 +215,7 @@ public class PrintController {
     public ResponseEntity<Void> reset(@PathVariable String kind, @PathVariable String name, @PathVariable String form,
                                       AccessSubject subject) {
         requireManager(subject);
+        requireWritable();
         print.resetTemplate(requireManagedForm(kind, name, form));
         return ResponseEntity.noContent().build();
     }
@@ -251,6 +267,12 @@ public class PrintController {
         if (subject.superuser()) return;
         if (subject.roles().stream().noneMatch(manageRoles::contains)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied to print templates");
+        }
+    }
+
+    private void requireWritable() {
+        if (readOnly) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UI is in read-only mode");
         }
     }
 

@@ -6,7 +6,8 @@ plugins {
 
 dependencies {
     api(project(":onno-framework"))
-    implementation(project(":onno-ui-starter"))
+    // api: PrintController and the contributor beans expose UI-starter types in public signatures (#464).
+    api(project(":onno-ui-starter"))
 
     api(libs.poi.ooxml)
 
@@ -21,6 +22,7 @@ dependencies {
     testImplementation(libs.assertj.core)
     testImplementation(libs.mockito.core)
     testImplementation(libs.h2)
+    testImplementation(libs.spring.boot.test)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
