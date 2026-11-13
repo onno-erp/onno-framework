@@ -343,7 +343,8 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
 ## Modules & config
 
 Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-ui-starter`, `onno-auth-starter`,
-`onno-mcp-starter`, `onno-import-starter`, `onno-cluster-starter` (cross-node live-UI sync for
+`onno-mcp-starter`, `onno-import-starter`, `onno-print-starter` (Word/Excel print forms via
+`PrintForm<T>` beans), `onno-cluster-starter` (cross-node live-UI sync for
 horizontal scale-out), `onno-kafka-starter`, `onno-observability-starter`,
 `onno-desktop-starter` (+ Gradle plugin), `onno-widgets-gradle-plugin`, and `onno-widget-sdk`.
 Optional starters use their documented `onno.<module>.enabled` switches where provided. The full
@@ -360,11 +361,16 @@ spring:
   datasource: { url: "jdbc:h2:file:./data/app", driver-class-name: org.h2.Driver, username: sa }
 onno:
   auth:
-    users: [{ username: admin, password: admin, roles: [ADMIN] }]
+    mode: database   # accounts in the application DB, managed at runtime
+    users: [{ username: admin, password: change-me-on-first-login, roles: [ADMIN] }]  # first-boot seed only
 ```
 
-`onno.auth.mode` picks the auth model: **`IN_MEMORY`** (default — the `users` list above, session
-cookie, JSON `/api/auth/login`), **`OIDC`** (server-side OpenID Connect auth-code login; provider
+`onno.auth.mode` picks the auth model: **`DATABASE`** (recommended — accounts in the table
+`onno_auth_user`, managed at runtime through `UserAccounts`, `/api/auth/users` and the
+`type("users")` / `type("changePassword")` widgets; the `users` list only seeds an empty store once,
+and seeded accounts must change their password at first sign-in), **`IN_MEMORY`** (default — the
+`users` list is the account set for as long as the config file says so; development and demos only),
+**`OIDC`** (server-side OpenID Connect auth-code login; provider
 preset `onno.auth.oidc.provider` = `KEYCLOAK` / `ZITADEL` / `CUSTOM`, with token-claim → role mapping
 under `onno.auth.oidc.roles.*`), or **`RESOURCE_SERVER`** (stateless bearer-token validation). The
 SPA's `/api/auth/me` advertises the available login methods, so the login screen renders the right
@@ -409,6 +415,7 @@ Standing rules — follow them without being re-told:
 ./gradlew clean check                         # compile + test everything incl. example + frontend
 ./gradlew publishToMavenLocal                 # verify consumable artifacts (sources/javadoc/POM)
 ./gradlew :onno-framework:test                # narrow iteration
+./gradlew :onno-ui-starter:testFrontend       # frontend-only: typecheckFrontend, then Vitest
 ./gradlew :onno-ui-starter:buildFrontend      # frontend-only changes
 ```
 
@@ -428,7 +435,7 @@ When you hit a genuine framework bug, don't silently work around it — **surfac
 issue** so it gets fixed upstream:
 
 - Core framework → [`onno-erp/onno-framework`](https://github.com/onno-erp/onno-framework/issues)
-- Commercial connectors (Guesty / SES.HOSPEDAJES / Tochka) → the `onno-erp/onno-enterprise` repo.
+- Commercial connectors (Tochka / YooKassa / Ozon / …) → the `onno-erp/onno-enterprise` repo.
 
 Reduce it to the smallest repro first, **check for duplicates**, and — because filing is a public,
 outward action — **confirm with the user before creating it** (or hand them the command if you

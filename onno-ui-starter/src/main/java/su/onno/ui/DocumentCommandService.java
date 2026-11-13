@@ -43,7 +43,8 @@ import java.util.UUID;
  * are enforced in exactly one place.
  *
  * <p>Every mutating method enforces {@code requireWritable()} (global read-only mode),
- * {@link UiAccessService#requireWrite} and the record policies against the caller's
+ * {@link UiAccessService#requireWrite} (posting and unposting additionally the document's
+ * {@code @AccessControl(postRoles/unpostRoles)} gate) and the record policies against the caller's
  * {@link AccessSubject}, so callers never bypass the role model: an existing document must be
  * inside the write scope (404 otherwise), the written document must still satisfy it (403, rolled
  * back), and every reference written — header or line — must be readable (422). Tabular sections
@@ -307,7 +308,7 @@ public class DocumentCommandService {
 
     public Map<String, Object> post(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(subject, desc);
+        access.requirePost(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         DocumentObject doc = loadDocumentObject(desc, id);
         if (doc.isPosted()) {
@@ -330,7 +331,7 @@ public class DocumentCommandService {
 
     public Map<String, Object> unpost(DocumentDescriptor desc, UUID id, AccessSubject subject) {
         EntityWriteSupport.requireWritable(properties);
-        access.requireWrite(subject, desc);
+        access.requireUnpost(subject, desc);
         guard.requireInScope(desc.javaClass(), desc.tableName(), id, subject, AccessMode.WRITE);
         DocumentObject doc = loadDocumentObject(desc, id);
         postingService.unpost(doc);
@@ -358,6 +359,11 @@ public class DocumentCommandService {
         // (OnnoBeforeDeleteCallback): the loaded aggregate may veto the soft-delete by throwing —
         // a ValidationException maps to the standard 4xx.
         DocumentObject stored = loadDocumentObject(desc, id);
+        // Deleting a posted document unposts it, so it needs the unpost right too (#546) — checked
+        // before any hook runs so a caller without it changes nothing.
+        if (stored.isPosted()) {
+            access.requireUnpost(subject, desc);
+        }
         if (stored instanceof su.onno.lifecycle.BeforeDeleteHandler handler) {
             handler.beforeDelete();
         }

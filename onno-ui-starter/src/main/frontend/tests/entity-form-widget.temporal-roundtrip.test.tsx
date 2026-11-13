@@ -68,7 +68,8 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
       expect(updateCatalogItem).toHaveBeenCalledWith(
         "episodes",
         "episode-1",
-        expect.objectContaining({ observedAt: "2026-01-16T04:00:00.000" })
+        expect.objectContaining({ observedAt: "2026-01-16T04:00:00.000" }),
+        { silent: true }
       )
     );
   });
@@ -94,7 +95,8 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
     expect(updateCatalogItem).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(updateCatalogItem).toHaveBeenCalledWith(
-      "Profiles", "profile-1", expect.objectContaining({ filters: [{ property: "duration" }, { property: "level" }] })
+      "Profiles", "profile-1", expect.objectContaining({ filters: [{ property: "duration" }, { property: "level" }] }),
+      { silent: true }
     ));
   });
 
@@ -133,7 +135,8 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
         expect.objectContaining({
           startsAt: "2026-01-16T04:00:00.000",
           slots: [expect.objectContaining({ happensAt: "2026-01-16T05:30:00" })],
-        })
+        }),
+        { silent: true }
       )
     );
   });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "@/components/ui/toast";
 import { Plus, Trash2 } from "lucide-react";
+import { notifyError } from "@/lib/notify-error";
 import type { AttributeMeta, EntityRecord, RelatedListMeta } from "@/lib/types";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -63,9 +63,10 @@ export function RelatedListPanel({
     if (!parentId) return;
     setLoading(true);
     try {
-      setRows(await api.getRelatedList(parentKind, parentName, parentId, meta.name));
+      // Silent: this panel owns the toast and names the list that failed.
+      setRows(await api.getRelatedList(parentKind, parentName, parentId, meta.name, { silent: true }));
     } catch (e) {
-      toast.error(`Couldn't load ${title}: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't load ${title}: ${m}` });
     } finally {
       setLoading(false);
     }
@@ -84,11 +85,11 @@ export function RelatedListPanel({
       await api.createCatalogItem(meta.sourceName, {
         [meta.viaField]: parentId,
         [meta.displayField]: targetId,
-      });
+      }, { silent: true });
       setAdding(false);
       await reload();
     } catch (e) {
-      toast.error(`Couldn't add: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't add: ${m}` });
     } finally {
       setBusy(false);
     }
@@ -97,10 +98,10 @@ export function RelatedListPanel({
   const remove = async (rowId: string) => {
     setBusy(true);
     try {
-      await api.deleteCatalogItem(meta.sourceName, rowId);
+      await api.deleteCatalogItem(meta.sourceName, rowId, { silent: true });
       await reload();
     } catch (e) {
-      toast.error(`Couldn't remove: ${e instanceof Error ? e.message : String(e)}`);
+      notifyError(e, { format: (m) => `Couldn't remove: ${m}` });
     } finally {
       setBusy(false);
     }

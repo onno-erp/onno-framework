@@ -22,7 +22,6 @@ const evt = (over: Partial<UiEvent> = {}): UiEvent => ({
   entityType: "catalog",
   entityName: "Properties",
   id: "1",
-  naturalKey: null,
   ...over,
 });
 

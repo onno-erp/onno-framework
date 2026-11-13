@@ -88,8 +88,8 @@ describe("DivKitView copy link", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    toast.success.mockReset();
-    toast.error.mockReset();
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
   });
 
   it("copies the tab's absolute deep link from its right-click menu", async () => {

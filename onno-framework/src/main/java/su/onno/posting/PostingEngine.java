@@ -3,6 +3,7 @@ package su.onno.posting;
 import su.onno.events.EntityChangedEvent;
 import su.onno.lifecycle.AfterPostHandler;
 import su.onno.lifecycle.BeforePostHandler;
+import su.onno.lifecycle.BeforeUnpostHandler;
 import su.onno.lifecycle.BeforeWriteHandler;
 import su.onno.lifecycle.Postable;
 import su.onno.annotations.DomainEvent;
@@ -251,6 +252,9 @@ public class PostingEngine {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void doUnpost(DocumentObject document) {
+        if (document instanceof BeforeUnpostHandler handler) {
+            OnnoPerformance.record("onno.document.before-unpost", 1, handler::beforeUnpost);
+        }
         DocumentDescriptor docDescriptor = registry.getDocumentDescriptor(document.getClass());
         Set<Class<?>> chronologicalRegisters = chronologicalRegistersForDocument(document.getId());
         if (!chronologicalRegisters.isEmpty()) {

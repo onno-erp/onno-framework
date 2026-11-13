@@ -152,9 +152,13 @@ spring:
 
 onno:
   auth:
+    # Accounts live in the database and are managed at runtime (users widget, /api/auth/users).
+    mode: database
+    # Seeds the first account into the empty store once; it must set a new password at first
+    # sign-in, and the list is ignored afterwards. Remove it once you have signed in.
     users:
       - username: admin
-        password: admin # development only
+        password: change-me-on-first-login
         roles: [ADMIN]
 ```
 
@@ -200,7 +204,7 @@ interfaces, and UI metadata lives in focused `Layout`, `Page`, and `EntityView` 
 | Foundation | [`onno-framework`](onno-framework), [`onno-framework-starter`](onno-framework-starter) |
 | Application surface | [`onno-ui-starter`](onno-ui-starter), [`onno-auth-starter`](onno-auth-starter) |
 | Composable messaging | [`onno-crm-starter`](onno-crm-starter) |
-| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
+| Data and integration | [`onno-import-starter`](onno-import-starter), [`onno-print-starter`](onno-print-starter), [`onno-kafka-starter`](onno-kafka-starter), [`onno-cluster-starter`](onno-cluster-starter) |
 | AI and operations | [`onno-mcp-starter`](onno-mcp-starter), [`onno-observability-starter`](onno-observability-starter) |
 | Native and custom UI | [`onno-desktop-starter`](onno-desktop-starter), [`onno-desktop-gradle-plugin`](onno-desktop-gradle-plugin), [`onno-widgets-gradle-plugin`](onno-widgets-gradle-plugin), [`@onno/widget-sdk`](onno-widget-sdk) |
 | Consumer examples | [`example`](example) |

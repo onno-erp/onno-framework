@@ -42,7 +42,7 @@ public final class ListSpec<E> {
     private String defaultGroupBy;
     private boolean groupsExpanded;
     private final List<Aggregate> aggregates = new ArrayList<>();
-    private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
+    private java.util.function.Function<ActionRow<E>, RowStyle> rowStyleFn;
 
     public ListSpec<E> title(String title) {
         this.title = title;
@@ -238,8 +238,9 @@ public final class ListSpec<E> {
      * (a multi-select matched as
      * {@code field IN (…)}), {@link FilterBuilder#contains}/{@link FilterBuilder#startsWith} (a
      * field-scoped typeahead for high-cardinality fields, matched case-insensitively as
-     * {@code LIKE}), or {@link FilterBuilder#dateRange} (from/to pickers, a {@code field >= from AND
-     * field <= to} range).
+     * {@code LIKE}), {@link FilterBuilder#dateRange} (from/to pickers, a {@code field >= from AND
+     * field <= to} range), or {@link FilterBuilder#numberRange} (from/to number inputs over a numeric
+     * field, either bound optional, both inclusive).
      *
      * <p>When several filters are declared they combine with {@code AND}: each contributes its own
      * {@code WHERE} fragment and the row must satisfy all of them. A {@code multiOptions} filter is
@@ -259,6 +260,7 @@ public final class ListSpec<E> {
      * list.filter("doctorName").label("Doctor").contains();         // typeahead -> doctor_name ILIKE %v%
      * list.filter("role").multiOptions("Хирург", "Терапевт");        // multi-select -> role IN (…)
      * list.filter("checkIn").dateRange();                           // from/to pickers -> checkIn range
+     * list.filter("total").numberRange();                           // from/to inputs -> total &gt;= a AND total &lt;= b
      * // value→label split: the query matches the stored value, the dropdown shows the label
      * var statuses = new LinkedHashMap&lt;String, String&gt;();           // ordered: dropdown follows it
      * statuses.put("NEW", "Новый"); statuses.put("FILES_RECEIVED", "Файлы получены");
@@ -473,7 +475,7 @@ public final class ListSpec<E> {
      *         : null);
      * </pre>
      */
-    public ListSpec<E> rowStyle(java.util.function.Function<ActionRow, RowStyle> style) {
+    public ListSpec<E> rowStyle(java.util.function.Function<ActionRow<E>, RowStyle> style) {
         this.rowStyleFn = style;
         return this;
     }
@@ -513,7 +515,7 @@ public final class ListSpec<E> {
     public List<Aggregate> aggregates() { return List.copyOf(aggregates); }
 
     /** The conditional row-formatting function, or {@code null} when {@link #rowStyle} wasn't called. */
-    public java.util.function.Function<ActionRow, RowStyle> rowStyleFn() { return rowStyleFn; }
+    public java.util.function.Function<ActionRow<E>, RowStyle> rowStyleFn() { return rowStyleFn; }
 
     /** The declared list filters, in declaration order. */
     public List<Filter> filters() {
@@ -672,7 +674,13 @@ public final class ListSpec<E> {
         /** A debounced text typeahead; the text matches case-insensitively as {@code field LIKE v%}. */
         STARTS_WITH,
         /** A pair of from/to date pickers driving a {@code field >= from AND field <= to} range. */
-        DATE_RANGE
+        DATE_RANGE,
+        /**
+         * A pair of from/to number inputs over a numeric field ({@code Integer}/{@code Long}/
+         * {@code BigDecimal}…) driving an inclusive {@code field >= from AND field <= to} range;
+         * either bound may be left open.
+         */
+        NUMBER_RANGE
     }
 
     /**
@@ -712,7 +720,8 @@ public final class ListSpec<E> {
 
     /**
      * Fluent builder for one filter; {@link #options}/{@link #multiple}/{@link #multiOptions}/
-     * {@link #contains}/{@link #startsWith}/{@link #dateRange} pick the control type.
+     * {@link #contains}/{@link #startsWith}/{@link #dateRange}/{@link #numberRange} pick the control
+     * type.
      */
     public static final class FilterBuilder {
         private final String field;
@@ -827,6 +836,16 @@ public final class ListSpec<E> {
         /** A from/to date-range filter (two date pickers) over the field. */
         public FilterBuilder dateRange() {
             this.type = FilterType.DATE_RANGE;
+            return this;
+        }
+
+        /**
+         * A from/to numeric range filter (two number inputs) over a numeric field — amounts,
+         * quantities, weights. Either bound is optional ("debts above 1000", "stock below 5") and
+         * both are inclusive: {@code field >= from AND field <= to}, compared as numbers.
+         */
+        public FilterBuilder numberRange() {
+            this.type = FilterType.NUMBER_RANGE;
             return this;
         }
 

@@ -25,7 +25,7 @@ public final class PageBuilder {
     private final UiLayoutBuilder widgetHost = new UiLayoutBuilder();
     private final List<PageComponent> components = new ArrayList<>();
     // Server handlers for the page's action buttons, resolved by key when a button posts back.
-    private final List<ActionSpec.Action> pageActions = new ArrayList<>();
+    private final List<ActionSpec.Action<Void>> pageActions = new ArrayList<>();
     // An optional right rail (aside). Blocks added here render in a narrow column beside the main
     // content on desktop, and stacked below it on mobile. Lazily created on first aside(...) call.
     private PageBuilder aside;
@@ -101,14 +101,14 @@ public final class PageBuilder {
      * without roles, any authenticated user may run it and the handler enforces its own finer
      * authorization via {@code ctx.user()}.</p>
      */
-    public PageBuilder actions(String heading, Consumer<ActionSpec> configurer) {
-        ActionSpec spec = new ActionSpec();
+    public PageBuilder actions(String heading, Consumer<ActionSpec<Void>> configurer) {
+        ActionSpec<Void> spec = new ActionSpec<>();
         configurer.accept(spec);
-        List<ActionSpec.Action> resolved = spec.actions();
+        List<ActionSpec.Action<Void>> resolved = spec.actions();
         pageActions.addAll(resolved);
 
         List<Map<String, Object>> buttons = new ArrayList<>();
-        for (ActionSpec.Action a : resolved) {
+        for (ActionSpec.Action<Void> a : resolved) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("key", a.key());
             m.put("label", a.label());
@@ -133,7 +133,7 @@ public final class PageBuilder {
         return this;
     }
 
-    private static List<Map<String, Object>> actionFormDescriptors(ActionSpec.Action action) {
+    private static List<Map<String, Object>> actionFormDescriptors(ActionSpec.Action<Void> action) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (InputSpec.InputField field : action.form()) {
             Map<String, Object> m = inputFieldDescriptor(field);
@@ -168,7 +168,7 @@ public final class PageBuilder {
         return m;
     }
 
-    private static Map<String, Object> actionFormDialogDescriptor(ActionSpec.Action action) {
+    private static Map<String, Object> actionFormDialogDescriptor(ActionSpec.Action<Void> action) {
         InputSpec.ActionFormDialog d = action.formDialog();
         if (d == null) return Map.of();
         Map<String, Object> m = new LinkedHashMap<>();
@@ -448,12 +448,12 @@ public final class PageBuilder {
     }
 
     /** The page's action-button handlers, in declaration order (resolved by key on post-back). */
-    public List<ActionSpec.Action> pageActions() {
+    public List<ActionSpec.Action<Void>> pageActions() {
         return List.copyOf(pageActions);
     }
 
     /** The page action with this key, or {@code null} if the page declares none. */
-    public ActionSpec.Action pageAction(String key) {
+    public ActionSpec.Action<Void> pageAction(String key) {
         return pageActions.stream().filter(a -> a.key().equals(key)).findFirst().orElse(null);
     }
 }

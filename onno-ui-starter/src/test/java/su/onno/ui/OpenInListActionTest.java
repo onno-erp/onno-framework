@@ -153,6 +153,30 @@ class OpenInListActionTest {
         assertThat(status).isEqualTo(403);
     }
 
+    @Test
+    void documentRefreshUsesTheSameReadOnlyActionsAsTheRecordSurface() throws Exception {
+        String recordPath = "/documents/OlEvents/" + event;
+        Map<String, Object> refresh = json(mvc.perform(get("/api/divkit/record-refresh" + recordPath)
+                .principal(READER)).andReturn());
+
+        assertThat(refresh).containsOnlyKeys("record", "actions", "readOnly")
+                .containsEntry("readOnly", true)
+                .containsEntry("actions", actions("/api/divkit" + recordPath, READER));
+        assertThat(((Map<?, ?>) refresh.get("record")).get("id")).isEqualTo(event.toString());
+    }
+
+    @Test
+    void catalogRefreshPreservesActionPlacementAndEntityReadAccess() throws Exception {
+        String recordPath = "/catalogs/OlPinned/" + pinned;
+        String refreshPath = "/api/divkit/record-refresh" + recordPath;
+        Map<String, Object> refresh = json(mvc.perform(get(refreshPath).principal(WRITER)).andReturn());
+
+        assertThat(refresh).containsEntry("readOnly", false)
+                .containsEntry("actions", actions("/api/divkit" + recordPath, WRITER));
+        assertThat(mvc.perform(get(refreshPath).principal(OUTSIDER)).andReturn().getResponse().getStatus())
+                .isEqualTo(403);
+    }
+
     // --- helpers ---------------------------------------------------------------
 
     /** The header actions of a record surface: every map in the response that carries an onno:// url. */

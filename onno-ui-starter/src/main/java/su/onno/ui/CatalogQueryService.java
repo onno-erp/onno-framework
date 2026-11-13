@@ -231,7 +231,8 @@ public class CatalogQueryService {
         String fingerprint = scopes.policies().fingerprint(subject);
         String col = surface.safeSort(sortColumn);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -288,7 +289,8 @@ public class CatalogQueryService {
                       List<String> prefix, List<String> ge, List<String> le,
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -325,7 +327,8 @@ public class CatalogQueryService {
         boolean date = isTemporalColumn(desc, groupColumn);
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = widgetFilter(desc, surface, widgetFilter);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -423,13 +426,17 @@ public class CatalogQueryService {
     private static WidgetFilter.Result widgetFilter(CatalogDescriptor desc, EntitySurfaceDescriptor surface,
                                                     String filter) {
         if (!desc.hierarchical()) {
-            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns());
+            return WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         }
         Set<String> columns = new java.util.HashSet<>(surface.columnNames());
         columns.add("_parent");
         Set<String> uuids = new java.util.HashSet<>(surface.uuidColumns());
         uuids.add("_parent");
-        return WidgetFilter.parse(filter, columns, uuids);
+        return WidgetFilter.parse(filter, columns, uuids, surface::storageColumn);
+    }
+
+    void validateWidgetFilter(CatalogDescriptor desc, String filter) {
+        widgetFilter(desc, surface(desc), filter);
     }
 
     /**

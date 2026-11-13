@@ -11,7 +11,11 @@ Check which process, port, database and external configuration actually run befo
 Preserve database files and credentials; stop the actual old listener before starting a replacement.
 
 Missing chat: confirm the provider account/number, then its visibility/permissions, sync cursor,
-deduplication state, and workspace channel predicate. Check the scoped workspace APIs; a 403 from
+deduplication state, and workspace channel predicate. For Gmail, `onno_crm_gmail_failed` lists
+messages that could not be fetched or imported (skipped after three attempts, logged with Gmail id,
+HTTP status and exception class), a "rate limit … paused until" log means that mailbox waits for
+Gmail, and mail older than the first import or archived in Gmail is brought in with
+`POST /api/crm/gmail/restore`, not by resetting cursors. Check the scoped workspace APIs; a 403 from
 generic conversation lists can be intentional workspace isolation. Do not broaden permissions to
 make a diagnostic call succeed. Distinguish provider polling delay from CRM SSE invalidation.
 
@@ -28,6 +32,12 @@ WhatsApp: verify raw-byte HMAC, exact WABA/number filters, callback challenge an
 subscription. Unsigned requests must fail. Check that the reverse proxy exposes only the webhook
 route and that auth permits that exact path. Temporary tunnels stop with their process and change
 hostname on recreation. Instagram's polling adapter does not configure webhooks.
+
+Instagram missing or unexpected messages: check `onno_crm_ig_sync` (`activation_cutoff` — messages
+before it are never imported, by design — plus `checkpoint` and an in-progress `pass_head`/`pass_cursor`
+backlog) and `onno_crm_ig_thread` watermarks. Do not reset the cutoff to "fix" missing history; that is
+an explicit operator decision made while the account is paused. Rate limits show as a deferred
+channel with Graph codes 4/17/32/613 in the logs.
 
 Never print bearer tokens, raw OAuth callback URLs, credential-bearing request URLs or message
 bodies for routine diagnostics. Record status codes, counts, sanitized errors and correlation IDs.

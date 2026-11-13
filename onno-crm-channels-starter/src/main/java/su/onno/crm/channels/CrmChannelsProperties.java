@@ -1,5 +1,8 @@
 package su.onno.crm.channels;
 
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /** Provider setup; all adapters default disabled. */
@@ -50,6 +53,19 @@ public class CrmChannelsProperties {
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/gmail-tokens.json";
         /** Exact registered Google OAuth callback URI; use HTTPS in deployments. */
         private String redirectUri = "http://127.0.0.1:8090/api/crm/gmail/callback";
+        /**
+         * Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after
+         * Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit.
+         */
+        private int initialImportLimit = 500;
+        /**
+         * Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the
+         * age limit. A re-scan after Gmail's history expired starts from the mailbox's latest
+         * imported email instead.
+         */
+        private int initialImportDays = 90;
+        /** Each mailbox's older mail, imported once as history after its first import. */
+        private HistoryImport historyImport = new HistoryImport();
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
@@ -59,6 +75,54 @@ public class CrmChannelsProperties {
         public void setTokensFile(String value) { this.tokensFile = value; }
         public String getRedirectUri() { return redirectUri; }
         public void setRedirectUri(String value) { this.redirectUri = value; }
+        public int getInitialImportLimit() { return initialImportLimit; }
+        public void setInitialImportLimit(int value) {
+            if (value < 0) throw new IllegalArgumentException("onno.crm.channels.gmail.initial-import-limit must be 0 or more");
+            this.initialImportLimit = value;
+        }
+        public int getInitialImportDays() { return initialImportDays; }
+        public void setInitialImportDays(int value) {
+            if (value < 0) throw new IllegalArgumentException("onno.crm.channels.gmail.initial-import-days must be 0 or more");
+            this.initialImportDays = value;
+        }
+        public HistoryImport getHistoryImport() { return historyImport; }
+        public void setHistoryImport(HistoryImport value) { this.historyImport = value == null ? new HistoryImport() : value; }
+    }
+
+    /**
+     * A mailbox's older mail, imported once after its first import finished: every thread under the
+     * listed labels, newest first, a few threads per synchronization round so live mail keeps flowing.
+     * The mail arrives as history: read, its new conversations closed, no notifications or
+     * automation ({@code su.onno.crm.service.CrmHistoryImport}). Only the text is downloaded; each file
+     * stays in Gmail and is fetched when someone opens it, so the import costs neither disk nor
+     * Gmail's download quota. Progress is kept per mailbox in {@code onno_crm_gmail_history_import};
+     * delete a mailbox's row there to import again (already imported emails are skipped).
+     */
+    public static class HistoryImport {
+        /** Import each mailbox's older mail once, as read history with its files left in Gmail. */
+        private boolean enabled = false;
+        /** Gmail labels whose threads are imported, in this order; {@code INBOX} by default, add {@code SENT} for archived threads the studio answered. */
+        private List<String> labels = new ArrayList<>(List.of("INBOX"));
+        /** Threads one mailbox imports per synchronization round (a round runs every 15 seconds). */
+        private int threadsPerRound = 20;
+        /** Gmail categories left out; {@code CATEGORY_PROMOTIONS} and {@code CATEGORY_SOCIAL} (newsletters, social-network notices) by default. */
+        private List<String> skipCategories = new ArrayList<>(List.of("CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL"));
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { this.enabled = value; }
+        public List<String> getLabels() { return labels; }
+        public void setLabels(List<String> value) {
+            if (value == null || value.isEmpty() || value.stream().anyMatch(label -> label == null || !label.matches("[A-Za-z0-9_-]{1,100}")))
+                throw new IllegalArgumentException("onno.crm.channels.gmail.history-import.labels must list Gmail label ids such as INBOX or SENT");
+            this.labels = new ArrayList<>(value);
+        }
+        public int getThreadsPerRound() { return threadsPerRound; }
+        public void setThreadsPerRound(int value) {
+            if (value < 1 || value > 100) throw new IllegalArgumentException("onno.crm.channels.gmail.history-import.threads-per-round must be between 1 and 100");
+            this.threadsPerRound = value;
+        }
+        public List<String> getSkipCategories() { return skipCategories; }
+        public void setSkipCategories(List<String> value) { this.skipCategories = value == null ? new ArrayList<>() : new ArrayList<>(value); }
     }
 
     public static class Instagram {
@@ -66,11 +130,43 @@ public class CrmChannelsProperties {
         private boolean enabled = false;
         /** Private Instagram token JSON file. */
         private String tokensFile = System.getProperty("user.home") + "/.config/onno/instagram-tokens.json";
+        /**
+         * UTC instant (for example {@code 2026-11-12T09:00:00Z}) from which Instagram messages are
+         * imported; messages sent earlier are never imported, even in a conversation that receives a
+         * new message later. Used only to seed the account's persisted cutoff in
+         * {@code onno_crm_ig_sync} when it has none; a persisted cutoff is never changed by this
+         * property, a restart, a reconnect or pause/resume. When unset, the cutoff is the moment
+         * synchronization is first enabled for the account.
+         */
+        private Instant activationCutoff = null;
+        /**
+         * Conversation-list pages (25 conversations each) one poll may read. Polling starts at the most
+         * recently updated conversation and stops at the account's checkpoint; a longer backlog
+         * continues on the next poll, which first rechecks the newest conversations.
+         */
+        private int conversationPagesPerPoll = 4;
+        /**
+         * Conversations whose recent messages one poll may download. Conversations unchanged since
+         * their last download are skipped and do not count.
+         */
+        private int threadsPerPoll = 20;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean value) { this.enabled = value; }
         public String getTokensFile() { return tokensFile; }
         public void setTokensFile(String value) { this.tokensFile = value; }
+        public Instant getActivationCutoff() { return activationCutoff; }
+        public void setActivationCutoff(Instant value) { this.activationCutoff = value; }
+        public int getConversationPagesPerPoll() { return conversationPagesPerPoll; }
+        public void setConversationPagesPerPoll(int value) {
+            if (value < 1 || value > 100) throw new IllegalArgumentException("onno.crm.channels.instagram.conversation-pages-per-poll must be between 1 and 100");
+            this.conversationPagesPerPoll = value;
+        }
+        public int getThreadsPerPoll() { return threadsPerPoll; }
+        public void setThreadsPerPoll(int value) {
+            if (value < 1 || value > 500) throw new IllegalArgumentException("onno.crm.channels.instagram.threads-per-poll must be between 1 and 500");
+            this.threadsPerPoll = value;
+        }
     }
 
     public static class Whatsapp {

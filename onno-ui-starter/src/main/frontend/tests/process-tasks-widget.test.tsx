@@ -201,7 +201,7 @@ describe("ProcessTasksWidget live inbox", () => {
     render(<ProcessTasksWidget widget={widget} />);
 
     await screen.findByText("Review order O-42");
-    fireEvent.click(screen.getByRole("button", { name: "Approve", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(completeProcessTask).not.toHaveBeenCalled();
     expect(screen.getByRole("alertdialog", { name: "Approve task?" })).toBeInTheDocument();
 

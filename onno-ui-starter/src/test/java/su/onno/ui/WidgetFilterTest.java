@@ -1,10 +1,11 @@
 package su.onno.ui;
 
-import org.junit.jupiter.api.Test;
-
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class WidgetFilterTest {
 
@@ -66,8 +67,10 @@ class WidgetFilterTest {
     }
 
     @Test
-    void unknownColumnIsIgnored() {
-        assertThat(WidgetFilter.parse("secret_column = 1", COLUMNS).isEmpty()).isTrue();
+    void unknownColumnCausesErrorThroughLegacyOverload() {
+        assertThatThrownBy(() -> WidgetFilter.parse("secret_column = 1", COLUMNS))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("secret_column");
     }
 
     @Test
@@ -83,5 +86,19 @@ class WidgetFilterTest {
         WidgetFilter.Result r = WidgetFilter.parse("status = '0; DROP TABLE bills'", COLUMNS);
         assertThat(r.sql()).isEqualTo("status = :wf0");
         assertThat(r.bindings()).containsEntry("wf0", "0; DROP TABLE bills");
+    }
+
+    @Test
+    void logicalPostedNameResolvesToSystemColumn() {
+        WidgetFilter.Result result = WidgetFilter.parse("posted = true", COLUMNS, Set.of(), field -> field.equals("posted") ? "_posted" : field);
+        assertThat(result.sql()).isEqualTo("_posted = :wf0");
+        assertThat(result.bindings()).containsEntry("wf0", true);
+    }
+
+    @Test
+    void unknownFieldCausesError() {
+        assertThatThrownBy(() -> WidgetFilter.parse("postedd = true", COLUMNS, Set.of(), field -> field))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("postedd");
     }
 }

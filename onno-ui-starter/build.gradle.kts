@@ -17,12 +17,36 @@ val buildFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::
     inputs.dir("src/main/frontend/public")
     inputs.file("src/main/frontend/index.html")
     inputs.file("src/main/frontend/package.json")
+    inputs.file("src/main/frontend/tsconfig.json")
+    inputs.file("src/main/frontend/tsconfig.app.json")
     inputs.file("src/main/frontend/vite.config.ts")
     outputs.dir("src/main/frontend/dist")
 }
 
+// `tsc -b` over both tsconfig projects: the app and the Vitest suite (tests/, vite.config.ts and
+// the widget sources the tests import from onno-crm-starter, onno-crm-channels-starter and
+// onno-widget-sdk). buildFrontend checks only the app, so a type error in a test fails `check`,
+// not packaging.
+val typecheckFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {
+    dependsOn(tasks.named("npmInstall"))
+    args.set(listOf("run", "typecheck"))
+    workingDir.set(file("src/main/frontend"))
+    inputs.dir("src/main/frontend/src")
+    inputs.dir("src/main/frontend/tests")
+    inputs.dir("../onno-crm-starter/src/main/widgets")
+    inputs.dir("../onno-crm-channels-starter/src/main/widgets")
+    inputs.dir("../onno-widget-sdk/src")
+    inputs.file("src/main/frontend/tsconfig.json")
+    inputs.file("src/main/frontend/tsconfig.app.json")
+    inputs.file("src/main/frontend/tsconfig.test.json")
+    inputs.file("src/main/frontend/package.json")
+    inputs.file("src/main/frontend/package-lock.json")
+    inputs.file("src/main/frontend/vite.config.ts")
+}
+
 val testFrontend by tasks.registering(com.github.gradle.node.npm.task.NpmTask::class) {
     dependsOn(tasks.named("npmInstall"))
+    dependsOn(typecheckFrontend)
     args.set(listOf("run", "test:run"))
     workingDir.set(file("src/main/frontend"))
     inputs.dir("src/main/frontend/src")

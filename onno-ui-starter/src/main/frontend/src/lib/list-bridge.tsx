@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { SurfaceHost } from "@/lib/surface-refresh";
 import { EntityListWidget, type ListDescriptor } from "@/components/entity-list-widget";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
@@ -82,9 +83,11 @@ export function ListPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <IslandErrorBoundary label={m.list.title || m.list.name}>
-            <EntityListWidget list={m.list} />
-          </IslandErrorBoundary>,
+          <SurfaceHost.Provider value={m.el}>
+            <IslandErrorBoundary label={m.list.title || m.list.name}>
+              <EntityListWidget list={m.list} />
+            </IslandErrorBoundary>
+          </SurfaceHost.Provider>,
           m.el,
           String(m.id)
         )

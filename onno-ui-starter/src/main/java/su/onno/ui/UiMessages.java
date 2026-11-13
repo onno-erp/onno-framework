@@ -246,6 +246,53 @@ public final class UiMessages {
         d.put("crm.inbox.noMatches", "No conversations match these filters");
         d.put("crm.inbox.noMatchesHint", "Clear a filter or create a conversation.");
         d.put("crm.inbox.view", "Inbox view");
+        // Composer: the large window (ILES-16) and drafts kept per conversation (ILES-19).
+        d.put("crm.composer.expand", "Open in a larger window");
+        d.put("crm.composer.maximize", "Fill the screen");
+        d.put("crm.composer.restoreSize", "Restore the window size");
+        d.put("crm.composer.replyTitle", "Reply to {name}");
+        d.put("crm.composer.noteTitle", "Internal note about {name}");
+        d.put("crm.composer.noteHint", "Visible to your team only");
+        d.put("crm.composer.replyLabel", "Write a reply");
+        d.put("crm.composer.sending", "Sending…");
+        d.put("crm.composer.inWindow", "Writing in the larger window…");
+        // Sending mailbox (ILES-17): switching to the contact's other conversations once From picks a mailbox.
+        d.put("crm.chat.switchConversation", "Switch to another of this contact's conversations");
+        d.put("crm.chat.switchLocked", "Send or clear your draft before changing channels");
+        d.put("crm.chat.switchHint", "Choose a conversation for this contact");
+        // Visible folder controls (ILES-18). Apps that call chat groups folders override crm.group.*.
+        d.put("crm.chat.rowMenu", "Chat options");
+        d.put("crm.group.move", "Move to group");
+        d.put("crm.group.newFolder", "New group");
+        d.put("crm.group.create", "Create group");
+        d.put("crm.group.startsWith", "{name} moves into the new group.");
+        d.put("crm.group.needsChat", "Open a chat first: a new group starts with that chat.");
+        d.put("crm.inbox.listActions", "Conversation list actions");
+        d.put("crm.inbox.showAll", "All chats");
+        // Find in mailbox: search a connected Gmail mailbox, archived mail included, and restore a message.
+        d.put("crm.mailbox.find", "Find in mailbox");
+        d.put("crm.mailbox.description", "Search a connected mailbox, archived mail included, and bring a message back into the inbox.");
+        d.put("crm.mailbox.account", "Mailbox");
+        d.put("crm.mailbox.query", "Search the mailbox");
+        d.put("crm.mailbox.placeholder", "from:anna subject:villa");
+        d.put("crm.mailbox.hint", "Gmail search syntax: from:, to:, subject:, has:attachment, before:2026/01/31.");
+        d.put("crm.mailbox.search", "Search");
+        d.put("crm.mailbox.searching", "Searching…");
+        d.put("crm.mailbox.start", "Search by sender, subject or any word in the message.");
+        d.put("crm.mailbox.empty", "No messages match this search.");
+        d.put("crm.mailbox.error", "Could not search this mailbox.");
+        d.put("crm.mailbox.retry", "Try again");
+        d.put("crm.mailbox.results", "Messages found");
+        d.put("crm.mailbox.archived", "Archived");
+        d.put("crm.mailbox.noSubject", "(no subject)");
+        d.put("crm.mailbox.open", "Open");
+        d.put("crm.mailbox.restore", "Restore to inbox");
+        d.put("crm.mailbox.restoring", "Restoring…");
+        d.put("crm.mailbox.restoreFailed", "Could not bring this message into the inbox.");
+        d.put("crm.mailbox.readOnly", "This mailbox is connected read-only: restored mail comes into the CRM but stays archived in Gmail until the mailbox is reconnected.");
+        d.put("crm.mailbox.keptArchived", "The message is in the CRM, but stays archived in Gmail until the mailbox is reconnected.");
+        d.put("crm.mailbox.loadMore", "Load more");
+        d.put("crm.mailbox.loadingMore", "Loading…");
 
         // Login screen (DivKit card + the onno-login-form React island).
         // Left-panel hero + footer copy (React shell, login.tsx) — keep in sync with DEFAULT_MESSAGES.
@@ -441,6 +488,25 @@ public final class UiMessages {
         d.put("batch.deleteConfirm", "Sure? Delete {n}");
         d.put("batch.running", "{label} — running on {n}…");
         d.put("batch.done", "{label}: {ok}/{n} done");
+        d.put("list.download.running", "Preparing {label} for {n}…");
+        d.put("list.download.failed", "{label} failed");
+        // onno-print-starter's printTemplates widget (template management for admins).
+        d.put("print.templates.title", "Print templates");
+        d.put("print.templates.empty", "No print forms are registered.");
+        d.put("print.templates.form", "Form");
+        d.put("print.templates.entity", "Record type");
+        d.put("print.templates.template", "Template");
+        d.put("print.templates.builtIn", "Built-in");
+        d.put("print.templates.uploaded", "Uploaded {date} by {user}");
+        d.put("print.templates.download", "Download");
+        d.put("print.templates.downloadBuiltIn", "Download built-in");
+        d.put("print.templates.upload", "Upload");
+        d.put("print.templates.reset", "Reset");
+        d.put("print.templates.uploadedToast", "Template for {form} uploaded");
+        d.put("print.templates.resetToast", "{form} uses its built-in template again");
+        d.put("print.templates.loadFailed", "Could not load print templates.");
+        d.put("print.templates.disabled", "Template uploads are disabled (onno.print.templates.enabled=false).");
+        d.put("print.templates.hint", "Download a template, edit it in Word or Excel keeping the {{placeholders}}, then upload it. Reset restores the built-in file.");
         d.put("batch.deleted", "Deleted {ok}/{n}");
         // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
         d.put("clipboard.copied", "{count} copied");
@@ -468,6 +534,8 @@ public final class UiMessages {
         d.put("list.clear", "Clear");
         d.put("list.clearAll", "Clear all");
         d.put("list.done", "Done");
+        d.put("list.rangeFrom", "From");
+        d.put("list.rangeTo", "To");
         d.put("list.selected", "{count} selected");
         d.put("list.dateToday", "Today");
         d.put("list.dateYesterday", "Yesterday");

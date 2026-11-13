@@ -74,12 +74,14 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | Property | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `onno.auth.additional-public-paths` | `List<String>` | — | Additional public Ant path patterns, combined with the mandatory framework paths and legacy public-paths. |
-| `onno.auth.csrf-ignored-paths` | `List<String>` | — | Request paths exempted from CSRF protection in the cookie-based modes (IN_MEMORY and OIDC). Defaults to just the login endpoint. Add a path here to expose an anonymous, CSRF-free `POST` (e.g. a public lead/intake form) without having to override the whole `SecurityFilterChain` (issue #30). Ant patterns are supported (e.g. `/api/public/**`). Ignored in RESOURCE_SERVER, where CSRF is already disabled. |
-| `onno.auth.demo.auto-login-username` | `String` | — | In-memory username to authenticate automatically on every anonymous API request. Blank (the default) disables auto-login. The named user must exist in `onno.auth.users`. This bypasses password login and is intended only for public, non-sensitive demos. |
+| `onno.auth.csrf-ignored-paths` | `List<String>` | — | Request paths exempted from CSRF protection in the cookie-based modes (IN_MEMORY, DATABASE and OIDC). Defaults to just the login endpoint. Add a path here to expose an anonymous, CSRF-free `POST` (e.g. a public lead/intake form) without having to override the whole `SecurityFilterChain` (issue #30). Ant patterns are supported (e.g. `/api/public/**`). Ignored in RESOURCE_SERVER, where CSRF is already disabled. |
+| `onno.auth.database.password-min-length` | `Integer` | `8` | Minimum password length, in characters, for a password an account holder or an administrator chooses. Generated one-time passwords are never shorter than 16. |
+| `onno.auth.database.seed-password-change-required` | `Boolean` | `true` | Whether accounts seeded from `onno.auth.users` on first boot must set a new password at first sign-in. Keep it on: the configured password sits in a file. Turning it off requires every seed password to satisfy the password policy. |
+| `onno.auth.demo.auto-login-username` | `String` | — | In-memory username to authenticate automatically on every anonymous API request. Blank (the default) disables auto-login. The named user must exist in `onno.auth.users` (`in-memory` mode) or in the account store (`database` mode). This bypasses password login and is intended only for public, non-sensitive demos. |
 | `onno.auth.embedding.cross-site-cookies` | `Boolean` | `false` | Whether the readable CSRF cookie should use `SameSite=None; Secure` for a cross-site iframe. Disabled by default. The servlet session cookie must be configured the same way through `server.servlet.session.cookie.*`, and HTTPS is required. |
 | `onno.auth.embedding.frame-ancestors` | `List<String>` | — | Content-Security-Policy `frame-ancestors` sources allowed to embed the app, for example `'self'` and `https://www.example.com`. Empty (the default) keeps Spring Security's `X-Frame-Options: DENY`. Configuring this list disables that legacy header and emits the explicit CSP directive instead. Cross-site session-based apps must also use HTTPS cookies with `SameSite=None`. |
 | `onno.auth.enabled` | `Boolean` | `true` | Master switch for the auth starter. When false, no SecurityFilterChain is contributed and the application can wire its own. |
-| `onno.auth.mode` | `Mode` | `in-memory` | Which authentication backend the starter wires. Selecting a mode only changes how identities are authenticated — the `/api/**`-requires-auth model is the same across all of them. <ul> <li>IN_MEMORY (default) — username/password against `onno.auth.users`, session cookie, JSON `/api/auth/login`. Zero external dependencies.</li> <li>OIDC — server-side OpenID Connect authorization-code login against any standard provider (Keycloak, Zitadel, …). Keeps the session-cookie model; "login" becomes a redirect to `/oauth2/authorization/{registrationId}`. Configure the provider with the standard `spring.security.oauth2.client.*` properties.</li> <li>RESOURCE_SERVER — stateless bearer-token validation. The client obtains tokens from the IdP directly and sends `Authorization: Bearer ...`. Configure with `spring.security.oauth2.resourceserver.jwt.issuer-uri`.</li> </ul> |
+| `onno.auth.mode` | `Mode` | `in-memory` | Which authentication backend the starter wires. Selecting a mode only changes how identities are authenticated — the `/api/**`-requires-auth model is the same across all of them. <ul> <li>IN_MEMORY (default) — username/password against `onno.auth.users`, session cookie, JSON `/api/auth/login`. Zero external dependencies; accounts live in configuration, so use it for development and demos only.</li> <li>DATABASE — username/password against accounts stored in the application database (table `onno_auth_user`), managed at runtime: create, disable, change roles, reset passwords, force a password change, sign out everywhere. The `onno.auth.users` list only seeds the first accounts into an empty store.</li> <li>OIDC — server-side OpenID Connect authorization-code login against any standard provider (Keycloak, Zitadel, …). Keeps the session-cookie model; "login" becomes a redirect to `/oauth2/authorization/{registrationId}`. Configure the provider with the standard `spring.security.oauth2.client.*` properties.</li> <li>RESOURCE_SERVER — stateless bearer-token validation. The client obtains tokens from the IdP directly and sends `Authorization: Bearer ...`. Configure with `spring.security.oauth2.resourceserver.jwt.issuer-uri`.</li> </ul> |
 | `onno.auth.oidc.logout-path` | `String` | `/logout` | Path the SPA navigates to for RP-initiated logout in OIDC mode. A GET here clears the local session and redirects to the IdP's end-session endpoint. Surfaced to the SPA via `/api/auth/me` as `logoutUrl`. |
 | `onno.auth.oidc.post-logout-redirect-uri` | `String` | `{baseUrl}` | Where the IdP sends the browser after ending its session. `{baseUrl}` expands to the app's own origin (scheme://host:port), so the user lands back on the SPA shell. This value must be registered under the IdP client's valid post-logout redirect URIs. |
 | `onno.auth.oidc.principal-claim` | `String` | — | Token claim used as the authenticated principal name. Defaults from the preset. |
@@ -96,7 +98,7 @@ except Kafka inbound). Standard Spring keys (`spring.datasource.*`, `spring.mail
 | `onno.auth.session.remember-me.key` | `String` | — | Secret that signs the remember-me cookie. Set a stable, non-guessable value in production so cookies survive restarts, can't be forged, and validate across every node of a horizontally-scaled deployment. When blank, startup fails fast unless allowEphemeralKey is set (a blank key would otherwise sign cookies with a secret that peer nodes reject, breaking login under a load balancer). |
 | `onno.auth.session.remember-me.validity` | `Duration` | `14d` | How long the remember-me cookie stays valid. Defaults to 14 days. |
 | `onno.auth.session.timeout` | `Duration` | `8h` | Idle session timeout for the cookie-based modes, applied to the servlet container. Slides on each request. Defaults to 8 hours (a working day) instead of Spring's 30 minutes so parked-but-open tabs don't silently lose their session. Ignored in RESOURCE_SERVER. |
-| `onno.auth.users` | `List<User>` | — | In-memory user accounts. Empty by default — the consuming app supplies them via `onno.auth.users[*]`. Production deployments should disable in-memory users and configure their own UserDetailsService. Only used in IN_MEMORY. |
+| `onno.auth.users` | `List<User>` | — | Configured user accounts. Empty by default — the starter ships no built-in users. In `in-memory` mode these are the only accounts and live as long as the configuration does. In `database` mode they are copied into the empty account store once, on first boot, and ignored afterwards. Ignored in `oidc` and `resource-server` modes. |
 
 OIDC and resource-server modes also read the standard `spring.security.oauth2.client.*` /
 `spring.security.oauth2.resourceserver.*` properties.
@@ -121,6 +123,20 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.import.max-file-bytes` | `Long` | `0` | Maximum accepted CSV file size in bytes. Defaults to 5 MiB. |
 | `onno.import.max-rows` | `Integer` | `10000` | Maximum data rows processed by one import request. |
 | `onno.import.preview-rows` | `Integer` | `20` | Maximum data rows returned from preview. |
+
+## Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onno.print.batch.max-records` | `Integer` | `200` | Most records one batch print request may include; larger selections are rejected. |
+| `onno.print.enabled` | `Boolean` | `true` | Master switch for print forms. When false, no PrintService, print endpoints or record "Print" actions are registered, even if PrintForm beans exist. |
+| `onno.print.pdf.gotenberg.timeout` | `Duration` | `60s` | Timeout of one Gotenberg conversion request. |
+| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service, e.g. http://localhost:3000. Setting it enables PDF output. |
+| `onno.print.pdf.libreoffice.command` | `String` | — | The soffice executable (a name on the PATH or an absolute path, e.g. /Applications/LibreOffice.app/Contents/MacOS/soffice). Setting it enables PDF output. |
+| `onno.print.pdf.libreoffice.timeout` | `Duration` | `120s` | Timeout of one LibreOffice conversion. |
+| `onno.print.templates.enabled` | `Boolean` | `true` | Whether admins may upload replacement templates (stored in the onno_print_templates table) that take precedence over the built-in ones. |
+| `onno.print.templates.manage-roles` | `List<String>` | — | Roles allowed to list, download, upload and reset print templates. ADMIN always passes. |
+| `onno.print.templates.max-size` | `DataSize` | `10MB` | Largest accepted uploaded template. |
 
 ## Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)
 
@@ -178,9 +194,18 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 | --- | --- | --- | --- |
 | `onno.crm.channels.gmail.client-file` | `String` | — | Google OAuth client JSON file outside the application artifact. |
 | `onno.crm.channels.gmail.enabled` | `Boolean` | `false` | Enable the Gmail OAuth adapter. Each connected account (shared or personal) authorizes its own mailbox and gets its own inbox. |
+| `onno.crm.channels.gmail.history-import.enabled` | `Boolean` | `false` | Import each mailbox's older mail once, as read history with its files left in Gmail. |
+| `onno.crm.channels.gmail.history-import.labels` | `List<String>` | — | Gmail labels whose threads are imported, in this order; `INBOX` by default, add `SENT` for archived threads the studio answered. |
+| `onno.crm.channels.gmail.history-import.skip-categories` | `List<String>` | — | Gmail categories left out; `CATEGORY_PROMOTIONS` and `CATEGORY_SOCIAL` (newsletters, social-network notices) by default. |
+| `onno.crm.channels.gmail.history-import.threads-per-round` | `Integer` | `20` | Threads one mailbox imports per synchronization round (a round runs every 15 seconds). |
+| `onno.crm.channels.gmail.initial-import-days` | `Integer` | `90` | Age limit, in days, of the Inbox messages a mailbox's first import brings in. 0 removes the age limit. A re-scan after Gmail's history expired starts from the mailbox's latest imported email instead. |
+| `onno.crm.channels.gmail.initial-import-limit` | `Integer` | `500` | Most Inbox messages a mailbox's first import brings in, newest first. A re-scan after Gmail's history expired applies it to Inbox and to sent mail. 0 removes the count limit. |
 | `onno.crm.channels.gmail.redirect-uri` | `String` | `http://127.0.0.1:8090/api/crm/gmail/callback` | Exact registered Google OAuth callback URI; use HTTPS in deployments. |
 | `onno.crm.channels.gmail.tokens-file` | `String` | — | Private writable Google token JSON file. |
+| `onno.crm.channels.instagram.activation-cutoff` | `Instant` | — | UTC instant (for example `2026-11-12T09:00:00Z`) from which Instagram messages are imported; messages sent earlier are never imported, even in a conversation that receives a new message later. Used only to seed the account's persisted cutoff in `onno_crm_ig_sync` when it has none; a persisted cutoff is never changed by this property, a restart, a reconnect or pause/resume. When unset, the cutoff is the moment synchronization is first enabled for the account. |
+| `onno.crm.channels.instagram.conversation-pages-per-poll` | `Integer` | `4` | Conversation-list pages (25 conversations each) one poll may read. Polling starts at the most recently updated conversation and stops at the account's checkpoint; a longer backlog continues on the next poll, which first rechecks the newest conversations. |
 | `onno.crm.channels.instagram.enabled` | `Boolean` | `false` | Enable the single-account Instagram polling adapter. |
+| `onno.crm.channels.instagram.threads-per-poll` | `Integer` | `20` | Conversations whose recent messages one poll may download. Conversations unchanged since their last download are skipped and do not count. |
 | `onno.crm.channels.instagram.tokens-file` | `String` | — | Private Instagram token JSON file. |
 | `onno.crm.channels.telegram.enabled` | `Boolean` | `false` | Enable the Telegram bot adapter: one server-configured bot that serves ordinary bot chats and, when the bot has business mode, per-user Telegram business connections. |
 | `onno.crm.channels.telegram.regular-chats-enabled` | `Boolean` | `true` | Accept ordinary (non-business) private chats with the bot into a shared Telegram inbox. When false the bot serves Telegram business connections only: ordinary chats are ignored, no ordinary inbox is created, and replies to existing ordinary chats are not sent. |
@@ -190,6 +215,6 @@ The `onno-desktop-gradle-plugin` is configured through the `onnoDesktop { … }`
 
 ## Enterprise connectors (`su.onno.enterprise`, separate repo)
 
-Gated by `onno.guesty.enabled` / `onno.hospedajes.enabled` / `onno.tochka.enabled`. Each reads its
+Gated by `onno.<connector>.enabled` (e.g. `onno.tochka.enabled`, `onno.yookassa.enabled`). Each reads its
 own `onno.<connector>.*` block (base URL, credentials/tokens, timeouts, retry, token cache). See the
 [onno-enterprise](https://github.com/onno-erp/onno-enterprise) module READMEs.

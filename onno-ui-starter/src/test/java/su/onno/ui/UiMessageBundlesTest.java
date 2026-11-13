@@ -20,6 +20,9 @@ class UiMessageBundlesTest {
         assertThat(UiMessageBundles.load("EN")).isEmpty();
         assertThat(UiMessageBundles.load("")).isEmpty();
         assertThat(UiMessageBundles.load(null)).isEmpty();
+        // Regional English changes formats only; its wording is the English defaults.
+        assertThat(UiMessageBundles.load("en-GB")).isEmpty();
+        assertThat(UiMessageBundles.load("en_AU")).isEmpty();
     }
 
     @Test

@@ -67,6 +67,7 @@ Use the narrowest useful command while iterating, then broaden:
 ./gradlew :onno-framework:test
 ./gradlew :onno-framework-starter:compileJava
 ./gradlew :onno-ui-starter:buildFrontend
+./gradlew :onno-ui-starter:typecheckFrontend
 ./gradlew :onno-ui-starter:compileJava
 ./gradlew clean check
 ./gradlew publishToMavenLocal

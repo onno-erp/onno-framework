@@ -19,6 +19,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
+    // Browser code: keep @types/node (installed for vite.config.ts) and other ambient @types out.
+    "types": [],
     "baseUrl": ".",
     "paths": {
       "@/*": [

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Builds the per-surface DivKit <em>content</em> (catalog/document lists, the combined
@@ -52,8 +53,18 @@ public final class SurfaceDivBuilder {
                                                   List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs,
                                                   boolean dynamicActions, java.util.UUID focus) {
-        Map<String, Object> descriptor =
-                listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions);
+        return listSurface(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions, focus, d -> d);
+    }
+
+    /** As above, letting the caller decorate the list descriptor (e.g. contributed selection downloads). */
+    public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
+                                                  String newUrl, boolean canWrite,
+                                                  List<Map<String, Object>> actions,
+                                                  List<Map<String, Object>> inputs,
+                                                  boolean dynamicActions, java.util.UUID focus,
+                                                  java.util.function.UnaryOperator<Map<String, Object>> decorate) {
+        Map<String, Object> descriptor = decorate.apply(
+                listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions));
         if (focus != null) {
             descriptor.put("focus", focus.toString());
         }
@@ -274,13 +285,13 @@ public final class SurfaceDivBuilder {
         if (isBalance) {
             views.add(registerView("balance", msg.get("register.balanceTab"),
                     registerListDescriptor(title, name, "/api/list/registers/" + name + "/balance",
-                            balanceColumns(dimensions, resources), List.of(),
+                            balanceColumns(dimensions, resources), resourceRangeFilters(resources),
                             firstColumnName(dimensions), false)));
         }
         views.add(registerView("movements", msg.get("register.movementsTab"),
                 registerListDescriptor(title, name, "/api/list/registers/" + name + "/movements",
                         movementColumns(dimensions, resources, msg, str(meta.get("periodFormat"))),
-                        movementFilters(msg), "_period", true)));
+                        movementFilters(msg, resources), "_period", true)));
 
         Map<String, Object> register = new LinkedHashMap<>();
         register.put("views", views);
@@ -330,17 +341,40 @@ public final class SurfaceDivBuilder {
     }
 
     /**
-     * The movements tab's built-in filter facets: a {@code _period} date range and a
-     * {@code _movement_type} Receipt/Expense choice. Both compile server-side through
-     * {@link su.onno.ui.ListFilter} like any authored list filter (ge/le on the period, eq on the
-     * type), so the register no longer forces scrolling the whole log to find a window of activity.
+     * The movements tab's built-in filter facets: a {@code _period} date range, a
+     * {@code _movement_type} Receipt/Expense choice and a from–to number range per numeric resource.
+     * All compile server-side through {@link su.onno.ui.ListFilter} like any authored list filter
+     * (ge/le on the period and the resources, eq on the type), so the register no longer forces
+     * scrolling the whole log to find a window of activity.
      */
-    private static List<Map<String, Object>> movementFilters(UiMessages msg) {
+    private static List<Map<String, Object>> movementFilters(UiMessages msg,
+                                                             List<Map<String, Object>> resources) {
         List<Map<String, Object>> filters = new ArrayList<>();
         filters.add(filterControl("period", msg.get("register.period"), "_period", "dateRange", List.of()));
         filters.add(filterControl("type", msg.get("register.type"), "_movement_type", "options", List.of(
                 filterOption("RECEIPT", msg.get("register.receipt")),
                 filterOption("EXPENSE", msg.get("register.expense")))));
+        filters.addAll(resourceRangeFilters(resources));
+        return filters;
+    }
+
+    /** Java simple type names (as register metadata reports them) that persist as numeric columns. */
+    private static final Set<String> NUMERIC_TYPES = Set.of(
+            "BigDecimal", "BigInteger", "Integer", "Long", "Short", "Byte", "Double", "Float",
+            "int", "long", "short", "byte", "double", "float");
+
+    /**
+     * A from–to number-range facet per numeric register resource (stock below a threshold, debts
+     * above an amount) — the balance tab's filters, and appended to the movements tab's.
+     */
+    private static List<Map<String, Object>> resourceRangeFilters(List<Map<String, Object>> resources) {
+        List<Map<String, Object>> filters = new ArrayList<>();
+        for (Map<String, Object> r : resources) {
+            String column = str(r.get("columnName"));
+            if (!column.isBlank() && NUMERIC_TYPES.contains(str(r.get("javaType")))) {
+                filters.add(filterControl(column, str(r.get("displayName")), column, "numberRange", List.of()));
+            }
+        }
         return filters;
     }
 

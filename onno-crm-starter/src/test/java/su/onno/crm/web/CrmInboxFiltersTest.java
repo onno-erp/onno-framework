@@ -33,4 +33,16 @@ class CrmInboxFiltersTest {
   assertThat(predicate.test(Map.of("subject","Something else","lastMessageAt","2026-09-09T12:00:00"))).isFalse();
   assertThatThrownBy(()->CrmInboxFilters.predicate(workspace.filters(),params)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
  }
+ @Test void numberRangeBoundsCompareNumericallyNotLexically() {
+  var filters = List.of(new su.onno.ui.ListSpec.Filter("unread","Unread",su.onno.ui.ListSpec.FilterType.NUMBER_RANGE,List.of()));
+  var params = new LinkedMultiValueMap<String,String>();
+  params.add("ge","unread,10"); params.add("le","unread,50.5");
+  var predicate = CrmInboxFilters.predicate(filters,params);
+  assertThat(predicate.test(Map.of("unread",10))).isTrue();
+  assertThat(predicate.test(Map.of("unread",new java.math.BigDecimal("50.50")))).isTrue();
+  assertThat(predicate.test(Map.of("unread",9))).isFalse();
+  assertThat(predicate.test(Map.of("unread",100))).isFalse();
+  var open = new LinkedMultiValueMap<String,String>(); open.add("le","unread,abc");
+  assertThat(CrmInboxFilters.predicate(filters,open).test(Map.of("unread",1))).isFalse();
+ }
 }
