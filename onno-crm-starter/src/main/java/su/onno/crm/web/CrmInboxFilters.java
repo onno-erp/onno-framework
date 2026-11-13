@@ -21,11 +21,15 @@ final class CrmInboxFilters {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown inbox filter or operator");
                 values.computeIfAbsent(parts[0], ignored -> new ArrayList<>()).add(parts[1]);
             }
-            values.forEach((field, choices) -> conditions.add(row -> {
+            values.forEach((field, choices) -> {
+                boolean numeric = definitions.stream().anyMatch(f -> f.field().equals(field)
+                        && f.type() == ListSpec.FilterType.NUMBER_RANGE);
+                conditions.add(row -> {
                 Object raw = row.get(field);
                 if (raw == null) return false;
                 if(raw instanceof Collection<?> items && (operator.equals("eq") || operator.equals("in"))) return items.stream().anyMatch(item->choices.contains(Objects.toString(item,"")));
                 String value = raw.toString();
+                if (numeric) return choices.stream().anyMatch(choice -> numberBound(value, choice, operator.equals("le")));
                 return choices.stream().anyMatch(choice -> switch (operator) {
                     case "eq", "in" -> value.equals(choice);
                     case "like" -> value.toLowerCase(Locale.ROOT).contains(choice.toLowerCase(Locale.ROOT));
@@ -34,7 +38,7 @@ final class CrmInboxFilters {
                     case "le" -> value.compareTo(choice.length() == 10 ? choice + "T23:59:59.999999999" : choice) <= 0;
                     default -> false;
                 });
-            }));
+            });});
         }
         return row -> conditions.stream().allMatch(condition -> condition.test(row));
     }
@@ -44,7 +48,17 @@ final class CrmInboxFilters {
             case MULTI_OPTIONS -> operator.equals("in");
             case CONTAINS -> operator.equals("like");
             case STARTS_WITH -> operator.equals("prefix");
-            case DATE_RANGE -> operator.equals("ge") || operator.equals("le");
+            case DATE_RANGE, NUMBER_RANGE -> operator.equals("ge") || operator.equals("le");
         };
+    }
+
+    /** A number-range bound compares numerically ("9" below "50"); a non-number never matches. */
+    private static boolean numberBound(String value, String bound, boolean upper) {
+        try {
+            int order = new java.math.BigDecimal(value).compareTo(new java.math.BigDecimal(bound));
+            return upper ? order <= 0 : order >= 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
