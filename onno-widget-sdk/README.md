@@ -55,6 +55,7 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   host's singletons at runtime (shared React instance, host-emitted classes). Requires host contract
   v2+.
 - `html` — `htm` bound to the host `React.createElement`, for JSX-free markup.
+- `navigate`, `openRecord`, and `Link` — [workspace navigation](#in-app-navigation).
 - `WidgetProps` — `{ widget: DashboardWidgetMeta }`, the props every widget receives. Read
   `widget.entityName` / `widget.entityType` for the bound entity and `widget.extraConfig` for your
   server-side `.config(key, value)` values. When the component is embedded through
@@ -71,6 +72,32 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 
   A link with the REST spelling (`SalesOrders`) still opens, but the record gets no live updates
   and no localized tab title.
+
+## In-app navigation
+
+Use `Link` for a clickable destination and `navigate` or `openRecord` for programmatic navigation,
+for example after an operation completes. These exports require host contract v8 and use the same
+tab and pane rules as built-in UI actions.
+
+```tsx
+import { Button, Link, navigate, openRecord } from "@onno/widget-sdk";
+
+function ReportActions({ orderId }: { orderId: string }) {
+  return (
+    <>
+      <Link to="/reports?period=month">Monthly report</Link>
+      <Button onClick={() => navigate("/settings")}>Settings</Button>
+      <Button onClick={() => openRecord("documents", "orders", orderId)}>Open order</Button>
+    </>
+  );
+}
+```
+
+Pass application paths starting with `/` and omit the configured UI prefix (for example, `/ui`).
+Use `"catalogs"` or `"documents"` with the logical entity name and record ID for `openRecord`.
+`Link` adds the UI prefix to its real `href`, so copy-link, Ctrl/⌘-click and middle-click still
+work. Use `navigate("/reports", { newTab: true })` to open a separate browser tab explicitly.
+For navigation within the current workspace, use these exports so its open tabs and drafts survive.
 
 ## Styling
 

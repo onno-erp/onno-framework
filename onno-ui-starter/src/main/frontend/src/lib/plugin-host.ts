@@ -14,6 +14,7 @@ import * as ReactJSXRuntime from "react/jsx-runtime";
 import htm from "htm";
 import { registerWidget } from "./widget-bridge";
 import { subscribeUiEvents } from "./ui-event-bus";
+import { widgetNavigation } from "./widget-navigation";
 import { subscribeWidgetMessages, widgetLocale, widgetTranslate } from "./widget-messages";
 import { registerListRenderer, registerListSelection } from "./widget-registry";
 import type { Translate } from "@/lib/messages";
@@ -123,6 +124,8 @@ export interface OnnoHost {
   api: OnnoReadApi;
   /** Shared notification manager for widget action feedback. */
   toast: Pick<typeof toast, "success" | "error" | "info" | "warning">;
+  /** In-app navigation through the workspace router; added in host contract v8. */
+  navigation: typeof widgetNavigation;
   /** The host's UI component primitives (see {@link OnnoUi}) — the real design-system controls. */
   ui: OnnoUi;
   /** Shared live updates; added in host contract v3. */
@@ -272,6 +275,7 @@ export function installPluginHost(): OnnoHost {
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
     toast,
+    navigation: widgetNavigation,
     ui,
     events,
     // v6: widgets can translate their own labels. Additive — existing widgets keep working.
@@ -280,7 +284,7 @@ export function installPluginHost(): OnnoHost {
     // v4: added custom chat body renderers. Additive — existing widgets keep working.
     chatMessages,
     extensions,
-    version: 7,
+    version: 8,
   });
   window.onno = host;
   return host;

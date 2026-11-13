@@ -61,6 +61,12 @@ For a record surface, override `EntityView.detail(DetailSpec)` and declare the s
 with `detail.widget("Title").type("myWidget")`. Saved-record widgets receive `widget.record`; they
 do not render on New/Duplicate forms.
 
+For in-app links, import `Link` from `@onno/widget-sdk` and pass a route like
+`<Link to="/reports">Reports</Link>`. Use `navigate("/reports")` or
+`openRecord("catalogs", name, id)` for programmatic navigation. Pass paths without the UI mount
+prefix. Use these exports instead of `window.location` or a plain anchor for in-app routes to
+preserve workspace tabs and state. Requires UI host v8.
+
 Built-in `list` accepts catalogs/documents, not registers. Register KPI filters address dimensions;
 use a custom widget with `api.getBalance`/`getMovements` for resource-threshold or movement-list UI.
 

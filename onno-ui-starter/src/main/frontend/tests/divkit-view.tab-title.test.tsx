@@ -4,6 +4,8 @@ import { MemoryRouter, useLocation } from "react-router";
 import { DivKitView, workspaceTabState } from "@/views/divkit-view";
 import { openRoute } from "@/lib/navigation";
 import { PageActionsBar } from "@/components/page-actions-bar";
+import "@/lib/plugin-host";
+import { Link, openRecord } from "@onno/widget-sdk";
 
 function CurrentRoute() {
   const location = useLocation();
@@ -282,6 +284,31 @@ describe("DivKitView tab titles", () => {
     act(() => openRoute("onno://" + path.slice(1)));
     expect(screen.getAllByTestId("content-" + path)).toHaveLength(1);
     expect(record.parentElement).toHaveStyle({ visibility: "visible" });
+  });
+
+  it("lets a custom widget open a record and follow a link without losing its workspace draft", async () => {
+    const listPath = "/catalogs/customers";
+    const recordPath = "/documents/orders/r-1";
+    const pagePath = "/reports?period=month";
+    render(<MemoryRouter initialEntries={[listPath]}>
+      <DivKitView />
+      <CurrentRoute />
+      <button onClick={() => openRecord("documents", "orders", "r-1")}>Open order</button>
+      <Link to={pagePath}>Monthly report</Link>
+    </MemoryRouter>);
+
+    const editor = await screen.findByRole("textbox", { name: `Editor ${listPath}` });
+    fireEvent.change(editor, { target: { value: "Unsaved draft" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open order" }));
+    await screen.findByTestId(`content-${recordPath}`);
+    expect(editor).toBeVisible();
+
+    fireEvent.click(screen.getByRole("link", { name: "Monthly report" }));
+    await screen.findByTestId(`content-${pagePath}`);
+    expect(screen.getByTestId("current-route")).toHaveTextContent(pagePath);
+    expect(editor).toHaveValue("Unsaved draft");
+    expect(screen.getByTestId(`content-${recordPath}`)).toBeInTheDocument();
   });
 
   it("treats /app as a page rather than the onno://app profile-switch command", async () => {

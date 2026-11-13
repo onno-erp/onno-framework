@@ -268,6 +268,18 @@ export interface OnnoUi {
 
 export type ListSelectionProps = { ids: string[]; complete: () => void };
 
+export type NavigateOptions = {
+  /** Open a separate browser tab instead of navigating the current workspace. Default false. */
+  newTab?: boolean;
+};
+
+export type RecordKind = "catalogs" | "documents";
+
+export type LinkProps = Omit<import("react").ComponentPropsWithRef<"a">, "href"> & {
+  /** Application path such as `/catalogs/customers`, without the UI mount prefix. */
+  to: string;
+};
+
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
   extensions?: {
@@ -294,6 +306,12 @@ export interface OnnoHost {
   api: OnnoReadApi;
   /** Optional on older hosts; shared notification manager. */
   toast?: Record<"success" | "error" | "info" | "warning", (message: string) => string | number>;
+  /** Optional on older hosts; present from host contract v8. */
+  navigation?: {
+    navigate(path: string, options?: NavigateOptions): void;
+    openRecord(kind: RecordKind, name: string, id: string): void;
+    Link: import("react").ComponentType<LinkProps>;
+  };
   /** The host's UI component primitives (see {@link OnnoUi}). Present from host contract v2. */
   ui: OnnoUi;
   /** Shared live-event facade. Present from host contract v3. */
