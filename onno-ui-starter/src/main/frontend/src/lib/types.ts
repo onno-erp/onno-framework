@@ -136,13 +136,21 @@ export interface RefOptionSearch {
   documentId?: string;
 }
 
+/** A picker dialog window to decorate (#411): the field's context plus the ids on screen. */
+export type RefOptionDecorateRequest = Omit<RefOptionSearch, "query" | "limit"> & { ids: string[] };
+
+/** Which of the requested ids the dropdown would offer, and how to present them. */
+export interface RefOptionDecorations {
+  offered: string[];
+  decorations: Record<string, { badge?: string; tone?: string; color?: string; disabled?: boolean; reason?: string }>;
+}
+
 /**
  * An inline related-list (child rows) panel on a catalog or document view, backed by a junction —
  * a join catalog or an information register. The panel reads the junction rows whose {@link
  * viaField} ref points at the record being edited; a join-catalog junction also adds/removes rows
  * by creating/deleting join records (so a many-to-many edits inline like a document's tabular
- * section, with no mirrored data), while a register-backed junction is read-only. See {@code
- * RelatedList}.
+ * section, with no mirrored data), while a register-backed junction is read-only. See the server-side RelatedList type.
  */
 export interface RelatedListMeta {
   /** Panel id + REST sub-path: GET /api/{catalogs|documents}/{owner}/{id}/related/{name}. */
@@ -177,6 +185,7 @@ export interface CatalogMeta {
   tableName: string;
   codeLength: number;
   attributes: AttributeMeta[];
+  tabularSections?: TabularSectionMeta[];
 }
 
 export interface DocumentMeta {
@@ -273,6 +282,8 @@ export interface AuthUser {
 
 export interface UiEvent {
   type: string;
+  /** Local ActionResult.refresh invalidation, scoped to one mounted surface (not sent over SSE). */
+  surfacePath?: string;
   entityType?: string;
   entityName?: string;
   id?: string;

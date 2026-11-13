@@ -5,6 +5,7 @@ import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.PageWidgetDescriptor;
 import su.onno.metadata.DocumentDescriptor;
+import su.onno.lifecycle.Postable;
 import su.onno.ui.divkit.DashboardDivBuilder;
 import su.onno.ui.divkit.Div;
 import su.onno.ui.divkit.DivCard;
@@ -368,6 +369,10 @@ public class DivKitController implements DisposableBean {
         if (content == null) {
             List<PageWidgetDescriptor> widgets = layoutResolver.resolveWidgets(active).stream()
                     .filter(w -> access.canRead(principal, w.entityType(), w.entityName()))
+                    .map(w -> {
+                        validateWidgetFilter(w);
+                        return w;
+                    })
                     .toList();
             // No authored "/" page and no (readable) widgets means the app has no dashboard.
             // Render a neutral, empty surface rather than a phantom "Dashboard" / "Welcome
@@ -452,8 +457,7 @@ public class DivKitController implements DisposableBean {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not allowed to run action: " + key);
         }
         // No record to scope: a handler that touches data uses RecordAccess with ctx.subject().
-        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body)
-                .withSubject(subject(principal));
+        ActionContext ctx = ActionContext.from("page", route, null, principal.getName(), body, subject(principal));
         ActionResult result = action.handler().apply(ctx);
         return result != null ? result : ActionResult.ok();
     }
@@ -581,7 +585,35 @@ public class DivKitController implements DisposableBean {
         return layoutResolver.resolveWidgetConfigs(pb.widgets()).stream()
                 // An entity-less widget (e.g. the shared time-range picker) has no entity to gate on.
                 .filter(w -> w.entityType() == null || access.canRead(principal, w.entityType(), w.entityName()))
+                .map(w -> {
+                    validateWidgetFilter(w);
+                    return w;
+                })
                 .toList();
+    }
+
+    private void validateWidgetFilter(PageWidgetDescriptor widget) {
+        if (widget.extraConfig() == null) {
+            return;
+        }
+
+        String filter = widget.extraConfig().get("filter");
+        if (filter == null || filter.isBlank()) {
+            return;
+        }
+
+        if ("catalog".equals(widget.entityType())) {
+            catalogQuery.validateWidgetFilter(catalogQuery.require(widget.entityName()), filter);
+            return;
+        }
+
+        if (!"document".equals(widget.entityType())) {
+            return;
+        }
+
+        EntitySurfaceDescriptor surface = EntitySurfaceDescriptor.document(documentQuery.require(widget.entityName()));
+
+        WidgetFilter.parse(filter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
     }
 
     /** A route segment → a human-facing default page title ("/team-roster" → "Team Roster"). */
@@ -900,12 +932,29 @@ public class DivKitController implements DisposableBean {
                                              @RequestParam(required = false) String profile,
                                              @RequestParam(required = false) String viewport,
                                              Principal principal) {
+        return catalogRecord(name, id, profile, viewport, principal, false);
+    }
+
+    @GetMapping("/record-refresh/{kind}/{name}/{id}")
+    public Map<String, Object> recordRefresh(@PathVariable String kind, @PathVariable String name,
+                                             @PathVariable UUID id,
+                                             @RequestParam(required = false) String profile,
+                                             @RequestParam(required = false) String viewport,
+                                             Principal principal) {
+        return switch (kind) {
+            case "catalogs" -> catalogRecord(name, id, profile, viewport, principal, true);
+            case "documents" -> documentRecord(name, id, profile, viewport, principal, true);
+            default -> throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown record kind: " + kind);
+        };
+    }
+
+    private Map<String, Object> catalogRecord(String name, UUID id, String profile, String viewport,
+                                               Principal principal, boolean refreshOnly) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Load the record before building the actions: the custom DETAIL actions' per-record
         // functions (visibleWhen/label/…) evaluate against it (#255). Outside the viewer's record
         // scope this is a 404, like a missing record.
@@ -930,13 +979,17 @@ public class DivKitController implements DisposableBean {
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> record = EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL);
+        if (refreshOnly) {
+            return Map.of("record", record, "actions", SurfaceDivBuilder.actionItems(actions), "readOnly", !canWrite);
+        }
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         String label = str(row.get("_description"));
         if (label.isBlank()) label = str(row.get("_code"));
         if (label.isBlank()) label = str(meta.get("name"));
         Map<String, Object> content = entityFormBody("catalogs", name, id, label,
-                messages.get("action.save"), meta,
-                EntityJsonRepresentation.catalog(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
-                false, !canWrite, actions);
+                messages.get("action.save"), meta, record, false, !canWrite, actions,
+                new RecordRefreshContext(profileId, viewport));
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "catalogs", name, id.toString());
         }
@@ -948,7 +1001,11 @@ public class DivKitController implements DisposableBean {
                                           @RequestParam Map<String, String> params, Principal principal) {
         CatalogDescriptor desc = catalogQuery.require(name);
         access.requireWrite(principal, desc);
-        String profileId = activeProfile(principal, params.get("profile")).id();
+        UiLayout.Profile active = activeProfile(principal, params.get("profile"));
+        String profileId = active.id();
+        Map<String, Object> override = defaultSurfaceOverride("/catalogs/" + name + "/new", active,
+                Viewport.parse(params.get("viewport")), params.get("theme"), principal);
+        if (override != null) return override;
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeCatalog(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
@@ -1004,22 +1061,67 @@ public class DivKitController implements DisposableBean {
                         d -> withSelectionDownloads(d, "documents", name, desc.javaClass(), principal)));
     }
 
+    /**
+     * The {@code onno-list} descriptor a reference field's "Show all…" picker dialog (#411) opens:
+     * the target's list columns, sort, search and filters from its {@code EntityView} for the
+     * active profile. Unlike the list surface it is never replaced by an authored {@code Page} and
+     * does not require a view: the dropdown works without one, so a view-less target falls back to
+     * the default columns. Picking is read-only, so the descriptor carries no actions, inputs,
+     * New url, batch selection or alternate (map/custom) views. {@code hierarchical} tells the
+     * dialog to show the folder tree and breadcrumbs.
+     */
+    @GetMapping("/pickers/{kind}/{name}")
+    public Map<String, Object> pickerList(@PathVariable String kind, @PathVariable String name,
+                                          @RequestParam(required = false) String profile,
+                                          Principal principal) {
+        String profileId = activeProfile(principal, profile).id();
+        ResolvedListView view;
+        boolean hierarchical = false;
+        String surfaceKind;
+        if ("documents".equals(kind) || "document".equals(kind)) {
+            DocumentDescriptor desc = documentQuery.require(name);
+            access.requireRead(principal, desc);
+            view = viewResolver.documentList(desc, profileId);
+            surfaceKind = "documents";
+        } else if ("catalogs".equals(kind) || "catalog".equals(kind)) {
+            CatalogDescriptor desc = catalogQuery.require(name);
+            access.requireRead(principal, desc);
+            view = viewResolver.catalogList(desc, profileId);
+            hierarchical = desc.hierarchical();
+            surfaceKind = "catalogs";
+        } else {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown picker kind: " + kind);
+        }
+        Map<String, Object> descriptor = SurfaceDivBuilder.listDescriptor(
+                view, surfaceKind, name, null, false, List.of(), List.of());
+        descriptor.put("selectionCheckboxes", false);
+        descriptor.remove("selectionWidget");
+        descriptor.remove("map");
+        descriptor.remove("custom");
+        descriptor.put("hierarchical", hierarchical);
+        return descriptor;
+    }
+
     @GetMapping("/documents/{name}/{id}")
     public Map<String, Object> documentDetail(@PathVariable String name, @PathVariable UUID id,
                                               @RequestParam(required = false) String profile,
                                               @RequestParam(required = false) String viewport,
                                               Principal principal) {
+        return documentRecord(name, id, profile, viewport, principal, false);
+    }
+
+    private Map<String, Object> documentRecord(String name, UUID id, String profile, String viewport,
+                                                Principal principal, boolean refreshOnly) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireRead(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
         su.onno.access.AccessSubject subject = subject(principal);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> row = documentQuery.get(subject, desc, id);
         // A document the viewer can read but not change (outside its write scope) renders read-only.
         boolean canWrite = access.canWrite(principal, desc) && !uiProperties.isReadOnly()
                 && documentQuery.inScope(subject, desc, id, su.onno.access.AccessMode.WRITE);
-        boolean postable = Boolean.TRUE.equals(meta.get("postable"));
+        boolean postable = Postable.class.isAssignableFrom(desc.javaClass());
         boolean posted = Boolean.TRUE.equals(row.get("_posted"));
         // The view's placement overrides (f.action(key).primary()/inMenu()/hidden(), #183), read
         // straight from the view so every built-in key is honored, not only the keys the form
@@ -1050,11 +1152,15 @@ public class DivKitController implements DisposableBean {
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
+        Map<String, Object> record = EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL);
+        if (refreshOnly) {
+            return Map.of("record", record, "actions", SurfaceDivBuilder.actionItems(actions), "readOnly", !canWrite);
+        }
+        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         Map<String, Object> content = entityFormBody("documents", name, id,
                 str(meta.get("name")) + " " + str(row.get("_number")),
-                messages.get("action.save"), meta,
-                EntityJsonRepresentation.document(desc, row, EntityJsonRepresentation.Mode.LOGICAL),
-                false, !canWrite, actions);
+                messages.get("action.save"), meta, record, false, !canWrite, actions,
+                new RecordRefreshContext(profileId, viewport));
         if (commentsEnabled() && viewResolver.commentsEnabled(desc.javaClass())) {
             SurfaceDivBuilder.withComments(content, "documents", name, id.toString());
         }
@@ -1066,7 +1172,11 @@ public class DivKitController implements DisposableBean {
                                            @RequestParam Map<String, String> params, Principal principal) {
         DocumentDescriptor desc = documentQuery.require(name);
         access.requireWrite(principal, desc);
-        String profileId = activeProfile(principal, params.get("profile")).id();
+        UiLayout.Profile active = activeProfile(principal, params.get("profile"));
+        String profileId = active.id();
+        Map<String, Object> override = defaultSurfaceOverride("/documents/" + name + "/new", active,
+                Viewport.parse(params.get("viewport")), params.get("theme"), principal);
+        if (override != null) return override;
         requireView(desc.javaClass(), profileId);
         Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
@@ -1337,8 +1447,10 @@ public class DivKitController implements DisposableBean {
                                                   Map<String, Object> meta,
                                                   Map<String, Object> row, boolean duplicate) {
         return DivCard.of("onno-content",
-                entityFormBody(kind, name, id, title, "Create", meta, row, duplicate, false, List.of()));
+                entityFormBody(kind, name, id, title, "Create", meta, row, duplicate, false, List.of(), null));
     }
+
+    private record RecordRefreshContext(String profile, String viewport) {}
 
     /**
      * The bare {@code onno-form} content (no DivCard wrapper), so a caller can chain
@@ -1350,7 +1462,8 @@ public class DivKitController implements DisposableBean {
     private Map<String, Object> entityFormBody(String kind, String name, UUID id, String title,
                                                String submitLabel, Map<String, Object> meta,
                                                Map<String, Object> row, boolean duplicate,
-                                               boolean readOnly, List<SurfaceDivBuilder.HeaderAction> actions) {
+                                               boolean readOnly, List<SurfaceDivBuilder.HeaderAction> actions,
+                                               RecordRefreshContext refreshContext) {
         Map<String, Object> descriptor = new LinkedHashMap<>();
         descriptor.put("kind", kind);
         descriptor.put("name", name);
@@ -1359,6 +1472,9 @@ public class DivKitController implements DisposableBean {
         descriptor.put("submitLabel", submitLabel);
         descriptor.put("duplicate", duplicate);
         descriptor.put("readOnly", readOnly);
+        if (refreshContext != null) {
+            descriptor.put("refreshContext", refreshContext);
+        }
         if (!actions.isEmpty()) {
             descriptor.put("actions", SurfaceDivBuilder.actionItems(actions));
         }

@@ -495,6 +495,12 @@ public class UiAutoConfiguration implements WebMvcConfigurer {
     }
 
     @Bean
+    public GenericInformationRegisterController genericInformationRegisterController(
+            InformationRegisterQueryService query, UiAccessService access) {
+        return new GenericInformationRegisterController(query, access);
+    }
+
+    @Bean
     public GenericRegisterController genericRegisterController(RegisterQueryService registerQueryService,
                                                                UiAccessService access) {
         return new GenericRegisterController(registerQueryService, access);

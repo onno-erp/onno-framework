@@ -3,9 +3,11 @@ package su.onno.ui;
 import su.onno.access.AccessSubject;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
+import su.onno.metadata.TabularSectionDescriptor;
 
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,25 +38,53 @@ public class GenericCatalogController {
         this.batch = batch;
     }
 
+    /**
+     * Direct children of {@code parent} (roots without it). {@code folders=true} returns just the
+     * folders, each with {@code hasChildFolders} (#411).
+     */
     @GetMapping("/{name}/children")
     public List<Map<String, Object>> children(@PathVariable String name,
                                               @RequestParam(required = false) UUID parent,
+                                              @RequestParam(defaultValue = "false") boolean folders,
                                               @RequestParam(defaultValue = "logical") String representation,
                                               AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.catalogs(desc, query.children(subject, desc, parent),
+        return EntityJsonRepresentation.catalogs(desc, query.children(subject, desc, parent, folders),
                 EntityJsonRepresentation.parse(representation));
     }
 
+    /**
+     * The full nested tree; with {@code ids} only the paths from the roots to those records (#411).
+     * {@code ids} are comma-separated or repeated; malformed ones are ignored.
+     */
     @GetMapping("/{name}/tree")
     public List<Map<String, Object>> tree(@PathVariable String name,
+                                          @RequestParam(required = false) List<String> ids,
                                           @RequestParam(defaultValue = "logical") String representation,
                                           AccessSubject subject) {
         CatalogDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return EntityJsonRepresentation.catalogs(desc, query.tree(subject, desc),
-                EntityJsonRepresentation.parse(representation));
+        List<Map<String, Object>> rows = ids == null
+                ? query.tree(subject, desc)
+                : query.paths(subject, desc, parseIds(ids));
+        return EntityJsonRepresentation.catalogs(desc, rows, EntityJsonRepresentation.parse(representation));
+    }
+
+    private static List<UUID> parseIds(List<String> values) {
+        List<UUID> ids = new java.util.ArrayList<>();
+        for (String value : values) {
+            for (String part : value.split(",")) {
+                try {
+                    if (!part.isBlank()) {
+                        ids.add(UUID.fromString(part.trim()));
+                    }
+                } catch (IllegalArgumentException malformed) {
+                    // an unparseable id names no record: skip it
+                }
+            }
+        }
+        return ids;
     }
 
     @GetMapping("/{name}/{id}")
@@ -97,7 +127,7 @@ public class GenericCatalogController {
     }
 
     /**
-     * Create a copy of record {@code id}: same description/attributes/parent, fresh identity (new
+     * Create a copy of record {@code id}: same description/attributes/parent and line items, fresh identity (new
      * id, next code). Secret attributes are not copied — reads are redacted, so a copy would store
      * the sentinel; the clone starts with them unset. Runs through the normal create path
      * (lifecycle hooks, validation, write access). Powers the list's clipboard paste (⌘C/⌘V).
@@ -127,6 +157,22 @@ public class GenericCatalogController {
             if (v != null) {
                 body.put(attr.fieldName(), v);
             }
+        }
+        // Match document duplication: copy declared row attributes, never row identities or secrets.
+        for (TabularSectionDescriptor section : desc.tabularSections()) {
+            if (!(row.get(section.name()) instanceof List<?> rows)) continue;
+            List<Map<String, Object>> copies = new ArrayList<>();
+            for (Object value : rows) {
+                if (!(value instanceof Map<?, ?> source)) continue;
+                Map<String, Object> copy = new LinkedHashMap<>();
+                for (AttributeDescriptor attr : section.attributes()) {
+                    if (!attr.secret() && source.get(attr.columnName()) != null) {
+                        copy.put(attr.fieldName(), source.get(attr.columnName()));
+                    }
+                }
+                copies.add(copy);
+            }
+            body.put(section.name(), copies);
         }
         return EntityJsonRepresentation.catalog(desc, commands.create(desc, body, subject),
                 mode);

@@ -32,11 +32,12 @@ public class GenericRegisterController {
 
     @GetMapping("/{name}/balance")
     public List<Map<String, Object>> balance(@PathVariable String name,
+                                             @RequestParam(required = false) String asOf,
                                              @RequestParam Map<String, String> filters,
                                              AccessSubject subject) {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
-        return query.balance(subject, desc, filters);
+        return query.balance(subject, desc, filters, asOf);
     }
 
     @GetMapping("/{name}/turnover")

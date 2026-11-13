@@ -12,12 +12,28 @@ import { DEFAULT_MESSAGES, makeTranslate, type Translate } from "@/lib/messages"
  * itself — the same behaviour the rest of the shell has.
  */
 let translate: Translate = makeTranslate(DEFAULT_MESSAGES);
+let locale: string | undefined;
 const listeners = new Set<() => void>();
 
 /** Called by {@link MessagesProvider} when the resolved message map changes. */
 export function publishWidgetMessages(messages: Record<string, string>): void {
   translate = makeTranslate(messages);
   for (const listener of listeners) listener();
+}
+
+/**
+ * Called by {@link MessagesProvider} with {@code onno.ui.locale} once `/api/config` lands, so widgets
+ * format dates and numbers like the shell (`en-GB`: 10 Nov 2026) rather than in the browser's locale.
+ */
+export function publishWidgetLocale(next: string | undefined): void {
+  if (next === locale) return;
+  locale = next;
+  for (const listener of listeners) listener();
+}
+
+/** The configured locale, or undefined (the browser's) before config arrives or when none is set. */
+export function widgetLocale(): string | undefined {
+  return locale;
 }
 
 /** The current translate function. Stable identity between publishes, so it is a valid store snapshot. */

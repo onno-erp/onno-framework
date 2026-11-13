@@ -173,8 +173,8 @@ public final class ProcessController {
     private ProcessWorkItem masked(ProcessWorkItem item, Principal principal) {
         ProcessDomainLink link = item == null ? null : item.subject();
         if (link == null || recordAccess == null || subjects == null) return item;
-        if (recordAccess.canReadRecord(subjects.resolve(principal), link.kind(), link.entityName(),
-                link.id().toString())) {
+        if (recordAccess.canReadRecord(subjects.resolve(principal),
+                new RecordRoute(link.kind(), link.entityName(), link.id()))) {
             return item;
         }
         ProcessDomainLink restricted = new ProcessDomainLink(link.kind(), link.entityName(), link.id(),

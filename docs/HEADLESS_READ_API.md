@@ -16,18 +16,28 @@ every `/api/**` route is authenticated, reads need only the session cookie (or a
 
 ## Endpoints
 
+Historical register balances: `register_balance` accepts optional `asOf`: an inclusive
+ISO-8601 local date-time (`2024-03-31T18:00`) or a date (`2024-03-31`, the whole day); offsets are rejected with `400`. REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
+With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
+grouped by dimensions; dimension filters and record access policies apply before aggregation.
+Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
+
 ```text
 GET /api/catalogs/{name}/{id}            one catalog row
-GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs)
-GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays
+GET /api/catalogs/{name}/children?parent={uuid}   hierarchical children (hierarchical catalogs); folders=true: folders only, with hasChildFolders
+GET /api/catalogs/{name}/tree            full hierarchy as nested `children` arrays; ids=a,b: only the paths to those records
 GET /api/documents/{name}/{id}           one document, with tabular sections inlined
 GET /api/list/catalogs/{name}?cursor=&limit=       one keyset-paginated collection window
 GET /api/list/documents/{name}?cursor=&limit=&from=&to=  one document window
 POST /api/ref-options/search                  bounded contextual reference options
 POST /api/ref-options/recent                  remember a picked reference value (204, CSRF)
+POST /api/ref-options/decorate                which of a picker window's ids the dropdown would offer (CSRF)
+GET /api/divkit/pickers/{kind}/{name}         list descriptor for the "Show all..." picker dialog
+GET /api/divkit/record-refresh/{kind}/{name}/{id}  saved record and current header actions for the open form
 GET /api/registers/{name}/movements
 GET /api/registers/{name}/balance
 GET /api/registers/{name}/turnover?from=&to=
+GET /api/information-registers/{name}/records?from=&to=&cursor=&limit=
 GET /api/process-definitions                 latest versions plus typed graph descriptors
 GET /api/processes                           caller-visible process instances
 POST /api/processes/{definitionKey}          start; body is the definition's typed payload as JSON
@@ -42,6 +52,28 @@ GET /api/tasks/{workItemId}/history       ordered task audit trail
 POST /api/tasks/{workItemId}/delegate     body: {"targetActorId":"identity-record-uuid","reason":"…"}
 POST /api/tasks/{workItemId}/complete        body: {"outcome":"ENUM_CONSTANT"}
 ```
+
+Information-register records return one keyset window of stored rows, including periodic
+history, in the same envelope as the catalog/document feeds: `{rows, nextCursor, hasMore}`.
+Use `from` / `to` as optional inclusive ISO local date-times (for example
+`2024-03-31T23:59:59`); the API reads stored periods without changing bucket granularity.
+Pass dimension Java field names as equality query parameters, for example
+`?customer=<uuid>&region=North`. Reference and enumeration dimensions use their stored UUIDs.
+Only declared non-secret dimensions participate in filtering; any other query parameter is
+rejected with `400` instead of being ignored.
+
+`limit` defaults to 100 and is clamped to 1..500. Pass the previous `nextCursor` back as `cursor`
+for the next window; `nextCursor` is `null` (and `hasMore` false) on the last one. The cursor is
+sealed to the caller's record access, so a cursor issued to another user is rejected with `400`.
+Rows are ordered by period descending, then ID descending to break ties; nonperiodic (`NONE`)
+registers order by ID descending and reject `from` / `to` with `400`.
+Invalid dates and reversed ranges also return `400`.
+
+The response uses logical names: `id`, `period` (periodic registers only), dimension/resource/
+attribute field names, and reference `*Display` / `*Ref` sidecars. `@AccessControl` gates the route
+(`403` without a read grant); record policies filter rows before pagination, and restricted references
+are masked by the common resolver. Secret attributes carry the common redacted sentinel.
+Unknown register names return `404`. This is a read-only route; it does not expose SQL or writes.
 
 The optional `onno-crm-starter` adds a focused command surface for its packaged inbox widget:
 
@@ -102,6 +134,11 @@ token mappings fail atomically.
 }]
 ```
 
+For a mounted record form, `GET /api/divkit/record-refresh/{kind}/{name}/{id}` returns
+`{record, actions, readOnly}`. Pass the form's `profile` and `viewport` to preserve action placement.
+The response applies the same access rules as the record surface. `record` uses the logical
+representation and `actions` uses the form descriptor's header action shape.
+
 Action handlers use the successful response `{refresh, feedback}`. Feedback has `severity`
 (`info|success|warning|error`) and `presentation` (`toast|dialog|inline`). Text is structured through
 `ActionToast`, `ActionDialog`, or `ActionFeedback`; navigation is static action declaration
@@ -134,7 +171,11 @@ context-aware search input. With an empty `query` it leads with up to five of th
 picks, each flagged `_recent: true`, then the ordinary options without duplicates, still within
 `limit`; send `"recent": false` to omit them. Picks are remembered with `POST /api/ref-options/recent`
 (`{targetKind, targetName, id}`); a recent pick is re-read through the same search, so it obeys the
-deletion mark, record scope and the request's `filter` like any other option. There is no unbounded collection or offset-paging endpoint. See
+deletion mark, record scope and the request's `filter` like any other option. The "Show all..." picker
+dialog pages the ordinary list feed with the field's `filter` (plus `_parent = <uuid>` / `_parent =
+null` for folder navigation on a hierarchical catalog) and checks each window with
+`POST /api/ref-options/decorate` (`ids` plus the `/search` context), which answers `offered` ids and
+their `decorations`. There is no unbounded collection or offset-paging endpoint. See
 [onno-ui-starter/README](../onno-ui-starter/README.md) for the complete list contract.
 
 Catalog/document single-record, hierarchy, related-catalog, list-feed, reference-option,
@@ -159,7 +200,7 @@ Catalog/document responses use **logical API names by default**. Attributes use 
 | `deletionMark` | catalog, document | soft-delete flag |
 | `folder`, `parent` | hierarchical catalog | folder flag / parent UUID |
 | `version` | catalog, document | optimistic-lock version |
-| `parentId`, `lineNumber` | tabular-section row | back-reference to the document / 1-based ordinal |
+| `parentId`, `lineNumber` | tabular-section row | back-reference to the owning catalog/document / 1-based ordinal |
 | `<fieldName>` | attribute | Java field name; a `Ref<>`/enum is a UUID, a `PolyRef` is `JavaType\|UUID` |
 | `<fieldName>Display` | `Ref<>`, `PolyRef` & enum attrs | resolved human label |
 | `<fieldName>Ref` | `Ref<>`/`PolyRef` attrs | `{ id, type, display, kind?, javaType?, code?, avatarUrl?, color? }`; `type` is the target's logical name, while `kind`/`javaType` are present for polymorphic refs |
@@ -252,7 +293,7 @@ writes use the same field name:
 }
 ```
 
-List-feed rows do **not** inline tabular sections; single-document reads do. A single-record read
+List-feed rows do **not** inline tabular sections; single-catalog and single-document reads do. A single-record read
 returns `404` when the id is unknown.
 
 ## Reference & enum expansion
@@ -433,7 +474,24 @@ When `onno.crm.channels.gmail.enabled=true`, `CrmChannelAccess`-protected `POST 
 returns `{ "url": "https://accounts.google.com/…" }`. The session-bound, single-use GET callback at
 `/api/crm/gmail/callback` exchanges the authorization code and returns to the local `returnPath` supplied to the authorize request.
 Credentials are never returned. Existing `/api/crm/channels` includes Gmail health and actions;
-message reading and reply enqueueing retain the standard CRM endpoints and authorization.
+message reading and reply enqueueing retain the standard CRM endpoints and authorization. New
+connections ask for `gmail.readonly`, `gmail.send` and `gmail.modify`; only the first two are required.
+
+The delivery connection (`GET /api/crm/conversations/{id}/delivery`) adds `senders:[{id,label}]` and
+the default `sender` (the conversation's own mailbox address); the reply command accepts an optional
+`from` among those ids (else 400). Gmail offers shared mailboxes and the caller's own personal one.
+
+Mail search and restore, all requiring inbox workspace access (restore: write access) and limited to
+shared mailboxes and the caller's own personal ones (any other `account` is 404):
+
+- `GET /api/crm/gmail/accounts` → `[{address,label,canModify}]`.
+- `GET /api/crm/gmail/search?account=&q=&pageToken=` (`q` required, at most 500 characters) →
+  `{messages:[{id,threadId,from,subject,snippet,date,archived,conversationId}],nextPageToken}`, 20 per
+  page over all mail including archived (spam and trash excluded); `date` is ISO-8601,
+  `conversationId` is null unless the thread is already in the CRM and readable.
+- `POST /api/crm/gmail/restore` `{account,messageId,toInbox}` → `{conversationId,movedToInbox}`;
+  imports the whole thread and, with `toInbox` and the modify grant, moves it back to the Inbox.
+  Idempotent. Gmail failures answer 429, 404, 409 (reconnect) or 502.
 
 ### CRM inbox workspace API
 
@@ -479,7 +537,7 @@ selected-row toolbar. It does not alter generated record reads or grant command 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; a reply also carries the `senderAccount` it was queued with (a Gmail mailbox address), null otherwise. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
@@ -620,3 +678,10 @@ from the ordinary shared bot inbox, with reply permissions checked before sends.
 starter README for lifecycle, skipped paused updates, attachment and history limits.
 
 CRM audio attachments keep the existing `contentType`, `url`, `filename`, `size`, and `image` contract. The inbox renders `audio/*` with playback controls; no additional message field is required. Common audio formats served through `/api/media/{key}` use inline disposition.
+
+Catalog `@TabularSection` fields follow the same row contract as documents in REST and MCP.
+Create/update accepts section-name arrays; omitted sections are preserved and `[]` clears them.
+Catalog header and section replacements share one transaction, including the version check.
+
+`POST /api/catalogs/{name}/{id}/duplicate` also copies tabular-section rows in their original order.
+The copy receives fresh record and row IDs; secret attributes are omitted, as for documents.

@@ -158,7 +158,9 @@ When adding a starter, include:
 - Javadoc currently emits many missing-comment warnings. Broken links are not acceptable because they can fail
   publication.
 - The frontend npm audit may report moderate vulnerabilities. Do not run forced upgrades without checking the
-  impact on the UI build and generated assets.
+  impact on the UI build and generated assets. `CI` runs the same audits as the release workflow on main and every PR
+  (`.github/scripts/npm-audit.mjs`, with its reviewed allowlist), so a new advisory blocks a merge rather
+  than a release tag.
 
 ### AI-Friendly Change Style
 
@@ -259,7 +261,10 @@ public class SalesOrder extends DocumentObject implements BeforeWriteHandler, Po
 
 ### Tabular Sections
 
-Tabular sections are line-item collections owned by a document.
+Tabular sections are line-item collections owned by a catalog or document.
+Catalog sections use `catalog_<owner>_<section>` tables and the same form editor as documents.
+REST/MCP writes accept section-name arrays; omitted sections stay unchanged, `[]` clears them.
+Catalog headers and submitted sections commit or roll back together.
 
 Examples:
 - Invoice lines
@@ -281,7 +286,7 @@ public class SalesOrderLine extends TabularSectionRow {
 
 Each `@TabularSection` must use its own concrete `TabularSectionRow` class. Spring Data JDBC maps a
 row class to one generated child table, so startup rejects the same concrete row class reused by
-another document or section. Share common fields and behavior through a base row class, then create
+another catalog, document or section. Share common fields and behavior through a base row class, then create
 a distinct concrete subclass for each section.
 
 ### Accumulation Registers
@@ -989,7 +994,7 @@ UI is authored as Java classes registered as Spring beans — never as annotatio
 
 Field-hint methods on `FieldHintBuilder` (used inside `EntityView.fields`): `order(int)`, `group(String)`, `width(String)`, `widget(String)`, `placeholder(String)`, `format(String)`, `hint(String)`, `label(String)`, `refSecondary(String)`, `openButton(bool)`, `clearButton(bool)`, `hideInList()`, `hideInForm()`, `hideInDetail()`, plus explicit `visibleInList(bool)`/`visibleInForm(bool)`/`visibleInDetail(bool)`. Only set what differs from the default. `width(String)` is a form-layout hint (`half`/`1/2`/`50%` pairs fields); a list column falls back to it only when it is a pixel value. Size list columns with the list-only `ListSpec.width(field, px)` / `width(field, "<n>px")` (getter-reference overloads too), which wins and rejects non-pixel values at configuration time.
 
-`refField(Order::getCustomer).refSecondary(Customer::getPhone)` shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records. `refField` retains the `Ref<T>` target type, so the secondary getter must belong to `T`. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. The picker also offers the user's recent picks for that target first on an empty query, and shows an "open" button (opens the selected record) and a clear button; `refField(...).openButton(false)` / `.clearButton(false)` hide them per field, in the header and, addressed as `"section.field"`, in tabular-section rows. A required ref is never clearable, whatever `clearButton` says (#409). A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
+`refField(Order::getCustomer).refSecondary(Customer::getPhone)` shows a secondary attribute of the picked record under its name in the ref picker, to disambiguate same-named records. `refField` retains the `Ref<T>` target type, so the secondary getter must belong to `T`. Independent of search: the ref-picker typeahead already matches every text column of the target (code/description/number + each String attribute), so a record is findable by a secondary attribute whether or not it is shown. The picker also offers the user's recent picks for that target first on an empty query, and shows an "open" button (opens the selected record) and a clear button; `refField(...).openButton(false)` / `.clearButton(false)` hide them per field, in the header and, addressed as `"section.field"`, in tabular-section rows. A required ref is never clearable, whatever `clearButton` says (#409). The options end with "Show all...", a dialog over the target's full list (its `EntityView` columns, filters and grouping; a folder tree and breadcrumbs for a hierarchical catalog) that obeys the same `refFilter`, record scope, `refOptions` decorator and `uniqueWithinSection` rules as the dropdown (#411). A **New** form seeds its inputs from a fresh instance, so a domain field initializer (`private OrderStatus status = OrderStatus.NEW;`) pre-fills the form, not just records written through code (an entity with no no-arg constructor opens blank; a `Ref` default can't be a literal initializer — seed it via a query-param prefill instead: append write-path field names to the New route, e.g. `/ui/documents/Reservations/new?room=<uuid>&startsAt=2026-07-16T19:00`; `Ref`/enum values are UUID strings, temporals ISO, unknown keys are skipped, and prefill applies after `OnFillingHandler`/initializers).
 
 `label(String)` overrides a field's display label on the record form and list header — for custom attributes (over `@Attribute(displayName=…)`) and, crucially, for the built-in **system columns** that otherwise have no DSL label path: `code`/`description` (catalogs) and `number`/`date`/`posted` (documents). The primary use is localization, e.g. `f.field("code").label("Код")`, `f.field("posted").label("Статус")`. It is the form/detail counterpart to `ListSpec.label(field, …)` (which relabels only the list header); a `ListSpec.label` on the same field still wins for the list column specifically.
 
@@ -1221,7 +1226,10 @@ recorded in `onno_crm_gmail_grouping`. Replies retain the thread selected when q
 The Instagram adapter in `onno-crm-channels-starter` owns the opt-in `onno.crm.channels.instagram.enabled`
 connection, private token-file reads, and additive `onno_crm_ig_*` tables. `Channel.INSTAGRAM` is
 append-only; preserve existing enum constants. Provider-visible polling messages deduplicate by
-account/message ID and route by account/peer, preserving contact canonicalization. Outbound sends
+account/message ID and route by account/peer, preserving contact canonicalization. Polling imports
+only messages at or after the account's persisted UTC activation cutoff (`onno_crm_ig_sync`), never
+history; never reset or overwrite that cutoff in code. Polling is head-first and bounded per poll, and
+per-thread watermarks/cursors/checkpoint advance only after message inserts commit. Outbound sends
 are queued transactionally and enforce a 24-hour reply window; uncertain sends require explicit
 retry. This adapter does not configure public webhooks or publish the Meta app.
 

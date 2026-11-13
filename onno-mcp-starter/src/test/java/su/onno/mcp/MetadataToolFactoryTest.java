@@ -85,6 +85,20 @@ class MetadataToolFactoryTest {
     }
 
     @Test
+    void describeMetadataIncludesCatalogSections() {
+        var profile = new CatalogDescriptor("Profiles", "Profiles", "catalog_profiles", Object.class,
+                9, false, true, "", "", List.of("RENTALS"), List.of("RENTALS"),
+                List.of(), List.of(), List.of(new su.onno.metadata.TabularSectionDescriptor(
+                "filters", "filters", "catalog_profiles_filters", Object.class, clients.attributes())));
+        registry.registerCatalog(profile);
+        var describe = byName(factory(new OnnoMcpProperties()).build(), "describe_metadata");
+        var result = describe.callHandler().apply(exchange(),
+                new CallToolRequest("describe_metadata", Map.of("kind", "catalog")));
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(result.content().toString()).contains("Profiles", "tabularSections", "filters");
+    }
+
+    @Test
     void exposesFullToolSetByDefault() {
         Set<String> names = names(factory(new OnnoMcpProperties()).build());
         assertThat(names).contains(
@@ -232,9 +246,24 @@ class MetadataToolFactoryTest {
     }
 
     @Test
+    void registerBalanceForwardsInclusiveCutoffAndFilters() {
+        when(registerQuery.require("Cash")).thenReturn(cash);
+        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash),
+                org.mockito.ArgumentMatchers.eq(Map.of("name", "Main")),
+                org.mockito.ArgumentMatchers.eq("2024-03-31T23:59:59")))
+                .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 42)), false));
+        var balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
+        var result = balance.callHandler().apply(exchange(), new CallToolRequest("register_balance",
+                Map.of("name", "Cash", "asOf", "2024-03-31T23:59:59", "filters", Map.of("name", "Main"))));
+        assertThat(result.isError()).isNotEqualTo(true);
+        assertThat(result.content().toString()).contains("42");
+        assertThat(balance.tool().inputSchema().properties()).containsKey("asOf");
+    }
+
+    @Test
     void registerBalanceFailsLoudlyWhenTheBoundedQueryTruncates() {
         when(registerQuery.require("Cash")).thenReturn(cash);
-        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.eq(Map.of())))
+        when(registerQuery.balanceBounded(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(cash), org.mockito.ArgumentMatchers.eq(Map.of()), org.mockito.ArgumentMatchers.isNull()))
                 .thenReturn(new RegisterQueryService.BoundedRows(List.of(Map.of("amount", 10)), true));
         SyncToolSpecification balance = byName(factory(new OnnoMcpProperties()).build(), "register_balance");
 

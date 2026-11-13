@@ -68,9 +68,36 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
       expect(updateCatalogItem).toHaveBeenCalledWith(
         "episodes",
         "episode-1",
-        expect.objectContaining({ observedAt: "2026-01-16T04:00:00.000" })
+        expect.objectContaining({ observedAt: "2026-01-16T04:00:00.000" }),
+        { silent: true }
       )
     );
+  });
+
+  it("edits catalog rows and sends them in the same save payload", async () => {
+    updateCatalogItem.mockResolvedValue({ id: "profile-1" });
+    validateRecord.mockResolvedValue({ fieldErrors: {}, formErrors: [] });
+    const form: FormDescriptor = {
+      kind: "catalogs", name: "Profiles", id: "profile-1", title: "Profile", submitLabel: "Save",
+      meta: { name: "Profiles", attributes: [], tabularSections: [{
+        name: "filters", tableName: "catalog_profiles_filters", label: "Event filters",
+        attributes: [{ fieldName: "property", columnName: "property", displayName: "Property",
+          javaType: "String", visibleInForm: true } as never],
+      }] },
+      initial: { id: "profile-1", filters: [{ property: "event" }] },
+    };
+    render(<EntityFormWidget form={form} />);
+    expect(screen.getByRole("table", { name: "Event filters" })).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("event"), { target: { value: "duration" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add row" }));
+    const inputs = screen.getAllByRole("textbox");
+    fireEvent.change(inputs[inputs.length - 1], { target: { value: "level" } });
+    expect(updateCatalogItem).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateCatalogItem).toHaveBeenCalledWith(
+      "Profiles", "profile-1", expect.objectContaining({ filters: [{ property: "duration" }, { property: "level" }] }),
+      { silent: true }
+    ));
   });
 
   it("normalizes document header and tabular-section LocalDateTimes before save", async () => {
@@ -108,7 +135,8 @@ describe("EntityFormWidget temporal round trips (#267)", () => {
         expect.objectContaining({
           startsAt: "2026-01-16T04:00:00.000",
           slots: [expect.objectContaining({ happensAt: "2026-01-16T05:30:00" })],
-        })
+        }),
+        { silent: true }
       )
     );
   });

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { SurfaceHost } from "@/lib/surface-refresh";
 import { EntityFormWidget, type FormDescriptor } from "@/components/entity-form-widget";
 import { IslandErrorBoundary } from "@/lib/island-error-boundary";
 
@@ -86,9 +87,11 @@ export function FormPortals() {
     <>
       {list.map((m) =>
         createPortal(
-          <IslandErrorBoundary label={m.form.title || m.form.name}>
-            <EntityFormWidget form={m.form} />
-          </IslandErrorBoundary>,
+          <SurfaceHost.Provider value={m.el}>
+            <IslandErrorBoundary label={m.form.title || m.form.name}>
+              <EntityFormWidget form={m.form} />
+            </IslandErrorBoundary>
+          </SurfaceHost.Provider>,
           m.el,
           String(m.id)
         )

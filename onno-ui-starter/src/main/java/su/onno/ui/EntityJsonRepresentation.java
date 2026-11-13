@@ -3,6 +3,7 @@ package su.onno.ui;
 import su.onno.metadata.AttributeDescriptor;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
+import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.TabularSectionDescriptor;
 
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,7 @@ final class EntityJsonRepresentation {
             Map.entry("_is_folder", "folder"),
             Map.entry("_parent", "parent"),
             Map.entry("_parent_restricted", "parentRestricted"),
+            Map.entry("_has_child_folders", "hasChildFolders"),
             Map.entry("_version", "version"),
             Map.entry("_actions", "actions"),
             Map.entry("_style", "style")
@@ -120,9 +122,19 @@ final class EntityJsonRepresentation {
         return logical;
     }
 
+    static List<Map<String, Object>> informationRegisters(InformationRegisterDescriptor descriptor,
+                                                          List<Map<String, Object>> rows) {
+        List<AttributeDescriptor> fields = new ArrayList<>(descriptor.dimensions());
+        fields.addAll(descriptor.resources());
+        fields.addAll(descriptor.attributes());
+        return rows.stream().map(row -> logicalRow(row, Map.of("_id", "id", "_period", "period"), fields))
+                .toList();
+    }
+
     private static Map<String, Object> logicalCatalog(CatalogDescriptor descriptor,
                                                        Map<String, Object> row) {
         Map<String, Object> logical = logicalRow(row, CATALOG_SYSTEM_KEYS, descriptor.attributes());
+        sections(logical, row, descriptor.tabularSections());
         Object children = valueIgnoreCase(row, "children");
         if (children instanceof List<?> rows) {
             logical.put("children", catalogChildren(descriptor, rows));
@@ -143,7 +155,13 @@ final class EntityJsonRepresentation {
     private static Map<String, Object> logicalDocument(DocumentDescriptor descriptor,
                                                         Map<String, Object> row) {
         Map<String, Object> logical = logicalRow(row, DOCUMENT_SYSTEM_KEYS, descriptor.attributes());
-        for (TabularSectionDescriptor section : descriptor.tabularSections()) {
+        sections(logical, row, descriptor.tabularSections());
+        return logical;
+    }
+
+    private static void sections(Map<String, Object> logical, Map<String, Object> row,
+                                 List<TabularSectionDescriptor> sections) {
+        for (TabularSectionDescriptor section : sections) {
             Object sectionValue = valueIgnoreCase(row, section.name());
             if (!(sectionValue instanceof List<?> rows)) {
                 continue;
@@ -157,7 +175,6 @@ final class EntityJsonRepresentation {
             }
             logical.put(section.name(), logicalRows);
         }
-        return logical;
     }
 
     private static Map<String, Object> logicalRow(Map<String, Object> row,

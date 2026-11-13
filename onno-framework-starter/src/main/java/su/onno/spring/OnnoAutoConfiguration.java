@@ -50,19 +50,22 @@ public class OnnoAutoConfiguration extends AbstractJdbcConfiguration {
 
     /**
      * Maps each tabular-section row class to the child table the schema generator creates
-     * ({@code document_<doc>_<section>}), so {@link OnnoNamingStrategy} can give Spring Data JDBC
-     * the same table name when it persists a document's {@code @TabularSection List<Row>}. Rejects
+     * ({@code document_<doc>_<section>} or {@code catalog_<catalog>_<section>}), so {@link OnnoNamingStrategy} can give Spring Data JDBC
+     * the same table name when it persists a catalog/document's {@code @TabularSection List<Row>}. Rejects
      * a concrete row class owned by more than one section because a class can map to only one table.
      */
     static Map<Class<?>, String> buildTabularSectionTables(List<String> scanPackages) {
         Map<Class<?>, String> map = new LinkedHashMap<>();
         Map<Class<?>, TabularSectionOwner> owners = new HashMap<>();
         MetadataScanner scanner = new MetadataScanner(new DefaultNamingStrategy());
-        for (Class<?> clazz : new DocumentScanner().scan(scanPackages)) {
-            DocumentDescriptor doc = scanner.scanDocument(clazz);
-            for (TabularSectionDescriptor ts : doc.tabularSections()) {
+        List<Class<?>> classes = new ArrayList<>(new DocumentScanner().scan(scanPackages));
+        classes.addAll(new CatalogScanner().scan(scanPackages));
+        for (Class<?> clazz : classes) {
+            List<TabularSectionDescriptor> sections = su.onno.model.CatalogObject.class.isAssignableFrom(clazz)
+                    ? scanner.scan(clazz).tabularSections() : scanner.scanDocument(clazz).tabularSections();
+            for (TabularSectionDescriptor ts : sections) {
                 TabularSectionOwner owner = new TabularSectionOwner(
-                        doc.javaClass(), ts.fieldName(), ts.name(), ts.tableName());
+                        clazz, ts.fieldName(), ts.name(), ts.tableName());
                 TabularSectionOwner existing = owners.putIfAbsent(ts.rowClass(), owner);
                 if (existing != null && !existing.equals(owner)) {
                     throw new IllegalStateException(

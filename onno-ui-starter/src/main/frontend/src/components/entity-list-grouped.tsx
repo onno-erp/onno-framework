@@ -1,3 +1,5 @@
+import { useSurfaceRefresh } from "@/lib/surface-refresh";
+import { openRoute } from "@/lib/navigation";
 import { ListSelectionCheckbox, loadedSelectionState, selectLoaded } from "./list-selection-checkbox";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type Ref, type SetStateAction } from "react";
 import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
@@ -7,12 +9,14 @@ import type { EntityRecord, UiEvent } from "@/lib/types";
 import { useMessages } from "@/providers/messages-provider";
 import {
   ListCell,
+  PickRowBadge,
   ROW_H,
   entityRowId,
   entityRowTone,
   eventMatches,
   type ListAggregate,
   type ListColumn,
+  type ListSelectMode,
 } from "@/components/entity-list-widget";
 
 /** One expand filter param a group header carries; the flat feed replays it to load the group's rows. */
@@ -27,10 +31,6 @@ type GroupHeader = {
 };
 /** Per-group lazy row state: the loaded rows, the cursor for the next window, and load flags. */
 type GroupRows = { rows: EntityRecord[]; cursor: string | null; hasMore: boolean; loading: boolean };
-
-function dispatchAction(url: string) {
-  window.dispatchEvent(new CustomEvent("onno:action", { detail: url }));
-}
 
 /**
  * The grouped rendering of a list: one collapsible header per {@code GROUP BY} value (or date
@@ -65,6 +65,7 @@ export function GroupedList({
   clearSelection,
   selectionCheckboxes = false,
   openRowMenu,
+  selectMode,
 }: {
   feedBase: string;
   kind: string;
@@ -93,6 +94,8 @@ export function GroupedList({
   clearSelection: () => void;
   /** Opens the island-level row context menu (built-ins + custom actions + batch ops). */
   openRowMenu: (menu: { x: number; y: number; id: string; url: string; row: EntityRecord; only?: string }) => void;
+  /** Reference-picker mode (#411): rows highlight and activate instead of opening. */
+  selectMode?: ListSelectMode;
 }) {
   const t = useMessages();
   const [groups, setGroups] = useState<GroupHeader[] | null>(null);
@@ -101,6 +104,8 @@ export function GroupedList({
   const autoExpand = useRef(false);
   // Loaded rows per expanded group, keyed by group index; absent = collapsed.
   const [expanded, setExpanded] = useState<Record<number, GroupRows>>({});
+  const selectModeRef = useRef(selectMode);
+  selectModeRef.current = selectMode;
   const aggSig = JSON.stringify(aggregates);
 
   // (Re)fetch the group headers whenever the grouping, granularity, or the shared query changes.
@@ -147,6 +152,7 @@ export function GroupedList({
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   const [liveTick, setLiveTick] = useState(0);
+  useSurfaceRefresh(() => setLiveTick((tick) => tick + 1));
   useEffect(() => {
     let timer: number | undefined;
     const onData = (e: Event) => {
@@ -172,6 +178,7 @@ export function GroupedList({
       fetch(`${feedBase}?${p.toString()}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then((data: { rows: EntityRecord[]; nextCursor: string | null; hasMore: boolean }) => {
+          if (data.rows?.length) selectModeRef.current?.onRowsLoaded?.(data.rows);
           setExpanded((prev) => {
             const cur = prev[index];
             if (!cur) return prev; // collapsed while the fetch was in flight
@@ -414,6 +421,43 @@ export function GroupedList({
                     const rowId = openable ? entityRowId(row) : null;
                     const url = rowId ? `onno://${kind}/${name}/${rowId}` : undefined;
                     const isSelected = rowId != null && selected.has(rowId);
+                    if (selectMode) {
+                      // Select mode (#411): the same pick grammar as the flat table.
+                      const pick = selectMode.rowState?.(row);
+                      if (pick?.hidden) return null;
+                      const highlighted = rowId != null && rowId === selectMode.highlightedId;
+                      return (
+                        <div
+                          key={ri}
+                          role="option"
+                          aria-selected={highlighted}
+                          aria-disabled={pick?.disabled || undefined}
+                          data-onno-pick-row={rowId ?? ""}
+                          data-onno-selected={highlighted ? "true" : undefined}
+                          title={pick?.reason || undefined}
+                          onClick={() => selectMode.onHighlight(row)}
+                          onDoubleClick={() => {
+                            if (!pick?.disabled) selectMode.onActivate(row);
+                          }}
+                          onContextMenu={(e) => e.preventDefault()}
+                          className={cn(
+                            "relative grid cursor-pointer select-none items-center gap-3 border-b border-border/50 text-sm",
+                            leftPad,
+                            !highlighted && rowStyleClass(entityRowTone(row)),
+                            pick?.disabled && "cursor-not-allowed opacity-55"
+                          )}
+                          style={{ minHeight: ROW_H, gridTemplateColumns: template }}
+                        >
+                          {columns.map((c) => {
+                            const text = selectMode.cellText?.(row, c);
+                            return text !== undefined
+                              ? <span key={c.columnName} className="min-w-0 truncate text-muted-foreground">{text}</span>
+                              : <ListCell key={c.columnName} row={row} col={c} />;
+                          })}
+                          <PickRowBadge pick={pick} />
+                        </div>
+                      );
+                    }
                     return (
                       <div
                         key={ri}
@@ -451,7 +495,7 @@ export function GroupedList({
                             clearSelection();
                             return;
                           }
-                          if (url) dispatchAction(url);
+                          if (url) openRoute(url);
                         }}
                         onContextMenu={(e) => {
                           if (!url || !rowId) return; // keep the browser menu for non-openable rows

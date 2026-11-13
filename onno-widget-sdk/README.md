@@ -45,7 +45,7 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
 - **UI primitives** — the host's real design-system controls, so a widget matches the product instead
   of shipping hand-rolled lookalikes. Import them **by name** (`import { DatePicker, Select, Button }
   from "@onno/widget-sdk"`) or off the `ui` object (`ui.Select`). Curated subset — `Button`, `Badge`,
-  `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `Card`
+  `Input`, `Label`, `Textarea`, `Checkbox`, `Switch`, `Segmented`, `DatePicker`, `RefSelect`, `Card`
   (+ `CardHeader`/`CardTitle`/`CardDescription`/`CardContent`), `Popover`
   (+ `PopoverTrigger`/`PopoverContent`), and `Select`
   (+ `SelectTrigger`/`SelectValue`/`SelectContent`/`SelectItem`/`SelectGroup`). They resolve to the
@@ -263,6 +263,50 @@ registerListRenderer("inbox", Inbox, { ownsLoadingMore: true });
 Only the `EntityListWidget` props documented here (`list`, `renderer`, `toolbarPlacement`) are SDK
 contract. Others the host accepts — `initialPage`, `toolbarFooter`, `toolbarOptions.filterSidebar`
 and similar — are host-internal hooks for first-party workspaces and may change without notice.
+
+### Dates in the app's locale
+
+`Intl` with an `undefined` locale formats in the browser's language, so an `en-US` browser writes
+"Nov 6" in an app configured for `en-GB`. Pass `useLocale()` (in a component, re-rendering when
+`/api/config` lands) or `locale()` (anywhere else) instead: it returns `onno.ui.locale`, and
+undefined (the browser's locale) before config arrives, when none is set, or on a host older than
+contract v7.
+
+```tsx
+import { useLocale } from "@onno/widget-sdk";
+const when = new Intl.DateTimeFormat(useLocale(), { day: "numeric", month: "short" }).format(date);
+```
+
+### Reference pickers
+
+Import `RefSelect` to pick a catalog or document record. It is the same control as a generated
+form's reference field: a server-side typeahead (the catalog never loads whole), recent picks first,
+"+ New" opening the target's new-record form, and "Show all…" opening the target's full list —
+columns, filters, folders — in a picker dialog. Requires host contract v7.
+
+```tsx
+import { Label, RefSelect, useState } from "@onno/widget-sdk";
+
+function SupplierField({ eventId }: { eventId: string }) {
+  const [supplier, setSupplier] = useState<string | null>(null);
+  return <>
+    <Label htmlFor="supplier">Supplier</Label>
+    <RefSelect id="supplier" targetName="Contacts" fieldLabel="Supplier" placeholder="Not chosen yet"
+      value={supplier} onChange={setSupplier} clearable allowCreate={false}
+      filter="active = true" optionDecorator="com.example.ui.SupplierOptions"
+      optionContext={{ fieldPath: "vendor", formValues: { wedding: eventId } }} />
+  </>;
+}
+```
+
+`value` is the record id and clearing emits `null`. `filter` is a fixed WidgetFilter predicate
+applied to the dropdown and the dialog alike. `optionDecorator` names a server `RefOptionDecorator`
+bean by class; it receives `optionContext` and can badge, disable or hide options. `allowCreate`,
+`showAll`, `clearable` and `openButton` toggle the "+ New", "Show all…", clear and open-record
+affordances (on, on, off, off by default). `className` merges over the trigger, so a dense row can
+render it as a compact chip; the dropdown keeps a readable minimum width. Pass `valueLabel`
+when the widget already has the picked record's name: it shows at once, and stays for a user who
+may not read the target catalog.
 
 ### Date and time fields
 

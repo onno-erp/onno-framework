@@ -21,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 /**
  * The ref-picker typeahead accepts a {@code filter} predicate (the cascading {@code refFilter},
@@ -87,6 +88,13 @@ class CatalogSearchRefFilterTest {
     void blankFilterLeavesSearchUnfiltered() {
         assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, null)).hasSize(3);
         assertThat(query.search(AccessSubject.system(), bookDesc, null, 50, "")).hasSize(3);
+    }
+
+    @Test
+    void validationRejectsUnknownFilterField() {
+        assertThatThrownBy(() -> query.validateWidgetFilter(bookDesc, "unknownField = true"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unknownField");
     }
 
     private void supplier(UUID id, String name) {

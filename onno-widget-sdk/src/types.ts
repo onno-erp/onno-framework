@@ -237,6 +237,12 @@ export interface OnnoUi {
     disabled?: boolean;
     "aria-label"?: string;
   }>;
+  /**
+   * The form's reference-field picker (host contract v7): server-side typeahead over a catalog or
+   * document, recent picks first, "+ New" and "Show all…" (the target's full list in a picker
+   * dialog). The value is the picked record's id; clearing emits `null`.
+   */
+  RefSelect: import("react").ComponentType<RefSelectProps>;
   Card: import("react").ComponentType<any>;
   CardHeader: import("react").ComponentType<any>;
   CardTitle: import("react").ComponentType<any>;
@@ -285,6 +291,8 @@ export interface OnnoHost {
   messages?: {
     get(): (key: string, params?: Record<string, string | number>) => string;
     subscribe(listener: () => void): () => void;
+    /** `onno.ui.locale`, or undefined for the browser's; present from host contract v7. */
+    locale?(): string | undefined;
   };
   chatMessages?: {
     register(renderer: ChatMessageRenderer): () => void;
@@ -319,6 +327,58 @@ export interface ChatMessageRenderer {
 
 export type WorkspaceToolbarLayout = Partial<Record<"start" | "center" | "end" | "secondary" | "overflow" | "hidden", string[]>>;
 export interface WorkspaceToolbarProps { items: {id: string; content: import("react").ReactNode}[]; layout?: WorkspaceToolbarLayout; compactLayout?: WorkspaceToolbarLayout; compact?: boolean; balanced?: boolean; fit?: boolean; narrowLayout?: WorkspaceToolbarLayout; className?: string; }
+
+/** Live context sent to the picker's option decorator (`RefOptionDecorator` bean on the server). */
+export interface RefSelectOptionContext {
+  /** The field the decorator is resolving options for, e.g. `"vendor"` or `"lines.vendor"`. */
+  fieldPath: string;
+  /** The surrounding values the decorator reads (ids as strings). */
+  formValues: EntityRecord;
+  section?: string;
+  rowIndex?: number;
+  rowValues?: EntityRecord;
+  documentId?: string;
+}
+
+/** Props of {@link OnnoUi.RefSelect}. */
+export interface RefSelectProps {
+  /** The target's registered logical name, e.g. `"Contacts"`. */
+  targetName: string;
+  /** Defaults to `"catalog"`. */
+  refKind?: "catalog" | "document";
+  /** The picked record's id; empty or `undefined` shows the placeholder. */
+  value?: string | null;
+  onChange: (id: string | null) => void;
+  /** A target column shown under each option's name. */
+  secondaryField?: string;
+  /** A fixed WidgetFilter predicate (e.g. `"active = true"`) narrowing the options and the dialog. */
+  filter?: string;
+  /** The fully-qualified class name of a server `RefOptionDecorator` bean (badges, disabled, hidden). */
+  optionDecorator?: string;
+  optionContext?: RefSelectOptionContext;
+  /** Ids shown but not selectable (picked in a sibling row). */
+  excludedIds?: string[];
+  /** Titles the "Show all…" dialog. */
+  fieldLabel?: string;
+  /** Offer "Show all…"; default `true`. */
+  showAll?: boolean;
+  /** Offer "+ New" (opens the target's new-record form); default `true`. */
+  allowCreate?: boolean;
+  /** Offer "Clear selection" and an inline clear button once a value is set; default `false`. */
+  clearable?: boolean;
+  /** An inline button opening the picked record; default `false`. */
+  openButton?: boolean;
+  disabled?: boolean;
+  /** Empty-field text; defaults to "Select {targetName}". */
+  placeholder?: string;
+  /** The value's label when already known: shown before (or instead of, if unreadable) the record fetch. */
+  valueLabel?: string | null;
+  id?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  /** Extra trigger classes merged over the select-trigger look. */
+  className?: string;
+}
 
 export type DialogShellSize = "sm" | "md" | "lg";
 export interface DialogShellProps {

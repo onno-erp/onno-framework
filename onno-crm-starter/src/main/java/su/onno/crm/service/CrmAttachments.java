@@ -146,6 +146,17 @@ public class CrmAttachments {
                 || (pattern.endsWith("/*") && type.startsWith(pattern.substring(0, pattern.length() - 1))));
     }
 
+    /**
+     * The URL under which {@code GET /api/media/{key}} serves a key that a {@link MediaStorage}
+     * resolves itself (a file kept elsewhere and fetched when opened). Null when media is off or the
+     * key is not a plain storage key.
+     */
+    public String reference(String key) {
+        if (storage == null || key == null) return null;
+        var url = (basePath.endsWith("/") ? basePath : basePath + "/") + key;
+        return key(url) == null ? null : url;
+    }
+
     /** The stored value for a list of media URLs, or null when there are none. */
     public String store(List<String> urls) {
         var accepted = accept(urls);

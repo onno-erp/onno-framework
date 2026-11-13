@@ -1,4 +1,4 @@
-import { text as t } from "@onno/widget-sdk";
+import { locale, text as t } from "@onno/widget-sdk";
 import { useId } from "react";
 import { Button, DatePicker, Input, Label, Popover, PopoverContent, PopoverTrigger, useState } from "@onno/widget-sdk";
 import { Video } from "lucide-react";
@@ -13,7 +13,7 @@ export function callInvitation(when: string, link: string, duration: string, now
     throw new Error(t("crm.zoom.hostError"));
   if (!Number.isInteger(Number(duration)) || Number(duration) < 5 || Number(duration) > 240) throw new Error(t("crm.zoom.durationError"));
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const display = new Intl.DateTimeFormat(undefined, {dateStyle:"medium",timeStyle:"short"}).format(date);
+  const display = new Intl.DateTimeFormat(locale(), {dateStyle:"medium",timeStyle:"short"}).format(date);
   return `Let's meet on Zoom on ${display} (${zone}).\nDuration: ${duration} minutes\n${url.href}`;
 }
 

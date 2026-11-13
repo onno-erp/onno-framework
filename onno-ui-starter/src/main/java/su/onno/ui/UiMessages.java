@@ -246,6 +246,53 @@ public final class UiMessages {
         d.put("crm.inbox.noMatches", "No conversations match these filters");
         d.put("crm.inbox.noMatchesHint", "Clear a filter or create a conversation.");
         d.put("crm.inbox.view", "Inbox view");
+        // Composer: the large window (ILES-16) and drafts kept per conversation (ILES-19).
+        d.put("crm.composer.expand", "Open in a larger window");
+        d.put("crm.composer.maximize", "Fill the screen");
+        d.put("crm.composer.restoreSize", "Restore the window size");
+        d.put("crm.composer.replyTitle", "Reply to {name}");
+        d.put("crm.composer.noteTitle", "Internal note about {name}");
+        d.put("crm.composer.noteHint", "Visible to your team only");
+        d.put("crm.composer.replyLabel", "Write a reply");
+        d.put("crm.composer.sending", "Sending…");
+        d.put("crm.composer.inWindow", "Writing in the larger window…");
+        // Sending mailbox (ILES-17): switching to the contact's other conversations once From picks a mailbox.
+        d.put("crm.chat.switchConversation", "Switch to another of this contact's conversations");
+        d.put("crm.chat.switchLocked", "Send or clear your draft before changing channels");
+        d.put("crm.chat.switchHint", "Choose a conversation for this contact");
+        // Visible folder controls (ILES-18). Apps that call chat groups folders override crm.group.*.
+        d.put("crm.chat.rowMenu", "Chat options");
+        d.put("crm.group.move", "Move to group");
+        d.put("crm.group.newFolder", "New group");
+        d.put("crm.group.create", "Create group");
+        d.put("crm.group.startsWith", "{name} moves into the new group.");
+        d.put("crm.group.needsChat", "Open a chat first: a new group starts with that chat.");
+        d.put("crm.inbox.listActions", "Conversation list actions");
+        d.put("crm.inbox.showAll", "All chats");
+        // Find in mailbox: search a connected Gmail mailbox, archived mail included, and restore a message.
+        d.put("crm.mailbox.find", "Find in mailbox");
+        d.put("crm.mailbox.description", "Search a connected mailbox, archived mail included, and bring a message back into the inbox.");
+        d.put("crm.mailbox.account", "Mailbox");
+        d.put("crm.mailbox.query", "Search the mailbox");
+        d.put("crm.mailbox.placeholder", "from:anna subject:villa");
+        d.put("crm.mailbox.hint", "Gmail search syntax: from:, to:, subject:, has:attachment, before:2026/01/31.");
+        d.put("crm.mailbox.search", "Search");
+        d.put("crm.mailbox.searching", "Searching…");
+        d.put("crm.mailbox.start", "Search by sender, subject or any word in the message.");
+        d.put("crm.mailbox.empty", "No messages match this search.");
+        d.put("crm.mailbox.error", "Could not search this mailbox.");
+        d.put("crm.mailbox.retry", "Try again");
+        d.put("crm.mailbox.results", "Messages found");
+        d.put("crm.mailbox.archived", "Archived");
+        d.put("crm.mailbox.noSubject", "(no subject)");
+        d.put("crm.mailbox.open", "Open");
+        d.put("crm.mailbox.restore", "Restore to inbox");
+        d.put("crm.mailbox.restoring", "Restoring…");
+        d.put("crm.mailbox.restoreFailed", "Could not bring this message into the inbox.");
+        d.put("crm.mailbox.readOnly", "This mailbox is connected read-only: restored mail comes into the CRM but stays archived in Gmail until the mailbox is reconnected.");
+        d.put("crm.mailbox.keptArchived", "The message is in the CRM, but stays archived in Gmail until the mailbox is reconnected.");
+        d.put("crm.mailbox.loadMore", "Load more");
+        d.put("crm.mailbox.loadingMore", "Loading…");
 
         // Login screen (DivKit card + the onno-login-form React island).
         // Left-panel hero + footer copy (React shell, login.tsx) — keep in sync with DEFAULT_MESSAGES.
@@ -420,7 +467,7 @@ public final class UiMessages {
         d.put("register.expense", "Expense");
 
         // List grid: toolbar count, search, sort, view toggle, and keyset loading.
-        d.put("list.count", "{count} rows");
+        d.put("list.count", "Rows: {count}");
         d.put("list.focusMissing", "This record isn't in the list with the current filters");
         d.put("list.search", "Search…");
         d.put("list.searchLabel", "Search");
@@ -562,6 +609,14 @@ public final class UiMessages {
         d.put("ref.recent", "Recent");
         d.put("ref.open", "Open record");
         d.put("ref.clearValue", "Clear value");
+        d.put("ref.showAll", "Show all…");
+        d.put("ref.pickTitle", "Select: {name}");
+        d.put("ref.pick", "Select");
+        d.put("ref.pickFiltered", "The list is limited by this field's conditions");
+        d.put("ref.folder", "Folder");
+        d.put("ref.folders", "Folders");
+        d.put("ref.location", "Location");
+        d.put("ref.pickEmpty", "Nothing to select here");
         d.put("relatedList.saveFirstManage", "Save this record first to manage {name}.");
         d.put("relatedList.saveFirstView", "Save this record first to see {name}.");
 

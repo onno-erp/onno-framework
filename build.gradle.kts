@@ -405,8 +405,11 @@ fun renderConfigDefault(value: Any?): String = when (value) {
     else -> "`$value`"
 }
 
+// Javadoc <p> paragraph breaks are dropped: a table cell can't hold paragraphs, and VitePress's Vue
+// compiler rejects the unclosed <p> as "Element is missing end tag".
 fun cleanConfigDescription(raw: String?): String =
-    stripJavadocTags(raw ?: "").replace("|", "\\|").replace(Regex("\\s+"), " ").trim()
+    stripJavadocTags(raw ?: "").replace(Regex("</?p\\s*/?>", RegexOption.IGNORE_CASE), " ")
+        .replace("|", "\\|").replace(Regex("\\s+"), " ").trim()
 
 @Suppress("UNCHECKED_CAST")
 fun renderConfigDocs(): String {

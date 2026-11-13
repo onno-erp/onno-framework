@@ -43,7 +43,7 @@ it.each([[false, false], [true, false], [false, true], [true, true]])("keeps sel
   await screen.findByText("6 chats");
   expect(screen.getByTestId("crm-inbox-workspace").querySelector("[data-list-toolbar]")).not.toBeNull();
   expect(document.querySelectorAll("[data-list-toolbar]")).toHaveLength(1);
-  expect(screen.queryByText("6 rows")).not.toBeInTheDocument();
+  expect(screen.queryByText("Rows: 6")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", {name:"Table"})).not.toBeInTheDocument();
   await screen.findByText("Person 2");
   expect(fetcher.mock.calls.filter(([input]) => new URL(String(input), "http://localhost").pathname === "/api/crm/inbox-workspaces/support")).toHaveLength(1);

@@ -36,7 +36,6 @@ import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -114,14 +113,14 @@ class RecordPolicyConformanceTest {
                 "GET /api/documents/{name}/{id}/posting-preview", "POST /api/documents/{name}/{id}/unpost",
                 "DELETE /api/documents/{name}/{id}", "POST /api/documents/{name}/batch-delete",
                 "GET /api/registers/{name}/movements", "GET /api/registers/{name}/balance",
-                "GET /api/registers/{name}/turnover",
+                "GET /api/registers/{name}/turnover", "GET /api/information-registers/{name}/records",
                 // List feeds, groups, widget aggregates
                 "GET /api/list/catalogs/{name}", "GET /api/list/documents/{name}",
                 "GET /api/list/catalogs/{name}/groups", "GET /api/list/documents/{name}/groups",
                 "GET /api/list/catalogs/{name}/aggregate", "GET /api/list/documents/{name}/aggregate",
                 "GET /api/list/registers/{name}/movements", "GET /api/list/registers/{name}/balance",
                 // Pickers, mentions, comments, tags, presence, actions, form validation
-                "POST /api/ref-options/search", "POST /api/ref-options/recent", "GET /api/mentions", "GET /api/mentions/resolve",
+                "POST /api/ref-options/search", "POST /api/ref-options/recent", "POST /api/ref-options/decorate", "GET /api/mentions", "GET /api/mentions/resolve",
                 "GET /api/comments/{kind}/{name}/{id}", "POST /api/comments/{kind}/{name}/{id}",
                 "POST /api/comments/{commentId}/reactions", "DELETE /api/comments/{commentId}",
                 "GET /api/tags/{kind}/{name}", "GET /api/tags/{kind}/{name}/{id}",
@@ -139,7 +138,8 @@ class RecordPolicyConformanceTest {
                 "GET /api/divkit/catalogs/{name}/new", "GET /api/divkit/catalogs/{name}/{id}/duplicate",
                 "GET /api/divkit/documents/{name}", "GET /api/divkit/documents/{name}/{id}",
                 "GET /api/divkit/documents/{name}/new", "GET /api/divkit/documents/{name}/{id}/duplicate",
-                "GET /api/divkit/registers/{name}",
+                "GET /api/divkit/registers/{name}", "GET /api/divkit/pickers/{kind}/{name}",
+                "GET /api/divkit/record-refresh/{kind}/{name}/{id}",
                 // Task inbox: assignment decides visibility; subject labels are masked by scope
                 "GET /api/tasks")) {
             ROUTES.put(r, Route.SCOPED);
@@ -192,7 +192,7 @@ class RecordPolicyConformanceTest {
     private MockMvc mvc;
 
     private static boolean seeded;
-    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked, planBasic;
+    private static UUID ownerA, ownerB, tenantA, tenantB, tenantLocked;
     private static UUID instanceA, instanceB, instanceUnderB, instanceMirror;
     private static UUID jobA, jobB;
     private static final Set<String> B_IDS = new LinkedHashSet<>();
@@ -230,7 +230,7 @@ class RecordPolicyConformanceTest {
                 "email", "a@leak.test"), system));
         ownerB = id(catalogCommands.create(owners, body("code", "LEAK-B-O", "description", "LEAK-B-owner",
                 "email", "b@leak.test"), system));
-        planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
+        UUID planBasic = id(catalogCommands.create(plans, body("code", "BASIC", "description", "Basic plan"), system));
         tenantA = id(catalogCommands.create(tenants, body("code", "TA", "description", "Alpha tenant",
                 "owner", ownerA.toString(), "note", "alpha"), system));
         tenantLocked = id(catalogCommands.create(tenants, body("code", "TL", "description", "Locked tenant",
@@ -271,6 +271,9 @@ class RecordPolicyConformanceTest {
                 .title("LEAK-B-notification").link("catalogs/LkTenants/" + tenantB).build());
         notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
                 .title("alpha notification").link("catalogs/LkTenants/" + tenantA).build());
+        // A link whose entity resolves to nothing (removed): a narrowed recipient cannot be shown it.
+        notifications.notify(NotificationRequest.to(ownerA.toString()).type("assignment")
+                .title("LEAK-B-gone-notification").link("catalogs/LkRemoved/" + tenantA).build());
 
         B_IDS.addAll(List.of(ownerB.toString(), tenantB.toString(), instanceB.toString(), jobB.toString()));
     }
@@ -372,6 +375,16 @@ class RecordPolicyConformanceTest {
         assertThat(ids(options)).doesNotContain(tenantB.toString());
         assertThat(options.get(0)).containsEntry("_recent", true);
         assertThat(options.stream().filter(o -> Boolean.TRUE.equals(o.get("_recent")))).hasSize(1);
+
+        // The picker dialog (#411): an out-of-scope id is left out exactly like an unknown one, so
+        // the window never offers it and the answer never names it.
+        Map<String, Object> decorations = jsonMap(ok(post("/api/ref-options/decorate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"targetKind\":\"catalog\",\"targetName\":\"LkTenants\",\"ids\":[\""
+                        + tenantA + "\",\"" + tenantB + "\",\"" + UUID.randomUUID() + "\"]}")));
+        assertThat(decorations.get("offered")).isEqualTo(List.of(tenantA.toString()));
+        ok(get("/api/divkit/pickers/catalogs/LkTenants"));
+        ok(get("/api/divkit/pickers/documents/LkBuildJobs"));
     }
 
     private void restrictedRefsAndSearchAreNoOracle() throws Exception {
@@ -394,9 +407,18 @@ class RecordPolicyConformanceTest {
         assertThat(ids(jsonList(ok(get("/api/catalogs/LkInstances/children"))))).contains(instanceUnderB.toString());
         assertThat(jsonList(ok(get("/api/catalogs/LkInstances/children").param("parent", instanceB.toString()))))
                 .allSatisfy(r -> assertThat(r.get("parent")).isNull());
+
+        // Picker folder browsing (#411): folders-only children and the pruned path tree are scoped
+        // the same way; a path to the orphan starts at the orphan, never at B's hidden parent.
+        ok(get("/api/catalogs/LkInstances/children").param("folders", "true"));
+        List<Map<String, Object>> path = jsonList(ok(get("/api/catalogs/LkInstances/tree")
+                .param("ids", instanceUnderB + "," + instanceB)));
+        assertThat(ids(path)).containsExactly(instanceUnderB.toString());
+        assertThat(row(path, instanceUnderB)).containsEntry("parent", null).containsEntry("parentRestricted", true);
     }
 
     private void registersAreScopedByDimension() throws Exception {
+        assertThat((List<?>) jsonMap(ok(get("/api/information-registers/LkTenantFacts/records"))).get("rows")).hasSize(1);
         List<Map<String, Object>> movements = jsonList(ok(get("/api/registers/LkUsage/movements")));
         assertThat(movements).hasSize(1);
         List<Map<String, Object>> balance = jsonList(ok(get("/api/registers/LkUsage/balance")));
@@ -413,7 +435,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> resolved = jsonMap(ok(get("/api/mentions/resolve")
                 .param("kind", "catalogs").param("name", "LkTenants").param("id", tenantB.toString())));
         // the resolve response echoes the requested id; it must be unreadable with no display
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(resolved).containsEntry("readable", false).containsEntry("display", null);
 
         ok(get("/api/comments/catalogs/LkTenants/" + tenantA));
@@ -424,7 +446,7 @@ class RecordPolicyConformanceTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"mine\"}")));
         ok(post("/api/comments/" + mine.get("id") + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"));
-        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).get(0).id();
+        UUID bComment = comments.list("catalogs", "LkTenants", tenantB).getFirst().id();
         status(post("/api/comments/" + bComment + "/reactions").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"emoji\":\"👍\"}"), 404);
         status(delete("/api/comments/" + bComment), 404);
@@ -440,9 +462,19 @@ class RecordPolicyConformanceTest {
         assertThat((List<?>) snapshot.get("records")).isEmpty();
         status(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"path\":\"/catalogs/LkTenants/" + tenantB + "\",\"action\":\"enter\"}"), 404);
+        // A list or draft route carries no record id: presence on it is not narrowed by record scope.
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants\",\"action\":\"enter\"}"));
+        ok(post("/api/presence").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"/catalogs/LkTenants/new\",\"action\":\"enter\"}"));
+        List<String> presenceIds = ((List<?>) jsonMap(ok(get("/api/presence"))).get("records")).stream()
+                .map(r -> String.valueOf(((Map<?, ?>) r).get("id"))).toList();
+        assertThat(presenceIds).containsExactlyInAnyOrder("/catalogs/LkTenants", "new");
 
         Map<String, Object> feed = jsonMap(ok(get("/api/notifications")));
         assertThat((List<?>) feed.get("items")).hasSize(1);
+        // The badge counts only what the feed shows.
+        assertThat(feed.get("unreadCount")).isEqualTo(1);
 
         ok(get("/api/tasks"));
     }
@@ -453,6 +485,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/catalogs/LkTenants"));
         ok(get("/api/divkit/catalogs/LkTenants/" + tenantA));
         status(get("/api/divkit/catalogs/LkTenants/" + tenantB), 404);
+        ok(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantA));
+        status(get("/api/divkit/record-refresh/catalogs/LkTenants/" + tenantB), 404);
         String draft = ok(get("/api/divkit/catalogs/LkTenants/new"));
         assertThat(draft).as("the policy default (the signed-in owner) pre-fills the New form")
                 .contains(ownerA.toString());
@@ -461,6 +495,8 @@ class RecordPolicyConformanceTest {
         ok(get("/api/divkit/documents/LkBuildJobs"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB), 404);
+        ok(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobA));
+        status(get("/api/divkit/record-refresh/documents/LkBuildJobs/" + jobB), 404);
         ok(get("/api/divkit/documents/LkBuildJobs/new"));
         ok(get("/api/divkit/documents/LkBuildJobs/" + jobA + "/duplicate"));
         status(get("/api/divkit/documents/LkBuildJobs/" + jobB + "/duplicate"), 404);
@@ -477,13 +513,13 @@ class RecordPolicyConformanceTest {
         ok(post("/api/catalogs/LkTenants/validate").contentType(MediaType.APPLICATION_JSON).content("{}"));
         Map<String, Object> batch = jsonMap(ok(post("/api/catalogs/LkTenants/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + tenantB + "\"]}")));
-        bodies.remove(bodies.size() - 1); // the batch summary echoes failed ids
+        bodies.removeLast(); // the batch summary echoes failed ids
         assertThat(batch).containsEntry("ok", 0);
 
         // create: the policy default stamps the owner, even over an explicit foreign owner
         Map<String, Object> created = jsonMap(ok(post("/api/catalogs/LkTenants").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"description\":\"New tenant\",\"owner\":\"" + ownerB + "\"}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(created.get("owner")).isEqualTo(ownerA.toString());
         // cannot move a record out of the write scope; cannot reference an unreadable record
         status(put("/api/catalogs/LkTenants/" + tenantA).contentType(MediaType.APPLICATION_JSON)
@@ -511,7 +547,7 @@ class RecordPolicyConformanceTest {
         status(delete("/api/documents/LkBuildJobs/" + jobB), 404);
         Map<String, Object> docBatch = jsonMap(ok(post("/api/documents/LkBuildJobs/batch-delete")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"ids\":[\"" + jobB + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(docBatch).containsEntry("ok", 0);
         // a line referencing B's instance is rejected
         status(post("/api/documents/LkBuildJobs").contentType(MediaType.APPLICATION_JSON)
@@ -541,7 +577,7 @@ class RecordPolicyConformanceTest {
         Map<String, Object> batch = jsonMap(ok(post("/api/actions/catalogs/LkTenants/touch/batch")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[\"" + tenantA + "\",\"" + tenantB + "\",\"" + tenantLocked + "\"]}")));
-        bodies.remove(bodies.size() - 1);
+        bodies.removeLast();
         assertThat(batch).containsEntry("ok", 1);
         assertThat(LeakTestApp.TOUCHES.get()).isEqualTo(2);
     }
@@ -574,12 +610,17 @@ class RecordPolicyConformanceTest {
         publisher.publish("updated", "document", "LkBuildJobs", jobB, "LEAK-B");
         publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkTenants/" + tenantB,
                 "title", "LEAK-B"));
+        // The stream withholds what the feed withholds: a link to an entity that resolves to nothing.
+        publisher.publishNotification(ownerA.toString(), Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "LEAK-B-gone"));
+        publisher.publishNotification("staff", Map.of("link", "catalogs/LkRemoved/" + tenantA,
+                "title", "gone-for-staff"));
         publisher.publish("changed", "register", "*", jobB, null);
 
         String seenByA = String.join("\n", toA.sent);
         assertThat(seenByA).contains(tenantA.toString()).doesNotContain(tenantB.toString()).doesNotContain("LEAK-B");
         assertThat(toA.sent).anySatisfy(s -> assertThat(s).contains("entityName:*").contains("register"));
-        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString());
+        assertThat(String.join("\n", toStaff.sent)).contains(tenantB.toString()).contains("gone-for-staff");
     }
 
     /** An emitter that records what would be written to the stream. */
@@ -591,9 +632,9 @@ class RecordPolicyConformanceTest {
         }
 
         @Override
-        public void send(SseEventBuilder builder) throws IOException {
+        public void send(SseEventBuilder builder) {
             StringBuilder sb = new StringBuilder();
-            builder.build().forEach(part -> sb.append(String.valueOf(part.getData())));
+            builder.build().forEach(part -> sb.append(part.getData()));
             sent.add(sb.toString().replace('=', ':'));
         }
     }
@@ -625,11 +666,7 @@ class RecordPolicyConformanceTest {
     // --------------------------------------------------------------------------- helpers
 
     private String ok(MockHttpServletRequestBuilder request) throws Exception {
-        return ok(request, 200);
-    }
-
-    private String ok(MockHttpServletRequestBuilder request, int expected) throws Exception {
-        return status(request, expected);
+        return status(request, 200);
     }
 
     private String status(MockHttpServletRequestBuilder request, int expected) throws Exception {

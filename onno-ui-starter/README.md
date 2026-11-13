@@ -190,8 +190,8 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. |
-| GET | `/{name}/tree` | Full nested tree (hierarchical only). |
+| GET | `/{name}/children?parent={uuid}` | Direct children (hierarchical catalogs only; else `400`). Omit `parent` for roots. `folders=true` returns just the folders, each with `hasChildFolders` (whether it holds a sub-folder the caller may read). |
+| GET | `/{name}/tree` | Full nested tree (hierarchical only). `ids=a,b` returns only the paths from the roots to those records; a path starts at the first ancestor the caller may read, and unreadable or deleted ids are left out. |
 | GET | `/{name}/{id}` | Single item. |
 | POST | `/{name}` | Create. Body is a JSON map of `code`/`description`/`folder`/`parent` + attribute fields. Code auto-generated when omitted and the catalog auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update. Send `version` (or `_version`) for optimistic locking — a stale version returns `409`. |
@@ -467,6 +467,21 @@ public void fields(EntityConfigBuilder f) {
 }
 ```
 
+### Refresh after a server action
+
+`ActionResult.reload()` and `ActionResult.refresh(...)` explicitly re-read the screen that launched
+the action, including detail-header buttons, the overflow menu, and page action bars. They also work
+when the handler emits no entity-change SSE event, for example after a write through another API.
+The refresh sends a local `onno:dataevent` with `type: "refresh"` and the originating `surfacePath`,
+including its query string. It does not refetch or replace the DivKit card. Data-owning React islands
+on that surface re-read their own data in place, keeping list search/sort, expanded groups and local
+component state. Other workspace tabs remain mounted even if focus moves during the action.
+Record forms read `{record, actions, readOnly}` from
+`GET /api/divkit/record-refresh/{kind}/{name}/{id}` with their profile and viewport. The server
+evaluates action labels, visibility and availability against the same saved row as the fields.
+A dirty form updates its header actions and keeps its draft behind the existing reload banner.
+This also protects edits started while a background request is in flight.
+
 ### Action forms — collect input before the handler runs
 
 A server action may declare a **form**: clicking it opens a modal dialog with the declared fields
@@ -726,6 +741,43 @@ A required ref never shows the clear button, even with `clearButton(true)`. The 
 resolved `refOpenButton`/`refClearButton` booleans. Pickers in action dialogs and related-list panels
 show recent picks too but no open button, so a click there never leaves the dialog.
 
+**"Show all..." picker dialog (#411).** The options end with **Show all...**, which opens the
+target's full list in a modal dialog (a full-screen sheet on touch devices): the target's
+`EntityView` columns, sort, filters and grouping for the active profile, its own search box (focused,
+seeded with the text typed in the dropdown), **Select** and **Cancel**. A click highlights a row, a
+double click or Enter selects it, the arrow keys move the highlight, Esc closes; the dialog opens on
+the field's current value. It works the same in the header and in tabular-section rows, and a
+dialog pick takes the dropdown's path (the same value, remembered as a recent pick).
+
+The dialog never offers what the dropdown would not:
+
+- the field's resolved `refFilter` is a fixed feed constraint the user cannot lift (the dialog says
+  the list is limited by the field's conditions, without showing the values);
+- record scope and the deletion mark apply as in every list feed;
+- with `refOptions(Decorator.class)` each loaded window is re-read through
+  `POST /api/ref-options/decorate` (body: the field context as for `/search` plus `ids`; answer
+  `{offered: [ids], decorations: {id: {badge, tone, color, disabled, reason}}}`): an id missing from
+  `offered` is not drawn, a disabled one is shown greyed with its reason;
+- with `uniqueWithinSection()` the values picked in sibling rows are shown but not selectable.
+
+The list descriptor comes from `GET /api/divkit/pickers/{kind}/{name}?profile=`, which is never
+replaced by an authored `Page` on the list route and does not require an `EntityView` (a view-less
+target gets the default columns); it carries no actions, New url, batch selection or map/custom
+views. For a hierarchical catalog the dialog adds a folder tree beside the list and breadcrumbs above
+it: a folder opens on double click (the **Select** button picks the highlighted folder itself, as the
+dropdown allows), and a search spans every folder, adding a **Location** column with each hit's
+folder path. The grid filters by folder with the `_parent = <uuid>` / `_parent = null` clause the list
+feed's `filter=` accepts on hierarchical catalogs; the tree reads `/children?folders=true` (an arrow
+only where `hasChildFolders`), and the path to the current value or to the search hits comes from one
+`/tree?ids=` call. Polymorphic (`PolyRef`) fields keep the dropdown only.
+
+The folder pieces live in `folder-browser.tsx` for reuse beside any list over a hierarchical
+catalog: `FolderTree` (lazy, folders only), `FolderBreadcrumbs`, and `loadFolderPaths(catalog, ids)`.
+
+The list widget's select mode is reusable: `<EntityListWidget list={...} selectMode={{ highlightedId,
+onHighlight, onActivate, rowState, onRowsLoaded, query }} />` turns any list into a picker (no record
+opening, row menu, batch selection or clipboard; rows stamp `data-onno-pick-row`).
+
 Two **column-name conventions** on the target catalog decorate everywhere its records are shown:
 an `avatar_url` attribute renders a thumbnail (picker options, list cells, comments), and a `color`
 attribute (a CSS hex like `#B6D7A8`) renders a color dot in the picker and turns referencing list
@@ -953,7 +1005,7 @@ render and whenever SSE-driven page refreshes replace it; `prefers-reduced-motio
 | `gauge` | Radial progress gauge | An aggregate filled toward a `target`. |
 | `calendar` | FullCalendar month/week + agenda | One `document` or `catalog` (`dateField`, optional `endDateField`), or every `CalendarSource` of `.calendar(name)`. Drag-to-reschedule where the viewer may write. See [Calendar widget](#calendar-widget). |
 | `list` | Recent-records list | Configurable title/secondary/amount/date. |
-| `kanban` | Drag board grouped by a field | |
+| `kanban` | Document Draft/Posted board; catalog cards in one column | Writable documents support drag-to-post/unpost. Catalog cards open records without posting mutations; authored catalog grouping is not supported. |
 | `map` | MapLibre geometry map | Plots records on a theme-aware monochrome basemap (no API key). Geo source: `latField`+`lngField` for points and/or `geoJsonField` for points, paths, and areas; features link to the record and label from `.titleField(...)`. |
 | `tasks` | Durable process inbox | No entity source. Shows the authenticated caller's candidate/claimed work, with claim and enum-outcome completion buttons. |
 | *(custom)* | App-registered React component | Register on the client with `registerWidget("heatmap", HeatmapWidget)`. |
@@ -1078,7 +1130,7 @@ still shows its single value.
 |-----|-----------|--------|
 | `metric` | count, metric, chart | `count` (default) or `sum`/`avg`/`min`/`max`. |
 | `metricField` | metric, chart | Column aggregated by a non-count metric (a register resource for register sources). |
-| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. Logical field names are preferred and legacy storage names remain accepted. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
+| `filter` | count, metric, chart, stat, sparkline, gauge, list, calendar | Safe predicate, e.g. `status != 'DRAFT' AND posted = true`. Applied server-side for `document`/`catalog` sources — KPI cards aggregate with it; the data widgets pass it to `/api/list/...?filter=`. For document/catalog sources, filter identifiers resolve through entity metadata: use logical field names such as `posted`, `date`, and `assignedTo`. Legacy storage-column names such as `_posted`, `_date`, and `assigned_to` remain accepted as deprecated aliases for one compatibility release. Unknown identifiers cause an error; authored page filters are validated during page resolution. Columns are validated; values are always bound (never inlined) — see `WidgetFilter`. Quote string values compared to a `VARCHAR` column (e.g. `season = '2026'`) so Postgres doesn't reject an int/text mismatch. |
 | `currency` | metric, list, calendar, chart | ISO code (e.g. `EUR`) → currency formatting. |
 | `format` | metric, list, calendar, chart | `integer` / `decimal` fraction-digit policy when not a currency. |
 | `locale` | metric, list, calendar, chart | BCP-47 locale for number/currency grouping. |
@@ -1226,7 +1278,7 @@ drawers, theming) and carry host-emitted classes:
 
 ```tsx
 import { Segmented, DatePicker, useState } from "@onno/widget-sdk"; // by name, or from the `ui` object
-// also Select, Button, Popover, Badge, Checkbox, Switch, Input, Card, …
+// also Select, RefSelect (record picker), Button, Popover, Badge, Checkbox, Switch, Input, Card, …
 
 function ViewSwitch() {
   const [view, setView] = useState("day");
@@ -1380,6 +1432,13 @@ Button face — set **one**:
 | `feedback(ActionFeedback)` | explicit severity + toast/dialog/inline presentation |
 | `refresh(ActionToast)` / `refresh(ActionDialog)` | structured feedback + reload the current surface |
 
+Navigation buttons accept both `onno://...` commands and router-relative paths such as
+`/documentation` (including query strings). React islands use the shared
+`openRoute` helper from `@/lib/navigation`, which dispatches through the workspace host rather
+than navigating with React Router directly. Lists, calendars and kanban cards follow the same
+tab reuse and record-pane placement rules as other links. Paths are relative to the router;
+do not prepend the configured UI mount prefix.
+
 Navigation is declaration metadata, not a handler response: use
 `a.action("docs").navigate("/documentation")` for a static navigation action. Server handlers return
 only refresh intent and structured feedback.
@@ -1459,7 +1518,7 @@ feature is disabled.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. |
+| GET | `/api/notifications[?unread&cursor]` | The caller's timeline, newest first, keyset-paginated: `{ items, nextCursor, hasMore, unreadCount }`. `?unread=true` restricts to unread; `?cursor=` resumes. Scoped to the caller — never another user's feed. A record-scoped viewer gets no item about a record it can't read, and `unreadCount` leaves those out. |
 | POST | `/api/notifications/{id}/read` | Mark one read; returns the fresh `{ unreadCount }`. |
 | POST | `/api/notifications/read-all` | Mark every unread one read; returns `{ marked, unreadCount }`. |
 
@@ -1751,6 +1810,37 @@ Live list refreshes coalesce while a window is loading, including custom inbox p
 The current response renders before a queued refresh; filter changes still discard stale responses,
 and failed background refreshes preserve the visible rows.
 
+### Reference pickers
+
+Import `RefSelect` to pick a catalog or document record. It is the same control as a generated
+form's reference field: a server-side typeahead (the catalog never loads whole), recent picks first,
+"+ New" opening the target's new-record form, and "Show all…" opening the target's full list —
+columns, filters, folders — in a picker dialog. Requires host contract v7.
+
+```tsx
+import { Label, RefSelect, useState } from "@onno/widget-sdk";
+
+function SupplierField({ eventId }: { eventId: string }) {
+  const [supplier, setSupplier] = useState<string | null>(null);
+  return <>
+    <Label htmlFor="supplier">Supplier</Label>
+    <RefSelect id="supplier" targetName="Contacts" fieldLabel="Supplier" placeholder="Not chosen yet"
+      value={supplier} onChange={setSupplier} clearable allowCreate={false}
+      filter="active = true" optionDecorator="com.example.ui.SupplierOptions"
+      optionContext={{ fieldPath: "vendor", formValues: { wedding: eventId } }} />
+  </>;
+}
+```
+
+`value` is the record id and clearing emits `null`. `filter` is a fixed WidgetFilter predicate
+applied to the dropdown and the dialog alike. `optionDecorator` names a server `RefOptionDecorator`
+bean by class; it receives `optionContext` and can badge, disable or hide options. `allowCreate`,
+`showAll`, `clearable` and `openButton` toggle the "+ New", "Show all…", clear and open-record
+affordances (on, on, off, off by default). `className` merges over the trigger, so a dense row can
+render it as a compact chip; the dropdown keeps a readable minimum width. Pass `valueLabel`
+when the widget already has the picked record's name: it shows at once, and stays for a user who
+may not read the target catalog.
+
 ### Date and time fields
 
 Import `ColorPicker` for `#RRGGBB` colours. It is the same control as the `color` field widget: a hex
@@ -1827,3 +1917,7 @@ sidecars, including across restarts. Existing files without metadata remain read
 their storage filename and detected type. The media endpoint never serves metadata sidecars.
 
 Common audio media types (Ogg, MP3, MP4, WebM, WAV, AAC and FLAC) are served inline for voice-message playback, retaining `nosniff`. Other file types retain their existing disposition policy.
+
+Authored Page routes may replace `/documents/{name}/new` and `/catalogs/{name}/new` as well as list routes.
+The creation route still requires entity write access and uses the normal active profile; the
+custom page owns its create UI and should save through the generated document API.

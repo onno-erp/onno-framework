@@ -28,6 +28,7 @@ final class EntityWriteAliases {
         alias(body, "parent", "_parent");
         alias(body, "version", "_version");
         attributes(body, descriptor.attributes());
+        sections(body, descriptor.tabularSections());
         return body;
     }
 
@@ -37,7 +38,12 @@ final class EntityWriteAliases {
         alias(body, "date", "_date");
         alias(body, "version", "_version");
         attributes(body, descriptor.attributes());
-        for (TabularSectionDescriptor section : descriptor.tabularSections()) {
+        sections(body, descriptor.tabularSections());
+        return body;
+    }
+
+    private static void sections(Map<String, Object> body, List<TabularSectionDescriptor> sections) {
+        for (TabularSectionDescriptor section : sections) {
             if (!(body.get(section.name()) instanceof List<?> rows)) {
                 continue;
             }
@@ -54,7 +60,6 @@ final class EntityWriteAliases {
             }
             body.put(section.name(), normalizedRows);
         }
-        return body;
     }
 
     private static void attributes(Map<String, Object> body, List<AttributeDescriptor> attributes) {

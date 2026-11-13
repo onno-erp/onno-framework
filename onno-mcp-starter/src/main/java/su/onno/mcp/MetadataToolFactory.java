@@ -187,17 +187,18 @@ public class MetadataToolFactory implements McpToolProvider {
 
         tools.add(readTool("register_balance",
                 "Get accumulation register balances",
-                "Returns up to 5000 current balances for a BALANCE accumulation register, optionally "
+                "Returns up to 5000 current or as-of balances for a BALANCE accumulation register, optionally "
                         + "filtered by dimension field values. If more rows match, the call fails instead "
                         + "of returning an incomplete result; narrow the dimension filters.",
                 "{\"type\":\"object\",\"required\":[\"name\"],\"properties\":{"
                         + "\"name\":{\"type\":\"string\",\"description\":\"Register logical name (see describe_metadata).\"},"
+                        + "\"asOf\":{\"type\":\"string\",\"description\":\"Optional inclusive cutoff: ISO-8601 local date-time (2024-03-31T18:00) or date (2024-03-31 = the whole day), no offset. Omit for current totals.\"},"
                         + "\"filters\":{\"type\":\"object\",\"description\":\"Optional map of dimension fieldName -> value.\"}}}",
                 (exchange, args) -> {
                     AccumulationRegisterDescriptor desc = registerQuery.require(requireString(args, "name"));
                     access.requireRead(subject(exchange), desc);
                     RegisterQueryService.BoundedRows result =
-                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")));
+                            registerQuery.balanceBounded(subject(exchange), desc, stringMap(args.get("filters")), optString(args, "asOf"));
                     if (result.truncated()) {
                         return error("Register balance exceeds the 5000-row safety limit; "
                                 + "narrow the dimension filters and retry.");
@@ -370,6 +371,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 e.put("hierarchical", d.hierarchical());
                 e.put("writable", writesAllowed() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
+                describeSections(e, d.tabularSections());
                 catalogs.add(e);
             }
             out.put("catalogs", catalogs);
@@ -385,14 +387,7 @@ public class MetadataToolFactory implements McpToolProvider {
                 e.put("postingEnabled", properties.isPostingEnabled()
                         && !uiProperties.isReadOnly() && access.canWrite(principal, d));
                 e.put("fields", fields(d.attributes()));
-                List<Map<String, Object>> sections = new ArrayList<>();
-                for (TabularSectionDescriptor ts : d.tabularSections()) {
-                    Map<String, Object> s = new LinkedHashMap<>();
-                    s.put("name", ts.name());
-                    s.put("fields", fields(ts.attributes()));
-                    sections.add(s);
-                }
-                if (!sections.isEmpty()) e.put("tabularSections", sections);
+                describeSections(e, d.tabularSections());
                 documents.add(e);
             }
             out.put("documents", documents);
@@ -621,4 +616,15 @@ public class MetadataToolFactory implements McpToolProvider {
         required.append("]");
         return "{\"type\":\"object\",\"required\":" + required + ",\"properties\":{" + props + "}}";
     }
+    private void describeSections(Map<String, Object> e, List<TabularSectionDescriptor> descriptors) {
+        List<Map<String, Object>> sections = new ArrayList<>();
+        for (TabularSectionDescriptor ts : descriptors) {
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("name", ts.name());
+            s.put("fields", fields(ts.attributes()));
+            sections.add(s);
+        }
+        if (!sections.isEmpty()) e.put("tabularSections", sections);
+    }
+
 }

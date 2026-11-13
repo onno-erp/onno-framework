@@ -88,7 +88,9 @@ In brief:
 - **`@Document`** — business events (Sales Order, Invoice). `numberPrefix`, `numberLength`,
   `autoNumber`, `previousNames`, `context`. Base class `DocumentObject`
   (`id`, `number`, `date`, `posted`, `deletionMark`, `version`, `isNew`).
-- **`@TabularSection`** — line-item collections on a document; rows extend `TabularSectionRow`.
+- **`@TabularSection`** — owned line-item collections on a catalog or document; rows extend `TabularSectionRow`. Catalog child tables use
+  `catalog_<owner>_<section>`. Repositories, REST/MCP and the common form grid (including `rowField`
+  hints) support both owners; generic catalog writes save the header and rows atomically.
   Each section owns one distinct concrete row class because Spring Data JDBC maps that class to one
   child table; startup rejects reuse across documents or sections before scan order can select the
   wrong table. Common fields/behavior belong in a shared base row class.
@@ -268,16 +270,25 @@ files for structural changes. The diff-based engine lives in
   and skipped unless `onno.schema.allow-destructive=true`), `plan` (log only), `validate` (fail on
   drift / unapplied migrations), `off`.
 - **Diff inputs**: the desired `SchemaModel` (from the registry), the live DB's current schema
-  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`), and the previous `SchemaSnapshot` (stored
-  as JSON in `onno_schema_history`). Same-named tables in other PostgreSQL schemas are ignored. The
-  snapshot is how *type changes* and *removed entities* are detected on later boots.
+  (`INFORMATION_SCHEMA` is filtered to `CURRENT_SCHEMA`, and covers tables, columns and `UNIQUE`
+  constraints), and the previous `SchemaSnapshot` (stored as JSON in `onno_schema_history`).
+  Same-named tables in other PostgreSQL schemas are ignored. The snapshot is how *type changes* and
+  *removed entities* are detected on later boots.
+- **Register keys are reconciled**: an information register's key — `(_period, dimensions…)`, the
+  same tuple its upserts name in `ON CONFLICT` — is diffed against the live `UNIQUE` constraints, so
+  changing `periodicity` or a `@Dimension` on an existing database moves the constraint instead of
+  leaving the old one enforcing a key the code no longer uses. Widening the key (a finer periodicity,
+  an added dimension) is safe by construction and applies by default; narrowing it can meet rows that
+  duplicate under the new key, so it is destructive-gated. A table that declares a key owns every
+  `UNIQUE` constraint on it — use an index, not a constraint, for your own uniqueness on one.
 - **Renames keep data**: declare the former name with `previousNames` on `@Catalog`/`@Document`/
   `@Attribute`; the engine emits a `RENAME_TABLE`/`RENAME_COLUMN` instead of drop+add.
 - **SQL identifiers fail fast**: metadata-derived table/column names and rename aliases must match
   `[A-Za-z_][A-Za-z0-9_]*`; the scanner rejects unsafe identifiers before DDL or query rendering.
 - **Change kinds** (`SchemaChange.Type`): `CREATE_TABLE`, `RENAME_TABLE`, `RENAME_COLUMN`,
-  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `DROP_COLUMN`, `DROP_TABLE`. Drops are only ever proposed for
-  objects present in the previous snapshot (never user-created tables).
+  `ADD_COLUMN`, `ALTER_COLUMN_TYPE`, `ALTER_COLUMN_NULLABILITY`, `ALTER_UNIQUE_KEY`, `DROP_COLUMN`,
+  `DROP_TABLE`. Drops are only ever proposed for objects present in the previous snapshot (never
+  user-created tables).
 - **Data migrations**: implement `AppMigration` (`version()` compared segment-wise, `migrate(MigrationContext)`)
   as a Spring bean. Each runs exactly once per database, in version order, inside a transaction,
   recorded in `onno_schema_history` (a unique constraint arbitrates concurrent starts).
@@ -385,10 +396,11 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 
 | Area | Endpoints (served by) |
 | --- | --- |
-| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=`, `/tree`, `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}`; `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
-| Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; an empty query leads with up to 5 of the caller's recent picks (`_recent: true`, opt out with `recent: false`), re-read through the same search so deletion mark, record scope and `refFilter` still apply; `POST /api/ref-options/recent` - remember a pick `{targetKind, targetName, id}` per user and target in the framework-owned `onno_ref_recent` table (20 newest kept; `204` whether or not the record is visible, so it is no existence oracle; #409); `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
+| Catalogs | `GET /api/catalogs/{name}/{id}`, `/children?parent=` (`folders=true`: folders only with `hasChildFolders`), `/tree` (`ids=`: only the paths to those records, record-scoped), `/{id}/related/{relatedName}`; `POST`/`PUT /{id}`/`POST /{id}/duplicate`/`DELETE /{id}` (duplicate includes tabular rows with fresh IDs and omits secrets); `POST /validate` / `POST /{id}/validate` — dry-run the write lifecycle (constraints + hooks + business rules) without persisting, always 200 with `{valid, fieldErrors, formErrors}` — the form's live as-you-type validation (ui-starter) |
+| Contextual forms | `POST /api/ref-options/search` — Ref search with live header/row/id context and application badges, disable reasons, or filtering; an empty query leads with up to 5 of the caller's recent picks (`_recent: true`, opt out with `recent: false`), re-read through the same search so deletion mark, record scope and `refFilter` still apply; `POST /api/ref-options/recent` - remember a pick `{targetKind, targetName, id}` per user and target in the framework-owned `onno_ref_recent` table (20 newest kept; `204` whether or not the record is visible, so it is no existence oracle; #409); `POST /api/ref-options/decorate` - the "Show all..." picker dialog's window check: the field context plus `ids`, re-read through the same search and the field's decorator, answering `{offered, decorations}` and never naming an id outside the caller's scope; `GET /api/divkit/pickers/{kind}/{name}` - the dialog's list descriptor (view columns/filters for the active profile, default columns without a view, never replaced by an authored `Page`, no write affordances, `hierarchical`; #411); `POST /api/form-validation/{kind}/{name}/{key}` — dependency-aware advisory `ERROR`/`WARNING`/`INFO` feedback for new/edit forms (write-authorized; ui-starter) |
 | Documents | `GET /api/documents/{name}/{id}`, `/{id}/posting-preview`; `POST`, `PUT /{id}`, `POST /{id}/duplicate`, `DELETE /{id}`, `POST /{id}/post`, `POST /{id}/unpost`; `POST /validate` / `POST /{id}/validate` — same dry-run validate as catalogs, tabular rows included (ui-starter) |
 | Registers | `GET /api/registers/{name}/movements`, `/balance`, `/turnover?from=&to=` (ui-starter) |
+| Information registers | `GET /api/information-registers/{name}/records?from=&to=&cursor=&limit=&{dimension}={value}` — stored history as a keyset feed `{rows, nextCursor, hasMore}`, inclusive ISO date-time bounds, dimension equality filters (unknown parameters are `400`), newest period then ID descending; nonperiodic registers order by ID and reject period bounds. Limit defaults to 100, clamped to 1..500; the cursor is sealed to the caller's record access. Entity/record read policies apply before paging; logical fields include `id`, `period` (periodic only), and reference `*Display` sidecars; secrets are redacted. (ui-starter) |
 | List feed | `GET /api/list/catalogs/{name}`, `/api/list/documents/{name}` — the only catalog/document collection read: pass `?cursor=&limit=` and read `{rows, nextCursor, hasMore, prevCursor, hasPrevious}` (keyset pagination, constant-time at any depth, no skip/dup on shifting data); `?focus=<id>` returns the window containing that record (echoed as `focus`; a record the query cannot see falls back to the first window) and `?before=<prevCursor>` the window above one; `?count=exact\|estimate` adds a total. `?ids=` returns just those rows (the grid's single-row live patch); `?filter=` applies a safe `WidgetFilter` predicate server-side (a dashboard widget's `config("filter", …)`, e.g. `status != 'DRAFT'`). `GET /api/list/registers/{name}/movements`, `/balance` — register data for the virtualized register surface, same cursor envelope and declarative filter params (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's columns); movement rows carry a localized `_movement_type_display` + `_movement_type_color` (ui-starter) |
 | Calendars | `GET /api/calendars/{name}` — legend sources (`key,label,color,canReschedule`), filter facets (`key,label,options,me`) and watched entity names for a source-backed calendar widget; `GET /api/calendars/{name}/items?from=&to=&facet=key:value&source=` — merged `CalendarSource` items for inclusive days (max 400), ids prefixed `source:`, facet filters applied; `PUT /api/calendars/{name}/items/{id}` `{start,end,allDay}` — drag-to-reschedule via `CalendarSource.reschedule` (204; 400 with `message` when refused, 403 without `canReschedule`) (ui-starter) |
 | List grouping | `GET /api/list/{kind}/{name}/groups?groupBy=&granularity=&agg=fn,col&{q,filters}` — backend `GROUP BY`: `{groups: [{label, color?, count, values[], expand[]}], capped}`. One header per value (or per `day`/`month`/`year` bucket for a date column), each carrying an `expand` filter the grid replays on the list feed to load the group's rows. Same WHERE as the flat list; headers cap at 200 (ui-starter) |
@@ -398,12 +410,13 @@ cancellation comes from `cancellationAssignment(payload)`; inbox/task authorizat
 | Media | `POST /api/media`, `GET /api/media/{key}` — authenticated uploads; served with `nosniff`, safe raster images inline and other types as attachments ([MEDIA_UPLOADS.md](MEDIA_UPLOADS.md)) (ui-starter) |
 | Comments | `GET`/`POST /api/comments/{kind}/{name}/{id}`, `POST /api/comments/{commentId}/reactions`, `DELETE /api/comments/{commentId}` — discussion threads with replies (`parentId`) and grouped reactions, opt-in per entity via `EntityView.comments()` (404 otherwise), gated on read access to the entity; `createdAt`/`editedAt` are zone-qualified instants (`…Z`) (ui-starter) |
 | Mentions | `GET /api/mentions?q=[&kind=people\|catalogs\|documents]` — comment typeahead over readable records; the UI uses `@` for people mentions (`kind=people` narrows to the `Layout.identity(...)` catalog, falling back to all catalogs when no identity link is configured) and `#` to reference any record — no `kind` sweeps documents and catalogs alike, searchable by name or code. Suggestions carry a secondary `hint` (a person's `email` attribute, a catalog record's code, a document's `yyyy-MM-dd` date). `GET /api/mentions/resolve?kind&name&id` resolves one triple to its live display plus a `person` flag (same per-viewer read gate) — the compose box uses it to swap a pasted internal `/ui/...` record URL for an `@` (person) or `#` (anything else) mention. Bodies carry `@[Display](kind/name/id)` / `#[Display](kind/name/id)` tokens resolved live; readable `@` mentions publish `EntityMentionedEvent` (consumed by notifications; additive via `@EventListener`) (ui-starter) |
-| Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}`; `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
+| Notifications | `GET /api/notifications[?unread&cursor]` — the caller's keyset-paginated timeline `{items, nextCursor, hasMore, unreadCount}` (for a record-scoped viewer, items about unreadable records are withheld and not counted); `POST /api/notifications/{id}/read` and `POST /api/notifications/read-all` mark read. Every call is scoped to the caller's identity (no cross-user reads). Rows persist in the framework-owned `onno_notifications` table; new ones push over the `notification` SSE event (routed by recipient, relayed across nodes over the `ClusterEventBus`). Built-in producers: comment mentions and record assignment (`@AssigneeField`); apps add more by calling `NotificationService.notify`. Gated by `onno.notifications.*` (ui-starter) |
 
 Catalog/document attributes declared with `@Attribute(secret = true)` are write-only and are excluded
 from list filter, sort, grouping, and aggregate allowlists; list-query shape and counts therefore
 cannot be used as a blind oracle for encrypted values.
 | DivKit UI | `GET /api/divkit/{shell,home,menu,account}` and `/api/divkit/{catalogs,documents}/{name}[/{id}|/new]`, `/api/divkit/registers/{name}` (ui-starter). `/{id}` is the combined record surface — the editable form (disabled for read-only viewers) with the record-level actions in its header: the built-in `openInList` (read access only; opens the list at `?focus=<id>`, omitted when an authored `Page` overrides the list route), `duplicate`, `delete` and, for documents, `unpost`, plus custom `DETAIL` actions, each placed by `f.action(key).primary()/inMenu()/hidden()`. `GET /api/divkit/{*route}` is the catch-all page endpoint: any route with a registered `Page` bean renders (a custom dashboard/report, **including `/settings`** — there is no built-in Settings surface), otherwise `404`. An authored `Page` at a default surface route (`/catalogs/{name}`, `/documents/{name}`, `/registers/{name}`) overrides that surface's default list/report |
+| Record refresh | `GET /api/divkit/record-refresh/{catalogs,documents}/{name}/{id}?profile=&viewport=` returns `{record, actions, readOnly}`. It uses the record surface's read and write scope checks and computes header actions from the same saved row as the logical record. The SPA updates the mounted form and action cluster in place. |
 | Theme/config | `GET /api/theme`, `GET /api/config`, `GET /api/branding` (ui-starter) |
 | Events | `GET /api/events` — SSE stream of CRUD/posting changes, `tasks-changed` inbox invalidations, plus `presence` viewer-set updates (ui-starter); filtered per subscriber by entity read access or process-task audience (#190) |
 | Presence | `POST /api/presence` (body `{path, action}`) — mark presence on any route (`enter`/`heartbeat`/`leave`); the server derives the identity from the path (a record, an entity list, or any page/dashboard), gating entity routes on read access while a page is visible to any signed-in user. Identity from the session, heartbeat-kept + TTL-expired, relayed across nodes over the `ClusterEventBus`. `GET /api/presence` — the ambient snapshot (routes the caller may see) that seeds the client store behind the tab/row/sidebar collaborator avatars (the viewer's photo, initials fallback); kept live by `presence` SSE deltas (ui-starter) |
@@ -493,7 +506,10 @@ The UI is authored as Spring beans, never as annotations on domain classes:
   `uniqueWithinSection()` prevents sibling duplicate picks. `openButton(bool)` / `clearButton(bool)`
   show or hide the picker's "open selected record" and clear buttons (both on by default; the
   metadata carries the resolved `refOpenButton`/`refClearButton`, and a required ref is never
-  clearable); on an empty query the picker leads with the user's recent picks (#409).
+  clearable); on an empty query the picker leads with the user's recent picks (#409). The options end
+  with "Show all...", a dialog over the target's full list in the list widget's select mode, with the
+  `refFilter` as a fixed constraint, decorator and `uniqueWithinSection` rules applied per window,
+  and a folder tree plus breadcrumbs for a hierarchical catalog (#411).
   `EntityConfigBuilder.validation(...)`
   registers a Spring `FormValidator` with explicit dependency paths and debounce for advisory
   field/form errors, warnings, and info; save/post invariants remain authoritative business rules.
@@ -650,6 +666,11 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   Advance offset by limit until a short or empty page is returned. Existing calls retain their
   list response and newest-first defaults; matches beyond 1,000 no longer cause an overflow error.
   `register_balance` still returns an MCP error when more than 5,000 rows match.
+  Historical register balances: `register_balance` accepts optional `asOf`: an inclusive
+  ISO-8601 local date-time (`2024-03-31T18:00`) or a date (`2024-03-31`, the whole day); offsets are rejected with `400`. REST: `GET /api/registers/{name}/balance?asOf=2024-03-31T23:59:59`.
+  With `asOf`, BALANCE registers sum active movements through the cutoff (receipts minus expenses),
+  grouped by dimensions; dimension filters and record access policies apply before aggregation.
+  Without `asOf`, reads keep the fast materialized totals path. The 5,000-row limit still applies.
   This is the agent-readable model surface that replaced the old idea of an HTTP manifest.
 - **Import** (`onno-import-starter`) — CSV preview + import for catalogs/documents through the same
   command services as the UI (so validation, numbering, posting, events all apply); modes
@@ -878,6 +899,25 @@ and a single-instance polling worker. It publishes CRM changes via the standard 
 `CrmChannelAccess`-protected `POST /api/crm/gmail/authorize` starts session-bound PKCE authorization;
 `GET /api/crm/gmail/callback` consumes the state and returns to Channels. It is an opt-in development
 connector in `onno-crm-channels-starter`; see that module’s README.
+Replies may be sent from another mailbox (`Connection.senders`/`sender`, request `from`, stored as
+`ConversationMessage.senderAccount`); such a reply starts a thread in that mailbox, routed to the same
+conversation. `CrmMessageTransport.connection(conversation, principal)` gives the per-user view and
+`markedRead(conversation)` lets Gmail clear its `UNREAD` label after commit (grants with
+`gmail.modify` only). `GET /api/crm/gmail/accounts`, `GET /api/crm/gmail/search` and
+`POST /api/crm/gmail/restore` find mail in a mailbox, archived included, and import its thread through
+the sync's own ingest. The worker parses Gmail answers with a private high-limit mapper, retries an
+unreadable message three times before skipping it (`onno_crm_gmail_failed`), and pauses only the
+affected mailbox on 429/rate-limit 403 until Retry-After or an exponential backoff.
+
+`history-import` brings each mailbox's older mail in once, after the first import, a page of
+threads per round. It reads `format=full` (text plus file references) and stores emails through the
+same `save` as live mail in `HISTORY` mode: read, new conversations closed, inside
+`CrmHistoryImport`, a thread-bound mark that `CrmWorkspaceEvents` and application listeners check to
+stay quiet. Files are recorded in `onno_crm_gmail_file` as media keys `gmail/<id>/<name>`;
+`GmailMediaFiles` wraps the application's `MediaStorage` so `GET /api/media/...` fetches such a key
+from Gmail by message part when opened. A new thread joins the sender's conversation through
+`findByCustomerAndDeletionMarkFalse` over the contact and its merge redirects, never a scan of the
+mailbox's conversations.
 
 Inbox workspaces are application-authored `CrmInboxWorkspace` beans, separate from the persisted
 `Inbox` channel-account catalog. Each supplies stable identity, read/write roles, a typed
@@ -916,9 +956,15 @@ and pagination. This cursor is an offset, not a stable snapshot under concurrent
 The channels starter also provides an opt-in Instagram Login adapter (`onno.crm.channels.instagram.enabled`).
 It uses `Channel.INSTAGRAM`, verifies its account from a private token file, polls provider-visible
 messages into Support, and routes text replies through a durable outbox. Account/peer identity and
-provider-message deduplication are owned by `onno_crm_ig_*` adapter tables. The worker commits each
-message before advancing a conversation-list cursor; uncertain sends require explicit retry and
-replies outside the 24-hour window are rejected. It does not configure public webhooks or waive
+provider-message deduplication are owned by `onno_crm_ig_*` adapter tables. Only messages sent at or
+after the account's persisted UTC activation cutoff (`onno_crm_ig_sync`, seeded once from
+`onno.crm.channels.instagram.activation-cutoff` or the moment sync is first enabled, never reset) are
+imported, filtered per message. Polling is incremental and head-first: it stops at the checkpoint
+minus an overlap, downloads only conversations whose `updated_time` moved (`onno_crm_ig_thread`),
+bounds pages and downloads per poll, and resumes a backlog from a saved cursor after rechecking the
+newest conversations. Watermarks, cursors and the checkpoint advance only after the messages they
+cover commit; rate limits back off. Uncertain sends require explicit retry and replies outside the
+24-hour window are rejected. It does not configure public webhooks or waive
 Meta test-mode restrictions. Tokens and provider response bodies are never returned by CRM APIs.
 
 ### CRM channel distribution
@@ -948,7 +994,7 @@ provider-approved WhatsApp message templates. Inactive or deleted templates are 
 
 The CRM Inbox presents one row per contact and a chronological timeline across its channel conversations, internal comments and system events. Underlying conversations retain provider routing and email thread identifiers. The reply selector changes only the destination, and defaults to the latest incoming message's conversation; an unsent draft keeps its selected destination.
 
-`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
+`GET /api/crm/contacts/{customer}/activity?offset=0&limit=100` returns `{entries,total,hasMore}` (newest first, limit 1–500). Each entry includes `id`, `conversationId`, `subject`, `channel`, `kind`, `direction`, `authorName`, `body`, `at`, and `deliveryStatus`; a reply also carries the `senderAccount` it was queued with (a Gmail mailbox address), null otherwise. Only readable conversations are included, with canonical contact resolution after merging. The UI loads older pages on demand and updates through existing CRM SSE invalidations.
 
 `POST /api/crm/contacts/{customer}/activity` accepts `conversationId`, `type` (`QUOTED`, `CALL_PLANNED`, `CALL_COMPLETED`, `MEETING_PLANNED`, `OTHER`), nonblank `details` up to 7000 characters, and optional local `scheduledFor`. It requires write access to the matching contact's conversation. It stores an internal `SYSTEM_EVENT` without sending a channel message or changing the sales stage. Planned dates are descriptive event text, not reminders or calendar invitations. Domain workflows can also append system events through the existing conversation-message repository.
 
