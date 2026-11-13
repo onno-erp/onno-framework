@@ -369,7 +369,8 @@ because they are not Java field references.
     order), or `options/multiOptions(Collection<ListSpec.Option>)` when choices need richer display
     such as `ListSpec.Option.withAvatar(employeeId, name, avatarUrl)`; `.options(...).multiple()` is
     the configurable form of the same multi-select behavior
-    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange`; an **`@Enumeration` field** persists as
+    as `.multiOptions(...)`; `contains` / `startsWith` / `dateRange` / `numberRange` (from–to over a
+    numeric field, either bound optional, inclusive; `ge`/`le` feed params); an **`@Enumeration` field** persists as
     deterministic UUIDs, so the resolver translates its select options — author the constant name
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —

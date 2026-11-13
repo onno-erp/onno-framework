@@ -75,11 +75,12 @@ public class OrderView implements EntityView<Order> {
                 .aggregate(Order::getTotal, ListSpec.Agg.SUM, "Total");
         // Faceted filter bar: a status multi-select (no options authored — an enum field offers
         // every declared value, labelled like the colored pills), a date-range facet (with Today /
-        // Last 7 days / This month presets) and a note typeahead. They narrow the same query the
+        // Last 7 days / This month presets), a from–to total range and a note typeahead. They narrow the same query the
         // grouping and search run over.
         list.filter(Order::getStatus).label("Status").multiOptions();
         list.filter(Order::getAssignedTo).label("Assignee").multiOptions(employeeFilterOptions());
         list.filter(Order::getDate).label("Order date").dateRange();
+        list.filter(Order::getTotal).label("Total").numberRange();
         list.filter(Order::getNote).label("Note").contains();
         // Conditional row formatting: fresh orders get an amber wash (they need action), cancelled
         // ones fade out. The function runs server-side per row; null means the default look.

@@ -488,6 +488,8 @@ export const DEFAULT_MESSAGES: Record<string, string> = {
   "list.clear": "Clear",
   "list.clearAll": "Clear all",
   "list.done": "Done",
+  "list.rangeFrom": "From",
+  "list.rangeTo": "To",
   "list.selected": "{count} selected",
   "list.dateToday": "Today",
   "list.dateYesterday": "Yesterday",

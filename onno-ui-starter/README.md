@@ -279,6 +279,14 @@ constraint: `v.defaultFilter("status", "READY")` selects explicit values, while
 remain normal UI filters that the viewer can clear or replace. Use `v.filter("active = true")` only
 for a base constraint that must always apply.
 
+**Number-range filter.** `list.filter(Order::getTotal).label("Total").numberRange()` adds a from–to
+facet over a numeric field (`Integer`/`Long`/`BigDecimal`…): two number inputs, either bound
+optional ("debts above 1000", "stock below 5"), both inclusive. It rides the same `ge`/`le` feed
+params as the date range — `?ge=total,100&le=total,500` — and the server binds a bound on a numeric
+column as a number (a non-numeric value is ignored, like a filter on an unknown column). The applied
+range is URL-synced as `f.<key>.from` / `f.<key>.to`, and an embedded list can preset it with
+`v.defaultFilter("total", "100", "500")` (one value presets only the lower bound).
+
 **Conditional row formatting.** `list.rowStyle(row -> …)` tints rows by their data: the function
 runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware
 row actions use) and returns a semantic `ListSpec.RowStyle` tone — `DANGER` (red), `WARNING`
@@ -305,14 +313,16 @@ The register **report surface** is likewise fed window-by-window (newest-first, 
 response is `{rows, nextCursor, hasMore, total}`; the cursor is opaque to clients. Both feeds honor
 the grid's declarative filter params
 (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's own columns) — the movements
-tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, and
+tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, both
+tabs ship a from–to number-range facet per numeric resource (stock below a threshold, turnover
+above an amount; `ge`/`le` on the resource column), and
 movement rows carry a localized `_movement_type_display` + `_movement_type_color` so the type renders
 as a colored status pill:
 
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances + the live total (BALANCE registers). |
 
 ### DivKit server-driven UI — `/api/divkit`
 
