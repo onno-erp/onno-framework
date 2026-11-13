@@ -13,6 +13,7 @@ public final class PrintFormSpec {
     private String icon = "printer";
     private final Set<String> roles = new LinkedHashSet<>();
     private Locale locale = Locale.getDefault();
+    private PrintOutput output = PrintOutput.SOURCE;
 
     PrintFormSpec() {
     }
@@ -53,6 +54,15 @@ public final class PrintFormSpec {
         return this;
     }
 
+    /**
+     * Downloads the form as PDF by default (the source format stays available via
+     * {@code ?format=}). Requires a {@link PdfConverter}; startup fails without one.
+     */
+    public PrintFormSpec pdf() {
+        this.output = PrintOutput.PDF;
+        return this;
+    }
+
     String label() {
         return label;
     }
@@ -71,5 +81,9 @@ public final class PrintFormSpec {
 
     Locale locale() {
         return locale;
+    }
+
+    PrintOutput output() {
+        return output;
     }
 }

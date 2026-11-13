@@ -91,6 +91,8 @@ public class DivKitController implements DisposableBean {
     private AccessSubjectResolver subjects;
     // Extension modules' read-only record header actions (e.g. print forms); set by the auto-configuration.
     private List<RecordActionContributor> recordActionContributors = List.of();
+    // Extension modules' read-only selection-toolbar downloads (e.g. batch print).
+    private List<SelectionDownloadContributor> selectionDownloadContributors = List.of();
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -139,6 +141,34 @@ public class DivKitController implements DisposableBean {
     /** Wire the subject resolver (set by the auto-configuration). */
     public void setAccessSubjectResolver(AccessSubjectResolver subjects) {
         this.subjects = subjects;
+    }
+
+    /** Wire the extension selection-toolbar downloads (set by the auto-configuration). */
+    public void setSelectionDownloadContributors(List<SelectionDownloadContributor> contributors) {
+        this.selectionDownloadContributors = List.copyOf(contributors);
+    }
+
+    /**
+     * Adds the contributed selection downloads to a list descriptor. Omitted when there are none so
+     * descriptors of apps without such a module stay unchanged.
+     */
+    private Map<String, Object> withSelectionDownloads(Map<String, Object> descriptor, String kind, String name,
+                                                       Class<?> type, Principal principal) {
+        if (descriptor == null || selectionDownloadContributors.isEmpty()) return descriptor;
+        var request = new SelectionDownloadContributor.SelectionRequest(kind, name, type, subject(principal));
+        List<Map<String, Object>> downloads = new ArrayList<>();
+        for (SelectionDownloadContributor contributor : selectionDownloadContributors) {
+            for (SelectionDownloadContributor.SelectionDownload d : contributor.downloads(request)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("key", d.key());
+                item.put("icon", d.icon());
+                item.put("label", d.label());
+                item.put("url", d.url());
+                downloads.add(item);
+            }
+        }
+        if (!downloads.isEmpty()) descriptor.put("selectionDownloads", downloads);
+        return descriptor;
     }
 
     /** Wire the extension record header actions (set by the auto-configuration). */
@@ -744,9 +774,9 @@ public class DivKitController implements DisposableBean {
             String name = toSnakeCase(cd.logicalName());
             boolean canWrite = access.canWrite(principal, cd);
             String newUrl = canWrite ? "onno://catalogs/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
+            return withSelectionDownloads(SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
                     listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity),
-                    canWrite && actionResolver.hasDynamicActions(entity));
+                    canWrite && actionResolver.hasDynamicActions(entity)), "catalogs", name, entity, principal);
         }
         DocumentDescriptor dd = documentQuery.forClass(entity);
         if (dd != null) {
@@ -760,9 +790,9 @@ public class DivKitController implements DisposableBean {
             String name = toSnakeCase(dd.logicalName());
             boolean canWrite = access.canWrite(principal, dd);
             String newUrl = canWrite ? "onno://documents/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
+            return withSelectionDownloads(SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
                     listActions(entity, "documents", name), actionResolver.inputDescriptors(entity),
-                    canWrite && actionResolver.hasDynamicActions(entity));
+                    canWrite && actionResolver.hasDynamicActions(entity)), "documents", name, entity, principal);
         }
         return null;
     }
@@ -861,7 +891,8 @@ public class DivKitController implements DisposableBean {
                         listActions(desc.javaClass(), "catalogs", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
                         canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
-                        focusId(focus)));
+                        focusId(focus),
+                        d -> withSelectionDownloads(d, "catalogs", name, desc.javaClass(), principal)));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -969,7 +1000,8 @@ public class DivKitController implements DisposableBean {
                         listActions(desc.javaClass(), "documents", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
                         canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
-                        focusId(focus)));
+                        focusId(focus),
+                        d -> withSelectionDownloads(d, "documents", name, desc.javaClass(), principal)));
     }
 
     @GetMapping("/documents/{name}/{id}")

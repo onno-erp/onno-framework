@@ -489,7 +489,11 @@ The CRM Inbox presents one row per contact and a chronological timeline across i
 `[{key, label, format, url}]` (`format` is `docx` or `xlsx`). `GET {url}` returns the filled file
 with `Content-Disposition: attachment`. Both apply the same entity read access and record scope as
 `GET /api/{kind}/{name}/{id}` (a record outside scope is `404`), plus the form's optional roles
-(`403`). The response is a binary file, not JSON.
+(`403`). The response is a binary file, not JSON. `?format=pdf` (or the template format) picks the
+output when a PDF converter is configured; `formats` in the listing says which values are accepted.
+`POST /api/print/batch/{kind}/{name}/{form}` with `{"ids":[…]}` (CSRF) returns a zip, skipping ids
+outside the caller's scope. Template management (`/api/print/templates/**`) is admin-only; see
+`onno-print-starter/README.md`.
 
 ### Record tag API
 

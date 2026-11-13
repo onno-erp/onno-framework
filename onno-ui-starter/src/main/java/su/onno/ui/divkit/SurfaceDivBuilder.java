@@ -52,8 +52,18 @@ public final class SurfaceDivBuilder {
                                                   List<Map<String, Object>> actions,
                                                   List<Map<String, Object>> inputs,
                                                   boolean dynamicActions, java.util.UUID focus) {
-        Map<String, Object> descriptor =
-                listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions);
+        return listSurface(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions, focus, d -> d);
+    }
+
+    /** As above, letting the caller decorate the list descriptor (e.g. contributed selection downloads). */
+    public static Map<String, Object> listSurface(ResolvedListView view, String kind, String name,
+                                                  String newUrl, boolean canWrite,
+                                                  List<Map<String, Object>> actions,
+                                                  List<Map<String, Object>> inputs,
+                                                  boolean dynamicActions, java.util.UUID focus,
+                                                  java.util.function.UnaryOperator<Map<String, Object>> decorate) {
+        Map<String, Object> descriptor = decorate.apply(
+                listDescriptor(view, kind, name, newUrl, canWrite, actions, inputs, dynamicActions));
         if (focus != null) {
             descriptor.put("focus", focus.toString());
         }

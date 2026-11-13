@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -64,7 +65,7 @@ class PrintControllerTest {
     @BeforeEach
     void setUp() {
         ResourceLoader resources = new org.springframework.core.io.DefaultResourceLoader();
-        service = new PrintService(List.of(new InvoiceForm()), Set.of(Invoice.class), refs, resources);
+        service = new PrintService(List.of(new InvoiceForm()), Map.of(Invoice.class, "documents/Invoices"), refs, resources);
         controller = new PrintController(service, mock(CatalogQueryService.class), documents,
                 mock(UiAccessService.class), refs);
         when(documents.require("Invoices")).thenReturn(desc);
@@ -78,7 +79,7 @@ class PrintControllerTest {
     void downloadsTheFilledFormAsAttachment() {
         when(documents.inScope(manager, desc, id, AccessMode.READ)).thenReturn(true);
 
-        ResponseEntity<byte[]> response = controller.render("documents", "Invoices", id, "invoice", manager);
+        ResponseEntity<byte[]> response = controller.render("documents", "Invoices", id, "invoice", null, manager);
 
         assertThat(response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .startsWith("attachment").contains("invoice-INV-1.docx");
@@ -90,7 +91,7 @@ class PrintControllerTest {
     void recordOutsideScopeIsNotFound() {
         when(documents.inScope(eq(manager), eq(desc), eq(id), eq(AccessMode.READ))).thenReturn(false);
 
-        assertThatThrownBy(() -> controller.render("documents", "Invoices", id, "invoice", manager))
+        assertThatThrownBy(() -> controller.render("documents", "Invoices", id, "invoice", null, manager))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
@@ -100,7 +101,7 @@ class PrintControllerTest {
         AccessSubject clerk = AccessSubject.user("c", Set.of("CLERK"));
         when(documents.inScope(any(), eq(desc), eq(id), eq(AccessMode.READ))).thenReturn(true);
 
-        assertThatThrownBy(() -> controller.render("documents", "Invoices", id, "invoice", clerk))
+        assertThatThrownBy(() -> controller.render("documents", "Invoices", id, "invoice", null, clerk))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
         assertThat(controller.forms("documents", "Invoices", id, clerk)).isEmpty();
@@ -116,5 +117,68 @@ class PrintControllerTest {
         });
         assertThat(actions.actions(new RecordActionContributor.RecordActionRequest(
                 "documents", "Invoices", Invoice.class, id, clerk))).isEmpty();
+    }
+
+    @Test
+    void batchZipsOnlyRecordsInScopeAndEnforcesLimits() throws java.io.IOException {
+        UUID hidden = UUID.randomUUID();
+        when(documents.inScope(manager, desc, id, AccessMode.READ)).thenReturn(true);
+        when(documents.inScope(manager, desc, hidden, AccessMode.READ)).thenReturn(false);
+
+        ResponseEntity<byte[]> zip = controller.batch("documents", "Invoices", "invoice", null,
+                new PrintController.BatchRequest(List.of(id, hidden, id)), manager);
+
+        assertThat(zip.getHeaders().getContentType()).hasToString(PrintService.ZIP);
+        int entries = 0;
+        try (var in = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zip.getBody()))) {
+            while (in.getNextEntry() != null) entries++;
+        }
+        assertThat(entries).isEqualTo(1);
+
+        assertThatThrownBy(() -> controller.batch("documents", "Invoices", "invoice", null,
+                new PrintController.BatchRequest(List.of(hidden)), manager))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+        PrintController small = new PrintController(service, mock(CatalogQueryService.class), documents,
+                mock(UiAccessService.class), refs, List.of("ADMIN"), 1);
+        assertThatThrownBy(() -> small.batch("documents", "Invoices", "invoice", null,
+                new PrintController.BatchRequest(List.of(id, hidden)), manager))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    void unsupportedOrUnconfiguredFormatIsBadRequest() {
+        when(documents.inScope(manager, desc, id, AccessMode.READ)).thenReturn(true);
+
+        for (String format : List.of("pdf", "xlsx")) {
+            assertThatThrownBy(() -> controller.render("documents", "Invoices", id, "invoice", format, manager))
+                    .isInstanceOfSatisfying(ResponseStatusException.class,
+                            e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        }
+        assertThat(controller.render("documents", "Invoices", id, "invoice", "DOCX", manager).getBody()).isNotEmpty();
+        assertThat(controller.forms("documents", "Invoices", id, manager).get(0).formats()).containsExactly("docx");
+    }
+
+    @Test
+    void templateManagementRequiresManageRole() {
+        assertThatThrownBy(() -> controller.templates(manager))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                        e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+
+        AccessSubject admin = AccessSubject.user("root", Set.of("ADMIN"));
+        PrintController.TemplateList list = controller.templates(admin);
+        assertThat(list.uploadsEnabled()).isFalse();
+        assertThat(list.forms()).singleElement().satisfies(t -> {
+            assertThat(t.kind() + "/" + t.name() + "/" + t.key()).isEqualTo("documents/Invoices/invoice");
+            assertThat(t.uploaded()).isFalse();
+            assertThat(t.url()).isEqualTo("/api/print/templates/documents/Invoices/invoice");
+        });
+        ResponseEntity<byte[]> template = controller.template("documents", "Invoices", "invoice", false, admin);
+        assertThat(template.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("invoice.docx");
+
+        PrintController managers = new PrintController(service, mock(CatalogQueryService.class), documents,
+                mock(UiAccessService.class), refs, List.of("ROLE_MANAGER"), 10);
+        assertThat(managers.templates(manager).forms()).hasSize(1);
     }
 }

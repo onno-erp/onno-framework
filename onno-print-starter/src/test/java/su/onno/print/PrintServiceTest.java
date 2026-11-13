@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -57,6 +58,8 @@ class PrintServiceTest {
             model.text("customer", invoice.customer).text("status", invoice.status).text("number", invoice.getNumber());
         }
     }
+
+    static final Map<Class<?>, String> SCOPES = Map.of(Invoice.class, "documents/Invoices", Customer.class, "catalogs/Customers");
 
     private final Customer acme = customer();
     private final RefResolver refs = new RefResolver() {
@@ -103,7 +106,7 @@ class PrintServiceTest {
     void rejectsDuplicateKeysUnregisteredTypesMissingTemplatesAndBadKeys() {
         assertThatThrownBy(() -> service(List.of(new InvoiceForm("invoice"), new InvoiceForm("invoice"))))
                 .hasMessageContaining("Duplicate print form 'invoice'");
-        assertThatThrownBy(() -> new PrintService(List.of(new InvoiceForm("invoice")), Set.of(), refs, loader()))
+        assertThatThrownBy(() -> new PrintService(List.of(new InvoiceForm("invoice")), Map.of(), refs, loader()))
                 .hasMessageContaining("not a registered @Catalog or @Document");
         PrintForm<Invoice> missing = new PrintForm<>("nothing", Invoice.class) {
             @Override
@@ -116,7 +119,7 @@ class PrintServiceTest {
     }
 
     private PrintService service(List<PrintForm<?>> forms) {
-        return new PrintService(forms, Set.of(Invoice.class, Customer.class), refs, loader());
+        return new PrintService(forms, SCOPES, refs, loader());
     }
 
     /** Serves {@code memory:invoice.docx} from bytes built with POI. */

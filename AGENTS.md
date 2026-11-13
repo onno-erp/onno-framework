@@ -40,7 +40,7 @@ to future agents that may not have the full conversation context.
 | `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
-| `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu + `/api/print` download. |
+| `onno-print-starter` | Print forms: typed `PrintForm<T>` beans fill Word/Excel templates; record ⋯ menu, list batch zip, admin template uploads, optional PDF. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
 | `onno-kafka-starter` | Kafka/event transport helpers (outbox relay, CloudEvents, remote refs). |
 | `onno-desktop-starter` | Desktop runtime support and bundled Tauri shell resources. |
@@ -942,8 +942,10 @@ event streaming).
 A print form (1C "печатная форма") is a `.docx`/`.xlsx` template plus a typed `PrintForm<T>` bean
 from `onno-print-starter`. Templates use `{{key}}` placeholders and `{{table.column}}` rows that
 repeat per item. The record ⋯ menu offers each form the viewer may use (`print-{key}` action key).
-Keep values typed (`number`/`date`) so Excel cells stay numeric. Do not build bespoke download
-controllers for printing.
+Keep values typed (`number`/`date`) so Excel cells stay numeric. List selections batch-print to a
+zip; admins replace templates at runtime with the `printTemplates` widget (stored in
+`onno_print_templates`); `spec.pdf()` / `?format=pdf` need a configured `PdfConverter` (Gotenberg or
+LibreOffice). Do not build bespoke download controllers for printing.
 
 ```java
 @Component

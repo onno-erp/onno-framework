@@ -29,7 +29,8 @@ public class OrderInvoicePrint extends PrintForm<Order> {
             .template("classpath:/print/invoice.docx") // default: classpath:/print/{key}.docx, then .xlsx
             .icon("file-text")                 // lucide icon (default "printer")
             .roles("MANAGER")                  // optional; ADMIN always passes
-            .locale(Locale.GERMANY);           // Word number/date patterns (default: JVM locale)
+            .locale(Locale.GERMANY)            // Word number/date patterns (default: JVM locale)
+            .pdf();                            // optional: download as PDF by default (needs a converter)
     }
 
     @Override
@@ -79,16 +80,23 @@ that repeats once per item.
   Java `DecimalFormat`/`DateTimeFormatter` patterns. Excel ignores them and uses the cell's format.
 - **Unknown placeholders** are left as they are, so a typo shows up in the printed file.
 
-Only `.docx` and `.xlsx` are supported, not the legacy `.doc`/`.xls`. Phase 1 reads templates from
-any Spring resource location (`classpath:`, `file:`). Admin-uploaded templates and PDF output are
-on the roadmap.
+Only `.docx` and `.xlsx` are supported, not the legacy `.doc`/`.xls`. Built-in templates come from
+any Spring resource location (`classpath:`, `file:`); admins can replace them at runtime (below).
 
 ## Endpoints and UI
 
 ```text
-GET /api/print/{kind}/{name}/{id}          forms the caller may use for the record → [{key,label,format,url}]
-GET /api/print/{kind}/{name}/{id}/{form}   the filled file, Content-Disposition: attachment
+GET    /api/print/{kind}/{name}/{id}                   forms the caller may use → [{key,label,format,formats,url}]
+GET    /api/print/{kind}/{name}/{id}/{form}[?format=]  the filled file, Content-Disposition: attachment
+POST   /api/print/batch/{kind}/{name}/{form}[?format=] {"ids":[…]} → zip of the filled files
+GET    /api/print/templates                            every form + template state (manage roles)
+GET    /api/print/templates/{kind}/{name}/{form}[?builtin=true]   the effective / built-in template
+PUT    /api/print/templates/{kind}/{name}/{form}       multipart "file": replace the template
+DELETE /api/print/templates/{kind}/{name}/{form}       back to the built-in template
 ```
+
+`format` is `pdf` or the template's own format (`docx`/`xlsx`); without it a form downloads in its
+default output. An unsupported format, or `pdf` with no converter configured, is a `400`.
 
 `kind` is `catalogs` or `documents`, and `name` is the entity's route name (for example `Orders`).
 Both endpoints require read access to the entity and to the record under any `RecordAccessPolicy`:
@@ -101,11 +109,66 @@ example `f.action("print-invoice").primary()` to show it as a button or `.hidden
 The menu entry comes from a `RecordActionContributor` bean (an `onno-ui-starter` SPI), so other
 modules can add read-only record actions the same way.
 
+With a PDF converter configured, each menu entry gets a sibling: `Invoice · PDF` (key
+`print-{key}-pdf`) for a Word/Excel form, or `Invoice · DOCX` (`print-{key}-source`) for a `pdf()`
+form.
+
+## Batch printing
+
+Select rows in a catalog/document list (⌘/Ctrl/Shift-click, ⌘A) and the selection toolbar offers each
+permitted form (and its PDF/source sibling). It POSTs the ids and saves one zip with a file per
+record; duplicate names get `(2)`, `(3)`… Records outside the caller's scope are skipped. At most
+`onno.print.batch.max-records` (default 200) per request. The buttons come from a
+`SelectionDownloadContributor` bean (an `onno-ui-starter` SPI) and are shown to every reader, not
+only writers.
+
+## Uploaded templates
+
+Admins can edit templates without a redeploy. Put the bundled `printTemplates` widget on an admin
+page:
+
+```java
+b.widget("Print templates").type("printTemplates").width("full");
+```
+
+It lists every form with **Download** (the effective template, or the built-in one), **Upload** (an
+edited copy) and **Reset** (back to the built-in file). An upload must be the same format as the
+built-in template, a readable `.docx`/`.xlsx`, and at most `onno.print.templates.max-size`
+(default 10 MB). It replaces the template for every user and every node; the file is stored in the
+framework-managed `onno_print_templates` table, keyed by entity (`documents/Orders`) and form key —
+renaming the entity orphans its uploads. Only `onno.print.templates.manage-roles` (default
+`ADMIN`) may manage templates; `onno.print.templates.enabled=false` makes the built-in templates
+final. The fill code is unchanged by an upload, so an edited template can rearrange or restyle the
+`{{placeholders}}` but not invent new ones.
+
+## PDF output
+
+Configure one converter:
+
+```yaml
+onno:
+  print:
+    pdf:
+      gotenberg:
+        url: http://localhost:3000     # docker run -p 3000:3000 gotenberg/gotenberg:8
+      # or a local LibreOffice:
+      # libreoffice:
+      #   command: soffice             # or /Applications/LibreOffice.app/Contents/MacOS/soffice
+```
+
+Then any form can be downloaded with `?format=pdf`, and `spec.pdf()` makes PDF a form's default.
+A form declaring `pdf()` without a converter fails startup. `GotenbergPdfConverter` posts the filled
+file to Gotenberg's LibreOffice route; `LibreOfficePdfConverter` runs
+`soffice --headless --convert-to pdf` in a fresh temp directory and profile per conversion. Register
+your own `PdfConverter` bean to use something else; it replaces both.
+
 ## Programmatic use
 
 ```java
 PrintForm<?> form = printService.form(Order.class, "invoice").orElseThrow();
 PrintResult file = printService.render(form, order);   // content(), contentType(), fileName()
+PrintResult pdf  = printService.render(form, order, PrintOutput.PDF);
+PrintResult zip  = printService.renderZip(form, List.of(a, b), PrintOutput.SOURCE);
 ```
 
 `TemplateModel`, `DocxTemplateEngine` and `XlsxTemplateEngine` can also be used directly to fill a

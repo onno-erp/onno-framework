@@ -498,8 +498,15 @@ makes it reachable by direct route but unlisted. No auto-listing of unclaimed ca
 - Template syntax `{{key}}`, table rows `{{items.col}}` (row repeats per item). Unknown keys stay
   visible. Excel `SUM` ranges ending on the template row stretch over inserted rows.
 - UI: record ⋯ menu entry per permitted form, action key `print-{key}` (`f.action("print-invoice").primary()`).
-- REST: `GET /api/print/{kind}/{name}/{id}` (list), `GET /api/print/{kind}/{name}/{id}/{form}` (file).
-- Generic SPI behind the menu: `su.onno.ui.RecordActionContributor` (read-only record actions).
+- REST: `GET /api/print/{kind}/{name}/{id}` (list), `GET /api/print/{kind}/{name}/{id}/{form}[?format=pdf]`
+  (file), `POST /api/print/batch/{kind}/{name}/{form}` `{"ids":[…]}` (zip), `/api/print/templates/**` (admin).
+- Batch: list selection toolbar → zip (`onno.print.batch.max-records`, default 200).
+- Uploaded templates: `b.widget("Print templates").type("printTemplates")`; `onno.print.templates.*`
+  (`enabled`, `manage-roles` = ADMIN, `max-size` = 10MB); same format as the built-in file.
+- PDF: `onno.print.pdf.gotenberg.url` or `onno.print.pdf.libreoffice.command` (or a `PdfConverter`
+  bean); `spec.pdf()` makes PDF the default (fails startup without a converter); menu gains `· PDF`.
+- Generic SPIs behind it: `su.onno.ui.RecordActionContributor` (record ⋯ menu) and
+  `su.onno.ui.SelectionDownloadContributor` (list selection-toolbar downloads).
 
 ## Notifications (package `su.onno.ui.notifications`; `onno.notifications.*`)
 

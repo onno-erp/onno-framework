@@ -39,5 +39,10 @@ public class SettingsPage implements Page {
         b.widget("Store name").type("setting").width("1/2").order(0)
                 .config("constant", "Store Name")
                 .hint("The trading name of the shop, shown across the app.");
+        // onno-print-starter's template manager: download a print form's template, upload an edited
+        // copy (it replaces the built-in file for everyone), or reset it. Admin-only via
+        // onno.print.templates.manage-roles; the widget ships inside the starter's jar.
+        b.widget("Print templates").type("printTemplates").width("full").order(1)
+                .hint("Edit the Word and Excel files behind the Print menu.");
     }
 }
