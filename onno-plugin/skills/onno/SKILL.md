@@ -433,7 +433,7 @@ When you hit a genuine framework bug, don't silently work around it — **surfac
 issue** so it gets fixed upstream:
 
 - Core framework → [`onno-erp/onno-framework`](https://github.com/onno-erp/onno-framework/issues)
-- Commercial connectors (Guesty / SES.HOSPEDAJES / Tochka) → the `onno-erp/onno-enterprise` repo.
+- Commercial connectors (Tochka / YooKassa / Ozon / …) → the `onno-erp/onno-enterprise` repo.
 
 Reduce it to the smallest repro first, **check for duplicates**, and — because filing is a public,
 outward action — **confirm with the user before creating it** (or hand them the command if you

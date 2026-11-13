@@ -47,7 +47,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
 | `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, a read-only data client, and shared live-event subscriptions that resolve to the host SPA at runtime. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
-| `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
+| `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`, … | `su.onno.enterprise` | Commercial connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
 ## Boot pipeline
 
@@ -803,7 +803,7 @@ Running more than one instance behind a load balancer needs these, beyond a shar
 
 The framework is open-core. Everything in this repo (Maven group `su.onno`) is
 Apache-2.0, **including authentication and OIDC/SSO** (`onno-auth-starter`). Separately licensed
-commercial connectors (Maven group `su.onno.enterprise`: Guesty, SES.HOSPEDAJES, Tochka) live in
+commercial connectors (Maven group `su.onno.enterprise`: Tochka, YooKassa, Ozon, Wildberries, …) live in
 the private [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo under the onno
 Commercial License and consume the core as published Maven artifacts. An enterprise connector is a
 Spring Boot auto-configuration starter that wraps an external API; the framework metadata, posting,

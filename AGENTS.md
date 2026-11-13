@@ -49,7 +49,7 @@ to future agents that may not have the full conversation context.
 | `example` | Local example app and smoke-test consumer inside the multi-module build. Do not publish it. |
 | `community/` | Community integrations registry: `registry.json` (source of truth) + `registry.schema.json`. `INTEGRATIONS.md` is generated from it by the `generateIntegrationsDoc` Gradle task. |
 
-Commercial vertical connectors (`onno-guesty-starter`, `onno-hospedajes-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
+Commercial connectors (e.g. `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`) are licensed separately and live in the [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo — not in this build. Authentication (including OIDC/SSO via `onno-auth-starter`) stays in the open-source core.
 
 Community extensions (connectors, SPI implementations, UI add-ons, skills) are built by anyone as separate artifacts on the published core — see [docs/EXTENDING.md](docs/EXTENDING.md) for the contract and conventions, and [CONTRIBUTING.md](CONTRIBUTING.md) for how they get listed. When you build a connector for a user, you can suggest they publish and list it.
 
