@@ -155,6 +155,25 @@ class SearchIndexReconcilerPostgresIT {
     }
 
     @Test
+    void leavesTheIndexesForTheNextStartWhenTheBuildLockStaysHeld() {
+        List<String> before = trigramIndexes();
+        Handle otherReconciliation = jdbi.open();
+        try {
+            assertThat(tryLock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY)).isTrue();
+
+            assertTimeoutPreemptively(Duration.ofSeconds(15), () ->
+                    new SearchIndexReconciler(generator, SearchIndexMode.AUTO, Duration.ofSeconds(2))
+                            .reconcile(jdbi, SqlDialect.POSTGRESQL));
+
+            assertThat(trigramIndexes()).isEqualTo(before);
+        } finally {
+            unlock(otherReconciliation, SearchIndexReconciler.BUILD_LOCK_KEY);
+            otherReconciliation.close();
+        }
+        assertThat(lockFree(SearchIndexReconciler.LOCK_KEY)).isTrue();
+    }
+
+    @Test
     void releasesBothLocksWhenTheConnectionStaysOpen() throws Exception {
         // A pool keeps the session, and with it any advisory lock left unreleased.
         Handle pooled = jdbi.open();

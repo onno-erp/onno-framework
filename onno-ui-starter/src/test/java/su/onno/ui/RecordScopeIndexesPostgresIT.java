@@ -420,6 +420,29 @@ class RecordScopeIndexesPostgresIT {
     }
 
     @Test
+    void recognisesItsOwnIndexOnAKeywordColumn() {
+        // pg_get_indexdef quotes a column named after a keyword ("position", "time", ...); an
+        // unquoted comparison would never treat such an index as ours, so it could never be repaired.
+        jdbi.useHandle(h -> {
+            h.execute("CREATE TABLE scope_keyword_cols (position integer, plain integer)");
+            try {
+                for (String column : List.of("position", "plain")) {
+                    var wanted = new RecordScopeIndexes.ScopeIndex(
+                            RecordScopeIndexes.indexName("scope_keyword_cols", column), "scope_keyword_cols", column);
+                    h.execute(wanted.ddl(false));
+                    String def = h.createQuery("SELECT pg_get_indexdef(to_regclass(:name))")
+                            .bind("name", wanted.name()).mapTo(String.class).one();
+                    var existing = new RecordScopeIndexes.ExistingIndex(wanted.name(), "scope_keyword_cols", false, def);
+                    assertThat(existing.isPlainIndexOn(wanted, RecordScopeIndexes.quoteIdent(h, column)))
+                            .as("%s is recognised as the scope index", def).isTrue();
+                }
+            } finally {
+                h.execute("DROP TABLE scope_keyword_cols");
+            }
+        });
+    }
+
+    @Test
     void repairsItsIndexWhileTheSameNameIsBuiltInAnotherSchema() throws Exception {
         interruptBuild("CREATE INDEX CONCURRENTLY " + index + " ON " + notes.tableName() + " (owner)");
         assertThat(validity()).contains(false);

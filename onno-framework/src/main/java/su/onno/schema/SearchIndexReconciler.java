@@ -5,6 +5,7 @@ import org.jdbi.v3.core.Jdbi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,8 +31,9 @@ import java.util.stream.Collectors;
  * lock timeout) is logged and the rest continues — search falls back to {@code LIKE} scans.
  * Runs under a {@code pg_try_advisory_lock} so only one node of a scaled-out deployment builds at
  * a time, and also takes {@link #BUILD_LOCK_KEY}, waiting for it, so it never builds alongside
- * another background index reconciliation. While it waits it holds no connection. A no-op on
- * non-PostgreSQL dialects.
+ * another background index reconciliation. While it waits it holds no connection; after 30
+ * minutes it gives up and leaves the indexes for the next start. A no-op on non-PostgreSQL
+ * dialects.
  */
 public final class SearchIndexReconciler {
 
@@ -51,12 +53,21 @@ public final class SearchIndexReconciler {
 
     private static final long BUILD_LOCK_POLL_MILLIS = 1_000;
 
+    /** How long to wait for {@link #BUILD_LOCK_KEY} before leaving the search indexes for the next start. */
+    static final Duration BUILD_LOCK_WAIT = Duration.ofMinutes(30);
+
     private final SchemaGenerator generator;
     private final SearchIndexMode mode;
+    private final Duration buildLockWait;
 
     public SearchIndexReconciler(SchemaGenerator generator, SearchIndexMode mode) {
+        this(generator, mode, BUILD_LOCK_WAIT);
+    }
+
+    SearchIndexReconciler(SchemaGenerator generator, SearchIndexMode mode, Duration buildLockWait) {
         this.generator = generator;
         this.mode = mode;
+        this.buildLockWait = buildLockWait;
     }
 
     /**
@@ -86,6 +97,7 @@ public final class SearchIndexReconciler {
         // Polls rather than block in pg_advisory_lock: a statement blocked on the lock holds a
         // snapshot, and the lock holder's concurrent build waits for every older snapshot. Each
         // attempt runs on its own short-lived connection, so waiting holds no pooled connection.
+        long deadline = System.nanoTime() + buildLockWait.toNanos();
         boolean announced = false;
         while (true) {
             Attempt attempt = jdbi.withHandle(this::attempt);
@@ -94,6 +106,11 @@ public final class SearchIndexReconciler {
                 return;
             }
             if (attempt == Attempt.DONE) {
+                return;
+            }
+            if (System.nanoTime() >= deadline) {
+                log.warn("Another index reconciliation kept running for {}; search indexes are left for the "
+                        + "next start", buildLockWait);
                 return;
             }
             if (!announced) {

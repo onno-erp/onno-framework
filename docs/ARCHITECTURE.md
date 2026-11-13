@@ -292,7 +292,8 @@ files for structural changes. The diff-based engine lives in
   ones are built with `CREATE INDEX CONCURRENTLY` under a `pg_try_advisory_lock`. Before building it
   also waits, holding no connection, for the advisory lock it shares with the record-scope index
   reconciliation (see [Record-level access policies](#record-level-access-policies)), so the two
-  never build at once: two concurrent builds on one table deadlock. Search covers every String
+  never build at once: two concurrent builds on one table deadlock. After 30 minutes of waiting it
+  leaves the search indexes for the next start. Search covers every String
   attribute regardless — unindexed ones fall back to a `LIKE` scan.
 
 Every applied change-set plus a fresh metadata snapshot is written to `onno_schema_history`.

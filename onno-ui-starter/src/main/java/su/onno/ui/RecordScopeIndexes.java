@@ -270,7 +270,7 @@ public class RecordScopeIndexes implements SmartInitializingSingleton {
             if (isValid(current)) continue;
             if (current != null) {
                 // Only drop what this class would have built; never an unrelated index that shares the name.
-                if (!current.isPlainIndexOn(index)) {
+                if (!current.isPlainIndexOn(index, quoteIdent(handle, index.column()))) {
                     log.warn("Index {} is invalid but is not a plain index on {}.{}; leaving it in place, "
                             + "so that column stays unindexed", index.name(), index.table(), index.column());
                     continue;
@@ -370,6 +370,16 @@ public class RecordScopeIndexes implements SmartInitializingSingleton {
                 .findOne().orElse(null);
     }
 
+    /**
+     * The column as PostgreSQL prints it in an index definition. The DDL leaves it unquoted, so it
+     * is folded to lower case first; {@code quote_ident} then quotes it exactly as
+     * {@code pg_get_indexdef} does.
+     */
+    static String quoteIdent(Handle handle, String column) {
+        return handle.createQuery("SELECT quote_ident(:column)")
+                .bind("column", column.toLowerCase(Locale.ROOT)).mapTo(String.class).one();
+    }
+
     static String indexName(String table, String column) {
         String name = "idx_" + table + "_" + column;
         if (name.length() > 63) {
@@ -390,12 +400,16 @@ public class RecordScopeIndexes implements SmartInitializingSingleton {
     /** An index found in the database. */
     record ExistingIndex(String name, String table, boolean valid, String definition) {
 
-        /** Whether this is the plain, non-unique btree index {@code index} describes. */
-        boolean isPlainIndexOn(ScopeIndex index) {
+        /**
+         * Whether this is the plain, non-unique btree index {@code index} describes.
+         * {@code quotedColumn} is the column as {@code pg_get_indexdef} prints it: quoted when it is
+         * a keyword such as {@code position} or {@code time}.
+         */
+        boolean isPlainIndexOn(ScopeIndex index, String quotedColumn) {
             String def = definition == null ? "" : definition.toLowerCase(Locale.ROOT);
             return table.equalsIgnoreCase(index.table())
                     && def.startsWith("create index ")
-                    && def.endsWith(" using btree (" + index.column().toLowerCase(Locale.ROOT) + ")");
+                    && def.endsWith(" using btree (" + quotedColumn.toLowerCase(Locale.ROOT) + ")");
         }
     }
 }
