@@ -37,7 +37,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the UI starter but disabled by default. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities and widgets. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
-| `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
+| `onno-auth-starter` | `su.onno` | Spring Security: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
@@ -588,6 +588,13 @@ In every mode, framework bootstrap paths (including `/api/config` and `/api/auth
 public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
 entries are combined with them and can no longer remove mandatory framework paths.
 
+- **`database`** (recommended) — accounts in the framework-managed table `onno_auth_user`, managed at
+  runtime through `UserAccounts`, `/api/auth/users` (ADMIN) and the `users` / `changePassword`
+  widgets. `onno.auth.users[*]` only seeds an empty store once, flagged for a forced password change.
+  Each security-relevant change bumps the account's security stamp; `AccountSessionGuardFilter`
+  re-reads the account per request, revokes stale sessions (`401 session_revoked`, remember-me cookies
+  are stamp-bound too) and confines a pending one-time-password session to `/api/auth/**`
+  (`403 password_change_required`). Otherwise identical to `in-memory` (session cookie, CSRF, JSON login).
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
@@ -595,7 +602,9 @@ entries are combined with them and can no longer remove mandatory framework path
   the token via `onno.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.
 
-Public, non-sensitive demos can opt into server-side in-memory auto-login with
+In-memory users last as long as the configuration does; use it for development and demos.
+
+Public, non-sensitive demos can opt into server-side password-mode auto-login with
 `onno.auth.demo.auto-login-username`; normal RBAC still sees that user's roles. Iframe embedding is
 deny-by-default and requires an explicit `onno.auth.embedding.frame-ancestors` CSP allowlist. A
 cross-site session iframe additionally needs `onno.auth.embedding.cross-site-cookies=true` and HTTPS

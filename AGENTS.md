@@ -37,7 +37,7 @@ to future agents that may not have the full conversation context.
 | `onno-ui-starter` | Generic REST + DivKit UI controllers plus the packaged React/Vite frontend, media uploads, and the SSE event stream. |
 | `onno-observability-starter` | Opt-in privacy-safe business/UX telemetry API, browser intake, and bounded asynchronous HTTP export. |
 | `onno-crm-starter` | Composable inbox and messaging around explicitly bound host customer/employee catalogs. Host owns sales, business fields and navigation. |
-| `onno-auth-starter` | Security and auth API auto-configuration: in-memory, OIDC/SSO, and resource-server (JWT) modes. |
+| `onno-auth-starter` | Security and auth API auto-configuration: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes. |
 | `onno-mcp-starter` | MCP server exposing the model + CRUD + register reads + posting as AI-agent tools. |
 | `onno-import-starter` | CSV import (preview, mapping, upsert, dry-run) through the UI command path. |
 | `onno-cluster-starter` | Cross-node delivery of entity-change events for horizontal scale-out via a pluggable `ClusterEventBus` (default Postgres LISTEN/NOTIFY; no-op on H2). |
@@ -1102,8 +1102,11 @@ up every agent:
 **Authenticate first (session cookie + CSRF), then call the API.** Login is a JSON POST that sets a
 `JSESSIONID` session cookie — *not* HTTP Basic. Mutations (`POST`/`PUT`/`DELETE`) require the CSRF
 token: it's delivered in a readable `XSRF-TOKEN` cookie and echoed back in the `X-XSRF-TOKEN` header.
-Users come from `onno.auth.users[*]` (the starter ships **no** default credentials; the bundled
-example app seeds `admin@onnobooks.local`/`admin` and `manager@onnobooks.local`/`manager`).
+Users come from `onno.auth.users[*]` in `in-memory` mode, or from the `onno_auth_user` table in
+`database` mode (where that list only seeds an empty store once). The starter ships **no** default
+credentials; the bundled example app configures `admin@onnobooks.local`/`admin` and
+`manager@onnobooks.local`/`manager` for its demo. For a real app use `onno.auth.mode=database` so no
+config-file password stays valid forever.
 
 ```bash
 # 1. Log in — saves the session cookie and the XSRF-TOKEN cookie into the jar. Login itself is CSRF-exempt.

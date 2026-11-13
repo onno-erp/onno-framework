@@ -9,6 +9,7 @@ import type {
   LayoutSection,
   RegisterMeta,
   AuthUser,
+  UserAccountView,
   UiEvent,
   SettingMeta,
   ActionResult,
@@ -493,6 +494,34 @@ export const api = {
     }),
   logout: () =>
     fetchJson<void>(`${BASE}/auth/logout`, { method: "POST" }),
+  // Database-mode accounts. The caller renders its own error text, so these stay silent.
+  getPasswordPolicy: () =>
+    fetchJson<{ minLength: number }>(`${BASE}/auth/password-policy`, undefined, { silent: true }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchJson<void>(`${BASE}/auth/password`, {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }, { silent: true }),
+  listUserAccounts: () =>
+    fetchJson<UserAccountView[]>(`${BASE}/auth/users`, undefined, { silent: true }),
+  createUserAccount: (username: string, roles: string[], password?: string) =>
+    fetchJson<{ account: UserAccountView; temporaryPassword: string | null }>(`${BASE}/auth/users`, {
+      method: "POST",
+      body: JSON.stringify({ username, roles, password: password || null }),
+    }, { silent: true }),
+  updateUserAccount: (id: string, patch: { roles?: string[]; enabled?: boolean }) =>
+    fetchJson<UserAccountView>(`${BASE}/auth/users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }, { silent: true }),
+  resetUserPassword: (id: string) =>
+    fetchJson<{ temporaryPassword: string }>(`${BASE}/auth/users/${encodeURIComponent(id)}/reset-password`, {
+      method: "POST",
+    }, { silent: true }),
+  signOutUserAccount: (id: string) =>
+    fetchJson<UserAccountView>(`${BASE}/auth/users/${encodeURIComponent(id)}/sign-out`, {
+      method: "POST",
+    }, { silent: true }),
 
   getConfig: () => fetchJson<AppConfig>(`${BASE}/config`),
   getTheme: () => fetchJson<Record<string, string>>(`${BASE}/theme`),

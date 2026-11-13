@@ -270,14 +270,29 @@ export interface AuthUser {
   authenticated: boolean;
   username: string;
   roles: string[];
-  // Active auth backend: "in-memory", "oidc", or "resource-server".
+  // Active auth backend: "in-memory", "database", "oidc", or "resource-server".
   mode?: string;
+  // Database mode: the account signed in with a one-time password and must set a new one before
+  // anything else; the server answers 403 password_change_required to every other API call.
+  passwordChangeRequired?: boolean;
   // Where to send the user to sign in. Non-null only in OIDC mode, where login is a
   // full-page redirect to Keycloak rather than a password POST.
   loginUrl?: string | null;
   // Where to send the user to sign out. Non-null only in OIDC mode, where logout is a
   // full-page redirect that ends the Keycloak SSO session, not a fetch POST.
   logoutUrl?: string | null;
+}
+
+/** A sign-in account in onno.auth.mode=database (GET /api/auth/users). */
+export interface UserAccountView {
+  id: string;
+  username: string;
+  roles: string[];
+  enabled: boolean;
+  passwordChangeRequired: boolean;
+  createdAt: string;
+  passwordChangedAt?: string | null;
+  lastLoginAt?: string | null;
 }
 
 export interface UiEvent {

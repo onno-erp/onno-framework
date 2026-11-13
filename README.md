@@ -152,9 +152,13 @@ spring:
 
 onno:
   auth:
+    # Accounts live in the database and are managed at runtime (users widget, /api/auth/users).
+    mode: database
+    # Seeds the first account into the empty store once; it must set a new password at first
+    # sign-in, and the list is ignored afterwards. Remove it once you have signed in.
     users:
       - username: admin
-        password: admin # development only
+        password: change-me-on-first-login
         roles: [ADMIN]
 ```
 
