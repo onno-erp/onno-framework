@@ -237,6 +237,51 @@ public class UiAccessService {
         return canWrite(subject, "document", descriptor.logicalName());
     }
 
+    // ---------------------------------------------------------------- post / unpost (#546)
+    //
+    // Posting rights narrow write access: the caller must be able to write the document AND, when
+    // the document declares @AccessControl(postRoles/unpostRoles), hold one of those roles. An
+    // unset list leaves the right with every writer. ADMIN and trusted system code always pass.
+
+    /** Whether {@code subject} may post / re-post documents of this type. */
+    public boolean canPost(AccessSubject subject, DocumentDescriptor descriptor) {
+        return canWrite(subject, descriptor) && holdsOptional(subject, descriptor.postRoles());
+    }
+
+    /** Whether {@code subject} may unpost documents of this type (also gates deleting a posted one). */
+    public boolean canUnpost(AccessSubject subject, DocumentDescriptor descriptor) {
+        return canWrite(subject, descriptor) && holdsOptional(subject, descriptor.unpostRoles());
+    }
+
+    public boolean canPost(Principal principal, DocumentDescriptor descriptor) {
+        return canWrite(principal, descriptor)
+                && (descriptor.postRoles().isEmpty() || hasAnyRole(principal, descriptor.postRoles()));
+    }
+
+    public boolean canUnpost(Principal principal, DocumentDescriptor descriptor) {
+        return canWrite(principal, descriptor)
+                && (descriptor.unpostRoles().isEmpty() || hasAnyRole(principal, descriptor.unpostRoles()));
+    }
+
+    public void requirePost(AccessSubject subject, DocumentDescriptor descriptor) {
+        requireWrite(subject, descriptor);
+        if (!canPost(subject, descriptor)) throw forbiddenOperation("post", descriptor.logicalName());
+    }
+
+    public void requireUnpost(AccessSubject subject, DocumentDescriptor descriptor) {
+        requireWrite(subject, descriptor);
+        if (!canUnpost(subject, descriptor)) throw forbiddenOperation("unpost", descriptor.logicalName());
+    }
+
+    private boolean holdsOptional(AccessSubject subject, List<String> requiredRoles) {
+        return requiredRoles == null || requiredRoles.isEmpty() || hasAnyRole(subject, requiredRoles);
+    }
+
+    private ResponseStatusException forbiddenOperation(String operation, String name) {
+        return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                "Current user is not allowed to " + operation + " document: " + name);
+    }
+
     /** Whether {@code subject} holds any of {@code requiredRoles} ({@code ADMIN} and system code always pass). */
     public boolean hasAnyRole(AccessSubject subject, List<String> requiredRoles) {
         return subject instanceof AccessSubject.System || hasAnyRole(subject.roles(), requiredRoles);

@@ -636,6 +636,25 @@ public class DivKitController implements DisposableBean {
     }
 
     /**
+     * Hide the form's built-in Post button from a viewer who may write the document but lacks its
+     * {@code @AccessControl(postRoles)} right (#546) — the same {@code "hidden"} placement
+     * {@code f.action("post").hidden()} produces, so the client needs no extra rule. The REST
+     * layer rejects the post regardless.
+     */
+    private Map<String, Object> withPostingAccess(Map<String, Object> meta, Principal principal,
+                                                  DocumentDescriptor desc) {
+        if (!access.canPost(principal, desc)) {
+            Map<String, Object> actions = new LinkedHashMap<>();
+            if (meta.get("actions") instanceof Map<?, ?> existing) {
+                existing.forEach((k, v) -> actions.put(String.valueOf(k), v));
+            }
+            actions.put("post", "hidden");
+            meta.put("actions", actions);
+        }
+        return meta;
+    }
+
+    /**
      * Expand the renderer-agnostic page components into concrete custom blocks: an embedded list
      * ({@code PageBuilder.list}) becomes the full {@code onno-list} surface; an action section
      * ({@code PageBuilder.actions}) becomes an {@code onno-actions} block carrying the page route
@@ -1089,7 +1108,10 @@ public class DivKitController implements DisposableBean {
         Map<String, String> placement = resolvedMetadata.actionOverrides(desc.javaClass(), profileId);
 
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
-        if (canWrite && postable && posted) {
+        // Posting rights can be narrower than write access (@AccessControl postRoles/unpostRoles, #546).
+        boolean canPost = canWrite && access.canPost(principal, desc);
+        boolean canUnpost = canWrite && access.canUnpost(principal, desc);
+        if (canUnpost && postable && posted) {
             actions.add(new SurfaceDivBuilder.HeaderAction("rotate-ccw", messages.get("action.unpost"), "normal",
                     "onno://unpost/" + name + "/" + id, placement.getOrDefault("unpost", "menu"),
                     List.of(), Map.of(), false, false));
@@ -1101,10 +1123,13 @@ public class DivKitController implements DisposableBean {
                     "onno://documents/" + name + "/" + id + "/duplicate",
                     placement.getOrDefault("duplicate", "menu"),
                     List.of(), Map.of(), false, false));
-            actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
-                    "onno://delete/documents/" + name + "/" + id,
-                    placement.getOrDefault("delete", "menu"),
-                    List.of(), Map.of(), false, false));
+            // Deleting a posted document unposts it, so it is offered only with the unpost right.
+            if (!posted || canUnpost) {
+                actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
+                        "onno://delete/documents/" + name + "/" + id,
+                        placement.getOrDefault("delete", "menu"),
+                        List.of(), Map.of(), false, false));
+            }
             // Custom DETAIL actions read the same override map; their per-record functions
             // evaluate against the loaded row (#255).
             actions.addAll(detailActions(desc.javaClass(), "documents", name, id, placement, row));
@@ -1115,7 +1140,7 @@ public class DivKitController implements DisposableBean {
         if (refreshOnly) {
             return Map.of("record", record, "actions", SurfaceDivBuilder.actionItems(actions), "readOnly", !canWrite);
         }
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
+        Map<String, Object> meta = withPostingAccess(withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal), principal, desc);
         Map<String, Object> content = entityFormBody("documents", name, id,
                 str(meta.get("name")) + " " + str(row.get("_number")),
                 messages.get("action.save"), meta, record, false, !canWrite, actions,
@@ -1137,7 +1162,7 @@ public class DivKitController implements DisposableBean {
                 Viewport.parse(params.get("viewport")), params.get("theme"), principal);
         if (override != null) return override;
         requireView(desc.javaClass(), profileId);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
+        Map<String, Object> meta = withPostingAccess(withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal), principal, desc);
         // Seed the New form from a fresh instance so domain field-initializer defaults pre-fill
         // (issue #181); blank for an entity with no usable no-arg constructor. Any extra query params
         // (a deep link like …/new?startsAt=…&room=<id>) overlay onto that seed as initial field values.
@@ -1162,7 +1187,7 @@ public class DivKitController implements DisposableBean {
         access.requireWrite(principal, desc);
         String profileId = activeProfile(principal, profile).id();
         requireView(desc.javaClass(), profileId);
-        Map<String, Object> meta = withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal);
+        Map<String, Object> meta = withPostingAccess(withRelatedListAccess(resolvedMetadata.describeDocument(desc, profileId), principal), principal, desc);
         Map<String, Object> draft = duplicateDraft(documentQuery.get(subject(principal), desc, id), desc.attributes());
         return entityFormContent("documents", name, id, "Duplicate " + str(meta.get("name")), meta,
                 EntityJsonRepresentation.document(desc, draft, EntityJsonRepresentation.Mode.LOGICAL), true);
