@@ -16,7 +16,20 @@ import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
 import org.springframework.boot.web.servlet.server.ConfigurableServletWebServerFactory;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import su.onno.auth.users.AccountRememberMeServices;
+import su.onno.auth.users.AccountSessionGuardFilter;
+import su.onno.auth.users.AccountUserDetailsService;
+import su.onno.auth.users.JdbcUserStore;
+import su.onno.auth.users.PasswordPolicy;
+import su.onno.auth.users.UserAccounts;
+import su.onno.auth.users.UserAccountsBootstrap;
+import su.onno.auth.users.UserAccountsController;
+import su.onno.auth.users.UserStore;
+import javax.sql.DataSource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -89,9 +102,10 @@ public class OnnoAuthAutoConfiguration {
     @Bean
     AuthApiController onnoAuthApiController(ObjectProvider<AuthenticationManager> authenticationManager,
                                             ObjectProvider<TokenBasedRememberMeServices> rememberMeServices,
+                                            ObjectProvider<UserAccounts> userAccounts,
                                             OnnoAuthProperties properties) {
         return new AuthApiController(authenticationManager.getIfAvailable(),
-                rememberMeServices.getIfAvailable(), properties);
+                rememberMeServices.getIfAvailable(), properties, userAccounts.getIfAvailable());
     }
 
     /**
@@ -163,11 +177,68 @@ public class OnnoAuthAutoConfiguration {
     }
 
     // ----------------------------------------------------------------------------------------
-    // Mode: in-memory (default) — username/password against onno.auth.users, session cookie.
+    // Password modes: in-memory (default; accounts from onno.auth.users) and database (accounts
+    // in the application database). Same session-cookie chain; only the account source differs.
     // ----------------------------------------------------------------------------------------
 
+    /** Matches {@code onno.auth.mode} = {@code in-memory} (or unset) or {@code database}. */
+    static final class PasswordLoginCondition extends AnyNestedCondition {
+
+        PasswordLoginCondition() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
+        static class InMemory {
+        }
+
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "database")
+        static class Database {
+        }
+    }
+
+    /**
+     * {@code onno.auth.mode=database}: the account store, the management service and its HTTP
+     * surface, and first-boot seeding from {@code onno.auth.users}.
+     */
     @Configuration(proxyBeanMethods = false)
-    @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "database")
+    static class DatabaseAccountsConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(UserStore.class)
+        UserStore onnoUserStore(DataSource dataSource) {
+            return new JdbcUserStore(dataSource);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean
+        UserAccounts onnoUserAccounts(UserStore store, PasswordEncoder passwordEncoder, OnnoAuthProperties properties) {
+            return new UserAccounts(store, passwordEncoder,
+                    new PasswordPolicy(properties.getDatabase().getPasswordMinLength()));
+        }
+
+        @Bean
+        UserAccountsBootstrap onnoUserAccountsBootstrap(UserAccounts accounts, OnnoAuthProperties properties) {
+            return new UserAccountsBootstrap(accounts, properties);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(UserDetailsService.class)
+        UserDetailsService onnoUserDetailsService(UserStore store) {
+            return new AccountUserDetailsService(store);
+        }
+
+        @Bean
+        UserAccountsController onnoUserAccountsController(UserAccounts accounts,
+                                                          UserDetailsService userDetailsService,
+                                                          ObjectProvider<TokenBasedRememberMeServices> rememberMe) {
+            return new UserAccountsController(accounts, userDetailsService, rememberMe.getIfAvailable());
+        }
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Conditional(PasswordLoginCondition.class)
     static class InMemoryAuthConfiguration {
 
         @Bean
@@ -178,6 +249,7 @@ public class OnnoAuthAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean
+        @ConditionalOnProperty(prefix = "onno.auth", name = "mode", havingValue = "in-memory", matchIfMissing = true)
         UserDetailsService onnoUserDetailsService(OnnoAuthProperties properties, PasswordEncoder passwordEncoder) {
             List<UserDetails> users = properties.getUsers().stream()
                     .map(u -> {
@@ -219,7 +291,8 @@ public class OnnoAuthAutoConfiguration {
         @ConditionalOnProperty(prefix = "onno.auth.session.remember-me", name = "enabled",
                 havingValue = "true", matchIfMissing = true)
         TokenBasedRememberMeServices onnoRememberMeServices(UserDetailsService userDetailsService,
-                                                            OnnoAuthProperties properties) {
+                                                            OnnoAuthProperties properties,
+                                                            ObjectProvider<UserStore> userStore) {
             OnnoAuthProperties.RememberMe config = properties.getSession().getRememberMe();
             String key = config.getKey();
             if (key == null || key.isBlank()) {
@@ -238,8 +311,13 @@ public class OnnoAuthAutoConfiguration {
                 log.warn("onno.auth.session.remember-me.key is not set; using a built-in non-secret dev "
                         + "key (allow-ephemeral-key=true). Set a stable secret for production.");
             }
-            TokenBasedRememberMeServices services = new TokenBasedRememberMeServices(
-                    key, userDetailsService, TokenBasedRememberMeServices.RememberMeTokenAlgorithm.SHA256);
+            // Database mode binds the cookie to the account's security stamp, so "sign out
+            // everywhere", a disable or a role change also voids outstanding remember-me cookies.
+            UserStore store = userStore.getIfAvailable();
+            TokenBasedRememberMeServices services = store != null
+                    ? new AccountRememberMeServices(key, userDetailsService, store)
+                    : new TokenBasedRememberMeServices(
+                            key, userDetailsService, TokenBasedRememberMeServices.RememberMeTokenAlgorithm.SHA256);
             services.setTokenValiditySeconds((int) config.getValidity().toSeconds());
             services.setAlwaysRemember(true);
             return services;
@@ -249,7 +327,8 @@ public class OnnoAuthAutoConfiguration {
         @ConditionalOnMissingBean(SecurityFilterChain.class)
         SecurityFilterChain onnoSecurityFilterChain(HttpSecurity http, OnnoAuthProperties properties,
                                                     ObjectProvider<TokenBasedRememberMeServices> rememberMe,
-                                                    UserDetailsService userDetailsService)
+                                                    UserDetailsService userDetailsService,
+                                                    ObjectProvider<UserStore> userStore)
                 throws Exception {
             CsrfTokenRequestAttributeHandler csrfHandler = new CsrfTokenRequestAttributeHandler();
             csrfHandler.setCsrfRequestAttributeName(null);
@@ -277,6 +356,15 @@ public class OnnoAuthAutoConfiguration {
                         contextRepository), AnonymousAuthenticationFilter.class);
             }
             applyEmbeddingPolicy(http, properties);
+
+            // Database mode: re-check the account on each request so disabling it, resetting its
+            // password or "sign out everywhere" ends live sessions, and a pending password change
+            // confines the session to the change-password screen.
+            UserStore store = userStore.getIfAvailable();
+            if (store != null) {
+                http.addFilterBefore(new AccountSessionGuardFilter(store, rms,
+                        properties.effectivePublicPaths()), AuthorizationFilter.class);
+            }
 
             return http
                     .securityContext(sc -> sc.securityContextRepository(contextRepository))

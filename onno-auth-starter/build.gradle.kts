@@ -10,6 +10,8 @@ dependencies {
     implementation(libs.spring.boot.autoconfigure)
     api(libs.spring.boot.starter.security)
     implementation(libs.spring.boot.starter.web)
+    // onno.auth.mode=database keeps accounts in the application's DataSource (JdbcUserStore).
+    implementation(libs.spring.jdbc)
 
     // OIDC support (Keycloak, Zitadel, …). Only exercised when onno.auth.mode = oidc /
     // resource-server; the standard Spring Boot auto-config for these stays dormant until
@@ -22,5 +24,6 @@ dependencies {
 
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.spring.boot.test)
+    testImplementation(libs.h2)
     testRuntimeOnly(libs.junit.platform.launcher)
 }

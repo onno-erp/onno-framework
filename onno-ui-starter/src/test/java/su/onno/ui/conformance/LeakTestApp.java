@@ -125,7 +125,7 @@ public class LeakTestApp {
             }
 
             @Override
-            public void actions(ActionSpec a) {
+            public void actions(ActionSpec<LkTenant> a) {
                 a.action("touch").scope(ActionScope.ROW).label("Touch")
                         .enabledWhen(row -> !"locked".equals(row.text("note")))
                         .handler(ctx -> {

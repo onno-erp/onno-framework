@@ -120,6 +120,26 @@ class CatalogQueryServiceGroupsTest {
     }
 
     @Test
+    void numberRangeNarrowsCountInclusivelyWithEitherBoundOpen() {
+        insert("C-01", "gold", LocalDate.of(2024, 1, 5), new BigDecimal("9.00"));
+        insert("C-02", "gold", LocalDate.of(2024, 1, 6), new BigDecimal("50.00"));
+        insert("C-03", "std", LocalDate.of(2024, 1, 7), new BigDecimal("100.00"));
+        insert("C-04", "std", LocalDate.of(2024, 1, 8), new BigDecimal("250.50"));
+        String amount = col("amount");
+
+        // Numeric, not lexical: "9" sorts after "50" as text but is below the range as a number.
+        assertThat(count(List.of(amount + ",50"), List.of(amount + ",100"))).isEqualTo(2L);
+        assertThat(count(List.of(amount + ",100"), NONE)).isEqualTo(2L);
+        assertThat(count(NONE, List.of(amount + ",49.99"))).isEqualTo(1L);
+        // A malformed bound degrades to "no constraint" rather than failing the list.
+        assertThat(count(List.of(amount + ",abc"), NONE)).isEqualTo(4L);
+    }
+
+    private long count(List<String> ge, List<String> le) {
+        return service.count(AccessSubject.system(), catalog, null, NONE, NONE, NONE, NONE, ge, le, null);
+    }
+
+    @Test
     void unknownGroupColumnYieldsNoGroups() {
         insert("C-01", "gold", LocalDate.of(2024, 1, 5), new BigDecimal("1"));
         ListGroups.GroupResult res = service.groups(AccessSubject.system(), catalog, "not_a_column", null, null,

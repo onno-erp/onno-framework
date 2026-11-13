@@ -33,7 +33,7 @@ public class PickerDialogTestApp {
             }
 
             @Override
-            public void actions(ActionSpec a) {
+            public void actions(ActionSpec<PdGroup> a) {
                 a.action("archive").label("Archive").scope(ActionScope.TOOLBAR)
                         .handler(ctx -> ActionResult.ok());
             }

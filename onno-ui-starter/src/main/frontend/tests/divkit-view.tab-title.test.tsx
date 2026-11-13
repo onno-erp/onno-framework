@@ -236,7 +236,7 @@ describe("DivKitView tab titles", () => {
     act(() => window.dispatchEvent(new CustomEvent("onno:action", { detail: "onno://" + path.slice(1) })));
     await screen.findByTestId("content-" + path);
     expect(screen.queryByTestId("content-/documents/event_invoices/new")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "New Event Invoices", exact: true })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "New Event Invoices" })).toHaveLength(1);
   });
 
   it("templates the new-record tab around the localized entity title", async () => {
@@ -266,7 +266,7 @@ describe("DivKitView tab titles", () => {
     await waitFor(() => expect(screen.getByTestId("current-route"))
       .toHaveTextContent("/documentation?topic=orders"));
     await screen.findByTestId("content-/documentation?topic=orders");
-    expect(screen.getAllByRole("button", { name: "Documentation", exact: true })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Documentation" })).toHaveLength(2);
     expect(editor).toHaveValue("Unsaved draft");
     fireEvent.click(button);
     expect(screen.getAllByTestId("content-/documentation?topic=orders")).toHaveLength(1);

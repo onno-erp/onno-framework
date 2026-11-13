@@ -16,6 +16,7 @@ Implemented:
 - UI auth foundation with login screen, protected routes, `GET /api/auth/me`, JSON `POST /api/auth/login` and `/api/auth/logout`, session cookies, CSRF
 - Production auth modes shipped in `onno-auth-starter`: `in-memory`, `oidc` (Keycloak/Zitadel/custom SSO), and `resource-server` (stateless JWT bearer)
 - Per-entity, deny-by-default RBAC via `@AccessControl(readRoles, writeRoles)` enforced across REST, UI, and MCP (`ADMIN` is a superuser)
+- Document post/unpost rights separate from write access: `@AccessControl(postRoles, unpostRoles)` narrows who may post, re-post or unpost (and delete a posted document) on REST, MCP and the built-in UI actions; `BeforeUnpostHandler` lets the domain veto an unpost
 - Record-level access policies (`RecordAccessPolicy` + `RecordScope`): declarative, query-pushed-down "which records" rules for external users, enforced on every generic read/write path (lists, aggregates, search, refs, writes, actions, import, comments, tags, presence, notifications, SSE, MCP, CRM inbox) with a shipped leak-test conformance suite
 - Structured reference resolution for API rows via `{column}_display` and `{column}_ref`
 - Server-sent UI event stream (`GET /api/events`) for live refresh of catalogs, documents, registers, and comment threads
@@ -42,7 +43,7 @@ Implemented:
 - Dry-run posting previews
 - Domain event metadata and outbox publication hooks
 - `onno-auth-starter` with session-based defaults, JSON login/logout, CSRF cookie, in-memory users via `onno.auth.users`, plus OIDC and resource-server modes
-- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
+- Integration starters: MCP server (`onno-mcp-starter`), CSV import (`onno-import-starter`), Word/Excel print forms with batch printing, admin-uploaded templates and PDF (`onno-print-starter`), Kafka outbox relay (`onno-kafka-starter`), native desktop packaging (`onno-desktop-starter` + Gradle plugin)
 - Horizontal scale-out: cross-node delivery of live-UI entity-change events via a pluggable `ClusterEventBus` (`onno-cluster-starter`, default Postgres `LISTEN`/`NOTIFY`), an advisory-locked schema apply, and a fail-fast remember-me key guard
 - Server-driven DivKit UI layer (`/api/divkit/**`) alongside the bundled React/Vite SPA, plus media uploads with a pluggable `MediaStorage` SPI
 - UI configuration decoupled from domain: sidebar sections live in `Layout` beans, dashboard widgets live in `Page` beans, and per-field hints live in `EntityView` or `Layout` configuration.

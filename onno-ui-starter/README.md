@@ -40,6 +40,13 @@ is never returned by `/api/config` or sent to the browser. See
 > `src/main/frontend/dist` to `static/ui/`). `static/ui/` is not committed; build the module to
 > produce it.
 
+> **Type checks.** `buildFrontend` type-checks only `src/` (`tsconfig.app.json`). The Vitest suite
+> has its own `tsconfig.test.json` covering `tests/`, `vite.config.ts` and the widget sources the
+> tests import (`onno-crm-starter`, `onno-crm-channels-starter`, `onno-widget-sdk`), with the Vitest
+> globals and the jsdom environment's `jsdom` global (`vitest/globals`, `vitest/jsdom`);
+> `npm run typecheck` (`tsc -b`) checks both projects. Gradle runs it as `typecheckFrontend`, which
+> `testFrontend` depends on, so a type error in a test fails `check`.
+
 > **Static assets.** Bundled UI assets are served from `classpath:/static/ui/`; application assets
 > may use Spring Boot's standard `META-INF/resources`, `resources`, `static`, or `public` locations.
 > Missing files return `404` instead of the SPA shell. `{onno.ui.path}/plugins/**` keeps precedence
@@ -206,12 +213,12 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 | GET | `/{name}/{id}` | Single document. |
 | POST | `/{name}` | Create. Body carries header fields + tabular-section arrays keyed by section name. Number auto-generated when omitted and the document auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. Optimistic locking via `version`/`_version` (`409` on conflict). |
-| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. |
-| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. |
+| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. Needs write access and, when the document declares `@AccessControl(postRoles = …)`, one of those roles (`403` otherwise). |
+| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. Needs write access and, when declared, one of `@AccessControl(unpostRoles = …)` (`403` otherwise). A domain `BeforeUnpostHandler.beforeUnpost()` runs first and may veto by throwing. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
-| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
+| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted — which requires the unpost right, see `/unpost`). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
 
 ### Registers — `/api/registers`
 
@@ -279,6 +286,14 @@ constraint: `v.defaultFilter("status", "READY")` selects explicit values, while
 remain normal UI filters that the viewer can clear or replace. Use `v.filter("active = true")` only
 for a base constraint that must always apply.
 
+**Number-range filter.** `list.filter(Order::getTotal).label("Total").numberRange()` adds a from–to
+facet over a numeric field (`Integer`/`Long`/`BigDecimal`…): two number inputs, either bound
+optional ("debts above 1000", "stock below 5"), both inclusive. It rides the same `ge`/`le` feed
+params as the date range — `?ge=total,100&le=total,500` — and the server binds a bound on a numeric
+column as a number (a non-numeric value is ignored, like a filter on an unknown column). The applied
+range is URL-synced as `f.<key>.from` / `f.<key>.to`, and an embedded list can preset it with
+`v.defaultFilter("total", "100", "500")` (one value presets only the lower bound).
+
 **Conditional row formatting.** `list.rowStyle(row -> …)` tints rows by their data: the function
 runs **server-side per row** as the feed serves it (the same `ActionRow` accessor the state-aware
 row actions use) and returns a semantic `ListSpec.RowStyle` tone — `DANGER` (red), `WARNING`
@@ -305,14 +320,16 @@ The register **report surface** is likewise fed window-by-window (newest-first, 
 response is `{rows, nextCursor, hasMore, total}`; the cursor is opaque to clients. Both feeds honor
 the grid's declarative filter params
 (`eq`/`in`/`like`/`prefix`/`ge`/`le`, validated against the register's own columns) — the movements
-tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, and
+tab ships a built-in `_period` date-range facet and a `_movement_type` Receipt/Expense facet, both
+tabs ship a from–to number-range facet per numeric resource (stock below a threshold, turnover
+above an amount; `ge`/`le` on the resource column), and
 movement rows carry a localized `_movement_type_display` + `_movement_type_color` so the type renders
 as a colored status pill:
 
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/list/registers/{name}/movements?cursor=&limit=&sort=&dir=&from=&to=&eq=&ge=&le=` | One window of movements + the live total, for the virtualized register surface. |
-| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=` | One window of current balances + the live total (BALANCE registers). |
+| GET | `/api/list/registers/{name}/balance?cursor=&limit=&sort=&dir=&eq=&in=&ge=&le=` | One window of current balances + the live total (BALANCE registers). |
 
 ### DivKit server-driven UI — `/api/divkit`
 
@@ -395,14 +412,14 @@ a fresh tab opens the app straight on that surface (after login if needed).
 
 ### Custom & state-aware row actions
 
-An `EntityView.actions(ActionSpec)` declares custom buttons on the list (`ActionScope.TOOLBAR` /
+An `EntityView<E>.actions(ActionSpec<E>)` declares custom buttons on the list (`ActionScope.TOOLBAR` /
 `ROW`) or the detail surface (`DETAIL`); each runs a server `handler(ctx -> ActionResult)` or
 `navigate(url)`. A **row** action's icon, label, visibility and enabled state may be **functions of
 the row** instead of fixed, so one control adapts to each record — a `pause` "Suspend" on a running
 row flipping to a `play` "Resume" once stopped, or a button shown only where it applies:
 
 ```java
-public void actions(ActionSpec a) {
+public void actions(ActionSpec<Order> a) {
     a.action("toggle").scope(ActionScope.ROW)
      .label("Change running state")
      .label(row -> row.enumValue("status", Status.class) == Status.STOPPED ? "Resume" : "Suspend")
@@ -427,12 +444,26 @@ Any action (entity or page) may declare `.roles("ACCOUNTANT", "MANAGER")` — th
 callers holding none of them (`ADMIN` always passes). For an entity action this is a finer gate *on
 top of* the entity's write roles; unset means the entity's write access alone decides.
 
-Each function receives an `ActionRow` — a read-only view of the record's resolved data (`id()`,
+Each function receives an `ActionRow<E>` — a read-only view of the record's resolved data (`id()`,
 `text(col)` for the display value, `enumValue(col, Type)` to read an enum column back, `bool(col)`,
 or `get(col)`/`values()` for the raw map). They're evaluated **server-side per row** as the list
 page is served (no extra query — the row is already in hand) and shipped to the grid under each
 row's `actions`; the button falls back to the static `icon`/`label` when a function isn't set. A
 static row action (no functions) costs nothing: the list ships its rows untouched.
+
+Typed reads such as `row.get(Order::getAssignedTo)`, `row.text(Order::getAssignedTo)`,
+`row.bool(Order::getNeedsApproval)` and `row.enumValue(Order::getReviewStatus, Status.class)`
+resolve the Java property through the entity's attribute metadata. This works for camelCase
+properties and custom `@Attribute(name = "...")` columns in row actions, detail actions and
+`rowStyle`, including the server-side enabled check. String reads still use storage column names.
+The entity type flows from `EntityView<E>` through `ActionSpec<E>` (including `dynamic` providers)
+and `ListSpec<E>.rowStyle` into every `ActionRow<E>` callback. An order callback accepts
+`row.bool(Order::getUrgent)` and inherited getters; `row.bool(Customer::getVip)` does not compile.
+When updating an existing view, declare `actions(ActionSpec<Order> actions)` for
+`EntityView<Order>` and use parameterized `ActionSpec`/`ActionRow` types rather than raw types.
+Page actions have no owning entity and use `ActionSpec<Void>`.
+When constructing an `ActionRow` directly from storage data, pass `descriptor.attributes()` as
+the second constructor argument; the original one-argument constructor reads keys as supplied.
 
 The same per-record functions apply to **`DETAIL` actions**, evaluated against the loaded record as
 the record surface renders — so one header button can hide (`visibleWhen`), relabel (`label(fn)`),
@@ -619,7 +650,7 @@ When those choices come from an editable catalog rather than a Java enum, declar
 **late-bound** with `ActionSpec.dynamic(...)`:
 
 ```java
-public void actions(ActionSpec actions) {
+public void actions(ActionSpec<Order> actions) {
     actions.dynamic(live -> {
         for (Status status : statuses.all()) {
             live.action("status-" + status.getId()).scope(ActionScope.ROW)
@@ -1669,17 +1700,24 @@ A browser SPA gets this for free: the cookie is sent automatically and the clien
 
 ### Providing users
 
-In-memory users come from `onno-auth-starter`. Add at least one (the `ADMIN` role makes it a
-superuser for the UI):
+Users come from `onno-auth-starter`. Prefer `mode: database` — accounts live in the application
+database and are managed at runtime; the `users` list only seeds the first account (the `ADMIN` role
+makes it a superuser for the UI), which must set a new password at first sign-in:
 
 ```yaml
 onno:
   auth:
+    mode: database
     users:
       - username: admin
-        password: secret
+        password: change-me-on-first-login
         roles: [ADMIN]
 ```
+
+Two built-in widgets serve database mode: `b.widget("Users").type("users")` (ADMIN account list:
+create with a one-time password, roles, disable/enable, reset password, sign out everywhere) and
+`b.widget("Password").type("changePassword")` (the signed-in holder's own password). A session holding
+a one-time password renders only a change-password screen until it is replaced.
 
 ## SPA routing, the base path, and the index fallback
 
@@ -1775,6 +1813,19 @@ The Add tag picker searches existing entries and can create a new one through
 `POST /api/tags/{kind}/{name}` (`{name,color}`; requires write access to the tagged entity), which goes
 through `TagCatalog.importTag` when a catalog is bound. Legacy IDs and assignments
 survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
+
+### Record header actions from extension modules
+
+A `RecordActionContributor` bean adds read-only actions to catalog/document record surfaces
+(`onno-print-starter` uses it for its print menu). Each `RecordAction(key, icon, label, url)` is
+offered regardless of write access or read-only mode, so the contributor must filter by the
+request's `AccessSubject` itself. Placement follows `f.action(key)` and defaults to the ⋯ menu. A
+`onno://download/{path}` URL downloads a server file through a full-page GET.
+
+A `SelectionDownloadContributor` bean does the same for a list's selection toolbar (batch print):
+each `SelectionDownload(key, icon, label, url)` becomes a button for every reader; clicking POSTs
+`{"ids":[…]}` with the CSRF header to `url` and saves the attachment. The descriptor carries them as
+`selectionDownloads` (omitted when empty). The endpoint must enforce entity and record access.
 
 ### UI extension outlets
 

@@ -12,8 +12,8 @@ it("switches channels and clears a previously selected account",()=>{
   render(<Example/>);
   expect(screen.getByRole("button",{name:"Studio email"})).toHaveAttribute("aria-pressed","true");
   expect(screen.queryByRole("button",{name:"Studio bot"})).toBeNull();
-  fireEvent.click(screen.getByRole("button",{name:"Telegram",exact:true}));
-  expect(screen.getByRole("button",{name:"Telegram",exact:true})).toHaveAttribute("aria-pressed","true");
+  fireEvent.click(screen.getByRole("button",{name:"Telegram"}));
+  expect(screen.getByRole("button",{name:"Telegram"})).toHaveAttribute("aria-pressed","true");
   expect(screen.getByRole("button",{name:"All accounts"})).toHaveAttribute("aria-pressed","true");
   expect(screen.queryByRole("button",{name:"Studio email"})).toBeNull();
   fireEvent.click(screen.getByRole("button",{name:"Studio bot"}));

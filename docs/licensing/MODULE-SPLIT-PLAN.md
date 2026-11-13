@@ -1,5 +1,9 @@
 # Open-core split plan: extracting commercial modules
 
+> **Historical.** This plan is complete. `onno-guesty-starter` and `onno-hospedajes-starter`
+> were later removed from onno-enterprise altogether; see that repo's README for the current
+> module list.
+
 Goal: make **this repo** a clean Apache-2.0 open-source project, and move the commercial
 modules into a separate **private `onno-enterprise` repo** that consumes the OSS core as
 published Maven artifacts.

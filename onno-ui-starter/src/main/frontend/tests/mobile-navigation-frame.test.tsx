@@ -53,7 +53,7 @@ it("retains an exiting record until Back finishes animating", async () => {
 });
 it("fades section changes quickly but still slides the next detail and Back", async () => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-  const animate = vi.fn(() => ({cancel:vi.fn(),finished:Promise.resolve()}));
+  const animate = vi.fn((_keyframes:Keyframe[], _options?:KeyframeAnimationOptions) => ({cancel:vi.fn(),finished:Promise.resolve()}));
   Object.defineProperty(HTMLElement.prototype,"animate",{configurable:true,value:animate});
   const props = {roots:["/inbox","/catalogs/contacts"],back:vi.fn(),backLabel:"Back",navigation:<nav>Tabs</nav>,render:(path:string)=><div>{path}</div>};
   const view = render(<MobileNavigationFrame {...props} path="/inbox"/>);

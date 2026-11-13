@@ -20,8 +20,8 @@ By contributing you agree your contributions are licensed under the repository's
 ```
 
 Narrower loops: `./gradlew :onno-framework:test` for core changes,
-`./gradlew :onno-ui-starter:buildFrontend` for frontend-only changes. Java 21 is required (the Gradle
-toolchain pins it).
+`./gradlew :onno-ui-starter:testFrontend :onno-ui-starter:buildFrontend` for frontend-only
+changes. Java 21 is required (the Gradle toolchain pins it).
 
 ### Keep docs in sync — required
 

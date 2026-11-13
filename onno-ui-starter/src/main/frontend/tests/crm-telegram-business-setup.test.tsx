@@ -6,7 +6,7 @@ import "../../../../../onno-crm-channels-starter/src/main/widgets/ConnectorSetup
 
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it("opens a one-use business authorization link without sending a message or using the ordinary bot endpoint",async()=>{
- const request=vi.fn(async()=>new Response(JSON.stringify({url:"https://t.me/example_bot?start=crm_proof"})));
+ const request=vi.fn(async(_input:RequestInfo|URL)=>new Response(JSON.stringify({url:"https://t.me/example_bot?start=crm_proof"})));
  vi.stubGlobal("fetch",request);
  render(<ExtensionSlot name="crm.channel.settings" context={{surface:"crm-channel",record:{key:"telegram-business",accountId:"account-1",account:"@example_bot",actions:["connect"]},permissions:{canManage:true}}}/>);
  fireEvent.click(await screen.findByRole("button",{name:"Connect account"}));

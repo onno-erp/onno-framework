@@ -203,7 +203,8 @@ public class DocumentQueryService {
         String col = surface.safeSort(sortColumn);
         boolean dirDesc = defaultSort ? surface.defaultDescending() : descending;
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -262,7 +263,8 @@ public class DocumentQueryService {
                       List<String> prefix, List<String> ge, List<String> le,
                       String widgetFilter) {
         EntitySurfaceDescriptor surface = surface(desc);
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, surface.columnNames(), surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);
@@ -307,7 +309,8 @@ public class DocumentQueryService {
         boolean date = isTemporalColumn(desc, groupColumn);
         String groupExpr = ListGroups.groupExpression(groupColumn, date, granularity);
 
-        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le, surface.filterableColumns());
+        ListFilter.Result filter = ListFilter.parse(eq, in, like, prefix, ge, le,
+                surface.filterableColumns(), surface.numericColumns());
         WidgetFilter.Result wf = WidgetFilter.parse(widgetFilter, columns, surface.uuidColumns(), surface::storageColumn);
         ScopeClause scope = scope(subject, surface);
         ScopeClause searchClause = searchClause(subject, surface, search);

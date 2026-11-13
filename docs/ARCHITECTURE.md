@@ -37,9 +37,10 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-ui-starter` | `su.onno` | Generic REST controllers under `/api/**`, the DivKit server-driven UI layer, the bundled React/Vite SPA, media uploads, SSE event stream, comment threads, per-user notifications. |
 | `onno-observability-starter` | `su.onno` | Opt-in privacy-safe business and UX telemetry, a bounded non-blocking exporter, and deployment-version context. Included transitively by the UI starter but disabled by default. |
 | `onno-crm-starter` | `su.onno` | Composable messaging: inboxes, conversations/messages, channel identities and widgets. Explicit host customer bindings enable it; customers, employees, sales models and navigation remain host-owned. |
-| `onno-auth-starter` | `su.onno` | Spring Security: in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
+| `onno-auth-starter` | `su.onno` | Spring Security: database (runtime-managed accounts), in-memory, OIDC/SSO, and resource-server (JWT) modes; JSON login/logout; CSRF; per-request principal. |
 | `onno-mcp-starter` | `su.onno` | Model Context Protocol server exposing the model + CRUD + register reads + posting as AI-agent tools, generated from the registry. |
 | `onno-import-starter` | `su.onno` | CSV import (preview, mapping, upsert, dry-run, document grouping) through the same command path as the UI. |
+| `onno-print-starter` | `su.onno` | Print forms: `PrintForm<T>` beans fill Word (`.docx`) / Excel (`.xlsx`) templates via Apache POI; record-menu actions, list batch printing (zip), admin-uploaded template overrides (`onno_print_templates`), optional PDF via a `PdfConverter` (Gotenberg / LibreOffice). |
 | `onno-cluster-starter` | `su.onno` | Cross-node delivery of `ClusterEvent`s (entity changes, process-task invalidations, presence, and notifications) for horizontal scale-out via a pluggable `ClusterEventBus` SPI (default Postgres `LISTEN`/`NOTIFY`; no-op on H2). Keeps the SSE live UI, task inboxes, collaboration markers, and notification delivery in sync across instances. |
 | `onno-kafka-starter` | `su.onno` | Transactional outbox → Kafka relay as CloudEvents, de-duplicating inbox, service registry, remote `Ref` client. |
 | `onno-desktop-starter` | `su.onno` | Runs the app as a native desktop window (Tauri shell), config-as-code window manifest, H2/session relocation. |
@@ -47,7 +48,7 @@ Apache-2.0) and `su.onno.enterprise` (commercial connectors). The desktop Gradle
 | `onno-widgets-gradle-plugin` | (`su.onno.widgets` plugin) | Compiles consumer-authored React widgets (`src/main/widgets/*.tsx`) into onno UI plugin modules via managed Node + esbuild; bundles the `@onno/widget-sdk` authoring package. |
 | `onno-widget-sdk` | (npm `@onno/widget-sdk`) | The authoring surface for custom widgets — types, hooks, UI primitives, a read-only data client, and shared live-event subscriptions that resolve to the host SPA at runtime. |
 | `example` | (not published) | The Onno Books retailer app: a compact end-to-end consumer and smoke-test fixture. |
-| `onno-guesty-starter`, `onno-hospedajes-starter`, `onno-tochka-starter` | `su.onno.enterprise` | Commercial vertical connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
+| `onno-tochka-starter`, `onno-yookassa-starter`, `onno-ozon-starter`, … | `su.onno.enterprise` | Commercial connectors in the separate [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo. |
 
 ## Boot pipeline
 
@@ -114,7 +115,7 @@ In brief:
   `@EnumLabel(color="#…")` that renders the value as a colored status pill), **`@Constant`** (singleton
   setting), **`@ScheduledJob`**
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
-  (`readRoles`/`writeRoles`), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
+  (`readRoles`/`writeRoles`, plus `postRoles`/`unpostRoles` on documents), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
@@ -249,8 +250,12 @@ placement or field-display hints.
 
 Authored Java uses the shared serializable `Field<E,V>` getter token wherever a value denotes a
 model field. `ListSpec<E>`, `EntityConfigBuilder<E>`, widget field methods, related lists,
-form-validation dependencies, `ActionRow`, register queries, and `Q` all accept method references
-such as `Order::getStatus`. `Fields.name(...)` resolves the JavaBean property and boundary resolvers
+form-validation dependencies, `ActionRow<E>`, register queries, and `Q` all accept method references
+such as `Order::getStatus`. `EntityView<E>.actions(ActionSpec<E>)` and
+`ListSpec<E>.rowStyle` preserve the owning entity in every `ActionRow<E>` callback, including
+late-bound actions. Getters from unrelated entities are compile errors; inherited getters remain
+valid. Page actions use `ActionSpec<Void>` because they have no owning record.
+`Fields.name(...)` resolves the JavaBean property and boundary resolvers
 map it to the logical API field used by catalog/document widgets, then query services translate it
 to the physical storage column. This keeps Java source compiler-checked while preserving validated
 SQL identifiers internally. String overloads are unsafe compatibility/dynamic escape hatches.
@@ -317,6 +322,10 @@ public void handlePosting(PostingContext context) {
     }
 }
 ```
+
+Unposting runs `BeforeUnpostHandler.beforeUnpost()` first (when the document implements it); a throw
+vetoes the unpost and leaves the document posted. It does not run on a re-post or on the internal
+reverse/replay of later documents during chronological restoration.
 
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
 `beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
@@ -588,6 +597,13 @@ In every mode, framework bootstrap paths (including `/api/config` and `/api/auth
 public. `onno.auth.additional-public-paths` adds public Ant patterns; legacy `onno.auth.public-paths`
 entries are combined with them and can no longer remove mandatory framework paths.
 
+- **`database`** (recommended) — accounts in the framework-managed table `onno_auth_user`, managed at
+  runtime through `UserAccounts`, `/api/auth/users` (ADMIN) and the `users` / `changePassword`
+  widgets. `onno.auth.users[*]` only seeds an empty store once, flagged for a forced password change.
+  Each security-relevant change bumps the account's security stamp; `AccountSessionGuardFilter`
+  re-reads the account per request, revokes stale sessions (`401 session_revoked`, remember-me cookies
+  are stamp-bound too) and confines a pending one-time-password session to `/api/auth/**`
+  (`403 password_change_required`). Otherwise identical to `in-memory` (session cookie, CSRF, JSON login).
 - **`in-memory`** (default) — users from `onno.auth.users[*]`, session cookie + optional remember-me,
   JSON `POST /api/auth/login`, CSRF via `XSRF-TOKEN` cookie / `X-XSRF-TOKEN` header (browser SPAs read
   the cookie directly; native clients that can't read it fetch the token from `GET /api/auth/csrf`).
@@ -595,7 +611,9 @@ entries are combined with them and can no longer remove mandatory framework path
   the token via `onno.auth.oidc.*`; RP-initiated logout.
 - **`resource-server`** — stateless JWT bearer validation, no session/CSRF.
 
-Public, non-sensitive demos can opt into server-side in-memory auto-login with
+In-memory users last as long as the configuration does; use it for development and demos.
+
+Public, non-sensitive demos can opt into server-side password-mode auto-login with
 `onno.auth.demo.auto-login-username`; normal RBAC still sees that user's roles. Iframe embedding is
 deny-by-default and requires an explicit `onno.auth.embedding.frame-ancestors` CSP allowlist. A
 cross-site session iframe additionally needs `onno.auth.embedding.cross-site-cookies=true` and HTTPS
@@ -608,6 +626,16 @@ catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onno.auth.enabled=false` and supplying your own
 `SecurityFilterChain`.
+
+**Posting rights** are separate from write access. On a document, `@AccessControl(postRoles = …)`
+and `unpostRoles = …` narrow who may post / re-post or unpost: the caller needs write access *and*
+one of the listed roles (an empty list leaves the right with every writer; `ADMIN` always passes).
+`DocumentCommandService` enforces them — so `POST /api/documents/{name}/{id}/post` and `/unpost`,
+the MCP `post_document`/`unpost_document` tools and the built-in UI actions all answer `403` — and
+`DELETE` of a *posted* document requires the unpost right because it unposts first. The record
+surface hides the Post button, the Unpost action and (for a posted record) Delete from callers who
+lack the right. `PostingService` itself is not gated: like typed repositories it is trusted
+application code.
 
 ### Record-level access policies
 
@@ -675,6 +703,20 @@ keep new endpoints and data paths honest. See [Record access policies](RECORD_AC
   command services as the UI (so validation, numbering, posting, events all apply); modes
   `CREATE_ONLY` / `UPSERT_BY_CODE` (catalogs) / `UPSERT_BY_NUMBER` (documents), dotted mapping keys
   for tabular sections, optional `groupBy` + `postAfterImport` for documents.
+- **Print** (`onno-print-starter`) — `PrintForm<T>` beans (one per catalog/document form) bind typed
+  values into a `.docx`/`.xlsx` template's `{{key}}` placeholders; a row with `{{table.column}}`
+  repeats per item (Excel ranges ending on it stretch, formulas recalculate). Each form the viewer
+  may use appears in the record ⋯ menu through the UI starter's `RecordActionContributor` SPI and
+  downloads from `GET /api/print/{kind}/{name}/{id}/{form}`; `GET /api/print/{kind}/{name}/{id}`
+  lists the available forms. Both enforce entity read access, record scope (out of scope = 404) and
+  the form's optional roles. A list's selection toolbar batch-prints through the UI starter's
+  `SelectionDownloadContributor` SPI (`POST /api/print/batch/{kind}/{name}/{form}` → zip; out-of-scope
+  ids skipped). Admins (`onno.print.templates.manage-roles`) replace templates at runtime via
+  `/api/print/templates/**` and the bundled `printTemplates` widget; uploads live in the
+  framework-managed `onno_print_templates` table (keyed by entity scope + form key, so every node sees
+  them) and win over the built-in file until reset. PDF output (`?format=pdf`, `spec.pdf()`) goes
+  through one `PdfConverter` bean — `GotenbergPdfConverter` or `LibreOfficePdfConverter` from
+  `onno.print.pdf.*`, or the application's own. Replaces the removed Thymeleaf `@PrintTemplate` starter.
 - **Kafka** (`onno-kafka-starter`) — drains the `onno_outbox` to a Kafka topic as CloudEvents via
   `OutboxRelay.relayPending()` (call it from your own `@Scheduled`); optional de-duplicating inbox
   dispatches to `EventHandler` beans; `RemoteRefClient` resolves references against other services.
@@ -780,7 +822,7 @@ Running more than one instance behind a load balancer needs these, beyond a shar
 
 The framework is open-core. Everything in this repo (Maven group `su.onno`) is
 Apache-2.0, **including authentication and OIDC/SSO** (`onno-auth-starter`). Separately licensed
-commercial connectors (Maven group `su.onno.enterprise`: Guesty, SES.HOSPEDAJES, Tochka) live in
+commercial connectors (Maven group `su.onno.enterprise`: Tochka, YooKassa, Ozon, Wildberries, …) live in
 the private [onno-enterprise](https://github.com/onno-erp/onno-enterprise) repo under the onno
 Commercial License and consume the core as published Maven artifacts. An enterprise connector is a
 Spring Boot auto-configuration starter that wraps an external API; the framework metadata, posting,
@@ -1082,7 +1124,7 @@ Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(
 `.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
 implicit column/filter is installed. The priority UUID is scoped to that host source.
 Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
-Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
+Host `EntityView<Conversation>` beans declare ordinary `ActionSpec<Conversation>` ROW/DETAIL handlers; extension
 buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
 with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles

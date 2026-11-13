@@ -33,7 +33,8 @@ describe("large UI batches", () => {
       },
       { ok: 201, failed: [], total: 201 },
     ];
-    const fetchMock = vi.fn(async () => jsonResponse(responses[fetchMock.mock.calls.length - 1]));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(responses[fetchMock.mock.calls.length - 1]));
     vi.stubGlobal("fetch", fetchMock);
     const ids = Array.from({ length: 1_201 }, (_, index) => `id-${index}`);
 

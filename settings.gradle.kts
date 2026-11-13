@@ -18,6 +18,7 @@ include(
     "onno-auth-starter",
     "onno-mcp-starter",
     "onno-import-starter",
+    "onno-print-starter",
     "onno-cluster-starter",
     "onno-kafka-starter",
     "onno-observability-starter",
