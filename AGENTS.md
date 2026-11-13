@@ -966,10 +966,16 @@ event for anything that touches beans. Neither requires the Kafka outbox (that's
 event streaming).
 
 `PostingEngine` also publishes document `EntityChangedEvent` notifications
-(`POSTED` / `UNPOSTED`) after its JDBI transaction commits, including calls made
-directly through `PostingService`. Each successful operation publishes one such
-notification; rolled-back operations publish none. UI commands do not duplicate
-these notifications.
+(`POSTED` / `UNPOSTED`), plus a wildcard register `CHANGED` notification so open register views
+refresh, after its JDBI transaction commits, including calls made directly through
+`PostingService`. Each successful operation publishes one of each; rolled-back operations publish
+none. UI commands do not duplicate these notifications.
+
+Post-commit callbacks (`AfterPostHandler.afterPost()`, `DocumentPostedEvent`/`DocumentUnpostedEvent`
+listeners, these notifications) cannot fail a committed post: an exception is logged at ERROR and
+the framework's remaining callbacks still run (Spring still skips later listeners of the same
+event). Anything that must not be lost belongs in a `@DomainEvent` outbox
+row, which commits with the posting.
 
 ### Print Forms
 

@@ -270,36 +270,62 @@ public class PostingEngine {
         afterSuccessfulUnpost(document);
     }
 
+    /*
+     * Everything below runs after the posting transaction has committed. The post is done and
+     * cannot be rolled back, so a failing callback (an AfterPostHandler, or an @EventListener
+     * behind the publisher) must not surface as a posting failure: the caller would report
+     * "posting failed" for a posted document, and the remaining callbacks would be skipped.
+     * Each callback is isolated and a failure is logged at ERROR. Work that must not be lost
+     * belongs in a @DomainEvent outbox row, which commits with the posting.
+     */
     private void afterSuccessfulPost(DocumentObject document) {
         document.setPosted(true);
-
-        publishApplicationEvent(new EntityChangedEvent(
-                EntityChangedEvent.POSTED,
-                EntityChangedEvent.DOCUMENT,
-                registry.getDocumentDescriptor(document.getClass()).logicalName(),
-                document.getId(),
-                document.getNumber()
-        ));
-
+        publishChangeEvents(document, EntityChangedEvent.POSTED);
         if (document instanceof AfterPostHandler handler) {
-            OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
+            afterCommit(document, "AfterPostHandler.afterPost()", () ->
+                    OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost));
         }
-
-        publishApplicationEvent(new DocumentPostedEvent(document));
+        afterCommit(document, "DocumentPostedEvent listener", () ->
+                publishApplicationEvent(new DocumentPostedEvent(document)));
     }
 
     private void afterSuccessfulUnpost(DocumentObject document) {
         document.setPosted(false);
+        publishChangeEvents(document, EntityChangedEvent.UNPOSTED);
+        afterCommit(document, "DocumentUnpostedEvent listener", () ->
+                publishApplicationEvent(new DocumentUnpostedEvent(document)));
+    }
 
-        publishApplicationEvent(new EntityChangedEvent(
-                EntityChangedEvent.UNPOSTED,
-                EntityChangedEvent.DOCUMENT,
-                registry.getDocumentDescriptor(document.getClass()).logicalName(),
-                document.getId(),
-                document.getNumber()
-        ));
+    /**
+     * The document change ({@code POSTED}/{@code UNPOSTED}) plus a wildcard register change: posting
+     * rewrote register movements, so open register views (balances, turnovers, movements) refresh
+     * whichever entry point posted — UI, REST, MCP, import, a job or direct Java.
+     */
+    private void publishChangeEvents(DocumentObject document, String changeType) {
+        afterCommit(document, "EntityChangedEvent listener", () -> {
+            publishApplicationEvent(new EntityChangedEvent(
+                    changeType,
+                    EntityChangedEvent.DOCUMENT,
+                    registry.getDocumentDescriptor(document.getClass()).logicalName(),
+                    document.getId(),
+                    document.getNumber()));
+        });
+        afterCommit(document, "EntityChangedEvent listener", () ->
+                publishApplicationEvent(new EntityChangedEvent(
+                        EntityChangedEvent.CHANGED,
+                        EntityChangedEvent.REGISTER,
+                        "*",
+                        document.getId(),
+                        null)));
+    }
 
-        publishApplicationEvent(new DocumentUnpostedEvent(document));
+    private void afterCommit(DocumentObject document, String callback, Runnable action) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            log.error("{} failed after {} {} was committed; the posting stands",
+                    callback, document.getClass().getSimpleName(), document.getId(), e);
+        }
     }
 
     private void restoreChronologically(DocumentObject requested,

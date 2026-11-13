@@ -106,6 +106,12 @@ class DocumentPostingEventsTest {
                         id,
                         "TEST-001"
                 ));
+        // The register invalidation comes from PostingEngine; the UI command must not add a second one.
+        assertThat(events)
+                .filteredOn(event -> event instanceof EntityChangedEvent change
+                        && EntityChangedEvent.REGISTER.equals(change.entityType()))
+                .containsExactly(new EntityChangedEvent(
+                        EntityChangedEvent.CHANGED, EntityChangedEvent.REGISTER, "*", id, null));
 
         events.clear();
 
