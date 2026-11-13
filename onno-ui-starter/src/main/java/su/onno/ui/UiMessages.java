@@ -515,6 +515,8 @@ public final class UiMessages {
         d.put("list.clear", "Clear");
         d.put("list.clearAll", "Clear all");
         d.put("list.done", "Done");
+        d.put("list.rangeFrom", "From");
+        d.put("list.rangeTo", "To");
         d.put("list.selected", "{count} selected");
         d.put("list.dateToday", "Today");
         d.put("list.dateYesterday", "Yesterday");

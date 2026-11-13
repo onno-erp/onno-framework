@@ -43,6 +43,7 @@ public class SalesOrderView implements EntityView<SalesOrder> {
 
         list.filter(SalesOrder::getStatus).label("Status").multiOptions();
         list.filter(SalesOrder::getDate).label("Order date").dateRange();
+        list.filter(SalesOrder::getTotal).label("Total").numberRange();   // from–to, either bound optional
 
         list.rowStyle(row -> {
             OrderStatus status = row.enumValue(SalesOrder::getStatus, OrderStatus.class);

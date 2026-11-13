@@ -1,6 +1,6 @@
 export type InitialFilterControl = {
   key: string;
-  type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange";
+  type: "options" | "multiOptions" | "contains" | "startsWith" | "dateRange" | "numberRange";
 };
 
 export type FilterState = Record<
@@ -23,7 +23,27 @@ export function initialFilterState(
       if (filter.type === "dateRange") {
         return [filter.key, values[0] || values[1] ? { from: values[0] ?? "", to: values[1] ?? "" } : {}];
       }
+      if (filter.type === "numberRange") {
+        const from = normalizeNumberBound(values[0] ?? "");
+        const to = normalizeNumberBound(values[1] ?? "");
+        return [filter.key, from || to ? { from, to } : {}];
+      }
       return [filter.key, values[0] ? { eq: values[0] } : {}];
     })
   );
+}
+
+/**
+ * A number-range bound as the server accepts it: a plain decimal with a dot ("1 250,5" → "1250.5").
+ * Anything that isn't a number (or is unfinished, like a lone "-") yields "" — no constraint.
+ */
+export function normalizeNumberBound(text: string): string {
+  const v = text.replace(/[\s\u00a0\u202f]/g, "").replace(",", ".");
+  return /^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(v) ? v.replace(/\.$/, "") : "";
+}
+
+/** The chip badge for a number range: "100 – 500", or "≥ 100" / "≤ 500" when one end is open. */
+export function numberRangeLabel(from: string, to: string): string {
+  if (from && to) return `${from} – ${to}`;
+  return from ? `≥ ${from}` : to ? `≤ ${to}` : "";
 }

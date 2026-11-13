@@ -3,6 +3,7 @@ package su.onno.ui;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,8 +16,8 @@ import java.util.regex.Pattern;
  * {@code eq}/{@code in}/{@code like}/{@code prefix}/{@code ge}/{@code le} query params) into a safe
  * SQL fragment with bound parameters. It is the list-query counterpart of {@link WidgetFilter}: a
  * SELECT-options filter sends one {@code eq}, a multi-select sends one {@code in} per picked value,
- * a contains/starts-with typeahead sends a {@code like}/{@code prefix}, and a date-range sends a
- * {@code ge} and/or {@code le}.
+ * a contains/starts-with typeahead sends a {@code like}/{@code prefix}, and a date-range or
+ * number-range sends a {@code ge} and/or {@code le}.
  *
  * <p>Each param is a {@code "column,value"} pair. Injection safety rests on the same two rules as
  * {@link WidgetFilter}: the column (left of the first comma) must be a known column — validated
@@ -68,6 +69,19 @@ public final class ListFilter {
      */
     public static Result parse(List<String> eq, List<String> in, List<String> like, List<String> prefix,
                                List<String> ge, List<String> le, Set<String> allowedColumns) {
+        return parse(eq, in, like, prefix, ge, le, allowedColumns, Set.of());
+    }
+
+    /**
+     * As {@link #parse(List, List, List, List, List, List, Set)}, additionally told which columns
+     * are numeric so a {@code ge}/{@code le} bound on one binds as a number (see
+     * {@link #appendBound}).
+     *
+     * @param numericColumns lowercased names of the columns whose SQL type is numeric
+     */
+    public static Result parse(List<String> eq, List<String> in, List<String> like, List<String> prefix,
+                               List<String> ge, List<String> le, Set<String> allowedColumns,
+                               Set<String> numericColumns) {
         Map<String, Object> bindings = new LinkedHashMap<>();
         StringBuilder sql = new StringBuilder();
         int[] i = {0};
@@ -81,8 +95,8 @@ public final class ListFilter {
         // a case-insensitive match (matching the global search box) rather than Postgres-only ILIKE.
         appendLike(sql, bindings, i, like, allowedColumns, false);
         appendLike(sql, bindings, i, prefix, allowedColumns, true);
-        appendBound(sql, bindings, i, ge, allowedColumns, false);
-        appendBound(sql, bindings, i, le, allowedColumns, true);
+        appendBound(sql, bindings, i, ge, allowedColumns, numericColumns, false);
+        appendBound(sql, bindings, i, le, allowedColumns, numericColumns, true);
         return new Result(sql.toString(), bindings);
     }
 
@@ -100,10 +114,17 @@ public final class ListFilter {
      *       so {@code <= '2024-12-31'} (midnight) would silently drop every row dated inside the
      *       range's last day — the classic "the date filter doesn't work" report.</li>
      * </ul>
-     * Any other value (a full timestamp, a number) keeps the plain native comparison.
+     * A bound on a known numeric column (the number-range filter) binds as a {@link BigDecimal}:
+     * Postgres has no {@code numeric >= varchar} operator, so a string binding would fail there
+     * (H2 coerces silently). A value that is not a number is skipped — like a stale column, a
+     * malformed bound degrades to "no constraint" instead of failing the list.
+     *
+     * <p>Any other value (a full timestamp, a bound on a text column) keeps the plain native
+     * comparison.</p>
      */
     private static void appendBound(StringBuilder sql, Map<String, Object> bindings, int[] i,
-                                    List<String> pairs, Set<String> allowedColumns, boolean upper) {
+                                    List<String> pairs, Set<String> allowedColumns,
+                                    Set<String> numericColumns, boolean upper) {
         if (pairs == null) {
             return;
         }
@@ -112,8 +133,19 @@ public final class ListFilter {
             if (cv == null) {
                 continue;
             }
-            String param = "lf" + (i[0]++);
             String op = upper ? "<=" : ">=";
+            if (numericColumns.contains(cv[0])) {
+                BigDecimal number = number(cv[1]);
+                if (number == null) {
+                    log.warn("Ignoring non-numeric list filter bound on column: {}", cv[0]);
+                    continue;
+                }
+                String numeric = "lf" + (i[0]++);
+                and(sql).append(cv[0]).append(' ').append(op).append(" :").append(numeric);
+                bindings.put(numeric, number);
+                continue;
+            }
+            String param = "lf" + (i[0]++);
             if (DATE_ONLY.matcher(cv[1]).matches()) {
                 and(sql).append(cv[0]).append(' ').append(op)
                         .append(" CAST(:").append(param).append(" AS TIMESTAMP)");
@@ -123,6 +155,19 @@ public final class ListFilter {
                 bindings.put(param, cv[1]);
             }
         }
+    }
+
+    /** A plain decimal ({@code -12.50}; no exponent, no grouping), or {@code null} when it isn't one. */
+    private static final Pattern NUMBER = Pattern.compile("^[+-]?(\\d+(\\.\\d*)?|\\.\\d+)$");
+
+    /** Whether a field of this Java type persists as a numeric column (boxed or primitive). */
+    public static boolean isNumeric(Class<?> type) {
+        return type != null && (Number.class.isAssignableFrom(type)
+                || (type.isPrimitive() && type != boolean.class && type != char.class && type != void.class));
+    }
+
+    private static BigDecimal number(String value) {
+        return NUMBER.matcher(value).matches() && value.length() <= 64 ? new BigDecimal(value) : null;
     }
 
     private static void append(StringBuilder sql, Map<String, Object> bindings, int[] i,

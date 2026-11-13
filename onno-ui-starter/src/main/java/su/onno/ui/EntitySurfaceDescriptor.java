@@ -74,6 +74,15 @@ record EntitySurfaceDescriptor(
         return columnNames();
     }
 
+    /** Columns whose SQL type is numeric, so a range filter bound binds as a number (PG-strict). */
+    Set<String> numericColumns() {
+        return attributes.stream()
+                .filter(a -> !a.secret())
+                .filter(a -> ListFilter.isNumeric(a.javaType()))
+                .map(a -> a.columnName().toLowerCase())
+                .collect(Collectors.toSet());
+    }
+
     /** Columns whose SQL type is UUID (refs and enums), so a filter binds them typed (PG-strict). */
     Set<String> uuidColumns() {
         return attributes.stream()

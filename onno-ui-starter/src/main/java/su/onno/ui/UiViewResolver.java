@@ -313,6 +313,7 @@ public class UiViewResolver {
             case CONTAINS -> "contains";
             case STARTS_WITH -> "startsWith";
             case DATE_RANGE -> "dateRange";
+            case NUMBER_RANGE -> "numberRange";
             case OPTIONS -> "options";
         };
     }

@@ -65,7 +65,7 @@ public class RegisterListController {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
         int lim = clamp(limit);
-        ListFilter.Result filters = filters(request, query.movementFilterColumns(desc));
+        ListFilter.Result filters = filters(request, query.movementFilterColumns(desc), desc);
         long total = query.movementsCount(subject, desc, from, to, filters);
         int rowPosition = rowPosition(request);
         List<Map<String, Object>> rows = query.movementsWindow(subject, desc, from, to, filters,
@@ -84,7 +84,7 @@ public class RegisterListController {
         AccumulationRegisterDescriptor desc = query.require(name);
         access.requireRead(subject, desc);
         int lim = clamp(limit);
-        ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc));
+        ListFilter.Result filters = filters(request, query.balanceFilterColumns(desc), desc);
         long total = query.balanceCount(subject, desc, filters);
         int rowPosition = rowPosition(request);
         List<Map<String, Object>> rows = query.balanceWindow(subject, desc, filters,
@@ -95,11 +95,14 @@ public class RegisterListController {
     /**
      * The grid's declarative filter params, read raw (Spring's {@code List<String>} binding splits
      * a single value on commas, mangling the {@code "column,value"} encoding) and compiled against
-     * the register's own columns.
+     * the register's own columns. Numeric dimensions/resources are passed along so a number-range
+     * bound ({@code ge}/{@code le} on a resource) binds as a number.
      */
-    private static ListFilter.Result filters(HttpServletRequest request, java.util.Set<String> columns) {
+    private ListFilter.Result filters(HttpServletRequest request, java.util.Set<String> columns,
+                                      AccumulationRegisterDescriptor desc) {
         return ListFilter.parse(multi(request, "eq"), multi(request, "in"), multi(request, "like"),
-                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"), columns);
+                multi(request, "prefix"), multi(request, "ge"), multi(request, "le"), columns,
+                query.numericFilterColumns(desc));
     }
 
     private static List<String> multi(HttpServletRequest request, String param) {

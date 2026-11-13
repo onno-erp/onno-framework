@@ -155,6 +155,24 @@ class RegisterQueryServicePostgresIT {
     }
 
     @Test
+    void movementsWindow_numberRangeOnAResourceBindsNumericOnPostgres() {
+        // Postgres has no "numeric >= character varying" operator: a number-range bound must bind
+        // as a number (H2 would coerce a string silently and hide the failure).
+        insertMovement(LocalDateTime.of(2024, 7, 1, 10, 0), new BigDecimal("200.00"));
+        insertMovement(LocalDateTime.of(2024, 8, 1, 10, 0), new BigDecimal("300.00"));
+
+        ListFilter.Result range = ListFilter.parse(null, null, null, null,
+                List.of("amount,150"), List.of("amount,300"),
+                service.movementFilterColumns(descriptor), service.numericFilterColumns(descriptor));
+
+        assertThat(service.numericFilterColumns(descriptor)).containsExactly("amount");
+        assertThat(service.movementsCount(AccessSubject.system(), descriptor, null, null, range)).isEqualTo(2L);
+        List<Map<String, Object>> rows = service.movementsWindow(AccessSubject.system(),
+                descriptor, null, null, range, null, true, 0, 10);
+        assertThat(rows).extracting(r -> ((BigDecimal) r.get("amount")).intValue()).containsExactly(300, 200);
+    }
+
+    @Test
     void movementsWindow_sortsByAValidatedColumn_elseFallsBack() {
         insertMovement(LocalDateTime.of(2024, 7, 1, 10, 0), new BigDecimal("200.00"));
         insertMovement(LocalDateTime.of(2024, 8, 1, 10, 0), new BigDecimal("300.00"));
