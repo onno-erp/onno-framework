@@ -413,6 +413,7 @@ public class BookstoreSeeder implements ApplicationRunner {
         inventoryCount.setStartsAt(java.time.LocalDate.now().plusDays(1).atTime(10, 30));
         inventoryCount.setEndsAt(java.time.LocalDate.now().plusDays(1).atTime(11, 30));
         inventoryCount.setDate(inventoryCount.getStartsAt());
+        inventoryCount.setOrganizer(employeeRefs.get(0));
         inventoryCount.getParticipants().add(participant(employeeRefs.get(0), "Lead"));
         inventoryCount.getParticipants().add(participant(employeeRefs.get(2), "Inventory count"));
         schedules.save(inventoryCount);

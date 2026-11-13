@@ -375,7 +375,14 @@ because they are not Java field references.
     (`"SHIPPED"`) or its `@EnumLabel` text, or author **no options** (`.multiOptions()`) to offer
     every declared value labelled like the pills; `map()` → `MapSpec<E>` adds a Table⇄Map toggle —
     `lat(getter).lng(getter)` or `geoJson(String)`, `label(getter)` (marker popup), `defaultView()`
-    (open on the map); `custom(type)` → `CustomSpec` delegates the list **body** to a
+    (open on the map); `calendar(startGetter[, endGetter])` → `CalendarSpec<E>` adds a month/week/day
+    Calendar view and `timeline(startGetter, endGetter[, laneRefGetter])` → `TimelineSpec<E>` a
+    day scheduler with one lane per record of the lane `Ref` — both read the list feed with the
+    list's search/filters, refresh live, open the record on click and, with write access, save a
+    drag (move / resize / lane change) as a partial update through the generic command path;
+    `title(getter)`, `colorBy(getter)`, `defaultView()`, calendar `defaultMode(CalendarMode.WEEK)`,
+    timeline `slotMinutes(10)` + `hours(8, 21)`; a non-temporal start/end drops the view;
+    `custom(type)` → `CustomSpec` delegates the list **body** to a
     widget-registry component (`registerListRenderer(type, C)` from `@onno/widget-sdk`; props =
     `{rows, list, open, openUrl}`) behind a Table⇄custom toggle — `label(s)` (toggle label, else the
     `list.customView` message), `defaultView()`; the framework keeps search/filters/sort/feed/live

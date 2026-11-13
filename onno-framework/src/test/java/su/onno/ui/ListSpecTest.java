@@ -313,4 +313,36 @@ class ListSpecTest {
         assertThatThrownBy(() -> spec.width(" ", 10)).isInstanceOf(IllegalArgumentException.class);
         assertThat(spec.widths()).isEmpty();
     }
+
+    @Test
+    void calendarAndTimelineSpecsAccumulateAndValidate() {
+        ListSpec<Object> spec = new ListSpec<>();
+        assertThat(spec.calendarSpec()).isNull();
+        assertThat(spec.timelineSpec()).isNull();
+
+        spec.calendar("startsAt", "endsAt").title("subject").colorBy("status");
+        spec.calendar("startsAt", null).defaultMode(ListSpec.CalendarMode.DAY).defaultView();
+        // A second call replaces the fields but keeps the spec (and what was chained on it).
+        assertThat(spec.calendarSpec().startField()).isEqualTo("startsAt");
+        assertThat(spec.calendarSpec().endField()).isNull();
+        assertThat(spec.calendarSpec().titleField()).isEqualTo("subject");
+        assertThat(spec.calendarSpec().colorField()).isEqualTo("status");
+        assertThat(spec.calendarSpec().defaultMode()).isEqualTo(ListSpec.CalendarMode.DAY);
+        assertThat(spec.calendarSpec().isDefaultView()).isTrue();
+
+        ListSpec.TimelineSpec<Object> timeline = spec.timeline("startsAt", "endsAt", "doctor");
+        assertThat(timeline.slotMinutes()).isEqualTo(30);
+        assertThat(timeline.startHour()).isZero();
+        assertThat(timeline.endHour()).isEqualTo(24);
+        timeline.slotMinutes(10).hours(8, 21);
+        assertThat(spec.timelineSpec().laneField()).isEqualTo("doctor");
+        assertThat(spec.timelineSpec().slotMinutes()).isEqualTo(10);
+        assertThat(spec.timelineSpec().startHour()).isEqualTo(8);
+        assertThat(spec.timelineSpec().endHour()).isEqualTo(21);
+
+        assertThatThrownBy(() -> timeline.slotMinutes(7)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timeline.slotMinutes(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timeline.hours(9, 9)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> timeline.hours(-1, 25)).isInstanceOf(IllegalArgumentException.class);
+    }
 }
