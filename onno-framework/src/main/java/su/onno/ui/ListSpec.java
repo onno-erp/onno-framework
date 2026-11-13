@@ -42,7 +42,7 @@ public final class ListSpec<E> {
     private String defaultGroupBy;
     private boolean groupsExpanded;
     private final List<Aggregate> aggregates = new ArrayList<>();
-    private java.util.function.Function<ActionRow, RowStyle> rowStyleFn;
+    private java.util.function.Function<ActionRow<E>, RowStyle> rowStyleFn;
 
     public ListSpec<E> title(String title) {
         this.title = title;
@@ -475,7 +475,7 @@ public final class ListSpec<E> {
      *         : null);
      * </pre>
      */
-    public ListSpec<E> rowStyle(java.util.function.Function<ActionRow, RowStyle> style) {
+    public ListSpec<E> rowStyle(java.util.function.Function<ActionRow<E>, RowStyle> style) {
         this.rowStyleFn = style;
         return this;
     }
@@ -515,7 +515,7 @@ public final class ListSpec<E> {
     public List<Aggregate> aggregates() { return List.copyOf(aggregates); }
 
     /** The conditional row-formatting function, or {@code null} when {@link #rowStyle} wasn't called. */
-    public java.util.function.Function<ActionRow, RowStyle> rowStyleFn() { return rowStyleFn; }
+    public java.util.function.Function<ActionRow<E>, RowStyle> rowStyleFn() { return rowStyleFn; }
 
     /** The declared list filters, in declaration order. */
     public List<Filter> filters() {

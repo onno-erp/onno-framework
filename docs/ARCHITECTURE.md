@@ -250,8 +250,12 @@ placement or field-display hints.
 
 Authored Java uses the shared serializable `Field<E,V>` getter token wherever a value denotes a
 model field. `ListSpec<E>`, `EntityConfigBuilder<E>`, widget field methods, related lists,
-form-validation dependencies, `ActionRow`, register queries, and `Q` all accept method references
-such as `Order::getStatus`. `Fields.name(...)` resolves the JavaBean property and boundary resolvers
+form-validation dependencies, `ActionRow<E>`, register queries, and `Q` all accept method references
+such as `Order::getStatus`. `EntityView<E>.actions(ActionSpec<E>)` and
+`ListSpec<E>.rowStyle` preserve the owning entity in every `ActionRow<E>` callback, including
+late-bound actions. Getters from unrelated entities are compile errors; inherited getters remain
+valid. Page actions use `ActionSpec<Void>` because they have no owning record.
+`Fields.name(...)` resolves the JavaBean property and boundary resolvers
 map it to the logical API field used by catalog/document widgets, then query services translate it
 to the physical storage column. This keeps Java source compiler-checked while preserving validated
 SQL identifiers internally. String overloads are unsafe compatibility/dynamic escape hatches.
@@ -1120,7 +1124,7 @@ Priority is optional: bind a host catalog/enum with `CrmPriorityBinding.catalog(
 `.enumeration(...)`; use `.options()` in an ordinary priority filter. No priority enum, default or
 implicit column/filter is installed. The priority UUID is scoped to that host source.
 Assignment, close/reopen, status-change and manual identity-linking HTTP actions are not bundled.
-Host `EntityView<Conversation>` beans declare ordinary `ActionSpec` ROW/DETAIL handlers; extension
+Host `EntityView<Conversation>` beans declare ordinary `ActionSpec<Conversation>` ROW/DETAIL handlers; extension
 buttons receive their descriptors and call `context.execute(key, inputs)`. The scoped action API is
 `/api/crm/inbox-workspaces/{workspace}/conversations/{id}/actions` (GET descriptors, POST `/{key}`
 with `{inputs:{...}}`). It checks workspace write access, application read-only mode, action roles

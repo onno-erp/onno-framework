@@ -343,7 +343,7 @@ because they are not Java field references.
 - `EntityView<E>` — `Class<E> entity()` (names the target catalog/document/register), `profile()`
   (a profile's own view replaces the default one for its list *and* record surface),
   `list(ListSpec<E>)`, `fields(EntityConfigBuilder<E>)`, `detail(DetailSpec<E>)`,
-  `actions(ActionSpec)`, `inputs(InputSpec)`,
+  `actions(ActionSpec<E>)`, `inputs(InputSpec)`,
   `comments()` (return `true` to opt this catalog/document into the `/api/comments` discussion
   thread; off by default, gated by the global `onno.comments.enabled` switch), `opensInMain()`
   (return `true` so records open in the focused pane instead of a detail island beside the list).
@@ -385,11 +385,13 @@ because they are not Java field references.
     scroll only its bounded inner panes; do not cap it with viewport clamps or grow the whole page.
     Use entity/ref/comment avatar payloads and merge durable system activity into communication
     timelines. `rowStyle(row →
-    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow` as
+    RowStyle)` = **conditional row formatting** — evaluated server-side per row (same `ActionRow<E>` as
     state-aware actions), returns `ListSpec.RowStyle.DANGER/WARNING/SUCCESS/ACCENT/MUTED` or `null`
     (default look); the grid renders a theme-aware translucent wash (e.g. urgent rows red, cancelled
     faded), also inside expanded groups; a throwing function = `null` for that row.
-  - `ActionSpec`: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
+  - `ActionSpec<E>` retains the view entity in all row callbacks, including `dynamic` providers;
+    getters from unrelated entities do not compile. Page actions use `ActionSpec<Void>`.
+    Action DSL: `action(key)` → `ActionBuilder.label/icon(String)`, `logo(urlOrStaticPath)` (image
     instead of the lucide icon — e.g. a brand mark), `scope(ActionScope.ROW|TOOLBAR|DETAIL)`,
     `handler(ctx→ActionResult)` or `navigate(url)`. `roles("MANAGER", …)` restricts who may run the
     action (`ADMIN` always passes; #227): on an entity action it's a finer gate on top of the
@@ -420,7 +422,7 @@ because they are not Java field references.
     add/remove tabular grid whose columns reuse the field DSL (incl. `.reference(...)`), read back
     with `ctx.inputRows(key)` → `List<Map<String,String>>` (`.required()` = at least one row).
     Groups are action-form only; a toolbar renders scalars and ignores them (#248). A **row** action may vary per row — `icon(row→String)`,
-    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow`
+    `label(row→String)`, `visibleWhen(row→bool)`, `enabledWhen(row→bool)` — taking an `ActionRow<E>`
     (`id()`, `text(col)`, `enumValue(col,Type)`, `bool(col)`), evaluated as the list renders (#116).
     A dynamic **server ROW** action should also declare a human-facing `label(String)`: batch
     selection has no single row context, so its menu and progress messages use the fixed label and

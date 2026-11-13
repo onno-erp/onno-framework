@@ -29,7 +29,7 @@ public class UiViewResolver {
     private final Map<Class<?>, Map<String, EntityView>> views = new LinkedHashMap<>();
     // entity -> its authored rowStyle function (empty = none) — cached because the list-data feed
     // asks per request and building a ListSpec re-runs the view's list() authoring each time.
-    private final Map<Class<?>, java.util.Optional<java.util.function.Function<ActionRow, ListSpec.RowStyle>>>
+    private final Map<Class<?>, java.util.Optional<java.util.function.Function<?, ListSpec.RowStyle>>>
             rowStyles = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Resolver with the built-in 50-row keyset window. */
@@ -97,11 +97,12 @@ public class UiViewResolver {
      * then any profile-specific one — because the list-data feed that evaluates it has no profile
      * context (mirroring how {@link UiActionResolver} aggregates actions across views).
      */
-    public java.util.function.Function<ActionRow, ListSpec.RowStyle> rowStyle(Class<?> entity) {
+    @SuppressWarnings("unchecked") // Cache keys are the entity() class of the declaring EntityView<E>.
+    public <E> java.util.function.Function<ActionRow<E>, ListSpec.RowStyle> rowStyle(Class<E> entity) {
         if (entity == null) {
             return null;
         }
-        return rowStyles.computeIfAbsent(entity, e -> {
+        return (java.util.function.Function<ActionRow<E>, ListSpec.RowStyle>) rowStyles.computeIfAbsent(entity, e -> {
             Map<String, EntityView> byProfile = views.get(e);
             if (byProfile == null) {
                 return java.util.Optional.empty();
@@ -112,15 +113,21 @@ public class UiViewResolver {
                 ordered.add(def);
             }
             byProfile.values().stream().filter(v -> v != def).forEach(ordered::add);
-            for (EntityView view : ordered) {
-                ListSpec<Object> spec = new ListSpec<>();
-                view.list(spec);
-                if (spec.rowStyleFn() != null) {
-                    return java.util.Optional.of(spec.rowStyleFn());
+            for (EntityView<?> view : ordered) {
+                var style = rowStyleFor(view);
+                if (style != null) {
+                    return java.util.Optional.of(style);
                 }
             }
             return java.util.Optional.empty();
         }).orElse(null);
+    }
+
+    private static <E> java.util.function.Function<ActionRow<E>, ListSpec.RowStyle> rowStyleFor(
+            EntityView<E> view) {
+        ListSpec<E> spec = new ListSpec<>();
+        view.list(spec);
+        return spec.rowStyleFn();
     }
 
     /** Profile-specific view wins, then the default view, then auto-generated columns. */

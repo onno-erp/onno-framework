@@ -446,7 +446,7 @@ public class DivKitController implements DisposableBean {
         }
         PageBuilder pb = new PageBuilder();
         page.compose(pb);
-        ActionSpec.Action action = pb.pageAction(key);
+        ActionSpec.Action<?> action = pb.pageAction(key);
         if (action == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unknown action: " + key);
         }
@@ -890,13 +890,14 @@ public class DivKitController implements DisposableBean {
      */
     private List<SurfaceDivBuilder.HeaderAction> detailActions(Class<?> entity, String kind, String name, UUID id,
                                                                Map<String, String> placement,
-                                                               Map<String, Object> row) {
+                                                               Map<String, Object> row,
+                                                               List<AttributeDescriptor> attributes) {
         List<SurfaceDivBuilder.HeaderAction> out = new ArrayList<>();
-        for (ActionSpec.Action a : actionResolver.forEntity(entity)) {
+        for (ActionSpec.Action<?> a : actionResolver.forEntity(entity)) {
             if (a.scope() != ActionScope.DETAIL) {
                 continue;
             }
-            UiActionResolver.RecordActionState state = UiActionResolver.recordActionState(a, row);
+            UiActionResolver.RecordActionState state = UiActionResolver.recordActionState(a, row, attributes);
             if (!state.visible()) {
                 continue;
             }
@@ -994,7 +995,7 @@ public class DivKitController implements DisposableBean {
             actions.add(new SurfaceDivBuilder.HeaderAction("trash-2", messages.get("action.delete"), "danger",
                     "onno://delete/catalogs/" + name + "/" + id, placement.getOrDefault("delete", "menu"),
                     List.of(), Map.of(), false, false));
-            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id, placement, row));
+            actions.addAll(detailActions(desc.javaClass(), "catalogs", name, id, placement, row, desc.attributes()));
         }
         // A custom action set to .hidden() drops out of the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
@@ -1173,7 +1174,7 @@ public class DivKitController implements DisposableBean {
             }
             // Custom DETAIL actions read the same override map; their per-record functions
             // evaluate against the loaded row (#255).
-            actions.addAll(detailActions(desc.javaClass(), "documents", name, id, placement, row));
+            actions.addAll(detailActions(desc.javaClass(), "documents", name, id, placement, row, desc.attributes()));
         }
         // "hidden" placement drops the action from the UI (it stays available via REST).
         actions.removeIf(a -> "hidden".equals(a.placement()));
