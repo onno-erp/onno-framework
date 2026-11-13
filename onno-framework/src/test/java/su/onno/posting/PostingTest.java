@@ -1,5 +1,6 @@
 package su.onno.posting;
 
+import su.onno.events.EntityChangedEvent;
 import su.onno.fixtures.TestDeclarativeReceipt;
 import su.onno.fixtures.TestCostIssue;
 import su.onno.fixtures.TestCostReceipt;
@@ -487,20 +488,39 @@ class PostingTest {
 
     @Test
     void unpost_receiptAlreadyConsumed_rollsBackMovementsTotalsAndPostedFlag() {
+        List<Object> events = new ArrayList<>();
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add
+        );
+
         UUID product = UUID.randomUUID();
         UUID warehouse = UUID.randomUUID();
-        TestReceipt receipt = createReceipt(warehouse, product, new BigDecimal("10"));
-        TestReceipt consumption = createReceipt(warehouse, product, new BigDecimal("-4"));
-        engine.post(receipt);
-        engine.post(consumption);
-        assertThatThrownBy(() -> engine.unpost(receipt))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("negative balance");
+
+        TestReceipt receipt = createReceipt(
+                warehouse, product, new BigDecimal("10"));
+        TestReceipt consumption = createReceipt(
+                warehouse, product, new BigDecimal("-4"));
+
+        engineWithEvents.post(receipt);
+        engineWithEvents.post(consumption);
+
+        events.clear();
+
+        assertThatThrownBy(() -> engineWithEvents.unpost(receipt))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("negative balance");
+
+        assertThat(events).isEmpty();
+
         assertStockBalance(product, warehouse, "6");
         assertThat(isPosted(receipt)).isTrue();
         assertThat(stockPersistence.getRecordsByDocument(receipt.getId()))
-                .singleElement().matches(TestStockRegister::isActive);
-        engine.unpost(consumption);
-        engine.unpost(receipt);
+                .singleElement()
+                .matches(TestStockRegister::isActive);
+
+        engineWithEvents.unpost(consumption);
+        engineWithEvents.unpost(receipt);
+
         assertStockBalance(product, warehouse, "0");
     }
 
@@ -572,14 +592,24 @@ class PostingTest {
         engineWithEvents.post(receipt);
         engineWithEvents.unpost(receipt);
 
-        assertThat(events).hasSize(2);
-        assertThat(events.get(0)).isInstanceOf(DocumentPostedEvent.class);
-        DocumentPostedEvent posted = (DocumentPostedEvent) events.get(0);
+        List<Object> documentPostingEvents = events.stream()
+                .filter(event ->
+                        event instanceof DocumentPostedEvent || event instanceof DocumentUnpostedEvent
+                )
+                .toList();
+
+        assertThat(documentPostingEvents).hasSize(2);
+
+        assertThat(documentPostingEvents.get(0)).isInstanceOf(DocumentPostedEvent.class);
+
+        DocumentPostedEvent posted = (DocumentPostedEvent) documentPostingEvents.get(0);
+
         assertThat(posted.document()).isSameAs(receipt);
         assertThat(posted.documentId()).isEqualTo(receipt.getId());
 
-        assertThat(events.get(1)).isInstanceOf(DocumentUnpostedEvent.class);
-        assertThat(((DocumentUnpostedEvent) events.get(1)).document()).isSameAs(receipt);
+        assertThat(documentPostingEvents.get(1)).isInstanceOf(DocumentUnpostedEvent.class);
+
+        assertThat(((DocumentUnpostedEvent) documentPostingEvents.get(1)).document()).isSameAs(receipt);
     }
 
     @Test
@@ -599,14 +629,23 @@ class PostingTest {
         TestReceipt receipt = createReceipt(
                 UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("10"));
         jdbi.useHandle(handle -> handle.execute("DROP TABLE onno_outbox"));
+
+        List<Object> events = new ArrayList<>();
+
         PostingEngine engineWithOutbox = new PostingEngine(
-                jdbi, registry, repositoryMapFor(), new OutboxWriter(jdbi));
+                jdbi,
+                registry,
+                repositoryMapFor(),
+                new OutboxWriter(jdbi),
+                events::add
+        );
 
         assertThatThrownBy(() -> engineWithOutbox.post(receipt))
                 .hasMessageContaining("onno_outbox");
 
         assertThat(isPosted(receipt)).isFalse();
         assertThat(stockPersistence.getRecordsByDocument(receipt.getId())).isEmpty();
+        assertThat(events).isEmpty();
     }
 
     private Map<Class<?>, RegisterRepositoryImpl<?>> repositoryMapFor() {
@@ -861,6 +900,70 @@ class PostingTest {
         }
 
         assertThat(receipts).allMatch(TestReceipt::isPosted);
+    }
+
+    @Test
+    void programmaticPostPublishesEntityChangedEvent() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("10")
+        );
+
+        List<Object> events = new ArrayList<>();
+
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add
+        );
+
+        PostingService service = new PostingService(engineWithEvents);
+        service.post(receipt);
+
+        EntityChangedEvent expected = new EntityChangedEvent(
+                EntityChangedEvent.POSTED,
+                EntityChangedEvent.DOCUMENT,
+                registry.getDocumentDescriptor(TestReceipt.class).logicalName(),
+                receipt.getId(),
+                receipt.getNumber()
+        );
+
+        assertThat(events)
+                .filteredOn(event -> expected.equals(event))
+                .hasSize(1);
+    }
+
+    @Test
+    void programmaticUnpostPublishesEntityChangedEvent() {
+        TestReceipt receipt = createReceipt(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("10")
+        );
+
+        List<Object> events = new ArrayList<>();
+
+        PostingEngine engineWithEvents = new PostingEngine(
+                jdbi, registry, repositoryMapFor(), null, events::add
+        );
+
+        PostingService service = new PostingService(engineWithEvents);
+
+        service.post(receipt);
+        events.clear();
+
+        service.unpost(receipt);
+
+        EntityChangedEvent expected = new EntityChangedEvent(
+                EntityChangedEvent.UNPOSTED,
+                EntityChangedEvent.DOCUMENT,
+                registry.getDocumentDescriptor(TestReceipt.class).logicalName(),
+                receipt.getId(),
+                receipt.getNumber()
+        );
+
+        assertThat(events)
+                .filteredOn(event -> expected.equals(event))
+                .hasSize(1);
     }
 
     private TestReceipt createNumberedReceipt(String number, UUID warehouse, UUID product, BigDecimal qty) {

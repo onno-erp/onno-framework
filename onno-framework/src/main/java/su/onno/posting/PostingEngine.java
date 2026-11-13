@@ -1,5 +1,6 @@
 package su.onno.posting;
 
+import su.onno.events.EntityChangedEvent;
 import su.onno.lifecycle.AfterPostHandler;
 import su.onno.lifecycle.BeforePostHandler;
 import su.onno.lifecycle.BeforeUnpostHandler;
@@ -258,8 +259,7 @@ public class PostingEngine {
         Set<Class<?>> chronologicalRegisters = chronologicalRegistersForDocument(document.getId());
         if (!chronologicalRegisters.isEmpty()) {
             restoreChronologically(document, null, chronologicalRegisters, PostingMutation.UNPOST);
-            document.setPosted(false);
-            publishApplicationEvent(new DocumentUnpostedEvent(document));
+            afterSuccessfulUnpost(document);
             return;
         }
 
@@ -267,19 +267,39 @@ public class PostingEngine {
             unpostInTransaction(handle, docDescriptor, document.getId());
         }));
 
-        document.setPosted(false);
-
-        publishApplicationEvent(new DocumentUnpostedEvent(document));
+        afterSuccessfulUnpost(document);
     }
 
     private void afterSuccessfulPost(DocumentObject document) {
         document.setPosted(true);
+
+        publishApplicationEvent(new EntityChangedEvent(
+                EntityChangedEvent.POSTED,
+                EntityChangedEvent.DOCUMENT,
+                registry.getDocumentDescriptor(document.getClass()).logicalName(),
+                document.getId(),
+                document.getNumber()
+        ));
 
         if (document instanceof AfterPostHandler handler) {
             OnnoPerformance.record("onno.document.after-post", 1, handler::afterPost);
         }
 
         publishApplicationEvent(new DocumentPostedEvent(document));
+    }
+
+    private void afterSuccessfulUnpost(DocumentObject document) {
+        document.setPosted(false);
+
+        publishApplicationEvent(new EntityChangedEvent(
+                EntityChangedEvent.UNPOSTED,
+                EntityChangedEvent.DOCUMENT,
+                registry.getDocumentDescriptor(document.getClass()).logicalName(),
+                document.getId(),
+                document.getNumber()
+        ));
+
+        publishApplicationEvent(new DocumentUnpostedEvent(document));
     }
 
     private void restoreChronologically(DocumentObject requested,

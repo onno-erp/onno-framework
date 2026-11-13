@@ -965,6 +965,12 @@ The domain `AfterPostHandler.afterPost()` hook still exists, but it has no Sprin
 event for anything that touches beans. Neither requires the Kafka outbox (that's only for cross-service
 event streaming).
 
+`PostingEngine` also publishes document `EntityChangedEvent` notifications
+(`POSTED` / `UNPOSTED`) after its JDBI transaction commits, including calls made
+directly through `PostingService`. Each successful operation publishes one such
+notification; rolled-back operations publish none. UI commands do not duplicate
+these notifications.
+
 ### Print Forms
 
 A print form (1C "печатная форма") is a `.docx`/`.xlsx` template plus a typed `PrintForm<T>` bean

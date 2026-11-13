@@ -748,6 +748,13 @@ The starter's repository entity-change publisher defers events until `Transactio
 when a Spring transaction is active. Rollback discards these events; without a transaction they are
 published immediately. Event data is captured when the write completes.
 
+Posting notifications are published by `PostingEngine` after its own JDBI
+transaction commits. Successful `post` and `repost` operations publish a document
+`EntityChangedEvent.POSTED`; successful `unpost` operations publish
+`EntityChangedEvent.UNPOSTED`. This applies to direct Java calls and UI, REST,
+and MCP entry points. Rolled-back operations publish neither notification.
+`DocumentCommandService` does not publish duplicate document posting notifications.
+
 Every write — through the generic controllers **and** through `repository.save(...)` — publishes a
 Spring `EntityChangedEvent(changeType, entityType, entityName, id, naturalKey)`
 (`onno-framework/src/main/java/su/onno/events/EntityChangedEvent.java`). It drives the `/api/events`
