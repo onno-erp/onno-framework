@@ -15,6 +15,7 @@ import htm from "htm";
 import { registerWidget } from "./widget-bridge";
 import { subscribeUiEvents } from "./ui-event-bus";
 import { subscribeWidgetMessages, widgetLocale, widgetTranslate } from "./widget-messages";
+import { registerListRenderer, registerListSelection } from "./widget-registry";
 import type { Translate } from "@/lib/messages";
 import { api } from "./api";
 import type { UiEvent, UiEventFilter } from "./types";
@@ -114,6 +115,8 @@ export interface OnnoHost {
   jsxRuntime: typeof ReactJSXRuntime;
   /** Register (or override) the renderer for a widget type; see {@link registerWidget}. */
   registerWidget: typeof registerWidget;
+  registerListRenderer: typeof registerListRenderer;
+  registerListSelection: typeof registerListSelection;
   /** `htm` bound to `React.createElement` — JSX-like authoring with no build step (Tier-0). */
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   /** Read-only slice of the REST client — safe surface for first-party widgets. */
@@ -264,6 +267,8 @@ export function installPluginHost(): OnnoHost {
     React,
     jsxRuntime: ReactJSXRuntime,
     registerWidget,
+    registerListRenderer,
+    registerListSelection,
     html: htm.bind(React.createElement) as OnnoHost["html"],
     api: readApi,
     toast,

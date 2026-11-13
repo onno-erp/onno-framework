@@ -1343,7 +1343,7 @@ the renderer receives. Declare it from the entity's `list(ListSpec)`:
 }
 ```
 
-Register the renderer the same way as a dashboard widget — same registry, list-shaped props:
+Register a list renderer with `registerListRenderer`.
 
 ```tsx
 import { registerListRenderer, type ListRendererProps } from "@onno/widget-sdk";

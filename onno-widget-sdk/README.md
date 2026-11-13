@@ -24,13 +24,16 @@ hooks, context, router, and theme all work, and there is no second React on the 
 import { registerWidget, useState, useEffect, api, html, type WidgetProps } from "@onno/widget-sdk";
 ```
 
-- `registerWidget(type, Component)` — register (or override) the renderer for a widget type.
-- `registerListRenderer(type, Component, options?)` — register the **body renderer for a custom list view**:
-  the component an entity's server-side `list.custom("type")` resolves. Same registry as
-  `registerWidget`, list-shaped props (`ListRendererProps`): `rows` (the current window, fed by the
-  framework-owned search/filters/sort/pagination), `list` (the descriptor — `kind`, `name`, `title`,
-  resolved `columns`, `canWrite`), and `open(row)` / `openUrl(row)` to open a record's detail pane.
-  An unregistered type degrades to the default grid.
+- `registerWidget(type, Component, options?)` registers a dashboard widget.
+  Pass `{ override: true }` to replace a built-in widget.
+- `registerListRenderer(type, Component, options?)` registers the renderer for a
+  custom list view configured with `list.custom("type")`. List renderers have
+  their own registry, so they can reuse dashboard widget names. The component
+  receives `ListRendererProps`, including `rows`, the `list` descriptor, and
+  `open(row)` / `openUrl(row)` for opening records. If no renderer is registered,
+  the list falls back to the default grid.
+  A bundle built with an older SDK that registered list renderers or selection
+  widgets through `registerWidget` still resolves, with a console warning; rebuild it.
 - `React`, `useState`, `useEffect`, `useMemo`, `useRef`, `useCallback`, `useReducer`, `useContext`,
   `useLayoutEffect` — the host React and its hooks (you may equally `import ... from "react"`).
 - `useWidgetUpdates(widget, refresh, options?)` — refetch when the widget's bound entity changes,

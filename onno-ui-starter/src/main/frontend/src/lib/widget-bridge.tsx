@@ -18,6 +18,7 @@ import { ValueWidget } from "@/components/value-widget";
 import { ChangePasswordWidget, UserAccountsWidget } from "@/components/user-accounts-widget";
 import {
   getRegistryVersion,
+  registerBuiltinWidget,
   registerWidget,
   registeredWidgetTypes,
   resolveWidget,
@@ -43,37 +44,33 @@ export { registerWidget, registeredWidgetTypes, resolveWidget, subscribeRegistry
  * forking the framework. The server emits {@code .type("gauge")} as an {@code
  * onno-widget} descriptor; whatever the app registered under {@code "gauge"} renders it.
  */
-registerWidget("entityTags", ({ widget }: { widget: DashboardWidgetMeta }) => widget.record ? <EntityTags {...widget.record} /> : null);
-registerWidget("count", ValueWidget);
-registerWidget("metric", ValueWidget);
-registerWidget("chart", ChartWidget);
-registerWidget("timeRange", TimeRangeWidget);
-registerWidget("calendar", CalendarWidget);
-registerWidget("kanban", KanbanWidget);
-registerWidget("list", ListWidget);
-registerWidget("stat", StatWidget);
-registerWidget("sparkline", SparklineWidget);
-registerWidget("gauge", GaugeWidget);
-registerWidget("map", MapWidget);
-registerWidget("setting", SettingWidget);
-registerWidget("tasks", ProcessTasksWidget);
-registerWidget("users", UserAccountsWidget);
-registerWidget("changePassword", ChangePasswordWidget);
+registerBuiltinWidget("entityTags", ({ widget }: { widget: DashboardWidgetMeta }) => widget.record ? <EntityTags {...widget.record} /> : null);
+registerBuiltinWidget("count", ValueWidget);
+registerBuiltinWidget("metric", ValueWidget);
+registerBuiltinWidget("chart", ChartWidget);
+registerBuiltinWidget("timeRange", TimeRangeWidget);
+registerBuiltinWidget("calendar", CalendarWidget);
+registerBuiltinWidget("kanban", KanbanWidget);
+registerBuiltinWidget("list", ListWidget);
+registerBuiltinWidget("stat", StatWidget);
+registerBuiltinWidget("sparkline", SparklineWidget);
+registerBuiltinWidget("gauge", GaugeWidget);
+registerBuiltinWidget("map", MapWidget);
+registerBuiltinWidget("setting", SettingWidget);
+registerBuiltinWidget("tasks", ProcessTasksWidget);
+registerBuiltinWidget("users", UserAccountsWidget);
+registerBuiltinWidget("changePassword", ChangePasswordWidget);
 
-/**
- * Register (or override) the renderer for a widget type. Call once at startup, before
- * or after DivKit content mounts — already-rendered hosts re-resolve against the new
- * registration. Returns nothing; last registration for a type wins.
+/*
+ * Apps add dashboard widget types with registerWidget(type, Component). Registering after DivKit
+ * content mounts is fine: mounted hosts re-resolve. The built-in types above cannot be replaced
+ * unless the call passes { override: true }:
  *
- * @example
- *   registerWidget("gauge", GaugeWidget);
- *   // server: b.widget("SLA").type("gauge").document(Incident.class)
- */
-/**
- * Look up the component registered under a type — the same registry {@link registerWidget} feeds.
- * Used by the entity list to resolve a {@code ListSpec.custom(type)} body renderer (whose props are
- * the list-renderer contract, not {@code {widget}} — the registry stores both shapes; the emitting
- * site knows which one it renders). Undefined when nothing is registered under the type.
+ *   registerWidget("slaGauge", SlaGauge);                        // server: .type("slaGauge")
+ *   registerWidget("gauge", MyGauge, { override: true });        // replace the built-in gauge
+ *
+ * List body renderers (ListSpec.custom) and selection widgets (ListSpec.selectionWidget) have their
+ * own registries in widget-registry.ts, so their type names never collide with dashboard widgets.
  */
 type Mount = { id: number; el: HTMLElement; widget: DashboardWidgetMeta };
 

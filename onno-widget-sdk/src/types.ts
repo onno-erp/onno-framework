@@ -266,6 +266,8 @@ export interface OnnoUi {
   SelectValue: import("react").ComponentType<any>;
 }
 
+export type ListSelectionProps = { ids: string[]; complete: () => void };
+
 /** The shape the host installs on {@code window.onno} (see the SDK's runtime bindings). */
 export interface OnnoHost {
   extensions?: {
@@ -276,7 +278,17 @@ export interface OnnoHost {
   jsxRuntime: unknown;
   registerWidget: (
     widgetType: string,
-    component: import("react").ComponentType<{ widget: DashboardWidgetMeta }>
+    component: import("react").ComponentType<{ widget: DashboardWidgetMeta }>,
+    options?: { override?: boolean }
+  ) => void;
+  registerListRenderer?: (
+    type: string,
+    component: import("react").ComponentType<ListRendererProps>,
+    options?: ListRendererOptions
+  ) => void;
+  registerListSelection?: (
+    type: string,
+    component: import("react").ComponentType<ListSelectionProps>
   ) => void;
   html: (strings: TemplateStringsArray, ...values: unknown[]) => unknown;
   api: OnnoReadApi;

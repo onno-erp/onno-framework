@@ -568,7 +568,7 @@ npm workspace and esbuild bundles them into the consumer's widget module. React,
 widget SDK, and build-tool packages remain framework-managed so plugins share the host runtime
 rather than loading incompatible duplicates.
 
-The same registry also serves **custom list renderers**: an `EntityView` may declare
+Custom list renderers use a separate registry. An `EntityView` may declare
 `list.custom("type")` to delegate the list *body* (tiles/cards/gallery) to a component registered
 with `registerListRenderer(type, C)`, while the framework keeps the toolbar (search, filters,
 sorting), the feed (infinite/paged + pager), and live refresh — the component just receives the
