@@ -345,6 +345,26 @@ Data aggregates retain physical deletes. Generic REST/import/MCP creates and upd
 `onFilling` (create), `beforeWrite`, rules, persistence, then `afterWrite`; validation previews never
 run `afterWrite`.
 
+**Who may post is a separate right from who may edit.** `@AccessControl(postRoles = …,
+unpostRoles = …)` on a document narrows posting (and re-posting) or unposting to those roles *on
+top of* write access; left empty, every writer keeps the right. Deleting a posted document unposts
+it, so it needs the unpost right too. `ADMIN` always passes. The gates are enforced on the shared
+command path (generic REST, MCP tools, built-in UI actions — the Post/Unpost buttons are hidden
+from callers who lack them); trusted code calling `PostingService` directly is not gated, like typed
+repositories. For a state-based veto ("a reconciled payment cannot be unposted") implement
+`BeforeUnpostHandler.beforeUnpost()` — the counterpart of `BeforePostHandler` — and throw.
+
+```java
+@Document(name = "Invoices")
+@AccessControl(readRoles = {"RECEPTION", "MANAGER"}, unpostRoles = "MANAGER")
+public class Invoice extends DocumentObject implements Postable, BeforeUnpostHandler {
+    @Override
+    public void beforeUnpost() {
+        if (paid) throw new ValidationException("A paid invoice cannot be unposted");
+    }
+}
+```
+
 Use `TURNOVER` when period totals matter but current balance does not.
 
 Examples:
@@ -751,8 +771,9 @@ Ask:
 
 Likely outputs:
 - `BeforeWriteHandler`
-- `BeforePostHandler`
+- `BeforePostHandler` / `BeforeUnpostHandler`
 - validation in Java services
+- `@AccessControl(postRoles = …, unpostRoles = …)` when posting is a different right from editing
 
 ### Round 6: Integrations, Scale, And Boundaries
 

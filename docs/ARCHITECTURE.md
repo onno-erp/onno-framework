@@ -114,7 +114,7 @@ In brief:
   `@EnumLabel(color="#…")` that renders the value as a colored status pill), **`@Constant`** (singleton
   setting), **`@ScheduledJob`**
   (`cron`) / `@Scheduled` background jobs, **`@DomainEvent`** (outbox), **`@AccessControl`**
-  (`readRoles`/`writeRoles`), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
+  (`readRoles`/`writeRoles`, plus `postRoles`/`unpostRoles` on documents), **`@Attribute`** (`required`, `length`, `precision`/`scale`, `secret`,
   validation `min`/`max`/`pattern`/`email`, `previousNames`).
 - **`Ref<T>`** (`su.onno.types.Ref`) — a typed `(Class<T>, UUID)` reference, stored as a UUID
   column; resolved with `RefResolver`.
@@ -317,6 +317,10 @@ public void handlePosting(PostingContext context) {
     }
 }
 ```
+
+Unposting runs `BeforeUnpostHandler.beforeUnpost()` first (when the document implements it); a throw
+vetoes the unpost and leaves the document posted. It does not run on a re-post or on the internal
+reverse/replay of later documents during chronological restoration.
 
 `PostingEngine` (`onno-framework/src/main/java/su/onno/posting/PostingEngine.java`) runs
 `beforeWrite` → `beforePost` → business-rule validation, then **inside its own JDBI transaction**
@@ -608,6 +612,16 @@ catalog/document/register is invisible
 and uneditable unless its `@AccessControl` read/write roles grant the caller; the `ADMIN` role is a
 superuser. Override the whole thing by setting `onno.auth.enabled=false` and supplying your own
 `SecurityFilterChain`.
+
+**Posting rights** are separate from write access. On a document, `@AccessControl(postRoles = …)`
+and `unpostRoles = …` narrow who may post / re-post or unpost: the caller needs write access *and*
+one of the listed roles (an empty list leaves the right with every writer; `ADMIN` always passes).
+`DocumentCommandService` enforces them — so `POST /api/documents/{name}/{id}/post` and `/unpost`,
+the MCP `post_document`/`unpost_document` tools and the built-in UI actions all answer `403` — and
+`DELETE` of a *posted* document requires the unpost right because it unposts first. The record
+surface hides the Post button, the Unpost action and (for a posted record) Delete from callers who
+lack the right. `PostingService` itself is not gated: like typed repositories it is trusted
+application code.
 
 ### Record-level access policies
 

@@ -30,6 +30,10 @@ change.
   non-API endpoints as a separate security decision; use a management port/chain when needed.
 - `@AccessControl` is deny-by-default. `ADMIN` always passes.
 - `writeRoles` falls back to `readRoles` when empty.
+- On documents, `postRoles` / `unpostRoles` separate posting from editing: the caller needs write
+  access *and* one of the roles (empty = every writer). `@AccessControl(readRoles = {"RECEPTION",
+  "MANAGER"}, unpostRoles = "MANAGER")` lets reception create and post invoices but only a manager
+  unpost (or delete a posted) one. REST/MCP answer `403`; the UI hides the Post/Unpost actions.
 - Record-level access (external users seeing only their own records) is a `RecordAccessPolicy`
   bean: `RecordAccessPolicy.forCatalog(Tenant.class).appliesTo("CUSTOMER")
   .read(RecordScope.eq("owner", Subject.recordId()))`; `via("tenant")` scopes through a ref;

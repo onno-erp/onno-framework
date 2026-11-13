@@ -206,12 +206,12 @@ duplicates with `400`. See [the headless contract](../docs/HEADLESS_READ_API.md)
 | GET | `/{name}/{id}` | Single document. |
 | POST | `/{name}` | Create. Body carries header fields + tabular-section arrays keyed by section name. Number auto-generated when omitted and the document auto-numbers. |
 | PUT | `/{name}/{id}` | Partial update; supplied tabular sections are replaced wholesale. Optimistic locking via `version`/`_version` (`409` on conflict). |
-| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. |
-| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. |
+| POST | `/{name}/{id}/post` | Post a draft, or atomically reverse and recalculate an already-posted document. Needs write access and, when the document declares `@AccessControl(postRoles = …)`, one of those roles (`403` otherwise). |
+| POST | `/{name}/{id}/unpost` | Reverse a posted document; drafts and deleted documents are rejected. Needs write access and, when declared, one of `@AccessControl(unpostRoles = …)` (`403` otherwise). A domain `BeforeUnpostHandler.beforeUnpost()` runs first and may veto by throwing. |
 | GET | `/{name}/{id}/posting-preview` | Preview movements without writing them. |
 | POST | `/{name}/{id}/duplicate` | Server-side copy: attributes + line items, fresh id + number, dated now, unposted. Secret attributes start unset. Backs the list's ⌘C/⌘V. |
 | POST | `/{name}/batch-delete` | Soft-delete `{ids: […]}` in one request (≤500, auto-unposting posted ones). Per-id failures don't abort; returns `{ok, failed, total}`. Backs the list's batch Delete N. |
-| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
+| DELETE | `/{name}/{id}` | Soft delete (auto-unposts first if posted — which requires the unpost right, see `/unpost`). A domain `BeforeDeleteHandler.beforeDelete()` runs first and may veto by throwing (a `ValidationException` maps to the standard `4xx`). |
 
 ### Registers — `/api/registers`
 

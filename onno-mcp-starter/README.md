@@ -32,7 +32,7 @@ security filter chain scoped to that endpoint that reuses your existing
 | `create_catalog`, `update_catalog`, `delete_catalog` | write | Create/update/soft-delete catalog records. *(gated by `onno.mcp.writes-enabled`)* |
 | `create_document`, `update_document`, `delete_document` | write | Create/update/soft-delete documents. A posted document is unposted before delete. *(gated by `onno.mcp.writes-enabled`)* |
 | `posting_preview` | read | Show the register movements a document would make if posted. *(gated by `onno.mcp.posting-enabled`)* |
-| `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** *(gated by `onno.mcp.posting-enabled`)* |
+| `post_document`, `unpost_document` | write | Post/unpost a document to registers. **Has ledger side-effects.** Honours the document's `@AccessControl(postRoles/unpostRoles)` like the REST API. *(gated by `onno.mcp.posting-enabled`)* |
 
 ## Usage
 
