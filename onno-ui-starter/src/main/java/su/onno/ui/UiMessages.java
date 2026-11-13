@@ -488,6 +488,25 @@ public final class UiMessages {
         d.put("batch.deleteConfirm", "Sure? Delete {n}");
         d.put("batch.running", "{label} — running on {n}…");
         d.put("batch.done", "{label}: {ok}/{n} done");
+        d.put("list.download.running", "Preparing {label} for {n}…");
+        d.put("list.download.failed", "{label} failed");
+        // onno-print-starter's printTemplates widget (template management for admins).
+        d.put("print.templates.title", "Print templates");
+        d.put("print.templates.empty", "No print forms are registered.");
+        d.put("print.templates.form", "Form");
+        d.put("print.templates.entity", "Record type");
+        d.put("print.templates.template", "Template");
+        d.put("print.templates.builtIn", "Built-in");
+        d.put("print.templates.uploaded", "Uploaded {date} by {user}");
+        d.put("print.templates.download", "Download");
+        d.put("print.templates.downloadBuiltIn", "Download built-in");
+        d.put("print.templates.upload", "Upload");
+        d.put("print.templates.reset", "Reset");
+        d.put("print.templates.uploadedToast", "Template for {form} uploaded");
+        d.put("print.templates.resetToast", "{form} uses its built-in template again");
+        d.put("print.templates.loadFailed", "Could not load print templates.");
+        d.put("print.templates.disabled", "Template uploads are disabled (onno.print.templates.enabled=false).");
+        d.put("print.templates.hint", "Download a template, edit it in Word or Excel keeping the {{placeholders}}, then upload it. Reset restores the built-in file.");
         d.put("batch.deleted", "Deleted {ok}/{n}");
         // Row clipboard: ⌘C copies rows (TSV + app payload), ⌘V pastes them back as new records.
         d.put("clipboard.copied", "{count} copied");

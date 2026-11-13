@@ -1793,6 +1793,19 @@ The Add tag picker searches existing entries and can create a new one through
 through `TagCatalog.importTag` when a catalog is bound. Legacy IDs and assignments
 survive migration; catalog edits update every assigned chip and deleted tags leave the picker.
 
+### Record header actions from extension modules
+
+A `RecordActionContributor` bean adds read-only actions to catalog/document record surfaces
+(`onno-print-starter` uses it for its print menu). Each `RecordAction(key, icon, label, url)` is
+offered regardless of write access or read-only mode, so the contributor must filter by the
+request's `AccessSubject` itself. Placement follows `f.action(key)` and defaults to the ⋯ menu. A
+`onno://download/{path}` URL downloads a server file through a full-page GET.
+
+A `SelectionDownloadContributor` bean does the same for a list's selection toolbar (batch print):
+each `SelectionDownload(key, icon, label, url)` becomes a button for every reader; clicking POSTs
+`{"ids":[…]}` with the CSRF header to `url` and saves the attachment. The descriptor carries them as
+`selectionDownloads` (omitted when empty). The endpoint must enforce entity and record access.
+
 ### UI extension outlets
 
 Host contract v5 adds `registerExtension` and `ExtensionSlot`: opt-in contributions to page/list/form

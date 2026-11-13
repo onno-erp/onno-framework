@@ -272,6 +272,48 @@ export async function uploadMedia(file: File): Promise<StoredMedia> {
 }
 
 /**
+ * POST the selected record ids to a server download endpoint (a list's selection download, e.g. batch
+ * print) and save the returned attachment. The file name comes from Content-Disposition (RFC 5987
+ * {@code filename*} preferred), falling back to {@code fallbackName}.
+ */
+export async function downloadSelection(url: string, ids: string[], fallbackName: string): Promise<void> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const csrf = readCsrfToken();
+  if (csrf) headers[CSRF_HEADER] = csrf;
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers,
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body.message) message = body.message;
+      else if (body.error) message = body.error;
+    } catch { /* ignore parse errors */ }
+    if (res.status === 401) onUnauthorized?.();
+    throw new ApiError(message, res.status);
+  }
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+  const name = encoded ? decodeURIComponent(encoded) : plain ?? fallbackName;
+  const href = URL.createObjectURL(await res.blob());
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(href), 60_000);
+  }
+}
+
+/**
  * A resolved {@code @} mention or {@code #} reference in a comment body (see MentionResolver). The body
  * carries it as a `@[Display](kind/name/id)` or `#[Display](kind/name/id)` token; this is the live resolution for the current viewer — display
  * and avatar reflect the record now, and `readable` is false when the viewer can't open it (the chip

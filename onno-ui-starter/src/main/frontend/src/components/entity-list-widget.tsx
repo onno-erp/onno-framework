@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/context-menu";
 import { DynamicLucide } from "@/lib/icon-bridge";
 import { getRegistryVersion, resolveWidget, subscribeRegistry } from "@/lib/widget-bridge";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, downloadSelection } from "@/lib/api";
 import { actionFeedbackFromError, applyActionResult, presentActionFeedback } from "@/lib/action-feedback";
 import { isInteractiveLayerOpen, matchesKey, shortcutLabel } from "@/lib/keybindings";
 import { withBasePath } from "@/lib/base-path";
@@ -146,6 +146,9 @@ export type ListAction = {
  * to hide/grey it on rows it doesn't apply to. Any field absent falls back to the static descriptor
  * (icon/label) or the default (visible/enabled = true).
  */
+/** A read-only selection download (e.g. batch print): POST {ids} to {@code url}, save the attachment. */
+export type SelectionDownload = { key: string; icon?: string; label: string; url: string };
+
 export type RowActionState = {
   visible?: boolean;
   enabled?: boolean;
@@ -335,6 +338,11 @@ export type ListDescriptor = {
   groupsExpanded?: boolean;
   selectionCheckboxes?: boolean;
   selectionWidget?: string;
+  /**
+   * Read-only file downloads over the selected rows (e.g. batch print), contributed server-side by a
+   * SelectionDownloadContributor. Offered to every reader: the endpoint enforces access itself.
+   */
+  selectionDownloads?: SelectionDownload[];
   pageSize: number;
   // Embedded in an authored page (PageBuilder.list) rather than rendered as its own route surface.
   // The page already pads its content, so the widget drops its horizontal gutter to align its table
@@ -2470,6 +2478,26 @@ export function EntityListWidget({
   // pending key still drives the disabled state of the menu items.
   const batchBusyRef = useRef(false);
 
+  // Download a file built from the selected rows (batch print and similar read-only exports).
+  const runSelectionDownload = useCallback(async (download: SelectionDownload, ids: string[]) => {
+    const k = `download:${download.key}`;
+    setPending((s) => new Set(s).add(k));
+    const toastId = toast.loading(t("list.download.running", { label: download.label, n: ids.length }));
+    try {
+      await downloadSelection(download.url, ids, `${download.key}.zip`);
+      toast.dismiss(toastId);
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("list.download.failed", { label: download.label }),
+        { id: toastId });
+    } finally {
+      setPending((s) => {
+        const n = new Set(s);
+        n.delete(k);
+        return n;
+      });
+    }
+  }, [t]);
+
   // Run a custom server action over every selected row. The API client chunks selections above the
   // server's 500-id request ceiling and folds them into one {ok, failed, total}, so the island still
   // owns one loading→summary toast and one refresh for the complete selection.
@@ -3101,6 +3129,13 @@ export function EntityListWidget({
               <Button size="toolbar" variant="subtle" onClick={() => {
                 for (const id of selected) openRoute(rowOpenUrl(kind, name, id));
               }}><ExternalLink />{t("action.open")}</Button>
+              {(list.selectionDownloads ?? []).map(d => (
+                <Button key={d.key} size="toolbar" variant="subtle" disabled={pending.has(`download:${d.key}`)}
+                  onClick={() => void runSelectionDownload(d, [...selected])}>
+                  {pending.has(`download:${d.key}`) ? <Loader2 className="animate-spin" /> : <DynamicLucide name={d.icon || "download"} size={16} />}
+                  {d.label}
+                </Button>
+              ))}
               {rowActions.filter(a => a.server).map(a => (
                 <Button key={a.key} size="toolbar" variant="subtle" disabled={pending.has(`batch:${a.key}`)}
                   onClick={() => { setArmedDelete(false); void runBatchAction(a, [...selected]); }}>

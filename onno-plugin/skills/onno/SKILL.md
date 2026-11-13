@@ -343,7 +343,8 @@ the JSON read contract (logical `FieldDisplay`/`FieldRef` companions, storage co
 ## Modules & config
 
 Core (`onno-framework` + `-starter`), plus opt-in starters: `onno-ui-starter`, `onno-auth-starter`,
-`onno-mcp-starter`, `onno-import-starter`, `onno-cluster-starter` (cross-node live-UI sync for
+`onno-mcp-starter`, `onno-import-starter`, `onno-print-starter` (Word/Excel print forms via
+`PrintForm<T>` beans), `onno-cluster-starter` (cross-node live-UI sync for
 horizontal scale-out), `onno-kafka-starter`, `onno-observability-starter`,
 `onno-desktop-starter` (+ Gradle plugin), `onno-widgets-gradle-plugin`, and `onno-widget-sdk`.
 Optional starters use their documented `onno.<module>.enabled` switches where provided. The full

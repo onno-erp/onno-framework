@@ -90,6 +90,10 @@ public class DivKitController implements DisposableBean {
     // on widgetPool threads, which carry no request/security context — so the subject is resolved
     // here, on the request thread, and handed to each task explicitly.
     private AccessSubjectResolver subjects;
+    // Extension modules' read-only record header actions (e.g. print forms); set by the auto-configuration.
+    private List<RecordActionContributor> recordActionContributors = List.of();
+    // Extension modules' read-only selection-toolbar downloads (e.g. batch print).
+    private List<SelectionDownloadContributor> selectionDownloadContributors = List.of();
 
     public DivKitController(LayoutSet layoutSet,
                             UiLayoutResolver layoutResolver,
@@ -138,6 +142,39 @@ public class DivKitController implements DisposableBean {
     /** Wire the subject resolver (set by the auto-configuration). */
     public void setAccessSubjectResolver(AccessSubjectResolver subjects) {
         this.subjects = subjects;
+    }
+
+    /** Wire the extension selection-toolbar downloads (set by the auto-configuration). */
+    public void setSelectionDownloadContributors(List<SelectionDownloadContributor> contributors) {
+        this.selectionDownloadContributors = List.copyOf(contributors);
+    }
+
+    /**
+     * Adds the contributed selection downloads to a list descriptor. Omitted when there are none so
+     * descriptors of apps without such a module stay unchanged.
+     */
+    private Map<String, Object> withSelectionDownloads(Map<String, Object> descriptor, String kind, String name,
+                                                       Class<?> type, Principal principal) {
+        if (descriptor == null || selectionDownloadContributors.isEmpty()) return descriptor;
+        var request = new SelectionDownloadContributor.SelectionRequest(kind, name, type, subject(principal));
+        List<Map<String, Object>> downloads = new ArrayList<>();
+        for (SelectionDownloadContributor contributor : selectionDownloadContributors) {
+            for (SelectionDownloadContributor.SelectionDownload d : contributor.downloads(request)) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("key", d.key());
+                item.put("icon", d.icon());
+                item.put("label", d.label());
+                item.put("url", d.url());
+                downloads.add(item);
+            }
+        }
+        if (!downloads.isEmpty()) descriptor.put("selectionDownloads", downloads);
+        return descriptor;
+    }
+
+    /** Wire the extension record header actions (set by the auto-configuration). */
+    public void setRecordActionContributors(List<RecordActionContributor> contributors) {
+        this.recordActionContributors = List.copyOf(contributors);
     }
 
     private su.onno.access.AccessSubject subject(Principal principal) {
@@ -788,9 +825,9 @@ public class DivKitController implements DisposableBean {
             String name = toSnakeCase(cd.logicalName());
             boolean canWrite = access.canWrite(principal, cd);
             String newUrl = canWrite ? "onno://catalogs/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
+            return withSelectionDownloads(SurfaceDivBuilder.listDescriptor(view, "catalogs", name, newUrl, canWrite,
                     listActions(entity, "catalogs", name), actionResolver.inputDescriptors(entity),
-                    canWrite && actionResolver.hasDynamicActions(entity));
+                    canWrite && actionResolver.hasDynamicActions(entity)), "catalogs", name, entity, principal);
         }
         DocumentDescriptor dd = documentQuery.forClass(entity);
         if (dd != null) {
@@ -804,9 +841,9 @@ public class DivKitController implements DisposableBean {
             String name = toSnakeCase(dd.logicalName());
             boolean canWrite = access.canWrite(principal, dd);
             String newUrl = canWrite ? "onno://documents/" + name + "/new" : null;
-            return SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
+            return withSelectionDownloads(SurfaceDivBuilder.listDescriptor(view, "documents", name, newUrl, canWrite,
                     listActions(entity, "documents", name), actionResolver.inputDescriptors(entity),
-                    canWrite && actionResolver.hasDynamicActions(entity));
+                    canWrite && actionResolver.hasDynamicActions(entity)), "documents", name, entity, principal);
         }
         return null;
     }
@@ -905,7 +942,8 @@ public class DivKitController implements DisposableBean {
                         listActions(desc.javaClass(), "catalogs", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
                         canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
-                        focusId(focus)));
+                        focusId(focus),
+                        d -> withSelectionDownloads(d, "catalogs", name, desc.javaClass(), principal)));
     }
 
     @GetMapping("/catalogs/{name}/{id}")
@@ -948,6 +986,7 @@ public class DivKitController implements DisposableBean {
         List<SurfaceDivBuilder.HeaderAction> actions = new ArrayList<>();
         // Read-only: offered to every viewer of the record, independent of canWrite (#410).
         addOpenInList(actions, "catalogs", name, id, profileId, viewport, placement);
+        addContributed(actions, "catalogs", name, desc.javaClass(), id, subject, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://catalogs/" + name + "/" + id + "/duplicate", placement.getOrDefault("duplicate", "menu"),
@@ -1037,7 +1076,8 @@ public class DivKitController implements DisposableBean {
                         listActions(desc.javaClass(), "documents", name),
                         actionResolver.inputDescriptors(desc.javaClass()),
                         canWrite && actionResolver.hasDynamicActions(desc.javaClass()),
-                        focusId(focus)));
+                        focusId(focus),
+                        d -> withSelectionDownloads(d, "documents", name, desc.javaClass(), principal)));
     }
 
     /**
@@ -1118,6 +1158,7 @@ public class DivKitController implements DisposableBean {
         }
         // Read-only: offered to every viewer of the record, independent of canWrite (#410).
         addOpenInList(actions, "documents", name, id, profileId, viewport, placement);
+        addContributed(actions, "documents", name, desc.javaClass(), id, subject, placement);
         if (canWrite) {
             actions.add(new SurfaceDivBuilder.HeaderAction("copy", messages.get("action.duplicate"), "normal",
                     "onno://documents/" + name + "/" + id + "/duplicate",
@@ -1365,6 +1406,26 @@ public class DivKitController implements DisposableBean {
                 "primary".equals(place) ? "accent" : "normal",
                 "onno://" + kind + "/" + name + "?focus=" + id, place,
                 List.of(), Map.of(), false, false));
+    }
+
+    /**
+     * Read-only header actions contributed by extension modules ({@link RecordActionContributor},
+     * e.g. print forms). Like "Open in list" they need only the read access the detail surface has
+     * already enforced, so they are offered regardless of write access or read-only mode; each
+     * contributor filters by the viewer itself. Placement follows {@code f.action(key)}.
+     */
+    private void addContributed(List<SurfaceDivBuilder.HeaderAction> actions, String kind, String name,
+                                Class<?> type, UUID id, su.onno.access.AccessSubject subject,
+                                Map<String, String> placement) {
+        var request = new RecordActionContributor.RecordActionRequest(kind, name, type, id, subject);
+        for (RecordActionContributor contributor : recordActionContributors) {
+            for (RecordActionContributor.RecordAction action : contributor.actions(request)) {
+                String place = placement.getOrDefault(action.key(), "menu");
+                actions.add(new SurfaceDivBuilder.HeaderAction(action.icon(), action.label(),
+                        "primary".equals(place) ? "accent" : "normal", action.url(), place,
+                        List.of(), Map.of(), false, false));
+            }
+        }
     }
 
     /**

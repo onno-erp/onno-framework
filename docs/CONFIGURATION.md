@@ -124,6 +124,20 @@ OIDC and resource-server modes also read the standard `spring.security.oauth2.cl
 | `onno.import.max-rows` | `Integer` | `10000` | Maximum data rows processed by one import request. |
 | `onno.import.preview-rows` | `Integer` | `20` | Maximum data rows returned from preview. |
 
+## Print — `onno-print-starter` (`OnnoPrintProperties`, prefix `onno.print`)
+
+| Property | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `onno.print.batch.max-records` | `Integer` | `200` | Most records one batch print request may include; larger selections are rejected. |
+| `onno.print.enabled` | `Boolean` | `true` | Master switch for print forms. When false, no PrintService, print endpoints or record "Print" actions are registered, even if PrintForm beans exist. |
+| `onno.print.pdf.gotenberg.timeout` | `Duration` | `60s` | Timeout of one Gotenberg conversion request. |
+| `onno.print.pdf.gotenberg.url` | `URI` | — | Base URL of a Gotenberg service, e.g. http://localhost:3000. Setting it enables PDF output. |
+| `onno.print.pdf.libreoffice.command` | `String` | — | The soffice executable (a name on the PATH or an absolute path, e.g. /Applications/LibreOffice.app/Contents/MacOS/soffice). Setting it enables PDF output. |
+| `onno.print.pdf.libreoffice.timeout` | `Duration` | `120s` | Timeout of one LibreOffice conversion. |
+| `onno.print.templates.enabled` | `Boolean` | `true` | Whether admins may upload replacement templates (stored in the onno_print_templates table) that take precedence over the built-in ones. |
+| `onno.print.templates.manage-roles` | `List<String>` | — | Roles allowed to list, download, upload and reset print templates. ADMIN always passes. |
+| `onno.print.templates.max-size` | `DataSize` | `10MB` | Largest accepted uploaded template. |
+
 ## Cluster — `onno-cluster-starter` (`OnnoClusterProperties`, prefix `onno.cluster`)
 
 | Property | Type | Default | Meaning |
