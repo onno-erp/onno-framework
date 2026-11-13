@@ -60,6 +60,17 @@ import { registerWidget, useState, useEffect, api, html, type WidgetProps } from
   server-side `.config(key, value)` values. When the component is embedded through
   `EntityView.detail(DetailSpec)`, `widget.record` additionally carries the saved record's route
   `kind`, logical `name`, `id`, already-loaded `data`, and `readOnly` state.
+- **Navigation** — dispatch an `onno:action` event with an `onno://` URL. Entity routes use the
+  snake_case route name, not the logical name REST uses: for `@Document(name = "SalesOrders")`,
+
+  ```ts
+  window.dispatchEvent(new CustomEvent("onno:action", {
+    detail: `onno://documents/sales_orders/${id}`,
+  }));
+  ```
+
+  A link with the REST spelling (`SalesOrders`) still opens, but the record gets no live updates
+  and no localized tab title.
 
 ## Styling
 

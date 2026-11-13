@@ -41,6 +41,12 @@ model. The host owns business fields, lifecycle stages, sales models, pages and 
 adapters call the host inbound-contact policy, not a module-owned customer repository. See the
 [CRM composition contract](../onno-crm-starter/README.md).
 
+UI extensions navigate by dispatching `onno:action` with an `onno://` URL (or through an extension
+context's `openRecord`). Entity routes use the snake_case route name, not the logical name REST
+uses: `@Document(name = "SalesOrders")` is `onno://documents/sales_orders/{id}`, while REST is
+`/api/documents/SalesOrders`. A notification `link` follows the same rule. A link with the REST
+spelling still renders, but live updates and the localized tab title don't apply to it (#247).
+
 ## Key idea: a connector wraps an external system, it does not model the business
 
 A connector defines **zero** framework metadata — no `@Catalog`/`@Document`/registers/posting/UI.
