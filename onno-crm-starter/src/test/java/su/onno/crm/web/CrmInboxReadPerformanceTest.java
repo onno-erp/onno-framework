@@ -5,7 +5,6 @@ import java.util.*;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import su.onno.crm.domain.Conversation;
@@ -45,7 +44,7 @@ class CrmInboxReadPerformanceTest {
         when(views.catalogList(eq(descriptor),any(ListSpec.class))).thenReturn(view);
         when(view.title()).thenReturn("Inbox");when(view.columns()).thenReturn(List.of());when(view.filters()).thenReturn(List.of());
         controller=new CrmInboxWorkspaceController(workspaces,catalogs,mock(CurrentUserResolver.class),mock(CommentService.class),
-            mock(CommentAuthorAvatars.class),mock(ApplicationEventPublisher.class),contacts,mock(ObjectProvider.class),mock(UiAccessService.class));
+            mock(CommentAuthorAvatars.class),mock(AccessSubjectResolver.class),contacts,mock(ObjectProvider.class),mock(UiAccessService.class));
         ReflectionTestUtils.setField(controller,"listViews",views);
         ReflectionTestUtils.setField(controller,"states",CrmStateConfiguration.empty());
         var priorities=mock(CrmPriorityBinding.class);when(priorities.choices()).thenReturn(CrmStateConfiguration.empty());

@@ -1070,7 +1070,7 @@ Framework-owned tables `onno_tags`, `onno_tag_links`, and `onno_tag_imports` are
 CRM installs no tag catalog or tag importer. Applications may use the UI starter's standard
 record-tag capability on their own catalogs.
 
-Internal CRM notes keep the inbox composer and use a compact inline reference picker: `@` selects people, `#` selects catalog/document records, and pasted local record links become references. Notes remain ordinary Onno comments, including permission checks and mention notifications. The host `CommentBody` renderer accepts a stored `body` and resolves links for the current viewer. CRM reply drafts and internal-note drafts stay separate.
+Internal CRM notes keep the inbox composer and use a compact inline reference picker: `@` selects people, `#` selects catalog/document records, and pasted local record links become references. The shared `CommentService` checks mention permissions, enforces `onno.comments.max-length` (4000 characters by default), and publishes comment events. The CRM endpoint also caps the request body at 8000 characters. The host `CommentBody` renderer accepts a stored `body` and resolves links for the current viewer. CRM reply drafts and internal-note drafts stay separate.
 
 Unified contact activity entries include `authorAvatarUrl` and `mine` for internal notes. Ownership matches the signed-in identity record ID, not the display name; photos resolve from the live identity catalog using the standard comment avatar resolver. The inbox preserves both fields when rendering notes.
 

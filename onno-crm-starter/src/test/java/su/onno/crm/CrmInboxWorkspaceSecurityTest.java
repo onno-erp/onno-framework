@@ -5,6 +5,7 @@ import java.util.*;
 import org.junit.jupiter.api.*;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import su.onno.access.AccessSubject;
 import su.onno.crm.domain.*;
 import su.onno.crm.repository.ConversationRepository;
 import su.onno.crm.service.*;
@@ -22,6 +23,8 @@ class CrmInboxWorkspaceSecurityTest {
     ConversationRepository repository=mock(ConversationRepository.class);
     ConversationService commands=mock(ConversationService.class);
     CommentService comments=mock(CommentService.class);
+    CurrentUserResolver users = mock(CurrentUserResolver.class);
+    AccessSubjectResolver subjects = mock(AccessSubjectResolver.class);
     Conversation sales=new Conversation(),support=new Conversation();
     CrmInboxWorkspaceService workspaces;
     MockMvc http;
@@ -36,13 +39,12 @@ class CrmInboxWorkspaceSecurityTest {
         var definitions=List.of(new CrmInboxWorkspace("sales","Sales",Set.of("SALES"),c->Channel.TELEGRAM.equals(c.getChannel())),
                 new CrmInboxWorkspace("support","Support",Set.of("SUPPORT"),c->Channel.EMAIL.equals(c.getChannel())));
         workspaces=new CrmInboxWorkspaceService(definitions,repository,access,mock(CrmWorkspaceService.class),su.onno.crm.TestBindings.readableContacts(),org.mockito.Mockito.mock(su.onno.crm.service.CrmConnectionAccounts.class));
-        var users=mock(CurrentUserResolver.class);
         var controller=new CrmInboxController(commands,users,mock(CrmAgentIdentityResolver.class),access,workspaces,
             mock(CommentAuthorAvatars.class),
             new su.onno.crm.service.CrmAttachments(mock(su.onno.ui.media.MediaStorage.class),new su.onno.ui.media.MediaProperties()),
             mock(su.onno.crm.repository.ContactIdentityRepository.class),su.onno.crm.TestBindings.readableContacts());
         var scoped=new CrmInboxWorkspaceController(workspaces,mock(CatalogQueryService.class),users,comments,
-                mock(CommentAuthorAvatars.class),mock(org.springframework.context.ApplicationEventPublisher.class),su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
+                mock(CommentAuthorAvatars.class),subjects,su.onno.crm.TestBindings.readableContacts(),su.onno.crm.TestBindings.noAgents(),access);
         http=MockMvcBuilders.standaloneSetup(controller,scoped).build();
     }
     @Test void listsOnlyPermittedWorkspaces() throws Exception {
@@ -69,6 +71,23 @@ class CrmInboxWorkspaceSecurityTest {
         http.perform(get(path).principal(alice)).andExpect(status().isForbidden());
         http.perform(post(path).principal(alice).contentType("application/json").content("{\"body\":\"hidden\"}")).andExpect(status().isForbidden());
         verifyNoInteractions(comments);
+    }
+
+    @Test
+    void authorizedNoteUsesTheAuthorsAccessSubject() throws Exception {
+        var actor = new CurrentUserResolver.CurrentUser("alice", "Alice", null, null, null);
+        var subject = AccessSubject.user("alice", Set.of("SALES"));
+        when(users.resolve(alice)).thenReturn(actor);
+        when(subjects.resolve(alice)).thenReturn(subject);
+        var note = new Comment(UUID.randomUUID(), "catalogs", "crm_conversations", sales.getId(),
+                null, "Alice", "hello", null, null, null);
+        when(comments.add("catalogs", "crm_conversations", sales.getId(), actor, "hello", null, subject))
+                .thenReturn(note);
+
+        http.perform(post("/api/crm/inbox-workspaces/sales/conversations/" + sales.getId() + "/comments")
+                        .principal(alice).contentType("application/json").content("{\"body\":\"hello\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.body").value("hello"));
+        verify(comments).add("catalogs", "crm_conversations", sales.getId(), actor, "hello", null, subject);
     }
     @Test void readOnlyRoleDoesNotGrantWriteAccessAndRoutingRemainsUntouched() {
         var workspace=new CrmInboxWorkspace("audit","Audit",Set.of("SALES"),Set.of("SUPPORT"),c->true,c->c);

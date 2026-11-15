@@ -1,12 +1,14 @@
 package su.onno.ui;
 
 import su.onno.access.AccessSubject;
+import su.onno.events.EntityChangedEvent;
 import su.onno.metadata.CatalogDescriptor;
 import su.onno.metadata.DocumentDescriptor;
 import su.onno.metadata.InformationRegisterDescriptor;
 import su.onno.metadata.MetadataRegistry;
 import su.onno.repository.InformationRegisterPersistence;
 import su.onno.types.Ref;
+import su.onno.ui.comments.CommentRepliedEvent;
 import su.onno.ui.comments.CommentService;
 import su.onno.ui.conformance.LeakTestApp;
 import su.onno.ui.conformance.model.LkTenant;
@@ -26,10 +28,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerMapping;
@@ -78,6 +84,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         "onno.ui.locale=en",
         "spring.main.banner-mode=off"
 })
+@RecordApplicationEvents
 class RecordPolicyConformanceTest {
 
     /** How a route relates to record data. */
@@ -186,6 +193,84 @@ class RecordPolicyConformanceTest {
     @Autowired RecordScopeCompiler compiler;
     @Autowired UiAccessService access;
     @Autowired AccessSubjectResolver subjects;
+    @Autowired PlatformTransactionManager transactions;
+
+    @Test
+    void commentReplyOverHttpPublishesEachEventOnce(ApplicationEvents events) throws Exception {
+        String route = "/api/comments/catalogs/LkTenants/" + tenantA;
+        Map<String, Object> parent = jsonMap(ok(post(route).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"body\":\"parent\"}")));
+        events.clear();
+
+        Map<String, Object> reply = jsonMap(ok(post(route).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("body", "reply", "parentId", parent.get("id"))))));
+
+        assertThat(events.stream(EntityChangedEvent.class)
+                .filter(event -> "comment".equals(event.entityType())).toList()).containsExactly(
+                        new EntityChangedEvent(EntityChangedEvent.CREATED, "comment", "LkTenants", tenantA, null));
+        assertThat(events.stream(CommentRepliedEvent.class).toList()).singleElement().satisfies(event -> {
+            assertThat(event.parent().id().toString()).isEqualTo(parent.get("id"));
+            assertThat(event.reply().id().toString()).isEqualTo(reply.get("id"));
+        });
+        status(post(route).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of("body", "x".repeat(4001)))), 422);
+    }
+
+    @Test
+    void commentEventsWaitForTransactionCommit(ApplicationEvents events) {
+        var transaction = new TransactionTemplate(transactions);
+        String recipient = UUID.randomUUID().toString();
+        var parent = comments.add("catalogs", "LkTenants", tenantA, recipient, "Recipient", "parent");
+        events.clear();
+        var rolledBack = transaction.execute(status -> {
+            var comment = comments.add("catalogs", "LkTenants", tenantA,
+                    ownerB.toString(), "Owner Beta", "rollback", parent.id());
+            assertThat(events.stream(EntityChangedEvent.class).toList()).isEmpty();
+            assertThat(events.stream(CommentRepliedEvent.class).toList()).isEmpty();
+            status.setRollbackOnly();
+            return comment;
+        });
+        assertThat(comments.find(rolledBack.id())).isEmpty();
+        assertThat(events.stream(EntityChangedEvent.class).toList()).isEmpty();
+        assertThat(events.stream(CommentRepliedEvent.class).toList()).isEmpty();
+
+        var committed = transaction.execute(status -> {
+            var comment = comments.add("catalogs", "LkTenants", tenantA,
+                    ownerB.toString(), "Owner Beta", "committed transactional reply", parent.id());
+            assertThat(events.stream(EntityChangedEvent.class).toList()).isEmpty();
+            assertThat(events.stream(CommentRepliedEvent.class).toList()).isEmpty();
+            return comment;
+        });
+        assertThat(comments.find(committed.id())).isPresent();
+        assertThat(events.stream(EntityChangedEvent.class).toList()).containsExactly(
+                new EntityChangedEvent(EntityChangedEvent.CREATED, "comment", "LkTenants", tenantA, null));
+        assertThat(events.stream(CommentRepliedEvent.class).toList()).singleElement()
+                .satisfies(event -> assertThat(event.reply()).isEqualTo(committed));
+        assertThat(notifications.list(recipient, false, null).items())
+                .anyMatch(notification -> "committed transactional reply".equals(notification.body()));
+    }
+
+    @Test
+    void tagMutationsOverHttpPublishOneEventEach(ApplicationEvents events) throws Exception {
+        String library = "/api/tags/catalogs/LkTenants";
+        events.clear();
+
+        var created = mvc.perform(post(library).principal(STAFF)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Collaboration\"}")).andReturn();
+        assertThat(created.getResponse().getStatus()).isEqualTo(200);
+        String tag = (String) jsonMap(created.getResponse().getContentAsString()).get("id");
+        String assignment = library + "/" + tenantA + "/" + tag;
+        assertThat(mvc.perform(post(assignment).principal(STAFF)).andReturn().getResponse().getStatus())
+                .isBetween(200, 299);
+        assertThat(mvc.perform(delete(assignment).principal(STAFF)).andReturn().getResponse().getStatus())
+                .isBetween(200, 299);
+
+        assertThat(events.stream(EntityChangedEvent.class).filter(event -> "tag".equals(event.entityType())).toList())
+                .containsExactly(
+                        new EntityChangedEvent(EntityChangedEvent.UPDATED, "tag", "LkTenants", null, null),
+                        new EntityChangedEvent(EntityChangedEvent.UPDATED, "tag", "LkTenants", tenantA, null),
+                        new EntityChangedEvent(EntityChangedEvent.UPDATED, "tag", "LkTenants", tenantA, null));
+    }
 
     private final ObjectMapper json = new ObjectMapper();
     private final Set<String> hits = new TreeSet<>();

@@ -1,7 +1,12 @@
 package su.onno.ui.comments;
 
 import org.jdbi.v3.core.Jdbi;
+import org.springframework.context.ApplicationEventPublisher;
 
+import su.onno.access.AccessSubject;
+import su.onno.events.EntityChangedEvent;
+import su.onno.ui.CurrentUserResolver.CurrentUser;
+import su.onno.ui.JdbiCommitCallbacks;
 import su.onno.ui.SqlBind;
 
 import java.sql.Timestamp;
@@ -13,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -33,11 +39,27 @@ public class CommentService {
 
     static final String TABLE = "onno_comments";
     static final String REACTIONS_TABLE = "onno_comment_reactions";
+    private static final String COMMENT_ENTITY_TYPE = "comment";
 
     private final Jdbi jdbi;
+    private final ApplicationEventPublisher events;
+    private final CommentProperties properties;
+    private final MentionResolver mentions;
 
     public CommentService(Jdbi jdbi) {
+        this(jdbi, event -> {});
+    }
+
+    public CommentService(Jdbi jdbi, ApplicationEventPublisher events) {
+        this(jdbi, events, new CommentProperties(), null);
+    }
+
+    public CommentService(Jdbi jdbi, ApplicationEventPublisher events,
+                          CommentProperties properties, MentionResolver mentions) {
         this.jdbi = jdbi;
+        this.events = events;
+        this.properties = properties;
+        this.mentions = mentions;
         ensureSchema();
     }
 
@@ -94,12 +116,49 @@ public class CommentService {
     /** Append a top-level comment or a reply and return it as stored. */
     public Comment add(String entityType, String entityName, UUID entityId,
                        String authorId, String authorName, String body, UUID parentId) {
+        CurrentUser actor = new CurrentUser(null, authorName, authorId, null, null);
+        return add(entityType, entityName, entityId, actor, body, parentId);
+    }
+
+    public Comment add(String entityType, String entityName, UUID entityId,
+                       CurrentUser actor, String body, UUID parentId) {
+        return add(entityType, entityName, entityId, actor, body, parentId,
+                AccessSubject.user(actor.username(), Set.of()));
+    }
+
+    /** Append a comment using the author's access subject to validate mentions. */
+    public Comment add(String entityType, String entityName, UUID entityId,
+                       CurrentUser actor, String body, UUID parentId, AccessSubject subject) {
+        if (body == null || body.isBlank()) {
+            throw new InvalidCommentException("Comment cannot be empty");
+        }
+        String text = body.strip();
+        if (text.length() > properties.getMaxLength()) {
+            throw new InvalidCommentException(
+                    "Comment must be at most " + properties.getMaxLength() + " characters");
+        }
+        boolean resolveMentions = mentions != null && properties.getMentions().isEnabled();
+        String savedBody = resolveMentions
+                ? Mentions.degrade(text, ref -> !mentions.canRead(subject, ref))
+                : text;
+        List<MentionRef> readableMentions = resolveMentions
+                ? mentions.resolve(Mentions.parse(savedBody, '@'), subject).stream()
+                        .filter(MentionResolver.ResolvedMention::readable)
+                        .map(ref -> new MentionRef(ref.kind(), ref.name(), ref.id()))
+                        .toList()
+                : List.of();
+        Comment parent = findReplyTarget(parentId, entityType, entityName, entityId);
+        String authorId = actor.recordId();
+        String authorName = actor.displayName();
         UUID id = UUID.randomUUID();
         // TIMESTAMP keeps microseconds and rounds finer values, so truncate first: the returned
         // createdAt then equals what a read-back sees (Linux clocks tick in nanoseconds).
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         UUID authorUuid = authorId == null ? null : UUID.fromString(authorId);
-        jdbi.useHandle(h -> {
+        Comment saved = new Comment(
+                id, entityType, entityName, entityId, authorId, authorName, savedBody, parentId, now, null);
+        Runnable publish = () -> publishAdded(saved, parent, actor, readableMentions);
+        boolean deferred = jdbi.withHandle(h -> {
             var update = h.createUpdate("INSERT INTO " + TABLE +
                             " (_id, _entity_type, _entity_name, _entity_id, _author_id, _author_name," +
                             " _body, _parent_id, _created_at, _edited_at, _deleted)" +
@@ -109,7 +168,7 @@ public class CommentService {
                     .bind("name", entityName)
                     .bind("entityId", entityId)
                     .bind("authorName", authorName)
-                    .bind("body", body)
+                    .bind("body", savedBody)
                     // Bind through java.sql.Timestamp (not the raw Instant) so write and read use the
                     // same conversion and the instant round-trips through the plain TIMESTAMP column.
                     .bind("createdAt", Timestamp.from(now));
@@ -119,8 +178,48 @@ public class CommentService {
             SqlBind.nullable(update, "authorId", authorUuid);
             SqlBind.nullable(update, "parentId", parentId);
             update.execute();
+            return JdbiCommitCallbacks.defer(h, publish);
         });
-        return new Comment(id, entityType, entityName, entityId, authorId, authorName, body, parentId, now, null);
+        if (!deferred) {
+            publish.run();
+        }
+        return saved;
+    }
+
+    private void publishAdded(Comment saved, Comment parent, CurrentUser actor, List<MentionRef> readableMentions) {
+        publishChange(EntityChangedEvent.CREATED, saved);
+        for (MentionRef ref : readableMentions) {
+            events.publishEvent(new EntityMentionedEvent(saved, ref, actor));
+        }
+        if (parent != null) {
+            events.publishEvent(new CommentRepliedEvent(saved, parent, actor));
+        }
+    }
+
+    private Comment findReplyTarget(UUID parentId, String entityType, String entityName, UUID entityId) {
+        if (parentId == null) {
+            return null;
+        }
+        Comment parent = find(parentId)
+                .orElseThrow(() -> new InvalidCommentException("Reply target does not exist"));
+        if (parent.parentId() != null
+                || !parent.entityType().equals(entityType)
+                || !parent.entityName().equals(entityName)
+                || !parent.entityId().equals(entityId)) {
+            throw new InvalidCommentException("Reply target is not in this thread");
+        }
+        return parent;
+    }
+
+    public static final class InvalidCommentException extends IllegalArgumentException {
+        InvalidCommentException(String message) {
+            super(message);
+        }
+    }
+
+    private void publishChange(String type, Comment comment) {
+        events.publishEvent(new EntityChangedEvent(
+                type, COMMENT_ENTITY_TYPE, comment.entityName(), comment.entityId(), null));
     }
 
     /** A single comment by id (including soft-deleted ones), for authorization checks. */
@@ -136,14 +235,34 @@ public class CommentService {
 
     /** Soft-delete a comment; returns false when it doesn't exist or was already deleted. */
     public boolean softDelete(UUID id) {
-        return jdbi.withHandle(h -> h.createUpdate("UPDATE " + TABLE +
-                        " SET _deleted = TRUE WHERE _id = :id AND _deleted = FALSE")
-                .bind("id", id)
-                .execute()) > 0;
+        return find(id).map(this::softDelete).orElse(false);
+    }
+
+    boolean softDelete(Comment comment) {
+        Runnable publish = () -> publishChange(EntityChangedEvent.DELETED, comment);
+        boolean deleted = jdbi.withHandle(h -> {
+            int rows = h.createUpdate("UPDATE " + TABLE +
+                            " SET _deleted = TRUE WHERE _id = :id AND _deleted = FALSE")
+                    .bind("id", comment.id())
+                    .execute();
+            if (rows > 0 && !JdbiCommitCallbacks.defer(h, publish)) {
+                publish.run();
+            }
+            return rows > 0;
+        });
+        return deleted;
     }
 
     /** Toggle one viewer's reaction on a comment and return whether it is now present. */
     public boolean toggleReaction(UUID commentId, String userKey, String emoji) {
+        return toggleReaction(commentId, userKey, emoji, null);
+    }
+
+    void toggleReaction(Comment comment, String userKey, String emoji) {
+        toggleReaction(comment.id(), userKey, emoji, comment);
+    }
+
+    private boolean toggleReaction(UUID commentId, String userKey, String emoji, Comment comment) {
         if (userKey == null || userKey.isBlank()) {
             throw new IllegalArgumentException("userKey is required");
         }
@@ -154,18 +273,24 @@ public class CommentService {
                     .bind("userKey", userKey)
                     .bind("emoji", emoji)
                     .execute();
-            if (deleted > 0) {
-                return false;
+            boolean present = deleted == 0;
+            if (present) {
+                h.createUpdate("INSERT INTO " + REACTIONS_TABLE +
+                                " (_comment_id, _user_key, _emoji, _created_at)" +
+                                " VALUES (:commentId, :userKey, :emoji, :createdAt)")
+                        .bind("commentId", commentId)
+                        .bind("userKey", userKey)
+                        .bind("emoji", emoji)
+                        .bind("createdAt", Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
+                        .execute();
             }
-            h.createUpdate("INSERT INTO " + REACTIONS_TABLE +
-                            " (_comment_id, _user_key, _emoji, _created_at)" +
-                            " VALUES (:commentId, :userKey, :emoji, :createdAt)")
-                    .bind("commentId", commentId)
-                    .bind("userKey", userKey)
-                    .bind("emoji", emoji)
-                    .bind("createdAt", Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MICROS)))
-                    .execute();
-            return true;
+            Optional.ofNullable(comment).or(() -> find(commentId)).ifPresent(target -> {
+                Runnable publish = () -> publishChange(EntityChangedEvent.UPDATED, target);
+                if (!JdbiCommitCallbacks.defer(h, publish)) {
+                    publish.run();
+                }
+            });
+            return present;
         });
     }
 
